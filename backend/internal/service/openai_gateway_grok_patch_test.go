@@ -136,6 +136,22 @@ func TestPatchGrokResponsesBodyCollapsesReplayedHistoryForContinuation(t *testin
 	require.Equal(t, "你是什么模型", gjson.GetBytes(patched, "input.0.content").String())
 }
 
+func TestPatchGrokResponsesBodyCollapsesReplayedUsersWithoutAssistantRole(t *testing.T) {
+	body := []byte(`{
+		"model": "grok",
+		"previous_response_id": "resp_prev",
+		"input": [
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "等哈建行卡"}]},
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "你是什么模型"}]}
+		]
+	}`)
+
+	patched, err := patchGrokResponsesBody(body, "grok-composer-2.5-fast")
+	require.NoError(t, err)
+	require.Len(t, gjson.GetBytes(patched, "input").Array(), 1)
+	require.Equal(t, "你是什么模型", gjson.GetBytes(patched, "input.0.content").String())
+}
+
 func TestPatchGrokResponsesBodyWrapsStandaloneInputTextItems(t *testing.T) {
 	body := []byte(`{
 		"model": "grok",
