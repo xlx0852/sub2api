@@ -33,19 +33,8 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 	if strings.TrimSpace(upstreamModel) == "" {
 		upstreamModel = "grok-4.3"
 	}
-	patchedBody, err := patchGrokResponsesBody(body, upstreamModel)
-	if err != nil {
-		return nil, err
-	}
 
 	token, _, err := s.GetAccessToken(ctx, account)
-	if err != nil {
-		return nil, err
-	}
-
-	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
-	defer releaseUpstreamCtx()
-	upstreamReq, err := buildGrokResponsesRequest(upstreamCtx, c, account, patchedBody, token)
 	if err != nil {
 		return nil, err
 	}
@@ -53,6 +42,32 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
+	}
+
+	sessionID := s.GenerateSessionHashForOpenAIRequest(c, body)
+	var grokIDMapper *grokWSRequestIDMapper
+	if sessionID != "" {
+		grokIDMapper = newGrokWSRequestIDMapper(sessionID, body)
+		defer deleteGrokWSIDState(sessionID)
+	}
+
+	preparedBody, err := s.prepareGrokUpstreamResponsesBody(ctx, c, account, body, upstreamModel, token, proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	patchedBody := preparedBody.Body
+	preprocessUsage := preparedBody.PreprocessUsage
+	if grokIDMapper != nil {
+		patchedBody = grokIDMapper.upstreamRequestPayload(patchedBody)
+		setGrokWSRequestIDMapper(c, grokIDMapper)
+		setGrokWSUpstreamRequestPayload(c, patchedBody)
+	}
+
+	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+	defer releaseUpstreamCtx()
+	upstreamReq, err := buildGrokResponsesRequest(upstreamCtx, c, account, patchedBody, token)
+	if err != nil {
+		return nil, err
 	}
 
 	upstreamStart := time.Now()
@@ -116,6 +131,9 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 	if usage == nil {
 		usage = &OpenAIUsage{}
 	}
+	if preprocessUsage != nil {
+		addOpenAIUsage(usage, *preprocessUsage)
+	}
 	return &OpenAIForwardResult{
 		RequestID:       firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id")),
 		ResponseID:      responseID,
@@ -129,6 +147,579 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 		Duration:        time.Since(startTime),
 		FirstTokenMs:    firstTokenMs,
 	}, nil
+}
+
+const (
+	grokComposerVisionPreprocessModel           = "grok-build"
+	grokComposerVisionPreprocessMaxContextChars = 4000
+)
+
+type grokVisionPreprocessResult struct {
+	Description string
+	Usage       OpenAIUsage
+}
+
+type grokPreparedResponsesBody struct {
+	Body            []byte
+	PreprocessUsage *OpenAIUsage
+}
+
+func (s *OpenAIGatewayService) prepareGrokUpstreamResponsesBody(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+	upstreamModel string,
+	token string,
+	proxyURL string,
+) (*grokPreparedResponsesBody, error) {
+	var preprocessUsage *OpenAIUsage
+	if shouldPreprocessGrokComposerImages(upstreamModel, body) {
+		preprocessResult, err := s.preprocessGrokComposerImages(ctx, c, account, body, token, proxyURL)
+		if err != nil {
+			return nil, err
+		}
+		rewrittenBody, err := rewriteGrokComposerBodyWithVisionDescription(body, preprocessResult.Description)
+		if err != nil {
+			return nil, err
+		}
+		body = rewrittenBody
+		preprocessUsage = &preprocessResult.Usage
+	}
+
+	patchedBody, err := patchGrokResponsesBody(body, upstreamModel)
+	if err != nil {
+		return nil, err
+	}
+	return &grokPreparedResponsesBody{
+		Body:            patchedBody,
+		PreprocessUsage: preprocessUsage,
+	}, nil
+}
+
+func shouldPreprocessGrokComposerImages(upstreamModel string, body []byte) bool {
+	return isGrokComposerModel(upstreamModel) && openAIRequestBodyMayContainImageInput(body)
+}
+
+func isGrokComposerModel(model string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "grok-composer-")
+}
+
+func (s *OpenAIGatewayService) preprocessGrokComposerImages(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+	token string,
+	proxyURL string,
+) (*grokVisionPreprocessResult, error) {
+	visionBody, err := buildGrokComposerVisionPreprocessBody(body)
+	if err != nil {
+		return nil, err
+	}
+	patchedVisionBody, err := patchGrokResponsesBody(visionBody, grokComposerVisionPreprocessModel)
+	if err != nil {
+		return nil, err
+	}
+
+	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+	defer releaseUpstreamCtx()
+	upstreamReq, err := buildGrokResponsesRequest(upstreamCtx, c, account, patchedVisionBody, token)
+	if err != nil {
+		return nil, err
+	}
+
+	upstreamStart := time.Now()
+	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
+	if err != nil {
+		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode >= 400 {
+		respBody := s.readUpstreamErrorBody(resp)
+		resp.Body = io.NopCloser(bytes.NewReader(respBody))
+		s.updateGrokUsageSnapshot(ctx, account.ID, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
+		upstreamMsg := sanitizeUpstreamErrorMessage(extractUpstreamErrorMessage(respBody))
+		if upstreamMsg == "" {
+			upstreamMsg = fmt.Sprintf("xAI vision preprocess returned status %d", resp.StatusCode)
+		}
+		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			Platform:           account.Platform,
+			AccountID:          account.ID,
+			AccountName:        account.Name,
+			UpstreamStatusCode: resp.StatusCode,
+			UpstreamRequestID:  firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id")),
+			Kind:               "grok_vision_preprocess",
+			Message:            upstreamMsg,
+		})
+		s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+		_, err := s.handleErrorResponse(ctx, resp, c, account, patchedVisionBody, grokComposerVisionPreprocessModel)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("grok vision preprocess returned status %d", resp.StatusCode)
+	}
+
+	s.updateGrokUsageSnapshot(ctx, account.ID, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
+	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
+	if err != nil {
+		return nil, err
+	}
+	description := strings.TrimSpace(extractOpenAIResponsesText(respBody))
+	if description == "" {
+		return nil, fmt.Errorf("grok vision preprocess returned empty description")
+	}
+	usage, _ := extractOpenAIUsageFromJSONBytes(respBody)
+	return &grokVisionPreprocessResult{
+		Description: description,
+		Usage:       usage,
+	}, nil
+}
+
+func buildGrokComposerVisionPreprocessBody(body []byte) ([]byte, error) {
+	var payload any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+	var images []string
+	collectGrokResponsesImageURLs(payload, &images)
+	if len(images) == 0 {
+		return nil, fmt.Errorf("grok composer image preprocess requires at least one image")
+	}
+
+	var textContext strings.Builder
+	collectGrokResponsesInputText(payload, &textContext)
+	contextText := trimGrokComposerVisionContext(textContext.String())
+	prompt := "Describe the attached image(s) for a coding assistant that cannot receive images directly. " +
+		"Focus on UI state, visible error text, logs, diagrams, code snippets, and anything needed to answer the user's request. " +
+		"Return a concise but complete textual description."
+	if contextText != "" {
+		prompt += "\n\nOriginal user text:\n" + contextText
+	}
+
+	content := make([]any, 0, len(images)+1)
+	content = append(content, map[string]any{
+		"type": "input_text",
+		"text": prompt,
+	})
+	for _, imageURL := range images {
+		if strings.TrimSpace(imageURL) == "" {
+			continue
+		}
+		content = append(content, map[string]any{
+			"type":      "input_image",
+			"image_url": imageURL,
+		})
+	}
+	if len(content) == 1 {
+		return nil, fmt.Errorf("grok composer image preprocess requires at least one non-empty image")
+	}
+
+	return marshalOpenAIUpstreamJSON(map[string]any{
+		"model":  grokComposerVisionPreprocessModel,
+		"stream": false,
+		"input": []any{
+			map[string]any{
+				"role":    "user",
+				"content": content,
+			},
+		},
+	})
+}
+
+func rewriteGrokComposerBodyWithVisionDescription(body []byte, description string) ([]byte, error) {
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+	stripGrokResponsesImagesFromPayload(payload)
+	prependGrokVisionDescription(payload, description)
+	return marshalOpenAIUpstreamJSON(payload)
+}
+
+func collectGrokResponsesImageURLs(value any, out *[]string) {
+	switch typed := value.(type) {
+	case map[string]any:
+		imageURL := strings.TrimSpace(firstNonEmptyString(typed["image_url"]))
+		if imageURL == "" {
+			if imageObject, ok := typed["image_url"].(map[string]any); ok {
+				imageURL = strings.TrimSpace(firstNonEmptyString(imageObject["url"]))
+			}
+		}
+		if imageURL != "" {
+			*out = append(*out, imageURL)
+		}
+		for _, child := range typed {
+			collectGrokResponsesImageURLs(child, out)
+		}
+	case []any:
+		for _, child := range typed {
+			collectGrokResponsesImageURLs(child, out)
+		}
+	}
+}
+
+func collectGrokResponsesInputText(value any, out *strings.Builder) {
+	switch typed := value.(type) {
+	case map[string]any:
+		if text := strings.TrimSpace(firstNonEmptyString(typed["text"])); text != "" {
+			if out.Len() > 0 {
+				out.WriteString("\n")
+			}
+			out.WriteString(text)
+		}
+		for _, key := range []string{"instructions", "input", "messages", "content"} {
+			if child, ok := typed[key]; ok {
+				collectGrokResponsesInputText(child, out)
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			collectGrokResponsesInputText(child, out)
+		}
+	case string:
+		if text := strings.TrimSpace(typed); text != "" {
+			if out.Len() > 0 {
+				out.WriteString("\n")
+			}
+			out.WriteString(text)
+		}
+	}
+}
+
+func trimGrokComposerVisionContext(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= grokComposerVisionPreprocessMaxContextChars {
+		return value
+	}
+	return value[:grokComposerVisionPreprocessMaxContextChars]
+}
+
+func stripGrokResponsesImagesFromPayload(payload map[string]any) {
+	input, ok := payload["input"].([]any)
+	if !ok {
+		return
+	}
+	for _, rawItem := range input {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			continue
+		}
+		content, ok := item["content"].([]any)
+		if !ok {
+			continue
+		}
+		normalized := make([]any, 0, len(content))
+		for _, rawPart := range content {
+			part, ok := rawPart.(map[string]any)
+			if !ok || part == nil {
+				normalized = append(normalized, rawPart)
+				continue
+			}
+			partType := strings.TrimSpace(firstNonEmptyString(part["type"]))
+			if partType == "input_image" {
+				continue
+			}
+			delete(part, "image_url")
+			normalized = append(normalized, part)
+		}
+		item["content"] = normalized
+	}
+	payload["input"] = input
+}
+
+func prependGrokVisionDescription(payload map[string]any, description string) {
+	visionText := "Image analysis from Grok Builder-style preprocessing:\n" +
+		strings.TrimSpace(description) +
+		"\n\nUse this as the visual context for the user's request. The original image inputs are not attached to this Composer request."
+	visionPart := map[string]any{
+		"type": "input_text",
+		"text": visionText,
+	}
+
+	input, _ := payload["input"].([]any)
+	for _, rawItem := range input {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			continue
+		}
+		if role := strings.TrimSpace(firstNonEmptyString(item["role"])); role != "" && role != "user" {
+			continue
+		}
+		switch content := item["content"].(type) {
+		case []any:
+			item["content"] = append([]any{visionPart}, content...)
+			payload["input"] = input
+			return
+		case string:
+			item["content"] = []any{
+				visionPart,
+				map[string]any{"type": "input_text", "text": content},
+			}
+			payload["input"] = input
+			return
+		}
+	}
+
+	payload["input"] = append(input, map[string]any{
+		"role": "user",
+		"content": []any{
+			visionPart,
+		},
+	})
+}
+
+func addOpenAIUsage(dst *OpenAIUsage, src OpenAIUsage) {
+	if dst == nil {
+		return
+	}
+	dst.InputTokens += src.InputTokens
+	dst.ImageInputTokens += src.ImageInputTokens
+	dst.OutputTokens += src.OutputTokens
+	dst.CacheCreationInputTokens += src.CacheCreationInputTokens
+	dst.CacheReadInputTokens += src.CacheReadInputTokens
+	dst.ImageOutputTokens += src.ImageOutputTokens
+	dst.CostInUSDTicks += src.CostInUSDTicks
+	if len(src.ServerSideToolUsage) > 0 {
+		if dst.ServerSideToolUsage == nil {
+			dst.ServerSideToolUsage = map[string]int{}
+		}
+		for name, count := range src.ServerSideToolUsage {
+			dst.ServerSideToolUsage[name] += count
+		}
+	}
+}
+
+func sanitizeGrokResponsesInclude(body []byte) ([]byte, error) {
+	include := gjson.GetBytes(body, "include")
+	if !include.Exists() || !include.IsArray() {
+		return body, nil
+	}
+	filtered := make([]any, 0, len(include.Array()))
+	changed := false
+	for _, item := range include.Array() {
+		if strings.TrimSpace(item.String()) == "reasoning.encrypted_content" {
+			changed = true
+			continue
+		}
+		filtered = append(filtered, item.Value())
+	}
+	if !changed {
+		return body, nil
+	}
+	if len(filtered) == 0 {
+		return sjson.DeleteBytes(body, "include")
+	}
+	encoded, err := json.Marshal(filtered)
+	if err != nil {
+		return nil, err
+	}
+	return sjson.SetRawBytes(body, "include", encoded)
+}
+
+func sanitizeGrokResponsesInput(body []byte) ([]byte, error) {
+	if !gjson.GetBytes(body, "input").Exists() {
+		return body, nil
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+	input, ok := payload["input"].([]any)
+	if !ok {
+		return body, nil
+	}
+	input = stripGrokIncompatibleCompactionInputItems(input)
+	normalizedInput, ok := normalizeGrokResponsesImageParts(input).([]any)
+	if !ok {
+		return body, nil
+	}
+	payload["input"] = rewriteGrokResponsesFunctionCallOutputImages(normalizedInput)
+	return json.Marshal(payload)
+}
+
+func stripGrokIncompatibleCompactionInputItems(input []any) []any {
+	if len(input) == 0 {
+		return input
+	}
+	filtered := make([]any, 0, len(input))
+	for _, rawItem := range input {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			filtered = append(filtered, rawItem)
+			continue
+		}
+		if isGrokIncompatibleCompactionInputItem(item) {
+			continue
+		}
+		filtered = append(filtered, rawItem)
+	}
+	return filtered
+}
+
+func isGrokIncompatibleCompactionInputItem(item map[string]any) bool {
+	itemType := strings.TrimSpace(firstNonEmptyString(item["type"]))
+	switch itemType {
+	case "compaction", "compaction_summary":
+		return true
+	}
+	itemID := strings.TrimSpace(firstNonEmptyString(item["id"]))
+	if strings.HasPrefix(itemID, "cmp_") && strings.TrimSpace(firstNonEmptyString(item["encrypted_content"])) != "" {
+		return true
+	}
+	return false
+}
+
+func normalizeGrokResponsesImageParts(value any) any {
+	switch typed := value.(type) {
+	case []any:
+		out := make([]any, len(typed))
+		for i, item := range typed {
+			out[i] = normalizeGrokResponsesImageParts(item)
+		}
+		return out
+	case map[string]any:
+		if typed == nil {
+			return typed
+		}
+		obj := typed
+		partType := strings.TrimSpace(firstNonEmptyString(obj["type"]))
+		switch partType {
+		case "image":
+			mimeType := strings.TrimSpace(firstNonEmptyString(obj["mimeType"]))
+			data := strings.TrimSpace(firstNonEmptyString(obj["data"]))
+			if mimeType != "" && data != "" {
+				detail := strings.TrimSpace(firstNonEmptyString(obj["detail"]))
+				if detail == "" {
+					detail = "auto"
+				}
+				return map[string]any{
+					"type":      "input_image",
+					"image_url": "data:" + mimeType + ";base64," + data,
+					"detail":    detail,
+				}
+			}
+		case "image_url":
+			imageURL, detail := grokResponsesImageURLAndDetail(obj)
+			normalized := map[string]any{
+				"type":      "input_image",
+				"image_url": imageURL,
+			}
+			if detail != "" {
+				normalized["detail"] = detail
+			} else {
+				normalized["detail"] = "auto"
+			}
+			return normalized
+		case "input_image":
+			imageURL, detail := grokResponsesImageURLAndDetail(obj)
+			if imageURL != "" {
+				obj["image_url"] = imageURL
+			}
+			if detail != "" {
+				obj["detail"] = detail
+			} else {
+				obj["detail"] = "auto"
+			}
+		}
+		for _, key := range []string{"content", "output"} {
+			if child, ok := obj[key]; ok {
+				obj[key] = normalizeGrokResponsesImageParts(child)
+			}
+		}
+		return obj
+	default:
+		return value
+	}
+}
+
+func grokResponsesImageURLAndDetail(obj map[string]any) (imageURL string, detail string) {
+	if nested, ok := obj["image_url"].(map[string]any); ok && nested != nil {
+		imageURL = strings.TrimSpace(firstNonEmptyString(nested["url"]))
+		detail = strings.TrimSpace(firstNonEmptyString(nested["detail"]))
+		return imageURL, detail
+	}
+	imageURL = strings.TrimSpace(firstNonEmptyString(obj["image_url"]))
+	detail = strings.TrimSpace(firstNonEmptyString(obj["detail"]))
+	return imageURL, detail
+}
+
+func rewriteGrokResponsesFunctionCallOutputImages(input []any) []any {
+	if len(input) == 0 {
+		return input
+	}
+	rewritten := make([]any, 0, len(input))
+	for _, rawItem := range input {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			rewritten = append(rewritten, rawItem)
+			continue
+		}
+		if strings.TrimSpace(firstNonEmptyString(item["type"])) != "function_call_output" {
+			rewritten = append(rewritten, item)
+			continue
+		}
+		outputParts, ok := item["output"].([]any)
+		if !ok {
+			rewritten = append(rewritten, item)
+			continue
+		}
+		imageParts := make([]any, 0)
+		textChunks := make([]string, 0)
+		for _, rawPart := range outputParts {
+			part, ok := rawPart.(map[string]any)
+			if ok && part != nil && strings.TrimSpace(firstNonEmptyString(part["type"])) == "input_image" {
+				imageParts = append(imageParts, normalizeGrokResponsesImageParts(part))
+				continue
+			}
+			switch typed := rawPart.(type) {
+			case string:
+				if text := strings.TrimSpace(typed); text != "" {
+					textChunks = append(textChunks, text)
+				}
+			case map[string]any:
+				if text := strings.TrimSpace(firstNonEmptyString(typed["text"])); text != "" {
+					textChunks = append(textChunks, text)
+				}
+			}
+		}
+		if len(imageParts) == 0 {
+			rewritten = append(rewritten, item)
+			continue
+		}
+		outputText := strings.Join(textChunks, "\n")
+		if outputText == "" {
+			outputText = "(tool returned no text output)"
+		}
+		flattened := make(map[string]any, len(item))
+		for key, value := range item {
+			flattened[key] = value
+		}
+		flattened["output"] = outputText
+		rewritten = append(rewritten, flattened)
+
+		callID := strings.TrimSpace(firstNonEmptyString(item["call_id"]))
+		label := "The previous tool result"
+		if callID != "" {
+			label += " (" + callID + ")"
+		}
+		imageCount := len(imageParts)
+		if imageCount == 1 {
+			label += " included 1 image. Use the attached image as the visual output from that tool."
+		} else {
+			label += fmt.Sprintf(" included %d images. Use the attached images as the visual output from that tool.", imageCount)
+		}
+		userContent := make([]any, 0, len(imageParts)+1)
+		userContent = append(userContent, map[string]any{"type": "input_text", "text": label})
+		userContent = append(userContent, imageParts...)
+		rewritten = append(rewritten, map[string]any{
+			"role":    "user",
+			"content": userContent,
+		})
+	}
+	return rewritten
 }
 
 func patchGrokResponsesBody(body []byte, upstreamModel string) ([]byte, error) {
@@ -148,6 +739,29 @@ func patchGrokResponsesBody(body []byte, upstreamModel string) ([]byte, error) {
 		}
 	}
 	out, err = sanitizeGrokResponsesUnsupportedFields(out)
+	if err != nil {
+		return nil, err
+	}
+	if isGrokComposerModel(upstreamModel) {
+		for _, unsupportedField := range []string{"reasoning", "reasoning_effort", "reasoningEffort"} {
+			if gjson.GetBytes(out, unsupportedField).Exists() {
+				out, err = sjson.DeleteBytes(out, unsupportedField)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	if strings.TrimSpace(gjson.GetBytes(out, "previous_response_id").String()) != "" {
+		if next, deleteErr := sjson.DeleteBytes(out, "instructions"); deleteErr == nil {
+			out = next
+		}
+	}
+	out, err = sanitizeGrokResponsesInclude(out)
+	if err != nil {
+		return nil, err
+	}
+	out, err = sanitizeGrokResponsesInput(out)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +936,12 @@ func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Acc
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("User-Agent", "sub2api-grok/1.0")
+	modelID := strings.TrimSpace(gjson.GetBytes(body, "model").String())
+	if xai.IsCLIChatProxyBaseURL(account.GetGrokBaseURL()) || xai.IsGrokCLIModel(modelID) {
+		xai.SetGrokCLIRequestHeaders(req.Header, modelID)
+	}
 	if c != nil {
+		xai.ForwardGrokCLIRequestHeaders(req.Header, c.Request.Header, gjson.GetBytes(body, "prompt_cache_key").String())
 		if v := c.GetHeader("OpenAI-Beta"); strings.TrimSpace(v) != "" {
 			req.Header.Set("OpenAI-Beta", v)
 		}
