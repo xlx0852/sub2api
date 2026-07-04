@@ -111,8 +111,29 @@ func TestPatchGrokResponsesBodyDropsDeveloperMessagesWhenPreviousResponseIDPrese
 	require.False(t, gjson.GetBytes(patched, "instructions").Exists())
 	require.False(t, gjson.GetBytes(patched, "input.#(role=developer)").Exists())
 	require.False(t, gjson.GetBytes(patched, "input.#(role=system)").Exists())
-	require.Equal(t, "Sure.", gjson.GetBytes(patched, "input.#(role=assistant).content").String())
-	require.Equal(t, "描述", gjson.GetBytes(patched, "input.#(role=user).content").String())
+	require.False(t, gjson.GetBytes(patched, "input.#(role=assistant)").Exists())
+	require.Len(t, gjson.GetBytes(patched, "input").Array(), 3)
+	require.Equal(t, "function_call", gjson.GetBytes(patched, "input.0.type").String())
+	require.Equal(t, "function_call_output", gjson.GetBytes(patched, "input.1.type").String())
+	require.Equal(t, "描述", gjson.GetBytes(patched, "input.2.content").String())
+}
+
+func TestPatchGrokResponsesBodyCollapsesReplayedHistoryForContinuation(t *testing.T) {
+	body := []byte(`{
+		"model": "grok",
+		"previous_response_id": "resp_prev",
+		"input": [
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "等哈建行卡"}]},
+			{"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "收到。"}]},
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "你是什么模型"}]}
+		]
+	}`)
+
+	patched, err := patchGrokResponsesBody(body, "grok-composer-2.5-fast")
+	require.NoError(t, err)
+	require.Len(t, gjson.GetBytes(patched, "input").Array(), 1)
+	require.Equal(t, "user", gjson.GetBytes(patched, "input.0.role").String())
+	require.Equal(t, "你是什么模型", gjson.GetBytes(patched, "input.0.content").String())
 }
 
 func TestPatchGrokResponsesBodyWrapsStandaloneInputTextItems(t *testing.T) {
