@@ -44,15 +44,14 @@ func TestPatchGrokResponsesBodyNormalizesCodexToolInputItems(t *testing.T) {
 
 	patched, err := patchGrokResponsesBody(body, "grok-composer-2.5-fast")
 	require.NoError(t, err)
-	require.Len(t, gjson.GetBytes(patched, "input").Array(), 4)
+	require.Len(t, gjson.GetBytes(patched, "input").Array(), 3)
 	require.Equal(t, "function_call", gjson.GetBytes(patched, "input.0.type").String())
 	require.Equal(t, "call_shell_1", gjson.GetBytes(patched, "input.0.call_id").String())
 	require.Equal(t, "shell", gjson.GetBytes(patched, "input.0.name").String())
 	require.Equal(t, "function_call_output", gjson.GetBytes(patched, "input.1.type").String())
-	require.False(t, gjson.GetBytes(patched, "input.2.encrypted_content").Exists())
-	require.Equal(t, "thinking", gjson.GetBytes(patched, "input.2.summary.0.text").String())
-	require.False(t, gjson.GetBytes(patched, "input.3.content.0.nonce").Exists())
-	require.Equal(t, "描述", gjson.GetBytes(patched, "input.3.content.0.text").String())
+	require.Equal(t, "user", gjson.GetBytes(patched, "input.2.role").String())
+	require.Equal(t, "描述", gjson.GetBytes(patched, "input.2.content").String())
+	require.False(t, gjson.GetBytes(patched, "input.2.type").Exists())
 }
 
 func TestPatchGrokResponsesBodyStripsCodexCompactionItems(t *testing.T) {
@@ -69,10 +68,64 @@ func TestPatchGrokResponsesBodyStripsCodexCompactionItems(t *testing.T) {
 	patched, err := patchGrokResponsesBody(body, "grok-composer-2.5-fast")
 	require.NoError(t, err)
 	require.Len(t, gjson.GetBytes(patched, "input").Array(), 1)
-	require.Equal(t, "message", gjson.GetBytes(patched, "input.0.type").String())
-	require.Equal(t, "你好", gjson.GetBytes(patched, "input.0.content.0.text").String())
+	require.Equal(t, "user", gjson.GetBytes(patched, "input.0.role").String())
+	require.Equal(t, "你好", gjson.GetBytes(patched, "input.0.content").String())
+	require.False(t, gjson.GetBytes(patched, "input.0.type").Exists())
 	require.Equal(t, "output_text", gjson.GetBytes(patched, "include.0").String())
 	require.False(t, gjson.GetBytes(patched, "include.1").Exists())
+}
+
+func TestPatchGrokResponsesBodyRelocatesDeveloperMessagesToInstructions(t *testing.T) {
+	body := []byte(`{
+		"model": "grok",
+		"instructions": "base prompt",
+		"input": [
+			{"type": "message", "role": "developer", "content": [{"type": "input_text", "text": "Be concise."}]},
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}
+		]
+	}`)
+
+	patched, err := patchGrokResponsesBody(body, "grok-composer-2.5-fast")
+	require.NoError(t, err)
+	require.Contains(t, gjson.GetBytes(patched, "instructions").String(), "base prompt")
+	require.Contains(t, gjson.GetBytes(patched, "instructions").String(), "Be concise.")
+	require.Len(t, gjson.GetBytes(patched, "input").Array(), 1)
+	require.Equal(t, "hello", gjson.GetBytes(patched, "input.0.content").String())
+}
+
+func TestPatchGrokResponsesBodyDropsDeveloperMessagesWhenPreviousResponseIDPresent(t *testing.T) {
+	body := []byte(`{
+		"model": "grok",
+		"previous_response_id": "resp_prev",
+		"input": [
+			{"type": "message", "role": "developer", "content": [{"type": "input_text", "text": "Be concise."}]},
+			{"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Sure."}]},
+			{"type": "local_shell_call", "call_id": "call_shell_1", "name": "shell", "input": "{\"command\":\"ls\"}"},
+			{"type": "mcp_tool_call_output", "call_id": "call_mcp_1", "output": "listed files"},
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "描述"}]}
+		]
+	}`)
+
+	patched, err := patchGrokResponsesBody(body, "grok-composer-2.5-fast")
+	require.NoError(t, err)
+	require.False(t, gjson.GetBytes(patched, "instructions").Exists())
+	require.False(t, gjson.GetBytes(patched, "input.#(role=developer)").Exists())
+	require.False(t, gjson.GetBytes(patched, "input.#(role=system)").Exists())
+	require.Equal(t, "Sure.", gjson.GetBytes(patched, "input.#(role=assistant).content").String())
+	require.Equal(t, "描述", gjson.GetBytes(patched, "input.#(role=user).content").String())
+}
+
+func TestPatchGrokResponsesBodyWrapsStandaloneInputTextItems(t *testing.T) {
+	body := []byte(`{
+		"model": "grok",
+		"previous_response_id": "resp_prev",
+		"input": [{"type": "input_text", "text": "continue"}]
+	}`)
+
+	patched, err := patchGrokResponsesBody(body, "grok-composer-2.5-fast")
+	require.NoError(t, err)
+	require.Equal(t, "user", gjson.GetBytes(patched, "input.0.role").String())
+	require.Equal(t, "continue", gjson.GetBytes(patched, "input.0.content").String())
 }
 
 func TestPatchGrokResponsesBodyStripsReasoningForGrokComposer(t *testing.T) {
@@ -275,7 +328,7 @@ func TestForwardGrokResponsesPreprocessesComposerImages(t *testing.T) {
 	require.Equal(t, "grok-composer-2.5-fast", gjson.GetBytes(finalBody, "model").String())
 	require.False(t, strings.Contains(string(finalBody), `"input_image"`))
 	require.False(t, strings.Contains(string(finalBody), `"image_url"`))
-	require.Contains(t, gjson.GetBytes(finalBody, "input.0.content.0.text").String(), "invalid invitation code error")
+	require.Contains(t, gjson.GetBytes(finalBody, "input.0.content").String(), "invalid invitation code error")
 	require.Equal(t, 30, result.Usage.InputTokens)
 	require.Equal(t, 12, result.Usage.OutputTokens)
 	require.Equal(t, http.StatusOK, rec.Code)
