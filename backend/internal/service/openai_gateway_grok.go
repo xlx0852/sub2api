@@ -548,8 +548,76 @@ func sanitizeGrokResponsesInput(body []byte) ([]byte, error) {
 	if !ok {
 		return body, nil
 	}
-	payload["input"] = rewriteGrokResponsesFunctionCallOutputImages(normalizedInput)
+	normalizedInput = rewriteGrokResponsesFunctionCallOutputImages(normalizedInput)
+	if strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String()) != "" {
+		normalizedInput = collapseGrokResponsesInputForContinuation(normalizedInput)
+	}
+	payload["input"] = normalizedInput
 	return json.Marshal(payload)
+}
+
+func collapseGrokResponsesInputForContinuation(input []any) []any {
+	if len(input) == 0 {
+		return input
+	}
+	lastAssistantIdx := -1
+	for i, rawItem := range input {
+		if isGrokAssistantInputItem(rawItem) {
+			lastAssistantIdx = i
+		}
+	}
+	collapsed := input
+	if lastAssistantIdx >= 0 && lastAssistantIdx+1 < len(input) {
+		collapsed = input[lastAssistantIdx+1:]
+	}
+	collapsed = dropGrokAssistantInputItems(collapsed)
+	if len(collapsed) == 0 {
+		collapsed = keepTrailingGrokContinuationInputItems(input)
+	}
+	return collapsed
+}
+
+func isGrokAssistantInputItem(rawItem any) bool {
+	item, ok := rawItem.(map[string]any)
+	if !ok || item == nil {
+		return false
+	}
+	return strings.TrimSpace(firstNonEmptyString(item["role"])) == "assistant"
+}
+
+func dropGrokAssistantInputItems(input []any) []any {
+	if len(input) == 0 {
+		return input
+	}
+	filtered := make([]any, 0, len(input))
+	for _, rawItem := range input {
+		if isGrokAssistantInputItem(rawItem) {
+			continue
+		}
+		filtered = append(filtered, rawItem)
+	}
+	return filtered
+}
+
+func keepTrailingGrokContinuationInputItems(input []any) []any {
+	if len(input) == 0 {
+		return input
+	}
+	for i := len(input) - 1; i >= 0; i-- {
+		item, ok := input[i].(map[string]any)
+		if !ok || item == nil {
+			continue
+		}
+		role := strings.TrimSpace(firstNonEmptyString(item["role"]))
+		itemType := strings.TrimSpace(firstNonEmptyString(item["type"]))
+		switch {
+		case role == "user":
+			return []any{item}
+		case itemType == "function_call", itemType == "function_call_output":
+			return input[i:]
+		}
+	}
+	return []any{input[len(input)-1]}
 }
 
 func relocateGrokSystemDeveloperInputItems(payload map[string]any, input []any, mergeInstructions bool) []any {
