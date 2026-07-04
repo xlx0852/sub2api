@@ -550,31 +550,76 @@ func sanitizeGrokResponsesInput(body []byte) ([]byte, error) {
 	}
 	normalizedInput = rewriteGrokResponsesFunctionCallOutputImages(normalizedInput)
 	if strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String()) != "" {
-		normalizedInput = collapseGrokResponsesInputForContinuation(normalizedInput)
+		normalizedInput = collapseGrokResponsesInputForContinuation(payload, normalizedInput)
 	}
 	payload["input"] = normalizedInput
 	return json.Marshal(payload)
 }
 
-func collapseGrokResponsesInputForContinuation(input []any) []any {
+func collapseGrokResponsesInputForContinuation(payload map[string]any, input []any) []any {
 	if len(input) == 0 {
 		return input
 	}
+	toolContinuation := payload != nil && NeedsToolContinuation(payload)
+
 	lastAssistantIdx := -1
 	for i, rawItem := range input {
 		if isGrokAssistantInputItem(rawItem) {
 			lastAssistantIdx = i
 		}
 	}
-	collapsed := input
-	if lastAssistantIdx >= 0 && lastAssistantIdx+1 < len(input) {
+
+	var collapsed []any
+	switch {
+	case lastAssistantIdx >= 0 && lastAssistantIdx+1 < len(input):
 		collapsed = input[lastAssistantIdx+1:]
+	case toolContinuation:
+		collapsed = keepTrailingGrokToolContinuationItems(input)
+	default:
+		collapsed = keepTrailingGrokUserMessages(input)
 	}
 	collapsed = dropGrokAssistantInputItems(collapsed)
 	if len(collapsed) == 0 {
 		collapsed = keepTrailingGrokContinuationInputItems(input)
 	}
 	return collapsed
+}
+
+func keepTrailingGrokUserMessages(input []any) []any {
+	if len(input) == 0 {
+		return input
+	}
+	for i := len(input) - 1; i >= 0; i-- {
+		item, ok := input[i].(map[string]any)
+		if !ok || item == nil {
+			continue
+		}
+		if strings.TrimSpace(firstNonEmptyString(item["role"])) == "user" {
+			return []any{item}
+		}
+	}
+	return nil
+}
+
+func keepTrailingGrokToolContinuationItems(input []any) []any {
+	if len(input) == 0 {
+		return input
+	}
+	lastToolIdx := -1
+	for i, rawItem := range input {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			continue
+		}
+		itemType := strings.TrimSpace(firstNonEmptyString(item["type"]))
+		if itemType == "function_call" || itemType == "function_call_output" {
+			lastToolIdx = i
+		}
+	}
+	if lastToolIdx >= 0 {
+		return input[lastToolIdx:]
+	}
+	return keepTrailingGrokUserMessages(input)
 }
 
 func isGrokAssistantInputItem(rawItem any) bool {
