@@ -532,19 +532,124 @@ func sanitizeGrokResponsesInput(body []byte) ([]byte, error) {
 		return body, nil
 	}
 	input = stripGrokIncompatibleCompactionInputItems(input)
+	mergeInstructions := strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String()) == ""
+	input = relocateGrokSystemDeveloperInputItems(payload, input, mergeInstructions)
+	input = dropGrokEmptyInputItems(input)
 	if normalizedToolRoleInput, modified := normalizeCodexToolRoleMessages(input); modified {
 		input = normalizedToolRoleInput
 	}
 	if normalizedMessageInput, modified := normalizeCodexMessageContentText(input); modified {
 		input = normalizedMessageInput
 	}
-	input = sanitizeGrokCodexInputItems(input)
+	dropReasoning := isGrokComposerModel(strings.TrimSpace(gjson.GetBytes(body, "model").String()))
+	input = sanitizeGrokCodexInputItems(input, dropReasoning)
+	input = wrapGrokStandaloneInputContentItems(input)
 	normalizedInput, ok := normalizeGrokResponsesImageParts(input).([]any)
 	if !ok {
 		return body, nil
 	}
 	payload["input"] = rewriteGrokResponsesFunctionCallOutputImages(normalizedInput)
 	return json.Marshal(payload)
+}
+
+func relocateGrokSystemDeveloperInputItems(payload map[string]any, input []any, mergeInstructions bool) []any {
+	if len(input) == 0 {
+		return input
+	}
+	instructionParts := make([]string, 0)
+	filtered := make([]any, 0, len(input))
+	for _, rawItem := range input {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			filtered = append(filtered, rawItem)
+			continue
+		}
+		itemType := strings.TrimSpace(firstNonEmptyString(item["type"]))
+		role := strings.TrimSpace(firstNonEmptyString(item["role"]))
+		if itemType == "message" {
+			switch role {
+			case "developer", "system":
+			default:
+				filtered = append(filtered, rawItem)
+				continue
+			}
+		} else if role != "developer" && role != "system" {
+			filtered = append(filtered, rawItem)
+			continue
+		}
+		if text := strings.TrimSpace(extractTextFromContent(item["content"])); text != "" {
+			instructionParts = append(instructionParts, text)
+		}
+	}
+	if mergeInstructions && len(instructionParts) > 0 {
+		existing := strings.TrimSpace(firstNonEmptyString(payload["instructions"]))
+		mergedParts := make([]string, 0, len(instructionParts)+1)
+		if existing != "" {
+			mergedParts = append(mergedParts, existing)
+		}
+		mergedParts = append(mergedParts, instructionParts...)
+		payload["instructions"] = strings.Join(mergedParts, "\n\n")
+	}
+	return filtered
+}
+
+func dropGrokEmptyInputItems(input []any) []any {
+	if len(input) == 0 {
+		return input
+	}
+	filtered := make([]any, 0, len(input))
+	for _, rawItem := range input {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			filtered = append(filtered, rawItem)
+			continue
+		}
+		if content, ok := item["content"].(string); ok && strings.TrimSpace(content) == "" {
+			continue
+		}
+		filtered = append(filtered, rawItem)
+	}
+	return filtered
+}
+
+func wrapGrokStandaloneInputContentItems(input []any) []any {
+	if len(input) == 0 {
+		return input
+	}
+	wrapped := make([]any, 0, len(input))
+	for _, rawItem := range input {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			wrapped = append(wrapped, rawItem)
+			continue
+		}
+		if strings.TrimSpace(firstNonEmptyString(item["role"])) != "" {
+			wrapped = append(wrapped, item)
+			continue
+		}
+		itemType := strings.TrimSpace(firstNonEmptyString(item["type"]))
+		switch itemType {
+		case "input_text":
+			text := strings.TrimSpace(firstNonEmptyString(item["text"]))
+			if text == "" {
+				continue
+			}
+			wrapped = append(wrapped, map[string]any{
+				"role":    "user",
+				"content": text,
+			})
+		case "input_image":
+			wrapped = append(wrapped, map[string]any{
+				"role": "user",
+				"content": []any{
+					item,
+				},
+			})
+		default:
+			wrapped = append(wrapped, item)
+		}
+	}
+	return wrapped
 }
 
 func stripGrokIncompatibleCompactionInputItems(input []any) []any {
@@ -580,14 +685,15 @@ var grokCodexToolOutputTypeAliases = map[string]string{
 }
 
 var grokDroppedCodexInputItemTypes = map[string]struct{}{
-	"item_reference":    {},
-	"web_search_call":   {},
-	"file_search_call":  {},
-	"computer_call":     {},
-	"code_interpreter_call": {},
+	"item_reference":         {},
+	"web_search_call":        {},
+	"file_search_call":       {},
+	"computer_call":          {},
+	"code_interpreter_call":  {},
+	"image_generation_call":  {},
 }
 
-func sanitizeGrokCodexInputItems(input []any) []any {
+func sanitizeGrokCodexInputItems(input []any, dropReasoning bool) []any {
 	if len(input) == 0 {
 		return input
 	}
@@ -598,7 +704,7 @@ func sanitizeGrokCodexInputItems(input []any) []any {
 			filtered = append(filtered, rawItem)
 			continue
 		}
-		normalized, keep := normalizeGrokCodexInputItem(item)
+		normalized, keep := normalizeGrokCodexInputItem(item, dropReasoning)
 		if !keep {
 			continue
 		}
@@ -607,7 +713,7 @@ func sanitizeGrokCodexInputItems(input []any) []any {
 	return filtered
 }
 
-func normalizeGrokCodexInputItem(item map[string]any) (map[string]any, bool) {
+func normalizeGrokCodexInputItem(item map[string]any, dropReasoning bool) (map[string]any, bool) {
 	itemType := strings.TrimSpace(firstNonEmptyString(item["type"]))
 	if itemType == "" {
 		if role := strings.TrimSpace(firstNonEmptyString(item["role"])); role != "" {
@@ -629,6 +735,9 @@ func normalizeGrokCodexInputItem(item map[string]any) (map[string]any, bool) {
 	}
 	switch itemType {
 	case "reasoning":
+		if dropReasoning {
+			return nil, false
+		}
 		return normalizeGrokCodexReasoningItem(item)
 	case "message":
 		return normalizeGrokCodexMessageItem(item), true
@@ -679,6 +788,18 @@ func normalizeGrokCodexFunctionCallItem(item map[string]any, targetType string) 
 		}
 	}
 	delete(normalized, "input")
+	if rawArguments, ok := normalized["arguments"]; ok && rawArguments != nil {
+		switch typed := rawArguments.(type) {
+		case string:
+		default:
+			if encoded, err := json.Marshal(typed); err == nil {
+				normalized["arguments"] = string(encoded)
+			}
+		}
+	}
+	for _, field := range []string{"status", "parsed_arguments", "queue_id"} {
+		delete(normalized, field)
+	}
 	return normalized
 }
 
@@ -702,6 +823,9 @@ func normalizeGrokCodexFunctionCallOutputItem(item map[string]any, targetType st
 		}
 	}
 	delete(normalized, "content")
+	for _, field := range []string{"status"} {
+		delete(normalized, field)
+	}
 	return normalized
 }
 
@@ -727,8 +851,12 @@ func normalizeGrokCodexMessageItem(item map[string]any) map[string]any {
 	for key, value := range item {
 		normalized[key] = value
 	}
+	delete(normalized, "type")
 	delete(normalized, "id")
-	if role := strings.TrimSpace(firstNonEmptyString(normalized["role"])); role == "tool" {
+	delete(normalized, "status")
+	role := strings.TrimSpace(firstNonEmptyString(normalized["role"]))
+	switch role {
+	case "tool":
 		callID := strings.TrimSpace(firstNonEmptyString(normalized["call_id"], normalized["tool_call_id"], normalized["id"]))
 		output := extractTextFromContent(normalized["content"])
 		if output == "" {
@@ -743,10 +871,53 @@ func normalizeGrokCodexMessageItem(item map[string]any) map[string]any {
 		}
 		normalized["role"] = "user"
 	}
-	if parts, ok := normalized["content"].([]any); ok {
-		normalized["content"] = stripGrokCodexMessageContentFields(parts)
-	}
+	normalized["content"] = flattenGrokCodexMessageContent(normalized["content"])
 	return normalized
+}
+
+func flattenGrokCodexMessageContent(content any) any {
+	switch typed := content.(type) {
+	case string:
+		return typed
+	case []any:
+		parts := stripGrokCodexMessageContentFields(typed)
+		textChunks := make([]string, 0, len(parts))
+		imageParts := make([]any, 0)
+		for _, rawPart := range parts {
+			part, ok := rawPart.(map[string]any)
+			if !ok || part == nil {
+				continue
+			}
+			partType := strings.TrimSpace(firstNonEmptyString(part["type"]))
+			switch partType {
+			case "input_image":
+				imageParts = append(imageParts, part)
+			case "input_text", "output_text", "text", "":
+				if text := strings.TrimSpace(firstNonEmptyString(part["text"])); text != "" {
+					textChunks = append(textChunks, text)
+				}
+			default:
+				if text := strings.TrimSpace(firstNonEmptyString(part["text"])); text != "" {
+					textChunks = append(textChunks, text)
+				}
+			}
+		}
+		if len(imageParts) > 0 {
+			if len(textChunks) > 0 {
+				imageParts = append([]any{map[string]any{"type": "input_text", "text": strings.Join(textChunks, "\n")}}, imageParts...)
+			}
+			return imageParts
+		}
+		if len(textChunks) == 1 {
+			return textChunks[0]
+		}
+		if len(textChunks) > 1 {
+			return strings.Join(textChunks, "\n")
+		}
+		return parts
+	default:
+		return content
+	}
 }
 
 func stripGrokCodexMessageContentFields(parts []any) []any {
