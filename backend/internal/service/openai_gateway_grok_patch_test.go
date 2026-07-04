@@ -30,6 +30,31 @@ func TestPatchGrokResponsesBodyStripsInstructionsWhenPreviousResponseIDPresent(t
 	require.False(t, gjson.GetBytes(patched, "instructions").Exists())
 }
 
+func TestPatchGrokResponsesBodyNormalizesCodexToolInputItems(t *testing.T) {
+	body := []byte(`{
+		"model": "grok",
+		"input": [
+			{"type": "item_reference", "id": "call_shell_1"},
+			{"type": "local_shell_call", "call_id": "call_shell_1", "name": "shell", "input": "{\"command\":\"ls\"}"},
+			{"type": "mcp_tool_call_output", "call_id": "call_mcp_1", "output": "listed files"},
+			{"type": "reasoning", "id": "rs_1", "encrypted_content": "opaque", "summary": [{"type": "summary_text", "text": "thinking"}]},
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "描述", "nonce": 123}]}
+		]
+	}`)
+
+	patched, err := patchGrokResponsesBody(body, "grok-composer-2.5-fast")
+	require.NoError(t, err)
+	require.Len(t, gjson.GetBytes(patched, "input").Array(), 4)
+	require.Equal(t, "function_call", gjson.GetBytes(patched, "input.0.type").String())
+	require.Equal(t, "call_shell_1", gjson.GetBytes(patched, "input.0.call_id").String())
+	require.Equal(t, "shell", gjson.GetBytes(patched, "input.0.name").String())
+	require.Equal(t, "function_call_output", gjson.GetBytes(patched, "input.1.type").String())
+	require.False(t, gjson.GetBytes(patched, "input.2.encrypted_content").Exists())
+	require.Equal(t, "thinking", gjson.GetBytes(patched, "input.2.summary.0.text").String())
+	require.False(t, gjson.GetBytes(patched, "input.3.content.0.nonce").Exists())
+	require.Equal(t, "描述", gjson.GetBytes(patched, "input.3.content.0.text").String())
+}
+
 func TestPatchGrokResponsesBodyStripsCodexCompactionItems(t *testing.T) {
 	body := []byte(`{
 		"model": "grok",
