@@ -532,6 +532,13 @@ func sanitizeGrokResponsesInput(body []byte) ([]byte, error) {
 		return body, nil
 	}
 	input = stripGrokIncompatibleCompactionInputItems(input)
+	if normalizedToolRoleInput, modified := normalizeCodexToolRoleMessages(input); modified {
+		input = normalizedToolRoleInput
+	}
+	if normalizedMessageInput, modified := normalizeCodexMessageContentText(input); modified {
+		input = normalizedMessageInput
+	}
+	input = sanitizeGrokCodexInputItems(input)
 	normalizedInput, ok := normalizeGrokResponsesImageParts(input).([]any)
 	if !ok {
 		return body, nil
@@ -557,6 +564,219 @@ func stripGrokIncompatibleCompactionInputItems(input []any) []any {
 		filtered = append(filtered, rawItem)
 	}
 	return filtered
+}
+
+var grokCodexToolCallTypeAliases = map[string]string{
+	"local_shell_call": "function_call",
+	"custom_tool_call": "function_call",
+	"mcp_tool_call":    "function_call",
+	"tool_search_call": "function_call",
+}
+
+var grokCodexToolOutputTypeAliases = map[string]string{
+	"custom_tool_call_output": "function_call_output",
+	"mcp_tool_call_output":    "function_call_output",
+	"tool_search_output":      "function_call_output",
+}
+
+var grokDroppedCodexInputItemTypes = map[string]struct{}{
+	"item_reference":    {},
+	"web_search_call":   {},
+	"file_search_call":  {},
+	"computer_call":     {},
+	"code_interpreter_call": {},
+}
+
+func sanitizeGrokCodexInputItems(input []any) []any {
+	if len(input) == 0 {
+		return input
+	}
+	filtered := make([]any, 0, len(input))
+	for _, rawItem := range input {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			filtered = append(filtered, rawItem)
+			continue
+		}
+		normalized, keep := normalizeGrokCodexInputItem(item)
+		if !keep {
+			continue
+		}
+		filtered = append(filtered, normalized)
+	}
+	return filtered
+}
+
+func normalizeGrokCodexInputItem(item map[string]any) (map[string]any, bool) {
+	itemType := strings.TrimSpace(firstNonEmptyString(item["type"]))
+	if itemType == "" {
+		if role := strings.TrimSpace(firstNonEmptyString(item["role"])); role != "" {
+			return normalizeGrokCodexMessageItem(item), true
+		}
+		if strings.TrimSpace(firstNonEmptyString(item["text"])) != "" {
+			return item, true
+		}
+		return item, true
+	}
+	if _, drop := grokDroppedCodexInputItemTypes[itemType]; drop {
+		return nil, false
+	}
+	if targetType, ok := grokCodexToolCallTypeAliases[itemType]; ok {
+		return normalizeGrokCodexFunctionCallItem(item, targetType), true
+	}
+	if targetType, ok := grokCodexToolOutputTypeAliases[itemType]; ok {
+		return normalizeGrokCodexFunctionCallOutputItem(item, targetType), true
+	}
+	switch itemType {
+	case "reasoning":
+		return normalizeGrokCodexReasoningItem(item)
+	case "message":
+		return normalizeGrokCodexMessageItem(item), true
+	case "function_call":
+		return normalizeGrokCodexFunctionCallItem(item, "function_call"), true
+	case "function_call_output":
+		return normalizeGrokCodexFunctionCallOutputItem(item, "function_call_output"), true
+	case "input_text", "input_image":
+		return item, true
+	default:
+		return nil, false
+	}
+}
+
+func normalizeGrokCodexFunctionCallItem(item map[string]any, targetType string) map[string]any {
+	normalized := make(map[string]any, len(item)+3)
+	for key, value := range item {
+		normalized[key] = value
+	}
+	normalized["type"] = targetType
+	callID := strings.TrimSpace(firstNonEmptyString(
+		normalized["call_id"],
+		normalized["id"],
+	))
+	if callID != "" {
+		normalized["call_id"] = callID
+	}
+	delete(normalized, "id")
+	name := strings.TrimSpace(firstNonEmptyString(
+		normalized["name"],
+		normalized["tool_name"],
+	))
+	if name == "" {
+		name = "tool"
+	}
+	normalized["name"] = name
+	delete(normalized, "tool_name")
+	if _, ok := normalized["arguments"]; !ok {
+		if rawArguments := normalized["input"]; rawArguments != nil {
+			switch typed := rawArguments.(type) {
+			case string:
+				normalized["arguments"] = typed
+			default:
+				if encoded, err := json.Marshal(typed); err == nil {
+					normalized["arguments"] = string(encoded)
+				}
+			}
+		}
+	}
+	delete(normalized, "input")
+	return normalized
+}
+
+func normalizeGrokCodexFunctionCallOutputItem(item map[string]any, targetType string) map[string]any {
+	normalized := make(map[string]any, len(item)+2)
+	for key, value := range item {
+		normalized[key] = value
+	}
+	normalized["type"] = targetType
+	callID := strings.TrimSpace(firstNonEmptyString(
+		normalized["call_id"],
+		normalized["id"],
+	))
+	if callID != "" {
+		normalized["call_id"] = callID
+	}
+	delete(normalized, "id")
+	if _, ok := normalized["output"]; !ok {
+		if output := extractTextFromContent(normalized["content"]); output != "" {
+			normalized["output"] = output
+		}
+	}
+	delete(normalized, "content")
+	return normalized
+}
+
+func normalizeGrokCodexReasoningItem(item map[string]any) (map[string]any, bool) {
+	normalized := make(map[string]any, len(item))
+	for key, value := range item {
+		if key == "encrypted_content" || key == "id" {
+			continue
+		}
+		normalized[key] = value
+	}
+	if summary, ok := normalized["summary"]; !ok || summary == nil {
+		normalized["summary"] = []any{}
+	}
+	if len(normalized) <= 1 {
+		return nil, false
+	}
+	return normalized, true
+}
+
+func normalizeGrokCodexMessageItem(item map[string]any) map[string]any {
+	normalized := make(map[string]any, len(item))
+	for key, value := range item {
+		normalized[key] = value
+	}
+	delete(normalized, "id")
+	if role := strings.TrimSpace(firstNonEmptyString(normalized["role"])); role == "tool" {
+		callID := strings.TrimSpace(firstNonEmptyString(normalized["call_id"], normalized["tool_call_id"], normalized["id"]))
+		output := extractTextFromContent(normalized["content"])
+		if output == "" {
+			output = strings.TrimSpace(firstNonEmptyString(normalized["output"]))
+		}
+		if callID != "" {
+			return map[string]any{
+				"type":    "function_call_output",
+				"call_id": callID,
+				"output":  output,
+			}
+		}
+		normalized["role"] = "user"
+	}
+	if parts, ok := normalized["content"].([]any); ok {
+		normalized["content"] = stripGrokCodexMessageContentFields(parts)
+	}
+	return normalized
+}
+
+func stripGrokCodexMessageContentFields(parts []any) []any {
+	if len(parts) == 0 {
+		return parts
+	}
+	out := make([]any, len(parts))
+	for i, rawPart := range parts {
+		part, ok := rawPart.(map[string]any)
+		if !ok || part == nil {
+			out[i] = rawPart
+			continue
+		}
+		cleaned := make(map[string]any, len(part))
+		for key, value := range part {
+			switch key {
+			case "nonce":
+				continue
+			default:
+				cleaned[key] = value
+			}
+		}
+		if text, ok := cleaned["text"]; ok {
+			if _, isString := text.(string); !isString {
+				cleaned["text"] = stringifyCodexContentText(text)
+			}
+		}
+		out[i] = cleaned
+	}
+	return out
 }
 
 func isGrokIncompatibleCompactionInputItem(item map[string]any) bool {
