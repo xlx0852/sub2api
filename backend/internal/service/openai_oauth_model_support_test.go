@@ -27,6 +27,7 @@ func TestIsModelSupported_OpenAIOAuthEmptyMapping_ServableModels(t *testing.T) {
 		"gpt-5.1-codex-mini",
 		"gpt-5",
 		"codex-mini-latest",
+		"gpt-5.3-codex-xhigh",
 		"gpt5.3codexspark",  // 别名拼写
 		"gpt-image-1",       // 图像生成模型
 		"claude-sonnet-4-6", // /v1/messages 调度默认映射兜底
@@ -106,4 +107,5 @@ func TestIsOpenAIOAuthServableModel(t *testing.T) {
 	require.True(t, isOpenAIOAuthServableModel("DeepThink-x"))  // 非黑名单前缀，保持允许
 	require.False(t, isOpenAIOAuthServableModel("DeepSeek-V4")) // 大小写不敏感
 	require.False(t, isOpenAIOAuthServableModel("qwen3-235b-thinking"))
+	require.True(t, isOpenAIOAuthServableModel("claude-unknown-family")) // 非黑名单模型保持允许，兼容后续渠道级映射
 }
