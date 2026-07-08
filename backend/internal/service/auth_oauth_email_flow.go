@@ -55,9 +55,12 @@ func (s *AuthService) SendPendingOAuthVerifyCode(ctx context.Context, email stri
 	}, nil
 }
 
-func (s *AuthService) validateOAuthRegistrationInvitation(ctx context.Context, invitationCode string) (*RedeemCode, error) {
+func (s *AuthService) validateOAuthRegistrationInvitation(ctx context.Context, invitationCode, affiliateCode string) (*registrationInvitationResolution, error) {
+	resolution := &registrationInvitationResolution{
+		affiliateCode: strings.TrimSpace(affiliateCode),
+	}
 	if s == nil || s.settingService == nil || !s.settingService.IsInvitationCodeEnabled(ctx) {
-		return nil, nil
+		return resolution, nil
 	}
 	if s.redeemRepo == nil && s.oauthEmailFlowClient(ctx) == nil {
 		return nil, ErrServiceUnavailable
@@ -65,17 +68,28 @@ func (s *AuthService) validateOAuthRegistrationInvitation(ctx context.Context, i
 
 	invitationCode = strings.TrimSpace(invitationCode)
 	if invitationCode == "" {
-		return nil, ErrInvitationCodeRequired
+		if resolution.affiliateCode == "" {
+			return nil, ErrInvitationCodeRequired
+		}
+		if !s.isRegistrationAffiliateCode(ctx, resolution.affiliateCode) {
+			return nil, ErrInvitationCodeInvalid
+		}
+		return resolution, nil
 	}
 
 	redeemCode, err := s.loadOAuthRegistrationInvitation(ctx, invitationCode)
-	if err != nil {
+	if err == nil && redeemCode.Type == RedeemTypeInvitation && redeemCode.CanUse() {
+		resolution.redeemCode = redeemCode
+		return resolution, nil
+	}
+	if err != nil && !errors.Is(err, ErrRedeemCodeNotFound) {
 		return nil, ErrInvitationCodeInvalid
 	}
-	if redeemCode.Type != RedeemTypeInvitation || !redeemCode.CanUse() {
-		return nil, ErrInvitationCodeInvalid
+	if s.isRegistrationAffiliateCode(ctx, invitationCode) {
+		resolution.affiliateCode = invitationCode
+		return resolution, nil
 	}
-	return redeemCode, nil
+	return nil, ErrInvitationCodeInvalid
 }
 
 // VerifyOAuthEmailCode verifies the locally entered email verification code for
@@ -105,6 +119,7 @@ func (s *AuthService) RegisterOAuthEmailAccount(
 	password string,
 	verifyCode string,
 	invitationCode string,
+	affiliateCode string,
 	signupSource string,
 ) (*TokenPair, *User, error) {
 	if s == nil {
@@ -127,7 +142,7 @@ func (s *AuthService) RegisterOAuthEmailAccount(
 		return nil, nil, err
 	}
 
-	if _, err := s.validateOAuthRegistrationInvitation(ctx, invitationCode); err != nil {
+	if _, err := s.validateOAuthRegistrationInvitation(ctx, invitationCode, affiliateCode); err != nil {
 		slog.Error("oauth email register: invitation failed", "email", email, "error", err.Error())
 		return nil, nil, err
 	}
@@ -182,6 +197,7 @@ func (s *AuthService) RegisterVerifiedOAuthEmailAccount(
 	email string,
 	password string,
 	invitationCode string,
+	affiliateCode string,
 	signupSource string,
 ) (*TokenPair, *User, error) {
 	if s == nil {
@@ -207,7 +223,7 @@ func (s *AuthService) RegisterVerifiedOAuthEmailAccount(
 	if strings.TrimSpace(password) == "" {
 		return nil, nil, infraerrors.BadRequest("PASSWORD_REQUIRED", "password is required")
 	}
-	if _, err := s.validateOAuthRegistrationInvitation(ctx, invitationCode); err != nil {
+	if _, err := s.validateOAuthRegistrationInvitation(ctx, invitationCode, affiliateCode); err != nil {
 		return nil, nil, err
 	}
 
@@ -270,12 +286,12 @@ func (s *AuthService) FinalizeOAuthEmailAccount(
 	}
 
 	signupSource = normalizeOAuthSignupSource(signupSource)
-	invitationRedeemCode, err := s.validateOAuthRegistrationInvitation(ctx, invitationCode)
+	invitationResolution, err := s.validateOAuthRegistrationInvitation(ctx, invitationCode, affiliateCode)
 	if err != nil {
 		return err
 	}
-	if invitationRedeemCode != nil {
-		if err := s.useOAuthRegistrationInvitation(ctx, invitationRedeemCode.ID, user.ID); err != nil {
+	if invitationResolution.redeemCode != nil {
+		if err := s.useOAuthRegistrationInvitation(ctx, invitationResolution.redeemCode.ID, user.ID); err != nil {
 			return ErrInvitationCodeInvalid
 		}
 	}
@@ -285,7 +301,7 @@ func (s *AuthService) FinalizeOAuthEmailAccount(
 	s.assignSubscriptions(ctx, user.ID, grantPlan.Subscriptions, "auto assigned by signup defaults")
 	// snapshot user × platform quota（fail-open）
 	_ = s.snapshotPlatformQuotaDefaults(ctx, user.ID, &grantPlan)
-	s.bindOAuthAffiliate(ctx, user.ID, affiliateCode)
+	s.bindOAuthAffiliate(ctx, user.ID, invitationResolution.affiliateCode)
 	return nil
 }
 

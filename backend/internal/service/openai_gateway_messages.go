@@ -238,18 +238,25 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		return nil, policyErr
 	}
 	responsesBody = updatedBody
-	if account.Platform == PlatformGrok {
-		patchedBody, patchErr := patchGrokResponsesBody(responsesBody, upstreamModel)
-		if patchErr != nil {
-			return nil, patchErr
-		}
-		responsesBody = patchedBody
-	}
 
 	// 5. Get access token
 	token, _, err := s.GetAccessToken(ctx, account)
 	if err != nil {
 		return nil, fmt.Errorf("get access token: %w", err)
+	}
+
+	var grokPreprocessUsage *OpenAIUsage
+	if account.Platform == PlatformGrok {
+		proxyURL := ""
+		if account.ProxyID != nil && account.Proxy != nil {
+			proxyURL = account.Proxy.URL()
+		}
+		preparedBody, prepareErr := s.prepareGrokUpstreamResponsesBody(ctx, c, account, responsesBody, upstreamModel, token, proxyURL, grokPreparedResponsesOptions{})
+		if prepareErr != nil {
+			return nil, prepareErr
+		}
+		responsesBody = preparedBody.Body
+		grokPreprocessUsage = preparedBody.PreprocessUsage
 	}
 
 	// 6. Build upstream request
@@ -418,6 +425,10 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		} else if snapshot := ParseCodexRateLimitHeaders(resp.Header); snapshot != nil {
 			s.updateCodexUsageSnapshot(ctx, account.ID, snapshot)
 		}
+	}
+
+	if handleErr == nil && result != nil && grokPreprocessUsage != nil {
+		addOpenAIUsage(&result.Usage, *grokPreprocessUsage)
 	}
 
 	return result, handleErr

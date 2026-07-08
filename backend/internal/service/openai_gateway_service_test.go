@@ -369,6 +369,29 @@ func TestOpenAIGatewayService_GenerateSessionHashForOpenAIRequest_CodexOfficialI
 	require.NotEqual(t, DeriveSessionHashFromSeed("pcache_123"), got)
 }
 
+func TestOpenAIGatewayService_GenerateSessionHash_XGrokConvIDWinsOverContent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+	c.Request.Header.Set("x-grok-conv-id", "grok-cli-conv-123")
+
+	svc := &OpenAIGatewayService{}
+	body := []byte(`{"model":"grok-composer-2.5-fast","input":[{"role":"user","content":"Hello"}]}`)
+
+	contentHash := svc.GenerateSessionHash(c, body)
+	require.NotEmpty(t, contentHash)
+
+	c.Request.Header.Set("x-grok-conv-id", "grok-cli-conv-456")
+	differentConvHash := svc.GenerateSessionHash(c, body)
+	require.NotEmpty(t, differentConvHash)
+	require.NotEqual(t, contentHash, differentConvHash)
+
+	c.Request.Header.Set("x-grok-conv-id", "grok-cli-conv-123")
+	sameConvHash := svc.GenerateSessionHash(c, body)
+	require.Equal(t, contentHash, sameConvHash)
+}
+
 func TestOpenAIGatewayService_GenerateSessionHash_ExplicitSignalWinsOverContent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()

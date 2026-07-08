@@ -374,6 +374,7 @@ func (h *AuthHandler) completeEmailOAuthRegistration(c *gin.Context, provider st
 		strings.TrimSpace(session.ResolvedEmail),
 		req.Password,
 		strings.TrimSpace(req.InvitationCode),
+		affiliateCode,
 		strings.TrimSpace(session.ProviderType),
 	)
 	if err != nil {

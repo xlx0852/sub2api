@@ -203,6 +203,36 @@ func TestRuntimeSanityReportsInvalidOverridesWithoutSecrets(t *testing.T) {
 	require.NotContains(t, report.ProxyPolicy, "client-secret-like-value")
 }
 
+func TestBuildResponsesWebSocketURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		baseURL string
+		want    string
+	}{
+		{
+			name:    "api.x.ai",
+			baseURL: "https://api.x.ai/v1",
+			want:    "wss://api.x.ai/v1/responses",
+		},
+		{
+			name:    "cli-chat-proxy maps to api.x.ai",
+			baseURL: "https://cli-chat-proxy.grok.com/v1",
+			want:    "wss://api.x.ai/v1/responses",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := BuildResponsesWebSocketURL(tt.baseURL)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestDefaultModelMappingIncludesGrokAliases(t *testing.T) {
 	t.Parallel()
 

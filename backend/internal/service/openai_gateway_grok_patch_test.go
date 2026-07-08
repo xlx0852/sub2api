@@ -44,14 +44,17 @@ func TestPatchGrokResponsesBodyNormalizesCodexToolInputItems(t *testing.T) {
 
 	patched, err := patchGrokResponsesBody(body, "grok-composer-2.5-fast")
 	require.NoError(t, err)
-	require.Len(t, gjson.GetBytes(patched, "input").Array(), 3)
+	require.Len(t, gjson.GetBytes(patched, "input").Array(), 4)
 	require.Equal(t, "function_call", gjson.GetBytes(patched, "input.0.type").String())
 	require.Equal(t, "call_shell_1", gjson.GetBytes(patched, "input.0.call_id").String())
 	require.Equal(t, "shell", gjson.GetBytes(patched, "input.0.name").String())
 	require.Equal(t, "function_call_output", gjson.GetBytes(patched, "input.1.type").String())
-	require.Equal(t, "user", gjson.GetBytes(patched, "input.2.role").String())
-	require.Equal(t, "描述", gjson.GetBytes(patched, "input.2.content").String())
-	require.False(t, gjson.GetBytes(patched, "input.2.type").Exists())
+	require.Equal(t, "reasoning", gjson.GetBytes(patched, "input.2.type").String())
+	require.False(t, gjson.GetBytes(patched, "input.2.encrypted_content").Exists())
+	require.Equal(t, "thinking", gjson.GetBytes(patched, "input.2.summary.0.text").String())
+	require.Equal(t, "user", gjson.GetBytes(patched, "input.3.role").String())
+	require.Equal(t, "描述", gjson.GetBytes(patched, "input.3.content").String())
+	require.False(t, gjson.GetBytes(patched, "input.3.type").Exists())
 }
 
 func TestPatchGrokResponsesBodyStripsCodexCompactionItems(t *testing.T) {
@@ -94,6 +97,8 @@ func TestPatchGrokResponsesBodyRelocatesDeveloperMessagesToInstructions(t *testi
 }
 
 func TestPatchGrokResponsesBodyDropsDeveloperMessagesWhenPreviousResponseIDPresent(t *testing.T) {
+	t.Setenv("SUB2API_GROK_KEEP_HISTORY", "0")
+
 	body := []byte(`{
 		"model": "grok",
 		"previous_response_id": "resp_prev",
@@ -112,13 +117,13 @@ func TestPatchGrokResponsesBodyDropsDeveloperMessagesWhenPreviousResponseIDPrese
 	require.False(t, gjson.GetBytes(patched, "input.#(role=developer)").Exists())
 	require.False(t, gjson.GetBytes(patched, "input.#(role=system)").Exists())
 	require.False(t, gjson.GetBytes(patched, "input.#(role=assistant)").Exists())
-	require.Len(t, gjson.GetBytes(patched, "input").Array(), 3)
-	require.Equal(t, "function_call", gjson.GetBytes(patched, "input.0.type").String())
-	require.Equal(t, "function_call_output", gjson.GetBytes(patched, "input.1.type").String())
-	require.Equal(t, "描述", gjson.GetBytes(patched, "input.2.content").String())
+	require.Len(t, gjson.GetBytes(patched, "input").Array(), 1)
+	require.Equal(t, "描述", gjson.GetBytes(patched, "input.0.content").String())
 }
 
 func TestPatchGrokResponsesBodyCollapsesReplayedHistoryForContinuation(t *testing.T) {
+	t.Setenv("SUB2API_GROK_KEEP_HISTORY", "0")
+
 	body := []byte(`{
 		"model": "grok",
 		"previous_response_id": "resp_prev",
@@ -137,6 +142,8 @@ func TestPatchGrokResponsesBodyCollapsesReplayedHistoryForContinuation(t *testin
 }
 
 func TestPatchGrokResponsesBodyCollapsesReplayedUsersWithoutAssistantRole(t *testing.T) {
+	t.Setenv("SUB2API_GROK_KEEP_HISTORY", "0")
+
 	body := []byte(`{
 		"model": "grok",
 		"previous_response_id": "resp_prev",
@@ -149,6 +156,164 @@ func TestPatchGrokResponsesBodyCollapsesReplayedUsersWithoutAssistantRole(t *tes
 	patched, err := patchGrokResponsesBody(body, "grok-composer-2.5-fast")
 	require.NoError(t, err)
 	require.Len(t, gjson.GetBytes(patched, "input").Array(), 1)
+	require.Equal(t, "你是什么模型", gjson.GetBytes(patched, "input.0.content").String())
+}
+
+func TestPatchGrokResponsesBodyKeepsTrailingToolOutputContinuation(t *testing.T) {
+	body := []byte(`{
+		"model": "grok",
+		"previous_response_id": "resp_prev",
+		"input": [
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "run ls"}]},
+			{"type": "local_shell_call", "call_id": "call_1", "name": "shell", "arguments": "{\"command\":\"ls\"}"},
+			{"type": "mcp_tool_call_output", "call_id": "call_1", "output": "file.txt"}
+		]
+	}`)
+
+	patched, err := patchGrokResponsesBody(body, "grok-composer-2.5-fast")
+	require.NoError(t, err)
+	require.Len(t, gjson.GetBytes(patched, "input").Array(), 3)
+	require.Equal(t, "run ls", gjson.GetBytes(patched, "input.0.content").String())
+	require.Equal(t, "function_call", gjson.GetBytes(patched, "input.1.type").String())
+	require.Equal(t, "function_call_output", gjson.GetBytes(patched, "input.2.type").String())
+}
+
+func TestPatchGrokResponsesBodyGrokBuildHTTPRelayCollapsesToolOutputPair(t *testing.T) {
+	body := []byte(`{
+		"model": "grok",
+		"instructions": "system prompt",
+		"input": [
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]},
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "list files"}]},
+			{"type": "reasoning", "id": "rs_1", "summary": []},
+			{"type": "local_shell_call", "call_id": "call_1", "name": "shell", "input": "{\"command\":\"ls\"}"},
+			{"type": "mcp_tool_call_output", "call_id": "call_1", "output": "a.txt\nb.txt"}
+		]
+	}`)
+
+	relayed, err := applyGrokBuildHTTPRelayBody(body, "session-abc")
+	require.NoError(t, err)
+	patched, err := patchGrokResponsesBodyWithOptions(relayed, "grok-composer-2.5-fast", grokResponsesPatchOptions{
+		dropReplayedAssistantMessages: true,
+		collapseForGrokBuildHTTPRelay: true,
+	})
+	require.NoError(t, err)
+	require.False(t, gjson.GetBytes(patched, "instructions").Exists())
+	require.Len(t, gjson.GetBytes(patched, "input").Array(), 3)
+	require.Equal(t, "list files", gjson.GetBytes(patched, "input.0.content").String())
+	require.Equal(t, "function_call", gjson.GetBytes(patched, "input.1.type").String())
+	require.Equal(t, "call_1", gjson.GetBytes(patched, "input.1.call_id").String())
+	require.Equal(t, "function_call_output", gjson.GetBytes(patched, "input.2.type").String())
+	require.Equal(t, "a.txt\nb.txt", gjson.GetBytes(patched, "input.2.output").String())
+}
+
+func TestPatchGrokResponsesBodyGrokBuildHTTPRelayKeepsAllToolPairsSinceLastUser(t *testing.T) {
+	body := []byte(`{
+		"model": "grok",
+		"input": [
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "重启一下前后端"}]},
+			{"type": "local_shell_call", "call_id": "call_1", "name": "shell", "input": "{\"command\":\"ls deploy\"}"},
+			{"type": "mcp_tool_call_output", "call_id": "call_1", "output": "README.md"},
+			{"type": "local_shell_call", "call_id": "call_2", "name": "shell", "input": "{\"command\":\"cat deploy/README.md\"}"},
+			{"type": "mcp_tool_call_output", "call_id": "call_2", "output": "restart: make dev"}
+		]
+	}`)
+
+	relayed, err := applyGrokBuildHTTPRelayBody(body, "session-abc")
+	require.NoError(t, err)
+	patched, err := patchGrokResponsesBodyWithOptions(relayed, "grok-composer-2.5-fast", grokResponsesPatchOptions{
+		dropReplayedAssistantMessages: true,
+		collapseForGrokBuildHTTPRelay: true,
+	})
+	require.NoError(t, err)
+	items := gjson.GetBytes(patched, "input").Array()
+	require.Len(t, items, 5)
+	require.Equal(t, "重启一下前后端", gjson.GetBytes(patched, "input.0.content").String())
+	require.Equal(t, "call_1", gjson.GetBytes(patched, "input.1.call_id").String())
+	require.Equal(t, "call_2", gjson.GetBytes(patched, "input.3.call_id").String())
+}
+
+func TestApplyGrokBuildHTTPRelayBodyStripsPreviousResponseIDAndSetsPromptCacheKey(t *testing.T) {
+	body := []byte(`{
+		"model": "grok-composer-2.5-fast",
+		"previous_response_id": "resp_prev",
+		"input": [{"role": "user", "content": "hello"}]
+	}`)
+
+	patched, err := applyGrokBuildHTTPRelayBody(body, "session-abc")
+	require.NoError(t, err)
+	require.False(t, gjson.GetBytes(patched, "previous_response_id").Exists())
+	require.Equal(t, "session-abc", gjson.GetBytes(patched, "prompt_cache_key").String())
+}
+
+func TestPatchGrokResponsesBodyGrokBuildHTTPRelayCollapsesReplayedHistory(t *testing.T) {
+	body := []byte(`{
+		"model": "grok",
+		"previous_response_id": "resp_prev",
+		"instructions": "system prompt",
+		"input": [
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "等哈建行卡"}]},
+			{"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "收到。"}]},
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "你是什么模型"}]}
+		]
+	}`)
+
+	relayed, err := applyGrokBuildHTTPRelayBody(body, "session-abc")
+	require.NoError(t, err)
+	patched, err := patchGrokResponsesBodyWithOptions(relayed, "grok-composer-2.5-fast", grokResponsesPatchOptions{
+		dropReplayedAssistantMessages: true,
+		collapseForGrokBuildHTTPRelay: true,
+	})
+	require.NoError(t, err)
+	require.False(t, gjson.GetBytes(patched, "previous_response_id").Exists())
+	require.Equal(t, "session-abc", gjson.GetBytes(patched, "prompt_cache_key").String())
+	require.False(t, gjson.GetBytes(patched, "instructions").Exists())
+	require.Len(t, gjson.GetBytes(patched, "input").Array(), 1)
+	require.Equal(t, "你是什么模型", gjson.GetBytes(patched, "input.0.content").String())
+}
+
+func TestPatchGrokResponsesBodyGrokBuildHTTPRelayCollapsesToolTurnReplay(t *testing.T) {
+	body := []byte(`{
+		"model": "grok",
+		"instructions": "system prompt",
+		"input": [
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "list files"}]},
+			{"type": "local_shell_call", "call_id": "call_1", "name": "shell", "input": "{\"command\":\"ls\"}"},
+			{"type": "mcp_tool_call_output", "call_id": "call_1", "output": [{"type": "input_text", "text": "a.txt"}]},
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "describe them"}]}
+		]
+	}`)
+
+	relayed, err := applyGrokBuildHTTPRelayBody(body, "session-abc")
+	require.NoError(t, err)
+	patched, err := patchGrokResponsesBodyWithOptions(relayed, "grok-composer-2.5-fast", grokResponsesPatchOptions{
+		dropReplayedAssistantMessages: true,
+		collapseForGrokBuildHTTPRelay: true,
+	})
+	require.NoError(t, err)
+	require.Len(t, gjson.GetBytes(patched, "input").Array(), 1)
+	require.Equal(t, "describe them", gjson.GetBytes(patched, "input.0.content").String())
+}
+
+func TestPatchGrokResponsesBodyCollapsesStaleToolHistoryWhenTrailingUserMessage(t *testing.T) {
+	t.Setenv("SUB2API_GROK_KEEP_HISTORY", "0")
+
+	body := []byte(`{
+		"model": "grok",
+		"previous_response_id": "resp_prev",
+		"tools": [{"type": "function", "name": "shell", "parameters": {}}],
+		"tool_choice": "auto",
+		"input": [
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "run ls"}]},
+			{"type": "local_shell_call", "call_id": "call_1", "name": "shell", "input": "{\"command\":\"ls\"}"},
+			{"type": "mcp_tool_call_output", "call_id": "call_1", "output": "file.txt"},
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "你是什么模型"}]}
+		]
+	}`)
+
+	patched, err := patchGrokResponsesBody(body, "grok-composer-2.5-fast")
+	require.NoError(t, err)
+	require.Len(t, gjson.GetBytes(patched, "input").Array(), 1, "patched=%s", string(patched))
 	require.Equal(t, "你是什么模型", gjson.GetBytes(patched, "input.0.content").String())
 }
 
@@ -175,6 +340,22 @@ func TestPatchGrokResponsesBodyStripsReasoningForGrokComposer(t *testing.T) {
 	}`)
 
 	patched, err := patchGrokResponsesBody(body, "grok-composer-2.5-fast")
+	require.NoError(t, err)
+	require.False(t, gjson.GetBytes(patched, "reasoning").Exists())
+	require.False(t, gjson.GetBytes(patched, "reasoning_effort").Exists())
+	require.False(t, gjson.GetBytes(patched, "reasoningEffort").Exists())
+}
+
+func TestPatchGrokResponsesBodyStripsReasoningForGrokBuild(t *testing.T) {
+	body := []byte(`{
+		"model": "grok",
+		"reasoning": {"effort": "high", "summary": "detailed"},
+		"reasoning_effort": "high",
+		"reasoningEffort": "high",
+		"input": [{"role": "user", "content": "hello"}]
+	}`)
+
+	patched, err := patchGrokResponsesBody(body, "grok-build-0.1")
 	require.NoError(t, err)
 	require.False(t, gjson.GetBytes(patched, "reasoning").Exists())
 	require.False(t, gjson.GetBytes(patched, "reasoning_effort").Exists())
@@ -293,6 +474,100 @@ func TestPatchGrokResponsesBodyPreservesInputImagesForGrokBuild(t *testing.T) {
 	require.Equal(t, "input_text", gjson.GetBytes(patched, "input.0.content.0.type").String())
 	require.Equal(t, "input_image", gjson.GetBytes(patched, "input.0.content.1.type").String())
 	require.Equal(t, "data:image/png;base64,abc", gjson.GetBytes(patched, "input.0.content.1.image_url").String())
+}
+
+func TestGrokPayloadRequiresComposerImagePreprocessSkipsToolTurns(t *testing.T) {
+	body := []byte(`{
+		"model": "grok-composer-2.5-fast",
+		"previous_response_id": "resp_prev",
+		"input": [
+			{"type": "message", "role": "user", "content": [{"type": "input_image", "image_url": "data:image/png;base64,old"}]},
+			{"type": "local_shell_call", "call_id": "call_1", "name": "shell", "input": {"command": "ls"}},
+			{"type": "mcp_tool_call_output", "call_id": "call_1", "output": "README.md"}
+		]
+	}`)
+	require.True(t, json.Valid(body), "body=%s", string(body))
+	require.Equal(t, "mcp_tool_call_output", gjson.GetBytes(body, "input.2.type").String())
+	require.True(t, isCodexToolCallOutputItemType("mcp_tool_call_output"))
+	input := gjson.GetBytes(body, "input")
+	require.True(t, input.IsArray())
+	foundToolOutput := false
+	for _, item := range input.Array() {
+		if isCodexToolCallOutputItemType(item.Get("type").String()) {
+			foundToolOutput = true
+		}
+	}
+	require.True(t, foundToolOutput)
+	require.True(t, openAIWSRawPayloadHasToolCallOutput(body))
+	require.True(t, grokPayloadHasToolContinuationInTrailingInput(body))
+	require.False(t, grokPayloadHasTrailingImageInput(body))
+	require.False(t, grokPayloadRequiresComposerImagePreprocess("grok-composer-2.5-fast", body))
+}
+
+func TestGrokPayloadRequiresComposerImagePreprocessForTrailingScreenshot(t *testing.T) {
+	body := []byte(`{
+		"model": "grok-composer-2.5-fast",
+		"input": [
+			{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "older"}]},
+			{"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "ok"}]},
+			{"type": "message", "role": "user", "content": [
+				{"type": "input_text", "text": "screenshot test"},
+				{"type": "input_image", "image_url": "data:image/png;base64,abc"}
+			]}
+		]
+	}`)
+	require.True(t, grokPayloadRequiresComposerImagePreprocess("grok-composer-2.5-fast", body))
+}
+
+func TestRebuildGrokComposerInputAfterVisionPreprocess(t *testing.T) {
+	payload := map[string]any{
+		"input": []any{
+			map[string]any{"role": "user", "content": "older question"},
+			map[string]any{"role": "assistant", "content": "older answer"},
+			map[string]any{"type": "input_text", "text": "screenshot test"},
+			map[string]any{"type": "input_image", "image_url": "data:image/png;base64,abc"},
+		},
+	}
+
+	rebuildGrokComposerInputAfterVisionPreprocess(payload, "The screenshot shows a terminal with green health checks.")
+
+	require.Len(t, payload["input"].([]any), 1)
+	turnText := gjson.GetBytes(mustMarshalJSON(t, payload), "input.0.content.0.text").String()
+	require.Contains(t, turnText, "terminal with green health checks")
+	require.Contains(t, turnText, "screenshot test")
+	require.NotContains(t, turnText, "older question")
+
+	patched, err := patchGrokResponsesBodyWithOptions(mustMarshalJSON(t, payload), "grok-composer-2.5-fast", grokResponsesPatchOptions{
+		forceIncrementalInput: true,
+	})
+	require.NoError(t, err)
+	require.Len(t, gjson.GetBytes(patched, "input").Array(), 1)
+	require.Contains(t, string(patched), "terminal with green health checks")
+	require.Contains(t, string(patched), "screenshot test")
+}
+
+func mustMarshalJSON(t *testing.T, value any) []byte {
+	t.Helper()
+	body, err := json.Marshal(value)
+	require.NoError(t, err)
+	return body
+}
+
+func TestCollectGrokResponsesImageURLsFromCodexImageParts(t *testing.T) {
+	var payload any
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"input": [{
+			"role": "user",
+			"content": [
+				{"type": "input_text", "text": "screenshot test"},
+				{"type": "image", "mimeType": "image/png", "data": "abc"}
+			]
+		}]
+	}`), &payload))
+
+	var urls []string
+	collectGrokResponsesImageURLs(payload, &urls)
+	require.Equal(t, []string{"data:image/png;base64,abc"}, urls)
 }
 
 func TestForwardGrokResponsesPreprocessesComposerImages(t *testing.T) {

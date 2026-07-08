@@ -10,7 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -695,7 +695,11 @@ func (s *AccountTestService) testGrokAccountConnection(c *gin.Context, account *
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Authorization", "Bearer "+authToken)
-	req.Header.Set("User-Agent", "sub2api-grok/1.0")
+	if xai.IsCLIChatProxyBaseURL(account.GetGrokBaseURL()) || xai.IsGrokCLIModel(testModelID) {
+		xai.SetGrokCLIRequestHeaders(req.Header, testModelID)
+	} else {
+		req.Header.Set("User-Agent", "sub2api-grok/1.0")
+	}
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -1752,7 +1756,7 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 func (s *AccountTestService) sendEvent(c *gin.Context, event TestEvent) {
 	eventJSON, _ := json.Marshal(event)
 	if _, err := fmt.Fprintf(c.Writer, "data: %s\n\n", eventJSON); err != nil {
-		log.Printf("failed to write SSE event: %v", err)
+		slog.Warn("account_test.write_event_failed", "error", err)
 		return
 	}
 	c.Writer.Flush()
@@ -1760,7 +1764,7 @@ func (s *AccountTestService) sendEvent(c *gin.Context, event TestEvent) {
 
 // sendErrorAndEnd sends an error event and ends the stream
 func (s *AccountTestService) sendErrorAndEnd(c *gin.Context, errorMsg string) error {
-	log.Printf("Account test error: %s", errorMsg)
+	slog.Warn("account_test.error", "error", errorMsg)
 	s.sendEvent(c, TestEvent{Type: "error", Error: errorMsg})
 	return fmt.Errorf("%s", errorMsg)
 }

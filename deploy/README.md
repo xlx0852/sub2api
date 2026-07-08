@@ -16,6 +16,7 @@ This directory contains files for deploying Sub2API on Linux servers.
 | `docker-compose.yml` | Docker Compose configuration (named volumes) |
 | `docker-compose.local.yml` | Docker Compose configuration (local directories, easy migration) |
 | `docker-deploy.sh` | **One-click Docker deployment script (recommended)** |
+| `SAFE_BLUE_GREEN_DEPLOY_CN.md` | 生产安全蓝绿部署流程：本地打包、新容器验证、Nginx 切流、保留回滚 |
 | `.env.example` | Docker environment variables template |
 | `DOCKER.md` | Docker Hub documentation |
 | `install.sh` | One-click binary installation script |

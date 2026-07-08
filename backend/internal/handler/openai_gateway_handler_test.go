@@ -652,6 +652,38 @@ func TestOpenAIResponses_GrokCLIStripsHTTPContinuationPreviousResponseID(t *test
 	require.NotContains(t, w.Body.String(), "Responses WebSocket v2")
 }
 
+func TestOpenAIResponses_AllowsGrokGroupHTTPContinuationPreviousResponseID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", strings.NewReader(
+		`{"model":"grok-composer-2.5-fast","stream":false,"previous_response_id":"resp_123456","prompt_cache_key":"sess-1","input":[{"type":"input_text","text":"hello"}]}`,
+	))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	groupID := int64(21)
+	c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{
+		ID:      101,
+		GroupID: &groupID,
+		User:    &service.User{ID: 1},
+		Group: &service.Group{
+			ID:       groupID,
+			Platform: service.PlatformGrok,
+		},
+	})
+	c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{
+		UserID:      1,
+		Concurrency: 1,
+	})
+
+	h := newOpenAIHandlerForPreviousResponseIDValidation(t, nil)
+	h.Responses(c)
+
+	require.NotEqual(t, http.StatusBadRequest, w.Code)
+	require.NotContains(t, w.Body.String(), "Responses WebSocket v2")
+}
+
 func TestOpenAIResponses_RejectsHTTPContinuationPreviousResponseID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

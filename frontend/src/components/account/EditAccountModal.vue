@@ -1451,6 +1451,28 @@
         </div>
       </div>
 
+      <!-- Grok xAI WS passthrough mode -->
+      <div
+        v-if="account?.platform === 'grok' && account?.type === 'oauth'"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.grok.xaiWsPassthroughMode') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.grok.xaiWsPassthroughModeDesc') }}
+            </p>
+          </div>
+          <div class="w-52">
+            <Select
+              v-model="grokXAIWSPassthroughMode"
+              data-testid="edit-grok-xai-ws-passthrough-mode-select"
+              :options="grokXAIWSPassthroughModeOptions"
+            />
+          </div>
+        </div>
+      </div>
+
       <!-- OpenAI APIKey Responses API support mode -->
       <div
         v-if="account?.platform === 'openai' && account?.type === 'apikey'"
@@ -2634,6 +2656,8 @@ const anthropicPassthroughEnabled = ref(false)
 const anthropicAPIKeyAuthScheme = ref<AnthropicAPIKeyAuthScheme>('x_api_key')
 const webSearchEmulationMode = ref('default')
 const webSearchGlobalEnabled = ref(false)
+type GrokXAIWSPassthroughMode = 'off' | 'auto' | 'force'
+const grokXAIWSPassthroughMode = ref<GrokXAIWSPassthroughMode>('off')
 const {
   globalEnabled: quotaNotifyGlobalEnabled,
   state: quotaNotifyState,
@@ -2682,6 +2706,11 @@ const openaiResponsesWebSocketV2Mode = computed({
 const openAIWSModeConcurrencyHintKey = computed(() =>
   resolveOpenAIWSModeConcurrencyHintKey(openaiResponsesWebSocketV2Mode.value)
 )
+const grokXAIWSPassthroughModeOptions = computed(() => [
+  { value: 'off', label: t('admin.accounts.grok.xaiWsPassthroughOff') },
+  { value: 'auto', label: t('admin.accounts.grok.xaiWsPassthroughAuto') },
+  { value: 'force', label: t('admin.accounts.grok.xaiWsPassthroughForce') }
+])
 const codexImageToolOptions = computed<Array<{
   value: CodexImageToolMode
   label: string
@@ -3058,6 +3087,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   anthropicPassthroughEnabled.value = false
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
   webSearchEmulationMode.value = 'default'
+  grokXAIWSPassthroughMode.value = 'off'
   if (newAccount.platform === 'openai' && (newAccount.type === 'oauth' || newAccount.type === 'setup-token' || newAccount.type === 'apikey')) {
     openaiPassthroughEnabled.value = extra?.openai_passthrough === true || extra?.openai_oauth_passthrough === true
     openAICompactMode.value = (extra?.openai_compact_mode as OpenAICompactMode) || 'auto'
@@ -3116,6 +3146,14 @@ const syncFormFromAccount = (newAccount: Account | null) => {
       webSearchEmulationMode.value = 'enabled'
     } else {
       webSearchEmulationMode.value = 'default'
+    }
+  }
+  if (newAccount.platform === 'grok' && newAccount.type === 'oauth') {
+    const rawMode = extra?.grok_xai_ws_passthrough_mode
+    if (rawMode === 'auto' || rawMode === 'force' || rawMode === 'off') {
+      grokXAIWSPassthroughMode.value = rawMode
+    } else if (extra?.grok_xai_ws_passthrough_enabled === true) {
+      grokXAIWSPassthroughMode.value = 'auto'
     }
   }
 
@@ -4166,6 +4204,20 @@ const handleSubmit = async () => {
         delete newExtra.web_search_emulation
       } else {
         newExtra.web_search_emulation = webSearchEmulationMode.value
+      }
+      updatePayload.extra = newExtra
+    }
+
+    // For Grok OAuth accounts, handle xAI native WS passthrough mode in extra.
+    if (props.account.platform === 'grok' && props.account.type === 'oauth') {
+      const currentExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
+      const newExtra: Record<string, unknown> = { ...currentExtra }
+      if (grokXAIWSPassthroughMode.value === 'off') {
+        delete newExtra.grok_xai_ws_passthrough_mode
+        delete newExtra.grok_xai_ws_passthrough_enabled
+      } else {
+        newExtra.grok_xai_ws_passthrough_mode = grokXAIWSPassthroughMode.value
+        delete newExtra.grok_xai_ws_passthrough_enabled
       }
       updatePayload.extra = newExtra
     }

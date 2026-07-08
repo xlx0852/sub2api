@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -29,6 +30,7 @@ func TestAccountTestService_TestAccountConnection_GrokUsesXAIResponses(t *testin
 		Credentials: map[string]any{
 			"access_token": "grok-access-token",
 			"expires_at":   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+			"base_url":     xai.DefaultCLIBaseURL,
 			"model_mapping": map[string]any{
 				"grok": "grok-4.3",
 			},
@@ -58,8 +60,11 @@ func TestAccountTestService_TestAccountConnection_GrokUsesXAIResponses(t *testin
 	err := svc.TestAccountConnection(c, account.ID, "grok", "", AccountTestModeDefault)
 	require.NoError(t, err)
 
-	require.Equal(t, "https://api.x.ai/v1/responses", upstream.lastReq.URL.String())
+	require.Equal(t, xai.DefaultCLIBaseURL+"/responses", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer grok-access-token", upstream.lastReq.Header.Get("Authorization"))
+	require.Equal(t, xai.GrokCLIVersion, upstream.lastReq.Header.Get("x-grok-client-version"))
+	require.Equal(t, "grok-pager", upstream.lastReq.Header.Get("x-grok-client-identifier"))
+	require.Equal(t, "grok-4.3", upstream.lastReq.Header.Get("x-grok-model-override"))
 	require.Equal(t, "grok-4.3", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.NotContains(t, rec.Body.String(), "claude")
 	require.Contains(t, rec.Body.String(), `"model":"grok-4.3"`)

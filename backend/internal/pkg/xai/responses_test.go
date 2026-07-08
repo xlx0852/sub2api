@@ -2,6 +2,7 @@ package xai
 
 import (
 	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -43,19 +44,23 @@ func TestNormalizeResponsesBodyMapDropsUnsupportedFieldsAndNormalizesTools(t *te
 	require.NotContains(t, req, "safety_identifier")
 	require.NotContains(t, req, "stream_options")
 
-	tools := req["tools"].([]any)
+	tools, ok := req["tools"].([]any)
+	require.True(t, ok)
 	require.Len(t, tools, 3)
 
-	customTool := tools[0].(map[string]any)
+	customTool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, "function", customTool["type"])
 	require.Equal(t, "lookup", customTool["name"])
 	require.Equal(t, map[string]any{}, customTool["parameters"])
 
-	webSearchTool := tools[1].(map[string]any)
+	webSearchTool, ok := tools[1].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, "web_search", webSearchTool["type"])
 	require.NotContains(t, webSearchTool, "external_web_access")
 
-	nestedTool := tools[2].(map[string]any)
+	nestedTool, ok := tools[2].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, "function", nestedTool["type"])
 	require.Equal(t, "nested", nestedTool["name"])
 	require.Equal(t, map[string]any{}, nestedTool["parameters"])
@@ -153,6 +158,40 @@ func TestNormalizeResponsesBodyMapCoalescesInputImageForGrokCLI(t *testing.T) {
 	require.Equal(t, "input_text", part["type"])
 	require.Equal(t, "describe this", part["text"])
 	require.Equal(t, "data:image/png;base64,abc", part["image_url"])
+}
+
+func TestNormalizeResponsesBodyMapPreservesInputImageForGrokBuild(t *testing.T) {
+	req := map[string]any{
+		"input": []any{
+			map[string]any{
+				"role": "user",
+				"content": []any{
+					map[string]any{"type": "input_text", "text": "describe this"},
+					map[string]any{"type": "input_image", "image_url": "data:image/png;base64,abc"},
+				},
+			},
+		},
+	}
+
+	NormalizeResponsesBodyMap(req, "grok-build", false, "", true)
+
+	content := req["input"].([]any)[0].(map[string]any)["content"].([]any)
+	require.Len(t, content, 2)
+	require.Equal(t, "input_text", content[0].(map[string]any)["type"])
+	require.Equal(t, "input_image", content[1].(map[string]any)["type"])
+	require.Equal(t, "data:image/png;base64,abc", content[1].(map[string]any)["image_url"])
+}
+
+func TestSetGrokCLIRequestHeaders(t *testing.T) {
+	headers := http.Header{}
+
+	SetGrokCLIRequestHeaders(headers, "grok-build")
+
+	require.Equal(t, "grok-build", headers.Get("x-grok-model-override"))
+	require.Equal(t, "grok-pager", headers.Get("x-grok-client-identifier"))
+	require.Equal(t, GrokCLIVersion, headers.Get("x-grok-client-version"))
+	require.Equal(t, "xai-grok-cli", headers.Get("x-xai-token-auth"))
+	require.Contains(t, headers.Get("User-Agent"), "grok-pager/")
 }
 
 func TestNormalizeResponsesBodyMapKeepsGrokCLIFields(t *testing.T) {

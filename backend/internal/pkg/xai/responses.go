@@ -20,7 +20,7 @@ func NormalizeResponsesBodyMap(req map[string]any, model string, stream bool, pr
 	if req == nil {
 		return
 	}
-	if grokCLI {
+	if grokCLI && shouldCoalesceGrokCLIInputImages(model) {
 		coalesceInputImageParts(req)
 	}
 	if strings.TrimSpace(model) != "" {
@@ -139,6 +139,10 @@ func coalesceInputImageParts(req map[string]any) {
 	}
 }
 
+func shouldCoalesceGrokCLIInputImages(model string) bool {
+	return strings.HasPrefix(strings.TrimSpace(model), "grok-composer-")
+}
+
 func coalesceInputImageContentParts(parts []any) ([]any, bool) {
 	if len(parts) == 0 {
 		return parts, false
@@ -181,6 +185,8 @@ func normalizeReasoning(req map[string]any) {
 	model := strings.TrimSpace(stringValue(req["model"]))
 	if !supportsReasoningEffort(model) {
 		delete(req, "reasoning")
+		delete(req, "reasoning_effort")
+		delete(req, "reasoningEffort")
 	}
 
 	if include, ok := req["include"].([]any); ok {

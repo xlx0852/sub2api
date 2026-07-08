@@ -2050,10 +2050,6 @@ func modelIDsFromMapping(mapping map[string]string) []string {
 	return ids
 }
 
-func openAIModelsFromIDs(ids []string) []openai.Model {
-	return openAIModelsFromIDsWithRetired(ids, false)
-}
-
 func openAIModelsFromIDsWithRetired(ids []string, includeRetired bool) []openai.Model {
 	seen := make(map[string]struct{}, len(ids))
 	defaultByID := make(map[string]openai.Model, len(openai.DefaultModels))

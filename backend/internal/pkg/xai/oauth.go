@@ -429,6 +429,44 @@ func BuildResponsesURL(baseURL string) (string, error) {
 	return validatedBaseURL + "/responses", nil
 }
 
+// ResolveGrokResponsesWebSocketBaseURL maps Grok HTTP bases to the xAI Responses
+// WebSocket host. cli-chat-proxy only supports HTTP POST; native WS lives on api.x.ai.
+func ResolveGrokResponsesWebSocketBaseURL(baseURL string) (string, error) {
+	if IsCLIChatProxyBaseURL(baseURL) {
+		return ValidatedBaseURL(DefaultBaseURL)
+	}
+	return ValidatedBaseURL(baseURL)
+}
+
+// BuildResponsesWebSocketURL returns the upstream Responses WebSocket endpoint.
+func BuildResponsesWebSocketURL(baseURL string) (string, error) {
+	validatedBaseURL, err := ResolveGrokResponsesWebSocketBaseURL(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid websocket base url: %w", err)
+	}
+	responsesURL, err := BuildResponsesURL(validatedBaseURL)
+	if err != nil {
+		return "", err
+	}
+	parsed, err := url.Parse(responsesURL)
+	if err != nil {
+		return "", err
+	}
+	switch parsed.Scheme {
+	case "https":
+		parsed.Scheme = "wss"
+	case "http":
+		parsed.Scheme = "ws"
+	case "wss", "ws":
+	default:
+		return "", fmt.Errorf("unsupported grok websocket scheme: %s", parsed.Scheme)
+	}
+	if strings.TrimSpace(parsed.Host) == "" {
+		return "", fmt.Errorf("grok websocket host is empty")
+	}
+	return parsed.String(), nil
+}
+
 func BuildChatCompletionsURL(baseURL string) (string, error) {
 	validatedBaseURL, err := ValidatedBaseURL(baseURL)
 	if err != nil {

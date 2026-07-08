@@ -900,6 +900,8 @@ type GatewayOpenAIWSConfig struct {
 	HTTPBridgeEnabled bool `mapstructure:"http_bridge_enabled"`
 	// HTTPBridgeThresholdBytes: 触发 HTTP bridge 的入站 WS payload 阈值。
 	HTTPBridgeThresholdBytes int64 `mapstructure:"http_bridge_threshold_bytes"`
+	// GrokXAIPassthroughMode: Grok xAI 原生 WS 直通模式（off/auto/force）。
+	GrokXAIPassthroughMode string `mapstructure:"grok_xai_ws_passthrough_mode"`
 
 	// Feature 开关：v2 优先于 v1
 	ResponsesWebsockets   bool `mapstructure:"responses_websockets"`
@@ -1855,6 +1857,7 @@ func setDefaults() {
 	viper.SetDefault("gateway.openai_ws.client_read_limit_bytes", 64*1024*1024)
 	viper.SetDefault("gateway.openai_ws.http_bridge_enabled", true)
 	viper.SetDefault("gateway.openai_ws.http_bridge_threshold_bytes", 15*1024*1024)
+	viper.SetDefault("gateway.openai_ws.grok_xai_ws_passthrough_mode", "auto")
 	viper.SetDefault("gateway.openai_ws.responses_websockets", false)
 	viper.SetDefault("gateway.openai_ws.responses_websockets_v2", true)
 	viper.SetDefault("gateway.openai_ws.max_conns_per_account", 128)
@@ -2609,6 +2612,14 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.OpenAIWS.HTTPBridgeEnabled && c.Gateway.OpenAIWS.HTTPBridgeThresholdBytes == 0 {
 		return fmt.Errorf("gateway.openai_ws.http_bridge_threshold_bytes must be positive when http_bridge_enabled is true")
+	}
+	if mode := strings.ToLower(strings.TrimSpace(c.Gateway.OpenAIWS.GrokXAIPassthroughMode)); mode != "" {
+		switch mode {
+		case "off", "auto", "force":
+			c.Gateway.OpenAIWS.GrokXAIPassthroughMode = mode
+		default:
+			return fmt.Errorf("gateway.openai_ws.grok_xai_ws_passthrough_mode must be one of off|auto|force")
+		}
 	}
 	if c.Gateway.OpenAIWS.FallbackCooldownSeconds < 0 {
 		return fmt.Errorf("gateway.openai_ws.fallback_cooldown_seconds must be non-negative")

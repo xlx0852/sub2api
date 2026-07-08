@@ -186,6 +186,7 @@ func TestRegisterOAuthEmailAccountRollsBackCreatedUserWhenTokenPairGenerationFai
 		"secret-123",
 		"246810",
 		"INVITE123",
+		"",
 		"oidc",
 	)
 
@@ -226,6 +227,7 @@ func TestRegisterOAuthEmailAccountSetsNormalizedSignupSourceOnCreatedUser(t *tes
 		"fresh@example.com",
 		"secret-123",
 		"246810",
+		"",
 		"",
 		" OIDC ",
 	)
@@ -287,6 +289,7 @@ func TestRegisterOAuthEmailAccountKeepsGitHubAndGoogleSignupSource(t *testing.T)
 				"secret-123",
 				"246810",
 				"",
+				"",
 				tt.signupSource,
 			)
 
@@ -327,6 +330,7 @@ func TestRegisterOAuthEmailAccountFallsBackUnknownSignupSourceToEmail(t *testing
 		"secret-123",
 		"246810",
 		"",
+		"",
 		"unknown-provider",
 	)
 
@@ -335,6 +339,78 @@ func TestRegisterOAuthEmailAccountFallsBackUnknownSignupSourceToEmail(t *testing
 	require.NotNil(t, user)
 	require.Len(t, userRepo.created, 1)
 	require.Equal(t, "email", userRepo.created[0].SignupSource)
+}
+
+func TestRegisterOAuthEmailAccountInvitationEnabledAllowsAffiliateCode(t *testing.T) {
+	userRepo := &userRepoStub{nextID: 104}
+	emailCache := &emailCacheStub{
+		data: &VerificationCodeData{
+			Code:      "246810",
+			Attempts:  0,
+			CreatedAt: time.Now().UTC(),
+			ExpiresAt: time.Now().UTC().Add(15 * time.Minute),
+		},
+	}
+	authService := newOAuthEmailFlowAuthService(
+		userRepo,
+		&redeemCodeRepoStub{},
+		&refreshTokenCacheStub{},
+		map[string]string{
+			SettingKeyRegistrationEnabled:   "true",
+			SettingKeyInvitationCodeEnabled: "true",
+			SettingKeyAffiliateEnabled:      "true",
+			SettingKeyEmailVerifyEnabled:    "true",
+		},
+		emailCache,
+		nil,
+	)
+	affiliateRepo := newAffiliateAdminBindRepo()
+	affiliateRepo.summaries[104] = &AffiliateSummary{UserID: 104, AffCode: "NEW104"}
+	authService.affiliateService = NewAffiliateService(affiliateRepo, authService.settingService, nil, nil)
+
+	tokenPair, user, err := authService.RegisterOAuthEmailAccount(
+		context.Background(),
+		"affiliate-link@example.com",
+		"secret-123",
+		"246810",
+		"",
+		"AFF1",
+		"oidc",
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, tokenPair)
+	require.NotNil(t, user)
+	require.Equal(t, int64(104), user.ID)
+}
+
+func TestFinalizeOAuthEmailAccountInvitationFieldAffiliateCodeBindsInviter(t *testing.T) {
+	authService := newOAuthEmailFlowAuthService(
+		&userRepoStub{},
+		&redeemCodeRepoStub{},
+		&refreshTokenCacheStub{},
+		map[string]string{
+			SettingKeyRegistrationEnabled:   "true",
+			SettingKeyInvitationCodeEnabled: "true",
+			SettingKeyAffiliateEnabled:      "true",
+		},
+		&emailCacheStub{},
+		nil,
+	)
+	affiliateRepo := newAffiliateAdminBindRepo()
+	affiliateRepo.summaries[105] = &AffiliateSummary{UserID: 105, AffCode: "NEW105"}
+	authService.affiliateService = NewAffiliateService(affiliateRepo, authService.settingService, nil, nil)
+
+	err := authService.FinalizeOAuthEmailAccount(
+		context.Background(),
+		&User{ID: 105, Email: "affiliate-field@example.com", Status: StatusActive},
+		"aff2",
+		"oidc",
+		"",
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(2), affiliateRepo.binds[105])
 }
 
 func TestRollbackOAuthEmailAccountCreationRestoresInvitationUsage(t *testing.T) {
