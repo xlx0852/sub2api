@@ -1264,6 +1264,9 @@ func (s *OpenAIGatewayService) ExtractSessionID(c *gin.Context, body []byte) str
 	if sessionID == "" {
 		sessionID = strings.TrimSpace(c.GetHeader("conversation_id"))
 	}
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(c.GetHeader("x-grok-conv-id"))
+	}
 	if sessionID == "" && len(body) > 0 {
 		sessionID = strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
 	}
@@ -1278,6 +1281,9 @@ func explicitOpenAISessionID(c *gin.Context, body []byte) string {
 	sessionID := strings.TrimSpace(c.GetHeader("session_id"))
 	if sessionID == "" {
 		sessionID = strings.TrimSpace(c.GetHeader("conversation_id"))
+	}
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(c.GetHeader("x-grok-conv-id"))
 	}
 	if sessionID == "" && len(body) > 0 {
 		sessionID = strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
@@ -1307,6 +1313,9 @@ func (s *OpenAIGatewayService) generateOpenAISessionHash(c *gin.Context, body []
 	sessionID := strings.TrimSpace(c.GetHeader("session_id"))
 	if sessionID == "" {
 		sessionID = strings.TrimSpace(c.GetHeader("conversation_id"))
+	}
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(c.GetHeader("x-grok-conv-id"))
 	}
 	if sessionID == "" && allowPromptCacheKey && len(body) > 0 {
 		sessionID = strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
@@ -4772,7 +4781,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 
 	if status, errType, errMsg, matched := applyErrorPassthroughRule(
 		c,
-		PlatformOpenAI,
+		account.Platform,
 		resp.StatusCode,
 		body,
 		http.StatusBadGateway,
@@ -4793,6 +4802,20 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 			return nil, fmt.Errorf("upstream error: %d (passthrough rule matched)", resp.StatusCode)
 		}
 		return nil, fmt.Errorf("upstream error: %d (passthrough rule matched) message=%s", resp.StatusCode, upstreamMsg)
+	}
+
+	if account.Platform == PlatformGrok && resp.StatusCode == http.StatusBadRequest {
+		if upstreamMsg == "" {
+			upstreamMsg = "xAI upstream rejected request"
+		}
+		MarkResponseCommitted(c)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"type":    "invalid_request_error",
+				"message": upstreamMsg,
+			},
+		})
+		return nil, fmt.Errorf("upstream error: %d message=%s", resp.StatusCode, upstreamMsg)
 	}
 
 	// Check custom error codes
@@ -5288,6 +5311,18 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 				data = string(correctedData)
 				line = "data: " + data
 				eventType = strings.TrimSpace(gjson.GetBytes(dataBytes, "type").String())
+			}
+			if grokIDMapper := getGrokWSRequestIDMapper(c); grokIDMapper != nil {
+				dataBytes = grokIDMapper.downstreamResponsePayload(dataBytes)
+				data = string(dataBytes)
+				line = "data: " + data
+				eventType = strings.TrimSpace(gjson.GetBytes(dataBytes, "type").String())
+				if mappedResponseID := strings.TrimSpace(gjson.GetBytes(dataBytes, "response.id").String()); mappedResponseID != "" {
+					responseID = mappedResponseID
+				}
+				if isOpenAIWSTerminalEvent(eventType) {
+					grokIDMapper.recordTranscriptTurn(getGrokWSUpstreamRequestPayload(c), dataBytes)
+				}
 			}
 			if imageOutput, ok := extractImageGenerationOutputFromSSEData(dataBytes, streamSeenImages); ok {
 				streamImageOutputs = append(streamImageOutputs, imageOutput)
@@ -5829,6 +5864,10 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	if originalModel != mappedModel {
 		body = s.replaceModelInResponseBody(body, mappedModel, originalModel)
 	}
+	if grokIDMapper := getGrokWSRequestIDMapper(c); grokIDMapper != nil {
+		body = grokIDMapper.downstreamResponsePayload(body)
+		grokIDMapper.recordTranscriptTurn(getGrokWSUpstreamRequestPayload(c), body)
+	}
 
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 
@@ -5899,6 +5938,10 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		}
 		// Correct tool calls in final response
 		body = s.correctToolCallsInResponseBody(body)
+		if grokIDMapper := getGrokWSRequestIDMapper(c); grokIDMapper != nil {
+			body = grokIDMapper.downstreamResponsePayload(body)
+			grokIDMapper.recordTranscriptTurn(getGrokWSUpstreamRequestPayload(c), body)
+		}
 	} else {
 		terminalType, terminalPayload, terminalOK := extractOpenAISSETerminalEvent(bodyText)
 		if terminalOK && terminalType == "response.failed" {
@@ -7739,10 +7782,23 @@ func openAIJSONValueMayContainImageInput(value gjson.Result) bool {
 		return found
 	}
 	if value.IsObject() {
-		if strings.TrimSpace(value.Get("type").String()) == "input_image" || value.Get("image_url").Exists() {
+		partType := strings.TrimSpace(value.Get("type").String())
+		switch partType {
+		case "input_image", "image_url":
+			return true
+		case "image":
+			if value.Get("image_url").Exists() || value.Get("data").Exists() || value.Get("source").Exists() {
+				return true
+			}
+		}
+		if value.Get("image_url").Exists() {
 			return true
 		}
-		return openAIJSONValueMayContainImageInput(value.Get("content"))
+		for _, key := range []string{"content", "output", "input"} {
+			if openAIJSONValueMayContainImageInput(value.Get(key)) {
+				return true
+			}
+		}
 	}
 	return false
 }

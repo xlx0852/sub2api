@@ -10,13 +10,21 @@ export default {
     login: 'Login',
     getStarted: 'Get Started',
     goToDashboard: 'Go to Dashboard',
+    defaultSubtitle: 'Large Model Access Provider',
+    navigation: {
+      features: 'Features',
+      models: 'Models',
+      docs: 'Docs'
+    },
     // User-focused value proposition
-    heroSubtitle: 'One Key, All AI Models',
-    heroDescription: 'No need to manage multiple subscriptions. Access Claude, GPT, Gemini and more with a single API key',
+    heroSubtitle: 'Enterprise model gateway by SicTs',
+    heroTitleHighlight: 'Reliable',
+    heroTitleSuffix: ' AI model gateway',
+    heroDescription: 'SicTs packages leading AI models, upstream account pools, and usage controls into one API so teams can call AI from a stable branded gateway.',
     tags: {
-      subscriptionToApi: 'Subscription to API',
-      stickySession: 'Session Persistence',
-      realtimeBilling: 'Pay As You Go'
+      modelGateway: 'Unified Model Gateway',
+      stickySession: 'Stable Sessions',
+      realtimeBilling: 'Usage Visibility'
     },
     // Pain points section
     painPoints: {
@@ -46,12 +54,31 @@ export default {
       subtitle: 'Three simple steps to stress-free AI access'
     },
     features: {
-      unifiedGateway: 'One-Click Access',
-      unifiedGatewayDesc: 'Get a single API key to call all connected AI models. No separate applications needed.',
-      multiAccount: 'Always Reliable',
-      multiAccountDesc: 'Smart routing across multiple upstream accounts with automatic failover. Say goodbye to errors.',
-      balanceQuota: 'Pay What You Use',
-      balanceQuotaDesc: 'Usage-based billing with quota limits. Full visibility into team consumption.'
+      unifiedGateway: 'Multi-model, ',
+      unifiedGatewayHighlight: 'one entry',
+      unifiedGatewayDesc: 'Use one SicTs API key to access Claude, GPT, Gemini and more while your application keeps a single integration point.',
+      multiAccount: 'Smart routing, ',
+      multiAccountHighlight: 'auto failover',
+      multiAccountDesc: 'Route by model, account health, and load so requests avoid single-channel congestion and repeated failures.',
+      balanceQuota: 'Usage clarity, ',
+      balanceQuotaHighlight: 'cost control',
+      balanceQuotaDesc: 'Track real usage, set quota limits, and keep team consumption visible as costs change.',
+      teamConsole: 'Team usage, ',
+      teamConsoleHighlight: 'central control',
+      teamConsoleDesc: 'Manage keys, quota, and model access in one console instead of maintaining scattered provider configuration.'
+    },
+    metrics: {
+      oneKey: 'Unified Key',
+      platforms: 'Platforms',
+      compatible: 'Compatible API',
+      reliable: 'Auto Routing',
+      live: 'Live Stats'
+    },
+    featureSection: {
+      label: 'Core Features',
+      titlePrefix: 'One promise: ',
+      titleHighlight: 'stable calls',
+      description: 'The homepage now focuses on the developer concerns that matter most: access, reliability, and cost control.'
     },
     // Comparison section
     comparison: {
@@ -91,7 +118,7 @@ export default {
     },
     providers: {
       title: 'Supported AI Models',
-      description: 'One API, Multiple Choices',
+      description: 'Call multiple model providers through the SicTs API',
       supported: 'Supported',
       soon: 'Soon',
       claude: 'Claude',
@@ -101,12 +128,13 @@ export default {
     },
     // CTA section
     cta: {
-      title: 'Ready to Get Started?',
-      description: 'Sign up now and get free trial credits to experience seamless AI access',
+      title: 'Bring SicTs into your product',
+      description: 'SicTs gives teams a complete AI gateway for model access, upstream routing, and usage management.',
       button: 'Sign Up Free'
     },
     footer: {
-      allRightsReserved: 'All rights reserved.'
+      allRightsReserved: 'All rights reserved.',
+      operational: 'Service operational'
     }
   },
 
@@ -3593,7 +3621,13 @@ export default {
       },
       grok: {
         baseUrlHint: 'Grok OAuth accounts forward to the official xAI API base URL.',
-        apiKeyHint: 'Grok subscription support uses OAuth refresh tokens; API keys are out of scope for this account type.'
+        apiKeyHint: 'Grok subscription support uses OAuth refresh tokens; API keys are out of scope for this account type.',
+        xaiWsPassthroughMode: 'xAI native WS passthrough',
+        xaiWsPassthroughModeDesc:
+          'Only affects Grok OAuth Codex Responses WebSocket requests. Auto falls back to HTTP bridge for unsupported media input or connection failure.',
+        xaiWsPassthroughOff: 'Off (off)',
+        xaiWsPassthroughAuto: 'Auto (auto)',
+        xaiWsPassthroughForce: 'Force (force)'
       },
       anthropic: {
         apiKeyPassthrough: 'Auto passthrough (auth only)',
@@ -6071,10 +6105,10 @@ export default {
         backendModeDescription:
           'Disables user registration, public site, and self-service features. Only admin can log in and manage the platform.',
         siteName: 'Site Name',
-        siteNamePlaceholder: 'Sub2API',
+        siteNamePlaceholder: 'SicTs',
         siteNameHint: 'Displayed in emails and page titles',
         siteSubtitle: 'Site Subtitle',
-        siteSubtitlePlaceholder: 'Subscription to API Conversion Platform',
+        siteSubtitlePlaceholder: 'Large Model Access Provider',
         siteSubtitleHint: 'Displayed on login and register pages',
         apiBaseUrl: 'API Base URL',
         apiBaseUrlPlaceholder: 'https://api.example.com',

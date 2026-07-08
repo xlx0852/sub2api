@@ -106,6 +106,29 @@ func TestPatchGrokResponsesBodyDropsToolChoiceWhenNoSupportedToolsRemain(t *test
 	require.False(t, gjson.GetBytes(patched, "tool_choice").Exists())
 }
 
+func TestPatchGrokResponsesBodyPreservesInputImagesForGrokComposerModel(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{
+		"model": "grok",
+		"input": [{
+			"role": "user",
+			"content": [
+				{"type": "input_text", "text": "describe this"},
+				{"type": "input_image", "image_url": "data:image/png;base64,abc"}
+			]
+		}]
+	}`)
+
+	patched, err := patchGrokResponsesBody(body, "grok-composer-2.5-fast")
+	require.NoError(t, err)
+	require.True(t, json.Valid(patched))
+	require.Equal(t, "grok-composer-2.5-fast", gjson.GetBytes(patched, "model").String())
+	require.Len(t, gjson.GetBytes(patched, "input.0.content").Array(), 2)
+	require.Equal(t, "input_image", gjson.GetBytes(patched, "input.0.content.1.type").String())
+	require.Equal(t, "data:image/png;base64,abc", gjson.GetBytes(patched, "input.0.content.1.image_url").String())
+}
+
 func TestBuildGrokResponsesRequestUsesAccountBaseURLAndBearerToken(t *testing.T) {
 	t.Setenv(xai.EnvAllowUnsafeURLOverrides, "true")
 
@@ -687,7 +710,7 @@ func TestForwardAsAnthropicForGrokUsesXAIResponses(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, xai.DefaultCLIBaseURL+"/responses", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer access-token", upstream.lastReq.Header.Get("Authorization"))
-	require.Equal(t, "sub2api-grok/1.0", upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, xai.GrokCLIUserAgent, upstream.lastReq.Header.Get("User-Agent"))
 	require.Equal(t, "grok-4.3", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
 	require.NotContains(t, string(upstream.lastBody), "chatgpt.com")
@@ -749,6 +772,48 @@ func TestHandleGrokAccountUpstreamErrorTempUnschedulesReadinessStates(t *testing
 			require.True(t, repo.lastTempUnschedUntil.Before(before.Add(tt.wantMaxCooldown)))
 		})
 	}
+}
+
+func TestForwardGrokResponsesMapsHTTPPreviousResponseID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	promptCacheKey := "grok-http-id-map-session"
+	sessionID, _ := deriveOpenAISessionHashes(promptCacheKey)
+	defer deleteGrokWSIDState(sessionID)
+	state := getGrokWSIDState(sessionID)
+	require.NotNil(t, state)
+	state.mapDownstreamToUpstream("resp-down-1", "resp-up-1")
+
+	requestBody := []byte(`{"model":"grok-composer-2.5-fast","stream":false,"prompt_cache_key":"` + promptCacheKey + `","previous_response_id":"resp-down-1","input":[{"type":"input_text","text":"continue"}]}`)
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body: io.NopCloser(strings.NewReader(`{
+			"id":"resp-up-2",
+			"previous_response_id":"resp-up-1",
+			"model":"grok-composer-2.5-fast",
+			"output":[{"type":"message","content":[{"type":"output_text","text":"done"}]}],
+			"usage":{"input_tokens":4,"output_tokens":2}
+		}`)),
+	}}
+	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	account := &Account{
+		ID:          91,
+		Platform:    PlatformGrok,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{"access_token": "token"},
+	}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(requestBody))
+
+	_, err := svc.forwardGrokResponses(context.Background(), c, account, requestBody, "grok-composer-2.5-fast", false, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, "resp-up-1", gjson.GetBytes(upstream.lastBody, "previous_response_id").String())
+	require.Equal(t, "resp-up-2", gjson.GetBytes(rec.Body.Bytes(), "id").String())
+	require.Equal(t, "resp-down-1", gjson.GetBytes(rec.Body.Bytes(), "previous_response_id").String())
 }
 
 func TestHandleGrokAccountUpstreamErrorDoesNotShortenExistingPause(t *testing.T) {

@@ -603,6 +603,9 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 			})
 			applyAntigravityGemini31ProAliases(result)
 		}
+		if a.Platform == domain.PlatformGrok {
+			applyGrokModelAliases(result)
+		}
 		return result
 	}
 
@@ -645,6 +648,27 @@ func modelMappingSignature(rawMapping map[string]any) uint64 {
 		_, _ = h.Write([]byte{0xff})
 	}
 	return h.Sum64()
+}
+
+func applyGrokModelAliases(mapping map[string]string) {
+	if mapping == nil {
+		return
+	}
+	if _, exists := mapping["grok-build"]; !exists {
+		if target := strings.TrimSpace(mapping["grok-build-0.1"]); target != "" {
+			mapping["grok-build"] = target
+		}
+	}
+	if _, exists := mapping["grok"]; !exists {
+		if target := strings.TrimSpace(mapping["grok-4.3"]); target != "" {
+			mapping["grok"] = target
+		}
+	}
+	if _, exists := mapping["grok-latest"]; !exists {
+		if target := strings.TrimSpace(mapping["grok-4.3"]); target != "" {
+			mapping["grok-latest"] = target
+		}
+	}
 }
 
 func ensureAntigravityDefaultPassthrough(mapping map[string]string, model string) {
@@ -1658,6 +1682,12 @@ const (
 	OpenAIWSIngressModeHTTPBridge  = "http_bridge"
 )
 
+const (
+	GrokXAIWSPassthroughModeOff   = "off"
+	GrokXAIWSPassthroughModeAuto  = "auto"
+	GrokXAIWSPassthroughModeForce = "force"
+)
+
 func normalizeOpenAIWSIngressMode(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case OpenAIWSIngressModeOff:
@@ -1685,6 +1715,53 @@ func normalizeOpenAIWSIngressDefaultMode(mode string) string {
 		return normalized
 	}
 	return OpenAIWSIngressModeCtxPool
+}
+
+func normalizeGrokXAIWSPassthroughMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case GrokXAIWSPassthroughModeOff:
+		return GrokXAIWSPassthroughModeOff
+	case GrokXAIWSPassthroughModeAuto:
+		return GrokXAIWSPassthroughModeAuto
+	case GrokXAIWSPassthroughModeForce:
+		return GrokXAIWSPassthroughModeForce
+	default:
+		return ""
+	}
+}
+
+func normalizeGrokXAIWSPassthroughDefaultMode(mode string) string {
+	if normalized := normalizeGrokXAIWSPassthroughMode(mode); normalized != "" {
+		return normalized
+	}
+	return GrokXAIWSPassthroughModeOff
+}
+
+// ResolveGrokXAIWSPassthroughMode 返回 Grok 账号的 xAI 原生 WS 直通模式（off/auto/force）。
+func (a *Account) ResolveGrokXAIWSPassthroughMode(defaultMode string) string {
+	resolvedDefault := normalizeGrokXAIWSPassthroughDefaultMode(defaultMode)
+	if a == nil || !a.IsGrok() {
+		return GrokXAIWSPassthroughModeOff
+	}
+	if a.Extra == nil {
+		return resolvedDefault
+	}
+	if raw, ok := a.Extra["grok_xai_ws_passthrough_mode"]; ok {
+		if mode, ok := raw.(string); ok {
+			if normalized := normalizeGrokXAIWSPassthroughMode(mode); normalized != "" {
+				return normalized
+			}
+		}
+	}
+	if raw, ok := a.Extra["grok_xai_ws_passthrough_enabled"]; ok {
+		if enabled, ok := raw.(bool); ok {
+			if enabled {
+				return GrokXAIWSPassthroughModeAuto
+			}
+			return GrokXAIWSPassthroughModeOff
+		}
+	}
+	return resolvedDefault
 }
 
 // ResolveOpenAIResponsesWebSocketV2Mode 返回账号在 WSv2 ingress 下的有效模式（off/ctx_pool/passthrough）。

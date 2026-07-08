@@ -322,6 +322,39 @@ func TestAccountGetMappedModel(t *testing.T) {
 	}
 }
 
+func TestAccountGetModelMapping_GrokAddsCanonicalAliases(t *testing.T) {
+	t.Parallel()
+
+	account := &Account{
+		Platform: domain.PlatformGrok,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{
+				"grok-4.3":               "grok-4.3",
+				"grok-build-0.1":         "grok-build-0.1",
+				"grok-composer-2.5-fast": "grok-composer-2.5-fast",
+			},
+		},
+	}
+
+	mapping := account.GetModelMapping()
+
+	if got := mapping["grok-build"]; got != "grok-build-0.1" {
+		t.Fatalf("expected grok-build alias to map to grok-build-0.1, got %q", got)
+	}
+	if got := mapping["grok"]; got != "grok-4.3" {
+		t.Fatalf("expected grok alias to map to grok-4.3, got %q", got)
+	}
+	if got := mapping["grok-latest"]; got != "grok-4.3" {
+		t.Fatalf("expected grok-latest alias to map to grok-4.3, got %q", got)
+	}
+	if !account.IsModelSupported("grok-build") {
+		t.Fatal("expected grok-build to be supported through grok-build-0.1 alias")
+	}
+	if got := account.GetMappedModel("grok-build"); got != "grok-build-0.1" {
+		t.Fatalf("expected GetMappedModel(grok-build) to return grok-build-0.1, got %q", got)
+	}
+}
+
 func TestAccountGetModelMapping_AntigravityNormalizesGemini31ProAliases(t *testing.T) {
 	t.Parallel()
 

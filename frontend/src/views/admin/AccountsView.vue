@@ -210,18 +210,18 @@
           <template #cell-select="{ row }">
             <input type="checkbox" :checked="isSelected(row.id)" @change="toggleSel(row.id)" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
           </template>
-          <template #cell-id="{ value }">
+          <template #cell-id="{ row, value }">
             <div class="flex min-w-[8rem] flex-col gap-1">
               <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ value }}</span>
-              <div
+              <button
                 v-if="getPrimaryPerformanceStat(Number(value))"
-                class="space-y-0.5 text-[11px] leading-4 text-gray-500 dark:text-gray-400"
-                :title="getPerformanceTitle(Number(value))"
+                type="button"
+                class="inline-flex w-fit items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] font-medium leading-4 text-gray-600 transition-colors hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-300 dark:hover:border-primary-700 dark:hover:bg-primary-900/20 dark:hover:text-primary-300"
+                @click.stop="openPerformanceDetails(row)"
               >
-                <div class="font-medium text-gray-600 dark:text-gray-300">
-                  {{ formatPerformanceLine(getPrimaryPerformanceStat(Number(value))!) }}
-                </div>
-              </div>
+                <Icon name="chart" size="xs" />
+                <span>性能详情</span>
+              </button>
               <span
                 v-else-if="performanceStatsLoading"
                 class="text-[11px] leading-4 text-gray-400 dark:text-dark-500"
@@ -390,6 +390,70 @@
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
+    <BaseDialog
+      :show="showPerformanceDetails"
+      :title="performanceDialogTitle"
+      width="wide"
+      @close="closePerformanceDetails"
+    >
+      <div class="space-y-4">
+        <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-dark-600 dark:bg-dark-800/60">
+          <div class="flex flex-wrap items-center gap-2 text-sm">
+            <span class="font-semibold text-gray-900 dark:text-white">{{ selectedPerformanceAccount?.name }}</span>
+            <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ selectedPerformanceAccount?.id }}</span>
+            <span
+              v-if="selectedPerformanceAccount"
+              class="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600 dark:bg-dark-700 dark:text-gray-300"
+            >
+              {{ selectedPerformanceAccount.platform }} / {{ selectedPerformanceAccount.type }}
+            </span>
+          </div>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            最近 {{ selectedPerformanceStats?.window_hours ?? 24 }} 小时请求性能
+          </p>
+        </div>
+
+        <div v-if="selectedPerformanceStatRows.length === 0" class="rounded-lg border border-dashed border-gray-200 py-8 text-center text-sm text-gray-500 dark:border-dark-600 dark:text-gray-400">
+          暂无性能数据
+        </div>
+
+        <div v-else class="grid gap-3 md:grid-cols-2">
+          <div
+            v-for="stat in selectedPerformanceStatRows"
+            :key="stat.request_type"
+            class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-600 dark:bg-dark-800"
+          >
+            <div class="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <div class="text-sm font-semibold text-gray-900 dark:text-white">
+                  {{ requestTypeDisplayName(stat.request_type) }}
+                </div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ stat.request_count }} 次请求
+                </div>
+              </div>
+              <span
+                v-if="(stat.ws_preflight_fail_count ?? 0) > 0"
+                class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+              >
+                预检失败 {{ stat.ws_preflight_fail_count }}
+              </span>
+            </div>
+
+            <dl class="grid grid-cols-2 gap-2 text-xs">
+              <div
+                v-for="item in getPerformanceDetailItems(stat)"
+                :key="item.label"
+                class="rounded-md bg-gray-50 px-3 py-2 dark:bg-dark-700/70"
+              >
+                <dt class="text-gray-500 dark:text-gray-400">{{ item.label }}</dt>
+                <dd class="mt-0.5 font-mono font-semibold text-gray-800 dark:text-gray-100">{{ item.value }}</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </div>
+    </BaseDialog>
     <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
     <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
@@ -432,6 +496,7 @@ import { useTableSelection } from '@/composables/useTableSelection'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -522,6 +587,7 @@ const showCreateShadowDialog = ref(false)
 const showReAuth = ref(false)
 const showTest = ref(false)
 const showStats = ref(false)
+const selectedPerformanceAccount = ref<Account | null>(null)
 const showErrorPassthrough = ref(false)
 const showTLSFingerprintProfiles = ref(false)
 const edAcc = ref<Account | null>(null)
@@ -698,6 +764,28 @@ const getPrimaryPerformanceStat = (accountID: number): AccountRequestTypePerform
   return stats.find(stat => stat.request_type === 'ws_v2') ?? stats.find(stat => stat.request_type === 'stream') ?? null
 }
 
+const selectedPerformanceStats = computed(() => {
+  if (!selectedPerformanceAccount.value) return null
+  return performanceStatsByAccountId.value[String(selectedPerformanceAccount.value.id)] ?? null
+})
+
+const selectedPerformanceStatRows = computed(() => selectedPerformanceStats.value?.stats ?? [])
+
+const showPerformanceDetails = computed(() => selectedPerformanceAccount.value !== null)
+
+const performanceDialogTitle = computed(() => {
+  if (!selectedPerformanceAccount.value) return '性能详情'
+  return `性能详情 #${selectedPerformanceAccount.value.id}`
+})
+
+const openPerformanceDetails = (account: Account) => {
+  selectedPerformanceAccount.value = account
+}
+
+const closePerformanceDetails = () => {
+  selectedPerformanceAccount.value = null
+}
+
 const formatDurationSeconds = (ms?: number | null) => {
   if (ms == null || !Number.isFinite(ms)) return '--'
   return `${(ms / 1000).toFixed(1)}s`
@@ -721,54 +809,21 @@ const requestTypeDisplayName = (requestType: string) => {
   return requestType || '-'
 }
 
-const formatPerformanceLine = (stat: AccountRequestTypePerformanceStats) => {
-  const parts = [
-    `${requestTypeDisplayName(stat.request_type)} 平均 ${formatDurationSeconds(stat.avg_duration_ms)}`,
-    `P90 ${formatDurationSeconds(stat.p90_duration_ms)}`
+const getPerformanceDetailItems = (stat: AccountRequestTypePerformanceStats) => {
+  return [
+    { label: '平均耗时', value: formatDurationSeconds(stat.avg_duration_ms) },
+    { label: 'P90 耗时', value: formatDurationSeconds(stat.p90_duration_ms) },
+    { label: '首 Token 平均', value: formatDurationSeconds(stat.avg_first_token_ms) },
+    { label: '首 Token P90', value: formatDurationSeconds(stat.p90_first_token_ms) },
+    { label: '连接选择平均', value: formatDurationSeconds(stat.avg_ws_conn_pick_ms) },
+    { label: '连接选择 P90', value: formatDurationSeconds(stat.p90_ws_conn_pick_ms) },
+    { label: '队列等待', value: formatDurationSeconds(stat.avg_ws_queue_wait_ms) },
+    { label: '平均请求体', value: formatPayloadSize(stat.avg_ws_payload_bytes) },
+    { label: '平均事件数', value: stat.avg_ws_event_count == null ? '--' : stat.avg_ws_event_count.toFixed(1) },
+    { label: '连接复用率', value: formatPercent(stat.ws_conn_reused_rate) },
+    { label: '复用次数', value: String(stat.ws_conn_reused_count ?? 0) },
+    { label: '预检失败', value: String(stat.ws_preflight_fail_count ?? 0) }
   ]
-  if (stat.avg_first_token_ms != null) {
-    parts.push(`首 ${formatDurationSeconds(stat.avg_first_token_ms)}`)
-  }
-  if (stat.avg_ws_conn_pick_ms != null) {
-    parts.push(`连 ${formatDurationSeconds(stat.avg_ws_conn_pick_ms)}`)
-  }
-  if ((stat.ws_preflight_fail_count ?? 0) > 0) {
-    parts.push(`预检失败 ${stat.ws_preflight_fail_count}`)
-  }
-  return parts.join(' · ')
-}
-
-const formatPerformanceDetailLine = (stat: AccountRequestTypePerformanceStats) => {
-  const parts = [
-    formatPerformanceLine(stat),
-    `${stat.request_count} 次`
-  ]
-  if (stat.avg_ws_queue_wait_ms != null) {
-    parts.push(`队列 ${formatDurationSeconds(stat.avg_ws_queue_wait_ms)}`)
-  }
-  if (stat.avg_ws_payload_bytes != null) {
-    parts.push(`体量 ${formatPayloadSize(stat.avg_ws_payload_bytes)}`)
-  }
-  if (stat.avg_ws_event_count != null) {
-    parts.push(`事件 ${stat.avg_ws_event_count.toFixed(1)}`)
-  }
-  if (stat.ws_conn_reused_rate != null) {
-    parts.push(`复用 ${formatPercent(stat.ws_conn_reused_rate)}`)
-  }
-  if (stat.p90_ws_conn_pick_ms != null) {
-    parts.push(`连P90 ${formatDurationSeconds(stat.p90_ws_conn_pick_ms)}`)
-  }
-  return parts.join(' · ')
-}
-
-const getPerformanceTitle = (accountID: number) => {
-  const accountStats = performanceStatsByAccountId.value[String(accountID)]
-  const stats = accountStats?.stats ?? []
-  if (stats.length === 0) return '最近 24 小时暂无性能数据'
-  const windowHours = accountStats?.window_hours ?? 24
-  return stats
-    .map(stat => `${windowHours}h ${formatPerformanceDetailLine(stat)}`)
-    .join('\n')
 }
 
 const autoRefreshIntervalLabel = (sec: number) => {
@@ -1025,6 +1080,7 @@ const isAnyModalOpen = computed(() => {
     showReAuth.value ||
     showTest.value ||
     showStats.value ||
+    showPerformanceDetails.value ||
     showSchedulePanel.value ||
     showErrorPassthrough.value ||
     showTLSFingerprintProfiles.value

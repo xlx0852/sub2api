@@ -159,6 +159,34 @@ func TestGetModelPricing_Gpt54NanoUsesDedicatedStaticFallbackWhenRemoteMissing(t
 	require.Zero(t, got.LongContextInputTokenThreshold)
 }
 
+func TestGetModelPricing_XAIGrokUsesStaticFallbackWhenRemoteMissing(t *testing.T) {
+	svc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{}}
+
+	tests := []struct {
+		model       string
+		inputPrice  float64
+		outputPrice float64
+		cacheRead   float64
+	}{
+		{model: "grok-4.3", inputPrice: 1.25e-6, outputPrice: 2.5e-6, cacheRead: 0.2e-6},
+		{model: "grok-4.3-fast", inputPrice: 1.25e-6, outputPrice: 2.5e-6, cacheRead: 0.2e-6},
+		{model: "xai/grok-4.20-0309-reasoning", inputPrice: 1.25e-6, outputPrice: 2.5e-6, cacheRead: 0.2e-6},
+		{model: "grok-build-0.1", inputPrice: 1e-6, outputPrice: 2e-6, cacheRead: 0.2e-6},
+		{model: "grok-build", inputPrice: 1e-6, outputPrice: 2e-6, cacheRead: 0.2e-6},
+		{model: "grok-composer-2.5-fast", inputPrice: 3e-6, outputPrice: 15e-6, cacheRead: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			got := svc.GetModelPricing(tt.model)
+			require.NotNil(t, got)
+			require.InDelta(t, tt.inputPrice, got.InputCostPerToken, 1e-12)
+			require.InDelta(t, tt.outputPrice, got.OutputCostPerToken, 1e-12)
+			require.InDelta(t, tt.cacheRead, got.CacheReadInputTokenCost, 1e-12)
+		})
+	}
+}
+
 func TestGetModelPricing_ImageModelDoesNotFallbackToTextModel(t *testing.T) {
 	imagePricing := &LiteLLMModelPricing{InputCostPerToken: 3}
 	textPricing := &LiteLLMModelPricing{InputCostPerToken: 9}

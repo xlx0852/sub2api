@@ -8,6 +8,8 @@ import (
 const (
 	DefaultAPIBaseURL   = "https://api.x.ai/v1"
 	CLIChatProxyBaseURL = "https://cli-chat-proxy.grok.com/v1"
+	GrokCLIVersion      = "0.2.22"
+	GrokCLIUserAgent    = "grok-pager/" + GrokCLIVersion + " grok-shell/" + GrokCLIVersion + " (macos; aarch64)"
 )
 
 func IsGrokCLIClient(userAgent string) bool {
@@ -96,5 +98,19 @@ func ForwardGrokCLIRequestHeaders(dst http.Header, src http.Header, promptCacheK
 	}
 	if strings.TrimSpace(promptCacheKey) != "" {
 		dst.Set("x-grok-conv-id", strings.TrimSpace(promptCacheKey))
+	}
+}
+
+func SetGrokCLIRequestHeaders(dst http.Header, modelID string) {
+	if dst == nil {
+		return
+	}
+	modelID = strings.TrimSpace(modelID)
+	dst.Set("User-Agent", GrokCLIUserAgent)
+	dst.Set("x-grok-client-identifier", "grok-pager")
+	dst.Set("x-grok-client-version", GrokCLIVersion)
+	dst.Set("x-xai-token-auth", "xai-grok-cli")
+	if modelID != "" {
+		dst.Set("x-grok-model-override", modelID)
 	}
 }

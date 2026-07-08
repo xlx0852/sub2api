@@ -10,13 +10,21 @@ export default {
     login: '登录',
     getStarted: '立即开始',
     goToDashboard: '进入控制台',
+    defaultSubtitle: '大模型接入商',
+    navigation: {
+      features: '特性',
+      models: '模型',
+      docs: '文档'
+    },
     // 新增：面向用户的价值主张
-    heroSubtitle: '一个密钥，畅用多个 AI 模型',
-    heroDescription: '无需管理多个订阅账号，一站式接入 Claude、GPT、Gemini 等主流 AI 服务',
+    heroSubtitle: 'SicTs 企业级模型网关',
+    heroTitleHighlight: '稳定可靠的',
+    heroTitleSuffix: ' AI 模型网关',
+    heroDescription: 'SicTs 将多家大模型能力、上游账号池和用量控制封装成统一 API，让团队用一个入口稳定调用 AI。',
     tags: {
-      subscriptionToApi: '订阅转 API',
-      stickySession: '会话保持',
-      realtimeBilling: '按量计费'
+      modelGateway: '统一模型网关',
+      stickySession: '稳定会话',
+      realtimeBilling: '用量透明'
     },
     // 用户痛点区块
     painPoints: {
@@ -46,12 +54,31 @@ export default {
       subtitle: '简单三步，开始省心使用 AI'
     },
     features: {
-      unifiedGateway: '一键接入',
-      unifiedGatewayDesc: '获取一个 API 密钥，即可调用所有已接入的 AI 模型，无需分别申请。',
-      multiAccount: '稳定可靠',
-      multiAccountDesc: '智能调度多个上游账号，自动切换和负载均衡，告别频繁报错。',
-      balanceQuota: '用多少付多少',
-      balanceQuotaDesc: '按实际使用量计费，支持设置配额上限，团队用量一目了然。'
+      unifiedGateway: '多模型，',
+      unifiedGatewayHighlight: '一处接入',
+      unifiedGatewayDesc: '一个 SicTs API 密钥即可接入 Claude、GPT、Gemini 等模型，业务侧只需要维护一个入口。',
+      multiAccount: '智能路由，',
+      multiAccountHighlight: '自动切换',
+      multiAccountDesc: '按模型、账号状态和负载自动选择可用通道，减少单点拥塞和频繁报错。',
+      balanceQuota: '用量透明，',
+      balanceQuotaHighlight: '成本可控',
+      balanceQuotaDesc: '按实际调用统计用量，支持额度上限和团队视图，成本变化随时可查。',
+      teamConsole: '团队使用，',
+      teamConsoleHighlight: '集中管理',
+      teamConsoleDesc: '在同一个控制台管理密钥、额度和模型调用，业务应用无需分散维护多套配置。'
+    },
+    metrics: {
+      oneKey: '统一密钥',
+      platforms: '接入平台',
+      compatible: '兼容协议',
+      reliable: '自动调度',
+      live: '实时统计'
+    },
+    featureSection: {
+      label: '核心特性',
+      titlePrefix: '唯一目标：',
+      titleHighlight: '稳定调用',
+      description: '从上游账号池到用量计费，首页聚焦开发者真正会关心的接入、稳定性和成本控制。'
     },
     // 优势对比
     comparison: {
@@ -91,7 +118,7 @@ export default {
     },
     providers: {
       title: '已支持的 AI 模型',
-      description: '一个 API，多种选择',
+      description: '通过 SicTs API，统一调用多家模型',
       supported: '已支持',
       soon: '即将推出',
       claude: 'Claude',
@@ -101,12 +128,13 @@ export default {
     },
     // CTA 区块
     cta: {
-      title: '准备好开始了吗？',
-      description: '注册即可获得免费试用额度，体验一站式 AI 服务',
+      title: '把 SicTs 接入你的业务',
+      description: '从模型接入、上游调度到用量管理，SicTs 提供一套面向团队使用的 AI 网关能力。',
       button: '免费注册'
     },
     footer: {
-      allRightsReserved: '保留所有权利。'
+      allRightsReserved: '保留所有权利。',
+      operational: '服务运行中'
     }
   },
 
@@ -3766,7 +3794,13 @@ export default {
       },
       grok: {
         baseUrlHint: 'Grok OAuth 账号会转发到官方 xAI API Base URL。',
-        apiKeyHint: 'Grok 订阅支持使用 OAuth refresh token；API Key 账号不在本次范围内。'
+        apiKeyHint: 'Grok 订阅支持使用 OAuth refresh token；API Key 账号不在本次范围内。',
+        xaiWsPassthroughMode: 'xAI 原生 WS 透传',
+        xaiWsPassthroughModeDesc:
+          '仅影响 Grok OAuth 的 Codex Responses WebSocket 请求。自动模式会在不支持的媒体输入或连接失败时回退 HTTP bridge。',
+        xaiWsPassthroughOff: '关闭（off）',
+        xaiWsPassthroughAuto: '自动（auto）',
+        xaiWsPassthroughForce: '强制（force）'
       },
       anthropic: {
         apiKeyPassthrough: '自动透传（仅替换认证）',
@@ -6225,10 +6259,10 @@ export default {
           '禁用用户注册、公开页面和自助服务功能。仅管理员可以登录和管理平台。',
         siteName: '站点名称',
         siteNameHint: '显示在邮件和页面标题中',
-        siteNamePlaceholder: 'Sub2API',
+        siteNamePlaceholder: 'SicTs',
         siteSubtitle: '站点副标题',
         siteSubtitleHint: '显示在登录和注册页面',
-        siteSubtitlePlaceholder: '订阅转 API 转换平台',
+        siteSubtitlePlaceholder: '大模型接入商',
         apiBaseUrl: 'API 端点地址',
         apiBaseUrlHint: '用于"使用密钥"、"导入到 CC Switch"和回调地址建议，留空则使用当前站点地址',
         apiBaseUrlPlaceholder: 'https://api.example.com',

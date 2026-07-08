@@ -117,6 +117,8 @@ const (
 	xaiGrokCacheReadPricePerToken          = 0.2e-6
 	xaiGrokBuildInputPricePerToken         = 1e-6
 	xaiGrokBuildOutputPricePerToken        = 2e-6
+	xaiGrokComposerInputPricePerToken      = 3e-6
+	xaiGrokComposerOutputPricePerToken     = 15e-6
 )
 
 func normalizeBillingServiceTier(serviceTier string) string {
@@ -284,6 +286,11 @@ func (s *BillingService) initFallbackPricing() {
 		CacheCreationPricePerToken: xaiGrokBuildInputPricePerToken,
 		CacheReadPricePerToken:     xaiGrokCacheReadPricePerToken,
 		SupportsCacheBreakdown:     false,
+	}
+	s.fallbackPrices["grok-composer-2.5-fast"] = &ModelPricing{
+		InputPricePerToken:     xaiGrokComposerInputPricePerToken,
+		OutputPricePerToken:    xaiGrokComposerOutputPricePerToken,
+		SupportsCacheBreakdown: false,
 	}
 
 	// OpenAI GPT-5.4（业务指定价格）
@@ -549,6 +556,12 @@ func (s *BillingService) initFallbackPricing() {
 		CacheReadPricePerToken:     xaiGrokCacheReadPricePerToken,
 		SupportsCacheBreakdown:     false,
 	}
+	// Grok Composer 2.5 Fast (Grok CLI / Cursor Composer fast tier: $3 input / $15 output per MTok)
+	s.fallbackPrices["grok-composer-2.5-fast"] = &ModelPricing{
+		InputPricePerToken:     xaiGrokComposerInputPricePerToken,
+		OutputPricePerToken:    xaiGrokComposerOutputPricePerToken,
+		SupportsCacheBreakdown: false,
+	}
 }
 
 // getFallbackPricing 根据模型系列获取回退价格
@@ -721,6 +734,8 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 		return s.fallbackPrices["grok-4.3"]
 	case "grok-build", "grok-build-0.1":
 		return s.fallbackPrices["grok-build-0.1"]
+	case "grok-composer-2.5-fast":
+		return s.fallbackPrices["grok-composer-2.5-fast"]
 	}
 
 	return nil
@@ -1124,6 +1139,8 @@ func normalizeKnownXAIGrokModel(model string) string {
 		model = strings.TrimSpace(model[idx+1:])
 	}
 	switch {
+	case strings.HasPrefix(model, "grok-composer-"):
+		return "grok-composer-2.5-fast"
 	case strings.HasPrefix(model, "grok-build-0.1"):
 		return "grok-build-0.1"
 	case strings.HasPrefix(model, "grok-4.20"):

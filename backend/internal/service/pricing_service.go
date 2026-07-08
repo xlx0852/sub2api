@@ -51,6 +51,30 @@ var (
 		Mode:                    "chat",
 		SupportsPromptCaching:   true,
 	}
+	// Source: https://docs.x.ai/developers/models
+	xaiGrok43FallbackPricing = &LiteLLMModelPricing{
+		InputCostPerToken:       1.25e-6,
+		OutputCostPerToken:      2.5e-6,
+		CacheReadInputTokenCost: 0.2e-6,
+		LiteLLMProvider:         "xai",
+		Mode:                    "chat",
+		SupportsPromptCaching:   true,
+	}
+	xaiGrokBuildFallbackPricing = &LiteLLMModelPricing{
+		InputCostPerToken:       1e-6,
+		OutputCostPerToken:      2e-6,
+		CacheReadInputTokenCost: 0.2e-6,
+		LiteLLMProvider:         "xai",
+		Mode:                    "chat",
+		SupportsPromptCaching:   true,
+	}
+	// Grok CLI fast composer tier; not on public api.x.ai pricing page.
+	xaiGrokComposerFallbackPricing = &LiteLLMModelPricing{
+		InputCostPerToken:  3e-6,
+		OutputCostPerToken: 15e-6,
+		LiteLLMProvider:    "xai",
+		Mode:               "chat",
+	}
 )
 
 // LiteLLMModelPricing LiteLLM价格数据结构
@@ -574,7 +598,41 @@ func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing 
 		return s.matchOpenAIModel(lookupCandidates[0])
 	}
 
+	// 6. xAI Grok 模型回退策略（LiteLLM 尚未覆盖的新型号）
+	if pricing := matchXAIGrokModelPricing(lookupCandidates[0]); pricing != nil {
+		return pricing
+	}
+
 	return nil
+}
+
+func matchXAIGrokModelPricing(model string) *LiteLLMModelPricing {
+	model = strings.ToLower(strings.TrimSpace(model))
+	if model == "" {
+		return nil
+	}
+	if idx := strings.LastIndex(model, "/"); idx >= 0 {
+		model = strings.TrimSpace(model[idx+1:])
+	}
+	switch {
+	case strings.HasPrefix(model, "grok-composer-"):
+		return xaiGrokComposerFallbackPricing
+	case model == "grok-build", strings.HasPrefix(model, "grok-build-"):
+		return xaiGrokBuildFallbackPricing
+	case model == "grok", model == "grok-latest",
+		strings.HasPrefix(model, "grok-4.3"),
+		strings.HasPrefix(model, "grok-4.20"),
+		strings.HasPrefix(model, "grok-3"),
+		strings.HasPrefix(model, "grok-4-0709"),
+		model == "grok-4",
+		strings.HasPrefix(model, "grok-4-latest"),
+		strings.HasPrefix(model, "grok-4-fast"),
+		strings.HasPrefix(model, "grok-4-1-fast"),
+		strings.HasPrefix(model, "grok-code-fast"):
+		return xaiGrok43FallbackPricing
+	default:
+		return nil
+	}
 }
 
 func (s *PricingService) buildModelLookupCandidates(modelLower string) []string {

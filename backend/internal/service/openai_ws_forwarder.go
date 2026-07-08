@@ -2506,10 +2506,18 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	}
 
 	wsDecision := s.getOpenAIWSProtocolResolver().Resolve(account)
-	forceHTTPBridge := account.Platform == PlatformGrok
+	grokWSPassthroughMode := s.resolveGrokXAIWSPassthroughMode(account)
+	grokWSPassthrough := account.IsGrokOAuth() && isGrokXAIWSPassthroughEnabled(grokWSPassthroughMode)
+	if grokWSPassthrough {
+		wsDecision = OpenAIWSProtocolDecision{
+			Transport: OpenAIUpstreamTransportResponsesWebsocketV2,
+			Reason:    "grok_xai_ws_" + grokWSPassthroughMode,
+		}
+	}
+	forceHTTPBridge := account.Platform == PlatformGrok && !grokWSPassthrough
 	modeRouterV2Enabled := s != nil && s.cfg != nil && s.cfg.Gateway.OpenAIWS.ModeRouterV2Enabled
 	ingressMode := OpenAIWSIngressModeCtxPool
-	if modeRouterV2Enabled && !forceHTTPBridge {
+	if modeRouterV2Enabled && !forceHTTPBridge && !grokWSPassthrough {
 		ingressMode = account.ResolveOpenAIResponsesWebSocketV2Mode(s.cfg.Gateway.OpenAIWS.IngressModeDefault)
 		if ingressMode == OpenAIWSIngressModeOff {
 			return NewOpenAIWSClientCloseError(
@@ -2556,6 +2564,22 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	if forceHTTPBridge {
 		wsHost = "xai-http-bridge"
 		wsPath = "/v1/responses"
+	} else if grokWSPassthrough {
+		var err error
+		wsURL, err = buildGrokResponsesWebSocketURL(account)
+		if err != nil {
+			if grokWSPassthroughMode == GrokXAIWSPassthroughModeAuto {
+				forceHTTPBridge = true
+				wsHost = "xai-http-bridge"
+				wsPath = "/v1/responses"
+				logOpenAIWSModeInfo("grok_xai_ws_fallback account_id=%d reason=build_url_error cause=%s", account.ID, truncateOpenAIWSLogValue(err.Error(), openAIWSLogValueMaxLen))
+			} else {
+				return fmt.Errorf("build grok websocket url: %w", err)
+			}
+		} else if parsedURL, parseErr := url.Parse(wsURL); parseErr == nil && parsedURL != nil {
+			wsHost = normalizeOpenAIWSLogValue(parsedURL.Host)
+			wsPath = normalizeOpenAIWSLogValue(parsedURL.Path)
+		}
 	} else {
 		var err error
 		wsURL, err = s.buildOpenAIResponsesWSURL(account)
@@ -2811,6 +2835,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		defer cancel()
 		return clientConn.Write(writeCtx, coderws.MessageText, message)
 	}
+	pingClientWS := func() error {
+		pingCtx, cancel := context.WithTimeout(ctx, s.openAIWSWriteTimeout())
+		defer cancel()
+		return clientConn.Ping(pingCtx)
+	}
 
 	readClientMessage := func() ([]byte, error) {
 		msgType, payload, readErr := clientConn.Read(ctx)
@@ -2862,20 +2891,24 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		}
 	}
 	refreshIngressRouteState(firstPayload)
-
-	if forceHTTPBridge || s.shouldBridgeOpenAIWSHTTP(account, firstPayload.payloadBytes, firstPayload.previousResponseID) {
+	if account.IsGrokOAuth() && sessionHash != "" {
+		defer deleteGrokWSIDState(sessionHash)
+	}
+	runHTTPBridgeLoop := func(initialPayload openAIWSClientPayload) error {
 		logOpenAIWSModeInfo(
 			"ingress_ws_http_bridge_start account_id=%d account_type=%s payload_bytes=%d threshold_bytes=%d has_session_hash=%v store_disabled=%v",
 			account.ID,
 			account.Type,
-			firstPayload.payloadBytes,
+			initialPayload.payloadBytes,
 			s.openAIWSHTTPBridgeThresholdBytes(),
 			sessionHash != "",
 			storeDisabled,
 		)
-		currentBridgePayload := firstPayload
+		currentBridgePayload := initialPayload
 		var bridgeReplayInput []json.RawMessage
 		bridgeReplayInputExists := false
+		grokHTTPBridgeIDChain := shouldUseGrokHTTPBridgeIDChain(account)
+		lastGrokBridgeResponseID := ""
 		for turn := 1; ; turn++ {
 			if turn > 1 && hooks != nil && hooks.BeforeRequest != nil {
 				if err := hooks.BeforeRequest(turn, currentBridgePayload.payloadRaw, currentBridgePayload.originalModel); err != nil {
@@ -2902,7 +2935,25 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			if replayInputErr != nil {
 				return fmt.Errorf("build websocket http bridge replay input: %w", replayInputErr)
 			}
-			if needsBridgeReplay && turnReplayInputExists {
+			if grokHTTPBridgeIDChain {
+				currentPreviousResponseID := strings.TrimSpace(currentBridgePayload.previousResponseID)
+				if currentPreviousResponseID == "" && lastGrokBridgeResponseID != "" &&
+					(turn > 1 || openAIWSRawPayloadHasToolCallOutput(currentBridgePayload.payloadRaw)) {
+					updatedPayload, setPrevErr := setPreviousResponseIDToRawPayload(bridgePayloadRaw, lastGrokBridgeResponseID)
+					if setPrevErr != nil {
+						return fmt.Errorf("set grok http bridge previous_response_id: %w", setPrevErr)
+					}
+					bridgePayloadRaw = updatedPayload
+					bridgePayloadBytes = len(updatedPayload)
+					logOpenAIWSModeInfo(
+						"ingress_ws_http_bridge_grok_prev_inject account_id=%d turn=%d previous_response_id=%s has_tool_output=%v",
+						account.ID,
+						turn,
+						truncateOpenAIWSLogValue(lastGrokBridgeResponseID, openAIWSIDValueMaxLen),
+						openAIWSRawPayloadHasToolCallOutput(currentBridgePayload.payloadRaw),
+					)
+				}
+			} else if needsBridgeReplay && turnReplayInputExists && (account == nil || !account.IsGrokOAuth()) {
 				updatedPayload, setInputErr := setOpenAIWSPayloadInputSequence(
 					currentBridgePayload.payloadRaw,
 					turnReplayInput,
@@ -2927,6 +2978,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				c,
 				account,
 				token,
+				sessionHash,
 				bridgePayloadRaw,
 				bridgePayloadBytes,
 				currentBridgePayload.originalModel,
@@ -2935,6 +2987,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				currentBridgePayload.imageInputSize,
 				turn,
 				writeClientMessage,
+				pingClientWS,
 			)
 			if hooks != nil && hooks.AfterTurn != nil {
 				hooks.AfterTurn(turn, result, bridgeErr)
@@ -2958,6 +3011,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				}
 			}
 			responseID := strings.TrimSpace(result.RequestID)
+			if grokHTTPBridgeIDChain && responseID != "" {
+				lastGrokBridgeResponseID = responseID
+			}
 			if responseID != "" && stateStore != nil {
 				ttl := s.openAIWSResponseStickyTTL()
 				logOpenAIWSBindResponseAccountWarn(groupID, account.ID, responseID, stateStore.BindResponseAccount(ctx, groupID, responseID, account.ID, ttl))
@@ -2983,10 +3039,135 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			currentBridgePayload = nextPayload
 		}
 	}
+	if grokWSPassthrough && !forceHTTPBridge && shouldBridgeGrokWSPayload(firstPayload.payloadRaw) {
+		if grokWSPassthroughMode == GrokXAIWSPassthroughModeForce {
+			return NewOpenAIWSClientCloseError(
+				coderws.StatusPolicyViolation,
+				"grok xAI websocket passthrough does not support image input for this model",
+				nil,
+			)
+		}
+		firstUpstreamModel := resolveGrokWSIngressUpstreamModel(account, firstPayload.originalModel)
+		if shouldPreprocessGrokComposerImagesAtWSIngress(account, firstUpstreamModel, firstPayload.payloadRaw) {
+			stopImagePreprocessKeepalive := startOpenAIWSHTTPBridgeClientKeepalive(
+				ctx,
+				s.openAIWSHTTPBridgeKeepaliveInterval(),
+				pingClientWS,
+				nil,
+			)
+			rewritten, _, preprocessErr := s.rewriteGrokComposerWSIngressImages(
+				ctx,
+				c,
+				account,
+				token,
+				firstPayload.payloadRaw,
+				firstUpstreamModel,
+			)
+			stopImagePreprocessKeepalive()
+			if preprocessErr != nil {
+				logOpenAIWSModeInfo(
+					"grok_xai_ws_fallback account_id=%d reason=image_preprocess_failed cause=%s",
+					account.ID,
+					truncateOpenAIWSLogValue(preprocessErr.Error(), openAIWSLogValueMaxLen),
+				)
+				forceHTTPBridge = true
+				wsHost = "xai-http-bridge"
+				wsPath = "/v1/responses"
+			} else {
+				beforeBytes := firstPayload.payloadBytes
+				firstPayload.payloadRaw = rewritten
+				firstPayload.payloadBytes = len(rewritten)
+				logOpenAIWSModeInfo(
+					"grok_xai_ws_image_preprocess account_id=%d turn=%d bytes_before=%d bytes_after=%d description_chars=%d action=stay_on_ws_native_chain",
+					account.ID,
+					1,
+					beforeBytes,
+					firstPayload.payloadBytes,
+					grokVisionDescriptionChars(firstPayload.payloadRaw),
+				)
+			}
+		} else {
+			forceHTTPBridge = true
+			wsHost = "xai-http-bridge"
+			wsPath = "/v1/responses"
+			logOpenAIWSModeInfo("grok_xai_ws_fallback account_id=%d reason=image_input_http_bridge", account.ID)
+		}
+	}
 
-	wsHeaders, _, buildHdrErr := s.buildOpenAIWSHeaders(ctx, c, account, token, wsDecision, isCodexCLI, turnState, strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader)), firstPayload.promptCacheKey)
-	if buildHdrErr != nil {
-		return fmt.Errorf("build ws headers: %w", buildHdrErr)
+	if forceHTTPBridge || (!grokWSPassthrough && s.shouldBridgeOpenAIWSHTTP(account, firstPayload.payloadBytes, firstPayload.previousResponseID)) {
+		return runHTTPBridgeLoop(firstPayload)
+	}
+
+	grokWSNativeChain := grokWSPassthrough && !forceHTTPBridge && shouldUseGrokWSNativeResponseChain(account)
+	grokWSIngressCollapseThreshold := s.openAIWSHTTPBridgeThresholdBytes()
+	applyGrokWSIngressPayloadCollapse := func(payload *openAIWSClientPayload, turn int) {
+		if payload == nil || !grokWSNativeChain {
+			return
+		}
+		collapsed, changed, collapseErr := collapseGrokWSIngressInput(payload.payloadRaw, grokWSIngressCollapseThreshold)
+		if collapseErr != nil {
+			logOpenAIWSModeInfo(
+				"grok_xai_ws_ingress_collapse_skip account_id=%d turn=%d reason=error cause=%s",
+				account.ID,
+				turn,
+				truncateOpenAIWSLogValue(collapseErr.Error(), openAIWSLogValueMaxLen),
+			)
+			return
+		}
+		if !changed {
+			return
+		}
+		beforeBytes := payload.payloadBytes
+		inputItemsBefore := len(gjson.GetBytes(payload.payloadRaw, "input").Array())
+		collapseReason := grokWSIngressCollapseReason(payload.payloadRaw, grokWSIngressCollapseThreshold)
+		payload.payloadRaw = collapsed
+		payload.payloadBytes = len(collapsed)
+		logOpenAIWSModeInfo(
+			"grok_xai_ws_ingress_collapse account_id=%d turn=%d reason=%s input_items_before=%d input_items_after=%d bytes_before=%d bytes_after=%d",
+			account.ID,
+			turn,
+			normalizeOpenAIWSLogValue(collapseReason),
+			inputItemsBefore,
+			len(gjson.GetBytes(collapsed, "input").Array()),
+			beforeBytes,
+			payload.payloadBytes,
+		)
+		captureGrokTransform(
+			"ws_ingress_collapse",
+			account.ID,
+			"ws",
+			turn,
+			"",
+			payload.payloadRaw,
+			collapsed,
+			map[string]string{
+				"collapse_reason":    collapseReason,
+				"collapse_changed":   "true",
+				"prompt_cache_key":   strings.TrimSpace(gjson.GetBytes(collapsed, "prompt_cache_key").String()),
+				"previous_response_id": strings.TrimSpace(gjson.GetBytes(collapsed, "previous_response_id").String()),
+				"input_items_before": fmt.Sprintf("%d", inputItemsBefore),
+				"input_items_after":  fmt.Sprintf("%d", len(gjson.GetBytes(collapsed, "input").Array())),
+			},
+		)
+	}
+	if grokWSNativeChain {
+		storeDisabled = false
+		logOpenAIWSModeInfo(
+			"grok_xai_ws_native_chain account_id=%d action=use_previous_response_id_chain store_disabled=false",
+			account.ID,
+		)
+		applyGrokWSIngressPayloadCollapse(&firstPayload, 1)
+	}
+
+	var wsHeaders http.Header
+	if grokWSPassthrough && !forceHTTPBridge {
+		wsHeaders = buildGrokResponsesWebSocketHeaders(c, account, token, firstPayload.payloadRaw, sessionHash)
+	} else {
+		var buildHdrErr error
+		wsHeaders, _, buildHdrErr = s.buildOpenAIWSHeaders(ctx, c, account, token, wsDecision, isCodexCLI, turnState, strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader)), firstPayload.promptCacheKey)
+		if buildHdrErr != nil {
+			return fmt.Errorf("build ws headers: %w", buildHdrErr)
+		}
 	}
 	baseAcquireReq := openAIWSAcquireRequest{
 		Account: account,
@@ -3136,10 +3317,95 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		return lease, nil
 	}
 
-	preflightFailCount := 0
-	sendAndRelay := func(turn int, lease *openAIWSConnLease, payload []byte, payloadBytes int, originalModel string, imageBillingModel string, imageSizeTier string, imageInputSize string) (*OpenAIForwardResult, error) {
+	sendAndRelay := func(turn int, lease *openAIWSConnLease, payload []byte, payloadBytes int, turnPreflightFailCount int, originalModel string, imageBillingModel string, imageSizeTier string, imageInputSize string) (*OpenAIForwardResult, error) {
 		if lease == nil {
 			return nil, errors.New("upstream websocket lease is nil")
+		}
+		var grokIDMapper *grokWSRequestIDMapper
+		var grokUpstreamRequestPayload []byte
+		var grokTurnPreprocessUsage *OpenAIUsage
+		var grokObserve *grokObserveSpan
+		grokUpstreamModel := ""
+		if grokWSPassthrough && !forceHTTPBridge {
+			grokIDMapper = newGrokWSRequestIDMapper(sessionHash, payload)
+			grokUpstreamModel = resolveGrokWSIngressUpstreamModel(account, originalModel)
+			if shouldUseGrokWSNativeResponseChain(account) && shouldPreprocessGrokComposerImages(grokUpstreamModel, payload) {
+				stopImagePreprocessKeepalive := startOpenAIWSHTTPBridgeClientKeepalive(
+					ctx,
+					s.openAIWSHTTPBridgeKeepaliveInterval(),
+					pingClientWS,
+					nil,
+				)
+				rewritten, preprocessUsage, preprocessErr := s.rewriteGrokComposerWSIngressImages(
+					ctx,
+					c,
+					account,
+					token,
+					payload,
+					grokUpstreamModel,
+				)
+				stopImagePreprocessKeepalive()
+				if preprocessErr != nil {
+					return nil, wrapOpenAIWSIngressTurnError(
+						"grok_xai_ws_image_preprocess",
+						preprocessErr,
+						false,
+					)
+				}
+				if !bytes.Equal(rewritten, payload) {
+					logOpenAIWSModeInfo(
+						"grok_xai_ws_image_preprocess account_id=%d turn=%d bytes_before=%d bytes_after=%d description_chars=%d action=send_turn",
+						account.ID,
+						turn,
+						len(payload),
+						len(rewritten),
+						grokVisionDescriptionChars(rewritten),
+					)
+					payload = rewritten
+					payloadBytes = len(rewritten)
+					grokTurnPreprocessUsage = preprocessUsage
+				}
+			}
+			var requestHeaders http.Header
+			if c != nil && c.Request != nil {
+				requestHeaders = c.Request.Header
+			}
+			grokObserve = &grokObserveSpan{
+				AccountID:      account.ID,
+				Turn:           turn,
+				Transport:      "ws",
+				SessionHash:    sessionHash,
+				UpstreamModel:  grokUpstreamModel,
+				PromptCacheKey: openAIWSPayloadStringFromRaw(payload, "prompt_cache_key"),
+				PreviousResponseID: openAIWSPayloadStringFromRaw(payload, "previous_response_id"),
+			}
+			upstreamPayload, transformErr := prepareGrokWebSocketUpstreamPayload(payload, grokUpstreamModel, account, requestHeaders, grokObserve)
+			if transformErr != nil {
+				return nil, wrapOpenAIWSIngressTurnError(
+					"grok_xai_ws_payload",
+					fmt.Errorf("prepare grok websocket payload: %w", transformErr),
+					false,
+				)
+			}
+			if grokIDMapper != nil {
+				upstreamPayload = grokIDMapper.upstreamRequestPayload(upstreamPayload)
+			}
+			grokUpstreamRequestPayload = append([]byte(nil), upstreamPayload...)
+			captureGrokTransform(
+				"ws_upstream_prepare",
+				account.ID,
+				"ws",
+				turn,
+				"",
+				payload,
+				upstreamPayload,
+				map[string]string{
+					"prompt_cache_key":     strings.TrimSpace(gjson.GetBytes(upstreamPayload, "prompt_cache_key").String()),
+					"previous_response_id": strings.TrimSpace(gjson.GetBytes(upstreamPayload, "previous_response_id").String()),
+				},
+			)
+			payload = upstreamPayload
+			payloadBytes = len(upstreamPayload)
 		}
 		turnStart := time.Now()
 		wroteDownstream := false
@@ -3162,6 +3428,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 
 		responseID := ""
 		usage := OpenAIUsage{}
+		if grokTurnPreprocessUsage != nil {
+			addOpenAIUsage(&usage, *grokTurnPreprocessUsage)
+		}
 		imageCounter := newOpenAIImageOutputCounter()
 		var firstTokenMs *int
 		reqStream := openAIWSPayloadBoolFromRaw(payload, "stream", true)
@@ -3308,6 +3577,17 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				}
 			}
 
+			if grokIDMapper != nil {
+				upstreamMessage = grokIDMapper.downstreamResponsePayload(upstreamMessage)
+				if mappedResponseID := strings.TrimSpace(gjson.GetBytes(upstreamMessage, "response.id").String()); mappedResponseID != "" {
+					responseID = mappedResponseID
+				}
+			}
+			if grokWSPassthrough && !forceHTTPBridge {
+				if sanitized, changed := sanitizeGrokWSOutboundEvent(eventType, upstreamMessage); changed {
+					upstreamMessage = sanitized
+				}
+			}
 			if !clientDisconnected {
 				if needModelReplace && len(mappedModelBytes) > 0 && openAIWSEventMayContainModel(eventType) && bytes.Contains(upstreamMessage, mappedModelBytes) {
 					upstreamMessage = replaceOpenAIWSMessageModel(upstreamMessage, mappedModel, originalModel)
@@ -3342,6 +3622,30 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				}
 			}
 			if isTerminalEvent {
+				if grokWSPassthrough && !forceHTTPBridge && grokUpstreamModel != "" {
+					analysis := analyzeGrokCompletedResponse(upstreamMessage)
+					observeGrokUpstreamCompleted(grokObserve, grokUpstreamRequestPayload, upstreamMessage, responseID)
+					if grokObserve != nil {
+						captureGrokTransform("ws_upstream_response", grokObserve.AccountID, grokObserve.Transport, grokObserve.Turn, grokObserve.SessionHash, grokUpstreamRequestPayload, upstreamMessage, map[string]string{
+							"output_text_chars":    fmt.Sprintf("%d", analysis.OutputTextChars),
+							"reasoning_text_chars": fmt.Sprintf("%d", analysis.ReasoningTextChars),
+							"response_id":          responseID,
+						})
+					}
+					cacheGrokReasoningReplayFromCompleted(grokUpstreamModel, grokUpstreamRequestPayload, upstreamMessage)
+					observeGrokEvent(grokObserve, "pipeline_turn_summary", map[string]string{
+						"response_id":          responseID,
+						"request_bytes":        fmt.Sprintf("%d", len(grokUpstreamRequestPayload)),
+						"output_text_chars":    fmt.Sprintf("%d", analysis.OutputTextChars),
+						"reasoning_text_chars": fmt.Sprintf("%d", analysis.ReasoningTextChars),
+						"anomaly_count":        fmt.Sprintf("%d", len(analysis.Anomalies)),
+						"anomalies":            strings.Join(analysis.Anomalies, ","),
+						"root_cause_hint":      grokAnomalyRootCauseHint(analysis.Anomalies, analysis.OutputTextChars, analysis.ReasoningTextChars),
+					})
+				}
+				if grokIDMapper != nil {
+					grokIDMapper.recordTranscriptTurn(grokUpstreamRequestPayload, upstreamMessage)
+				}
 				// 客户端已断连时，上游连接的 session 状态不可信，标记 broken 避免回池复用。
 				if clientDisconnected {
 					lease.MarkBroken()
@@ -3381,7 +3685,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					Duration:             time.Since(turnStart),
 					FirstTokenMs:         firstTokenMs,
 					WSConnReused:         boolPtr(lease.Reused()),
-					WSPreflightFailCount: intPtr(preflightFailCount),
+					WSPreflightFailCount: intPtr(turnPreflightFailCount),
 					WSConnPickMs:         intPtr(int(lease.ConnPickDuration().Milliseconds())),
 					WSPayloadBytes:       openAIWSInt64Ptr(int64(payloadBytes)),
 					WSEventCount:         intPtr(eventCount),
@@ -3468,6 +3772,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	turn := 1
 	turnRetry := 0
 	turnPrevRecoveryTried := false
+	turnPreflightFailCount := 0
 	lastTurnFinishedAt := time.Time{}
 	lastTurnResponseID := ""
 	lastTurnPayload := []byte(nil)
@@ -3756,6 +4061,18 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		if sessionLease == nil {
 			acquiredLease, acquireErr := acquireTurnLease(turn, preferredConnID, forcePreferredConn)
 			if acquireErr != nil {
+				if grokWSPassthrough && !forceHTTPBridge && grokWSPassthroughMode == GrokXAIWSPassthroughModeAuto && turn == 1 && isGrokWSAutoDialFallbackEligible(acquireErr) {
+					dialStatus, dialClass, _, _, _, _, _, _ := summarizeOpenAIWSDialError(acquireErr)
+					logOpenAIWSModeInfo(
+						"grok_xai_ws_fallback account_id=%d reason=dial_failed dial_status=%d dial_class=%s cause=%s",
+						account.ID,
+						dialStatus,
+						dialClass,
+						truncateOpenAIWSLogValue(acquireErr.Error(), openAIWSLogValueMaxLen),
+					)
+					forceHTTPBridge = true
+					return runHTTPBridgeLoop(firstPayload)
+				}
 				return fmt.Errorf("acquire upstream websocket: %w", acquireErr)
 			}
 			sessionLease = acquiredLease
@@ -3767,6 +4084,12 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 		}
 		shouldPreflightPing := turn > 1 && sessionLease != nil && turnRetry == 0
+		// Grok native chain stores continuation server-side via previous_response_id;
+		// ingress preflight ping on reused api.x.ai sockets is flaky and only forces
+		// needless connection churn without improving chain safety.
+		if grokWSNativeChain {
+			shouldPreflightPing = false
+		}
 		if shouldPreflightPing && openAIWSIngressPreflightPingIdle > 0 && !lastTurnFinishedAt.IsZero() {
 			if time.Since(lastTurnFinishedAt) < openAIWSIngressPreflightPingIdle {
 				shouldPreflightPing = false
@@ -3774,7 +4097,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		}
 		if shouldPreflightPing {
 			if pingErr := sessionLease.PingWithTimeout(openAIWSConnHealthCheckTO); pingErr != nil {
-				preflightFailCount++
+				turnPreflightFailCount++
 				s.recordOpenAIWSPreflightFailure(account.ID)
 				logOpenAIWSModeInfo(
 					"ingress_ws_upstream_preflight_ping_fail account_id=%d turn=%d conn_id=%s cause=%s",
@@ -3898,7 +4221,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			)
 		}
 
-		result, relayErr := sendAndRelay(turn, sessionLease, currentPayload, currentPayloadBytes, currentOriginalModel, currentImageBillingModel, currentImageSizeTier, currentImageInputSize)
+		result, relayErr := sendAndRelay(turn, sessionLease, currentPayload, currentPayloadBytes, turnPreflightFailCount, currentOriginalModel, currentImageBillingModel, currentImageSizeTier, currentImageInputSize)
 		if relayErr != nil {
 			lastTurnClean = false
 			if recoverIngressPrevResponseNotFound(relayErr, turn, connID) {
@@ -3982,14 +4305,59 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		if parseErr != nil {
 			return parseErr
 		}
+		if grokWSPassthrough && !forceHTTPBridge && shouldBridgeGrokWSPayload(nextPayload.payloadRaw) {
+			nextUpstreamModel := resolveGrokWSIngressUpstreamModel(account, nextPayload.originalModel)
+			if shouldPreprocessGrokComposerImagesAtWSIngress(account, nextUpstreamModel, nextPayload.payloadRaw) {
+				stopImagePreprocessKeepalive := startOpenAIWSHTTPBridgeClientKeepalive(
+					ctx,
+					s.openAIWSHTTPBridgeKeepaliveInterval(),
+					pingClientWS,
+					nil,
+				)
+				rewritten, _, preprocessErr := s.rewriteGrokComposerWSIngressImages(
+					ctx,
+					c,
+					account,
+					token,
+					nextPayload.payloadRaw,
+					nextUpstreamModel,
+				)
+				stopImagePreprocessKeepalive()
+				if preprocessErr != nil {
+					return fmt.Errorf("preprocess grok composer websocket image input: %w", preprocessErr)
+				}
+				beforeBytes := nextPayload.payloadBytes
+				nextPayload.payloadRaw = rewritten
+				nextPayload.payloadBytes = len(rewritten)
+				logOpenAIWSModeInfo(
+					"grok_xai_ws_image_preprocess account_id=%d turn=%d bytes_before=%d bytes_after=%d description_chars=%d action=stay_on_ws_native_chain",
+					account.ID,
+					turn+1,
+					beforeBytes,
+					nextPayload.payloadBytes,
+					grokVisionDescriptionChars(nextPayload.payloadRaw),
+				)
+			} else {
+				return NewOpenAIWSClientCloseError(
+					coderws.StatusPolicyViolation,
+					"grok xAI websocket passthrough does not support image input for this model",
+					nil,
+				)
+			}
+		}
+		applyGrokWSIngressPayloadCollapse(&nextPayload, turn+1)
 		if nextPayload.promptCacheKey != "" {
 			// ingress 会话在整个客户端 WS 生命周期内复用同一上游连接；
 			// prompt_cache_key 对握手头的更新仅在未来需要重新建连时生效。
-			updatedHeaders, _, updHdrErr := s.buildOpenAIWSHeaders(ctx, c, account, token, wsDecision, isCodexCLI, turnState, strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader)), nextPayload.promptCacheKey)
-			if updHdrErr != nil {
-				logOpenAIWSModeInfo("ingress_ws_update_headers_failed account_id=%d err=%v", account.ID, updHdrErr)
+			if grokWSPassthrough && !forceHTTPBridge {
+				baseAcquireReq.Headers = buildGrokResponsesWebSocketHeaders(c, account, token, nextPayload.payloadRaw, sessionHash)
 			} else {
-				baseAcquireReq.Headers = updatedHeaders
+				updatedHeaders, _, updHdrErr := s.buildOpenAIWSHeaders(ctx, c, account, token, wsDecision, isCodexCLI, turnState, strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader)), nextPayload.promptCacheKey)
+				if updHdrErr != nil {
+					logOpenAIWSModeInfo("ingress_ws_update_headers_failed account_id=%d err=%v", account.ID, updHdrErr)
+				} else {
+					baseAcquireReq.Headers = updatedHeaders
+				}
 			}
 		}
 		if nextPayload.previousResponseID != "" {
@@ -4033,9 +4401,13 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		currentImageInputSize = nextPayload.imageInputSize
 		currentPayloadBytes = nextPayload.payloadBytes
 		storeDisabled = s.isOpenAIWSStoreDisabledInRequestRaw(currentPayload, account)
+		if grokWSNativeChain {
+			storeDisabled = false
+		}
 		if !storeDisabled {
 			unpinSessionConn(sessionConnID)
 		}
+		turnPreflightFailCount = 0
 		turn++
 	}
 }

@@ -248,6 +248,8 @@ func TestGetModelPricing_XAIGrokFallback(t *testing.T) {
 		{model: "xai/grok-3-mini-fast-latest", inputPrice: 1.25e-6, outputPrice: 2.5e-6, cacheRead: 0.2e-6},
 		{model: "grok-code-fast-1", inputPrice: 1.25e-6, outputPrice: 2.5e-6, cacheRead: 0.2e-6},
 		{model: "grok-build-0.1", inputPrice: 1e-6, outputPrice: 2e-6, cacheRead: 0.2e-6},
+		{model: "grok-composer-2.5-fast", inputPrice: 3e-6, outputPrice: 15e-6, cacheRead: 0},
+		{model: "grok-composer-2", inputPrice: 3e-6, outputPrice: 15e-6, cacheRead: 0},
 	}
 
 	for _, tt := range tests {

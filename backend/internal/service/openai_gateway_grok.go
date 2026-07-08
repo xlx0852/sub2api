@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -46,12 +47,16 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 
 	sessionID := s.GenerateSessionHashForOpenAIRequest(c, body)
 	var grokIDMapper *grokWSRequestIDMapper
-	if sessionID != "" {
+	if sessionID != "" && !s.shouldUseGrokBuildHTTPRelay(c, account) {
 		grokIDMapper = newGrokWSRequestIDMapper(sessionID, body)
-		defer deleteGrokWSIDState(sessionID)
 	}
 
-	preparedBody, err := s.prepareGrokUpstreamResponsesBody(ctx, c, account, body, upstreamModel, token, proxyURL)
+	prepOpts := grokPreparedResponsesOptions{}
+	if s.shouldUseGrokBuildHTTPRelay(c, account) {
+		prepOpts.UseGrokBuildHTTPRelay = true
+		prepOpts.PromptCacheKey = sessionID
+	}
+	preparedBody, err := s.prepareGrokUpstreamResponsesBody(ctx, c, account, body, upstreamModel, token, proxyURL, prepOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -62,6 +67,19 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 		setGrokWSRequestIDMapper(c, grokIDMapper)
 		setGrokWSUpstreamRequestPayload(c, patchedBody)
 	}
+	captureGrokTransform(
+		"http_relay",
+		account.ID,
+		"http",
+		0,
+		sessionID,
+		body,
+		patchedBody,
+		map[string]string{
+			"prompt_cache_key":     strings.TrimSpace(gjson.GetBytes(patchedBody, "prompt_cache_key").String()),
+			"previous_response_id": strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String()),
+		},
+	)
 
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	defer releaseUpstreamCtx()
@@ -85,6 +103,18 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 		upstreamMsg := sanitizeUpstreamErrorMessage(extractUpstreamErrorMessage(respBody))
 		if upstreamMsg == "" {
 			upstreamMsg = fmt.Sprintf("xAI upstream returned status %d", resp.StatusCode)
+		}
+		if resp.StatusCode == http.StatusUnprocessableEntity || resp.StatusCode == http.StatusBadRequest {
+			logOpenAIWSModeInfo(
+				"grok_http_upstream_rejected account_id=%d inbound_bytes=%d upstream_bytes=%d previous_response_id=%s input_items=%d input_summary=%s message=%s",
+				account.ID,
+				len(body),
+				len(patchedBody),
+				truncateOpenAIWSLogValue(gjson.GetBytes(body, "previous_response_id").String(), 64),
+				len(gjson.GetBytes(patchedBody, "input").Array()),
+				truncateOpenAIWSLogValue(summarizeGrokResponsesInputItems(gjson.GetBytes(patchedBody, "input")), 256),
+				truncateOpenAIWSLogValue(upstreamMsg, openAIWSLogValueMaxLen),
+			)
 		}
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 			Platform:           account.Platform,
@@ -164,6 +194,52 @@ type grokPreparedResponsesBody struct {
 	PreprocessUsage *OpenAIUsage
 }
 
+// grokPreparedResponsesOptions controls how Codex/Grok upstream bodies are normalized.
+type grokPreparedResponsesOptions struct {
+	// UseGrokBuildHTTPRelay applies native Grok Build HTTP semantics for Codex HTTP
+	// continuation: strip previous_response_id, keep full sanitized input, and pin
+	// prompt_cache_key for server-side conversation affinity.
+	UseGrokBuildHTTPRelay bool
+	PromptCacheKey        string
+}
+
+type grokResponsesPatchOptions struct {
+	dropReplayedAssistantMessages bool
+	collapseForGrokBuildHTTPRelay bool
+	forceIncrementalInput         bool
+	requestHeaders                http.Header
+	observe                       *grokObserveSpan
+}
+
+func (s *OpenAIGatewayService) shouldUseGrokBuildHTTPRelay(c *gin.Context, account *Account) bool {
+	if account != nil && account.IsGrokOAuth() {
+		return true
+	}
+	return s.shouldUseCodexHighFidelityRelay(c)
+}
+
+func applyGrokBuildHTTPRelayBody(body []byte, promptCacheKey string) ([]byte, error) {
+	if !json.Valid(body) {
+		return nil, fmt.Errorf("invalid json request body")
+	}
+	out := body
+	var err error
+	if strings.TrimSpace(gjson.GetBytes(out, "previous_response_id").String()) != "" {
+		out, err = sjson.DeleteBytes(out, "previous_response_id")
+		if err != nil {
+			return nil, err
+		}
+	}
+	promptCacheKey = strings.TrimSpace(promptCacheKey)
+	if promptCacheKey != "" && !gjson.GetBytes(out, "prompt_cache_key").Exists() {
+		out, err = sjson.SetBytes(out, "prompt_cache_key", promptCacheKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 func (s *OpenAIGatewayService) prepareGrokUpstreamResponsesBody(
 	ctx context.Context,
 	c *gin.Context,
@@ -172,6 +248,7 @@ func (s *OpenAIGatewayService) prepareGrokUpstreamResponsesBody(
 	upstreamModel string,
 	token string,
 	proxyURL string,
+	opts grokPreparedResponsesOptions,
 ) (*grokPreparedResponsesBody, error) {
 	var preprocessUsage *OpenAIUsage
 	if shouldPreprocessGrokComposerImages(upstreamModel, body) {
@@ -187,7 +264,23 @@ func (s *OpenAIGatewayService) prepareGrokUpstreamResponsesBody(
 		preprocessUsage = &preprocessResult.Usage
 	}
 
-	patchedBody, err := patchGrokResponsesBody(body, upstreamModel)
+	if opts.UseGrokBuildHTTPRelay {
+		var relayErr error
+		body, relayErr = applyGrokBuildHTTPRelayBody(body, opts.PromptCacheKey)
+		if relayErr != nil {
+			return nil, relayErr
+		}
+	}
+
+	patchOpts := grokResponsesPatchOptions{}
+	if c != nil && c.Request != nil {
+		patchOpts.requestHeaders = c.Request.Header
+	}
+	if opts.UseGrokBuildHTTPRelay {
+		patchOpts.dropReplayedAssistantMessages = true
+		patchOpts.collapseForGrokBuildHTTPRelay = true
+	}
+	patchedBody, err := patchGrokResponsesBodyWithOptions(body, upstreamModel, patchOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -198,11 +291,107 @@ func (s *OpenAIGatewayService) prepareGrokUpstreamResponsesBody(
 }
 
 func shouldPreprocessGrokComposerImages(upstreamModel string, body []byte) bool {
-	return isGrokComposerModel(upstreamModel) && openAIRequestBodyMayContainImageInput(body)
+	return grokPayloadRequiresComposerImagePreprocess(upstreamModel, body)
+}
+
+func grokPayloadRequiresComposerImagePreprocess(upstreamModel string, body []byte) bool {
+	if !isGrokComposerModel(upstreamModel) {
+		return false
+	}
+	if openAIWSRawPayloadHasToolCallOutput(body) {
+		return false
+	}
+	if grokPayloadHasToolContinuationInTrailingInput(body) {
+		return false
+	}
+	return grokPayloadHasTrailingImageInput(body)
+}
+
+func grokPayloadHasTrailingImageInput(body []byte) bool {
+	if len(body) == 0 || !json.Valid(body) {
+		return false
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return false
+	}
+	input, ok := payload["input"].([]any)
+	if !ok || len(input) == 0 {
+		return false
+	}
+	trailing := trailingGrokItemsForImageDetection(input)
+	if len(trailing) == 0 {
+		return false
+	}
+	var images []string
+	for _, item := range trailing {
+		collectGrokResponsesImageURLs(item, &images)
+	}
+	return len(images) > 0
+}
+
+func grokPayloadHasToolContinuationInTrailingInput(body []byte) bool {
+	if len(body) == 0 || !json.Valid(body) {
+		return false
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return false
+	}
+	input, ok := payload["input"].([]any)
+	if !ok || len(input) == 0 {
+		return false
+	}
+	for _, rawItem := range trailingGrokItemsForImageDetection(input) {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			continue
+		}
+		itemType := strings.TrimSpace(firstNonEmptyString(item["type"]))
+		switch {
+		case itemType == "function_call", itemType == "function_call_output",
+			isCodexToolCallContextItemType(itemType), isCodexToolCallOutputItemType(itemType):
+			return true
+		}
+	}
+	return false
+}
+
+func trailingGrokItemsForImageDetection(input []any) []any {
+	if len(input) == 0 {
+		return nil
+	}
+	lastAssistantIdx := -1
+	for i, rawItem := range input {
+		if isGrokAssistantInputItem(rawItem) {
+			lastAssistantIdx = i
+		}
+	}
+	if lastAssistantIdx >= 0 && lastAssistantIdx+1 < len(input) {
+		return input[lastAssistantIdx+1:]
+	}
+	if isGrokTrailingUserContinuation(input) {
+		if kept := keepTrailingGrokUserMessages(input); len(kept) > 0 {
+			return kept
+		}
+	}
+	if needsGrokTrailingToolContinuation(input) {
+		return keepTrailingGrokToolContinuationItems(input)
+	}
+	return []any{input[len(input)-1]}
 }
 
 func isGrokComposerModel(model string) bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "grok-composer-")
+}
+
+func isGrokBuildModel(model string) bool {
+	model = strings.ToLower(strings.TrimSpace(model))
+	return model == "grok-build" || strings.HasPrefix(model, "grok-build-")
+}
+
+func grokModelRejectsReasoningEffort(model string) bool {
+	return isGrokComposerModel(model) || isGrokBuildModel(model)
 }
 
 func (s *OpenAIGatewayService) preprocessGrokComposerImages(
@@ -294,7 +483,7 @@ func buildGrokComposerVisionPreprocessBody(body []byte) ([]byte, error) {
 	contextText := trimGrokComposerVisionContext(textContext.String())
 	prompt := "Describe the attached image(s) for a coding assistant that cannot receive images directly. " +
 		"Focus on UI state, visible error text, logs, diagrams, code snippets, and anything needed to answer the user's request. " +
-		"Return a concise but complete textual description."
+		"Return a concise but complete textual description with enough detail for the assistant to fully answer the user's request without seeing the image."
 	if contextText != "" {
 		prompt += "\n\nOriginal user text:\n" + contextText
 	}
@@ -335,20 +524,51 @@ func rewriteGrokComposerBodyWithVisionDescription(body []byte, description strin
 		return nil, err
 	}
 	stripGrokResponsesImagesFromPayload(payload)
-	prependGrokVisionDescription(payload, description)
+	rebuildGrokComposerInputAfterVisionPreprocess(payload, description)
 	return marshalOpenAIUpstreamJSON(payload)
+}
+
+func grokResponsesImageDataURL(obj map[string]any) string {
+	if obj == nil {
+		return ""
+	}
+	partType := strings.TrimSpace(firstNonEmptyString(obj["type"]))
+	imageURL := strings.TrimSpace(firstNonEmptyString(obj["image_url"]))
+	if imageURL == "" {
+		if imageObject, ok := obj["image_url"].(map[string]any); ok && imageObject != nil {
+			imageURL = strings.TrimSpace(firstNonEmptyString(imageObject["url"]))
+		}
+	}
+	switch partType {
+	case "input_image", "image_url":
+		return imageURL
+	case "image":
+		if imageURL != "" {
+			return imageURL
+		}
+		mimeType := strings.TrimSpace(firstNonEmptyString(obj["mimeType"], obj["mime_type"]))
+		data := strings.TrimSpace(firstNonEmptyString(obj["data"]))
+		if mimeType != "" && data != "" {
+			return "data:" + mimeType + ";base64," + data
+		}
+		if source, ok := obj["source"].(map[string]any); ok && source != nil {
+			mediaType := strings.TrimSpace(firstNonEmptyString(source["media_type"], source["mime_type"], source["mimeType"]))
+			sourceData := strings.TrimSpace(firstNonEmptyString(source["data"]))
+			if mediaType != "" && sourceData != "" {
+				return "data:" + mediaType + ";base64," + sourceData
+			}
+		}
+	}
+	if imageURL != "" {
+		return imageURL
+	}
+	return ""
 }
 
 func collectGrokResponsesImageURLs(value any, out *[]string) {
 	switch typed := value.(type) {
 	case map[string]any:
-		imageURL := strings.TrimSpace(firstNonEmptyString(typed["image_url"]))
-		if imageURL == "" {
-			if imageObject, ok := typed["image_url"].(map[string]any); ok {
-				imageURL = strings.TrimSpace(firstNonEmptyString(imageObject["url"]))
-			}
-		}
-		if imageURL != "" {
+		if imageURL := grokResponsesImageDataURL(typed); imageURL != "" {
 			*out = append(*out, imageURL)
 		}
 		for _, child := range typed {
@@ -397,78 +617,136 @@ func trimGrokComposerVisionContext(value string) string {
 	return value[:grokComposerVisionPreprocessMaxContextChars]
 }
 
+const grokVisionTurnUserTextMarker = "Image analysis from Grok vision preprocessing:"
+
 func stripGrokResponsesImagesFromPayload(payload map[string]any) {
 	input, ok := payload["input"].([]any)
 	if !ok {
 		return
 	}
+	normalized := make([]any, 0, len(input))
 	for _, rawItem := range input {
 		item, ok := rawItem.(map[string]any)
 		if !ok || item == nil {
+			normalized = append(normalized, rawItem)
+			continue
+		}
+		partType := strings.TrimSpace(firstNonEmptyString(item["type"]))
+		if partType == "input_image" || partType == "image" || partType == "image_url" || item["image_url"] != nil {
 			continue
 		}
 		content, ok := item["content"].([]any)
 		if !ok {
+			normalized = append(normalized, item)
 			continue
 		}
-		normalized := make([]any, 0, len(content))
+		normalizedContent := make([]any, 0, len(content))
 		for _, rawPart := range content {
 			part, ok := rawPart.(map[string]any)
 			if !ok || part == nil {
-				normalized = append(normalized, rawPart)
+				normalizedContent = append(normalizedContent, rawPart)
 				continue
 			}
 			partType := strings.TrimSpace(firstNonEmptyString(part["type"]))
-			if partType == "input_image" {
+			if partType == "input_image" || partType == "image" || partType == "image_url" {
 				continue
 			}
 			delete(part, "image_url")
-			normalized = append(normalized, part)
+			normalizedContent = append(normalizedContent, part)
 		}
-		item["content"] = normalized
+		item["content"] = normalizedContent
+		normalized = append(normalized, item)
 	}
-	payload["input"] = input
+	payload["input"] = normalized
 }
 
-func prependGrokVisionDescription(payload map[string]any, description string) {
-	visionText := "Image analysis from Grok Builder-style preprocessing:\n" +
-		strings.TrimSpace(description) +
-		"\n\nUse this as the visual context for the user's request. The original image inputs are not attached to this Composer request."
-	visionPart := map[string]any{
-		"type": "input_text",
-		"text": visionText,
+func rebuildGrokComposerInputAfterVisionPreprocess(payload map[string]any, description string) {
+	userText := strings.TrimSpace(extractTrailingGrokUserRequestText(payload))
+	payload["input"] = []any{
+		map[string]any{
+			"role": "user",
+			"content": []any{
+				map[string]any{
+					"type": "input_text",
+					"text": buildGrokVisionTurnUserText(description, userText),
+				},
+			},
+		},
 	}
+}
 
+func buildGrokVisionTurnUserText(description string, userText string) string {
+	var b strings.Builder
+	b.WriteString(grokVisionTurnUserTextMarker)
+	b.WriteString("\n")
+	b.WriteString(strings.TrimSpace(description))
+	b.WriteString("\n\n")
+	if userText != "" {
+		b.WriteString("User request:\n")
+		b.WriteString(userText)
+		b.WriteString("\n\n")
+	}
+	b.WriteString("Using ONLY the image analysis above, fully answer the user request now in this response. ")
+	b.WriteString("Do not say you are still viewing, loading, or waiting for the image. ")
+	b.WriteString("Provide the complete analysis immediately.")
+	return b.String()
+}
+
+func extractTrailingGrokUserRequestText(payload map[string]any) string {
 	input, _ := payload["input"].([]any)
-	for _, rawItem := range input {
-		item, ok := rawItem.(map[string]any)
+	for i := len(input) - 1; i >= 0; i-- {
+		item, ok := input[i].(map[string]any)
 		if !ok || item == nil {
 			continue
 		}
-		if role := strings.TrimSpace(firstNonEmptyString(item["role"])); role != "" && role != "user" {
-			continue
-		}
-		switch content := item["content"].(type) {
-		case []any:
-			item["content"] = append([]any{visionPart}, content...)
-			payload["input"] = input
-			return
-		case string:
-			item["content"] = []any{
-				visionPart,
-				map[string]any{"type": "input_text", "text": content},
+		role := strings.TrimSpace(firstNonEmptyString(item["role"]))
+		itemType := strings.TrimSpace(firstNonEmptyString(item["type"]))
+		switch {
+		case role == "user" || (itemType == "message" && role != "assistant" && role != "developer" && role != "system"):
+			if text := strings.TrimSpace(extractGrokInputItemText(item)); text != "" {
+				return text
 			}
-			payload["input"] = input
-			return
+		case itemType == "input_text":
+			if text := strings.TrimSpace(firstNonEmptyString(item["text"])); text != "" && !strings.Contains(text, grokVisionTurnUserTextMarker) {
+				return text
+			}
 		}
 	}
+	return ""
+}
 
-	payload["input"] = append(input, map[string]any{
-		"role": "user",
-		"content": []any{
-			visionPart,
-		},
-	})
+func extractGrokInputItemText(item map[string]any) string {
+	if item == nil {
+		return ""
+	}
+	switch content := item["content"].(type) {
+	case string:
+		text := strings.TrimSpace(content)
+		if strings.Contains(text, grokVisionTurnUserTextMarker) {
+			return ""
+		}
+		return text
+	case []any:
+		chunks := make([]string, 0, len(content))
+		for _, rawPart := range content {
+			part, ok := rawPart.(map[string]any)
+			if !ok || part == nil {
+				continue
+			}
+			partType := strings.TrimSpace(firstNonEmptyString(part["type"]))
+			if partType != "input_text" && partType != "output_text" && partType != "" && partType != "text" {
+				continue
+			}
+			text := strings.TrimSpace(firstNonEmptyString(part["text"]))
+			if text == "" || strings.Contains(text, grokVisionTurnUserTextMarker) {
+				continue
+			}
+			chunks = append(chunks, text)
+		}
+		return strings.Join(chunks, "\n")
+	default:
+		return ""
+	}
 }
 
 func addOpenAIUsage(dst *OpenAIUsage, src OpenAIUsage) {
@@ -520,6 +798,10 @@ func sanitizeGrokResponsesInclude(body []byte) ([]byte, error) {
 }
 
 func sanitizeGrokResponsesInput(body []byte) ([]byte, error) {
+	return sanitizeGrokResponsesInputWithOptions(body, grokResponsesPatchOptions{})
+}
+
+func sanitizeGrokResponsesInputWithOptions(body []byte, opts grokResponsesPatchOptions) ([]byte, error) {
 	if !gjson.GetBytes(body, "input").Exists() {
 		return body, nil
 	}
@@ -541,7 +823,7 @@ func sanitizeGrokResponsesInput(body []byte) ([]byte, error) {
 	if normalizedMessageInput, modified := normalizeCodexMessageContentText(input); modified {
 		input = normalizedMessageInput
 	}
-	dropReasoning := isGrokComposerModel(strings.TrimSpace(gjson.GetBytes(body, "model").String()))
+	dropReasoning := opts.collapseForGrokBuildHTTPRelay
 	input = sanitizeGrokCodexInputItems(input, dropReasoning)
 	input = wrapGrokStandaloneInputContentItems(input)
 	normalizedInput, ok := normalizeGrokResponsesImageParts(input).([]any)
@@ -549,18 +831,93 @@ func sanitizeGrokResponsesInput(body []byte) ([]byte, error) {
 		return body, nil
 	}
 	normalizedInput = rewriteGrokResponsesFunctionCallOutputImages(normalizedInput)
-	if strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String()) != "" {
-		normalizedInput = collapseGrokResponsesInputForContinuation(payload, normalizedInput)
+	normalizedInput = finalizeGrokFunctionCallOutputStrings(normalizedInput)
+	inputBeforeCollapse := append([]any(nil), normalizedInput...)
+	forceTrailingUserOnly := opts.forceIncrementalInput || opts.collapseForGrokBuildHTTPRelay
+	switch {
+	case strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String()) != "":
+		normalizedInput = collapseGrokResponsesInputForContinuation(payload, normalizedInput, opts.observe, grokCollapseInputOpts{
+			forceTrailingUserOnly: forceTrailingUserOnly,
+		})
+	case opts.forceIncrementalInput && len(normalizedInput) > 1:
+		normalizedInput = collapseGrokResponsesInputForContinuation(payload, normalizedInput, opts.observe, grokCollapseInputOpts{
+			forceTrailingUserOnly: true,
+		})
+	case opts.collapseForGrokBuildHTTPRelay && len(normalizedInput) > 1:
+		normalizedInput = collapseGrokResponsesInputForContinuation(payload, normalizedInput, opts.observe, grokCollapseInputOpts{
+			forceTrailingUserOnly: true,
+		})
+	case opts.dropReplayedAssistantMessages:
+		normalizedInput = dropGrokAssistantInputItems(normalizedInput)
+	}
+	cacheKeyBefore := strings.TrimSpace(firstNonEmptyString(payload["prompt_cache_key"]))
+	if applyGrokCollapsedInputPromptCacheKeyRotation(payload, inputBeforeCollapse, normalizedInput) {
+		cacheKeyAfter := strings.TrimSpace(firstNonEmptyString(payload["prompt_cache_key"]))
+		observeGrokEvent(opts.observe, "cache_key_rotation", map[string]string{
+			"rotation_reason":         "isolated_user_turn",
+			"cache_key_before":        cacheKeyBefore,
+			"cache_key_after":         cacheKeyAfter,
+			"dropped_assistant_chars": fmt.Sprintf("%d", grokDroppedAssistantTextLen(inputBeforeCollapse, normalizedInput)),
+		})
+		logOpenAIWSModeInfo(
+			"grok_prompt_cache_key_rotated reason=isolated_user_turn prompt_cache_key=%s previous_response_id_stripped=true",
+			truncateOpenAIWSLogValue(cacheKeyAfter, 96),
+		)
 	}
 	payload["input"] = normalizedInput
 	return json.Marshal(payload)
 }
 
-func collapseGrokResponsesInputForContinuation(payload map[string]any, input []any) []any {
+func summarizeGrokResponsesInputItems(input gjson.Result) string {
+	if !input.IsArray() {
+		return "-"
+	}
+	parts := make([]string, 0, len(input.Array()))
+	for i, item := range input.Array() {
+		itemType := strings.TrimSpace(item.Get("type").String())
+		role := strings.TrimSpace(item.Get("role").String())
+		switch {
+		case itemType != "" && role != "":
+			parts = append(parts, fmt.Sprintf("%d:%s/%s", i, itemType, role))
+		case itemType != "":
+			parts = append(parts, fmt.Sprintf("%d:%s", i, itemType))
+		case role != "":
+			parts = append(parts, fmt.Sprintf("%d:%s", i, role))
+		default:
+			parts = append(parts, fmt.Sprintf("%d:?", i))
+		}
+	}
+	return strings.Join(parts, ",")
+}
+
+// grokKeepContinuationHistoryEnabled controls whether plain user continuation turns
+// keep prior user/assistant dialogue in the outbound Grok input. Defaults to ON:
+// collapsing to only the trailing user message relies on unreliable xAI server-side
+// prompt_cache_key affinity and drops multi-turn context. Set SUB2API_GROK_KEEP_HISTORY=0
+// (or false) to restore the legacy trailing-user-only behavior.
+func grokKeepContinuationHistoryEnabled() bool {
+	v := strings.TrimSpace(os.Getenv("SUB2API_GROK_KEEP_HISTORY"))
+	if v == "" {
+		return true
+	}
+	return !(v == "0" || strings.EqualFold(v, "false"))
+}
+
+type grokCollapseInputOpts struct {
+	// forceTrailingUserOnly collapses plain user continuations to the latest user
+	// message even when SUB2API_GROK_KEEP_HISTORY keeps full dialogue on HTTP paths.
+	forceTrailingUserOnly bool
+}
+
+func collapseGrokResponsesInputForContinuation(payload map[string]any, input []any, observe *grokObserveSpan, opts ...grokCollapseInputOpts) []any {
 	if len(input) == 0 {
 		return input
 	}
-	toolContinuation := payload != nil && NeedsToolContinuation(payload)
+	var collapseOpts grokCollapseInputOpts
+	if len(opts) > 0 {
+		collapseOpts = opts[0]
+	}
+	_ = payload
 
 	lastAssistantIdx := -1
 	for i, rawItem := range input {
@@ -569,20 +926,152 @@ func collapseGrokResponsesInputForContinuation(payload map[string]any, input []a
 		}
 	}
 
+	strategy := grokCollapseStrategyName(input)
 	var collapsed []any
+	preserveAssistants := false
+	recallDetected := false
 	switch {
+	case !collapseOpts.forceTrailingUserOnly && grokUserMessageReferencesPriorContext(grokLatestUserMessageText(input)):
+		// Recall turns need prior user/assistant answers in outbound input; cache alone is flaky.
+		collapsed = keepGrokRecallDialogueInput(input)
+		preserveAssistants = true
+		recallDetected = true
+	case isGrokTrailingUserContinuation(input):
+		if !collapseOpts.forceTrailingUserOnly && grokKeepContinuationHistoryEnabled() {
+			// Keep prior user/assistant dialogue so context survives across turns;
+			// relying on xAI server-side prompt_cache_key affinity alone loses context.
+			collapsed = keepGrokRecallDialogueInput(input)
+			preserveAssistants = true
+		} else {
+			// Fresh user turn after tool rounds: only forward the latest user message.
+			collapsed = keepTrailingGrokUserMessages(input)
+		}
+	case needsGrokTrailingToolContinuation(input):
+		collapsed = keepGrokToolContinuationItemsSinceLastUser(input)
+		collapsed = prependGrokUserRequestAnchor(input, collapsed)
 	case lastAssistantIdx >= 0 && lastAssistantIdx+1 < len(input):
 		collapsed = input[lastAssistantIdx+1:]
-	case toolContinuation:
-		collapsed = keepTrailingGrokToolContinuationItems(input)
+		collapsed = prependGrokUserRequestAnchor(input, collapsed)
 	default:
 		collapsed = keepTrailingGrokUserMessages(input)
 	}
-	collapsed = dropGrokAssistantInputItems(collapsed)
+	if !preserveAssistants {
+		collapsed = dropGrokAssistantInputItems(collapsed)
+	} else {
+		collapsed = sanitizeGrokInputAssistantItems(collapsed)
+	}
 	if len(collapsed) == 0 {
 		collapsed = keepTrailingGrokContinuationInputItems(input)
 	}
+	droppedAssistantChars := grokDroppedAssistantTextLen(input, collapsed)
+	observeGrokCollapseDecision(observe, strategy, input, collapsed, preserveAssistants, recallDetected, droppedAssistantChars)
 	return collapsed
+}
+
+func keepGrokRecallDialogueInput(input []any) []any {
+	if len(input) == 0 {
+		return input
+	}
+	out := make([]any, 0, len(input))
+	for _, rawItem := range input {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			continue
+		}
+		role := strings.TrimSpace(firstNonEmptyString(item["role"]))
+		itemType := strings.TrimSpace(firstNonEmptyString(item["type"]))
+		if role != "user" && role != "assistant" {
+			continue
+		}
+		if itemType != "" && itemType != "message" {
+			continue
+		}
+		out = append(out, rawItem)
+	}
+	return out
+}
+
+func prependGrokUserRequestAnchor(fullInput, collapsed []any) []any {
+	if len(collapsed) == 0 || len(fullInput) == 0 {
+		return collapsed
+	}
+	userAnchor := keepTrailingGrokUserMessages(fullInput)
+	if len(userAnchor) == 0 {
+		return collapsed
+	}
+	if grokCollapsedInputStartsWithUserItem(collapsed, userAnchor[0]) {
+		return collapsed
+	}
+	out := make([]any, 0, len(userAnchor)+len(collapsed))
+	out = append(out, userAnchor...)
+	out = append(out, collapsed...)
+	return out
+}
+
+func grokCollapsedInputEqual(before, after []any) bool {
+	if len(before) != len(after) {
+		return false
+	}
+	beforeJSON, err1 := json.Marshal(before)
+	afterJSON, err2 := json.Marshal(after)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return string(beforeJSON) == string(afterJSON)
+}
+
+func grokCollapsedInputStartsWithUserItem(collapsed []any, userItem any) bool {
+	if len(collapsed) == 0 || userItem == nil {
+		return false
+	}
+	first, ok := collapsed[0].(map[string]any)
+	if !ok || first == nil {
+		return false
+	}
+	anchor, ok := userItem.(map[string]any)
+	if !ok || anchor == nil {
+		return false
+	}
+	firstText := strings.TrimSpace(extractGrokInputItemText(first))
+	anchorText := strings.TrimSpace(extractGrokInputItemText(anchor))
+	return firstText != "" && firstText == anchorText
+}
+
+func isGrokTrailingUserContinuation(input []any) bool {
+	for i := len(input) - 1; i >= 0; i-- {
+		item, ok := input[i].(map[string]any)
+		if !ok || item == nil {
+			continue
+		}
+		role := strings.TrimSpace(firstNonEmptyString(item["role"]))
+		itemType := strings.TrimSpace(firstNonEmptyString(item["type"]))
+		if role == "user" {
+			return true
+		}
+		if itemType == "function_call" || itemType == "function_call_output" || isCodexToolCallOutputItemType(itemType) {
+			return false
+		}
+	}
+	return false
+}
+
+func needsGrokTrailingToolContinuation(input []any) bool {
+	for i := len(input) - 1; i >= 0; i-- {
+		item, ok := input[i].(map[string]any)
+		if !ok || item == nil {
+			continue
+		}
+		itemType := strings.TrimSpace(firstNonEmptyString(item["type"]))
+		switch {
+		case itemType == "function_call_output", isCodexToolCallOutputItemType(itemType):
+			return true
+		case itemType == "function_call", isCodexToolCallContextItemType(itemType):
+			return true
+		case strings.TrimSpace(firstNonEmptyString(item["role"])) == "user":
+			return false
+		}
+	}
+	return false
 }
 
 func keepTrailingGrokUserMessages(input []any) []any {
@@ -601,25 +1090,107 @@ func keepTrailingGrokUserMessages(input []any) []any {
 	return nil
 }
 
-func keepTrailingGrokToolContinuationItems(input []any) []any {
-	if len(input) == 0 {
-		return input
+func isGrokToolContinuationItem(item map[string]any) bool {
+	if item == nil {
+		return false
 	}
-	lastToolIdx := -1
+	itemType := strings.TrimSpace(firstNonEmptyString(item["type"]))
+	switch {
+	case itemType == "function_call", itemType == "function_call_output":
+		return true
+	case isCodexToolCallContextItemType(itemType), isCodexToolCallOutputItemType(itemType):
+		return true
+	default:
+		return false
+	}
+}
+
+func grokLastUserMessageIndex(input []any) int {
+	lastUserIdx := -1
 	for i, rawItem := range input {
 		item, ok := rawItem.(map[string]any)
 		if !ok || item == nil {
 			continue
 		}
-		itemType := strings.TrimSpace(firstNonEmptyString(item["type"]))
-		if itemType == "function_call" || itemType == "function_call_output" {
-			lastToolIdx = i
+		if strings.TrimSpace(firstNonEmptyString(item["role"])) == "user" {
+			lastUserIdx = i
 		}
 	}
-	if lastToolIdx >= 0 {
-		return input[lastToolIdx:]
+	return lastUserIdx
+}
+
+// keepGrokToolContinuationItemsSinceLastUser retains every tool call/output pair
+// after the latest user message so multi-step agent turns do not lose context.
+func keepGrokToolContinuationItemsSinceLastUser(input []any) []any {
+	if len(input) == 0 {
+		return input
 	}
-	return keepTrailingGrokUserMessages(input)
+	lastUserIdx := grokLastUserMessageIndex(input)
+	start := 0
+	if lastUserIdx >= 0 {
+		start = lastUserIdx + 1
+	}
+	if start >= len(input) {
+		return keepTrailingGrokToolContinuationItems(input)
+	}
+	filtered := make([]any, 0)
+	for _, rawItem := range input[start:] {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			continue
+		}
+		if isGrokToolContinuationItem(item) {
+			filtered = append(filtered, item)
+		}
+	}
+	if len(filtered) == 0 {
+		return keepTrailingGrokToolContinuationItems(input)
+	}
+	return filtered
+}
+
+func keepTrailingGrokToolContinuationItems(input []any) []any {
+	if len(input) == 0 {
+		return input
+	}
+	lastIdx := len(input) - 1
+	lastItem, ok := input[lastIdx].(map[string]any)
+	if !ok || lastItem == nil {
+		return keepTrailingGrokUserMessages(input)
+	}
+	lastType := strings.TrimSpace(firstNonEmptyString(lastItem["type"]))
+	switch {
+	case lastType == "function_call_output", isCodexToolCallOutputItemType(lastType):
+		start := lastIdx
+		if start > 0 {
+			if prev, ok := input[start-1].(map[string]any); ok && prev != nil {
+				prevType := strings.TrimSpace(firstNonEmptyString(prev["type"]))
+				if prevType == "function_call" || isCodexToolCallContextItemType(prevType) {
+					start--
+				}
+			}
+		}
+		return input[start:]
+	case lastType == "function_call", isCodexToolCallContextItemType(lastType):
+		return input[lastIdx:]
+	default:
+		lastToolIdx := -1
+		for i, rawItem := range input {
+			item, ok := rawItem.(map[string]any)
+			if !ok || item == nil {
+				continue
+			}
+			itemType := strings.TrimSpace(firstNonEmptyString(item["type"]))
+			if itemType == "function_call" || itemType == "function_call_output" ||
+				isCodexToolCallContextItemType(itemType) || isCodexToolCallOutputItemType(itemType) {
+				lastToolIdx = i
+			}
+		}
+		if lastToolIdx >= 0 {
+			return keepTrailingGrokToolContinuationItems(input[lastToolIdx:])
+		}
+		return keepTrailingGrokUserMessages(input)
+	}
 }
 
 func isGrokAssistantInputItem(rawItem any) bool {
@@ -798,12 +1369,14 @@ var grokCodexToolOutputTypeAliases = map[string]string{
 }
 
 var grokDroppedCodexInputItemTypes = map[string]struct{}{
-	"item_reference":         {},
-	"web_search_call":        {},
-	"file_search_call":       {},
-	"computer_call":          {},
-	"code_interpreter_call":  {},
-	"image_generation_call":  {},
+	"additional_tools":      {},
+	"agent_message":         {},
+	"item_reference":        {},
+	"web_search_call":       {},
+	"file_search_call":      {},
+	"computer_call":         {},
+	"code_interpreter_call": {},
+	"image_generation_call": {},
 }
 
 func sanitizeGrokCodexInputItems(input []any, dropReasoning bool) []any {
@@ -945,8 +1518,17 @@ func normalizeGrokCodexFunctionCallOutputItem(item map[string]any, targetType st
 func normalizeGrokCodexReasoningItem(item map[string]any) (map[string]any, bool) {
 	normalized := make(map[string]any, len(item))
 	for key, value := range item {
-		if key == "encrypted_content" || key == "id" {
+		if key == "id" {
 			continue
+		}
+		if key == "encrypted_content" {
+			encrypted, ok := value.(string)
+			if !ok || strings.TrimSpace(encrypted) == "" {
+				continue
+			}
+			if _, err := xai.InspectGrokEncryptedContent(encrypted); err != nil {
+				continue
+			}
 		}
 		normalized[key] = value
 	}
@@ -1150,6 +1732,31 @@ func grokResponsesImageURLAndDetail(obj map[string]any) (imageURL string, detail
 	return imageURL, detail
 }
 
+func finalizeGrokFunctionCallOutputStrings(input []any) []any {
+	if len(input) == 0 {
+		return input
+	}
+	for i, rawItem := range input {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			continue
+		}
+		if strings.TrimSpace(firstNonEmptyString(item["type"])) != "function_call_output" {
+			continue
+		}
+		rawOutput, ok := item["output"]
+		if !ok || rawOutput == nil {
+			continue
+		}
+		if _, isString := rawOutput.(string); isString {
+			continue
+		}
+		item["output"] = stringifyCodexContentText(rawOutput)
+		input[i] = item
+	}
+	return input
+}
+
 func rewriteGrokResponsesFunctionCallOutputImages(input []any) []any {
 	if len(input) == 0 {
 		return input
@@ -1227,6 +1834,10 @@ func rewriteGrokResponsesFunctionCallOutputImages(input []any) []any {
 }
 
 func patchGrokResponsesBody(body []byte, upstreamModel string) ([]byte, error) {
+	return patchGrokResponsesBodyWithOptions(body, upstreamModel, grokResponsesPatchOptions{})
+}
+
+func patchGrokResponsesBodyWithOptions(body []byte, upstreamModel string, opts grokResponsesPatchOptions) ([]byte, error) {
 	if !json.Valid(body) {
 		return nil, fmt.Errorf("invalid json request body")
 	}
@@ -1246,7 +1857,7 @@ func patchGrokResponsesBody(body []byte, upstreamModel string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if isGrokComposerModel(upstreamModel) {
+	if grokModelRejectsReasoningEffort(upstreamModel) {
 		for _, unsupportedField := range []string{"reasoning", "reasoning_effort", "reasoningEffort"} {
 			if gjson.GetBytes(out, unsupportedField).Exists() {
 				out, err = sjson.DeleteBytes(out, unsupportedField)
@@ -1260,19 +1871,53 @@ func patchGrokResponsesBody(body []byte, upstreamModel string) ([]byte, error) {
 		if next, deleteErr := sjson.DeleteBytes(out, "instructions"); deleteErr == nil {
 			out = next
 		}
+	} else if opts.collapseForGrokBuildHTTPRelay {
+		input := gjson.GetBytes(out, "input")
+		if input.IsArray() && len(input.Array()) > 1 {
+			if next, deleteErr := sjson.DeleteBytes(out, "instructions"); deleteErr == nil {
+				out = next
+			}
+		}
 	}
+	span := grokObserveSpanFromPayload(opts.observe, body, upstreamModel)
+	observeGrokPatchPipeline(span, "patch_begin", body, out, nil)
+
 	out, err = sanitizeGrokResponsesInclude(out)
 	if err != nil {
 		return nil, err
 	}
-	out, err = sanitizeGrokResponsesInput(out)
+	beforeReplay := append([]byte(nil), out...)
+	out = applyGrokReasoningReplayCacheObserved(out, upstreamModel, opts.requestHeaders, span)
+	observeGrokPatchPipeline(span, "reasoning_replay", beforeReplay, out, nil)
+
+	beforeEncrypted := append([]byte(nil), out...)
+	beforeCodex, beforePreserved, beforeInvalid := countGrokEncryptedContentStats(beforeEncrypted)
+	out = sanitizeGrokInputEncryptedContent(out)
+	afterCodex, afterPreserved, afterInvalid := countGrokEncryptedContentStats(out)
+	observeGrokPatchPipeline(span, "encrypted_sanitize", beforeEncrypted, out, map[string]string{
+		"encrypted_codex_rejected": fmt.Sprintf("%d", beforeCodex-afterCodex),
+		"encrypted_preserved":      fmt.Sprintf("%d", afterPreserved),
+		"encrypted_dropped":        fmt.Sprintf("%d", beforeInvalid-afterInvalid+beforeCodex),
+		"encrypted_before":         fmt.Sprintf("codex=%d preserved=%d invalid=%d", beforeCodex, beforePreserved, beforeInvalid),
+		"encrypted_after":          fmt.Sprintf("codex=%d preserved=%d invalid=%d", afterCodex, afterPreserved, afterInvalid),
+	})
+
+	beforeInput := append([]byte(nil), out...)
+	out, err = sanitizeGrokResponsesInputWithOptions(out, opts)
 	if err != nil {
 		return nil, err
 	}
+	observeGrokPatchPipeline(span, "input_sanitize", beforeInput, out, map[string]string{
+		"force_incremental":            fmt.Sprintf("%v", opts.forceIncrementalInput),
+		"collapse_http_relay":          fmt.Sprintf("%v", opts.collapseForGrokBuildHTTPRelay),
+		"drop_replayed_assistant_msgs": fmt.Sprintf("%v", opts.dropReplayedAssistantMessages),
+	})
+
 	out, err = sanitizeGrokResponsesTools(out)
 	if err != nil {
 		return nil, err
 	}
+	observeGrokPatchPipeline(span, "patch_end", body, out, nil)
 	return out, nil
 }
 
