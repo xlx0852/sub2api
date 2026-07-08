@@ -219,6 +219,103 @@
         </div>
       </section>
 
+      <section id="stability" class="stability-section">
+        <div class="home-container">
+          <div class="stability-layout">
+            <div class="stability-copy">
+              <div class="section-label">{{ stabilityCopy.label }}</div>
+              <h2 class="section-title">
+                {{ stabilityCopy.titlePrefix }}
+                <span>{{ stabilityCopy.titleHighlight }}</span>
+              </h2>
+              <p class="section-description">
+                {{ stabilityCopy.description }}
+              </p>
+              <div class="stability-stats" role="list">
+                <div
+                  v-for="stat in stabilityStats"
+                  :key="stat.label"
+                  class="stability-stat"
+                  role="listitem"
+                >
+                  <strong>{{ stat.value }}</strong>
+                  <span>{{ stat.label }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="stability-panel" aria-label="SicTs stability monitor">
+              <div class="stability-panel-top">
+                <div>
+                  <span class="stability-kicker">{{ stabilityCopy.panelKicker }}</span>
+                  <strong>{{ stabilityCopy.panelValue }}</strong>
+                  <small>{{ stabilityCopy.panelNote }}</small>
+                </div>
+                <span class="stability-live">
+                  <span></span>
+                  LIVE
+                </span>
+              </div>
+
+              <div class="stability-chart-card">
+                <div class="chart-header">
+                  <span>{{ stabilityCopy.chartTitle }}</span>
+                  <span>{{ stabilityCopy.chartWindow }}</span>
+                </div>
+                <div class="chart-body">
+                  <svg viewBox="0 0 720 280" role="img" :aria-label="stabilityCopy.chartTitle">
+                    <g class="chart-grid-lines">
+                      <line x1="64" y1="38" x2="692" y2="38" />
+                      <line x1="64" y1="82" x2="692" y2="82" />
+                      <line x1="64" y1="126" x2="692" y2="126" />
+                      <line x1="64" y1="170" x2="692" y2="170" />
+                      <line x1="64" y1="214" x2="692" y2="214" />
+                    </g>
+                    <g class="chart-axis-labels chart-y-labels">
+                      <text x="24" y="43">100</text>
+                      <text x="18" y="87">99.8</text>
+                      <text x="18" y="131">99.6</text>
+                      <text x="18" y="175">99.4</text>
+                      <text x="18" y="219">99.2</text>
+                    </g>
+                    <g class="chart-axis-labels chart-x-labels">
+                      <text x="64" y="248">30d</text>
+                      <text x="238" y="248">21d</text>
+                      <text x="412" y="248">14d</text>
+                      <text x="594" y="248">7d</text>
+                      <text x="675" y="248">now</text>
+                    </g>
+                    <path
+                      class="chart-recovery-fill"
+                      d="M64 42 C138 41 188 43 246 42 C284 42 308 44 326 60 C344 76 368 78 386 56 C406 42 458 42 522 43 C590 44 632 42 692 43 L692 214 L64 214 Z"
+                    />
+                    <path
+                      class="chart-line chart-line-shadow"
+                      d="M64 42 C138 41 188 43 246 42 C284 42 308 44 326 60 C344 76 368 78 386 56 C406 42 458 42 522 43 C590 44 632 42 692 43"
+                    />
+                    <path
+                      class="chart-line"
+                      d="M64 42 C138 41 188 43 246 42 C284 42 308 44 326 60 C344 76 368 78 386 56 C406 42 458 42 522 43 C590 44 632 42 692 43"
+                    />
+                    <path
+                      class="chart-line chart-line-success"
+                      d="M64 47 C184 47 304 46 424 47 C544 48 612 47 692 47"
+                    />
+                  </svg>
+                </div>
+                <div class="chart-footer">
+                  <span>
+                    <i></i>
+                    {{ stabilityCopy.legendPrimary }}
+                  </span>
+                  <span>{{ stabilityCopy.generatedBy }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="cta-section">
         <div class="home-container">
           <h2>{{ t('home.cta.title') }}</h2>
@@ -287,15 +384,20 @@ import { useAuthStore, useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const legacySubscriptionSubtitle = ['Subscription', 'to API Conversion Platform'].join(' ')
+const legacyZhSubscriptionSubtitle = ['订阅转', 'API 转换平台'].join(' ')
 
 const authStore = useAuthStore()
 const appStore = useAppStore()
 
 const defaultSiteName = 'SicTs'
 const legacySiteNames = new Set(['Sub2API'])
-const legacySubtitles = new Set(['AI API Gateway Platform', legacySubscriptionSubtitle, '订阅转 API 转换平台'])
+const legacySubtitles = new Set([
+  'AI API Gateway Platform',
+  legacySubscriptionSubtitle,
+  legacyZhSubscriptionSubtitle
+])
 
 function normalizeText(value?: string) {
   const text = value?.trim()
@@ -346,7 +448,7 @@ const providers = computed(() => [
   { name: t('home.providers.claude'), status: t('home.providers.supported'), tone: 'provider-supported' },
   { name: 'GPT', status: t('home.providers.supported'), tone: 'provider-supported' },
   { name: t('home.providers.gemini'), status: t('home.providers.supported'), tone: 'provider-supported' },
-  { name: t('home.providers.antigravity'), status: t('home.providers.supported'), tone: 'provider-supported' },
+  { name: t('home.providers.grok'), status: t('home.providers.supported'), tone: 'provider-supported' },
   { name: t('home.providers.more'), status: t('home.providers.soon'), tone: 'provider-muted' }
 ])
 
@@ -380,6 +482,48 @@ const features = computed(() => [
     description: t('home.features.teamConsoleDesc')
   }
 ])
+
+const isZhLocale = computed(() => String(locale.value).toLowerCase().startsWith('zh'))
+
+const stabilityCopy = computed(() => isZhLocale.value
+  ? {
+      label: '稳定性',
+      titlePrefix: '请求成功率，',
+      titleHighlight: '持续可见',
+      description: 'SicTs 会持续观察上游通道状态，并在异常时切到健康账号或节点，让业务请求尽量保持连续。',
+      panelKicker: '近 30 天平均成功率',
+      panelValue: '99.89%',
+      panelNote: '跨模型、跨上游通道聚合展示',
+      chartTitle: 'Uptime',
+      chartWindow: '30d',
+      legendPrimary: '请求成功率',
+      generatedBy: 'SicTs Monitor'
+    }
+  : {
+      label: 'Stability',
+      titlePrefix: 'Request success, ',
+      titleHighlight: 'always visible',
+      description: 'SicTs continuously watches upstream channel health and routes around failures so production requests stay steady.',
+      panelKicker: 'Average success rate, last 30 days',
+      panelValue: '99.89%',
+      panelNote: 'Aggregated across models and upstream channels',
+      chartTitle: 'Uptime',
+      chartWindow: '30d',
+      legendPrimary: 'Request success',
+      generatedBy: 'SicTs Monitor'
+    })
+
+const stabilityStats = computed(() => isZhLocale.value
+  ? [
+      { value: '30d', label: '滚动窗口' },
+      { value: '< 2s', label: '异常切换' },
+      { value: '24/7', label: '通道观察' }
+    ]
+  : [
+      { value: '30d', label: 'Rolling window' },
+      { value: '< 2s', label: 'Failover' },
+      { value: '24/7', label: 'Channel watch' }
+    ])
 
 // Current year for footer
 const currentYear = computed(() => new Date().getFullYear())
@@ -1170,6 +1314,225 @@ onMounted(() => {
   line-height: 1.75;
 }
 
+.stability-section {
+  padding: 112px 0;
+  background: var(--home-bg);
+}
+
+.stability-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(560px, 1fr);
+  align-items: center;
+  gap: 76px;
+}
+
+.stability-copy {
+  min-width: 0;
+}
+
+.stability-copy .section-header,
+.stability-copy .section-description {
+  text-align: left;
+}
+
+.stability-copy .section-description {
+  margin: 22px 0 0;
+}
+
+.stability-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin-top: 38px;
+  border: 1px solid var(--home-line);
+  border-radius: 14px;
+  background: var(--home-line);
+}
+
+.stability-stat {
+  min-width: 0;
+  padding: 22px 18px;
+  background: var(--home-panel);
+}
+
+.stability-stat strong {
+  display: block;
+  color: var(--home-text);
+  font-family: var(--home-serif);
+  font-size: clamp(28px, 3vw, 38px);
+  font-weight: 400;
+  line-height: 1;
+}
+
+.stability-stat span {
+  display: block;
+  margin-top: 10px;
+  color: var(--home-text-muted);
+  font-size: 13px;
+}
+
+.stability-panel {
+  min-width: 0;
+}
+
+.stability-panel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 14px;
+  padding: 24px 28px;
+  border: 1px solid var(--home-line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--home-panel) 92%, transparent);
+  box-shadow: 0 18px 48px rgba(17, 24, 17, 0.04);
+}
+
+.stability-panel-top div {
+  min-width: 0;
+}
+
+.stability-kicker,
+.stability-panel-top small {
+  display: block;
+  color: var(--home-text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.stability-panel-top strong {
+  display: block;
+  margin: 7px 0 4px;
+  color: var(--home-text);
+  font-family: var(--home-serif);
+  font-size: clamp(42px, 4.6vw, 58px);
+  font-weight: 400;
+  line-height: 1;
+}
+
+.stability-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #3fbd65;
+  color: #ffffff;
+  font-family: var(--home-mono);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.stability-live span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.18);
+}
+
+.stability-chart-card {
+  overflow: hidden;
+  border: 1px solid var(--home-line);
+  border-radius: 14px;
+  background: var(--home-panel);
+  box-shadow: 0 24px 70px rgba(17, 24, 17, 0.06);
+}
+
+.chart-header,
+.chart-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--home-text-secondary);
+  font-size: 13px;
+}
+
+.chart-header {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--home-line);
+}
+
+.chart-header span:first-child {
+  color: var(--home-text);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.chart-body {
+  padding: 16px 18px 8px;
+}
+
+.chart-body svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.chart-grid-lines line {
+  stroke: var(--home-line);
+  stroke-width: 1;
+}
+
+.chart-axis-labels text {
+  fill: var(--home-text-secondary);
+  font-family: var(--home-sans);
+  font-size: 12px;
+}
+
+.chart-x-labels text {
+  fill: var(--home-text-muted);
+  font-size: 11px;
+}
+
+.chart-x-labels text:last-child {
+  text-anchor: end;
+}
+
+.chart-recovery-fill {
+  fill: rgba(79, 138, 99, 0.08);
+}
+
+.chart-line {
+  fill: none;
+  stroke: #34985a;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3.2;
+}
+
+.chart-line-shadow {
+  stroke: rgba(52, 152, 90, 0.16);
+  stroke-width: 9;
+}
+
+.chart-line-success {
+  stroke: rgba(52, 152, 90, 0.42);
+  stroke-width: 1.6;
+}
+
+.chart-footer {
+  padding: 11px 18px 14px;
+}
+
+.chart-footer span {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.chart-footer i {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  background: #34985a;
+}
+
 .cta-section {
   text-align: center;
 }
@@ -1258,6 +1621,11 @@ onMounted(() => {
   .features-grid {
     grid-template-columns: 1fr;
   }
+
+  .stability-layout {
+    grid-template-columns: 1fr;
+    gap: 42px;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1330,12 +1698,36 @@ onMounted(() => {
   }
 
   .features-section,
+  .stability-section,
   .cta-section {
     padding: 92px 0;
   }
 
   .feature-card {
     padding: 34px 26px;
+  }
+
+  .stability-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .stability-panel-top {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 22px;
+  }
+
+  .chart-body {
+    padding: 14px 10px 6px;
+  }
+
+  .chart-axis-labels text {
+    font-size: 15px;
+  }
+
+  .chart-footer {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .footer-inner,

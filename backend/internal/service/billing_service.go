@@ -112,13 +112,6 @@ const (
 	openAIGPT54LongContextInputThreshold   = 272000
 	openAIGPT54LongContextInputMultiplier  = 2.0
 	openAIGPT54LongContextOutputMultiplier = 1.5
-	xaiGrokInputPricePerToken              = 1.25e-6
-	xaiGrokOutputPricePerToken             = 2.5e-6
-	xaiGrokCacheReadPricePerToken          = 0.2e-6
-	xaiGrokBuildInputPricePerToken         = 1e-6
-	xaiGrokBuildOutputPricePerToken        = 2e-6
-	xaiGrokComposerInputPricePerToken      = 3e-6
-	xaiGrokComposerOutputPricePerToken     = 15e-6
 )
 
 func normalizeBillingServiceTier(serviceTier string) string {
@@ -153,20 +146,18 @@ type UsageTokens struct {
 	CacheCreation5mTokens int
 	CacheCreation1hTokens int
 	ImageOutputTokens     int
-	ServerSideToolUsage   map[string]int
 }
 
 // CostBreakdown 费用明细
 type CostBreakdown struct {
-	InputCost          float64
-	OutputCost         float64
-	ImageOutputCost    float64
-	CacheCreationCost  float64
-	CacheReadCost      float64
-	ToolInvocationCost float64
-	TotalCost          float64
-	ActualCost         float64 // 应用倍率后的实际费用
-	BillingMode        string  // 计费模式（"token"/"per_request"/"image"），由 CalculateCostUnified 填充
+	InputCost         float64
+	OutputCost        float64
+	ImageOutputCost   float64
+	CacheCreationCost float64
+	CacheReadCost     float64
+	TotalCost         float64
+	ActualCost        float64 // 应用倍率后的实际费用
+	BillingMode       string  // 计费模式（"token"/"per_request"/"image"），由 CalculateCostUnified 填充
 }
 
 // ErrModelPricingUnavailable indicates that none of the configured pricing
@@ -271,28 +262,6 @@ func (s *BillingService) initFallbackPricing() {
 		SupportsCacheBreakdown:     false,
 	}
 
-	// xAI Grok text models
-	s.fallbackPrices["grok-4.3"] = &ModelPricing{
-		InputPricePerToken:         xaiGrokInputPricePerToken,
-		OutputPricePerToken:        xaiGrokOutputPricePerToken,
-		CacheCreationPricePerToken: xaiGrokInputPricePerToken,
-		CacheReadPricePerToken:     xaiGrokCacheReadPricePerToken,
-		SupportsCacheBreakdown:     false,
-	}
-	s.fallbackPrices["grok-4.20"] = s.fallbackPrices["grok-4.3"]
-	s.fallbackPrices["grok-build-0.1"] = &ModelPricing{
-		InputPricePerToken:         xaiGrokBuildInputPricePerToken,
-		OutputPricePerToken:        xaiGrokBuildOutputPricePerToken,
-		CacheCreationPricePerToken: xaiGrokBuildInputPricePerToken,
-		CacheReadPricePerToken:     xaiGrokCacheReadPricePerToken,
-		SupportsCacheBreakdown:     false,
-	}
-	s.fallbackPrices["grok-composer-2.5-fast"] = &ModelPricing{
-		InputPricePerToken:     xaiGrokComposerInputPricePerToken,
-		OutputPricePerToken:    xaiGrokComposerOutputPricePerToken,
-		SupportsCacheBreakdown: false,
-	}
-
 	// OpenAI GPT-5.4（业务指定价格）
 	s.fallbackPrices["gpt-5.4"] = &ModelPricing{
 		InputPricePerToken:             2.5e-6,  // $2.5 per MTok
@@ -310,6 +279,11 @@ func (s *BillingService) initFallbackPricing() {
 	// GPT-5.5 / GPT-5.5 Pro 暂无独立定价，回退到 GPT-5.4。
 	s.fallbackPrices["gpt-5.5"] = s.fallbackPrices["gpt-5.4"]
 	s.fallbackPrices["gpt-5.5-pro"] = s.fallbackPrices["gpt-5.4"]
+
+	// GPT-5.6（sol / terra / luna）暂无独立定价，回退到 GPT-5.4。
+	s.fallbackPrices["gpt-5.6-sol"] = s.fallbackPrices["gpt-5.4"]
+	s.fallbackPrices["gpt-5.6-terra"] = s.fallbackPrices["gpt-5.4"]
+	s.fallbackPrices["gpt-5.6-luna"] = s.fallbackPrices["gpt-5.4"]
 
 	s.fallbackPrices["gpt-5.4-mini"] = &ModelPricing{
 		InputPricePerToken:     7.5e-7,
@@ -542,24 +516,15 @@ func (s *BillingService) initFallbackPricing() {
 	s.fallbackPrices["grok-4.3"] = &ModelPricing{
 		InputPricePerToken:         1.25e-6,
 		OutputPricePerToken:        2.5e-6,
-		CacheCreationPricePerToken: xaiGrokInputPricePerToken,
-		CacheReadPricePerToken:     xaiGrokCacheReadPricePerToken,
+		CacheReadPricePerToken:     0,
 		SupportsCacheBreakdown:     false,
 		LongContextInputThreshold:  1000000,
 		LongContextInputMultiplier: 1,
 	}
 	// xAI Grok Build 0.1 (official docs: $1 input / $2 output per MTok)
 	s.fallbackPrices["grok-build-0.1"] = &ModelPricing{
-		InputPricePerToken:         1e-6,
-		OutputPricePerToken:        2e-6,
-		CacheCreationPricePerToken: xaiGrokBuildInputPricePerToken,
-		CacheReadPricePerToken:     xaiGrokCacheReadPricePerToken,
-		SupportsCacheBreakdown:     false,
-	}
-	// Grok Composer 2.5 Fast (Grok CLI / Cursor Composer fast tier: $3 input / $15 output per MTok)
-	s.fallbackPrices["grok-composer-2.5-fast"] = &ModelPricing{
-		InputPricePerToken:     xaiGrokComposerInputPricePerToken,
-		OutputPricePerToken:    xaiGrokComposerOutputPricePerToken,
+		InputPricePerToken:     1e-6,
+		OutputPricePerToken:    2e-6,
 		SupportsCacheBreakdown: false,
 	}
 }
@@ -599,11 +564,6 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	}
 	if strings.Contains(modelLower, "gemini-3.1-pro") || strings.Contains(modelLower, "gemini-3-1-pro") {
 		return s.fallbackPrices["gemini-3.1-pro"]
-	}
-
-	// xAI Grok 仅匹配官方当前模型和别名，避免任意 grok* 字符串误计价。
-	if normalized := normalizeKnownXAIGrokModel(modelLower); normalized != "" {
-		return s.fallbackPrices[normalized]
 	}
 
 	// DeepSeek V4 系列：仅匹配已知 V4 Pro/Flash 与官方兼容别名
@@ -712,6 +672,12 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	// OpenAI（GPT-5 / Codex 族）：仅匹配已知型号，避免未知 OpenAI 型号误计价。
 	if normalized := normalizeKnownOpenAICodexModel(modelLower); normalized != "" {
 		switch normalized {
+		case "gpt-5.6-sol":
+			return s.fallbackPrices["gpt-5.6-sol"]
+		case "gpt-5.6-terra":
+			return s.fallbackPrices["gpt-5.6-terra"]
+		case "gpt-5.6-luna":
+			return s.fallbackPrices["gpt-5.6-luna"]
 		case "gpt-5.5-pro":
 			return s.fallbackPrices["gpt-5.5-pro"]
 		case "gpt-5.5":
@@ -734,8 +700,6 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 		return s.fallbackPrices["grok-4.3"]
 	case "grok-build", "grok-build-0.1":
 		return s.fallbackPrices["grok-build-0.1"]
-	case "grok-composer-2.5-fast":
-		return s.fallbackPrices["grok-composer-2.5-fast"]
 	}
 
 	return nil
@@ -749,6 +713,14 @@ func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
 	// 1. 优先从动态价格服务获取
 	if s.pricingService != nil {
 		litellmPricing := s.pricingService.GetModelPricing(model)
+		// 仅有图片价、无 token 价的条目（如 LiteLLM 的 imagen 类模型）不能用于
+		// token 计费：直接返回会把 token 流量按 $0 计费。跳过后走 fallback，
+		// 无 fallback 则 fail-closed（ErrModelPricingUnavailable）。
+		// 图片计费路径（getDefaultImagePrice / getImageUnitPrice）直接读
+		// PricingService，不受影响。
+		if litellmPricing != nil && litellmPricing.TokenPricingAbsent {
+			litellmPricing = nil
+		}
 		if litellmPricing != nil {
 			// 启用 5m/1h 分类计费的条件：
 			// 1. 存在 1h 价格
@@ -992,29 +964,9 @@ func (s *BillingService) computeTokenBreakdown(
 
 	bd.TotalCost = bd.InputCost + bd.OutputCost + bd.ImageOutputCost +
 		bd.CacheCreationCost + bd.CacheReadCost
-	bd.ToolInvocationCost = calculateXAIToolInvocationCost(tokens.ServerSideToolUsage)
-	bd.TotalCost += bd.ToolInvocationCost
 	bd.ActualCost = bd.TotalCost * rateMultiplier
 
 	return bd
-}
-
-func calculateXAIToolInvocationCost(usage map[string]int) float64 {
-	var total float64
-	for rawCategory, count := range usage {
-		if count <= 0 {
-			continue
-		}
-		switch strings.ToUpper(strings.TrimSpace(rawCategory)) {
-		case "SERVER_SIDE_TOOL_WEB_SEARCH", "SERVER_SIDE_TOOL_IMAGE_SEARCH", "SERVER_SIDE_TOOL_X_SEARCH", "SERVER_SIDE_TOOL_CODE_EXECUTION":
-			total += float64(count) * 0.005
-		case "SERVER_SIDE_TOOL_ATTACHMENT_SEARCH":
-			total += float64(count) * 0.01
-		case "SERVER_SIDE_TOOL_COLLECTIONS_SEARCH":
-			total += float64(count) * 0.0025
-		}
-	}
-	return total
 }
 
 // computeCacheCreationCost 计算缓存创建费用（支持 5m/1h 分类或标准计费）。
@@ -1127,38 +1079,8 @@ func isOpenAIGPT54Model(model string) bool {
 	// normalizeCodexModel 的默认兜底把非 OpenAI 模型（claude-*、gemini-*、gpt-4o）
 	// 误识别为 gpt-5.4。
 	normalized := normalizeKnownOpenAICodexModel(model)
-	return normalized == "gpt-5.4" || normalized == "gpt-5.5" || normalized == "gpt-5.5-pro"
-}
-
-func normalizeKnownXAIGrokModel(model string) string {
-	model = strings.ToLower(strings.TrimSpace(model))
-	if model == "" {
-		return ""
-	}
-	if idx := strings.LastIndex(model, "/"); idx >= 0 {
-		model = strings.TrimSpace(model[idx+1:])
-	}
-	switch {
-	case strings.HasPrefix(model, "grok-composer-"):
-		return "grok-composer-2.5-fast"
-	case strings.HasPrefix(model, "grok-build-0.1"):
-		return "grok-build-0.1"
-	case strings.HasPrefix(model, "grok-4.20"):
-		return "grok-4.20"
-	case strings.HasPrefix(model, "grok-4.3"):
-		return "grok-4.3"
-	case model == "grok-latest",
-		strings.HasPrefix(model, "grok-3"),
-		strings.HasPrefix(model, "grok-4-0709"),
-		model == "grok-4",
-		strings.HasPrefix(model, "grok-4-latest"),
-		strings.HasPrefix(model, "grok-4-fast"),
-		strings.HasPrefix(model, "grok-4-1-fast"),
-		strings.HasPrefix(model, "grok-code-fast"):
-		return "grok-4.3"
-	default:
-		return ""
-	}
+	return normalized == "gpt-5.4" || normalized == "gpt-5.5" || normalized == "gpt-5.5-pro" ||
+		normalized == "gpt-5.6-sol" || normalized == "gpt-5.6-terra" || normalized == "gpt-5.6-luna"
 }
 
 // CalculateCostWithConfig 使用配置中的默认倍率计算费用
@@ -1261,8 +1183,7 @@ func (s *BillingService) IsModelSupported(model string) bool {
 	return strings.Contains(modelLower, "claude") ||
 		strings.Contains(modelLower, "opus") ||
 		strings.Contains(modelLower, "sonnet") ||
-		strings.Contains(modelLower, "haiku") ||
-		normalizeKnownXAIGrokModel(modelLower) != ""
+		strings.Contains(modelLower, "haiku")
 }
 
 // GetEstimatedCost 估算费用（用于前端展示）

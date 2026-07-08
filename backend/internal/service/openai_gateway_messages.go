@@ -1,13 +1,10 @@
 package service
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -16,6 +13,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
@@ -34,6 +32,14 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (*OpenAIForwardResult, error) {
+	// 入口分流：APIKey 账号 + 上游不支持 Responses API → 走 CC 直转（与
+	// ForwardAsChatCompletions 对称）。缺少此分流时，/v1/messages 入站请求
+	// 会被无条件转为 Responses 格式发往上游 /v1/responses，导致只支持
+	// /v1/chat/completions 的第三方 OpenAI 兼容上游全部 400。
+	if account.Type == AccountTypeAPIKey && !openai_compat.ShouldUseResponsesAPI(account.Extra) {
+		return s.forwardAnthropicViaRawChatCompletions(ctx, c, account, body, defaultMappedModel)
+	}
+
 	startTime := time.Now()
 
 	// 1. Parse Anthropic request
@@ -238,25 +244,18 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		return nil, policyErr
 	}
 	responsesBody = updatedBody
+	if account.Platform == PlatformGrok {
+		patchedBody, patchErr := patchGrokResponsesBody(responsesBody, upstreamModel)
+		if patchErr != nil {
+			return nil, patchErr
+		}
+		responsesBody = patchedBody
+	}
 
 	// 5. Get access token
 	token, _, err := s.GetAccessToken(ctx, account)
 	if err != nil {
 		return nil, fmt.Errorf("get access token: %w", err)
-	}
-
-	var grokPreprocessUsage *OpenAIUsage
-	if account.Platform == PlatformGrok {
-		proxyURL := ""
-		if account.ProxyID != nil && account.Proxy != nil {
-			proxyURL = account.Proxy.URL()
-		}
-		preparedBody, prepareErr := s.prepareGrokUpstreamResponsesBody(ctx, c, account, responsesBody, upstreamModel, token, proxyURL, grokPreparedResponsesOptions{})
-		if prepareErr != nil {
-			return nil, prepareErr
-		}
-		responsesBody = preparedBody.Body
-		grokPreprocessUsage = preparedBody.PreprocessUsage
 	}
 
 	// 6. Build upstream request
@@ -320,16 +319,12 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 
 	// 8. Handle error response with failover
 	if resp.StatusCode >= 400 {
-		respBody := s.readUpstreamErrorBody(resp)
-		_ = resp.Body.Close()
-		resp.Body = io.NopCloser(bytes.NewReader(respBody))
+		respBody, upstreamMsg := s.readOpenAIUpstreamError(resp)
 		if account.Platform == PlatformGrok {
 			s.updateGrokUsageSnapshot(ctx, account.ID, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
 			s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
 		}
 
-		upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
-		upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
 		if previousResponseID != "" && (isOpenAICompatPreviousResponseNotFound(resp.StatusCode, upstreamMsg, respBody) || isOpenAICompatPreviousResponseUnsupported(resp.StatusCode, upstreamMsg, respBody)) {
 			if isOpenAICompatPreviousResponseUnsupported(resp.StatusCode, upstreamMsg, respBody) {
 				s.disableOpenAICompatSessionContinuation(ctx, c, account, promptCacheKey)
@@ -343,31 +338,8 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 			)
 			return s.ForwardAsAnthropic(ctx, c, account, body, promptCacheKey, defaultMappedModel)
 		}
-		if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
-			upstreamDetail := ""
-			if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
-				maxBytes := s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes
-				if maxBytes <= 0 {
-					maxBytes = 2048
-				}
-				upstreamDetail = truncateString(string(respBody), maxBytes)
-			}
-			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
-				Platform:           account.Platform,
-				AccountID:          account.ID,
-				AccountName:        account.Name,
-				UpstreamStatusCode: resp.StatusCode,
-				UpstreamRequestID:  resp.Header.Get("x-request-id"),
-				Kind:               "failover",
-				Message:            upstreamMsg,
-				Detail:             upstreamDetail,
-			})
-			s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, upstreamModel)
-			return nil, &UpstreamFailoverError{
-				StatusCode:             resp.StatusCode,
-				ResponseBody:           respBody,
-				RetryableOnSameAccount: account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
-			}
+		if foErr := s.failoverOpenAIUpstreamHTTPError(ctx, c, account, resp, respBody, upstreamMsg, upstreamModel); foErr != nil {
+			return nil, foErr
 		}
 		// Non-failover error: return Anthropic-formatted error to client
 		return s.handleAnthropicErrorResponse(resp, c, account, billingModel)
@@ -425,10 +397,6 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		} else if snapshot := ParseCodexRateLimitHeaders(resp.Header); snapshot != nil {
 			s.updateCodexUsageSnapshot(ctx, account.ID, snapshot)
 		}
-	}
-
-	if handleErr == nil && result != nil && grokPreprocessUsage != nil {
-		addOpenAIUsage(&result.Usage, *grokPreprocessUsage)
 	}
 
 	return result, handleErr
@@ -575,12 +543,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 		return nil, usage, acc, errors.New("upstream response body is nil")
 	}
 
-	scanner := bufio.NewScanner(resp.Body)
-	maxLineSize := defaultMaxLineSize
-	if s.cfg != nil && s.cfg.Gateway.MaxLineSize > 0 {
-		maxLineSize = s.cfg.Gateway.MaxLineSize
-	}
-	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
+	scanner := s.newUpstreamSSEScanner(resp.Body)
 
 	streamInterval := time.Duration(0)
 	if s.cfg != nil && s.cfg.Gateway.StreamDataIntervalTimeout > 0 {
@@ -644,16 +607,12 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 	defer close(done)
 
 	var parser openAICompatSSEFrameParser
-	xaiCollector := &xai.OutputItemCollector{}
 	for {
 		select {
 		case ev, ok := <-events:
 			if !ok {
 				if frame, ok := parser.Finish(); ok {
 					payload := openAICompatPayloadWithEventType(frame.Data, frame.EventType)
-					if patched, patchedOK := xaiCollector.ProcessData([]byte(payload)); patchedOK {
-						payload = string(patched)
-					}
 					var event apicompat.ResponsesStreamEvent
 					if err := json.Unmarshal([]byte(payload), &event); err == nil {
 						acc.ProcessEvent(&event)
@@ -692,9 +651,6 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 				continue
 			}
 			payload := openAICompatPayloadWithEventType(frame.Data, frame.EventType)
-			if patched, patchedOK := xaiCollector.ProcessData([]byte(payload)); patchedOK {
-				payload = string(patched)
-			}
 
 			var event apicompat.ResponsesStreamEvent
 			if err := json.Unmarshal([]byte(payload), &event); err != nil {
@@ -746,22 +702,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
 	requestID := resp.Header.Get("x-request-id")
-
-	headersWritten := false
-	writeStreamHeaders := func() {
-		if headersWritten {
-			return
-		}
-		headersWritten = true
-		if s.responseHeaderFilter != nil {
-			responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
-		}
-		c.Writer.Header().Set("Content-Type", "text/event-stream")
-		c.Writer.Header().Set("Cache-Control", "no-cache")
-		c.Writer.Header().Set("Connection", "keep-alive")
-		c.Writer.Header().Set("X-Accel-Buffering", "no")
-		c.Writer.WriteHeader(http.StatusOK)
-	}
+	writeStreamHeaders := s.newStreamHeaderWriter(c, resp.Header)
 
 	state := apicompat.NewResponsesEventToAnthropicState()
 	state.Model = originalModel
@@ -771,14 +712,8 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 	firstChunk := true
 	clientDisconnected := false
 	clientOutputStarted := false
-	xaiCollector := &xai.OutputItemCollector{}
 
-	scanner := bufio.NewScanner(resp.Body)
-	maxLineSize := defaultMaxLineSize
-	if s.cfg != nil && s.cfg.Gateway.MaxLineSize > 0 {
-		maxLineSize = s.cfg.Gateway.MaxLineSize
-	}
-	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
+	scanner := s.newUpstreamSSEScanner(resp.Body)
 
 	streamInterval := time.Duration(0)
 	if s.cfg != nil && s.cfg.Gateway.StreamDataIntervalTimeout > 0 {
@@ -812,9 +747,6 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 
 	// processDataLine handles a single "data: ..." SSE line from upstream.
 	processDataLine := func(payload string) bool {
-		if patched, patchedOK := xaiCollector.ProcessData([]byte(payload)); patchedOK {
-			payload = string(patched)
-		}
 		if firstChunk {
 			firstChunk = false
 			ms := int(time.Since(startTime).Milliseconds())

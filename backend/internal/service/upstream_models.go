@@ -12,7 +12,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 )
 
 const upstreamModelsBodyLimit int64 = 8 << 20
@@ -132,8 +131,6 @@ func (s *AccountTestService) buildUpstreamModelsRequest(ctx context.Context, acc
 	switch {
 	case account.Platform == PlatformAntigravity:
 		return s.buildAntigravityAPIKeyModelsRequest(ctx, account)
-	case account.Platform == PlatformGrok:
-		return s.buildGrokOAuthUpstreamModelsRequest(ctx, account)
 	case account.IsOpenAI():
 		return s.buildOpenAIUpstreamModelsRequest(ctx, account)
 	case account.IsGemini():
@@ -145,42 +142,6 @@ func (s *AccountTestService) buildUpstreamModelsRequest(ctx context.Context, acc
 			fmt.Sprintf("Unsupported platform for upstream model sync: %s", account.Platform), nil,
 		)
 	}
-}
-
-func (s *AccountTestService) buildGrokOAuthUpstreamModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {
-	if account.Type != AccountTypeOAuth {
-		return nil, newUpstreamModelSyncUnsupportedError(
-			fmt.Sprintf("Unsupported Grok account type for upstream model sync: %s", account.Type), nil,
-		)
-	}
-	if s.grokTokenProvider == nil {
-		return nil, newUpstreamModelSyncConfigError("Grok token provider is not configured", nil)
-	}
-	accessToken, tokenErr := s.grokTokenProvider.GetAccessToken(ctx, account)
-	if tokenErr != nil {
-		return nil, newUpstreamModelSyncUpstreamError("Failed to get Grok access token", tokenErr)
-	}
-	accessToken = strings.TrimSpace(accessToken)
-	if accessToken == "" {
-		return nil, newUpstreamModelSyncConfigError("No Grok access token is available", nil)
-	}
-
-	baseURL := account.GetGrokBaseURL()
-	if !xai.IsCLIChatProxyBaseURL(baseURL) {
-		baseURL = xai.CLIChatProxyBaseURL
-	}
-	normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
-	if err != nil {
-		return nil, newUpstreamModelSyncConfigError("Invalid Grok base URL", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, xai.BuildModelsV2URL(normalizedBaseURL), nil)
-	if err != nil {
-		return nil, newUpstreamModelSyncConfigError("Invalid Grok model list URL", err)
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	xai.SetGrokCLIRequestHeaders(req.Header, "")
-	return req, nil
 }
 
 func (s *AccountTestService) buildAnthropicUpstreamModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {
@@ -247,6 +208,8 @@ func (s *AccountTestService) buildAnthropicUpstreamModelsRequest(ctx context.Con
 	} else {
 		setAnthropicAPIKeyAuthHeader(req.Header, account, apiKeyAuthToken)
 	}
+	// 账号级请求头覆写：模型列表探测与真实转发保持一致的最终头
+	account.ApplyHeaderOverrides(req.Header)
 	return req, nil
 }
 
@@ -316,6 +279,8 @@ func (s *AccountTestService) buildOpenAIUpstreamModelsRequest(ctx context.Contex
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
+	// 账号级请求头覆写：模型列表探测与真实转发保持一致的最终头
+	account.ApplyHeaderOverrides(req.Header)
 	return req, nil
 }
 
@@ -426,14 +391,7 @@ func buildV1ModelsURL(base string) string {
 }
 
 func buildOpenAIModelsURL(base string) string {
-	normalized := strings.TrimRight(strings.TrimSpace(base), "/")
-	if strings.HasSuffix(normalized, "/v1/models") {
-		return normalized
-	}
-	if strings.HasSuffix(normalized, "/v1") {
-		return normalized + "/models"
-	}
-	return normalized + "/v1/models"
+	return buildOpenAIEndpointURL(base, "/v1/models")
 }
 
 func buildGeminiModelsURL(base string) string {

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
@@ -28,6 +27,61 @@ func TestBuildV1ModelsURL(t *testing.T) {
 	require.Equal(t, "https://api.anthropic.com/v1/models", buildV1ModelsURL("https://api.anthropic.com/v1"))
 	require.Equal(t, "https://api.anthropic.com/v1/models", buildV1ModelsURL("https://api.anthropic.com/v1/models"))
 	require.Equal(t, "https://gateway.example.com/antigravity/v1/models", buildV1ModelsURL("https://gateway.example.com/antigravity/"))
+}
+
+func TestBuildOpenAIModelsURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		base string
+		want string
+	}{
+		{
+			name: "zhipu v4 coding base url",
+			base: "https://open.bigmodel.cn/api/coding/paas/v4",
+			want: "https://open.bigmodel.cn/api/coding/paas/v4/models",
+		},
+		{
+			name: "openai v1 base url",
+			base: "https://api.openai.com/v1",
+			want: "https://api.openai.com/v1/models",
+		},
+		{
+			name: "models url unchanged",
+			base: "https://api.openai.com/v1/models",
+			want: "https://api.openai.com/v1/models",
+		},
+		{
+			name: "host fallback uses v1",
+			base: "https://api.openai.com",
+			want: "https://api.openai.com/v1/models",
+		},
+		{
+			name: "trailing slash on v4",
+			base: "https://open.bigmodel.cn/api/coding/paas/v4/",
+			want: "https://open.bigmodel.cn/api/coding/paas/v4/models",
+		},
+		{
+			name: "v2 base url",
+			base: "https://gateway.example.com/openai/v2",
+			want: "https://gateway.example.com/openai/v2/models",
+		},
+		{
+			name: "v3 base url",
+			base: "https://gateway.example.com/openai/v3",
+			want: "https://gateway.example.com/openai/v3/models",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tt.want, buildOpenAIModelsURL(tt.base))
+		})
+	}
 }
 
 func TestBuildGeminiModelsURL(t *testing.T) {
@@ -209,38 +263,6 @@ func TestFetchUpstreamSupportedModelsParsesOpenAIResponse(t *testing.T) {
 	require.Equal(t, []string{"gpt-5", "o3"}, models)
 	require.Equal(t, "https://openai.example.com/v1/models", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer openai-key", upstream.lastReq.Header.Get("Authorization"))
-}
-
-func TestFetchUpstreamSupportedModelsParsesGrokModelsV2Response(t *testing.T) {
-	t.Parallel()
-
-	upstream := &httpUpstreamRecorder{resp: &http.Response{
-		StatusCode: http.StatusOK,
-		Header:     http.Header{"Content-Type": []string{"application/json"}},
-		Body:       io.NopCloser(strings.NewReader(`{"object":"list","data":[{"id":"grok-composer-2.5-fast"},{"id":"grok-build"},{"id":"grok-build"}]}`)),
-	}}
-	svc := &AccountTestService{
-		httpUpstream:      upstream,
-		cfg:               upstreamModelSyncTestConfig(),
-		grokTokenProvider: NewGrokTokenProvider(nil, nil),
-	}
-
-	models, err := svc.FetchUpstreamSupportedModels(context.Background(), &Account{
-		ID:       66,
-		Platform: PlatformGrok,
-		Type:     AccountTypeOAuth,
-		Credentials: map[string]any{
-			"access_token": "grok-access-token",
-			"expires_at":   time.Now().Add(time.Hour).Format(time.RFC3339),
-			"base_url":     "https://api.x.ai/v1",
-		},
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"grok-build", "grok-composer-2.5-fast"}, models)
-	require.Equal(t, "https://cli-chat-proxy.grok.com/v1/models-v2", upstream.lastReq.URL.String())
-	require.Equal(t, "Bearer grok-access-token", upstream.lastReq.Header.Get("Authorization"))
-	require.Equal(t, "xai-grok-cli", upstream.lastReq.Header.Get("x-xai-token-auth"))
-	require.Equal(t, "grok-pager", upstream.lastReq.Header.Get("x-grok-client-identifier"))
 }
 
 func TestFetchUpstreamSupportedModelsDoesNotExposeUpstreamBody(t *testing.T) {

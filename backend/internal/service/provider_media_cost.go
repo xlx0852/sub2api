@@ -8,7 +8,7 @@ func applyProviderMediaCostMultiplier(cost *CostBreakdown, multiplier float64) *
 		multiplier = 0
 	}
 	next := *cost
-	next.TotalCost = next.InputCost + next.OutputCost + next.ImageOutputCost + next.CacheCreationCost + next.CacheReadCost + next.ToolInvocationCost
+	next.TotalCost = next.InputCost + next.OutputCost + next.ImageOutputCost + next.CacheCreationCost + next.CacheReadCost
 	next.ActualCost = next.TotalCost * multiplier
 	return &next
 }

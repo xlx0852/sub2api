@@ -353,45 +353,6 @@ func TestOpenAIGatewayService_GenerateSessionHash_ContentFallback(t *testing.T) 
 	require.NotEqual(t, hash, hashDifferent, "different content should produce different hash")
 }
 
-func TestOpenAIGatewayService_GenerateSessionHashForOpenAIRequest_CodexOfficialIgnoresPromptCacheKey(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	svc := &OpenAIGatewayService{}
-	rec := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
-	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.98.0")
-
-	body := []byte(`{"model":"gpt-5.1","prompt_cache_key":"pcache_123","input":[{"type":"input_text","text":"hello"}]}`)
-	got := svc.GenerateSessionHashForOpenAIRequest(c, body)
-
-	require.NotEmpty(t, got)
-	require.NotEqual(t, DeriveSessionHashFromSeed("pcache_123"), got)
-}
-
-func TestOpenAIGatewayService_GenerateSessionHash_XGrokConvIDWinsOverContent(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	rec := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
-	c.Request.Header.Set("x-grok-conv-id", "grok-cli-conv-123")
-
-	svc := &OpenAIGatewayService{}
-	body := []byte(`{"model":"grok-composer-2.5-fast","input":[{"role":"user","content":"Hello"}]}`)
-
-	contentHash := svc.GenerateSessionHash(c, body)
-	require.NotEmpty(t, contentHash)
-
-	c.Request.Header.Set("x-grok-conv-id", "grok-cli-conv-456")
-	differentConvHash := svc.GenerateSessionHash(c, body)
-	require.NotEmpty(t, differentConvHash)
-	require.NotEqual(t, contentHash, differentConvHash)
-
-	c.Request.Header.Set("x-grok-conv-id", "grok-cli-conv-123")
-	sameConvHash := svc.GenerateSessionHash(c, body)
-	require.Equal(t, contentHash, sameConvHash)
-}
-
 func TestOpenAIGatewayService_GenerateSessionHash_ExplicitSignalWinsOverContent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
@@ -2704,15 +2665,6 @@ func TestExtractOpenAIUsageFromJSONBytes_AcceptsResponseAndChatUsageShapes(t *te
 	require.Equal(t, 13, usage.InputTokens)
 	require.Equal(t, 7, usage.OutputTokens)
 	require.Equal(t, 4, usage.CacheReadInputTokens)
-
-	usage, ok = extractOpenAIUsageFromJSONBytes([]byte(`{"type":"response.completed","response":{"usage":{"input_tokens":20,"output_tokens":10},"server_side_tool_usage":{"SERVER_SIDE_TOOL_WEB_SEARCH":2,"SERVER_SIDE_TOOL_X_SEARCH":1}}}`))
-	require.True(t, ok)
-	require.Equal(t, 20, usage.InputTokens)
-	require.Equal(t, 10, usage.OutputTokens)
-	require.Equal(t, map[string]int{
-		"SERVER_SIDE_TOOL_WEB_SEARCH": 2,
-		"SERVER_SIDE_TOOL_X_SEARCH":   1,
-	}, usage.ServerSideToolUsage)
 }
 
 func TestExtractCodexFinalResponse_SampleReplay(t *testing.T) {
@@ -2746,7 +2698,7 @@ func TestHandleSSEToJSON_CompletedEventReturnsJSON(t *testing.T) {
 		`data: [DONE]`,
 	}, "\n"))
 
-	usage, err := svc.handleSSEToJSON(resp, c, body, nil, "gpt-4o", "gpt-4o")
+	usage, err := svc.handleSSEToJSON(resp, c, body, "gpt-4o", "gpt-4o")
 	require.NoError(t, err)
 	require.NotNil(t, usage)
 	require.Equal(t, 7, usage.InputTokens)
@@ -2787,6 +2739,41 @@ func TestHandleNonStreamingResponse_APIKeyFallsBackToSSEBodyWhenContentTypeIsWro
 	require.Equal(t, "hello", gjson.Get(rec.Body.String(), "output.0.content.0.text").String())
 }
 
+func TestHandleNonStreamingResponse_OAuthJSONBodyWithDataEventTextKeepsJSONUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses/compact", nil)
+
+	svc := &OpenAIGatewayService{cfg: &config.Config{}}
+	// Plain JSON compact response whose output text happens to contain the
+	// literal substrings "data:" and "event:" (e.g. echoing shell/log output).
+	// This must NOT be misdetected as SSE framing: it has a top-level usage
+	// object and no upstream text/event-stream Content-Type.
+	jsonBody := `{"id":"resp_oauth_compact","object":"response","model":"gpt-5.4","status":"completed",` +
+		`"output":[{"type":"message","content":[{"type":"output_text",` +
+		`"text":"processing data: 1,2,3 then event: click finished"}]}],` +
+		`"usage":{"input_tokens":11,"output_tokens":22,"total_tokens":33}}`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(jsonBody)),
+	}
+	account := &Account{ID: 146, Type: AccountTypeOAuth}
+
+	result, err := svc.handleNonStreamingResponse(context.Background(), resp, c, account, "gpt-5.4", "gpt-5.4")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 11, result.InputTokens)
+	require.Equal(t, 22, result.OutputTokens)
+	// Response must remain the original JSON body (not routed through the SSE
+	// path, which would rewrite/lose the body or usage).
+	require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+	require.Equal(t, "resp_oauth_compact", gjson.Get(rec.Body.String(), "id").String())
+	require.Equal(t, int64(33), gjson.Get(rec.Body.String(), "usage.total_tokens").Int())
+	require.Contains(t, rec.Body.String(), "processing data: 1,2,3 then event: click finished")
+}
+
 func TestHandleSSEToJSON_ReconstructsImageGenerationOutputItemDone(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
@@ -2804,7 +2791,7 @@ func TestHandleSSEToJSON_ReconstructsImageGenerationOutputItemDone(t *testing.T)
 		`data: [DONE]`,
 	}, "\n"))
 
-	usage, err := svc.handleSSEToJSON(resp, c, body, nil, "gpt-5.4", "gpt-5.4")
+	usage, err := svc.handleSSEToJSON(resp, c, body, "gpt-5.4", "gpt-5.4")
 	require.NoError(t, err)
 	require.NotNil(t, usage)
 	require.Equal(t, 4, usage.ImageOutputTokens)
@@ -2830,7 +2817,7 @@ func TestHandleSSEToJSON_NoFinalResponseKeepsSSEBody(t *testing.T) {
 		`data: [DONE]`,
 	}, "\n"))
 
-	usage, err := svc.handleSSEToJSON(resp, c, body, nil, "gpt-4o", "gpt-4o")
+	usage, err := svc.handleSSEToJSON(resp, c, body, "gpt-4o", "gpt-4o")
 	require.NoError(t, err)
 	require.NotNil(t, usage)
 	require.Equal(t, 0, usage.InputTokens)
@@ -2854,7 +2841,7 @@ func TestHandleSSEToJSON_ResponseFailedReturnsProtocolError(t *testing.T) {
 		`data: [DONE]`,
 	}, "\n"))
 
-	usage, err := svc.handleSSEToJSON(resp, c, body, nil, "gpt-4o", "gpt-4o")
+	usage, err := svc.handleSSEToJSON(resp, c, body, "gpt-4o", "gpt-4o")
 	require.Nil(t, usage)
 	require.Error(t, err)
 	require.Equal(t, http.StatusBadGateway, rec.Code)
