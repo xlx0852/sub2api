@@ -70,6 +70,14 @@ type Account struct {
 	modelMappingCacheRawPtr         uintptr
 	modelMappingCacheRawLen         int
 	modelMappingCacheRawSig         uint64
+
+	// header_overrides 热路径缓存（非持久化字段，同 model_mapping 缓存先例）
+	headerOverrideCache               map[string]string
+	headerOverrideCacheReady          bool
+	headerOverrideCacheCredentialsPtr uintptr
+	headerOverrideCacheRawPtr         uintptr
+	headerOverrideCacheRawLen         int
+	headerOverrideCacheRawSig         uint64
 }
 
 type OpenAIEndpointCapability string
@@ -85,11 +93,6 @@ const (
 	OpenAIAuthModePersonalAccessToken = "personalAccessToken"
 	openAIAuthModeCredentialKey       = "auth_mode"
 	openAIAuthModeLegacyCredentialKey = "openai_auth_mode"
-)
-
-const (
-	AccountExtraCloudModelsKey            = "cloud_models"
-	AccountExtraCloudModelsRefreshedAtKey = "cloud_models_refreshed_at"
 )
 
 func isOpenAIPersonalAccessTokenAuthMode(value string) bool {
@@ -417,23 +420,7 @@ func parseTempUnschedStrings(value any) []string {
 	case []any:
 		raw = make([]string, 0, len(v))
 		for _, item := range v {
-			switch item := item.(type) {
-			case string:
-				raw = append(raw, item)
-			case map[string]any:
-				if s, ok := item["id"].(string); ok {
-					raw = append(raw, s)
-				}
-			case map[string]string:
-				if s := item["id"]; s != "" {
-					raw = append(raw, s)
-				}
-			}
-		}
-	case []map[string]any:
-		raw = make([]string, 0, len(v))
-		for _, item := range v {
-			if s, ok := item["id"].(string); ok {
+			if s, ok := item.(string); ok {
 				raw = append(raw, s)
 			}
 		}
@@ -603,9 +590,6 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 			})
 			applyAntigravityGemini31ProAliases(result)
 		}
-		if a.Platform == domain.PlatformGrok {
-			applyGrokModelAliases(result)
-		}
 		return result
 	}
 
@@ -648,27 +632,6 @@ func modelMappingSignature(rawMapping map[string]any) uint64 {
 		_, _ = h.Write([]byte{0xff})
 	}
 	return h.Sum64()
-}
-
-func applyGrokModelAliases(mapping map[string]string) {
-	if mapping == nil {
-		return
-	}
-	if _, exists := mapping["grok-build"]; !exists {
-		if target := strings.TrimSpace(mapping["grok-build-0.1"]); target != "" {
-			mapping["grok-build"] = target
-		}
-	}
-	if _, exists := mapping["grok"]; !exists {
-		if target := strings.TrimSpace(mapping["grok-4.3"]); target != "" {
-			mapping["grok"] = target
-		}
-	}
-	if _, exists := mapping["grok-latest"]; !exists {
-		if target := strings.TrimSpace(mapping["grok-4.3"]); target != "" {
-			mapping["grok-latest"] = target
-		}
-	}
 }
 
 func ensureAntigravityDefaultPassthrough(mapping map[string]string, model string) {
@@ -1227,6 +1190,18 @@ func (a *Account) IsOpenAIOAuth() bool {
 	return a.IsOpenAI() && a.Type == AccountTypeOAuth
 }
 
+func (a *Account) IsOpenAIChatGPTSubscription() bool {
+	if !a.IsOpenAIOAuth() {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(a.GetCredential("plan_type"))) {
+	case "", "free", "abnormal":
+		return false
+	default:
+		return true
+	}
+}
+
 func (a *Account) IsOpenAIPersonalAccessToken() bool {
 	if !a.IsOpenAIOAuth() {
 		return false
@@ -1289,110 +1264,6 @@ func (a *Account) GetGrokRefreshToken() string {
 		return ""
 	}
 	return a.GetCredential("refresh_token")
-}
-
-func (a *Account) GetCloudModelIDs() []string {
-	if a == nil || a.Extra == nil {
-		return nil
-	}
-	return normalizeAccountModelIDs(a.Extra[AccountExtraCloudModelsKey])
-}
-
-func (a *Account) ExtraWithCloudModels(modelIDs []string, refreshedAt time.Time) map[string]any {
-	extraSize := 2
-	if a != nil {
-		extraSize += len(a.Extra)
-	}
-	extra := make(map[string]any, extraSize)
-	if a != nil && a.Extra != nil {
-		for key, value := range a.Extra {
-			extra[key] = value
-		}
-	}
-	extra[AccountExtraCloudModelsKey] = mergeAccountCloudModelIDs(a.GetCloudModelIDs(), modelIDs)
-	extra[AccountExtraCloudModelsRefreshedAtKey] = refreshedAt.UTC().Format(time.RFC3339)
-	return extra
-}
-
-func mergeAccountCloudModelIDs(oldModelIDs []string, newModelIDs []string) []string {
-	newModelIDs = normalizeAccountModelIDs(newModelIDs)
-	if len(oldModelIDs) == 0 {
-		return newModelIDs
-	}
-
-	incoming := make(map[string]struct{}, len(newModelIDs))
-	for _, model := range newModelIDs {
-		incoming[model] = struct{}{}
-	}
-
-	seen := make(map[string]struct{}, len(newModelIDs))
-	models := make([]string, 0, len(newModelIDs))
-	for _, model := range oldModelIDs {
-		if _, ok := incoming[model]; !ok {
-			continue
-		}
-		if _, ok := seen[model]; ok {
-			continue
-		}
-		seen[model] = struct{}{}
-		models = append(models, model)
-	}
-	for _, model := range newModelIDs {
-		if _, ok := seen[model]; ok {
-			continue
-		}
-		seen[model] = struct{}{}
-		models = append(models, model)
-	}
-	return models
-}
-
-func normalizeAccountModelIDs(value any) []string {
-	var raw []string
-	switch v := value.(type) {
-	case []string:
-		raw = v
-	case []any:
-		raw = make([]string, 0, len(v))
-		for _, item := range v {
-			switch item := item.(type) {
-			case string:
-				raw = append(raw, item)
-			case map[string]any:
-				if s, ok := item["id"].(string); ok {
-					raw = append(raw, s)
-				}
-			case map[string]string:
-				if s := item["id"]; s != "" {
-					raw = append(raw, s)
-				}
-			}
-		}
-	case []map[string]any:
-		raw = make([]string, 0, len(v))
-		for _, item := range v {
-			if s, ok := item["id"].(string); ok {
-				raw = append(raw, s)
-			}
-		}
-	default:
-		return nil
-	}
-
-	seen := make(map[string]struct{}, len(raw))
-	models := make([]string, 0, len(raw))
-	for _, model := range raw {
-		model = strings.TrimSpace(model)
-		if model == "" {
-			continue
-		}
-		if _, ok := seen[model]; ok {
-			continue
-		}
-		seen[model] = struct{}{}
-		models = append(models, model)
-	}
-	return models
 }
 
 func (a *Account) GetOpenAIIDToken() string {
@@ -1682,12 +1553,6 @@ const (
 	OpenAIWSIngressModeHTTPBridge  = "http_bridge"
 )
 
-const (
-	GrokXAIWSPassthroughModeOff   = "off"
-	GrokXAIWSPassthroughModeAuto  = "auto"
-	GrokXAIWSPassthroughModeForce = "force"
-)
-
 func normalizeOpenAIWSIngressMode(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case OpenAIWSIngressModeOff:
@@ -1715,53 +1580,6 @@ func normalizeOpenAIWSIngressDefaultMode(mode string) string {
 		return normalized
 	}
 	return OpenAIWSIngressModeCtxPool
-}
-
-func normalizeGrokXAIWSPassthroughMode(mode string) string {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case GrokXAIWSPassthroughModeOff:
-		return GrokXAIWSPassthroughModeOff
-	case GrokXAIWSPassthroughModeAuto:
-		return GrokXAIWSPassthroughModeAuto
-	case GrokXAIWSPassthroughModeForce:
-		return GrokXAIWSPassthroughModeForce
-	default:
-		return ""
-	}
-}
-
-func normalizeGrokXAIWSPassthroughDefaultMode(mode string) string {
-	if normalized := normalizeGrokXAIWSPassthroughMode(mode); normalized != "" {
-		return normalized
-	}
-	return GrokXAIWSPassthroughModeOff
-}
-
-// ResolveGrokXAIWSPassthroughMode 返回 Grok 账号的 xAI 原生 WS 直通模式（off/auto/force）。
-func (a *Account) ResolveGrokXAIWSPassthroughMode(defaultMode string) string {
-	resolvedDefault := normalizeGrokXAIWSPassthroughDefaultMode(defaultMode)
-	if a == nil || !a.IsGrok() {
-		return GrokXAIWSPassthroughModeOff
-	}
-	if a.Extra == nil {
-		return resolvedDefault
-	}
-	if raw, ok := a.Extra["grok_xai_ws_passthrough_mode"]; ok {
-		if mode, ok := raw.(string); ok {
-			if normalized := normalizeGrokXAIWSPassthroughMode(mode); normalized != "" {
-				return normalized
-			}
-		}
-	}
-	if raw, ok := a.Extra["grok_xai_ws_passthrough_enabled"]; ok {
-		if enabled, ok := raw.(bool); ok {
-			if enabled {
-				return GrokXAIWSPassthroughModeAuto
-			}
-			return GrokXAIWSPassthroughModeOff
-		}
-	}
-	return resolvedDefault
 }
 
 // ResolveOpenAIResponsesWebSocketV2Mode 返回账号在 WSv2 ingress 下的有效模式（off/ctx_pool/passthrough）。

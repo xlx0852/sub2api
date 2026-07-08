@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -22,43 +21,6 @@ const (
 	openAIWSHTTPBridgeThresholdBytesDefault int64 = 15 * 1024 * 1024
 	openAIWSHTTPBridgeErrorBodyLimitBytes         = 64 * 1024
 )
-
-func (s *OpenAIGatewayService) openAIWSHTTPBridgeKeepaliveInterval() time.Duration {
-	if s == nil || s.cfg == nil || s.cfg.Gateway.StreamKeepaliveInterval <= 0 {
-		return 0
-	}
-	return time.Duration(s.cfg.Gateway.StreamKeepaliveInterval) * time.Second
-}
-
-func startOpenAIWSHTTPBridgeClientKeepalive(
-	ctx context.Context,
-	interval time.Duration,
-	pingClient func() error,
-	clientDisconnected *atomic.Bool,
-) func() {
-	if interval <= 0 || pingClient == nil {
-		return func() {}
-	}
-	keepaliveCtx, cancel := context.WithCancel(ctx)
-	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-keepaliveCtx.Done():
-				return
-			case <-ticker.C:
-				if clientDisconnected != nil && clientDisconnected.Load() {
-					continue
-				}
-				if err := pingClient(); err != nil && clientDisconnected != nil && isOpenAIWSClientDisconnectError(err) {
-					clientDisconnected.Store(true)
-				}
-			}
-		}
-	}()
-	return cancel
-}
 
 func ResolveOpenAIWSClientReadLimitBytes(cfg *config.Config) int64 {
 	if cfg == nil || cfg.Gateway.OpenAIWS.ClientReadLimitBytes <= 0 {
@@ -92,7 +54,7 @@ func (s *OpenAIGatewayService) shouldBridgeOpenAIWSHTTP(account *Account, payloa
 	return threshold > 0 && int64(payloadBytes) >= threshold
 }
 
-func prepareOpenAIWSHTTPBridgeBody(payload []byte, keepPreviousResponseID bool) ([]byte, error) {
+func prepareOpenAIWSHTTPBridgeBody(payload []byte) ([]byte, error) {
 	var body map[string]any
 	if err := json.Unmarshal(payload, &body); err != nil {
 		return nil, err
@@ -102,9 +64,7 @@ func prepareOpenAIWSHTTPBridgeBody(payload []byte, keepPreviousResponseID bool) 
 	}
 	delete(body, "type")
 	delete(body, "generate")
-	if !keepPreviousResponseID {
-		delete(body, "previous_response_id")
-	}
+	delete(body, "previous_response_id")
 	body["stream"] = true
 	return json.Marshal(body)
 }
@@ -189,7 +149,6 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	c *gin.Context,
 	account *Account,
 	token string,
-	sessionHash string,
 	payload []byte,
 	payloadBytes int,
 	originalModel string,
@@ -198,7 +157,6 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	imageInputSize string,
 	turn int,
 	writeClientMessage func([]byte) error,
-	pingClientWS func() error,
 ) (*OpenAIForwardResult, error) {
 	if s == nil {
 		return nil, errors.New("service is nil")
@@ -213,29 +171,13 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		return nil, errors.New("client websocket writer is nil")
 	}
 
-	var clientDisconnected atomic.Bool
-	stopClientKeepalive := startOpenAIWSHTTPBridgeClientKeepalive(
-		ctx,
-		s.openAIWSHTTPBridgeKeepaliveInterval(),
-		pingClientWS,
-		&clientDisconnected,
-	)
-	defer stopClientKeepalive()
-
-	body, err := prepareOpenAIWSHTTPBridgeBody(payload, false)
+	body, err := prepareOpenAIWSHTTPBridgeBody(payload)
 	if err != nil {
 		return nil, fmt.Errorf("prepare http bridge body: %w", err)
 	}
 
-	var grokIDMapper *grokWSRequestIDMapper
-	var grokUpstreamRequestPayload []byte
-	if account.Platform == PlatformGrok && strings.TrimSpace(sessionHash) != "" {
-		grokIDMapper = newGrokWSRequestIDMapper(sessionHash, payload)
-	}
-
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	var upstreamReq *http.Request
-	var grokPreprocessUsage *OpenAIUsage
 	if account.Platform == PlatformGrok {
 		upstreamModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
 		if originalModel != "" {
@@ -246,25 +188,11 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		if upstreamModel == "" {
 			upstreamModel = "grok-4.3"
 		}
-		proxyURL := ""
-		if account.ProxyID != nil && account.Proxy != nil {
-			proxyURL = account.Proxy.URL()
-		}
-		prepOpts := grokPreparedResponsesOptions{
-			UseGrokBuildHTTPRelay: true,
-			PromptCacheKey:        sessionHash,
-		}
-		preparedBody, prepareErr := s.prepareGrokUpstreamResponsesBody(upstreamCtx, c, account, body, upstreamModel, token, proxyURL, prepOpts)
-		if prepareErr != nil {
+		body, err = patchGrokResponsesBody(body, upstreamModel)
+		if err != nil {
 			releaseUpstreamCtx()
-			return nil, prepareErr
+			return nil, err
 		}
-		body = preparedBody.Body
-		grokPreprocessUsage = preparedBody.PreprocessUsage
-		if grokIDMapper != nil {
-			body = grokIDMapper.upstreamRequestPayload(body)
-		}
-		grokUpstreamRequestPayload = append([]byte(nil), body...)
 		upstreamReq, err = buildGrokResponsesRequest(upstreamCtx, c, account, body, token)
 	} else {
 		upstreamReq, err = s.buildUpstreamRequestOpenAIPassthrough(upstreamCtx, c, account, body, token)
@@ -298,16 +226,6 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		if upstreamMsg == "" {
 			upstreamMsg = http.StatusText(resp.StatusCode)
 		}
-		if account.Platform == PlatformGrok {
-			logOpenAIWSModeInfo(
-				"ingress_ws_http_bridge_grok_upstream_error account_id=%d turn=%d status=%d message=%s body=%s",
-				account.ID,
-				turn,
-				resp.StatusCode,
-				truncateOpenAIWSLogValue(upstreamMsg, openAIWSLogValueMaxLen),
-				truncateOpenAIWSLogValue(string(respBody), openAIWSLogValueMaxLen),
-			)
-		}
 		_ = writeClientMessage(buildOpenAIWSHTTPBridgeErrorEvent(resp.StatusCode, upstreamMsg))
 		return nil, fmt.Errorf("upstream http bridge error: status=%d message=%s", resp.StatusCode, upstreamMsg)
 	}
@@ -325,6 +243,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	lastEventType := ""
 	sawDone := false
 	wroteDownstream := false
+	clientDisconnected := false
 	mappedModel := ""
 	needModelReplace := false
 	var mappedModelBytes []byte
@@ -337,9 +256,6 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	}
 
 	resultWithUsage := func() *OpenAIForwardResult {
-		if grokPreprocessUsage != nil {
-			addOpenAIUsage(&usage, *grokPreprocessUsage)
-		}
 		imageCount := imageCounter.Count()
 		result := &OpenAIForwardResult{
 			RequestID:       responseID,
@@ -353,8 +269,6 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			ResponseHeaders: cloneHeader(resp.Header),
 			Duration:        time.Since(turnStart),
 			FirstTokenMs:    firstTokenMs,
-			WSPayloadBytes:  openAIWSInt64Ptr(int64(payloadBytes)),
-			WSEventCount:    intPtr(eventCount),
 		}
 		if replayInput := replayCollector.Items(); len(replayInput) > 0 {
 			result.wsReplayInput = replayInput
@@ -395,22 +309,9 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		}
 
 		upstreamMessage := []byte(trimmedData)
-		if grokIDMapper != nil {
-			upstreamMessage = grokIDMapper.downstreamResponsePayload(upstreamMessage)
-		}
 		eventType, eventResponseID, _ := parseOpenAIWSEventEnvelope(upstreamMessage)
-		if account.Platform == PlatformGrok {
-			if sanitized, changed := sanitizeGrokWSOutboundEvent(eventType, upstreamMessage); changed {
-				upstreamMessage = sanitized
-			}
-		}
 		if responseID == "" && eventResponseID != "" {
 			responseID = eventResponseID
-		}
-		if grokIDMapper != nil {
-			if mappedResponseID := strings.TrimSpace(gjson.GetBytes(upstreamMessage, "response.id").String()); mappedResponseID != "" {
-				responseID = mappedResponseID
-			}
 		}
 		if eventType != "" {
 			eventCount++
@@ -441,10 +342,10 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		}
 		replayCollector.AddEvent(eventType, upstreamMessage)
 
-		if !clientDisconnected.Load() {
+		if !clientDisconnected {
 			if err := writeClientMessage(upstreamMessage); err != nil {
 				if isOpenAIWSClientDisconnectError(err) {
-					clientDisconnected.Store(true)
+					clientDisconnected = true
 					closeStatus, closeReason := summarizeOpenAIWSReadCloseError(err)
 					logOpenAIWSModeInfo(
 						"ingress_ws_http_bridge_client_disconnected_drain account_id=%d turn=%d close_status=%s close_reason=%s",
@@ -465,9 +366,6 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			}
 		}
 
-		if isOpenAIWSTerminalEvent(eventType) && grokIDMapper != nil {
-			grokIDMapper.recordTranscriptTurn(grokUpstreamRequestPayload, upstreamMessage)
-		}
 		if eventType == "error" {
 			errCodeRaw, errTypeRaw, errMsgRaw := parseOpenAIWSErrorEventFields(upstreamMessage)
 			s.persistOpenAIWSRateLimitSignal(ctx, account, resp.Header, upstreamMessage, errCodeRaw, errTypeRaw, errMsgRaw)
@@ -496,7 +394,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 				truncateOpenAIWSLogValue(firstEventType, openAIWSLogValueMaxLen),
 				truncateOpenAIWSLogValue(lastEventType, openAIWSLogValueMaxLen),
 				firstTokenMsValue,
-				clientDisconnected.Load(),
+				clientDisconnected,
 			)
 			return resultWithUsage(), nil
 		}

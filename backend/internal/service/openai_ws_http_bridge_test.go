@@ -7,12 +7,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	coderws "github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
@@ -21,7 +19,7 @@ import (
 )
 
 func TestPrepareOpenAIWSHTTPBridgeBodyStripsWSFields(t *testing.T) {
-	body, err := prepareOpenAIWSHTTPBridgeBody([]byte(`{"type":"response.create","generate":true,"model":"gpt-5","stream":false,"previous_response_id":"resp_prev","input":"hi"}`), false)
+	body, err := prepareOpenAIWSHTTPBridgeBody([]byte(`{"type":"response.create","generate":true,"model":"gpt-5","stream":false,"previous_response_id":"resp_prev","input":"hi"}`))
 	require.NoError(t, err)
 	require.False(t, gjson.GetBytes(body, "type").Exists())
 	require.False(t, gjson.GetBytes(body, "generate").Exists())
@@ -123,7 +121,6 @@ func TestOpenAIWSHTTPBridgeRelaysSSEFramesAsWebSocketMessages(t *testing.T) {
 			ginCtx,
 			account,
 			"sk-test",
-			"",
 			payload,
 			len(payload),
 			"gpt-5",
@@ -132,7 +129,6 @@ func TestOpenAIWSHTTPBridgeRelaysSSEFramesAsWebSocketMessages(t *testing.T) {
 			"",
 			1,
 			writeClient,
-			nil,
 		)
 		resultCh <- bridgeResult{result: result, err: bridgeErr}
 	}))
@@ -178,167 +174,6 @@ func TestOpenAIWSHTTPBridgeRelaysSSEFramesAsWebSocketMessages(t *testing.T) {
 	require.False(t, gjson.GetBytes(upstream.lastBody, "type").Exists())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "generate").Exists())
 	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
-}
-
-func TestOpenAIWSHTTPBridgeKeepaliveIntervalUsesGatewayStreamSetting(t *testing.T) {
-	svc := &OpenAIGatewayService{
-		cfg: &config.Config{
-			Gateway: config.GatewayConfig{
-				StreamKeepaliveInterval: 12,
-			},
-		},
-	}
-	require.Equal(t, 12*time.Second, svc.openAIWSHTTPBridgeKeepaliveInterval())
-
-	svc.cfg.Gateway.StreamKeepaliveInterval = 0
-	require.Equal(t, time.Duration(0), svc.openAIWSHTTPBridgeKeepaliveInterval())
-}
-
-func TestStartOpenAIWSHTTPBridgeClientKeepalivePingsWhileWaiting(t *testing.T) {
-	var pingCount atomic.Int32
-	clientDisconnected := atomic.Bool{}
-	cancel := startOpenAIWSHTTPBridgeClientKeepalive(
-		context.Background(),
-		20*time.Millisecond,
-		func() error {
-			pingCount.Add(1)
-			return nil
-		},
-		&clientDisconnected,
-	)
-	defer cancel()
-
-	require.Eventually(t, func() bool {
-		return pingCount.Load() >= 2
-	}, time.Second, 10*time.Millisecond)
-}
-
-func TestOpenAIWSHTTPBridgeSendsClientKeepaliveWhileWaitingForUpstream(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	sseBody := strings.Join([]string{
-		`data: {"type":"response.created","response":{"id":"resp_slow","model":"gpt-5"}}`,
-		"",
-		`data: {"type":"response.completed","response":{"id":"resp_slow","model":"gpt-5","usage":{"input_tokens":1,"output_tokens":1}}}`,
-		"",
-	}, "\n")
-	upstream := &slowHTTPUpstreamRecorder{
-		delay: 2500 * time.Millisecond,
-		resp: &http.Response{
-			StatusCode: http.StatusOK,
-			Header: http.Header{
-				"Content-Type": []string{"text/event-stream"},
-			},
-			Body: io.NopCloser(strings.NewReader(sseBody)),
-		},
-	}
-	svc := &OpenAIGatewayService{
-		cfg: &config.Config{
-			Gateway: config.GatewayConfig{
-				MaxLineSize:             defaultMaxLineSize,
-				StreamKeepaliveInterval: 1,
-				OpenAIWS: config.GatewayOpenAIWSConfig{
-					HTTPBridgeEnabled:        true,
-					HTTPBridgeThresholdBytes: 1,
-				},
-			},
-		},
-		httpUpstream: upstream,
-	}
-	account := &Account{
-		ID:          7,
-		Platform:    PlatformOpenAI,
-		Type:        AccountTypeAPIKey,
-		Concurrency: 1,
-		Status:      StatusActive,
-	}
-	payload := []byte(`{"type":"response.create","generate":true,"model":"gpt-5","stream":true,"input":"hi"}`)
-
-	var pingCount atomic.Int32
-	resultCh := make(chan error, 1)
-	wsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := coderws.Accept(w, r, nil)
-		if err != nil {
-			resultCh <- err
-			return
-		}
-		defer func() { _ = conn.CloseNow() }()
-
-		rec := httptest.NewRecorder()
-		ginCtx, _ := gin.CreateTestContext(rec)
-		ginCtx.Request = r.Clone(r.Context())
-
-		_, bridgeErr := svc.proxyOpenAIWSHTTPBridgeTurn(
-			r.Context(),
-			ginCtx,
-			account,
-			"sk-test",
-			"",
-			payload,
-			len(payload),
-			"gpt-5",
-			"",
-			"",
-			"",
-			1,
-			func(message []byte) error {
-				writeCtx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
-				defer cancel()
-				return conn.Write(writeCtx, coderws.MessageText, message)
-			},
-			func() error {
-				pingCount.Add(1)
-				pingCtx, cancel := context.WithTimeout(r.Context(), time.Second)
-				defer cancel()
-				return conn.Ping(pingCtx)
-			},
-		)
-		resultCh <- bridgeErr
-	}))
-	defer wsServer.Close()
-
-	dialCtx, cancelDial := context.WithTimeout(context.Background(), 5*time.Second)
-	clientConn, _, err := coderws.Dial(dialCtx, "ws"+strings.TrimPrefix(wsServer.URL, "http"), nil)
-	cancelDial()
-	require.NoError(t, err)
-	defer func() { _ = clientConn.CloseNow() }()
-
-	select {
-	case bridgeErr := <-resultCh:
-		require.NoError(t, bridgeErr)
-	case <-time.After(8 * time.Second):
-		t.Fatal("timed out waiting for slow bridge result")
-	}
-	require.GreaterOrEqual(t, pingCount.Load(), int32(2))
-}
-
-type slowHTTPUpstreamRecorder struct {
-	delay time.Duration
-	resp  *http.Response
-	err   error
-
-	lastReq  *http.Request
-	lastBody []byte
-}
-
-func (r *slowHTTPUpstreamRecorder) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
-	r.lastReq = req
-	if req != nil && req.Body != nil {
-		body, readErr := io.ReadAll(req.Body)
-		if readErr == nil {
-			r.lastBody = body
-		}
-		_ = req.Body.Close()
-	}
-	if r.err != nil {
-		return nil, r.err
-	}
-	time.Sleep(r.delay)
-	return r.resp, nil
-}
-
-func (r *slowHTTPUpstreamRecorder) DoWithTLS(req *http.Request, proxyURL string, accountID int64, accountConcurrency int, _ *tlsfingerprint.Profile) (*http.Response, error) {
-	return r.Do(req, proxyURL, accountID, accountConcurrency)
 }
 
 func TestProxyResponsesWebSocketFromClientForGrokUsesXAIHTTPBridge(t *testing.T) {
@@ -447,199 +282,11 @@ func TestProxyResponsesWebSocketFromClientForGrokUsesXAIHTTPBridge(t *testing.T)
 
 	require.Equal(t, xai.DefaultCLIBaseURL+"/responses", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer access-token", upstream.lastReq.Header.Get("Authorization"))
-	require.Equal(t, xai.GrokCLIUserAgent, upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, "sub2api-grok/1.0", upstream.lastReq.Header.Get("User-Agent"))
 	require.Equal(t, "grok-4.3", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "type").Exists())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "generate").Exists())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_retention").Exists())
-}
-
-func TestProxyResponsesWebSocketFromClientForGrokAutoWSPassthroughFallsBackForImageInput(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	finalSSE := strings.Join([]string{
-		`data: {"type":"response.created","response":{"id":"resp_grok_image_bridge","model":"grok-4.3"}}`,
-		"",
-		`data: {"type":"response.completed","response":{"id":"resp_grok_image_bridge","model":"grok-4.3","usage":{"input_tokens":5,"output_tokens":3}}}`,
-		"",
-	}, "\n")
-	upstream := &httpUpstreamRecorder{responses: []*http.Response{
-		{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
-			Body:       io.NopCloser(strings.NewReader(finalSSE)),
-		},
-	}}
-	svc := &OpenAIGatewayService{
-		cfg: &config.Config{
-			Gateway: config.GatewayConfig{
-				MaxLineSize: defaultMaxLineSize,
-			},
-		},
-		httpUpstream: upstream,
-	}
-	account := &Account{
-		ID:          72,
-		Name:        "grok-auto-ws",
-		Platform:    PlatformGrok,
-		Type:        AccountTypeOAuth,
-		Concurrency: 1,
-		Status:      StatusActive,
-		Credentials: map[string]any{
-			"base_url": xai.DefaultCLIBaseURL,
-		},
-		Extra: map[string]any{
-			"grok_xai_ws_passthrough_mode": GrokXAIWSPassthroughModeAuto,
-		},
-	}
-
-	errCh := make(chan error, 1)
-	wsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := coderws.Accept(w, r, &coderws.AcceptOptions{CompressionMode: coderws.CompressionContextTakeover})
-		if err != nil {
-			errCh <- err
-			return
-		}
-		defer func() { _ = conn.CloseNow() }()
-
-		readCtx, cancelRead := context.WithTimeout(r.Context(), 3*time.Second)
-		msgType, firstMessage, err := conn.Read(readCtx)
-		cancelRead()
-		if err != nil {
-			errCh <- err
-			return
-		}
-		if msgType != coderws.MessageText {
-			errCh <- errors.New("first message was not text")
-			return
-		}
-
-		rec := httptest.NewRecorder()
-		ginCtx, _ := gin.CreateTestContext(rec)
-		req := r.Clone(r.Context())
-		req.Header = req.Header.Clone()
-		ginCtx.Request = req
-
-		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "access-token", firstMessage, nil)
-	}))
-	defer wsServer.Close()
-
-	dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
-	clientConn, _, err := coderws.Dial(dialCtx, "ws"+strings.TrimPrefix(wsServer.URL, "http"), nil)
-	cancelDial()
-	require.NoError(t, err)
-
-	payload := []byte(`{"type":"response.create","generate":true,"model":"grok-4.3","stream":true,"input":[{"role":"user","content":[{"type":"input_text","text":"describe"},{"type":"input_image","image_url":"data:image/png;base64,abc"}]}]}`)
-	writeCtx, cancelWrite := context.WithTimeout(context.Background(), 3*time.Second)
-	err = clientConn.Write(writeCtx, coderws.MessageText, payload)
-	cancelWrite()
-	require.NoError(t, err)
-
-	readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
-	msgType, event, err := clientConn.Read(readCtx)
-	cancelRead()
-	require.NoError(t, err)
-	require.Equal(t, coderws.MessageText, msgType)
-	require.Equal(t, "response.created", gjson.GetBytes(event, "type").String())
-
-	readCtx, cancelRead = context.WithTimeout(context.Background(), 3*time.Second)
-	msgType, event, err = clientConn.Read(readCtx)
-	cancelRead()
-	require.NoError(t, err)
-	require.Equal(t, coderws.MessageText, msgType)
-	require.Equal(t, "response.completed", gjson.GetBytes(event, "type").String())
-
-	_ = clientConn.Close(coderws.StatusNormalClosure, "done")
-	select {
-	case proxyErr := <-errCh:
-		require.NoError(t, proxyErr)
-	case <-time.After(3 * time.Second):
-		require.Fail(t, "proxy did not finish after client close")
-	}
-
-	require.Equal(t, 1, len(upstream.bodies))
-	require.Equal(t, "grok-4.3", gjson.GetBytes(upstream.bodies[0], "model").String())
-	require.Contains(t, string(upstream.bodies[0]), `"input_image"`)
-	require.False(t, gjson.GetBytes(upstream.bodies[0], "type").Exists())
-}
-
-func TestProxyResponsesWebSocketFromClientForGrokForceWSPassthroughRejectsImageInput(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	svc := &OpenAIGatewayService{
-		cfg: &config.Config{
-			Gateway: config.GatewayConfig{
-				MaxLineSize: defaultMaxLineSize,
-			},
-		},
-		httpUpstream: &httpUpstreamRecorder{},
-	}
-	account := &Account{
-		ID:          73,
-		Name:        "grok-force-ws",
-		Platform:    PlatformGrok,
-		Type:        AccountTypeOAuth,
-		Concurrency: 1,
-		Status:      StatusActive,
-		Credentials: map[string]any{
-			"base_url": xai.DefaultCLIBaseURL,
-		},
-		Extra: map[string]any{
-			"grok_xai_ws_passthrough_mode": GrokXAIWSPassthroughModeForce,
-		},
-	}
-
-	errCh := make(chan error, 1)
-	wsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := coderws.Accept(w, r, &coderws.AcceptOptions{CompressionMode: coderws.CompressionContextTakeover})
-		if err != nil {
-			errCh <- err
-			return
-		}
-		defer func() { _ = conn.CloseNow() }()
-
-		readCtx, cancelRead := context.WithTimeout(r.Context(), 3*time.Second)
-		msgType, firstMessage, err := conn.Read(readCtx)
-		cancelRead()
-		if err != nil {
-			errCh <- err
-			return
-		}
-		if msgType != coderws.MessageText {
-			errCh <- errors.New("first message was not text")
-			return
-		}
-
-		rec := httptest.NewRecorder()
-		ginCtx, _ := gin.CreateTestContext(rec)
-		req := r.Clone(r.Context())
-		req.Header = req.Header.Clone()
-		ginCtx.Request = req
-
-		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "access-token", firstMessage, nil)
-	}))
-	defer wsServer.Close()
-
-	dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
-	clientConn, _, err := coderws.Dial(dialCtx, "ws"+strings.TrimPrefix(wsServer.URL, "http"), nil)
-	cancelDial()
-	require.NoError(t, err)
-	defer func() { _ = clientConn.CloseNow() }()
-
-	payload := []byte(`{"type":"response.create","generate":true,"model":"grok-composer-2.5-fast","stream":true,"input":[{"type":"input_image","image_url":"data:image/png;base64,abc"}]}`)
-	writeCtx, cancelWrite := context.WithTimeout(context.Background(), 3*time.Second)
-	err = clientConn.Write(writeCtx, coderws.MessageText, payload)
-	cancelWrite()
-	require.NoError(t, err)
-
-	select {
-	case proxyErr := <-errCh:
-		var closeErr *OpenAIWSClientCloseError
-		require.ErrorAs(t, proxyErr, &closeErr)
-		require.Equal(t, coderws.StatusPolicyViolation, closeErr.StatusCode())
-	case <-time.After(3 * time.Second):
-		require.Fail(t, "proxy did not reject image input")
-	}
 }
 
 func TestOpenAIWSHTTPBridgeAcceptsFirstFrameAboveLegacy16MiB(t *testing.T) {

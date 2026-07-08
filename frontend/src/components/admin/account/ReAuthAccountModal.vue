@@ -130,14 +130,12 @@
         :show-help="isAnthropic"
         :show-proxy-warning="isAnthropic"
         :show-cookie-option="isAnthropic"
-        :show-refresh-token-option="isOpenAI || isAntigravity || isGrok"
         :allow-multiple="false"
         :method-label="t('admin.accounts.inputMethod')"
         :platform="isOpenAI ? 'openai' : isGemini ? 'gemini' : isAntigravity ? 'antigravity' : isGrok ? 'grok' : 'anthropic'"
         :show-project-id="isGemini && geminiOAuthType === 'code_assist'"
         @generate-url="handleGenerateUrl"
         @cookie-auth="handleCookieAuth"
-        @validate-refresh-token="handleValidateRefreshToken"
       />
 
     </div>
@@ -283,10 +281,8 @@ const currentError = computed(() => {
 
 // Computed
 const isManualInputMethod = computed(() => {
-  const method = oauthFlowRef.value?.inputMethod
-  if (method === 'refresh_token' || method === 'mobile_refresh_token') return false
-  // OpenAI/Gemini/Antigravity/Grok OAuth code flow always uses manual input.
-  return isOpenAILike.value || isGemini.value || isAntigravity.value || isGrok.value || method === 'manual'
+  // OpenAI/Gemini/Antigravity always use manual input (no cookie auth option)
+  return isOpenAILike.value || isGemini.value || isAntigravity.value || isGrok.value || oauthFlowRef.value?.inputMethod === 'manual'
 })
 
 const canExchangeCode = computed(() => {
@@ -538,82 +534,6 @@ const handleExchangeCode = async () => {
     } finally {
       claudeOAuth.loading.value = false
     }
-  }
-}
-
-const handleValidateRefreshToken = async (refreshTokenInput: string) => {
-  if (!props.account || !refreshTokenInput.trim()) return
-
-  if (isOpenAILike.value) {
-    openaiOAuth.loading.value = true
-    openaiOAuth.error.value = ''
-    try {
-      const tokenInfo = await openaiOAuth.validateRefreshToken(refreshTokenInput.trim(), props.account.proxy_id)
-      if (!tokenInfo) return
-      const credentials = openaiOAuth.buildCredentials(tokenInfo)
-      const extra = openaiOAuth.buildExtraInfo(tokenInfo)
-      const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
-        type: 'oauth',
-        credentials,
-        extra
-      })
-      appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
-      emit('reauthorized', updatedAccount)
-      handleClose()
-    } catch (error: any) {
-      openaiOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
-      appStore.showError(openaiOAuth.error.value)
-    } finally {
-      openaiOAuth.loading.value = false
-    }
-    return
-  }
-
-  if (isAntigravity.value) {
-    antigravityOAuth.loading.value = true
-    antigravityOAuth.error.value = ''
-    try {
-      const tokenInfo = await antigravityOAuth.validateRefreshToken(refreshTokenInput.trim(), props.account.proxy_id)
-      if (!tokenInfo) return
-      const credentials = antigravityOAuth.buildCredentials(tokenInfo)
-      const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
-        type: 'oauth',
-        credentials
-      })
-      appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
-      emit('reauthorized', updatedAccount)
-      handleClose()
-    } catch (error: any) {
-      antigravityOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
-      appStore.showError(antigravityOAuth.error.value)
-    } finally {
-      antigravityOAuth.loading.value = false
-    }
-    return
-  }
-
-  if (!isGrok.value) return
-
-  grokOAuth.loading.value = true
-  grokOAuth.error.value = ''
-  try {
-    const tokenInfo = await grokOAuth.validateRefreshToken(refreshTokenInput.trim(), props.account.proxy_id)
-    if (!tokenInfo) return
-    const credentials = grokOAuth.buildCredentials(tokenInfo)
-    const extra = grokOAuth.buildExtraInfo(tokenInfo)
-    const updatedAccount = await adminAPI.accounts.applyOAuthCredentials(props.account.id, {
-      type: 'oauth',
-      credentials,
-      extra
-    })
-    appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
-    emit('reauthorized', updatedAccount)
-    handleClose()
-  } catch (error: any) {
-    grokOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
-    appStore.showError(grokOAuth.error.value)
-  } finally {
-    grokOAuth.loading.value = false
   }
 }
 
