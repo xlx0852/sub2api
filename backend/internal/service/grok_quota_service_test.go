@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/stretchr/testify/require"
 )
 
@@ -141,6 +142,62 @@ func TestGrokQuotaServiceProbeUsageUnauthorized(t *testing.T) {
 	_, err := svc.ProbeUsage(context.Background(), 7)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "401")
+}
+
+func TestGrokQuotaServiceProbeUsagePartialFailureDoesNotPoisonStatus(t *testing.T) {
+	t.Parallel()
+
+	account := &Account{
+		ID:       9,
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "access-token",
+			"expires_at":   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+		},
+	}
+	repo := &grokQuotaAccountRepo{
+		mockAccountRepoForPlatform: &mockAccountRepoForPlatform{
+			accountsByID: map[int64]*Account{9: account},
+		},
+	}
+	// credits fails with 401; plain billing succeeds with monthly data.
+	monthlyBody := `{"config":{"monthlyLimit":{"val":15000},"used":{"val":1000},"billingPeriodEnd":"2026-08-01T00:00:00Z"}}`
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{
+			StatusCode: http.StatusUnauthorized,
+			Body:       io.NopCloser(strings.NewReader(`{"error":"unauthorized"}`)),
+		},
+		{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(monthlyBody)),
+		},
+	}}
+	svc := NewGrokQuotaService(repo, nil, NewGrokTokenProvider(repo, nil), upstream)
+
+	result, err := svc.ProbeUsage(context.Background(), 9)
+	require.NoError(t, err)
+	require.NotNil(t, result.Billing)
+	require.Equal(t, http.StatusOK, result.StatusCode)
+	require.Equal(t, http.StatusOK, result.Billing.StatusCode)
+	require.Equal(t, "SuperGrok", result.Billing.Plan)
+
+	// Persisted snapshot must not carry the failed side's 401.
+	stored, ok := repo.updates[9][grokBillingSnapshotKey].(*xai.BillingSnapshot)
+	require.True(t, ok)
+	require.Equal(t, http.StatusOK, stored.StatusCode)
+}
+
+func TestPickSuccessfulBillingStatus(t *testing.T) {
+	t.Parallel()
+
+	okSnap := &xai.BillingSnapshot{Plan: "SuperGrok"}
+	require.Equal(t, 200, pickSuccessfulBillingStatus(okSnap, 200, okSnap, 200))
+	require.Equal(t, 200, pickSuccessfulBillingStatus(nil, 401, okSnap, 200))
+	require.Equal(t, 200, pickSuccessfulBillingStatus(okSnap, 200, nil, 401))
+	require.Equal(t, 401, pickSuccessfulBillingStatus(nil, 401, nil, 0))
+	require.Equal(t, 403, pickSuccessfulBillingStatus(nil, 0, nil, 403))
 }
 
 func TestGrokQuotaServiceResetQuotaUnsupported(t *testing.T) {
