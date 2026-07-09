@@ -164,6 +164,12 @@ func isOpenAIResponsesCompactPath(c *gin.Context) bool {
 	return suffix == "/compact" || strings.HasPrefix(suffix, "/compact/")
 }
 
+// isOpenAICompactUpstreamRequest is true when the upstream request should use
+// compact endpoint semantics (legacy path or body-signal v2 bridged via /compact).
+func isOpenAICompactUpstreamRequest(c *gin.Context) bool {
+	return isOpenAIResponsesCompactPath(c) || IsOpenAIBodySignalCompactV2(c)
+}
+
 func normalizeOpenAICompactRequestBody(body []byte) ([]byte, bool, error) {
 	if len(body) == 0 {
 		return body, false, nil
@@ -193,10 +199,15 @@ func normalizeOpenAICompactRequestBody(body []byte) ([]byte, bool, error) {
 		normalized = next
 	}
 
-	if bytes.Equal(bytes.TrimSpace(body), bytes.TrimSpace(normalized)) {
-		return body, false, nil
+	// Legacy /responses/compact does not expect the v2 trigger item.
+	stripped, err := stripCompactionTriggerFromOpenAIInput(normalized)
+	if err != nil {
+		return body, false, err
 	}
-	return normalized, true, nil
+	if !bytes.Equal(bytes.TrimSpace(body), bytes.TrimSpace(stripped)) {
+		return stripped, true, nil
+	}
+	return body, false, nil
 }
 
 func resolveOpenAICompactSessionID(c *gin.Context) string {
@@ -217,6 +228,10 @@ func resolveOpenAICompactSessionID(c *gin.Context) string {
 }
 
 func openAIResponsesRequestPathSuffix(c *gin.Context) string {
+	// Body-signal v2 keeps the client path on /responses but forces upstream /compact.
+	if force := openAICompactForceUpstreamSuffix(c); force != "" {
+		return force
+	}
 	if c == nil || c.Request == nil || c.Request.URL == nil {
 		return ""
 	}

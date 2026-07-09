@@ -258,7 +258,8 @@ const requestTypeOptions = ref<SelectOption[]>([
   { value: 'ws_v2', label: t('usage.ws') },
   { value: 'stream', label: t('usage.stream') },
   { value: 'sync', label: t('usage.sync') },
-  { value: 'cyber', label: t('usage.cyber') }
+  { value: 'cyber', label: t('usage.cyber') },
+  { value: 'compact', label: t('usage.compact') }
 ])
 
 const billingTypeOptions = ref<SelectOption[]>([

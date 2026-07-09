@@ -61,6 +61,9 @@ var usageLogInsertArgTypes = [...]string{
 	"bigint",      // ws_payload_bytes
 	"integer",     // ws_event_count
 	"integer",     // ws_queue_wait_ms
+	"bigint",      // compact_payload_bytes
+	"integer",     // compact_retry_count
+	"boolean",     // compact_client_canceled
 	"text",        // user_agent
 	"text",        // ip_address
 	"integer",     // image_count
@@ -256,6 +259,9 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			ws_payload_bytes,
 			ws_event_count,
 			ws_queue_wait_ms,
+			compact_payload_bytes,
+			compact_retry_count,
+			compact_client_canceled,
 			user_agent,
 			ip_address,
 			image_count,
@@ -281,7 +287,7 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			$10, $11, $12, $13,
 			$14, $15, $16, $17,
 			$18, $19, $20, $21, $22, $23,
-			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56
+			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 		RETURNING id, created_at
@@ -710,6 +716,9 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 			ws_payload_bytes,
 			ws_event_count,
 			ws_queue_wait_ms,
+			compact_payload_bytes,
+			compact_retry_count,
+			compact_client_canceled,
 			user_agent,
 			ip_address,
 			image_count,
@@ -731,7 +740,7 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 			created_at
 		) AS (VALUES `)
 
-	args := make([]any, 0, len(keys)*56)
+	args := make([]any, 0, len(keys)*59)
 	argPos := 1
 	for idx, key := range keys {
 		if idx > 0 {
@@ -797,6 +806,9 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				ws_payload_bytes,
 				ws_event_count,
 				ws_queue_wait_ms,
+				compact_payload_bytes,
+				compact_retry_count,
+				compact_client_canceled,
 				user_agent,
 				ip_address,
 				image_count,
@@ -855,6 +867,9 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				ws_payload_bytes,
 				ws_event_count,
 				ws_queue_wait_ms,
+				compact_payload_bytes,
+				compact_retry_count,
+				compact_client_canceled,
 				user_agent,
 				ip_address,
 				image_count,
@@ -953,6 +968,9 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			ws_payload_bytes,
 			ws_event_count,
 			ws_queue_wait_ms,
+			compact_payload_bytes,
+			compact_retry_count,
+			compact_client_canceled,
 			user_agent,
 			ip_address,
 			image_count,
@@ -974,7 +992,7 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			created_at
 		) AS (VALUES `)
 
-	args := make([]any, 0, len(preparedList)*56)
+	args := make([]any, 0, len(preparedList)*59)
 	argPos := 1
 	for idx, prepared := range preparedList {
 		if idx > 0 {
@@ -1037,6 +1055,9 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			ws_payload_bytes,
 			ws_event_count,
 			ws_queue_wait_ms,
+			compact_payload_bytes,
+			compact_retry_count,
+			compact_client_canceled,
 			user_agent,
 			ip_address,
 			image_count,
@@ -1095,6 +1116,9 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			ws_payload_bytes,
 			ws_event_count,
 			ws_queue_wait_ms,
+			compact_payload_bytes,
+			compact_retry_count,
+			compact_client_canceled,
 			user_agent,
 			ip_address,
 			image_count,
@@ -1161,6 +1185,9 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			ws_payload_bytes,
 			ws_event_count,
 			ws_queue_wait_ms,
+			compact_payload_bytes,
+			compact_retry_count,
+			compact_client_canceled,
 			user_agent,
 			ip_address,
 			image_count,
@@ -1186,7 +1213,7 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			$10, $11, $12, $13,
 			$14, $15, $16, $17,
 			$18, $19, $20, $21, $22, $23,
-			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56
+			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 	`, prepared.args...)
@@ -1216,6 +1243,9 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 	wsPayloadBytes := nullInt64(log.WSPayloadBytes)
 	wsEventCount := nullInt(log.WSEventCount)
 	wsQueueWaitMs := nullInt(log.WSQueueWaitMs)
+	compactPayloadBytes := nullInt64(log.CompactPayloadBytes)
+	compactRetryCount := nullInt(log.CompactRetryCount)
+	compactClientCanceled := nullBool(log.CompactClientCanceled)
 	userAgent := nullString(log.UserAgent)
 	ipAddress := nullString(log.IPAddress)
 	imageSize := nullString(log.ImageSize)
@@ -1285,6 +1315,9 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 			wsPayloadBytes,
 			wsEventCount,
 			wsQueueWaitMs,
+			compactPayloadBytes,
+			compactRetryCount,
+			compactClientCanceled,
 			userAgent,
 			ipAddress,
 			log.ImageCount,

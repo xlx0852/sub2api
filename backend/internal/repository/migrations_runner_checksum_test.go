@@ -161,4 +161,13 @@ func TestIsMigrationChecksumCompatible(t *testing.T) {
 		)
 		require.False(t, ok)
 	})
+
+	t.Run("170历史compact指标迁移checksum可兼容", func(t *testing.T) {
+		ok := isMigrationChecksumCompatible(
+			"170_usage_log_compact_metrics.sql",
+			"c6854d9cfe08b316d688dbf2a52ed4d63f44977c1a840c6dbd887b5a1008460b",
+			"9ae7dec58793fc0eb97f99e1bc403caede1f5c83470856e65bac45cedc0f2acc",
+		)
+		require.True(t, ok)
+	})
 }

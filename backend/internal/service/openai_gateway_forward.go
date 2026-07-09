@@ -85,8 +85,22 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 		return nil, errors.New("openai ws v1 is temporarily unsupported; use ws v2")
 	}
+	bodySignalCompactV2 := IsOpenAIBodySignalCompactV2(c)
+	// Compact (legacy or body-signal v2) must not ride WSv2; keep HTTP compact contract.
+	if IsOpenAICompactRequest(c) {
+		wsDecision = OpenAIWSProtocolDecision{
+			Transport: OpenAIUpstreamTransportHTTPSSE,
+			Reason:    "compact_request_forces_http",
+		}
+		if c != nil {
+			c.Set("openai_ws_transport_decision", string(wsDecision.Transport))
+			c.Set("openai_ws_transport_reason", wsDecision.Reason)
+		}
+	}
+
 	passthroughEnabled := account.IsOpenAIPassthroughEnabled()
-	if passthroughEnabled {
+	// Body-signal v2 needs the compact SSE bridge; skip generic passthrough.
+	if passthroughEnabled && !bodySignalCompactV2 {
 		// 透传分支只需要轻量提取字段，避免热路径全量 Unmarshal。
 		reasoningEffort := extractOpenAIReasoningEffortFromBody(body, reqModel)
 		// 国产模型默认 effort 补充：也要用 mappedModel 判定是否是 passback-required 上游。
@@ -188,7 +202,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		markPatchSet("model", billingModel)
 	}
 	upstreamModel := billingModel
-	isCompactRequest := isOpenAIResponsesCompactPath(c)
+	isCompactRequest := isOpenAICompactUpstreamRequest(c)
 	compactMapped := false
 	if isCompactRequest {
 		compactMappedModel := resolveOpenAICompactForwardModel(account, billingModel)
@@ -663,12 +677,39 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		return nil, wsErr
 	}
 
+	// Body-signal v2: client stays on streaming /responses, upstream uses legacy
+	// /responses/compact JSON, then we bridge to Codex v2 SSE terminal events.
+	upstreamBody := body
+	upstreamStream := reqStream
+	if bodySignalCompactV2 {
+		prepared, prepErr := prepareOpenAIBodySignalV2UpstreamBody(body)
+		if prepErr != nil {
+			return nil, prepErr
+		}
+		upstreamBody = prepared
+		upstreamStream = false
+		reqStream = true // client contract remains SSE
+	}
+
 	httpInvalidEncryptedContentRetryTried := false
 	for {
-		// Build upstream request
-		upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
-		upstreamReq, err := s.buildUpstreamRequest(upstreamCtx, c, account, body, token, reqStream, promptCacheKey, isCodexCLI)
-		releaseUpstreamCtx()
+		// Build upstream request.
+		// Body-signal v2 keeps the compact soft-timeout deadline but detaches from
+		// client cancellation so upstream success can still be drained for billing.
+		// Other paths still detach so client disconnect can finish upstream for billing.
+		var upstreamReq *http.Request
+		var err error
+		upstreamCtx := ctx
+		if bodySignalCompactV2 {
+			var releaseUpstreamCtx context.CancelFunc
+			upstreamCtx, releaseUpstreamCtx = detachOpenAICompactUpstreamContext(ctx)
+			defer releaseUpstreamCtx()
+			upstreamReq, err = s.buildUpstreamRequest(upstreamCtx, c, account, upstreamBody, token, upstreamStream, promptCacheKey, isCodexCLI)
+		} else {
+			upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+			upstreamReq, err = s.buildUpstreamRequest(upstreamCtx, c, account, upstreamBody, token, upstreamStream, promptCacheKey, isCodexCLI)
+			releaseUpstreamCtx()
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -681,9 +722,20 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 
 		// Send request
 		upstreamStart := time.Now()
-		resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+		var resp *http.Response
+		if bodySignalCompactV2 {
+			// Start downstream SSE+keepalive before headers arrive; legacy compact
+			// often withholds response headers until compaction finishes.
+			resp, err = s.doOpenAIUpstreamWithCompactV2Keepalive(upstreamCtx, c, upstreamReq, proxyURL, account)
+		} else {
+			resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+		}
 		SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 		if err != nil {
+			// Soft-timeout / client cancel while waiting for unary compact.
+			if bodySignalCompactV2 && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+				return nil, err
+			}
 			// Transport-level failure (proxy/DNS/TCP/TLS — no HTTP response). Convert to
 			// a failover so the handler switches to a healthy account, and temporarily
 			// unschedule the account on durable faults (e.g. rejected proxy credentials).
@@ -708,6 +760,14 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 					body, err = marshalOpenAIUpstreamJSON(decoded)
 					if err != nil {
 						return nil, fmt.Errorf("serialize invalid_encrypted_content retry body: %w", err)
+					}
+					upstreamBody = body
+					if bodySignalCompactV2 {
+						prepared, prepErr := prepareOpenAIBodySignalV2UpstreamBody(body)
+						if prepErr != nil {
+							return nil, prepErr
+						}
+						upstreamBody = prepared
 					}
 					httpInvalidEncryptedContentRetryTried = true
 					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying non-WSv2 request once after invalid_encrypted_content (account: %s)", account.Name)
@@ -742,6 +802,12 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 					RetryableOnSameAccount: account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
 				}
 			}
+			// Body-signal v2 may have already committed 200 text/event-stream headers
+			// via keepalives from a prior soft-timeout attempt; JSON error bodies would
+			// corrupt the stream, so terminate with a Responses response.failed event.
+			if bodySignalCompactV2 && IsOpenAICompactV2SSEStarted(c) {
+				return nil, s.handleOpenAICompactV2UpstreamErrorSSE(ctx, resp, c, account, respBody, billingModel)
+			}
 			return s.handleErrorResponse(ctx, resp, c, account, body, billingModel)
 		}
 		defer func() { _ = resp.Body.Close() }()
@@ -760,7 +826,51 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		responseID := ""
 		imageCount := 0
 		var imageOutputSizes []string
-		if reqStream {
+		if bodySignalCompactV2 {
+			// Upstream is non-stream compact JSON; bridge to v2 SSE for the client.
+			bridgedID, bridgedUsage, bridgeErr := s.handleOpenAIBodySignalV2LegacyCompactResponse(upstreamCtx, c, resp, originalModel)
+			if bridgeErr != nil {
+				isCancelOrTimeout := errors.Is(bridgeErr, context.Canceled) || errors.Is(bridgeErr, context.DeadlineExceeded)
+				if !isCancelOrTimeout {
+					writeOpenAICompactV2StreamError(c, bridgeErr.Error())
+				}
+				// Upstream compact already spent tokens when usage was parsed from the
+				// JSON body. Downstream write/client disconnect must not drop billing
+				// (mirrors image partial-error accounting in the handler).
+				if bridgedUsage != nil {
+					payloadBytes := int64(len(upstreamBody))
+					clientCanceled := c != nil && c.Request != nil && c.Request.Context().Err() != nil
+					return &OpenAIForwardResult{
+						RequestID:             resp.Header.Get("x-request-id"),
+						ResponseID:            strings.TrimSpace(bridgedID),
+						Usage:                 *bridgedUsage,
+						Model:                 originalModel,
+						BillingModel:          billingModel,
+						UpstreamModel:         upstreamModel,
+						ServiceTier:           serviceTier,
+						ReasoningEffort:       reasoningEffort,
+						Stream:                true,
+						OpenAIWSMode:          false,
+						Duration:              time.Since(startTime),
+						Compact:               true,
+						CompactPayloadBytes:   &payloadBytes,
+						CompactClientCanceled: clientCanceled,
+						ClientDisconnect:      clientCanceled,
+					}, bridgeErr
+				}
+				return nil, bridgeErr
+			}
+			responseID = strings.TrimSpace(bridgedID)
+			usage = bridgedUsage
+			// Treat bridge start as first-byte for health metrics when available.
+			if IsOpenAICompactV2SSEStarted(c) {
+				elapsed := int(time.Since(startTime).Milliseconds())
+				if elapsed < 0 {
+					elapsed = 0
+				}
+				firstTokenMs = &elapsed
+			}
+		} else if reqStream {
 			streamResult, err := s.handleStreamingResponse(ctx, resp, c, account, startTime, originalModel, upstreamModel)
 			if err != nil {
 				return nil, err
@@ -779,6 +889,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			responseID = strings.TrimSpace(nonStreamResult.responseID)
 			imageCount = nonStreamResult.imageCount
 			imageOutputSizes = nonStreamResult.imageOutputSizes
+			if isCompactRequest {
+				MarkOpenAICompactTerminalCommitted(c)
+			}
 		}
 		s.bindHTTPResponseAccount(ctx, c, account, responseID)
 
@@ -807,6 +920,14 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			OpenAIWSMode:    false,
 			Duration:        time.Since(startTime),
 			FirstTokenMs:    firstTokenMs,
+		}
+		if isCompactRequest || bodySignalCompactV2 {
+			payloadBytes := int64(len(upstreamBody))
+			forwardResult.Compact = true
+			forwardResult.CompactPayloadBytes = &payloadBytes
+			// Client disconnect must use the inbound request context, not a
+			// soft-timeout child context (which may be canceled by the gateway).
+			forwardResult.CompactClientCanceled = c != nil && c.Request != nil && c.Request.Context().Err() != nil
 		}
 		if imageCount > 0 {
 			forwardResult.ImageCount = imageCount
@@ -885,7 +1006,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			req.Header.Set("originator", resolveOpenAIUpstreamOriginator(c, isCodexCLI))
 		}
 		apiKeyID := getAPIKeyIDFromContext(c)
-		if isOpenAIResponsesCompactPath(c) {
+		if isOpenAICompactUpstreamRequest(c) {
 			req.Header.Set("accept", "application/json")
 			if req.Header.Get("version") == "" {
 				req.Header.Set("version", codexCLIVersion)

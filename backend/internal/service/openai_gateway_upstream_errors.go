@@ -280,6 +280,20 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 ) (*OpenAIForwardResult, error) {
 	body := s.readUpstreamErrorBody(resp)
 
+	// Body-signal v2 may already have committed 200 text/event-stream (keepalives
+	// from a prior soft-timeout attempt). JSON c.Data/c.JSON would corrupt the
+	// stream and leave Codex without response.failed/completed. Terminate via SSE.
+	if IsOpenAIBodySignalCompactV2(c) && IsOpenAICompactV2SSEStarted(c) {
+		reqModel := ""
+		if len(requestedModel) > 0 {
+			reqModel = strings.TrimSpace(requestedModel[0])
+		}
+		if reqModel == "" {
+			reqModel, _, _ = extractOpenAIRequestMetaFromBody(requestBody)
+		}
+		return nil, s.handleOpenAICompactV2UpstreamErrorSSE(ctx, resp, c, account, body, reqModel)
+	}
+
 	// cyber_policy 硬阻断：透传上游原始错误体给客户端（不重包成通用 502），不冷却账号。
 	// 当前请求恒透传（需求1）；标记供 handler 事后写风控/邮件。400 cyber 不可 failover
 	// （shouldFailoverUpstreamError(400)=false），故走到此处即可安全早返回。

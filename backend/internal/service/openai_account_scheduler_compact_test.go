@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
@@ -13,6 +14,7 @@ import (
 // 验证 compact 调度时显式支持 (tier=2) 优先于未探测 (tier=1)。
 func TestOpenAIGatewayService_SelectAccountWithScheduler_CompactPrefersSupportedOverUnknown(t *testing.T) {
 	resetOpenAIAdvancedSchedulerSettingCacheForTest()
+	defer resetOpenAIAdvancedSchedulerSettingCacheForTest()
 
 	ctx := context.Background()
 	groupID := int64(91001)
@@ -45,6 +47,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_CompactPrefersSupported
 		cache:              &schedulerTestGatewayCache{},
 		cfg:                cfg,
 		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
+		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true"),
 	}
 
 	selection, _, err := svc.SelectAccountWithScheduler(
@@ -67,6 +70,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_CompactPrefersSupported
 // 验证 force_off / 已探测不支持 (tier=0) 的账号不会被 compact 请求选中。
 func TestOpenAIGatewayService_SelectAccountWithScheduler_CompactRejectsExplicitlyUnsupported(t *testing.T) {
 	resetOpenAIAdvancedSchedulerSettingCacheForTest()
+	defer resetOpenAIAdvancedSchedulerSettingCacheForTest()
 
 	ctx := context.Background()
 	groupID := int64(91002)
@@ -120,6 +124,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_CompactRejectsExplicitl
 // 验证当没有"已知支持"账号时，compact 请求会回退到"未探测"账号。
 func TestOpenAIGatewayService_SelectAccountWithScheduler_CompactFallsBackToUnknown(t *testing.T) {
 	resetOpenAIAdvancedSchedulerSettingCacheForTest()
+	defer resetOpenAIAdvancedSchedulerSettingCacheForTest()
 
 	ctx := context.Background()
 	groupID := int64(91003)
@@ -168,6 +173,125 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_CompactFallsBackToUnkno
 	require.NotNil(t, selection)
 	require.NotNil(t, selection.Account)
 	require.Equal(t, int64(71021), selection.Account.ID, "unknown account should be picked when no supported account available")
+}
+
+func TestOpenAIGatewayService_SelectAccountWithScheduler_CompactPenalizesRecentFailures(t *testing.T) {
+	resetOpenAIAdvancedSchedulerSettingCacheForTest()
+	defer resetOpenAIAdvancedSchedulerSettingCacheForTest()
+
+	ctx := context.Background()
+	groupID := int64(91004)
+	accounts := []Account{
+		{
+			ID:          71030,
+			Platform:    PlatformOpenAI,
+			Type:        AccountTypeAPIKey,
+			Status:      StatusActive,
+			Schedulable: true,
+			Concurrency: 1,
+			Priority:    0,
+			Extra:       map[string]any{"openai_compact_supported": true},
+		},
+		{
+			ID:          71031,
+			Platform:    PlatformOpenAI,
+			Type:        AccountTypeAPIKey,
+			Status:      StatusActive,
+			Schedulable: true,
+			Concurrency: 1,
+			Priority:    0,
+			Extra:       map[string]any{"openai_compact_supported": true},
+		},
+	}
+	cfg := &config.Config{}
+	cfg.Gateway.Scheduling.LoadBatchEnabled = false
+	// Explicit compact weights: config.LoadConfig sets these via viper.IsSet;
+	// bare test configs need them manually so penalty scoring is effective.
+	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.CompactError = 1.0
+	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.CompactLatency = 0.5
+	svc := &OpenAIGatewayService{
+		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: accounts},
+		cache:              &schedulerTestGatewayCache{},
+		cfg:                cfg,
+		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
+		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true"),
+	}
+
+	svc.ReportOpenAICompactScheduleResult(71030, false, 55*time.Second)
+	svc.ReportOpenAICompactScheduleResult(71031, true, 10*time.Second)
+
+	selection, _, err := svc.SelectAccountWithScheduler(
+		ctx,
+		&groupID,
+		"",
+		"",
+		"gpt-5.4",
+		nil,
+		OpenAIUpstreamTransportAny,
+		true,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, selection)
+	require.NotNil(t, selection.Account)
+	require.Equal(t, int64(71031), selection.Account.ID, "compact request should avoid account with recent compact failure")
+}
+
+func TestOpenAIGatewayService_SelectAccountWithScheduler_CompactHardPenaltyUsesUnknownHealthy(t *testing.T) {
+	resetOpenAIAdvancedSchedulerSettingCacheForTest()
+	defer resetOpenAIAdvancedSchedulerSettingCacheForTest()
+
+	ctx := context.Background()
+	groupID := int64(91005)
+	accounts := []Account{
+		{
+			ID:          71040,
+			Platform:    PlatformOpenAI,
+			Type:        AccountTypeAPIKey,
+			Status:      StatusActive,
+			Schedulable: true,
+			Concurrency: 1,
+			Priority:    0,
+			Extra:       map[string]any{"openai_compact_supported": true},
+		},
+		{
+			ID:          71041,
+			Platform:    PlatformOpenAI,
+			Type:        AccountTypeAPIKey,
+			Status:      StatusActive,
+			Schedulable: true,
+			Concurrency: 1,
+			Priority:    0,
+			Extra:       map[string]any{},
+		},
+	}
+	cfg := &config.Config{}
+	cfg.Gateway.Scheduling.LoadBatchEnabled = false
+	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.CompactError = 1.0
+	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.CompactLatency = 0.5
+	svc := &OpenAIGatewayService{
+		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: accounts},
+		cache:              &schedulerTestGatewayCache{},
+		cfg:                cfg,
+		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
+		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true"),
+	}
+
+	svc.ReportOpenAICompactScheduleResult(71040, false, 45*time.Second)
+
+	selection, _, err := svc.SelectAccountWithScheduler(
+		ctx,
+		&groupID,
+		"",
+		"",
+		"gpt-5.4",
+		nil,
+		OpenAIUpstreamTransportAny,
+		true,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, selection)
+	require.NotNil(t, selection.Account)
+	require.Equal(t, int64(71041), selection.Account.ID, "compact hard penalty should put slow supported account behind healthy unknown candidates")
 }
 
 // TestOpenAICompactSupportTier 验证 tier 分类逻辑。

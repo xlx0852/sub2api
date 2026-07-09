@@ -78,6 +78,9 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // ws_payload_bytes
 			sqlmock.AnyArg(), // ws_event_count
 			sqlmock.AnyArg(), // ws_queue_wait_ms
+			sqlmock.AnyArg(), // compact_payload_bytes
+			sqlmock.AnyArg(), // compact_retry_count
+			sqlmock.AnyArg(), // compact_client_canceled
 			sqlmock.AnyArg(), // user_agent
 			sqlmock.AnyArg(), // ip_address
 			log.ImageCount,
@@ -159,6 +162,9 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			int16(service.RequestTypeSync),
 			false,
 			false,
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
@@ -271,11 +277,13 @@ func TestPrepareUsageLogInsert_PersistsImageSizeMetadata(t *testing.T) {
 		CreatedAt:          time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC),
 	})
 
-	require.Equal(t, sql.NullString{String: imageSize, Valid: true}, prepared.args[40])
-	require.Equal(t, sql.NullString{String: inputSize, Valid: true}, prepared.args[41])
-	require.Equal(t, sql.NullString{String: outputSize, Valid: true}, prepared.args[42])
-	require.Equal(t, sql.NullString{String: source, Valid: true}, prepared.args[43])
-	breakdownJSON, ok := prepared.args[44].(string)
+	// Indices track usageLogInsertArgTypes: compact_* occupy 37-39, then
+	// user_agent/ip/image_count, then image size metadata at 43-47.
+	require.Equal(t, sql.NullString{String: imageSize, Valid: true}, prepared.args[43])
+	require.Equal(t, sql.NullString{String: inputSize, Valid: true}, prepared.args[44])
+	require.Equal(t, sql.NullString{String: outputSize, Valid: true}, prepared.args[45])
+	require.Equal(t, sql.NullString{String: source, Valid: true}, prepared.args[46])
+	breakdownJSON, ok := prepared.args[47].(string)
 	require.True(t, ok)
 	require.JSONEq(t, `{"1K":1,"4K":1}`, breakdownJSON)
 }
@@ -773,10 +781,39 @@ func (s usageLogScannerStub) Scan(dest ...any) error {
 	return nil
 }
 
+// usageLogScanTailAfterWS returns the trailing scan fields starting at
+// compact_* (must stay aligned with usageLogSelectColumns / scanUsageLog).
+func usageLogScanCompactAndTail(imageCount int, imageSize, imageInput, imageOutput, imageSource, imageBreakdown, serviceTier string, now time.Time) []any {
+	return []any{
+		sql.NullInt64{},  // compact_payload_bytes
+		sql.NullInt64{},  // compact_retry_count
+		sql.NullBool{},   // compact_client_canceled
+		sql.NullString{}, // user_agent
+		sql.NullString{}, // ip_address
+		imageCount,
+		sql.NullString{Valid: imageSize != "", String: imageSize},
+		sql.NullString{Valid: imageInput != "", String: imageInput},
+		sql.NullString{Valid: imageOutput != "", String: imageOutput},
+		sql.NullString{Valid: imageSource != "", String: imageSource},
+		sql.NullString{Valid: imageBreakdown != "", String: imageBreakdown},
+		sql.NullString{Valid: serviceTier != "", String: serviceTier},
+		sql.NullString{},  // reasoning_effort
+		sql.NullString{},  // inbound_endpoint
+		sql.NullString{},  // upstream_endpoint
+		false,             // cache_ttl_overridden
+		sql.NullInt64{},   // channel_id
+		sql.NullString{},  // model_mapping_chain
+		sql.NullString{},  // billing_tier
+		sql.NullString{},  // billing_mode
+		sql.NullFloat64{}, // account_stats_cost
+		now,
+	}
+}
+
 func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 	t.Run("image_size_metadata_is_scanned", func(t *testing.T) {
 		now := time.Now().UTC()
-		log, err := scanUsageLog(usageLogScannerStub{values: []any{
+		values := []any{
 			int64(4),
 			int64(13),
 			int64(23),
@@ -796,34 +833,17 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			int16(service.RequestTypeSync),
 			false,
 			false,
-			sql.NullInt64{},
-			sql.NullInt64{},
-			sql.NullBool{},
-			sql.NullInt64{},
-			sql.NullInt64{},
-			sql.NullInt64{},
-			sql.NullInt64{},
-			sql.NullInt64{},
-			sql.NullString{},
-			sql.NullString{},
-			2,
-			sql.NullString{Valid: true, String: "4K"},
-			sql.NullString{Valid: true, String: "1024x1024"},
-			sql.NullString{Valid: true, String: "3840x2160"},
-			sql.NullString{Valid: true, String: "output"},
-			sql.NullString{Valid: true, String: `{"4K":2}`},
-			sql.NullString{},
-			sql.NullString{},
-			sql.NullString{},
-			sql.NullString{},
-			false,
-			sql.NullInt64{},
-			sql.NullString{},
-			sql.NullString{},
-			sql.NullString{},
-			sql.NullFloat64{},
-			now,
-		}})
+			sql.NullInt64{}, // duration_ms
+			sql.NullInt64{}, // first_token_ms
+			sql.NullBool{},  // ws_conn_reused
+			sql.NullInt64{}, // ws_preflight_fail_count
+			sql.NullInt64{}, // ws_conn_pick_ms
+			sql.NullInt64{}, // ws_payload_bytes
+			sql.NullInt64{}, // ws_event_count
+			sql.NullInt64{}, // ws_queue_wait_ms
+		}
+		values = append(values, usageLogScanCompactAndTail(2, "4K", "1024x1024", "3840x2160", "output", `{"4K":2}`, "", now)...)
+		log, err := scanUsageLog(usageLogScannerStub{values: values})
 		require.NoError(t, err)
 		require.Equal(t, 2, log.ImageCount)
 		require.NotNil(t, log.ImageSize)
@@ -839,7 +859,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 
 	t.Run("request_type_ws_v2_overrides_legacy", func(t *testing.T) {
 		now := time.Now().UTC()
-		log, err := scanUsageLog(usageLogScannerStub{values: []any{
+		values := []any{
 			int64(1),  // id
 			int64(10), // user_id
 			int64(20), // api_key_id
@@ -878,26 +898,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullInt64{},
 			sql.NullInt64{},
-			sql.NullString{},
-			sql.NullString{},
-			0,
-			sql.NullString{},
-			sql.NullString{}, // image_input_size
-			sql.NullString{}, // image_output_size
-			sql.NullString{}, // image_size_source
-			sql.NullString{}, // image_size_breakdown
-			sql.NullString{Valid: true, String: "priority"},
-			sql.NullString{},
-			sql.NullString{},
-			sql.NullString{},
-			false,
-			sql.NullInt64{},   // channel_id
-			sql.NullString{},  // model_mapping_chain
-			sql.NullString{},  // billing_tier
-			sql.NullString{},  // billing_mode
-			sql.NullFloat64{}, // account_stats_cost
-			now,
-		}})
+		}
+		values = append(values, usageLogScanCompactAndTail(0, "", "", "", "", "", "priority", now)...)
+		log, err := scanUsageLog(usageLogScannerStub{values: values})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
 		require.Equal(t, "priority", *log.ServiceTier)
@@ -908,7 +911,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 
 	t.Run("request_type_unknown_falls_back_to_legacy", func(t *testing.T) {
 		now := time.Now().UTC()
-		log, err := scanUsageLog(usageLogScannerStub{values: []any{
+		values := []any{
 			int64(2),
 			int64(11),
 			int64(21),
@@ -936,26 +939,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullInt64{},
 			sql.NullInt64{},
-			sql.NullString{},
-			sql.NullString{},
-			0,
-			sql.NullString{},
-			sql.NullString{}, // image_input_size
-			sql.NullString{}, // image_output_size
-			sql.NullString{}, // image_size_source
-			sql.NullString{}, // image_size_breakdown
-			sql.NullString{Valid: true, String: "flex"},
-			sql.NullString{},
-			sql.NullString{},
-			sql.NullString{},
-			false,
-			sql.NullInt64{},   // channel_id
-			sql.NullString{},  // model_mapping_chain
-			sql.NullString{},  // billing_tier
-			sql.NullString{},  // billing_mode
-			sql.NullFloat64{}, // account_stats_cost
-			now,
-		}})
+		}
+		values = append(values, usageLogScanCompactAndTail(0, "", "", "", "", "", "flex", now)...)
+		log, err := scanUsageLog(usageLogScannerStub{values: values})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
 		require.Equal(t, "flex", *log.ServiceTier)
@@ -966,7 +952,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 
 	t.Run("service_tier_is_scanned", func(t *testing.T) {
 		now := time.Now().UTC()
-		log, err := scanUsageLog(usageLogScannerStub{values: []any{
+		values := []any{
 			int64(3),
 			int64(12),
 			int64(22),
@@ -994,29 +980,12 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullInt64{},
 			sql.NullInt64{},
-			sql.NullString{},
-			sql.NullString{},
-			0,
-			sql.NullString{},
-			sql.NullString{}, // image_input_size
-			sql.NullString{}, // image_output_size
-			sql.NullString{}, // image_size_source
-			sql.NullString{}, // image_size_breakdown
-			sql.NullString{Valid: true, String: "priority"},
-			sql.NullString{},
-			sql.NullString{},
-			sql.NullString{},
-			false,
-			sql.NullInt64{},   // channel_id
-			sql.NullString{},  // model_mapping_chain
-			sql.NullString{},  // billing_tier
-			sql.NullString{},  // billing_mode
-			sql.NullFloat64{}, // account_stats_cost
-			now,
-		}})
+		}
+		values = append(values, usageLogScanCompactAndTail(0, "", "", "", "", "", "priority", now)...)
+		log, err := scanUsageLog(usageLogScannerStub{values: values})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
 		require.Equal(t, "priority", *log.ServiceTier)
+		require.Equal(t, service.RequestTypeSync, log.RequestType)
 	})
-
 }

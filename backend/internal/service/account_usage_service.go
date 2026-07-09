@@ -164,6 +164,9 @@ type AccountRequestTypePerformanceStats struct {
 	AvgWSPayloadBytes        *float64 `json:"avg_ws_payload_bytes,omitempty"`
 	AvgWSEventCount          *float64 `json:"avg_ws_event_count,omitempty"`
 	AvgWSQueueWaitMs         *float64 `json:"avg_ws_queue_wait_ms,omitempty"`
+	AvgCompactPayloadBytes   *float64 `json:"avg_compact_payload_bytes,omitempty"`
+	CompactRetryCount        int64    `json:"compact_retry_count"`
+	CompactClientCanceled    int64    `json:"compact_client_canceled_count"`
 }
 
 // AccountPerformanceStats is the lightweight account-list latency snapshot.
@@ -1282,15 +1285,19 @@ func buildAccountPerformanceStatsFromLogs(accountID int64, windowHours int, logs
 		wsPreflightFailCount  int64
 		wsConnReusedCount     int64
 		wsConnReusedMetricCnt int64
+		compactPayloadBytes   []int64
+		compactRetryCount     int64
+		compactClientCanceled int64
 	}
 
 	buckets := map[RequestType]*requestTypeBucket{
-		RequestTypeStream: {},
-		RequestTypeWSV2:   {},
+		RequestTypeStream:  {},
+		RequestTypeWSV2:    {},
+		RequestTypeCompact: {},
 	}
 	for _, usageLog := range logs {
 		requestType := usageLog.EffectiveRequestType()
-		if requestType != RequestTypeStream && requestType != RequestTypeWSV2 {
+		if requestType != RequestTypeStream && requestType != RequestTypeWSV2 && requestType != RequestTypeCompact {
 			continue
 		}
 		if usageLog.DurationMs == nil {
@@ -1322,10 +1329,19 @@ func buildAccountPerformanceStatsFromLogs(accountID int64, windowHours int, logs
 				bucket.wsConnReusedCount++
 			}
 		}
+		if usageLog.CompactPayloadBytes != nil {
+			bucket.compactPayloadBytes = append(bucket.compactPayloadBytes, *usageLog.CompactPayloadBytes)
+		}
+		if usageLog.CompactRetryCount != nil {
+			bucket.compactRetryCount += int64(*usageLog.CompactRetryCount)
+		}
+		if usageLog.CompactClientCanceled != nil && *usageLog.CompactClientCanceled {
+			bucket.compactClientCanceled++
+		}
 	}
 
 	stats := make([]AccountRequestTypePerformanceStats, 0, len(buckets))
-	for _, requestType := range []RequestType{RequestTypeWSV2, RequestTypeStream} {
+	for _, requestType := range []RequestType{RequestTypeWSV2, RequestTypeStream, RequestTypeCompact} {
 		bucket := buckets[requestType]
 		if len(bucket.durations) == 0 {
 			continue
@@ -1346,6 +1362,9 @@ func buildAccountPerformanceStatsFromLogs(accountID int64, windowHours int, logs
 			AvgWSPayloadBytes:        float64PtrFromInt64Average(bucket.wsPayloadBytes),
 			AvgWSEventCount:          float64PtrFromIntAverage(bucket.wsEventCounts),
 			AvgWSQueueWaitMs:         float64PtrFromIntAverage(bucket.wsQueueWaitMs),
+			AvgCompactPayloadBytes:   float64PtrFromInt64Average(bucket.compactPayloadBytes),
+			CompactRetryCount:        bucket.compactRetryCount,
+			CompactClientCanceled:    bucket.compactClientCanceled,
 		}
 		stats = append(stats, stat)
 	}

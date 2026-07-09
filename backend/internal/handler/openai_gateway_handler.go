@@ -41,6 +41,82 @@ type OpenAIGatewayHandler struct {
 	cfg                      *config.Config
 }
 
+const defaultOpenAIRemoteCompactSoftTimeout = 45 * time.Second
+
+func (h *OpenAIGatewayHandler) openAIRemoteCompactSoftTimeout() time.Duration {
+	if h != nil && h.cfg != nil && h.cfg.Gateway.OpenAIScheduler.CodexCompactSoftTimeoutMs > 0 {
+		return time.Duration(h.cfg.Gateway.OpenAIScheduler.CodexCompactSoftTimeoutMs) * time.Millisecond
+	}
+	return defaultOpenAIRemoteCompactSoftTimeout
+}
+
+// recordOpenAICompactSoftTimeoutUsage writes a zero-token compact usage row for the
+// abandoned soft-timeout attempt so ops can audit retries that never reached a final response.
+func (h *OpenAIGatewayHandler) recordOpenAICompactSoftTimeoutUsage(
+	c *gin.Context,
+	apiKey *service.APIKey,
+	subject middleware2.AuthSubject,
+	account *service.Account,
+	subscription *service.UserSubscription,
+	channelMapping service.ChannelMappingResult,
+	reqModel string,
+	body []byte,
+	forwardBody []byte,
+	latency time.Duration,
+	compactRetryCount int,
+) {
+	if h == nil || h.gatewayService == nil || apiKey == nil || account == nil || c == nil {
+		return
+	}
+	payloadBytes := int64(len(forwardBody))
+	if payloadBytes <= 0 {
+		payloadBytes = int64(len(body))
+	}
+	clientCanceled := c.Request != nil && c.Request.Context().Err() != nil
+	result := &service.OpenAIForwardResult{
+		Model:                 reqModel,
+		Usage:                 service.OpenAIUsage{},
+		Duration:              latency,
+		Compact:               true,
+		CompactPayloadBytes:   &payloadBytes,
+		CompactRetryCount:     compactRetryCount,
+		CompactClientCanceled: clientCanceled,
+		Stream:                false,
+	}
+	userAgent := c.GetHeader("User-Agent")
+	clientIP := ip.GetClientIP(c)
+	requestPayloadHash := service.HashUsageRequestPayload(body)
+	inboundEndpoint := GetInboundEndpoint(c)
+	upstreamEndpoint := resolveOpenAIUpstreamEndpoint(c, account)
+	quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
+	user := apiKey.User
+	h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
+		if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
+			Result:             result,
+			APIKey:             apiKey,
+			User:               user,
+			Account:            account,
+			Subscription:       subscription,
+			InboundEndpoint:    inboundEndpoint,
+			UpstreamEndpoint:   upstreamEndpoint,
+			UserAgent:          userAgent,
+			IPAddress:          clientIP,
+			RequestPayloadHash: requestPayloadHash,
+			APIKeyService:      h.apiKeyService,
+			QuotaPlatform:      quotaPlatform,
+			ChannelUsageFields: channelMapping.ToUsageFields(reqModel, ""),
+		}); err != nil {
+			logger.L().With(
+				zap.String("component", "handler.openai_gateway.responses"),
+				zap.Int64("user_id", subject.UserID),
+				zap.Int64("api_key_id", apiKey.ID),
+				zap.Int64("account_id", account.ID),
+				zap.String("model", reqModel),
+			).Warn("openai.compact_soft_timeout_record_usage_failed", zap.Error(err))
+		}
+	})
+}
+
 func resolveOpenAIMessagesDispatchMappedModel(apiKey *service.APIKey, requestedModel string) string {
 	if apiKey == nil || apiKey.Group == nil {
 		return ""
@@ -250,8 +326,18 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 
+	compactMode := service.OpenAICompactMode(c)
+	requireCompact := service.IsOpenAICompactRequest(c)
+	// Body-signal v2 clients always expect Responses SSE terminal events.
+	if compactMode == service.OpenAICompactModeBodySignalV2 {
+		reqStream = true
+	}
+	requestType := service.RequestTypeFromLegacy(reqStream, false)
+	if requireCompact {
+		requestType = service.RequestTypeCompact
+	}
 	setOpsRequestContext(c, reqModel, reqStream)
-	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(reqStream, false)))
+	setOpsEndpointContext(c, "", int16(requestType))
 
 	if decision := h.checkContentModeration(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIResponses, reqModel, body); decision != nil && decision.Blocked {
 		h.errorResponse(c, contentModerationStatus(decision), contentModerationErrorCode(decision), decision.Message)
@@ -321,10 +407,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	if h.rejectIfCyberSessionBlocked(c, apiKey, sessionHashBody, reqModel, cyberBlockFormatResponses) {
 		return
 	}
-	requireCompact := isOpenAIRemoteCompactPath(c)
-
 	maxAccountSwitches := h.maxAccountSwitches
 	switchCount := 0
+	compactRetryCount := 0
 	failedAccountIDs := make(map[int64]struct{})
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
@@ -404,14 +489,28 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
 		forwardStart := time.Now()
 		writerSizeBeforeForward := c.Writer.Size()
+		forwardCtx := c.Request.Context()
+		var cancelForward context.CancelFunc
+		compactSoftTimeoutActive := false
+		compactSoftTimeout := h.openAIRemoteCompactSoftTimeout()
+		if requireCompact && compactRetryCount == 0 {
+			forwardCtx, cancelForward = context.WithTimeout(forwardCtx, compactSoftTimeout)
+			compactSoftTimeoutActive = true
+		}
 		result, err := func() (*service.OpenAIForwardResult, error) {
 			defer func() {
 				if accountReleaseFunc != nil {
 					accountReleaseFunc()
 				}
+				if cancelForward != nil {
+					cancelForward()
+				}
 			}()
-			return h.gatewayService.Forward(c.Request.Context(), c, account, forwardBody)
+			return h.gatewayService.Forward(forwardCtx, c, account, forwardBody)
 		}()
+		if service.IsOpenAICompactV2SSEStarted(c) {
+			streamStarted = true
+		}
 		cyberBlockKeyHTTP := ""
 		if service.GetOpsCyberPolicy(c) != nil {
 			cyberBlockKeyHTTP = service.CyberSessionBlockKey(apiKey.ID, c, sessionHashBody)
@@ -428,20 +527,62 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			service.SetOpsLatencyMs(c, service.OpsTimeToFirstTokenMsKey, int64(*result.FirstTokenMs))
 		}
 		if err != nil {
-			if result != nil && result.ImageCount > 0 {
-				reqLog.Warn("openai.forward_partial_error_with_image_result",
+			// Partial success: upstream work (image generation / compact) already
+			// produced billable usage. Fall through to usage recording instead of
+			// the pure-error retry/failover path.
+			if result != nil && (result.ImageCount > 0 || result.Compact) {
+				reqLog.Warn("openai.forward_partial_error_with_result",
 					zap.Int64("account_id", account.ID),
 					zap.Int("image_count", result.ImageCount),
+					zap.Bool("compact", result.Compact),
+					zap.Bool("client_disconnect", result.ClientDisconnect),
 					zap.Error(err),
 				)
 			} else {
-				var failoverErr *service.UpstreamFailoverError
-				if errors.As(err, &failoverErr) {
-					if c.Writer.Size() != writerSizeBeforeForward {
-						h.handleFailoverExhausted(c, failoverErr, true)
+				canRetryCompact := service.CanRetryOpenAICompactAfterForwardError(c, writerSizeBeforeForward)
+				if requireCompact && compactSoftTimeoutActive && errors.Is(err, context.DeadlineExceeded) && c.Request.Context().Err() == nil && canRetryCompact {
+					compactLatency := time.Since(forwardStart)
+					h.gatewayService.ReportOpenAICompactScheduleResult(account.ID, false, compactLatency)
+					h.gatewayService.RecordOpenAIAccountSwitch()
+					failedAccountIDs[account.ID] = struct{}{}
+					compactRetryCount++
+					payloadBytes := int64(len(forwardBody))
+					reqLog.Warn("codex.remote_compact.soft_timeout_switching",
+						zap.Int64("account_id", account.ID),
+						zap.String("account_name", account.Name),
+						zap.Int64("timeout_ms", compactSoftTimeout.Milliseconds()),
+						zap.Int64("latency_ms", compactLatency.Milliseconds()),
+						zap.Int64("payload_bytes", payloadBytes),
+						zap.Int("compact_retry_count", compactRetryCount),
+						zap.Int("switch_count", switchCount+1),
+						zap.Int("max_switches", maxAccountSwitches),
+						zap.String("model", reqModel),
+						zap.String("compact_mode", compactMode),
+					)
+					// Persist a zero-token compact attempt for diagnostics/audit.
+					h.recordOpenAICompactSoftTimeoutUsage(
+						c, apiKey, subject, account, subscription, channelMapping,
+						reqModel, body, forwardBody, compactLatency, compactRetryCount,
+					)
+					if switchCount >= maxAccountSwitches {
+						h.handleFailoverExhaustedSimple(c, http.StatusGatewayTimeout, streamStarted)
 						return
 					}
-					h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+					switchCount++
+					continue
+				}
+				var failoverErr *service.UpstreamFailoverError
+				if errors.As(err, &failoverErr) {
+					if !canRetryCompact {
+						h.handleFailoverExhausted(c, failoverErr, streamStarted || c.Writer.Size() != writerSizeBeforeForward)
+						return
+					}
+					if !requireCompact {
+						h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+					}
+					if requireCompact {
+						h.gatewayService.ReportOpenAICompactScheduleResult(account.ID, false, time.Since(forwardStart))
+					}
 					// 池模式：同账号重试
 					if failoverErr.RetryableOnSameAccount {
 						retryLimit := account.GetPoolModeRetryCount()
@@ -481,7 +622,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					)
 					continue
 				}
-				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+				if !requireCompact {
+					h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+				}
+				if requireCompact {
+					h.gatewayService.ReportOpenAICompactScheduleResult(account.ID, false, time.Since(forwardStart))
+				}
 				upstreamErrorAlreadyCommunicated := openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err)
 				wroteFallback := false
 				if !upstreamErrorAlreadyCommunicated {
@@ -502,13 +648,34 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			}
 		}
 		if result != nil {
+			if requireCompact {
+				result.CompactRetryCount = compactRetryCount
+			}
 			// 排除 spark 影子:其 codex_* 仅由 QueryUsage(/wham/usage bengalfox)更新(外审第7轮 P1)。
 			if account.Type == service.AccountTypeOAuth && !account.IsShadow() {
 				h.gatewayService.UpdateCodexUsageSnapshotFromHeaders(c.Request.Context(), account.ID, result.ResponseHeaders)
 			}
-			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, result.FirstTokenMs)
-		} else {
-			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
+			// Compact requests use dedicated ReportOpenAICompactScheduleResult; do not
+			// pollute the generic EWMA with compact latency/failures.
+			if !requireCompact {
+				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, result.FirstTokenMs)
+			}
+			if requireCompact {
+				h.gatewayService.ReportOpenAICompactScheduleResult(account.ID, true, result.Duration)
+			}
+		} else if err == nil {
+			// err==nil && result==nil should not happen on the success path; do not
+			// mark compact health as success (would poison EWMA).
+			reqLog.Warn("openai.forward_nil_result_without_error",
+				zap.Int64("account_id", account.ID),
+				zap.Bool("require_compact", requireCompact),
+			)
+			if !requireCompact {
+				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+			}
+			if requireCompact {
+				h.gatewayService.ReportOpenAICompactScheduleResult(account.ID, false, time.Since(forwardStart))
+			}
 		}
 
 		// 捕获请求信息（用于异步记录，避免在 goroutine 中访问 gin.Context）
@@ -565,7 +732,7 @@ func isOpenAIRemoteCompactPath(c *gin.Context) bool {
 }
 
 // isBareOpenAIResponsesPath 仅匹配裸 /responses 端点（无 /compact 等子路径），
-// body-signal 提升只允许发生在这里，避免误伤 /responses/{id}/... 形态的请求。
+// body-signal 检测只允许发生在这里，避免误伤 /responses/{id}/... 形态的请求。
 func isBareOpenAIResponsesPath(c *gin.Context) bool {
 	if c == nil || c.Request == nil || c.Request.URL == nil {
 		return false
@@ -574,40 +741,58 @@ func isBareOpenAIResponsesPath(c *gin.Context) bool {
 	return strings.HasSuffix(normalizedPath, "/responses")
 }
 
-// normalizeOpenAIResponsesCompactRequest 统一处理两种入站 compact 形态：
-// path-based（POST /v1/responses/compact）与 Codex remote compact v2 的
-// body-signal（普通 POST /v1/responses 的 input 中携带 type=compaction_trigger，
-// 见 #3777）。body-signal 命中时在 stream 解析、compact body 归一化与
-// requireCompact 调度判定之前改写 URL path，使后续全部链路（含 passthrough
-// 分支与上游 URL 构建）与 path-based 完全一致。
+// normalizeOpenAIResponsesCompactRequest 分类两种入站 compact 形态：
+//
+//  1. legacy_path: POST .../responses/compact → unary JSON contract
+//  2. body_signal_v2: POST .../responses + input.compaction_trigger → client SSE
+//     contract on /responses (Codex remote compaction v2). Upstream may still use
+//     legacy /responses/compact JSON and be bridged to SSE.
+//
 // 返回归一化后的 body；ok=false 表示错误响应已写出，调用方应直接 return。
 func (h *OpenAIGatewayHandler) normalizeOpenAIResponsesCompactRequest(c *gin.Context, reqLog *zap.Logger, body []byte) ([]byte, bool) {
-	isCompactRequest := service.IsOpenAIResponsesCompactPathForTest(c)
-	if !isCompactRequest && isBareOpenAIResponsesPath(c) && service.HasCompactionTriggerInInput(body) {
-		c.Request.URL.Path = strings.TrimRight(c.Request.URL.Path, "/") + "/compact"
-		isCompactRequest = true
-		reqLog.Info("codex.remote_compact.detected_body_signal")
-	}
-	if !isCompactRequest {
+	if service.IsOpenAIResponsesCompactPathForTest(c) || isOpenAIRemoteCompactPath(c) {
+		service.SetOpenAICompactMode(c, service.OpenAICompactModeLegacyPath)
+		if compactSeed := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String()); compactSeed != "" {
+			c.Set(service.OpenAICompactSessionSeedKeyForTest(), compactSeed)
+		}
+		normalizedCompactBody, normalizedCompact, compactErr := service.NormalizeOpenAICompactRequestBodyForTest(body)
+		if compactErr != nil {
+			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to normalize compact request body")
+			return nil, false
+		}
+		if normalizedCompact {
+			body = normalizedCompactBody
+		}
 		return body, true
 	}
-	if compactSeed := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String()); compactSeed != "" {
-		c.Set(service.OpenAICompactSessionSeedKeyForTest(), compactSeed)
+
+	if isBareOpenAIResponsesPath(c) && service.HasCompactionTriggerInInput(body) {
+		service.SetOpenAICompactMode(c, service.OpenAICompactModeBodySignalV2)
+		// Force upstream legacy compact endpoint while keeping client path on /responses.
+		service.SetOpenAICompactForceUpstreamSuffix(c, "/compact")
+		if compactSeed := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String()); compactSeed != "" {
+			c.Set(service.OpenAICompactSessionSeedKeyForTest(), compactSeed)
+		}
+		reqLog.Info("codex.remote_compact.detected_body_signal_v2",
+			zap.String("compact_mode", service.OpenAICompactModeBodySignalV2),
+			zap.String("client_path", c.Request.URL.Path),
+			zap.Bool("stream", gjson.GetBytes(body, "stream").Bool()),
+		)
+		// Keep client body (including stream=true + compaction_trigger). Upstream
+		// body is prepared later in Forward for the legacy compact bridge.
+		return body, true
 	}
-	normalizedCompactBody, normalizedCompact, compactErr := service.NormalizeOpenAICompactRequestBodyForTest(body)
-	if compactErr != nil {
-		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to normalize compact request body")
-		return nil, false
-	}
-	if normalizedCompact {
-		body = normalizedCompactBody
-	}
+
 	return body, true
 }
 
 func (h *OpenAIGatewayHandler) logOpenAIRemoteCompactOutcome(c *gin.Context, startedAt time.Time) {
-	if !isOpenAIRemoteCompactPath(c) {
+	compactMode := service.OpenAICompactMode(c)
+	if compactMode == "" && !isOpenAIRemoteCompactPath(c) {
 		return
+	}
+	if compactMode == "" {
+		compactMode = service.OpenAICompactModeLegacyPath
 	}
 
 	var (
@@ -639,10 +824,16 @@ func (h *OpenAIGatewayHandler) logOpenAIRemoteCompactOutcome(c *gin.Context, sta
 	fields := []zap.Field{
 		zap.String("component", "handler.openai_gateway.responses"),
 		zap.Bool("remote_compact", true),
+		zap.String("compact_mode", compactMode),
+		zap.Bool("compact_bridge_used", service.IsOpenAICompactBridgeUsed(c)),
+		zap.Bool("compact_v2_sse_started", service.IsOpenAICompactV2SSEStarted(c)),
+		zap.Bool("compact_terminal_committed", service.IsOpenAICompactTerminalCommitted(c)),
 		zap.String("compact_outcome", outcome),
 		zap.Int("status_code", status),
 		zap.Int64("latency_ms", latencyMs),
 		zap.String("path", path),
+		zap.Bool("client_context_canceled", errors.Is(ctx.Err(), context.Canceled)),
+		zap.Bool("client_context_deadline_exceeded", errors.Is(ctx.Err(), context.DeadlineExceeded)),
 		zap.Bool("force_codex_cli", h != nil && h.cfg != nil && h.cfg.Gateway.ForceCodexCLI),
 	}
 
@@ -1809,7 +2000,7 @@ func (h *OpenAIGatewayHandler) submitUsageRecordTask(parent context.Context, tas
 }
 
 func (h *OpenAIGatewayHandler) submitOpenAIUsageRecordTask(parent context.Context, result *service.OpenAIForwardResult, task service.UsageRecordTask) {
-	if result != nil && result.ImageCount > 0 {
+	if result != nil && (result.ImageCount > 0 || result.Compact) {
 		h.submitMandatoryUsageRecordTask(parent, task)
 		return
 	}
@@ -2003,6 +2194,11 @@ func shouldLogOpenAIForwardFailureAsWarn(c *gin.Context, wroteFallback bool) boo
 func openAIForwardErrorAlreadyCommunicated(c *gin.Context, writerSizeBeforeForward int, err error) bool {
 	if err == nil || c == nil || c.Writer == nil {
 		return false
+	}
+	// Compact v2 bridge / SSE error path marks terminal commit explicitly so the
+	// handler must not append a second response.failed ("Upstream request failed").
+	if service.IsResponseCommitted(c) || service.IsOpenAICompactTerminalCommitted(c) {
+		return true
 	}
 	if c.Writer.Size() == writerSizeBeforeForward {
 		return false

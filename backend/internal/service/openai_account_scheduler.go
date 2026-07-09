@@ -35,6 +35,11 @@ const (
 	openAIQuotaHeadroomSnapshotStaleAfter = 8 * time.Hour
 )
 
+const (
+	openAICompactHardPenaltyMinDuration = 30 * time.Second
+	openAICompactHardPenaltyDuration    = 10 * time.Minute
+)
+
 type cachedOpenAIAdvancedSchedulerSetting struct {
 	enabled                     bool
 	stickyWeightedEnabled       bool
@@ -103,6 +108,7 @@ type OpenAIAccountSchedulerMetricsSnapshot struct {
 type OpenAIAccountScheduler interface {
 	Select(ctx context.Context, req OpenAIAccountScheduleRequest) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error)
 	ReportResult(accountID int64, success bool, firstTokenMs *int)
+	ReportCompactResult(accountID int64, success bool, duration time.Duration)
 	ReportSwitch()
 	SnapshotMetrics() OpenAIAccountSchedulerMetricsSnapshot
 }
@@ -169,8 +175,11 @@ type openAIAccountRuntimeStats struct {
 }
 
 type openAIAccountRuntimeStat struct {
-	errorRateEWMABits atomic.Uint64
-	ttftEWMABits      atomic.Uint64
+	errorRateEWMABits        atomic.Uint64
+	ttftEWMABits             atomic.Uint64
+	compactErrorRateEWMABits atomic.Uint64
+	compactLatencyEWMABits   atomic.Uint64
+	compactPenaltyUntilNano  atomic.Int64
 }
 
 func newOpenAIAccountRuntimeStats() *openAIAccountRuntimeStats {
@@ -187,6 +196,7 @@ func (s *openAIAccountRuntimeStats) loadOrCreate(accountID int64) *openAIAccount
 
 	stat := &openAIAccountRuntimeStat{}
 	stat.ttftEWMABits.Store(math.Float64bits(math.NaN()))
+	stat.compactLatencyEWMABits.Store(math.Float64bits(math.NaN()))
 	actual, loaded := s.accounts.LoadOrStore(accountID, stat)
 	if !loaded {
 		s.accountCount.Add(1)
@@ -204,6 +214,20 @@ func updateEWMAAtomic(target *atomic.Uint64, sample float64, alpha float64) {
 		oldBits := target.Load()
 		oldValue := math.Float64frombits(oldBits)
 		newValue := alpha*sample + (1-alpha)*oldValue
+		if target.CompareAndSwap(oldBits, math.Float64bits(newValue)) {
+			return
+		}
+	}
+}
+
+func updateEWMAAtomicAllowNaN(target *atomic.Uint64, sample float64, alpha float64) {
+	for {
+		oldBits := target.Load()
+		oldValue := math.Float64frombits(oldBits)
+		newValue := sample
+		if !math.IsNaN(oldValue) {
+			newValue = alpha*sample + (1-alpha)*oldValue
+		}
 		if target.CompareAndSwap(oldBits, math.Float64bits(newValue)) {
 			return
 		}
@@ -261,6 +285,52 @@ func (s *openAIAccountRuntimeStats) snapshot(accountID int64) (errorRate float64
 		return errorRate, 0, false
 	}
 	return errorRate, ttftValue, true
+}
+
+func (s *openAIAccountRuntimeStats) reportCompact(accountID int64, success bool, duration time.Duration) {
+	if s == nil || accountID <= 0 {
+		return
+	}
+	const alpha = 0.25
+	stat := s.loadOrCreate(accountID)
+
+	errorSample := 1.0
+	if success {
+		errorSample = 0.0
+	}
+	updateEWMAAtomic(&stat.compactErrorRateEWMABits, errorSample, alpha)
+
+	if duration > 0 {
+		updateEWMAAtomicAllowNaN(&stat.compactLatencyEWMABits, float64(duration.Milliseconds()), alpha)
+	}
+	if success {
+		stat.compactPenaltyUntilNano.Store(0)
+		return
+	}
+	if duration >= openAICompactHardPenaltyMinDuration {
+		stat.compactPenaltyUntilNano.Store(time.Now().Add(openAICompactHardPenaltyDuration).UnixNano())
+	}
+}
+
+func (s *openAIAccountRuntimeStats) snapshotCompact(accountID int64) (errorRate float64, latencyMs float64, hasLatency bool, penaltyActive bool) {
+	if s == nil || accountID <= 0 {
+		return 0, 0, false, false
+	}
+	value, ok := s.accounts.Load(accountID)
+	if !ok {
+		return 0, 0, false, false
+	}
+	stat, _ := value.(*openAIAccountRuntimeStat)
+	if stat == nil {
+		return 0, 0, false, false
+	}
+	penaltyActive = stat.compactPenaltyUntilNano.Load() > time.Now().UnixNano()
+	errorRate = clamp01(math.Float64frombits(stat.compactErrorRateEWMABits.Load()))
+	latencyValue := math.Float64frombits(stat.compactLatencyEWMABits.Load())
+	if math.IsNaN(latencyValue) {
+		return errorRate, 0, false, penaltyActive
+	}
+	return errorRate, latencyValue, true, penaltyActive
 }
 
 func (s *openAIAccountRuntimeStats) size() int {
@@ -513,13 +583,17 @@ func (s *defaultOpenAIAccountScheduler) shouldEscapeStickyAccount(accountID int6
 }
 
 type openAIAccountCandidateScore struct {
-	account   *Account
-	loadInfo  *AccountLoadInfo
-	score     float64
-	priority  int
-	errorRate float64
-	ttft      float64
-	hasTTFT   bool
+	account              *Account
+	loadInfo             *AccountLoadInfo
+	score                float64
+	priority             int
+	errorRate            float64
+	ttft                 float64
+	hasTTFT              bool
+	compactErrorRate     float64
+	compactLatencyMs     float64
+	hasCompactLatencyMs  bool
+	compactPenaltyActive bool
 }
 
 type openAIAccountCandidateHeap []openAIAccountCandidateScore
@@ -714,6 +788,17 @@ func buildOpenAIWeightedSelectionOrder(
 	return order
 }
 
+// hasOpenAICompactFailureSignals is true only when some candidate has compact
+// error history. Successful latency alone must not disable weighted exploration.
+func hasOpenAICompactFailureSignals(candidates []openAIAccountCandidateScore) bool {
+	for _, candidate := range candidates {
+		if candidate.compactPenaltyActive || candidate.compactErrorRate > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *defaultOpenAIAccountScheduler) buildOpenAIAccountLoadPlan(
 	ctx context.Context,
 	req OpenAIAccountScheduleRequest,
@@ -727,15 +812,23 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAIAccountLoadPlan(
 			loadInfo = &AccountLoadInfo{AccountID: account.ID}
 		}
 		errorRate, ttft, hasTTFT := 0.0, 0.0, false
+		compactErrorRate, compactLatencyMs, hasCompactLatencyMs, compactPenaltyActive := 0.0, 0.0, false, false
 		if s.stats != nil {
 			errorRate, ttft, hasTTFT = s.stats.snapshot(account.ID)
+			if req.RequireCompact {
+				compactErrorRate, compactLatencyMs, hasCompactLatencyMs, compactPenaltyActive = s.stats.snapshotCompact(account.ID)
+			}
 		}
 		allCandidates = append(allCandidates, openAIAccountCandidateScore{
-			account:   account,
-			loadInfo:  loadInfo,
-			errorRate: errorRate,
-			ttft:      ttft,
-			hasTTFT:   hasTTFT,
+			account:              account,
+			loadInfo:             loadInfo,
+			errorRate:            errorRate,
+			ttft:                 ttft,
+			hasTTFT:              hasTTFT,
+			compactErrorRate:     compactErrorRate,
+			compactLatencyMs:     compactLatencyMs,
+			hasCompactLatencyMs:  hasCompactLatencyMs,
+			compactPenaltyActive: compactPenaltyActive,
 		})
 	}
 
@@ -769,6 +862,8 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAIAccountLoadPlan(
 	loadRateSumSquares := 0.0
 	minTTFT, maxTTFT := 0.0, 0.0
 	hasTTFTSample := false
+	minCompactLatency, maxCompactLatency := 0.0, 0.0
+	hasCompactLatencySample := false
 	for i := range candidates {
 		candidate := &candidates[i]
 		candidate.priority = openAIAccountSchedulingPriority(candidate.account)
@@ -791,6 +886,19 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAIAccountLoadPlan(
 				}
 				if candidate.ttft > maxTTFT {
 					maxTTFT = candidate.ttft
+				}
+			}
+		}
+		if req.RequireCompact && candidate.hasCompactLatencyMs && candidate.compactLatencyMs > 0 {
+			if !hasCompactLatencySample {
+				minCompactLatency, maxCompactLatency = candidate.compactLatencyMs, candidate.compactLatencyMs
+				hasCompactLatencySample = true
+			} else {
+				if candidate.compactLatencyMs < minCompactLatency {
+					minCompactLatency = candidate.compactLatencyMs
+				}
+				if candidate.compactLatencyMs > maxCompactLatency {
+					maxCompactLatency = candidate.compactLatencyMs
 				}
 			}
 		}
@@ -858,6 +966,16 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAIAccountLoadPlan(
 		if weights.QuotaHeadroom > 0 {
 			quotaHeadroomFactor = openAIQuotaHeadroomFactor(item.account, now)
 		}
+		compactErrorFactor := 0.0
+		compactLatencyFactor := 0.0
+		if req.RequireCompact {
+			compactErrorFactor = 1 - clamp01(item.compactErrorRate)
+			// Neutral baseline when no latency sample; better (lower) latency scores higher.
+			compactLatencyFactor = 0.5
+			if item.hasCompactLatencyMs && hasCompactLatencySample && maxCompactLatency > minCompactLatency {
+				compactLatencyFactor = 1 - clamp01((item.compactLatencyMs-minCompactLatency)/(maxCompactLatency-minCompactLatency))
+			}
+		}
 
 		item.score = weights.Priority*priorityFactor +
 			weights.Load*loadFactor +
@@ -865,7 +983,9 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAIAccountLoadPlan(
 			weights.ErrorRate*errorFactor +
 			weights.TTFT*ttftFactor +
 			weights.Reset*resetFactor +
-			weights.QuotaHeadroom*quotaHeadroomFactor
+			weights.QuotaHeadroom*quotaHeadroomFactor +
+			weights.CompactError*compactErrorFactor +
+			weights.CompactLatency*compactLatencyFactor
 		if req.StickyWeighted {
 			if req.PreviousResponseCanMove && req.StickyPreviousAccountID > 0 && item.account.ID == req.StickyPreviousAccountID {
 				item.score += weights.Previous
@@ -916,23 +1036,40 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAISelectionOrder(
 				}
 			}
 		}
+		// Only force deterministic ranking when compact failures exist; pure
+		// success/latency history should still explore via weighted selection.
+		if req.RequireCompact && hasOpenAICompactFailureSignals(ranked) {
+			return ranked
+		}
 		return buildOpenAIWeightedSelectionOrder(ranked, req)
 	}
 
 	if req.RequireCompact {
 		supported := make([]openAIAccountCandidateScore, 0, len(plan.candidates))
 		unknown := make([]openAIAccountCandidateScore, 0, len(plan.candidates))
+		supportedPenalized := make([]openAIAccountCandidateScore, 0, len(plan.candidates))
+		unknownPenalized := make([]openAIAccountCandidateScore, 0, len(plan.candidates))
 		for _, candidate := range plan.candidates {
 			switch openAICompactSupportTier(candidate.account) {
 			case 2:
-				supported = append(supported, candidate)
+				if candidate.compactPenaltyActive {
+					supportedPenalized = append(supportedPenalized, candidate)
+				} else {
+					supported = append(supported, candidate)
+				}
 			case 1:
-				unknown = append(unknown, candidate)
+				if candidate.compactPenaltyActive {
+					unknownPenalized = append(unknownPenalized, candidate)
+				} else {
+					unknown = append(unknown, candidate)
+				}
 			}
 		}
 		selectionOrder := make([]openAIAccountCandidateScore, 0, len(plan.allCandidates))
 		selectionOrder = append(selectionOrder, buildSelectionOrder(supported)...)
 		selectionOrder = append(selectionOrder, buildSelectionOrder(unknown)...)
+		selectionOrder = append(selectionOrder, buildSelectionOrder(supportedPenalized)...)
+		selectionOrder = append(selectionOrder, buildSelectionOrder(unknownPenalized)...)
 		if len(plan.staleSnapshotCompactRetry) > 0 && s.service.schedulerSnapshot != nil {
 			selectionOrder = append(selectionOrder, sortOpenAICompactRetryCandidates(plan.staleSnapshotCompactRetry)...)
 		}
@@ -1402,6 +1539,13 @@ func (s *defaultOpenAIAccountScheduler) ReportResult(accountID int64, success bo
 	s.stats.report(accountID, success, firstTokenMs)
 }
 
+func (s *defaultOpenAIAccountScheduler) ReportCompactResult(accountID int64, success bool, duration time.Duration) {
+	if s == nil || s.stats == nil {
+		return
+	}
+	s.stats.reportCompact(accountID, success, duration)
+}
+
 func (s *defaultOpenAIAccountScheduler) ReportSwitch() {
 	if s == nil {
 		return
@@ -1849,6 +1993,14 @@ func (s *OpenAIGatewayService) ReportOpenAIAccountScheduleResult(accountID int64
 	scheduler.ReportResult(accountID, success, firstTokenMs)
 }
 
+func (s *OpenAIGatewayService) ReportOpenAICompactScheduleResult(accountID int64, success bool, duration time.Duration) {
+	scheduler := s.getOpenAIAccountScheduler(context.Background())
+	if scheduler == nil {
+		return
+	}
+	scheduler.ReportCompactResult(accountID, success, duration)
+}
+
 func (s *OpenAIGatewayService) RecordOpenAIAccountSwitch() {
 	scheduler := s.getOpenAIAccountScheduler(context.Background())
 	if scheduler == nil {
@@ -1925,30 +2077,40 @@ func (s *OpenAIGatewayService) openAIStickyEscapeConfig() openAIStickyEscapeConf
 }
 
 func (s *OpenAIGatewayService) openAIWSSchedulerWeights() GatewayOpenAIWSSchedulerScoreWeightsView {
-	if s != nil && s.cfg != nil {
-		return GatewayOpenAIWSSchedulerScoreWeightsView{
-			Priority:      s.cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Priority,
-			Load:          s.cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Load,
-			Queue:         s.cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Queue,
-			ErrorRate:     s.cfg.Gateway.OpenAIWS.SchedulerScoreWeights.ErrorRate,
-			TTFT:          s.cfg.Gateway.OpenAIWS.SchedulerScoreWeights.TTFT,
-			Reset:         s.cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Reset,
-			QuotaHeadroom: s.cfg.Gateway.OpenAIWS.SchedulerScoreWeights.QuotaHeadroom,
-			Previous:      s.cfg.Gateway.OpenAIWS.SchedulerScoreWeights.PreviousResponse,
-			SessionSticky: s.cfg.Gateway.OpenAIWS.SchedulerScoreWeights.SessionSticky,
-		}
+	defaults := GatewayOpenAIWSSchedulerScoreWeightsView{
+		Priority:       1.0,
+		Load:           1.0,
+		Queue:          0.7,
+		ErrorRate:      0.8,
+		TTFT:           0.5,
+		Reset:          0.0,
+		QuotaHeadroom:  0.0,
+		CompactError:   1.0,
+		CompactLatency: 0.5,
+		Previous:       5.0,
+		SessionSticky:  3.0,
 	}
-	return GatewayOpenAIWSSchedulerScoreWeightsView{
-		Priority:      1.0,
-		Load:          1.0,
-		Queue:         0.7,
-		ErrorRate:     0.8,
-		TTFT:          0.5,
-		Reset:         0.0,
-		QuotaHeadroom: 0.0,
-		Previous:      5.0,
-		SessionSticky: 3.0,
+	if s == nil || s.cfg == nil {
+		return defaults
 	}
+	w := s.cfg.Gateway.OpenAIWS.SchedulerScoreWeights
+	view := GatewayOpenAIWSSchedulerScoreWeightsView{
+		Priority:       w.Priority,
+		Load:           w.Load,
+		Queue:          w.Queue,
+		ErrorRate:      w.ErrorRate,
+		TTFT:           w.TTFT,
+		Reset:          w.Reset,
+		QuotaHeadroom:  w.QuotaHeadroom,
+		CompactError:   w.CompactError,
+		CompactLatency: w.CompactLatency,
+		Previous:       w.PreviousResponse,
+		SessionSticky:  w.SessionSticky,
+	}
+	// Compact weights default to non-zero in the defaults struct above and in
+	// config.LoadConfig (guarded by viper.IsSet). Do NOT override explicit zero
+	// here: zero is a valid way to disable compact penalties from config.
+	return view
 }
 
 func (s *OpenAIGatewayService) openAIWSSchedulerWeightsForRequest(ctx context.Context) GatewayOpenAIWSSchedulerScoreWeightsView {
@@ -1981,6 +2143,10 @@ func applyOpenAIAdvancedSchedulerWeightOverrides(
 			weights.Reset = value
 		case "quota_headroom":
 			weights.QuotaHeadroom = value
+		case "compact_error":
+			weights.CompactError = value
+		case "compact_latency":
+			weights.CompactLatency = value
 		case "previous_response":
 			weights.Previous = value
 		case "session_sticky":
@@ -1997,10 +2163,12 @@ type GatewayOpenAIWSSchedulerScoreWeightsView struct {
 	ErrorRate float64
 	TTFT      float64
 	// Reset 倾向「会话窗口最早重置」的账号；0 表示关闭（默认）。
-	Reset         float64
-	QuotaHeadroom float64
-	Previous      float64
-	SessionSticky float64
+	Reset          float64
+	QuotaHeadroom  float64
+	CompactError   float64
+	CompactLatency float64
+	Previous       float64
+	SessionSticky  float64
 }
 
 type OpenAIAccountSchedulerScoreSnapshot struct {

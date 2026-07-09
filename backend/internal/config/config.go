@@ -1020,6 +1020,10 @@ type GatewayOpenAIWSSchedulerScoreWeights struct {
 	Reset float64 `mapstructure:"reset"`
 	// QuotaHeadroom 倾向 7d 剩余额度更健康的账号；默认 0（关闭，不改变原有行为）。
 	QuotaHeadroom float64 `mapstructure:"quota_headroom"`
+	// CompactError / CompactLatency 仅在 RequireCompact 调度时叠加。
+	// 默认 1.0 / 0.5，避免固定 +0~2 淹没常规权重。
+	CompactError   float64 `mapstructure:"compact_error"`
+	CompactLatency float64 `mapstructure:"compact_latency"`
 	// PreviousResponse/SessionSticky 仅在开启 OpenAI 高级调度的粘性加权时生效。
 	PreviousResponse float64 `mapstructure:"previous_response"`
 	SessionSticky    float64 `mapstructure:"session_sticky"`
@@ -1033,6 +1037,9 @@ type GatewayOpenAISchedulerConfig struct {
 	StickyEscapeTTFTMs int `mapstructure:"sticky_escape_ttft_ms"`
 	// StickyEscapeErrorRate: 错误率 EWMA 超过该阈值时跳过 sticky
 	StickyEscapeErrorRate float64 `mapstructure:"sticky_escape_error_rate"`
+	// CodexCompactSoftTimeoutMs: /responses/compact soft-timeout 换号阈值（毫秒）。
+	// 默认 45000；仅在首次 compact 尝试上生效，超时且客户端仍在线、响应未提交时换号一次。
+	CodexCompactSoftTimeoutMs int `mapstructure:"codex_compact_soft_timeout_ms"`
 }
 
 // GatewayUsageRecordConfig 使用量记录异步队列配置
@@ -1476,6 +1483,15 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	}
 	if !cfg.Gateway.OpenAIScheduler.StickyEscapeEnabled && !viper.IsSet("gateway.openai_scheduler.sticky_escape_enabled") {
 		cfg.Gateway.OpenAIScheduler.StickyEscapeEnabled = true
+	}
+	if cfg.Gateway.OpenAIScheduler.CodexCompactSoftTimeoutMs == 0 {
+		cfg.Gateway.OpenAIScheduler.CodexCompactSoftTimeoutMs = 45000
+	}
+	if cfg.Gateway.OpenAIWS.SchedulerScoreWeights.CompactError == 0 && !viper.IsSet("gateway.openai_ws.scheduler_score_weights.compact_error") {
+		cfg.Gateway.OpenAIWS.SchedulerScoreWeights.CompactError = 1.0
+	}
+	if cfg.Gateway.OpenAIWS.SchedulerScoreWeights.CompactLatency == 0 && !viper.IsSet("gateway.openai_ws.scheduler_score_weights.compact_latency") {
+		cfg.Gateway.OpenAIWS.SchedulerScoreWeights.CompactLatency = 0.5
 	}
 
 	cfg.RunMode = NormalizeRunMode(cfg.RunMode)
@@ -1994,6 +2010,12 @@ func setDefaults() {
 	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.quota_headroom", 0.0)
 	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.previous_response", 5.0)
 	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.session_sticky", 3.0)
+	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.compact_error", 1.0)
+	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.compact_latency", 0.5)
+	viper.SetDefault("gateway.openai_scheduler.sticky_escape_enabled", true)
+	viper.SetDefault("gateway.openai_scheduler.sticky_escape_ttft_ms", 15000)
+	viper.SetDefault("gateway.openai_scheduler.sticky_escape_error_rate", 0.5)
+	viper.SetDefault("gateway.openai_scheduler.codex_compact_soft_timeout_ms", 45000)
 	// OpenAI HTTP upstream protocol strategy
 	viper.SetDefault("gateway.openai_http2.enabled", true)
 	viper.SetDefault("gateway.openai_http2.allow_proxy_fallback_to_http1", true)
@@ -2833,6 +2855,8 @@ func (c *Config) Validate() error {
 		c.Gateway.OpenAIWS.SchedulerScoreWeights.ErrorRate < 0 ||
 		c.Gateway.OpenAIWS.SchedulerScoreWeights.TTFT < 0 ||
 		c.Gateway.OpenAIWS.SchedulerScoreWeights.QuotaHeadroom < 0 ||
+		c.Gateway.OpenAIWS.SchedulerScoreWeights.CompactError < 0 ||
+		c.Gateway.OpenAIWS.SchedulerScoreWeights.CompactLatency < 0 ||
 		c.Gateway.OpenAIWS.SchedulerScoreWeights.PreviousResponse < 0 ||
 		c.Gateway.OpenAIWS.SchedulerScoreWeights.SessionSticky < 0 {
 		return fmt.Errorf("gateway.openai_ws.scheduler_score_weights.* must be non-negative")
@@ -2851,6 +2875,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.OpenAIScheduler.StickyEscapeErrorRate < 0 || c.Gateway.OpenAIScheduler.StickyEscapeErrorRate > 1 {
 		return fmt.Errorf("gateway.openai_scheduler.sticky_escape_error_rate must be between 0 and 1")
+	}
+	if c.Gateway.OpenAIScheduler.CodexCompactSoftTimeoutMs <= 0 {
+		return fmt.Errorf("gateway.openai_scheduler.codex_compact_soft_timeout_ms must be positive")
 	}
 	if c.Gateway.MaxLineSize < 0 {
 		return fmt.Errorf("gateway.max_line_size must be non-negative")
