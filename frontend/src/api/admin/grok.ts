@@ -61,8 +61,36 @@ export interface GrokQuotaSnapshot {
   updated_at: string
 }
 
+/** Official SuperGrok billing snapshot from cli-chat-proxy /v1/billing (CPAMC-compatible). */
+export interface GrokBillingProductUsage {
+  product: string
+  usage_percent?: number | null
+}
+
+export interface GrokBillingSnapshot {
+  period_type?: string
+  usage_percent?: number | null
+  period_start?: string
+  period_end?: string
+  product_usage?: GrokBillingProductUsage[]
+  monthly_limit_cents?: number | null
+  used_cents?: number | null
+  included_used_cents?: number | null
+  on_demand_cap_cents?: number | null
+  on_demand_used_cents?: number | null
+  on_demand_used_percent?: number | null
+  billing_period_start?: string
+  billing_period_end?: string
+  used_percent?: number | null
+  plan?: string
+  status_code?: number
+  fetched_at?: string
+  source?: string
+}
+
 export interface GrokQuotaProbeResult {
-  source: 'active_probe'
+  source: 'billing_probe' | 'active_probe' | string
+  billing?: GrokBillingSnapshot | null
   snapshot?: GrokQuotaSnapshot | null
   status_code?: number
   headers_observed: boolean

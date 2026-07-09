@@ -35,9 +35,6 @@
       </button>
     </div>
 
-    <div v-if="summary" class="text-[10px] text-gray-600 dark:text-gray-300">
-      {{ summary }}
-    </div>
     <div v-if="error" class="truncate text-[10px] text-red-600 dark:text-red-400" :title="error">
       {{ truncatedError }}
     </div>
@@ -48,11 +45,15 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
-import type { GrokQuotaProbeResult, GrokQuotaWindow } from '@/api/admin/grok'
+import type { GrokBillingSnapshot, GrokQuotaProbeResult } from '@/api/admin/grok'
 import type { Account } from '@/types'
 
 const props = defineProps<{
   account: Account
+}>()
+
+const emit = defineEmits<{
+  refreshed: [billing: GrokBillingSnapshot | null]
 }>()
 
 const { t } = useI18n()
@@ -77,35 +78,6 @@ const extractErrorMessage = (e: unknown): string => {
   )
 }
 
-const formatWindow = (label: string, window?: GrokQuotaWindow | null): string | null => {
-  if (!window || window.limit == null || window.remaining == null) return null
-  return `${label} ${window.remaining}/${window.limit}`
-}
-
-const retryAfterLabel = computed(() => {
-  const seconds = data.value?.snapshot?.retry_after_seconds
-  if (seconds == null || seconds <= 0) return null
-  if (seconds < 60) return `${seconds}s`
-  return `${Math.ceil(seconds / 60)}m`
-})
-
-const summary = computed(() => {
-  const snapshot = data.value?.snapshot
-  if (!data.value) return ''
-  if (!snapshot) return t('admin.accounts.usageWindow.grokNoHeaders')
-  const parts = [
-    formatWindow(t('admin.accounts.usageWindow.grokRequests'), snapshot.requests),
-    formatWindow(t('admin.accounts.usageWindow.grokTokens'), snapshot.tokens)
-  ].filter(Boolean)
-  if (retryAfterLabel.value) {
-    parts.push(t('admin.accounts.usageWindow.grokRetryAfter', { time: retryAfterLabel.value }))
-  }
-  if (snapshot.entitlement_status) {
-    parts.push(snapshot.entitlement_status)
-  }
-  return parts.length > 0 ? parts.join(' | ') : t('admin.accounts.usageWindow.grokNoHeaders')
-})
-
 const truncatedError = computed(() => {
   if (!error.value) return ''
   return error.value.length > 80 ? `${error.value.slice(0, 80)}...` : error.value
@@ -117,6 +89,7 @@ const handleProbe = async () => {
   error.value = null
   try {
     data.value = await adminAPI.grok.queryQuota(props.account.id)
+    emit('refreshed', data.value?.billing ?? null)
   } catch (e) {
     error.value = extractErrorMessage(e)
   } finally {
@@ -132,4 +105,6 @@ watch(
     loading.value = false
   }
 )
+
+defineExpose({ handleProbe, loading })
 </script>

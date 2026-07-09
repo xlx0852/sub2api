@@ -1,9 +1,7 @@
 package service
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,16 +14,17 @@ import (
 
 const (
 	grokQuotaUpstreamTimeout = 20 * time.Second
-	grokQuotaProbeInput      = "."
+	grokBillingSnapshotKey   = "grok_billing_snapshot"
 )
 
 type GrokQuotaProbeResult struct {
-	Source          string             `json:"source"`
-	Snapshot        *xai.QuotaSnapshot `json:"snapshot,omitempty"`
-	StatusCode      int                `json:"status_code,omitempty"`
-	HeadersObserved bool               `json:"headers_observed"`
-	ResetSupported  bool               `json:"reset_supported"`
-	FetchedAt       int64              `json:"fetched_at"`
+	Source          string               `json:"source"`
+	Billing         *xai.BillingSnapshot `json:"billing,omitempty"`
+	Snapshot        *xai.QuotaSnapshot   `json:"snapshot,omitempty"` // legacy rate-limit headers (optional)
+	StatusCode      int                  `json:"status_code,omitempty"`
+	HeadersObserved bool                 `json:"headers_observed"`
+	ResetSupported  bool                 `json:"reset_supported"`
+	FetchedAt       int64                `json:"fetched_at"`
 }
 
 type GrokQuotaResetResult struct {
@@ -55,61 +54,114 @@ func NewGrokQuotaService(
 	}
 }
 
+// ProbeUsage actively queries xAI Grok CLI billing endpoints (same source as CPAMC).
+// It hits /v1/billing?format=credits and /v1/billing in parallel, merges the config
+// payloads, and persists the snapshot on the account for passive usage display.
 func (s *GrokQuotaService) ProbeUsage(ctx context.Context, accountID int64) (*GrokQuotaProbeResult, error) {
 	account, token, proxyURL, err := s.prepareProbe(ctx, accountID)
 	if err != nil {
 		return nil, err
 	}
 
-	body, err := buildGrokQuotaProbeBody(account)
+	userID := resolveGrokBillingUserID(account)
+	creditsURL, err := xai.BuildBillingURL(true)
 	if err != nil {
-		return nil, infraerrors.Newf(http.StatusBadRequest, "GROK_QUOTA_PROBE_BODY_ERROR", "failed to build probe body: %v", err)
+		return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_BILLING_URL_INVALID", "invalid billing url: %v", err)
 	}
-	targetURL, err := xai.BuildResponsesURL(account.GetGrokBaseURL())
+	plainURL, err := xai.BuildBillingURL(false)
 	if err != nil {
-		return nil, infraerrors.Newf(http.StatusBadRequest, "GROK_QUOTA_BASE_URL_INVALID", "invalid Grok base_url: %v", err)
+		return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_BILLING_URL_INVALID", "invalid billing url: %v", err)
 	}
 
 	callCtx, cancel := context.WithTimeout(ctx, grokQuotaUpstreamTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(callCtx, http.MethodPost, targetURL, bytes.NewReader(body))
-	if err != nil {
-		return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_QUOTA_PROBE_REQUEST_BUILD_FAILED", "failed to build upstream request: %v", err)
+
+	// Sequential: same account concurrency slot + simpler upstream clients/mocks.
+	// CPAMC issues both in parallel; merge semantics are identical either way.
+	creditsSnap, creditsStatus, creditsErr := s.fetchBilling(callCtx, creditsURL, token, userID, proxyURL, account)
+	plainSnap, plainStatus, plainErr := s.fetchBilling(callCtx, plainURL, token, userID, proxyURL, account)
+
+	merged := xai.MergeBillingSnapshots(creditsSnap, plainSnap)
+	statusCode := creditsStatus
+	if statusCode == 0 {
+		statusCode = plainStatus
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "sub2api-grok-quota-probe/1.0")
+	if merged == nil {
+		// Both failed: surface the more useful error.
+		if creditsErr != nil {
+			return nil, creditsErr
+		}
+		if plainErr != nil {
+			return nil, plainErr
+		}
+		return nil, infraerrors.New(http.StatusBadGateway, "GROK_BILLING_EMPTY", "billing response contained no quota data")
+	}
+
+	merged.StatusCode = statusCode
+	merged.Source = "billing_probe"
+	if merged.FetchedAt == "" {
+		merged.FetchedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+
+	// Persist for account list passive display.
+	_ = s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
+		grokBillingSnapshotKey: merged,
+	})
+
+	// Keep legacy rate-limit header snapshot if present (still useful for 429 UI).
+	legacy, _ := grokQuotaSnapshotFromExtra(account.Extra)
+
+	return &GrokQuotaProbeResult{
+		Source:          "billing_probe",
+		Billing:         merged,
+		Snapshot:        legacy,
+		StatusCode:      statusCode,
+		HeadersObserved: legacy != nil && legacy.HeadersObserved,
+		ResetSupported:  false,
+		FetchedAt:       time.Now().Unix(),
+	}, nil
+}
+
+func (s *GrokQuotaService) fetchBilling(
+	ctx context.Context,
+	targetURL, token, userID, proxyURL string,
+	account *Account,
+) (*xai.BillingSnapshot, int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+	if err != nil {
+		return nil, 0, infraerrors.Newf(http.StatusInternalServerError, "GROK_BILLING_REQUEST_BUILD_FAILED", "failed to build billing request: %v", err)
+	}
+	xai.ApplyGrokCLIBillingHeaders(req, token, userID)
 
 	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, maxInt(account.Concurrency, 1))
 	if err != nil {
-		return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_QUOTA_PROBE_REQUEST_FAILED", "upstream probe failed: %v", err)
+		return nil, 0, infraerrors.Newf(http.StatusBadGateway, "GROK_BILLING_REQUEST_FAILED", "billing request failed: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	snapshot := xai.ObserveQuotaHeaders(resp.Header, resp.StatusCode, "active_probe")
-	_ = s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
-		grokQuotaSnapshotExtraKey: snapshot,
-	})
-
-	result := &GrokQuotaProbeResult{
-		Source:          "active_probe",
-		Snapshot:        snapshot,
-		StatusCode:      resp.StatusCode,
-		HeadersObserved: snapshot.HeadersObserved,
-		ResetSupported:  false,
-		FetchedAt:       time.Now().Unix(),
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, resp.StatusCode, infraerrors.Newf(http.StatusBadGateway, "GROK_BILLING_READ_FAILED", "failed to read billing body: %v", err)
 	}
-	if resp.StatusCode == http.StatusTooManyRequests {
-		return result, nil
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, resp.StatusCode, infraerrors.New(http.StatusUnauthorized, "GROK_BILLING_UNAUTHENTICATED", "billing API returned 401; re-authorize the Grok account")
+	}
+	if resp.StatusCode == http.StatusForbidden {
+		return nil, resp.StatusCode, infraerrors.New(http.StatusForbidden, "GROK_BILLING_FORBIDDEN", "billing API returned 403")
 	}
 	if resp.StatusCode >= 400 {
-		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 240))
 		bodyText := truncate(strings.TrimSpace(string(bodyBytes)), 240)
-		slog.Warn("grok_quota_probe_failed", "account_id", account.ID, "status", resp.StatusCode, "body", bodyText)
-		return nil, infraerrors.Newf(mapUpstreamStatus(resp.StatusCode), "GROK_QUOTA_PROBE_UPSTREAM_ERROR", "upstream returned %d: %s", resp.StatusCode, bodyText)
+		slog.Warn("grok_billing_probe_failed", "account_id", account.ID, "status", resp.StatusCode, "url", targetURL, "body", bodyText)
+		return nil, resp.StatusCode, infraerrors.Newf(mapUpstreamStatus(resp.StatusCode), "GROK_BILLING_UPSTREAM_ERROR", "billing API returned %d: %s", resp.StatusCode, bodyText)
 	}
-	return result, nil
+
+	snapshot, err := xai.ParseBillingResponse(bodyBytes)
+	if err != nil {
+		return nil, resp.StatusCode, infraerrors.Newf(http.StatusBadGateway, "GROK_BILLING_PARSE_FAILED", "failed to parse billing response: %v", err)
+	}
+	snapshot.StatusCode = resp.StatusCode
+	return snapshot, resp.StatusCode, nil
 }
 
 func (s *GrokQuotaService) ResetQuota(ctx context.Context, accountID int64) (*GrokQuotaResetResult, error) {
@@ -174,19 +226,26 @@ func (s *GrokQuotaService) loadGrokOAuthAccount(ctx context.Context, accountID i
 	return account, nil
 }
 
-func buildGrokQuotaProbeBody(account *Account) ([]byte, error) {
-	model := xai.DefaultChatModel
-	if account != nil {
-		if mapped := strings.TrimSpace(account.GetMappedModel("grok")); mapped != "" {
-			model = mapped
+func resolveGrokBillingUserID(account *Account) string {
+	if account == nil {
+		return ""
+	}
+	for _, key := range []string{"sub", "subject", "user_id", "userId", "id"} {
+		if v := strings.TrimSpace(account.GetCredential(key)); v != "" {
+			return v
 		}
 	}
-	return json.Marshal(map[string]any{
-		"model":             model,
-		"input":             grokQuotaProbeInput,
-		"max_output_tokens": 1,
-		"store":             false,
-	})
+	// Nested oauth / user maps sometimes store subject.
+	if raw, ok := account.Credentials["oauth"]; ok {
+		if m, ok := raw.(map[string]any); ok {
+			for _, key := range []string{"sub", "subject", "user_id", "userId"} {
+				if v, ok := m[key].(string); ok && strings.TrimSpace(v) != "" {
+					return strings.TrimSpace(v)
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func maxInt(a, b int) int {

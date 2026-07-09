@@ -1029,6 +1029,29 @@ export interface AccountUsageInfo {
   grok_last_headers_seen_at?: string
   grok_last_status_code?: number
   grok_local_usage?: WindowStats | null
+  subscription_tier?: string
+  subscription_tier_raw?: string
+  /** Official billing from cli-chat-proxy (SuperGrok weekly / products / monthly credits). */
+  grok_billing?: {
+    period_type?: string
+    usage_percent?: number | null
+    period_start?: string
+    period_end?: string
+    product_usage?: Array<{ product: string; usage_percent?: number | null }>
+    monthly_limit_cents?: number | null
+    used_cents?: number | null
+    included_used_cents?: number | null
+    on_demand_cap_cents?: number | null
+    on_demand_used_cents?: number | null
+    on_demand_used_percent?: number | null
+    billing_period_start?: string
+    billing_period_end?: string
+    used_percent?: number | null
+    plan?: string
+    status_code?: number
+    fetched_at?: string
+    source?: string
+  } | null
   ai_credits?: Array<{
     credit_type?: string
     amount?: number
