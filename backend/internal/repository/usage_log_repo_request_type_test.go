@@ -89,6 +89,9 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // image_output_size
 			sqlmock.AnyArg(), // image_size_source
 			sqlmock.AnyArg(), // image_size_breakdown
+			sqlmock.AnyArg(), // video_count
+			sqlmock.AnyArg(), // video_resolution
+			sqlmock.AnyArg(), // video_duration_seconds
 			sqlmock.AnyArg(), // service_tier
 			sqlmock.AnyArg(), // reasoning_effort
 			sqlmock.AnyArg(), // inbound_endpoint
@@ -181,6 +184,9 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // image_output_size
 			sqlmock.AnyArg(), // image_size_source
 			sqlmock.AnyArg(), // image_size_breakdown
+			sqlmock.AnyArg(), // video_count
+			sqlmock.AnyArg(), // video_resolution
+			sqlmock.AnyArg(), // video_duration_seconds
 			serviceTier,
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
@@ -783,7 +789,19 @@ func (s usageLogScannerStub) Scan(dest ...any) error {
 
 // usageLogScanTailAfterWS returns the trailing scan fields starting at
 // compact_* (must stay aligned with usageLogSelectColumns / scanUsageLog).
-func usageLogScanCompactAndTail(imageCount int, imageSize, imageInput, imageOutput, imageSource, imageBreakdown, serviceTier string, now time.Time) []any {
+func usageLogScanCompactAndTail(
+	imageCount int,
+	imageSize, imageInput, imageOutput, imageSource, imageBreakdown string,
+	videoCount int,
+	videoResolution string,
+	videoDuration *int64,
+	serviceTier string,
+	now time.Time,
+) []any {
+	videoDurationValue := sql.NullInt64{}
+	if videoDuration != nil {
+		videoDurationValue = sql.NullInt64{Valid: true, Int64: *videoDuration}
+	}
 	return []any{
 		sql.NullInt64{},  // compact_payload_bytes
 		sql.NullInt64{},  // compact_retry_count
@@ -796,6 +814,9 @@ func usageLogScanCompactAndTail(imageCount int, imageSize, imageInput, imageOutp
 		sql.NullString{Valid: imageOutput != "", String: imageOutput},
 		sql.NullString{Valid: imageSource != "", String: imageSource},
 		sql.NullString{Valid: imageBreakdown != "", String: imageBreakdown},
+		videoCount,
+		sql.NullString{Valid: videoResolution != "", String: videoResolution},
+		videoDurationValue,
 		sql.NullString{Valid: serviceTier != "", String: serviceTier},
 		sql.NullString{},  // reasoning_effort
 		sql.NullString{},  // inbound_endpoint
@@ -842,7 +863,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{}, // ws_event_count
 			sql.NullInt64{}, // ws_queue_wait_ms
 		}
-		values = append(values, usageLogScanCompactAndTail(2, "4K", "1024x1024", "3840x2160", "output", `{"4K":2}`, "", now)...)
+		values = append(values, usageLogScanCompactAndTail(2, "4K", "1024x1024", "3840x2160", "output", `{"4K":2}`, 0, "", nil, "", now)...)
 		log, err := scanUsageLog(usageLogScannerStub{values: values})
 		require.NoError(t, err)
 		require.Equal(t, 2, log.ImageCount)
@@ -899,7 +920,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullInt64{},
 		}
-		values = append(values, usageLogScanCompactAndTail(0, "", "", "", "", "", "priority", now)...)
+		values = append(values, usageLogScanCompactAndTail(0, "", "", "", "", "", 0, "", nil, "priority", now)...)
 		log, err := scanUsageLog(usageLogScannerStub{values: values})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
@@ -940,7 +961,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullInt64{},
 		}
-		values = append(values, usageLogScanCompactAndTail(0, "", "", "", "", "", "flex", now)...)
+		values = append(values, usageLogScanCompactAndTail(0, "", "", "", "", "", 0, "", nil, "flex", now)...)
 		log, err := scanUsageLog(usageLogScannerStub{values: values})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
@@ -981,7 +1002,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullInt64{},
 		}
-		values = append(values, usageLogScanCompactAndTail(0, "", "", "", "", "", "priority", now)...)
+		values = append(values, usageLogScanCompactAndTail(0, "", "", "", "", "", 0, "", nil, "priority", now)...)
 		log, err := scanUsageLog(usageLogScannerStub{values: values})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
