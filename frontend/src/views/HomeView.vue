@@ -383,6 +383,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { sanitizeUrl } from '@/utils/url'
 
 const { t, locale } = useI18n()
 const legacySubscriptionSubtitle = ['Subscription', 'to API Conversion Platform'].join(' ')
@@ -410,13 +411,13 @@ const siteName = computed(() => {
   return configuredName && !legacySiteNames.has(configuredName) ? configuredName : defaultSiteName
 })
 const siteLogo = computed(() => appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '')
-const siteSubtitle = computed(() => {
+ const siteSubtitle = computed(() => {
   const configuredSubtitle = normalizeText(appStore.cachedPublicSettings?.site_subtitle)
   return configuredSubtitle && !legacySubtitles.has(configuredSubtitle)
     ? configuredSubtitle
     : t('home.defaultSubtitle')
 })
-const docUrl = computed(() => appStore.cachedPublicSettings?.doc_url || appStore.docUrl || '')
+const docUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))
 const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')
 
 // Check if homeContent is a URL (for iframe display)
