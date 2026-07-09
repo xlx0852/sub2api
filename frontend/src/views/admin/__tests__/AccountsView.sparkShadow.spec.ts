@@ -12,6 +12,7 @@ const {
   listAccounts,
   listWithEtag,
   getBatchTodayStats,
+  getBatchPerformanceStats,
   getAllProxies,
   getAllGroups,
   createSparkShadow,
@@ -21,6 +22,7 @@ const {
   listAccounts: vi.fn(),
   listWithEtag: vi.fn(),
   getBatchTodayStats: vi.fn(),
+  getBatchPerformanceStats: vi.fn(),
   getAllProxies: vi.fn(),
   getAllGroups: vi.fn(),
   createSparkShadow: vi.fn(),
@@ -34,6 +36,7 @@ vi.mock('@/api/admin', () => ({
       list: listAccounts,
       listWithEtag,
       getBatchTodayStats,
+      getBatchPerformanceStats,
       createSparkShadow,
       delete: vi.fn(),
       batchClearError: vi.fn(),
@@ -102,12 +105,13 @@ const mountView = () =>
 describe('admin AccountsView — 外审 F2:spark 影子创建接线', () => {
   beforeEach(() => {
     localStorage.clear()
-    for (const fn of [listAccounts, listWithEtag, getBatchTodayStats, getAllProxies, getAllGroups, createSparkShadow, showSuccess, showError]) {
+    for (const fn of [listAccounts, listWithEtag, getBatchTodayStats, getBatchPerformanceStats, getAllProxies, getAllGroups, createSparkShadow, showSuccess, showError]) {
       fn.mockReset()
     }
     listAccounts.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
     listWithEtag.mockResolvedValue({ notModified: true, etag: null, data: null })
     getBatchTodayStats.mockResolvedValue({ stats: {} })
+    getBatchPerformanceStats.mockResolvedValue({ stats: {} })
     getAllProxies.mockResolvedValue([])
     getAllGroups.mockResolvedValue([])
     createSparkShadow.mockResolvedValue({ id: 999, name: 'parent-acc (Spark)' })
@@ -208,11 +212,12 @@ const mountViewWithRow = () =>
 describe('admin AccountsView — 影子行 parent_* OR 兜底展示', () => {
   beforeEach(() => {
     localStorage.clear()
-    for (const fn of [listAccounts, listWithEtag, getBatchTodayStats, getAllProxies, getAllGroups, createSparkShadow, showSuccess, showError]) {
+    for (const fn of [listAccounts, listWithEtag, getBatchTodayStats, getBatchPerformanceStats, getAllProxies, getAllGroups, createSparkShadow, showSuccess, showError]) {
       fn.mockReset()
     }
     listWithEtag.mockResolvedValue({ notModified: true, etag: null, data: null })
     getBatchTodayStats.mockResolvedValue({ stats: {} })
+    getBatchPerformanceStats.mockResolvedValue({ stats: {} })
     getAllProxies.mockResolvedValue([])
     getAllGroups.mockResolvedValue([])
     vi.stubGlobal('confirm', vi.fn(() => true))
@@ -250,6 +255,32 @@ describe('admin AccountsView — 影子行 parent_* OR 兜底展示', () => {
     expect(badge.props('planType')).toBe('plus')
     expect(badge.props('privacyMode')).toBe('false')
     expect(badge.props('subscriptionExpiresAt')).toBe('2027-01-01T00:00:00Z')
+
+    wrapper.unmount()
+  })
+
+  it('Grok 行把 SuperGrok 订阅类型传给平台列徽章', async () => {
+    const grokAccount = {
+      id: 101,
+      name: 'grok',
+      platform: 'grok',
+      type: 'oauth',
+      credentials: {},
+      extra: {
+        grok_billing_snapshot: {
+          plan: 'supergrok_heavy'
+        }
+      }
+    }
+
+    listAccounts.mockResolvedValue({ items: [grokAccount], total: 1, page: 1, page_size: 20, pages: 1 })
+
+    const wrapper = mountViewWithRow()
+    await flushPromises()
+
+    const badge = wrapper.findComponent(PlatformTypeBadge)
+    expect(badge.exists()).toBe(true)
+    expect(badge.props('planType')).toBe('SuperGrok Heavy')
 
     wrapper.unmount()
   })

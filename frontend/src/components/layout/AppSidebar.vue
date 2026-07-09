@@ -11,10 +11,15 @@
       <!-- Custom Logo or Default Logo -->
       <router-link
         :to="homePath"
-        class="sidebar-logo flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl shadow-glow transition-opacity hover:opacity-80"
+        class="sidebar-logo flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-transparent shadow-none transition-opacity hover:opacity-80"
         @click="handleMenuItemClick(homePath)"
       >
-        <img v-if="settingsLoaded" :src="siteLogo || '/logo.png'" alt="Logo" class="h-full w-full object-contain" />
+        <img
+          v-if="settingsLoaded"
+          :src="siteLogo || '/logo.png'"
+          alt="Logo"
+          class="h-full w-full object-contain [filter:none] [box-shadow:none]"
+        />
       </router-link>
       <div class="sidebar-brand" :class="{ 'sidebar-brand-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
         <router-link
@@ -946,6 +951,15 @@ onBeforeUnmount(() => {
 .sidebar-logo {
   flex: 0 0 2.25rem;
   min-width: 2.25rem;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+.sidebar-logo img {
+  box-shadow: none !important;
+  filter: none !important;
+  /* Avoid soft halo from semi-transparent logo pixels blending on light bg */
+  background: transparent;
 }
 
 .sidebar-header-collapsed {

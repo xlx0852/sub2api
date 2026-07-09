@@ -888,6 +888,42 @@ func TestOpenAIGatewayServiceRecordUsage_WSModePrefersUpstreamRequestIDOverClien
 	require.Equal(t, "resp_openai_ws_turn_456", usageRepo.lastLog.RequestID)
 }
 
+func TestOpenAIGatewayServiceRecordUsage_CopiesWSHTTPBridgeMetrics(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{}
+	billingRepo := &openAIRecordUsageBillingRepoStub{result: &UsageBillingApplyResult{Applied: true}}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	subRepo := &openAIRecordUsageSubRepoStub{}
+	svc := newOpenAIRecordUsageServiceWithBillingRepoForTest(usageRepo, billingRepo, userRepo, subRepo, nil)
+
+	wsPayloadBytes := int64(45 * 1024 * 1024)
+	wsEventCount := 23
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:      "resp_openai_ws_bridge",
+			OpenAIWSMode:   true,
+			WSPayloadBytes: &wsPayloadBytes,
+			WSEventCount:   &wsEventCount,
+			Usage: OpenAIUsage{
+				InputTokens:  8,
+				OutputTokens: 4,
+			},
+			Model:    "gpt-5.1",
+			Duration: time.Second,
+		},
+		APIKey:  &APIKey{ID: 10051},
+		User:    &User{ID: 20051},
+		Account: &Account{ID: 30051},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	require.True(t, usageRepo.lastLog.OpenAIWSMode)
+	require.NotNil(t, usageRepo.lastLog.WSPayloadBytes)
+	require.Equal(t, wsPayloadBytes, *usageRepo.lastLog.WSPayloadBytes)
+	require.NotNil(t, usageRepo.lastLog.WSEventCount)
+	require.Equal(t, wsEventCount, *usageRepo.lastLog.WSEventCount)
+}
+
 func TestOpenAIGatewayServiceRecordUsage_GeneratesRequestIDWhenAllSourcesMissing(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{}
 	billingRepo := &openAIRecordUsageBillingRepoStub{result: &UsageBillingApplyResult{Applied: true}}

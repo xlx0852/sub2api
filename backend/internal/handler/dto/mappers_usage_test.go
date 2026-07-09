@@ -11,10 +11,14 @@ import (
 func TestUsageLogFromService_IncludesOpenAIWSMode(t *testing.T) {
 	t.Parallel()
 
+	wsPayloadBytes := int64(42 * 1024 * 1024)
+	wsEventCount := 17
 	wsLog := &service.UsageLog{
-		RequestID:    "req_1",
-		Model:        "gpt-5.3-codex",
-		OpenAIWSMode: true,
+		RequestID:      "req_1",
+		Model:          "gpt-5.3-codex",
+		OpenAIWSMode:   true,
+		WSPayloadBytes: &wsPayloadBytes,
+		WSEventCount:   &wsEventCount,
 	}
 	httpLog := &service.UsageLog{
 		RequestID:    "resp_1",
@@ -26,6 +30,8 @@ func TestUsageLogFromService_IncludesOpenAIWSMode(t *testing.T) {
 	require.False(t, UsageLogFromService(httpLog).OpenAIWSMode)
 	require.True(t, UsageLogFromServiceAdmin(wsLog).OpenAIWSMode)
 	require.False(t, UsageLogFromServiceAdmin(httpLog).OpenAIWSMode)
+	require.Equal(t, wsPayloadBytes, *UsageLogFromService(wsLog).WSPayloadBytes)
+	require.Equal(t, wsEventCount, *UsageLogFromServiceAdmin(wsLog).WSEventCount)
 }
 
 func TestUsageLogFromService_PrefersRequestTypeForLegacyFields(t *testing.T) {

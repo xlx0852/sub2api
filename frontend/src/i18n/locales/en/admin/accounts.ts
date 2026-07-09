@@ -125,6 +125,8 @@ export default {
         active: 'Active',
         inactive: 'Inactive',
         error: 'Error',
+        grokSpendingLimit: 'Grok Quota/Sub',
+        grokSpendingLimitHelp: 'Grok upstream reports exhausted credits or requires a SuperGrok subscription. Add credits or upgrade before resuming the account.',
         cooldown: 'Cooldown',
         paused: 'Paused',
         limited: 'Limited',

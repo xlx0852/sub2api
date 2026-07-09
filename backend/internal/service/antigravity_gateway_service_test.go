@@ -422,6 +422,9 @@ func TestAntigravityGatewayService_Forward_PromptTooLong(t *testing.T) {
 		Credentials: map[string]any{
 			"access_token": "token",
 			"project_id":   "proj",
+			"model_mapping": map[string]any{
+				"claude-opus-4-6": "claude-opus-4-6",
+			},
 		},
 	}
 
@@ -481,10 +484,13 @@ func TestAntigravityGatewayService_Forward_ModelRateLimitTriggersFailover(t *tes
 		Credentials: map[string]any{
 			"access_token": "token",
 			"project_id":   "proj",
+			"model_mapping": map[string]any{
+				"claude-opus-4-6": "claude-opus-4-6",
+			},
 		},
 		Extra: map[string]any{
 			modelRateLimitsKey: map[string]any{
-				"claude-opus-4-6-thinking": map[string]any{
+				"claude-opus-4-6": map[string]any{
 					"rate_limit_reset_at": futureResetAt,
 				},
 			},
@@ -538,6 +544,9 @@ func TestAntigravityGatewayService_ForwardGemini_ModelRateLimitTriggersFailover(
 		Credentials: map[string]any{
 			"access_token": "token",
 			"project_id":   "proj",
+			"model_mapping": map[string]any{
+				"gemini-2.5-flash": "gemini-2.5-flash",
+			},
 		},
 		Extra: map[string]any{
 			modelRateLimitsKey: map[string]any{
@@ -593,10 +602,13 @@ func TestAntigravityGatewayService_Forward_StickySessionForceCacheBilling(t *tes
 		Credentials: map[string]any{
 			"access_token": "token",
 			"project_id":   "proj",
+			"model_mapping": map[string]any{
+				"claude-opus-4-6": "claude-opus-4-6",
+			},
 		},
 		Extra: map[string]any{
 			modelRateLimitsKey: map[string]any{
-				"claude-opus-4-6-thinking": map[string]any{
+				"claude-opus-4-6": map[string]any{
 					"rate_limit_reset_at": futureResetAt,
 				},
 			},
@@ -649,6 +661,9 @@ func TestAntigravityGatewayService_ForwardGemini_StickySessionForceCacheBilling(
 		Credentials: map[string]any{
 			"access_token": "token",
 			"project_id":   "proj",
+			"model_mapping": map[string]any{
+				"gemini-2.5-flash": "gemini-2.5-flash",
+			},
 		},
 		Extra: map[string]any{
 			modelRateLimitsKey: map[string]any{
