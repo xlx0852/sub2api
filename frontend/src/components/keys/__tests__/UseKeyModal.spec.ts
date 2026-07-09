@@ -89,6 +89,114 @@ describe('UseKeyModal', () => {
     expect(configToml).toContain('[features]\nresponses_websockets_v2 = true\ngoals = true')
   })
 
+  it('renders Grok Codex CLI config with grok-4.5', () => {
+    const wrapper = mount(UseKeyModal, {
+      props: {
+        show: true,
+        apiKey: 'sk-grok-test',
+        baseUrl: 'https://code.sicts.shop',
+        platform: 'grok'
+      },
+      global: {
+        stubs: {
+          BaseDialog: {
+            template: '<div><slot /><slot name="footer" /></div>'
+          },
+          Icon: {
+            template: '<span />'
+          }
+        }
+      }
+    })
+
+    const codeBlocks = wrapper.findAll('pre code').map((code) => code.text())
+    const configToml = codeBlocks.find((content) => content.includes('model_provider = "Grok"'))
+    const authJson = codeBlocks.find((content) => content.includes('OPENAI_API_KEY'))
+
+    expect(configToml).toBeDefined()
+    expect(configToml).toContain('model = "grok-4.5"')
+    expect(configToml).toContain('review_model = "grok-4.5"')
+    expect(configToml).toContain('base_url = "https://code.sicts.shop/v1"')
+    expect(configToml).toContain('wire_api = "responses"')
+    expect(configToml).toContain('[features]\ngoals = true')
+    expect(authJson).toContain('sk-grok-test')
+
+    const tabLabels = wrapper.findAll('button').map((b) => b.text())
+    expect(tabLabels.some((t) => t.includes('keys.useKeyModal.cliTabs.codexCli'))).toBe(true)
+    expect(tabLabels.some((t) => t.includes('keys.useKeyModal.cliTabs.codexCliWs'))).toBe(true)
+    expect(tabLabels.some((t) => t.includes('keys.useKeyModal.cliTabs.claudeCode'))).toBe(true)
+  })
+
+  it('renders Grok Codex WebSocket config', async () => {
+    const wrapper = mount(UseKeyModal, {
+      props: {
+        show: true,
+        apiKey: 'sk-grok-test',
+        baseUrl: 'https://code.sicts.shop/v1',
+        platform: 'grok'
+      },
+      global: {
+        stubs: {
+          BaseDialog: {
+            template: '<div><slot /><slot name="footer" /></div>'
+          },
+          Icon: {
+            template: '<span />'
+          }
+        }
+      }
+    })
+
+    const wsTab = wrapper.findAll('button').find((button) =>
+      button.text().includes('keys.useKeyModal.cliTabs.codexCliWs')
+    )
+    expect(wsTab).toBeDefined()
+    await wsTab!.trigger('click')
+    await nextTick()
+
+    const codeBlocks = wrapper.findAll('pre code').map((code) => code.text())
+    const configToml = codeBlocks.find((content) => content.includes('supports_websockets = true'))
+
+    expect(configToml).toBeDefined()
+    expect(configToml).toContain('model_provider = "Grok"')
+    expect(configToml).toContain('model = "grok-4.5"')
+    expect(configToml).toContain('base_url = "https://code.sicts.shop/v1"')
+    expect(configToml).toContain('[features]\nresponses_websockets_v2 = true\ngoals = true')
+  })
+
+  it('renders Grok models in OpenCode config', async () => {
+    const wrapper = mount(UseKeyModal, {
+      props: {
+        show: true,
+        apiKey: 'sk-grok-test',
+        baseUrl: 'https://code.sicts.shop',
+        platform: 'grok'
+      },
+      global: {
+        stubs: {
+          BaseDialog: {
+            template: '<div><slot /><slot name="footer" /></div>'
+          },
+          Icon: {
+            template: '<span />'
+          }
+        }
+      }
+    })
+
+    const opencodeTab = wrapper.findAll('button').find((button) =>
+      button.text().includes('keys.useKeyModal.cliTabs.opencode')
+    )
+    expect(opencodeTab).toBeDefined()
+    await opencodeTab!.trigger('click')
+    await nextTick()
+
+    const codeBlock = wrapper.find('pre code').text()
+    expect(codeBlock).toContain('"grok"')
+    expect(codeBlock).toContain('grok-4.5')
+    expect(codeBlock).toContain('grok-build-0.1')
+  })
+
   it('renders GPT-5.4 mini entry in OpenCode config', async () => {
     const wrapper = mount(UseKeyModal, {
       props: {

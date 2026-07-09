@@ -180,6 +180,7 @@ const activeClientTab = ref<string>('claude')
 const defaultClientTab = computed(() => {
   switch (props.platform) {
     case 'openai':
+    case 'grok':
       return 'codex'
     case 'gemini':
       return 'gemini'
@@ -277,6 +278,16 @@ const clientTabs = computed((): TabConfig[] => {
       tabs.push({ id: 'opencode', label: t('keys.useKeyModal.cliTabs.opencode'), icon: TerminalIcon })
       return tabs
     }
+    case 'grok': {
+      const tabs: TabConfig[] = [
+        { id: 'codex', label: t('keys.useKeyModal.cliTabs.codexCli'), icon: TerminalIcon },
+        { id: 'codex-ws', label: t('keys.useKeyModal.cliTabs.codexCliWs'), icon: TerminalIcon },
+      ]
+      // Grok groups support Claude-compatible /v1/messages for CLI-style clients.
+      tabs.push({ id: 'claude', label: t('keys.useKeyModal.cliTabs.claudeCode'), icon: TerminalIcon })
+      tabs.push({ id: 'opencode', label: t('keys.useKeyModal.cliTabs.opencode'), icon: TerminalIcon })
+      return tabs
+    }
     case 'gemini':
       return [
         { id: 'gemini', label: t('keys.useKeyModal.cliTabs.geminiCli'), icon: SparkleIcon },
@@ -326,6 +337,11 @@ const platformDescription = computed(() => {
         return t('keys.useKeyModal.description')
       }
       return t('keys.useKeyModal.openai.description')
+    case 'grok':
+      if (activeClientTab.value === 'claude') {
+        return t('keys.useKeyModal.description')
+      }
+      return t('keys.useKeyModal.grok.description')
     case 'gemini':
       return t('keys.useKeyModal.gemini.description')
     case 'antigravity':
@@ -344,6 +360,13 @@ const platformNote = computed(() => {
       return activeTab.value === 'windows'
         ? t('keys.useKeyModal.openai.noteWindows')
         : t('keys.useKeyModal.openai.note')
+    case 'grok':
+      if (activeClientTab.value === 'claude') {
+        return t('keys.useKeyModal.note')
+      }
+      return activeTab.value === 'windows'
+        ? t('keys.useKeyModal.grok.noteWindows')
+        : t('keys.useKeyModal.grok.note')
     case 'gemini':
       return t('keys.useKeyModal.gemini.note')
     case 'antigravity':
@@ -400,6 +423,8 @@ const currentFiles = computed((): FileConfig[] => {
         return [generateOpenCodeConfig('anthropic', apiBase, apiKey)]
       case 'openai':
         return [generateOpenCodeConfig('openai', apiBase, apiKey)]
+      case 'grok':
+        return [generateOpenCodeConfig('grok', apiBase, apiKey)]
       case 'gemini':
         return [generateOpenCodeConfig('gemini', geminiBase, apiKey)]
       case 'antigravity':
@@ -421,6 +446,14 @@ const currentFiles = computed((): FileConfig[] => {
         return generateOpenAIWsFiles(baseUrl, apiKey)
       }
       return generateOpenAIFiles(baseUrl, apiKey)
+    case 'grok':
+      if (activeClientTab.value === 'claude') {
+        return generateAnthropicFiles(baseUrl, apiKey)
+      }
+      if (activeClientTab.value === 'codex-ws') {
+        return generateGrokWsFiles(baseUrl, apiKey)
+      }
+      return generateGrokFiles(baseUrl, apiKey)
     case 'gemini':
       return [generateGeminiCliContent(baseUrl, apiKey)]
     case 'antigravity':
@@ -484,7 +517,7 @@ $env:CLAUDE_CODE_ATTRIBUTION_HEADER=0`
 }
 
 function generateGeminiCliContent(baseUrl: string, apiKey: string): FileConfig {
-  const model = 'gemini-2.0-flash'
+  const model = 'gemini-3.5-flash'
   const modelComment = t('keys.useKeyModal.gemini.modelComment')
   let path: string
   let content: string
@@ -602,6 +635,94 @@ goals = true`
       path: `${configDir}/config.toml`,
       content: configContent,
       hint: t('keys.useKeyModal.openai.configTomlHint')
+    },
+    {
+      path: `${configDir}/auth.json`,
+      content: authContent
+    }
+  ]
+}
+
+/** Normalize Codex base_url so it ends with /v1 (Sub2API OpenAI-compatible root). */
+function normalizeCodexBaseUrl(baseUrl: string): string {
+  const trimmed = baseUrl.replace(/\/+$/, '')
+  if (trimmed.endsWith('/v1')) return trimmed
+  return `${trimmed}/v1`
+}
+
+function generateGrokFiles(baseUrl: string, apiKey: string): FileConfig[] {
+  const isWindows = activeTab.value === 'windows'
+  const configDir = isWindows ? '%userprofile%\\.codex' : '~/.codex'
+  const providerBase = normalizeCodexBaseUrl(baseUrl)
+
+  const configContent = `model_provider = "Grok"
+model = "grok-4.5"
+review_model = "grok-4.5"
+# Optional: grok-build-0.1 / grok-composer-2.5-fast / grok-4.3
+model_reasoning_effort = "high"
+disable_response_storage = true
+network_access = "enabled"
+windows_wsl_setup_acknowledged = true
+
+[model_providers.Grok]
+name = "Grok"
+base_url = "${providerBase}"
+wire_api = "responses"
+requires_openai_auth = true
+
+[features]
+goals = true`
+
+  const authContent = `{
+  "OPENAI_API_KEY": "${apiKey}"
+}`
+
+  return [
+    {
+      path: `${configDir}/config.toml`,
+      content: configContent,
+      hint: t('keys.useKeyModal.grok.configTomlHint')
+    },
+    {
+      path: `${configDir}/auth.json`,
+      content: authContent
+    }
+  ]
+}
+
+function generateGrokWsFiles(baseUrl: string, apiKey: string): FileConfig[] {
+  const isWindows = activeTab.value === 'windows'
+  const configDir = isWindows ? '%userprofile%\\.codex' : '~/.codex'
+  const providerBase = normalizeCodexBaseUrl(baseUrl)
+
+  const configContent = `model_provider = "Grok"
+model = "grok-4.5"
+review_model = "grok-4.5"
+model_reasoning_effort = "high"
+disable_response_storage = true
+network_access = "enabled"
+windows_wsl_setup_acknowledged = true
+
+[model_providers.Grok]
+name = "Grok"
+base_url = "${providerBase}"
+wire_api = "responses"
+supports_websockets = true
+requires_openai_auth = true
+
+[features]
+responses_websockets_v2 = true
+goals = true`
+
+  const authContent = `{
+  "OPENAI_API_KEY": "${apiKey}"
+}`
+
+  return [
+    {
+      path: `${configDir}/config.toml`,
+      content: configContent,
+      hint: t('keys.useKeyModal.grok.configTomlHint')
     },
     {
       path: `${configDir}/auth.json`,
@@ -764,46 +885,71 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
       }
     }
   }
-  const geminiModels = {
-    'gemini-2.0-flash': {
-      name: 'Gemini 2.0 Flash',
+  const grokModels = {
+    'grok-4.5': {
+      name: 'Grok 4.5',
       limit: {
-        context: 1048576,
-        output: 65536
-      },
-      modalities: {
-        input: ['text', 'image', 'pdf'],
-        output: ['text']
-      }
-    },
-    'gemini-2.5-flash': {
-      name: 'Gemini 2.5 Flash',
-      limit: {
-        context: 1048576,
-        output: 65536
-      },
-      modalities: {
-        input: ['text', 'image', 'pdf'],
-        output: ['text']
-      }
-    },
-    'gemini-2.5-pro': {
-      name: 'Gemini 2.5 Pro',
-      limit: {
-        context: 2097152,
-        output: 65536
-      },
-      modalities: {
-        input: ['text', 'image', 'pdf'],
-        output: ['text']
+        context: 500000,
+        output: 128000
       },
       options: {
-        thinking: {
-          budgetTokens: 24576,
-          type: 'enabled'
-        }
+        store: false
+      },
+      variants: {
+        low: {},
+        medium: {},
+        high: {},
+        xhigh: {}
       }
     },
+    'grok-4.3': {
+      name: 'Grok 4.3',
+      limit: {
+        context: 1000000,
+        output: 128000
+      },
+      options: {
+        store: false
+      },
+      variants: {
+        low: {},
+        medium: {},
+        high: {},
+        xhigh: {}
+      }
+    },
+    'grok-build-0.1': {
+      name: 'Grok Build 0.1',
+      limit: {
+        context: 256000,
+        output: 64000
+      },
+      options: {
+        store: false
+      },
+      variants: {
+        low: {},
+        medium: {},
+        high: {}
+      }
+    },
+    'grok-composer-2.5-fast': {
+      name: 'Grok Composer 2.5 Fast',
+      limit: {
+        context: 256000,
+        output: 64000
+      },
+      options: {
+        store: false
+      },
+      variants: {
+        low: {},
+        medium: {},
+        high: {}
+      }
+    }
+  }
+  const geminiModels = {
     'gemini-3.5-flash': {
       name: 'Gemini 3.5 Flash',
       limit: {
@@ -813,34 +959,6 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
       modalities: {
         input: ['text', 'image', 'pdf'],
         output: ['text']
-      }
-    },
-    'gemini-3-flash-preview': {
-      name: 'Gemini 3 Flash Preview',
-      limit: {
-        context: 1048576,
-        output: 65536
-      },
-      modalities: {
-        input: ['text', 'image', 'pdf'],
-        output: ['text']
-      }
-    },
-    'gemini-3-pro-preview': {
-      name: 'Gemini 3 Pro Preview',
-      limit: {
-        context: 1048576,
-        output: 65536
-      },
-      modalities: {
-        input: ['text', 'image', 'pdf'],
-        output: ['text']
-      },
-      options: {
-        thinking: {
-          budgetTokens: 24576,
-          type: 'enabled'
-        }
       }
     },
     'gemini-3.1-pro-preview': {
@@ -859,61 +977,21 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
           type: 'enabled'
         }
       }
+    },
+    'gemini-3.1-flash-image': {
+      name: 'Gemini 3.1 Flash Image',
+      limit: {
+        context: 1048576,
+        output: 65536
+      },
+      modalities: {
+        input: ['text', 'image', 'pdf'],
+        output: ['text', 'image']
+      }
     }
   }
 
   const antigravityGeminiModels = {
-    'gemini-2.5-flash': {
-      name: 'Gemini 2.5 Flash',
-      limit: {
-        context: 1048576,
-        output: 65536
-      },
-      modalities: {
-        input: ['text', 'image', 'pdf'],
-        output: ['text']
-      },
-      options: {
-        thinking: {
-          budgetTokens: 24576,
-          type: 'disable'
-        }
-      }
-    },
-    'gemini-2.5-flash-lite': {
-      name: 'Gemini 2.5 Flash Lite',
-      limit: {
-        context: 1048576,
-        output: 65536
-      },
-      modalities: {
-        input: ['text', 'image', 'pdf'],
-        output: ['text']
-      },
-      options: {
-        thinking: {
-          budgetTokens: 24576,
-          type: 'enabled'
-        }
-      }
-    },
-    'gemini-2.5-flash-thinking': {
-      name: 'Gemini 2.5 Flash (Thinking)',
-      limit: {
-        context: 1048576,
-        output: 65536
-      },
-      modalities: {
-        input: ['text', 'image', 'pdf'],
-        output: ['text']
-      },
-      options: {
-        thinking: {
-          budgetTokens: 24576,
-          type: 'enabled'
-        }
-      }
-    },
     'gemini-3-flash': {
       name: 'Gemini 3 Flash',
       limit: {
@@ -957,23 +1035,6 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
       modalities: {
         input: ['text', 'image', 'pdf'],
         output: ['text']
-      },
-      options: {
-        thinking: {
-          budgetTokens: 24576,
-          type: 'enabled'
-        }
-      }
-    },
-    'gemini-2.5-flash-image': {
-      name: 'Gemini 2.5 Flash Image',
-      limit: {
-        context: 1048576,
-        output: 65536
-      },
-      modalities: {
-        input: ['text', 'image'],
-        output: ['image']
       },
       options: {
         thinking: {
@@ -1068,10 +1129,15 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
     provider[platform].models = antigravityGeminiModels
   } else if (platform === 'openai') {
     provider[platform].models = openaiModels
+  } else if (platform === 'grok') {
+    // OpenAI-compatible Responses provider; models are Grok IDs on Sub2API.
+    provider[platform].npm = '@ai-sdk/openai'
+    provider[platform].name = 'Grok (Sub2API)'
+    provider[platform].models = grokModels
   }
 
   const agent =
-    platform === 'openai'
+    platform === 'openai' || platform === 'grok'
       ? {
           build: {
             options: {

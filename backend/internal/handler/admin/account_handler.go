@@ -23,6 +23,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
@@ -2808,6 +2809,12 @@ func (h *AccountHandler) BatchRefreshTier(c *gin.Context) {
 	}
 
 	response.Success(c, results)
+}
+
+// GetModelCatalog returns the global model catalog (platforms, mappings, presets, fallback pricing keys).
+// GET /api/v1/admin/model-catalog
+func (h *AccountHandler) GetModelCatalog(c *gin.Context) {
+	response.Success(c, modelcatalog.PublicView())
 }
 
 // GetAntigravityDefaultModelMapping 获取 Antigravity 平台的默认模型映射

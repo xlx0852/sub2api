@@ -129,14 +129,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { accountsAPI } from '@/api/admin/accounts'
 import type { SyncUpstreamPreviewParams } from '@/api/admin/accounts'
 import ModelIcon from '@/components/common/ModelIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
-import { allModels, getModelsByPlatform } from '@/composables/useModelWhitelist'
+import { allModels, getModelsByPlatform, ensureModelCatalogLoaded } from '@/composables/useModelWhitelist'
 
 const { t } = useI18n()
 
@@ -158,6 +158,10 @@ const emit = defineEmits<{
 }>()
 
 const appStore = useAppStore()
+
+onMounted(() => {
+  void ensureModelCatalogLoaded()
+})
 
 const showDropdown = ref(false)
 const searchQuery = ref('')

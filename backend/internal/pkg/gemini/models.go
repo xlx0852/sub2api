@@ -2,7 +2,11 @@
 // It is used when upstream model listing is unavailable (e.g. OAuth token missing AI Studio scopes).
 package gemini
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
+)
 
 type Model struct {
 	Name                       string   `json:"name"`
@@ -17,18 +21,24 @@ type ModelsListResponse struct {
 
 func DefaultModels() []Model {
 	methods := []string{"generateContent", "streamGenerateContent"}
-	return []Model{
-		{Name: "models/gemini-2.0-flash", SupportedGenerationMethods: methods},
-		{Name: "models/gemini-2.5-flash", SupportedGenerationMethods: methods},
-		{Name: "models/gemini-2.5-flash-image", SupportedGenerationMethods: methods},
-		{Name: "models/gemini-2.5-pro", SupportedGenerationMethods: methods},
-		{Name: "models/gemini-3.5-flash", SupportedGenerationMethods: methods},
-		{Name: "models/gemini-3-flash-preview", SupportedGenerationMethods: methods},
-		{Name: "models/gemini-3-pro-preview", SupportedGenerationMethods: methods},
-		{Name: "models/gemini-3.1-pro-preview", SupportedGenerationMethods: methods},
-		{Name: "models/gemini-3.1-pro-preview-customtools", SupportedGenerationMethods: methods},
-		{Name: "models/gemini-3.1-flash-image", SupportedGenerationMethods: methods},
+	entries := modelcatalog.GeminiModels()
+	out := make([]Model, 0, len(entries))
+	for _, e := range entries {
+		name := e.Name
+		if name == "" {
+			name = "models/" + e.ID
+		}
+		mth := e.SupportedGenerationMethods
+		if len(mth) == 0 {
+			mth = methods
+		}
+		out = append(out, Model{
+			Name:                       name,
+			DisplayName:                e.DisplayName,
+			SupportedGenerationMethods: append([]string(nil), mth...),
+		})
 	}
+	return out
 }
 
 func HasFallbackModel(model string) bool {
@@ -39,8 +49,8 @@ func HasFallbackModel(model string) bool {
 	if !strings.HasPrefix(trimmed, "models/") {
 		trimmed = "models/" + trimmed
 	}
-	for _, model := range DefaultModels() {
-		if model.Name == trimmed {
+	for _, m := range DefaultModels() {
+		if m.Name == trimmed {
 			return true
 		}
 	}
