@@ -1146,12 +1146,10 @@ const shortenProductLabel = (product: string): string => {
 const grokWeeklyBar = computed((): GrokQuotaBarInfo | null => {
   const b = effectiveGrokBilling.value
   if (!b || b.usage_percent == null) return null
-  // Only render the weekly row when the billing payload is a weekly window
-  // (format=credits). Monthly-only payloads also set usage_percent.
+  // Only true weekly windows (creditUsagePercent / period_type=weekly).
+  // Product-only payloads use period_type=unknown without a top-level weekly %.
   const period = (b.period_type || '').toLowerCase()
-  if (period !== 'weekly' && period !== 'unknown') return null
-  // Prefer true weekly signals: product usage rows or an explicit weekly type.
-  if (period !== 'weekly' && !(b.product_usage && b.product_usage.length > 0)) return null
+  if (period !== 'weekly') return null
   return {
     utilization: Math.max(0, Math.min(100, b.usage_percent)),
     resetsAt: b.period_end || null

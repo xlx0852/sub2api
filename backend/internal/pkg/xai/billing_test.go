@@ -67,6 +67,25 @@ func TestParseBillingResponseMonthlyCreditsObjectVal(t *testing.T) {
 	require.Equal(t, "2026-08-01T00:00:00Z", snapshot.BillingPeriodEnd)
 }
 
+func TestParseBillingResponseProductsOnlyDoesNotForceWeekly(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{
+		"config": {
+			"productUsage": [
+				{"product": "GrokBuild", "usagePercent": 10},
+				{"product": "Api"}
+			]
+		}
+	}`)
+	snapshot, err := ParseBillingResponse(body)
+	require.NoError(t, err)
+	require.Equal(t, "unknown", snapshot.PeriodType)
+	require.Nil(t, snapshot.UsagePercent)
+	require.Len(t, snapshot.ProductUsage, 2)
+	require.Equal(t, "GrokBuild", snapshot.ProductUsage[0].Product)
+}
+
 func TestMergeBillingSnapshotsPrefersCreditsThenFillsMonthly(t *testing.T) {
 	t.Parallel()
 

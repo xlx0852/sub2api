@@ -55,8 +55,8 @@ func NewGrokQuotaService(
 }
 
 // ProbeUsage actively queries xAI Grok CLI billing endpoints (same source as CPAMC).
-// It hits /v1/billing?format=credits and /v1/billing in parallel, merges the config
-// payloads, and persists the snapshot on the account for passive usage display.
+// It sequentially hits /v1/billing?format=credits then /v1/billing, merges the
+// config payloads, and persists the snapshot on the account for passive display.
 func (s *GrokQuotaService) ProbeUsage(ctx context.Context, accountID int64) (*GrokQuotaProbeResult, error) {
 	account, token, proxyURL, err := s.prepareProbe(ctx, accountID)
 	if err != nil {
@@ -76,16 +76,12 @@ func (s *GrokQuotaService) ProbeUsage(ctx context.Context, accountID int64) (*Gr
 	callCtx, cancel := context.WithTimeout(ctx, grokQuotaUpstreamTimeout)
 	defer cancel()
 
-	// Sequential: same account concurrency slot + simpler upstream clients/mocks.
-	// CPAMC issues both in parallel; merge semantics are identical either way.
+	// Sequential: reuses the same account concurrency slot and keeps mocks simple.
+	// Merge semantics match CPAMC (credits first, plain fills monthly gaps).
 	creditsSnap, creditsStatus, creditsErr := s.fetchBilling(callCtx, creditsURL, token, userID, proxyURL, account)
 	plainSnap, plainStatus, plainErr := s.fetchBilling(callCtx, plainURL, token, userID, proxyURL, account)
 
 	merged := xai.MergeBillingSnapshots(creditsSnap, plainSnap)
-	statusCode := creditsStatus
-	if statusCode == 0 {
-		statusCode = plainStatus
-	}
 	if merged == nil {
 		// Both failed: surface the more useful error.
 		if creditsErr != nil {
@@ -97,6 +93,10 @@ func (s *GrokQuotaService) ProbeUsage(ctx context.Context, accountID int64) (*Gr
 		return nil, infraerrors.New(http.StatusBadGateway, "GROK_BILLING_EMPTY", "billing response contained no quota data")
 	}
 
+	// Prefer status from a successful snapshot so a failed credits call (e.g. 401)
+	// does not poison a successful plain billing result as NeedsReauth.
+	statusCode := pickSuccessfulBillingStatus(creditsSnap, creditsStatus, plainSnap, plainStatus)
+
 	merged.StatusCode = statusCode
 	merged.Source = "billing_probe"
 	if merged.FetchedAt == "" {
@@ -104,9 +104,15 @@ func (s *GrokQuotaService) ProbeUsage(ctx context.Context, accountID int64) (*Gr
 	}
 
 	// Persist for account list passive display.
-	_ = s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
+	if err := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
 		grokBillingSnapshotKey: merged,
-	})
+	}); err != nil {
+		slog.Warn("grok_billing_persist_failed",
+			"account_id", account.ID,
+			"error", err,
+		)
+		return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_BILLING_PERSIST_FAILED", "billing fetched but failed to persist: %v", err)
+	}
 
 	// Keep legacy rate-limit header snapshot if present (still useful for 429 UI).
 	legacy, _ := grokQuotaSnapshotFromExtra(account.Extra)
@@ -120,6 +126,35 @@ func (s *GrokQuotaService) ProbeUsage(ctx context.Context, accountID int64) (*Gr
 		ResetSupported:  false,
 		FetchedAt:       time.Now().Unix(),
 	}, nil
+}
+
+// pickSuccessfulBillingStatus returns the HTTP status from a successful snapshot.
+// When both succeed, prefers a 2xx status; when only one succeeds, uses that side.
+func pickSuccessfulBillingStatus(creditsSnap *xai.BillingSnapshot, creditsStatus int, plainSnap *xai.BillingSnapshot, plainStatus int) int {
+	isOK := func(code int) bool { return code >= 200 && code < 300 }
+
+	switch {
+	case creditsSnap != nil && plainSnap != nil:
+		if isOK(creditsStatus) {
+			return creditsStatus
+		}
+		if isOK(plainStatus) {
+			return plainStatus
+		}
+		if creditsStatus != 0 {
+			return creditsStatus
+		}
+		return plainStatus
+	case creditsSnap != nil:
+		return creditsStatus
+	case plainSnap != nil:
+		return plainStatus
+	default:
+		if creditsStatus != 0 {
+			return creditsStatus
+		}
+		return plainStatus
+	}
 }
 
 func (s *GrokQuotaService) fetchBilling(

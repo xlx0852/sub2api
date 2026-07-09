@@ -208,13 +208,17 @@ func parseBillingConfig(cfg map[string]any) *BillingSnapshot {
 		onDemandPercent = &p
 	}
 
-	hasWeekly := creditUsagePercent != nil || periodType == "weekly" || len(products) > 0
-	hasMonthly := monthlyLimit != nil || used != nil || (!hasWeekly && (onDemandCap != nil || billingEnd != ""))
-	if !hasWeekly && !hasMonthly {
+	// Weekly window requires an explicit weekly signal — product rows alone are not enough
+	// (they can appear without a weekly creditUsagePercent).
+	hasWeeklyWindow := creditUsagePercent != nil || periodType == "weekly"
+	hasProducts := len(products) > 0
+	hasMonthly := monthlyLimit != nil || used != nil || onDemandCap != nil || billingEnd != ""
+	if !hasWeeklyWindow && !hasProducts && !hasMonthly {
 		return nil
 	}
 
-	if hasWeekly {
+	switch {
+	case hasWeeklyWindow:
 		if periodType == "unknown" {
 			out.PeriodType = "weekly"
 		} else {
@@ -223,11 +227,14 @@ func parseBillingConfig(cfg map[string]any) *BillingSnapshot {
 		out.UsagePercent = creditUsagePercent
 		out.PeriodStart = periodStart
 		out.PeriodEnd = periodEnd
-	} else {
+	case hasMonthly:
 		out.PeriodType = "monthly"
 		out.UsagePercent = monthlyUsedPercent
 		out.PeriodStart = billingStart
 		out.PeriodEnd = billingEnd
+	default:
+		// Product-only payload (no weekly % / monthly dollars).
+		out.PeriodType = "unknown"
 	}
 	out.ProductUsage = products
 	out.MonthlyLimitCents = monthlyLimit
@@ -477,13 +484,9 @@ func firstString(obj map[string]any, keys ...string) string {
 	switch v := raw.(type) {
 	case string:
 		return strings.TrimSpace(v)
-	case float64:
-		// ignore numeric non-strings
-		return ""
+	case []byte:
+		return strings.TrimSpace(string(v))
 	default:
-		if v == nil {
-			return ""
-		}
-		return strings.TrimSpace(fmt.Sprint(v))
+		return ""
 	}
 }
