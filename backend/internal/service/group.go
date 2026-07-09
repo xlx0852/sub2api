@@ -43,6 +43,11 @@ type Group struct {
 	ImagePrice1K                 *float64
 	ImagePrice2K                 *float64
 	ImagePrice4K                 *float64
+	VideoRateIndependent         bool
+	VideoRateMultiplier          float64
+	VideoPrice480P               *float64
+	VideoPrice720P               *float64
+	VideoPrice1080P              *float64
 	BatchImageDiscountMultiplier float64
 	BatchImageHoldMultiplier     float64
 
