@@ -62,6 +62,13 @@ describe('useModelWhitelist', () => {
     expect(models).not.toContain('gemini-3-pro-preview')
   })
 
+  it('xAI 模型列表包含 Grok 4.5 官方别名', () => {
+    const models = getModelsByPlatform('grok')
+    expect(models).toContain('grok-4.5')
+    expect(models).toContain('grok-4.5-latest')
+    expect(models).toContain('grok-build-latest')
+  })
+
   it('antigravity 模型列表会把图片模型排在前面', () => {
     const models = getModelsByPlatform('antigravity')
 
