@@ -29,9 +29,14 @@
     </template>
 
     <!-- Error Info Indicator -->
-    <div v-if="hasError && account.error_message" class="group/error relative">
+    <div v-if="hasError && errorTooltipText" class="group/error relative">
       <svg
-        class="h-4 w-4 cursor-help text-red-500 transition-colors hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+        :class="[
+          'h-4 w-4 cursor-help transition-colors',
+          isGrokSpendingLimitBlocked
+            ? 'text-amber-500 hover:text-amber-600 dark:text-amber-400 dark:hover:text-amber-300'
+            : 'text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300'
+        ]"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -48,7 +53,7 @@
         class="invisible absolute left-0 top-full z-[100] mt-1.5 min-w-[200px] max-w-[300px] rounded-lg bg-gray-800 px-3 py-2 text-xs text-white opacity-0 shadow-xl transition-all duration-200 group-hover/error:visible group-hover/error:opacity-100 dark:bg-gray-900"
       >
         <div class="whitespace-pre-wrap break-words leading-relaxed text-gray-300">
-          {{ account.error_message }}
+          {{ errorTooltipText }}
         </div>
         <!-- 上方小三角 -->
         <div
@@ -289,6 +294,25 @@ const hasError = computed(() => {
   return props.account.status === 'error'
 })
 
+const isGrokSpendingLimitBlocked = computed(() => {
+  if (props.account.platform !== 'grok') return false
+  const text = `${props.account.error_message ?? ''} ${props.account.temp_unschedulable_reason ?? ''}`.toLowerCase()
+  return (
+    text.includes('grok_spending_limit') ||
+    text.includes('personal-team-blocked:spending-limit') ||
+    text.includes('run out of credits') ||
+    text.includes('need a grok subscription')
+  )
+})
+
+const errorTooltipText = computed(() => {
+  if (!hasError.value) return ''
+  if (isGrokSpendingLimitBlocked.value) {
+    return t('admin.accounts.status.grokSpendingLimitHelp')
+  }
+  return props.account.error_message ?? ''
+})
+
 const isQuotaExceeded = computed(() => {
   const exceeded = (used?: number | null, limit?: number | null) =>
     typeof limit === 'number' && limit > 0 && typeof used === 'number' && used >= limit
@@ -316,6 +340,9 @@ const overloadCountdown = computed(() => {
 
 // Computed: status badge class
 const statusClass = computed(() => {
+  if (isGrokSpendingLimitBlocked.value) {
+    return 'badge-warning'
+  }
   if (hasError.value) {
     return 'badge-danger'
   }
@@ -336,6 +363,9 @@ const statusClass = computed(() => {
 
 // Computed: status text
 const statusText = computed(() => {
+  if (isGrokSpendingLimitBlocked.value) {
+    return t('admin.accounts.status.grokSpendingLimit')
+  }
   if (hasError.value) {
     return t('admin.accounts.status.error')
   }

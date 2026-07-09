@@ -258,6 +258,8 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 
 	resultWithUsage := func() *OpenAIForwardResult {
 		imageCount := imageCounter.Count()
+		payloadBytesValue := int64(payloadBytes)
+		eventCountValue := eventCount
 		result := &OpenAIForwardResult{
 			RequestID:       responseID,
 			Usage:           usage,
@@ -270,6 +272,8 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			ResponseHeaders: cloneHeader(resp.Header),
 			Duration:        time.Since(turnStart),
 			FirstTokenMs:    firstTokenMs,
+			WSPayloadBytes:  &payloadBytesValue,
+			WSEventCount:    &eventCountValue,
 		}
 		if replayInput := replayCollector.Items(); len(replayInput) > 0 {
 			result.wsReplayInput = replayInput

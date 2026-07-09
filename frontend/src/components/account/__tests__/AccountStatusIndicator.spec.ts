@@ -159,4 +159,29 @@ describe('AccountStatusIndicator', () => {
     // AICredits 积分耗尽状态应显示
     expect(wrapper.text()).toContain('admin.accounts.status.creditsExhausted')
   })
+
+  it('Grok spending-limit 403 显示专门状态并隐藏原始 JSON', () => {
+    const wrapper = mount(AccountStatusIndicator, {
+      props: {
+        account: makeAccount({
+          id: 5,
+          name: 'grok-1',
+          platform: 'grok',
+          status: 'error',
+          schedulable: false,
+          error_message:
+            'Access forbidden (403): {"code":"personal-team-blocked:spending-limit","error":"You have run out of credits or need a Grok subscription."}'
+        })
+      },
+      global: {
+        stubs: {
+          Icon: true
+        }
+      }
+    })
+
+    expect(wrapper.text()).toContain('admin.accounts.status.grokSpendingLimit')
+    expect(wrapper.text()).toContain('admin.accounts.status.grokSpendingLimitHelp')
+    expect(wrapper.text()).not.toContain('personal-team-blocked:spending-limit')
+  })
 })

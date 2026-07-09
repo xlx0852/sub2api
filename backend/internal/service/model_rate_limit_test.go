@@ -108,18 +108,18 @@ func TestIsModelRateLimited(t *testing.T) {
 			expected:       true,
 		},
 		{
-			name: "antigravity platform - gemini-3-pro-preview mapped to gemini-3-pro-high",
+			name: "antigravity platform - gemini-3.1-pro-preview mapped to gemini-pro-agent",
 			account: &Account{
 				Platform: PlatformAntigravity,
 				Extra: map[string]any{
 					modelRateLimitsKey: map[string]any{
-						"gemini-3-pro-high": map[string]any{
+						"gemini-pro-agent": map[string]any{
 							"rate_limit_reset_at": future,
 						},
 					},
 				},
 			},
-			requestedModel: "gemini-3-pro-preview",
+			requestedModel: "gemini-3.1-pro-preview",
 			expected:       true,
 		},
 		{
@@ -134,7 +134,7 @@ func TestIsModelRateLimited(t *testing.T) {
 					},
 				},
 			},
-			requestedModel: "gemini-3-pro-preview",
+			requestedModel: "gemini-3.1-pro-preview",
 			expected:       true,
 		},
 		{
@@ -153,18 +153,18 @@ func TestIsModelRateLimited(t *testing.T) {
 			expected:       false,
 		},
 		{
-			name: "non-antigravity platform - gemini-3-pro-preview NOT mapped",
+			name: "non-antigravity platform - gemini-3.1-pro-preview NOT mapped",
 			account: &Account{
 				Platform: PlatformGemini,
 				Extra: map[string]any{
 					modelRateLimitsKey: map[string]any{
-						"gemini-3-pro-high": map[string]any{
+						"gemini-pro-agent": map[string]any{
 							"rate_limit_reset_at": future,
 						},
 					},
 				},
 			},
-			requestedModel: "gemini-3-pro-preview",
+			requestedModel: "gemini-3.1-pro-preview",
 			expected:       false, // gemini 平台不走 antigravity 映射
 		},
 		{

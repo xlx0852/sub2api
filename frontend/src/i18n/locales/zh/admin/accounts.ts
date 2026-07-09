@@ -246,6 +246,8 @@ export default {
         active: '正常',
         inactive: '停用',
         error: '错误',
+        grokSpendingLimit: 'Grok 额度/订阅',
+        grokSpendingLimitHelp: 'Grok 上游返回额度已用尽或需要 SuperGrok 订阅，请充值或升级后恢复账号。',
         cooldown: '冷却中',
         paused: '暂停',
         limited: '限流',

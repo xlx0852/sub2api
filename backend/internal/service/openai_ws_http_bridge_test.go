@@ -165,6 +165,10 @@ func TestOpenAIWSHTTPBridgeRelaysSSEFramesAsWebSocketMessages(t *testing.T) {
 		require.Equal(t, 3, bridge.result.Usage.InputTokens)
 		require.Equal(t, 2, bridge.result.Usage.OutputTokens)
 		require.True(t, bridge.result.OpenAIWSMode)
+		require.NotNil(t, bridge.result.WSPayloadBytes)
+		require.Equal(t, int64(len(payload)), *bridge.result.WSPayloadBytes)
+		require.NotNil(t, bridge.result.WSEventCount)
+		require.Equal(t, 3, *bridge.result.WSEventCount)
 	case <-time.After(3 * time.Second):
 		t.Fatal("timed out waiting for bridge result")
 	}

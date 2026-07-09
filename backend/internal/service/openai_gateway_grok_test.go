@@ -816,6 +816,7 @@ func TestHandleGrokAccountUpstreamErrorTempUnschedulesReadinessStates(t *testing
 		name            string
 		status          int
 		headers         http.Header
+		body            []byte
 		wantReason      string
 		wantMinCooldown time.Duration
 		wantMaxCooldown time.Duration
@@ -831,6 +832,14 @@ func TestHandleGrokAccountUpstreamErrorTempUnschedulesReadinessStates(t *testing
 			name:            "forbidden entitlement",
 			status:          http.StatusForbidden,
 			wantReason:      "grok entitlement or subscription tier denied",
+			wantMinCooldown: 30*time.Minute - time.Second,
+			wantMaxCooldown: 30*time.Minute + time.Second,
+		},
+		{
+			name:            "forbidden spending limit",
+			status:          http.StatusForbidden,
+			body:            []byte(`{"code":"personal-team-blocked:spending-limit","error":"You have run out of credits or need a Grok subscription."}`),
+			wantReason:      grokSpendingLimitTempUnschedReason,
 			wantMinCooldown: 30*time.Minute - time.Second,
 			wantMaxCooldown: 30*time.Minute + time.Second,
 		},
@@ -851,7 +860,7 @@ func TestHandleGrokAccountUpstreamErrorTempUnschedulesReadinessStates(t *testing
 			svc := &OpenAIGatewayService{accountRepo: repo}
 			before := time.Now()
 
-			svc.handleGrokAccountUpstreamError(context.Background(), account, tt.status, tt.headers, nil)
+			svc.handleGrokAccountUpstreamError(context.Background(), account, tt.status, tt.headers, tt.body)
 
 			require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
 			require.Equal(t, 1, repo.tempUnschedCalls)

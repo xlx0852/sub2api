@@ -86,3 +86,29 @@ func TestRateLimitService_HandleUpstreamError_OpenAI403ThresholdDisables(t *test
 	require.Contains(t, repo.lastErrorMsg, "workspace forbidden by policy")
 	require.Contains(t, repo.lastErrorMsg, "consecutive_403=3/3")
 }
+
+func TestRateLimitService_HandleUpstreamError_Grok403SpendingLimitMarked(t *testing.T) {
+	repo := &rateLimitAccountRepoStub{}
+	service := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	account := &Account{
+		ID:       303,
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+	}
+	body := []byte(`{"code":"personal-team-blocked:spending-limit","error":"You have run out of credits or need a Grok subscription."}`)
+
+	shouldDisable := service.HandleUpstreamError(
+		context.Background(),
+		account,
+		http.StatusForbidden,
+		http.Header{},
+		body,
+	)
+
+	require.True(t, shouldDisable)
+	require.Equal(t, 1, repo.setErrorCalls)
+	require.Equal(t, account.ID, repo.lastErrorID)
+	require.Contains(t, repo.lastErrorMsg, grokSpendingLimitMarker)
+	require.Contains(t, repo.lastErrorMsg, "You have run out of credits")
+	require.NotContains(t, repo.lastErrorMsg, `{"code"`)
+}
