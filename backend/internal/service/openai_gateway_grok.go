@@ -37,7 +37,7 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 
 	upstreamModel := account.GetMappedModel(originalModel)
 	if strings.TrimSpace(upstreamModel) == "" {
-		upstreamModel = "grok-4.3"
+		upstreamModel = xai.DefaultChatModel
 	}
 	patchedBody, err := patchGrokResponsesBody(body, upstreamModel)
 	if err != nil {

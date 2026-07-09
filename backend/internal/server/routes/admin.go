@@ -292,6 +292,9 @@ func registerGroupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 }
 
 func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	// Global model catalog (JSON-driven; shared by admin UI first-party model lists)
+	admin.GET("/model-catalog", h.Admin.Account.GetModelCatalog)
+
 	accounts := admin.Group("/accounts")
 	{
 		accounts.GET("", h.Admin.Account.List)

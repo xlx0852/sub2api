@@ -16,43 +16,9 @@ type Model struct {
 	DisplayName string `json:"display_name"`
 }
 
-// DefaultModels OpenAI models list
-var DefaultModels = []Model{
-	{ID: "gpt-5.6-sol", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Sol"},
-	{ID: "gpt-5.6-terra", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Terra"},
-	{ID: "gpt-5.6-luna", Object: "model", Created: 1780876800, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.6 Luna"},
-	{ID: "gpt-5.5", Object: "model", Created: 1776873600, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.5"},
-	{ID: "gpt-5.4", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.4"},
-	{ID: "gpt-5.4-mini", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.4 Mini"},
-	{ID: "codex-auto-review", Object: "model", Created: 1776902400, OwnedBy: "openai", Type: "model", DisplayName: "Codex Auto Review"},
-	{ID: "gpt-5.2", Object: "model", Created: 1733875200, OwnedBy: "openai", Type: "model", DisplayName: "GPT-5.2"},
-	{ID: "gpt-image-1", Object: "model", Created: 1733875200, OwnedBy: "openai", Type: "model", DisplayName: "GPT Image 1"},
-	{ID: "gpt-image-1.5", Object: "model", Created: 1735689600, OwnedBy: "openai", Type: "model", DisplayName: "GPT Image 1.5"},
-	{ID: "gpt-image-2", Object: "model", Created: 1738368000, OwnedBy: "openai", Type: "model", DisplayName: "GPT Image 2"},
-}
-
-var retiredModelIDs = map[string]struct{}{
-	"gpt-5.3-codex":       {},
-	"gpt-5.3-codex-spark": {},
-}
-
-// IsRetiredModelID reports whether the OpenAI model should be hidden from selectable model lists.
-func IsRetiredModelID(id string) bool {
-	_, ok := retiredModelIDs[strings.ToLower(strings.TrimSpace(id))]
-	return ok
-}
-
-// DefaultModelIDs returns the default model ID list
-func DefaultModelIDs() []string {
-	ids := make([]string, len(DefaultModels))
-	for i, m := range DefaultModels {
-		ids[i] = m.ID
-	}
-	return ids
-}
-
-// DefaultTestModel default model for testing OpenAI accounts
-const DefaultTestModel = "gpt-5.4"
+// DefaultModels is populated from modelcatalog on package init.
+// Prefer reading via this variable or DefaultModelIDs() after init.
+var DefaultModels []Model
 
 // DefaultInstructions default instructions for non-Codex CLI requests.
 // 内容为真实 Codex CLI 的 GPT-5-Codex base prompt（codex 系模型默认）。

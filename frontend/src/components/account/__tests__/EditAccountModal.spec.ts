@@ -252,7 +252,7 @@ function buildGrokOAuthAccount() {
       refresh_token: 'grok-rt',
       base_url: 'https://api.x.ai/v1',
       model_mapping: {
-        'grok-latest': 'grok-4.3'
+        'grok-latest': 'grok-4.5'
       }
     },
     extra: {},
@@ -403,7 +403,7 @@ describe('EditAccountModal', () => {
     }
 
     await inputWithValue('grok-latest').setValue('grok')
-    await inputWithValue('grok-4.3').setValue('grok-build-0.1')
+    await inputWithValue('grok-4.5').setValue('grok-build-0.1')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)

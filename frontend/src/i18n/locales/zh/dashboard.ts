@@ -141,6 +141,14 @@ export default {
         noteWindows:
           '按 Win+R，输入 %userprofile%\\.codex 打开配置目录。如目录不存在，请先手动创建。'
       },
+      grok: {
+        description:
+          '将以下配置文件添加到 Codex CLI 配置目录中，通过 Sub2API 的 Grok 分组使用 Grok 模型（OpenAI Responses 兼容）。',
+        configTomlHint: '请确保以下内容位于 config.toml 文件的开头部分；默认模型为 grok-4.5',
+        note: '请确保配置目录存在。macOS/Linux 用户可运行 mkdir -p ~/.codex 创建目录。auth.json 中的 OPENAI_API_KEY 填写本站 API 密钥。',
+        noteWindows:
+          '按 Win+R，输入 %userprofile%\\.codex 打开配置目录。如目录不存在，请先手动创建。auth.json 中的 OPENAI_API_KEY 填写本站 API 密钥。'
+      },
       cliTabs: {
         claudeCode: 'Claude Code',
         geminiCli: 'Gemini CLI',
@@ -160,7 +168,7 @@ export default {
       gemini: {
         description:
           '将以下环境变量添加到您的终端配置文件或直接在终端中运行，以配置 Gemini CLI 访问。',
-        modelComment: '如果你有 Gemini 3 权限可以填：gemini-3-pro-preview',
+        modelComment: '如果你有 Gemini 3 权限可以填：gemini-3.1-pro-preview',
         note: '这些环境变量将在当前终端会话中生效。如需永久配置，请将其添加到 ~/.bashrc、~/.zshrc 或相应的配置文件中。'
       },
       opencode: {

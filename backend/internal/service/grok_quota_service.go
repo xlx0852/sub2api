@@ -17,7 +17,6 @@ import (
 const (
 	grokQuotaUpstreamTimeout = 20 * time.Second
 	grokQuotaProbeInput      = "."
-	grokQuotaDefaultModel    = "grok-4.3"
 )
 
 type GrokQuotaProbeResult struct {
@@ -176,7 +175,7 @@ func (s *GrokQuotaService) loadGrokOAuthAccount(ctx context.Context, accountID i
 }
 
 func buildGrokQuotaProbeBody(account *Account) ([]byte, error) {
-	model := grokQuotaDefaultModel
+	model := xai.DefaultChatModel
 	if account != nil {
 		if mapped := strings.TrimSpace(account.GetMappedModel("grok")); mapped != "" {
 			model = mapped

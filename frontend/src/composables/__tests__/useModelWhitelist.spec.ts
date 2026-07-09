@@ -33,12 +33,14 @@ describe('useModelWhitelist', () => {
     expect(models).not.toContain('gpt-5.2-codex')
   })
 
-  it('antigravity 模型列表包含图片模型兼容项', () => {
+  it('antigravity 模型列表包含当前代 Gemini', () => {
     const models = getModelsByPlatform('antigravity')
 
-    expect(models).toContain('gemini-2.5-flash-image')
     expect(models).toContain('gemini-3.1-flash-image')
-    expect(models).toContain('gemini-3-pro-image')
+    expect(models).toContain('gemini-3-flash')
+    expect(models).toContain('gemini-3.1-pro-high')
+    expect(models).not.toContain('gemini-2.5-flash')
+    expect(models).not.toContain('gemini-2.5-flash-image')
   })
 
   it('Claude 模型列表包含新发布的 Claude 模型', () => {
@@ -48,20 +50,22 @@ describe('useModelWhitelist', () => {
     expect(getModelsByPlatform('antigravity')).toContain('claude-opus-4-8')
   })
 
-  it('gemini 模型列表包含原生生图模型', () => {
+  it('gemini 模型列表仅保留当前代', () => {
     const models = getModelsByPlatform('gemini')
 
-    expect(models).toContain('gemini-2.5-flash-image')
     expect(models).toContain('gemini-3.1-flash-image')
-    expect(models.indexOf('gemini-3.1-flash-image')).toBeLessThan(models.indexOf('gemini-2.0-flash'))
-    expect(models.indexOf('gemini-2.5-flash-image')).toBeLessThan(models.indexOf('gemini-2.5-flash'))
+    expect(models).toContain('gemini-3.5-flash')
+    expect(models).toContain('gemini-3.1-pro-preview')
+    expect(models).not.toContain('gemini-2.0-flash')
+    expect(models).not.toContain('gemini-2.5-flash')
+    expect(models).not.toContain('gemini-2.5-pro')
+    expect(models).not.toContain('gemini-3-pro-preview')
   })
 
-  it('antigravity 模型列表会把新的 Gemini 图片模型排在前面', () => {
+  it('antigravity 模型列表会把图片模型排在前面', () => {
     const models = getModelsByPlatform('antigravity')
 
-    expect(models.indexOf('gemini-3.1-flash-image')).toBeLessThan(models.indexOf('gemini-2.5-flash'))
-    expect(models.indexOf('gemini-2.5-flash-image')).toBeLessThan(models.indexOf('gemini-2.5-flash-lite'))
+    expect(models.indexOf('gemini-3.1-flash-image')).toBeLessThan(models.indexOf('gemini-3-flash'))
   })
 
   it('antigravity 模型列表包含 Gemini 3.1 Pro 通用别名', () => {

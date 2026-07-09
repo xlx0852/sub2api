@@ -55,7 +55,7 @@ func DefaultTransformOptions() TransformOptions {
 }
 
 // webSearchFallbackModel web_search 请求使用的降级模型
-const webSearchFallbackModel = "gemini-2.5-flash"
+const webSearchFallbackModel = "gemini-3-flash"
 
 // MaxTokensBudgetPadding max_tokens 自动调整时在 budget_tokens 基础上增加的额度
 // Claude API 要求 max_tokens > thinking.budget_tokens，否则返回 400 错误

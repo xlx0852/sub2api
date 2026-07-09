@@ -207,8 +207,10 @@ func TestDefaultModelMappingIncludesGrokAliases(t *testing.T) {
 	t.Parallel()
 
 	mapping := DefaultModelMapping()
-	require.Equal(t, "grok-4.3", mapping["grok"])
-	require.Equal(t, "grok-4.3", mapping["grok-latest"])
+	require.Equal(t, DefaultChatModel, mapping["grok"])
+	require.Equal(t, DefaultChatModel, mapping["grok-latest"])
+	require.Equal(t, DefaultChatModel, mapping["grok-4.5"])
+	require.Equal(t, DefaultChatModel, mapping["grok-4.5-latest"])
 	require.Equal(t, "grok-build-0.1", mapping["grok-build"])
 	require.Equal(t, "grok-composer-2.5-fast", mapping["grok-composer"])
 	require.Equal(t, "grok-4.20-0309-reasoning", mapping["grok-4.20-reasoning"])

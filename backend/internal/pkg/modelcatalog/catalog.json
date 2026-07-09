@@ -1,0 +1,851 @@
+{
+  "version": 1,
+  "updated_at": "2026-07-09T00:00:00Z",
+  "platforms": {
+    "openai": {
+      "default_test_model": "gpt-5.4",
+      "models": [
+        {
+          "id": "gpt-5.6-sol",
+          "display_name": "GPT-5.6 Sol",
+          "object": "model",
+          "owned_by": "openai",
+          "type": "model",
+          "created": 1780876800
+        },
+        {
+          "id": "gpt-5.6-terra",
+          "display_name": "GPT-5.6 Terra",
+          "object": "model",
+          "owned_by": "openai",
+          "type": "model",
+          "created": 1780876800
+        },
+        {
+          "id": "gpt-5.6-luna",
+          "display_name": "GPT-5.6 Luna",
+          "object": "model",
+          "owned_by": "openai",
+          "type": "model",
+          "created": 1780876800
+        },
+        {
+          "id": "gpt-5.5",
+          "display_name": "GPT-5.5",
+          "object": "model",
+          "owned_by": "openai",
+          "type": "model",
+          "created": 1776873600
+        },
+        {
+          "id": "gpt-5.4",
+          "display_name": "GPT-5.4",
+          "object": "model",
+          "owned_by": "openai",
+          "type": "model",
+          "created": 1738368000
+        },
+        {
+          "id": "gpt-5.4-mini",
+          "display_name": "GPT-5.4 Mini",
+          "object": "model",
+          "owned_by": "openai",
+          "type": "model",
+          "created": 1738368000
+        },
+        {
+          "id": "codex-auto-review",
+          "display_name": "Codex Auto Review",
+          "object": "model",
+          "owned_by": "openai",
+          "type": "model",
+          "created": 1776902400
+        },
+        {
+          "id": "gpt-image-2",
+          "display_name": "GPT Image 2",
+          "object": "model",
+          "owned_by": "openai",
+          "type": "model",
+          "created": 1738368000,
+          "media": {
+            "image_generation": true
+          }
+        }
+      ],
+      "retired_ids": [
+        "gpt-5.3-codex",
+        "gpt-5.3-codex-spark",
+        "gpt-image-1",
+        "gpt-image-1.5",
+        "gpt-image-1-mini",
+        "gpt-5.2",
+        "gpt-5.2-codex",
+        "gpt-5.2-chat-latest"
+      ],
+      "aliases": {}
+    },
+    "anthropic": {
+      "default_test_model": "claude-sonnet-4-5-20250929",
+      "models": [
+        {
+          "id": "claude-fable-5",
+          "display_name": "Claude Fable 5",
+          "type": "model",
+          "created_at": "2026-06-09T00:00:00Z"
+        },
+        {
+          "id": "claude-opus-4-5-20251101",
+          "display_name": "Claude Opus 4.5",
+          "type": "model",
+          "created_at": "2025-11-01T00:00:00Z"
+        },
+        {
+          "id": "claude-opus-4-6",
+          "display_name": "Claude Opus 4.6",
+          "type": "model",
+          "created_at": "2026-02-06T00:00:00Z"
+        },
+        {
+          "id": "claude-opus-4-7",
+          "display_name": "Claude Opus 4.7",
+          "type": "model",
+          "created_at": "2026-04-17T00:00:00Z"
+        },
+        {
+          "id": "claude-opus-4-8",
+          "display_name": "Claude Opus 4.8",
+          "type": "model",
+          "created_at": "2026-05-29T00:00:00Z"
+        },
+        {
+          "id": "claude-sonnet-5",
+          "display_name": "Claude Sonnet 5",
+          "type": "model",
+          "created_at": "2026-07-01T00:00:00Z"
+        },
+        {
+          "id": "claude-sonnet-4-6",
+          "display_name": "Claude Sonnet 4.6",
+          "type": "model",
+          "created_at": "2026-02-18T00:00:00Z"
+        },
+        {
+          "id": "claude-sonnet-4-5-20250929",
+          "display_name": "Claude Sonnet 4.5",
+          "type": "model",
+          "created_at": "2025-09-29T00:00:00Z"
+        },
+        {
+          "id": "claude-haiku-4-5-20251001",
+          "display_name": "Claude Haiku 4.5",
+          "type": "model",
+          "created_at": "2025-10-01T00:00:00Z"
+        }
+      ],
+      "id_overrides": {
+        "claude-sonnet-4-5": "claude-sonnet-4-5-20250929",
+        "claude-opus-4-5": "claude-opus-4-5-20251101",
+        "claude-haiku-4-5": "claude-haiku-4-5-20251001"
+      },
+      "id_reverse_overrides": {
+        "claude-sonnet-4-5-20250929": "claude-sonnet-4-5",
+        "claude-opus-4-5-20251101": "claude-opus-4-5",
+        "claude-haiku-4-5-20251001": "claude-haiku-4-5"
+      }
+    },
+    "gemini": {
+      "default_test_model": "gemini-3.5-flash",
+      "models": [
+        {
+          "id": "gemini-3.5-flash",
+          "name": "models/gemini-3.5-flash",
+          "display_name": "Gemini 3.5 Flash",
+          "supported_generation_methods": [
+            "generateContent",
+            "streamGenerateContent"
+          ]
+        },
+        {
+          "id": "gemini-3.1-pro-preview",
+          "name": "models/gemini-3.1-pro-preview",
+          "display_name": "Gemini 3.1 Pro Preview",
+          "supported_generation_methods": [
+            "generateContent",
+            "streamGenerateContent"
+          ]
+        },
+        {
+          "id": "gemini-3.1-pro-preview-customtools",
+          "name": "models/gemini-3.1-pro-preview-customtools",
+          "display_name": "Gemini 3.1 Pro Preview Custom Tools",
+          "supported_generation_methods": [
+            "generateContent",
+            "streamGenerateContent"
+          ]
+        },
+        {
+          "id": "gemini-3.1-flash-image",
+          "name": "models/gemini-3.1-flash-image",
+          "display_name": "Gemini 3.1 Flash Image",
+          "supported_generation_methods": [
+            "generateContent",
+            "streamGenerateContent"
+          ],
+          "media": {
+            "image_generation": true
+          }
+        }
+      ]
+    },
+    "antigravity": {
+      "models": [
+        {
+          "id": "claude-fable-5",
+          "display_name": "Claude Fable 5",
+          "created_at": "2026-06-09T00:00:00Z",
+          "family": "claude"
+        },
+        {
+          "id": "claude-opus-4-5-thinking",
+          "display_name": "Claude Opus 4.5 Thinking",
+          "created_at": "2025-11-01T00:00:00Z",
+          "family": "claude",
+          "is_reasoning": true
+        },
+        {
+          "id": "claude-sonnet-4-5",
+          "display_name": "Claude Sonnet 4.5",
+          "created_at": "2025-09-29T00:00:00Z",
+          "family": "claude"
+        },
+        {
+          "id": "claude-sonnet-4-5-thinking",
+          "display_name": "Claude Sonnet 4.5 Thinking",
+          "created_at": "2025-09-29T00:00:00Z",
+          "family": "claude",
+          "is_reasoning": true
+        },
+        {
+          "id": "claude-opus-4-6",
+          "display_name": "Claude Opus 4.6",
+          "created_at": "2026-02-05T00:00:00Z",
+          "family": "claude"
+        },
+        {
+          "id": "claude-opus-4-6-thinking",
+          "display_name": "Claude Opus 4.6 Thinking",
+          "created_at": "2026-02-05T00:00:00Z",
+          "family": "claude",
+          "is_reasoning": true
+        },
+        {
+          "id": "claude-opus-4-7",
+          "display_name": "Claude Opus 4.7",
+          "created_at": "2026-04-17T00:00:00Z",
+          "family": "claude"
+        },
+        {
+          "id": "claude-opus-4-8",
+          "display_name": "Claude Opus 4.8",
+          "created_at": "2026-05-29T00:00:00Z",
+          "family": "claude"
+        },
+        {
+          "id": "claude-sonnet-4-6",
+          "display_name": "Claude Sonnet 4.6",
+          "created_at": "2026-02-17T00:00:00Z",
+          "family": "claude"
+        },
+        {
+          "id": "gemini-3-flash",
+          "display_name": "Gemini 3 Flash",
+          "created_at": "2025-06-01T00:00:00Z",
+          "family": "gemini"
+        },
+        {
+          "id": "gemini-3.1-pro-low",
+          "display_name": "Gemini 3.1 Pro Low",
+          "created_at": "2026-02-19T00:00:00Z",
+          "family": "gemini"
+        },
+        {
+          "id": "gemini-3.1-pro-high",
+          "display_name": "Gemini 3.1 Pro High",
+          "created_at": "2026-02-19T00:00:00Z",
+          "family": "gemini",
+          "is_reasoning": true
+        },
+        {
+          "id": "gemini-3.1-flash-image",
+          "display_name": "Gemini 3.1 Flash Image",
+          "created_at": "2026-02-19T00:00:00Z",
+          "family": "gemini",
+          "media": {
+            "image_generation": true
+          }
+        }
+      ],
+      "default_mapping": {
+        "claude-fable-5": "claude-fable-5",
+        "claude-opus-4-8": "claude-opus-4-8",
+        "claude-opus-4-7": "claude-opus-4-7",
+        "claude-opus-4-6-thinking": "claude-opus-4-6-thinking",
+        "claude-opus-4-6": "claude-opus-4-6-thinking",
+        "claude-opus-4-5-thinking": "claude-opus-4-6-thinking",
+        "claude-sonnet-4-6": "claude-sonnet-4-6",
+        "claude-sonnet-4-5": "claude-sonnet-4-5",
+        "claude-sonnet-4-5-thinking": "claude-sonnet-4-5-thinking",
+        "claude-opus-4-5-20251101": "claude-opus-4-6-thinking",
+        "claude-sonnet-4-5-20250929": "claude-sonnet-4-5",
+        "claude-haiku-4-5": "claude-sonnet-4-6",
+        "claude-haiku-4-5-20251001": "claude-sonnet-4-6",
+        "gemini-2.5-flash": "gemini-3-flash",
+        "gemini-2.5-flash-image": "gemini-3.1-flash-image",
+        "gemini-2.5-flash-image-preview": "gemini-3.1-flash-image",
+        "gemini-2.5-flash-lite": "gemini-3-flash",
+        "gemini-2.5-flash-thinking": "gemini-3-flash",
+        "gemini-2.5-pro": "gemini-pro-agent",
+        "gemini-3-flash": "gemini-3-flash",
+        "gemini-3-pro-high": "gemini-pro-agent",
+        "gemini-3-pro-low": "gemini-3.1-pro-low",
+        "gemini-3-flash-preview": "gemini-3-flash",
+        "gemini-3-pro-preview": "gemini-pro-agent",
+        "gemini-pro-agent": "gemini-pro-agent",
+        "gemini-3.1-pro": "gemini-pro-agent",
+        "gemini-3.1-pro-high": "gemini-pro-agent",
+        "gemini-3.1-pro-low": "gemini-3.1-pro-low",
+        "gemini-3.1-pro-preview": "gemini-pro-agent",
+        "gemini-3.1-flash-image": "gemini-3.1-flash-image",
+        "gemini-3.1-flash-image-preview": "gemini-3.1-flash-image",
+        "gemini-3-pro-image": "gemini-3.1-flash-image",
+        "gemini-3-pro-image-preview": "gemini-3.1-flash-image",
+        "gpt-oss-120b-medium": "gpt-oss-120b-medium",
+        "tab_flash_lite_preview": "tab_flash_lite_preview"
+      }
+    },
+    "grok": {
+      "default_chat_model": "grok-4.5",
+      "default_test_model": "grok-4.5",
+      "models": [
+        {
+          "id": "grok-4.5",
+          "display_name": "Grok 4.5",
+          "object": "model",
+          "owned_by": "xai"
+        },
+        {
+          "id": "grok-4.3",
+          "display_name": "Grok 4.3",
+          "object": "model",
+          "owned_by": "xai"
+        },
+        {
+          "id": "grok-build-0.1",
+          "display_name": "Grok Build 0.1",
+          "object": "model",
+          "owned_by": "xai"
+        },
+        {
+          "id": "grok-composer-2.5-fast",
+          "display_name": "Grok Composer 2.5 Fast",
+          "object": "model",
+          "owned_by": "xai"
+        },
+        {
+          "id": "grok-4.20-0309-reasoning",
+          "display_name": "Grok 4.20 Reasoning",
+          "object": "model",
+          "owned_by": "xai"
+        },
+        {
+          "id": "grok-4.20-0309-non-reasoning",
+          "display_name": "Grok 4.20 Non Reasoning",
+          "object": "model",
+          "owned_by": "xai"
+        },
+        {
+          "id": "grok-4.20-multi-agent-0309",
+          "display_name": "Grok 4.20 Multi Agent",
+          "object": "model",
+          "owned_by": "xai"
+        },
+        {
+          "id": "grok-imagine",
+          "display_name": "Grok Imagine",
+          "object": "model",
+          "owned_by": "xai",
+          "media": {
+            "image_generation": true
+          }
+        },
+        {
+          "id": "grok-imagine-image",
+          "display_name": "Grok Imagine Image",
+          "object": "model",
+          "owned_by": "xai",
+          "media": {
+            "image_generation": true
+          }
+        },
+        {
+          "id": "grok-imagine-image-quality",
+          "display_name": "Grok Imagine Image Quality",
+          "object": "model",
+          "owned_by": "xai",
+          "media": {
+            "image_generation": true
+          }
+        },
+        {
+          "id": "grok-imagine-edit",
+          "display_name": "Grok Imagine Edit",
+          "object": "model",
+          "owned_by": "xai",
+          "media": {
+            "image_edit": true
+          }
+        },
+        {
+          "id": "grok-imagine-video",
+          "display_name": "Grok Imagine Video",
+          "object": "model",
+          "owned_by": "xai",
+          "media": {
+            "video": true
+          }
+        },
+        {
+          "id": "grok-imagine-video-1.5",
+          "display_name": "Grok Imagine Video 1.5",
+          "object": "model",
+          "owned_by": "xai",
+          "media": {
+            "video": true
+          }
+        }
+      ],
+      "default_mapping": {
+        "grok": "grok-4.5",
+        "grok-latest": "grok-4.5",
+        "grok-4.5-latest": "grok-4.5",
+        "grok-build": "grok-build-0.1",
+        "grok-composer": "grok-composer-2.5-fast",
+        "grok-4.20-reasoning": "grok-4.20-0309-reasoning",
+        "grok-4.20-non-reasoning": "grok-4.20-0309-non-reasoning",
+        "grok-4.5": "grok-4.5",
+        "grok-4.3": "grok-4.3",
+        "grok-build-0.1": "grok-build-0.1",
+        "grok-composer-2.5-fast": "grok-composer-2.5-fast",
+        "grok-4.20-0309-reasoning": "grok-4.20-0309-reasoning",
+        "grok-4.20-0309-non-reasoning": "grok-4.20-0309-non-reasoning",
+        "grok-4.20-multi-agent-0309": "grok-4.20-multi-agent-0309",
+        "grok-imagine": "grok-imagine",
+        "grok-imagine-image": "grok-imagine-image",
+        "grok-imagine-image-quality": "grok-imagine-image-quality",
+        "grok-imagine-edit": "grok-imagine-edit",
+        "grok-imagine-video": "grok-imagine-video",
+        "grok-imagine-video-1.5": "grok-imagine-video-1.5"
+      }
+    },
+    "bedrock": {
+      "default_mapping": {
+        "claude-fable-5": "anthropic.claude-fable-5",
+        "claude-opus-4-8": "us.anthropic.claude-opus-4-8-v1",
+        "claude-opus-4-7": "us.anthropic.claude-opus-4-7-v1",
+        "claude-opus-4-6-thinking": "us.anthropic.claude-opus-4-6-v1",
+        "claude-opus-4-6": "us.anthropic.claude-opus-4-6-v1",
+        "claude-opus-4-5-thinking": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+        "claude-opus-4-5-20251101": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+        "claude-opus-4-1": "us.anthropic.claude-opus-4-1-20250805-v1:0",
+        "claude-opus-4-20250514": "us.anthropic.claude-opus-4-20250514-v1:0",
+        "claude-sonnet-5": "us.anthropic.claude-sonnet-5-v1",
+        "claude-sonnet-4-6-thinking": "us.anthropic.claude-sonnet-4-6",
+        "claude-sonnet-4-6": "us.anthropic.claude-sonnet-4-6",
+        "claude-sonnet-4-5": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "claude-sonnet-4-5-thinking": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "claude-sonnet-4-5-20250929": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "claude-sonnet-4-20250514": "us.anthropic.claude-sonnet-4-20250514-v1:0",
+        "claude-haiku-4-5": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "claude-haiku-4-5-20251001": "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+      }
+    }
+  },
+  "fallback_pricing": {
+    "claude-opus-4.5": {
+      "input_cost_per_token": 5e-06,
+      "output_cost_per_token": 2.5e-05,
+      "cache_creation_input_token_cost": 6.25e-06,
+      "cache_read_input_token_cost": 5e-07
+    },
+    "claude-sonnet-4": {
+      "input_cost_per_token": 3e-06,
+      "output_cost_per_token": 1.5e-05,
+      "cache_creation_input_token_cost": 3.75e-06,
+      "cache_read_input_token_cost": 3e-07
+    },
+    "claude-3-5-sonnet": {
+      "input_cost_per_token": 3e-06,
+      "output_cost_per_token": 1.5e-05,
+      "cache_creation_input_token_cost": 3.75e-06,
+      "cache_read_input_token_cost": 3e-07
+    },
+    "claude-3-5-haiku": {
+      "input_cost_per_token": 1e-06,
+      "output_cost_per_token": 5e-06,
+      "cache_creation_input_token_cost": 1.25e-06,
+      "cache_read_input_token_cost": 1e-07
+    },
+    "claude-3-opus": {
+      "input_cost_per_token": 1.5e-05,
+      "output_cost_per_token": 7.5e-05,
+      "cache_creation_input_token_cost": 1.875e-05,
+      "cache_read_input_token_cost": 1.5e-06
+    },
+    "claude-3-haiku": {
+      "input_cost_per_token": 2.5e-07,
+      "output_cost_per_token": 1.25e-06,
+      "cache_creation_input_token_cost": 3e-07,
+      "cache_read_input_token_cost": 3e-08
+    },
+    "claude-opus-4.6": {
+      "alias_of": "claude-opus-4.5"
+    },
+    "claude-opus-4.7": {
+      "alias_of": "claude-opus-4.6"
+    },
+    "gemini-3.1-pro": {
+      "input_cost_per_token": 2e-06,
+      "output_cost_per_token": 1.2e-05,
+      "cache_creation_input_token_cost": 2e-06,
+      "cache_read_input_token_cost": 2e-07
+    },
+    "gpt-5.4": {
+      "input_cost_per_token": 2.5e-06,
+      "input_cost_per_token_priority": 5e-06,
+      "output_cost_per_token": 1.5e-05,
+      "output_cost_per_token_priority": 3e-05,
+      "cache_creation_input_token_cost": 2.5e-06,
+      "cache_read_input_token_cost": 2.5e-07,
+      "cache_read_input_token_cost_priority": 5e-07,
+      "long_context_input_token_threshold": 272000,
+      "long_context_input_cost_multiplier": 2.0,
+      "long_context_output_cost_multiplier": 1.5
+    },
+    "gpt-5.5": {
+      "alias_of": "gpt-5.4"
+    },
+    "gpt-5.5-pro": {
+      "alias_of": "gpt-5.4"
+    },
+    "gpt-5.6-sol": {
+      "alias_of": "gpt-5.4"
+    },
+    "gpt-5.6-terra": {
+      "alias_of": "gpt-5.4"
+    },
+    "gpt-5.6-luna": {
+      "alias_of": "gpt-5.4"
+    },
+    "gpt-5.4-mini": {
+      "input_cost_per_token": 7.5e-07,
+      "output_cost_per_token": 4.5e-06,
+      "cache_read_input_token_cost": 7.5e-08
+    },
+    "gpt-5.4-nano": {
+      "input_cost_per_token": 2e-07,
+      "output_cost_per_token": 1.25e-06,
+      "cache_read_input_token_cost": 2e-08
+    },
+    "gpt-5.2": {
+      "input_cost_per_token": 1.75e-06,
+      "input_cost_per_token_priority": 3.5e-06,
+      "output_cost_per_token": 1.4e-05,
+      "output_cost_per_token_priority": 2.8e-05,
+      "cache_creation_input_token_cost": 1.75e-06,
+      "cache_read_input_token_cost": 1.75e-07,
+      "cache_read_input_token_cost_priority": 3.5e-07
+    },
+    "gpt-5.3-codex": {
+      "input_cost_per_token": 1.5e-06,
+      "input_cost_per_token_priority": 3e-06,
+      "output_cost_per_token": 1.2e-05,
+      "output_cost_per_token_priority": 2.4e-05,
+      "cache_creation_input_token_cost": 1.5e-06,
+      "cache_read_input_token_cost": 1.5e-07,
+      "cache_read_input_token_cost_priority": 3e-07
+    },
+    "deepseek-v4-pro": {
+      "input_cost_per_token": 4.35e-07,
+      "output_cost_per_token": 8.7e-07,
+      "cache_read_input_token_cost": 3.625e-09
+    },
+    "deepseek-v4-flash": {
+      "input_cost_per_token": 1.4e-07,
+      "output_cost_per_token": 2.8e-07,
+      "cache_read_input_token_cost": 2.8e-09
+    },
+    "glm-5.1": {
+      "input_cost_per_token": 1.4e-06,
+      "output_cost_per_token": 4.4e-06,
+      "cache_read_input_token_cost": 2.6e-07
+    },
+    "glm-5": {
+      "input_cost_per_token": 1e-06,
+      "output_cost_per_token": 3.2e-06,
+      "cache_read_input_token_cost": 2e-07
+    },
+    "glm-5-turbo": {
+      "input_cost_per_token": 1.2e-06,
+      "output_cost_per_token": 4e-06,
+      "cache_read_input_token_cost": 2.4e-07
+    },
+    "glm-4.7": {
+      "input_cost_per_token": 6e-07,
+      "output_cost_per_token": 2.2e-06,
+      "cache_read_input_token_cost": 1.1e-07
+    },
+    "glm-4.7-flashx": {
+      "input_cost_per_token": 7e-08,
+      "output_cost_per_token": 4e-07,
+      "cache_read_input_token_cost": 1e-08
+    },
+    "glm-4.6": {
+      "input_cost_per_token": 6e-07,
+      "output_cost_per_token": 2.2e-06,
+      "cache_read_input_token_cost": 1.1e-07
+    },
+    "glm-4.5": {
+      "input_cost_per_token": 6e-07,
+      "output_cost_per_token": 2.2e-06,
+      "cache_read_input_token_cost": 1.1e-07
+    },
+    "glm-4.5-x": {
+      "input_cost_per_token": 2.2e-06,
+      "output_cost_per_token": 8.9e-06,
+      "cache_read_input_token_cost": 4.5e-07
+    },
+    "glm-4.5-air": {
+      "input_cost_per_token": 2e-07,
+      "output_cost_per_token": 1.1e-06,
+      "cache_read_input_token_cost": 3e-08
+    },
+    "glm-4.5-airx": {
+      "input_cost_per_token": 1.1e-06,
+      "output_cost_per_token": 4.5e-06,
+      "cache_read_input_token_cost": 2.2e-07
+    },
+    "glm-4-32b-0414-128k": {
+      "input_cost_per_token": 1e-07,
+      "output_cost_per_token": 1e-07
+    },
+    "glm-4.5-flash": {
+      "input_cost_per_token": 0,
+      "output_cost_per_token": 0
+    },
+    "glm-4.7-flash": {
+      "input_cost_per_token": 0,
+      "output_cost_per_token": 0
+    },
+    "kimi-k2.6": {
+      "input_cost_per_token": 9.5e-07,
+      "output_cost_per_token": 4e-06,
+      "cache_read_input_token_cost": 1.5e-07
+    },
+    "kimi-for-coding": {
+      "input_cost_per_token": 9.5e-07,
+      "output_cost_per_token": 4e-06,
+      "cache_read_input_token_cost": 1.5e-07
+    },
+    "kimi-k2.5": {
+      "input_cost_per_token": 6e-07,
+      "output_cost_per_token": 3e-06,
+      "cache_read_input_token_cost": 9.8e-08
+    },
+    "kimi-k2-thinking": {
+      "input_cost_per_token": 5.6e-07,
+      "output_cost_per_token": 2.24e-06,
+      "cache_read_input_token_cost": 1.4e-07
+    },
+    "kimi-k2": {
+      "input_cost_per_token": 5.6e-07,
+      "output_cost_per_token": 2.24e-06,
+      "cache_read_input_token_cost": 1.4e-07
+    },
+    "minimax-m3": {
+      "input_cost_per_token": 6e-07,
+      "output_cost_per_token": 2.4e-06,
+      "cache_read_input_token_cost": 1.2e-07
+    },
+    "minimax-m2.7": {
+      "input_cost_per_token": 3e-07,
+      "output_cost_per_token": 1.2e-06,
+      "cache_read_input_token_cost": 6e-08
+    },
+    "minimax-m2.7-highspeed": {
+      "input_cost_per_token": 6e-07,
+      "output_cost_per_token": 2.4e-06,
+      "cache_read_input_token_cost": 6e-08
+    },
+    "minimax-m2.5": {
+      "input_cost_per_token": 3e-07,
+      "output_cost_per_token": 1.2e-06,
+      "cache_read_input_token_cost": 3e-08
+    },
+    "minimax-m2.1": {
+      "input_cost_per_token": 3e-07,
+      "output_cost_per_token": 1.2e-06,
+      "cache_read_input_token_cost": 3e-08
+    },
+    "minimax-m2": {
+      "input_cost_per_token": 3e-07,
+      "output_cost_per_token": 1.2e-06,
+      "cache_read_input_token_cost": 3e-08
+    },
+    "doubao-embedding-vision": {
+      "input_cost_per_token": 9.8e-08,
+      "image_input_cost_per_token": 2.52e-07,
+      "output_cost_per_token": 0
+    },
+    "grok-4.5": {
+      "input_cost_per_token": 2e-06,
+      "output_cost_per_token": 6e-06,
+      "cache_read_input_token_cost": 5e-07,
+      "supports_cache_breakdown": true,
+      "long_context_input_token_threshold": 500000,
+      "long_context_input_cost_multiplier": 1
+    },
+    "grok-4.3": {
+      "input_cost_per_token": 1.25e-06,
+      "output_cost_per_token": 2.5e-06,
+      "long_context_input_token_threshold": 1000000,
+      "long_context_input_cost_multiplier": 1
+    },
+    "grok-build-0.1": {
+      "input_cost_per_token": 1e-06,
+      "output_cost_per_token": 2e-06
+    }
+  },
+  "image_defaults": {
+    "base_price_usd": 0.134,
+    "size_multipliers": {
+      "1K": 1.0,
+      "2K": 1.5,
+      "4K": 2.0
+    }
+  },
+  "ui_presets": {
+    "openai": [
+      {
+        "label": "GPT-5.6 Sol",
+        "from": "gpt-5.6-sol",
+        "to": "gpt-5.6-sol"
+      },
+      {
+        "label": "GPT-5.5",
+        "from": "gpt-5.5",
+        "to": "gpt-5.5"
+      },
+      {
+        "label": "GPT-5.4",
+        "from": "gpt-5.4",
+        "to": "gpt-5.4"
+      },
+      {
+        "label": "GPT Image 2",
+        "from": "gpt-image-2",
+        "to": "gpt-image-2"
+      }
+    ],
+    "anthropic": [
+      {
+        "label": "Fable 5",
+        "from": "claude-fable-5",
+        "to": "claude-fable-5"
+      },
+      {
+        "label": "Sonnet 5",
+        "from": "claude-sonnet-5",
+        "to": "claude-sonnet-5"
+      },
+      {
+        "label": "Sonnet 4.6",
+        "from": "claude-sonnet-4-6",
+        "to": "claude-sonnet-4-6"
+      },
+      {
+        "label": "Opus 4.8",
+        "from": "claude-opus-4-8",
+        "to": "claude-opus-4-8"
+      },
+      {
+        "label": "Haiku 4.5",
+        "from": "claude-haiku-4-5-20251001",
+        "to": "claude-haiku-4-5-20251001"
+      }
+    ],
+    "gemini": [
+      {
+        "label": "3.5 Flash",
+        "from": "gemini-3.5-flash",
+        "to": "gemini-3.5-flash"
+      },
+      {
+        "label": "3.1 Pro",
+        "from": "gemini-3.1-pro-preview",
+        "to": "gemini-3.1-pro-preview"
+      },
+      {
+        "label": "3.1 Image",
+        "from": "gemini-3.1-flash-image",
+        "to": "gemini-3.1-flash-image"
+      }
+    ],
+    "grok": [
+      {
+        "label": "Grok 4.5",
+        "from": "grok-4.5",
+        "to": "grok-4.5"
+      },
+      {
+        "label": "Grok Latest",
+        "from": "grok-latest",
+        "to": "grok-4.5"
+      },
+      {
+        "label": "Build 0.1",
+        "from": "grok-build",
+        "to": "grok-build-0.1"
+      }
+    ],
+    "antigravity": [
+      {
+        "label": "Claude→Sonnet",
+        "from": "claude-*",
+        "to": "claude-sonnet-4-5"
+      },
+      {
+        "label": "Gemini 2.5→3 Flash",
+        "from": "gemini-2.5*",
+        "to": "gemini-3-flash"
+      },
+      {
+        "label": "3.1-Flash-Image透传",
+        "from": "gemini-3.1-flash-image",
+        "to": "gemini-3.1-flash-image"
+      }
+    ],
+    "bedrock": [
+      {
+        "label": "Opus 4.8",
+        "from": "claude-opus-4-8",
+        "to": "us.anthropic.claude-opus-4-8-v1"
+      },
+      {
+        "label": "Sonnet 4.6",
+        "from": "claude-sonnet-4-6",
+        "to": "us.anthropic.claude-sonnet-4-6"
+      }
+    ]
+  }
+}

@@ -140,6 +140,15 @@ export default {
         note: 'Make sure the config directory exists. macOS/Linux users can run mkdir -p ~/.codex to create it.',
         noteWindows: 'Press Win+R and enter %userprofile%\\.codex to open the config directory. Create it manually if it does not exist.',
       },
+      grok: {
+        description:
+          'Add the following configuration files to your Codex CLI config directory to use Grok models via this Sub2API Grok group (OpenAI Responses compatible).',
+        configTomlHint:
+          'Make sure the following content is at the beginning of the config.toml file. Default model is grok-4.5.',
+        note: 'Make sure the config directory exists. macOS/Linux users can run mkdir -p ~/.codex to create it. Put this site API key in auth.json as OPENAI_API_KEY.',
+        noteWindows:
+          'Press Win+R and enter %userprofile%\\.codex to open the config directory. Create it manually if it does not exist. Put this site API key in auth.json as OPENAI_API_KEY.',
+      },
       cliTabs: {
         claudeCode: 'Claude Code',
         geminiCli: 'Gemini CLI',
@@ -156,7 +165,7 @@ export default {
       },
       gemini: {
         description: 'Add the following environment variables to your terminal profile or run directly in terminal to configure Gemini CLI access.',
-        modelComment: 'If you have Gemini 3 access, you can use: gemini-3-pro-preview',
+        modelComment: 'If you have Gemini 3 access, you can use: gemini-3.1-pro-preview',
         note: 'These environment variables will be active in the current terminal session. For permanent configuration, add them to ~/.bashrc, ~/.zshrc, or the appropriate configuration file.',
       },
       opencode: {

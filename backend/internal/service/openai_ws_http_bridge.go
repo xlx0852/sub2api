@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 )
@@ -186,7 +187,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			}
 		}
 		if upstreamModel == "" {
-			upstreamModel = "grok-4.3"
+			upstreamModel = xai.DefaultChatModel
 		}
 		body, err = patchGrokResponsesBody(body, upstreamModel)
 		if err != nil {
