@@ -188,7 +188,7 @@ const allowedTimeRanges = new Set<TimeRange>(['5m', '30m', '1h', '6h', '24h', 'c
 
 type QueryMode = 'auto' | 'raw' | 'preagg'
 const allowedQueryModes = new Set<QueryMode>(['auto', 'raw', 'preagg'])
-const allowedRequestTypes = new Set<OpsRequestType>(['sync', 'stream', 'ws_v2'])
+const allowedRequestTypes = new Set<OpsRequestType>(['sync', 'stream', 'ws_v2', 'compact'])
 
 const loading = ref(true)
 const hasLoadedOnce = ref(false)

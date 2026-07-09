@@ -255,10 +255,20 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	usageLog.AccountRateMultiplier = &accountRateMultiplier
 	usageLog.BillingType = billingType
 	usageLog.Stream = result.Stream
+	if result.Compact {
+		usageLog.RequestType = RequestTypeCompact
+		usageLog.CompactPayloadBytes = result.CompactPayloadBytes
+		compactRetryCount := result.CompactRetryCount
+		usageLog.CompactRetryCount = &compactRetryCount
+		compactClientCanceled := result.CompactClientCanceled
+		usageLog.CompactClientCanceled = &compactClientCanceled
+	}
 	if input.CyberBlocked {
 		usageLog.RequestType = RequestTypeCyberBlocked
 	}
 	usageLog.OpenAIWSMode = result.OpenAIWSMode
+	usageLog.WSPayloadBytes = result.WSPayloadBytes
+	usageLog.WSEventCount = result.WSEventCount
 	usageLog.DurationMs = &durationMs
 	usageLog.FirstTokenMs = result.FirstTokenMs
 	usageLog.CreatedAt = time.Now()

@@ -3,17 +3,16 @@ package service
 import "github.com/tidwall/gjson"
 
 // HasCompactionTriggerInInput detects the Codex remote compact v2 body signal:
-// an input item with type "compaction_trigger". When the client sends this
-// inside a normal POST /v1/responses (instead of POST /v1/responses/compact),
-// the request must still be treated as a compact request — otherwise the
-// upstream path, model mapping, and body normalization are all wrong, causing
-// Codex to receive a non-compact response and fail with:
+// an input item with type "compaction_trigger". Official Codex (default since
+// 2026-06-11) sends this on ordinary POST /v1/responses with stream=true and
+// waits for SSE terminal events:
 //
-//	"remote compaction v2 expected exactly one compaction output item, got 0"
+//	response.output_item.done (item.type=compaction)
+//	response.completed
 //
-// The gateway handler promotes such requests by rewriting the URL path to the
-// compact form before stream parsing, compact body normalization, and
-// compact-capable account scheduling, so both inbound forms share one code path.
+// sub2api must preserve that client-facing SSE contract. Upstream may still use
+// legacy POST /responses/compact JSON, in which case the gateway bridges the
+// result into the v2 SSE sequence (see openai_compact_v2_bridge.go).
 func HasCompactionTriggerInInput(body []byte) bool {
 	if len(body) == 0 {
 		return false

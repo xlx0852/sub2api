@@ -457,6 +457,9 @@ export interface AccountRequestTypePerformanceStats {
   avg_ws_payload_bytes?: number | null
   avg_ws_event_count?: number | null
   avg_ws_queue_wait_ms?: number | null
+  avg_compact_payload_bytes?: number | null
+  compact_retry_count?: number
+  compact_client_canceled_count?: number
 }
 
 export interface AccountPerformanceStats {

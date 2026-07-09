@@ -19,7 +19,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
-const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, ws_conn_reused, ws_preflight_fail_count, ws_conn_pick_ms, ws_payload_bytes, ws_event_count, ws_queue_wait_ms, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, service_tier, reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, created_at"
+const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, ws_conn_reused, ws_preflight_fail_count, ws_conn_pick_ms, ws_payload_bytes, ws_event_count, ws_queue_wait_ms, compact_payload_bytes, compact_retry_count, compact_client_canceled, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, service_tier, reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, created_at"
 
 func (r *usageLogRepository) GetByID(ctx context.Context, id int64) (log *service.UsageLog, err error) {
 	query := "SELECT " + usageLogSelectColumns + " FROM usage_logs WHERE id = $1"
@@ -463,6 +463,9 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		wsPayloadBytes        sql.NullInt64
 		wsEventCount          sql.NullInt64
 		wsQueueWaitMs         sql.NullInt64
+		compactPayloadBytes   sql.NullInt64
+		compactRetryCount     sql.NullInt64
+		compactClientCanceled sql.NullBool
 		userAgent             sql.NullString
 		ipAddress             sql.NullString
 		imageCount            int
@@ -523,6 +526,9 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		&wsPayloadBytes,
 		&wsEventCount,
 		&wsQueueWaitMs,
+		&compactPayloadBytes,
+		&compactRetryCount,
+		&compactClientCanceled,
 		&userAgent,
 		&ipAddress,
 		&imageCount,
@@ -623,6 +629,18 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 	if wsQueueWaitMs.Valid {
 		value := int(wsQueueWaitMs.Int64)
 		log.WSQueueWaitMs = &value
+	}
+	if compactPayloadBytes.Valid {
+		value := compactPayloadBytes.Int64
+		log.CompactPayloadBytes = &value
+	}
+	if compactRetryCount.Valid {
+		value := int(compactRetryCount.Int64)
+		log.CompactRetryCount = &value
+	}
+	if compactClientCanceled.Valid {
+		value := compactClientCanceled.Bool
+		log.CompactClientCanceled = &value
 	}
 	if userAgent.Valid {
 		log.UserAgent = &userAgent.String

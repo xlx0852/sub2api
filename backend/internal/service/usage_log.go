@@ -19,11 +19,12 @@ const (
 	RequestTypeStream       RequestType = 2
 	RequestTypeWSV2         RequestType = 3
 	RequestTypeCyberBlocked RequestType = 4 // cyber_policy 命中（透传但被上游安全策略拒绝）
+	RequestTypeCompact      RequestType = 5 // Codex /responses/compact 远端摘要请求
 )
 
 func (t RequestType) IsValid() bool {
 	switch t {
-	case RequestTypeUnknown, RequestTypeSync, RequestTypeStream, RequestTypeWSV2, RequestTypeCyberBlocked:
+	case RequestTypeUnknown, RequestTypeSync, RequestTypeStream, RequestTypeWSV2, RequestTypeCyberBlocked, RequestTypeCompact:
 		return true
 	default:
 		return false
@@ -47,6 +48,8 @@ func (t RequestType) String() string {
 		return "ws_v2"
 	case RequestTypeCyberBlocked:
 		return "cyber"
+	case RequestTypeCompact:
+		return "compact"
 	default:
 		return "unknown"
 	}
@@ -68,8 +71,10 @@ func ParseUsageRequestType(value string) (RequestType, error) {
 		return RequestTypeWSV2, nil
 	case "cyber":
 		return RequestTypeCyberBlocked, nil
+	case "compact":
+		return RequestTypeCompact, nil
 	default:
-		return RequestTypeUnknown, fmt.Errorf("invalid request_type, allowed values: unknown, sync, stream, ws_v2, cyber")
+		return RequestTypeUnknown, fmt.Errorf("invalid request_type, allowed values: unknown, sync, stream, ws_v2, cyber, compact")
 	}
 }
 
@@ -85,7 +90,7 @@ func RequestTypeFromLegacy(stream bool, openAIWSMode bool) RequestType {
 
 func ApplyLegacyRequestFields(requestType RequestType, fallbackStream bool, fallbackOpenAIWSMode bool) (stream bool, openAIWSMode bool) {
 	switch requestType.Normalize() {
-	case RequestTypeSync:
+	case RequestTypeSync, RequestTypeCompact:
 		return false, false
 	case RequestTypeStream:
 		return true, false
@@ -154,20 +159,23 @@ type UsageLog struct {
 	// AccountStatsCost 账号统计定价预计算费用（nil = 使用默认公式 total_cost × account_rate_multiplier）
 	AccountStatsCost *float64
 
-	BillingType          int8
-	RequestType          RequestType
-	Stream               bool
-	OpenAIWSMode         bool
-	DurationMs           *int
-	FirstTokenMs         *int
-	WSConnReused         *bool
-	WSPreflightFailCount *int
-	WSConnPickMs         *int
-	WSPayloadBytes       *int64
-	WSEventCount         *int
-	WSQueueWaitMs        *int
-	UserAgent            *string
-	IPAddress            *string
+	BillingType           int8
+	RequestType           RequestType
+	Stream                bool
+	OpenAIWSMode          bool
+	DurationMs            *int
+	FirstTokenMs          *int
+	WSConnReused          *bool
+	WSPreflightFailCount  *int
+	WSConnPickMs          *int
+	WSPayloadBytes        *int64
+	WSEventCount          *int
+	WSQueueWaitMs         *int
+	CompactPayloadBytes   *int64
+	CompactRetryCount     *int
+	CompactClientCanceled *bool
+	UserAgent             *string
+	IPAddress             *string
 
 	// Cache TTL Override 标记（管理员强制替换了缓存 TTL 计费）
 	CacheTTLOverridden bool

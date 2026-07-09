@@ -19,6 +19,7 @@ const messages: Record<string, string> = {
   'usage.ws': 'WS',
   'usage.stream': 'Stream',
   'usage.sync': 'Sync',
+  'usage.compact': 'Compact',
   'admin.usage.billingType': 'Billing Type',
   'admin.usage.allBillingTypes': 'All Billing Types',
   'admin.usage.billingTypeBalance': 'Balance',

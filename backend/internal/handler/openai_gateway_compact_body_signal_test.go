@@ -23,11 +23,9 @@ func newCompactBodySignalTestContext(t *testing.T, path string, body []byte) *gi
 	return c
 }
 
-// body-signal 提升后必须与 path-based compact 走同一条链路：
-// path 改写、requireCompact 判定、stream/store/prompt_cache_key 归一化删除。
-// 回归防护：若 stream 字段存活，Forward 会用流式 handler 解析 compact 的
-// JSON 响应，导致 "stream ended before a terminal event" 的换号 failover 风暴。
-func TestNormalizeOpenAIResponsesCompactRequest_BodySignalPromoted(t *testing.T) {
+// Body-signal v2 must keep the client /responses streaming contract.
+// Upstream still uses /responses/compact via force-suffix + SSE bridge.
+func TestNormalizeOpenAIResponsesCompactRequest_BodySignalV2KeepsClientPath(t *testing.T) {
 	h := &OpenAIGatewayHandler{}
 	body := []byte(`{
 		"model":"gpt-5.5",
@@ -44,18 +42,23 @@ func TestNormalizeOpenAIResponsesCompactRequest_BodySignalPromoted(t *testing.T)
 	normalized, ok := h.normalizeOpenAIResponsesCompactRequest(c, zap.NewNop(), body)
 	require.True(t, ok)
 
-	require.Equal(t, "/v1/responses/compact", c.Request.URL.Path)
-	require.True(t, isOpenAIRemoteCompactPath(c))
+	require.Equal(t, "/v1/responses", c.Request.URL.Path)
+	require.False(t, isOpenAIRemoteCompactPath(c))
+	require.Equal(t, service.OpenAICompactModeBodySignalV2, service.OpenAICompactMode(c))
+	require.True(t, service.IsOpenAICompactRequest(c))
+	require.True(t, service.IsOpenAIBodySignalCompactV2(c))
 
-	require.False(t, gjson.GetBytes(normalized, "stream").Exists())
-	require.False(t, gjson.GetBytes(normalized, "store").Exists())
-	require.False(t, gjson.GetBytes(normalized, "prompt_cache_key").Exists())
-	require.Equal(t, "gpt-5.5", gjson.GetBytes(normalized, "model").String())
-	require.True(t, gjson.GetBytes(normalized, "input").IsArray())
+	// Client body keeps stream + trigger; upstream path is forced separately.
+	require.True(t, gjson.GetBytes(normalized, "stream").Bool())
+	require.True(t, gjson.GetBytes(normalized, "prompt_cache_key").Exists())
+	require.True(t, service.HasCompactionTriggerInInput(normalized))
 
 	reqStream, streamOK := parseOpenAICompatibleStream(normalized)
 	require.True(t, streamOK)
-	require.False(t, reqStream)
+	require.True(t, reqStream)
+
+	// Upstream suffix forced to legacy compact.
+	require.True(t, service.IsOpenAIResponsesCompactPathForTest(c))
 
 	seed, exists := c.Get(service.OpenAICompactSessionSeedKeyForTest())
 	require.True(t, exists)
@@ -69,17 +72,19 @@ func TestNormalizeOpenAIResponsesCompactRequest_BodySignalTrailingSlash(t *testi
 
 	_, ok := h.normalizeOpenAIResponsesCompactRequest(c, zap.NewNop(), body)
 	require.True(t, ok)
-	require.Equal(t, "/v1/responses/compact", c.Request.URL.Path)
+	require.Equal(t, "/v1/responses/", c.Request.URL.Path)
+	require.Equal(t, service.OpenAICompactModeBodySignalV2, service.OpenAICompactMode(c))
 }
 
-func TestNormalizeOpenAIResponsesCompactRequest_CodexDirectAliasPromoted(t *testing.T) {
+func TestNormalizeOpenAIResponsesCompactRequest_CodexDirectAliasBodySignal(t *testing.T) {
 	h := &OpenAIGatewayHandler{}
 	body := []byte(`{"model":"gpt-5.5","input":[{"type":"compaction_trigger"}]}`)
 	c := newCompactBodySignalTestContext(t, "/backend-api/codex/responses", body)
 
 	_, ok := h.normalizeOpenAIResponsesCompactRequest(c, zap.NewNop(), body)
 	require.True(t, ok)
-	require.Equal(t, "/backend-api/codex/responses/compact", c.Request.URL.Path)
+	require.Equal(t, "/backend-api/codex/responses", c.Request.URL.Path)
+	require.Equal(t, service.OpenAICompactModeBodySignalV2, service.OpenAICompactMode(c))
 }
 
 func TestNormalizeOpenAIResponsesCompactRequest_NoTriggerUntouched(t *testing.T) {
@@ -90,12 +95,13 @@ func TestNormalizeOpenAIResponsesCompactRequest_NoTriggerUntouched(t *testing.T)
 	normalized, ok := h.normalizeOpenAIResponsesCompactRequest(c, zap.NewNop(), body)
 	require.True(t, ok)
 	require.Equal(t, "/v1/responses", c.Request.URL.Path)
-	require.False(t, isOpenAIRemoteCompactPath(c))
+	require.Equal(t, service.OpenAICompactModeNone, service.OpenAICompactMode(c))
+	require.False(t, service.IsOpenAICompactRequest(c))
 	require.Equal(t, body, normalized)
 	require.True(t, gjson.GetBytes(normalized, "stream").Bool())
 }
 
-func TestNormalizeOpenAIResponsesCompactRequest_PathBasedNoDoubleSuffix(t *testing.T) {
+func TestNormalizeOpenAIResponsesCompactRequest_PathBasedLegacyJSON(t *testing.T) {
 	h := &OpenAIGatewayHandler{}
 	body := []byte(`{"model":"gpt-5.5","stream":true,"store":true,"input":[{"type":"message","role":"user","content":"hello"}]}`)
 	c := newCompactBodySignalTestContext(t, "/v1/responses/compact", body)
@@ -103,6 +109,7 @@ func TestNormalizeOpenAIResponsesCompactRequest_PathBasedNoDoubleSuffix(t *testi
 	normalized, ok := h.normalizeOpenAIResponsesCompactRequest(c, zap.NewNop(), body)
 	require.True(t, ok)
 	require.Equal(t, "/v1/responses/compact", c.Request.URL.Path)
+	require.Equal(t, service.OpenAICompactModeLegacyPath, service.OpenAICompactMode(c))
 	require.False(t, gjson.GetBytes(normalized, "stream").Exists())
 	require.False(t, gjson.GetBytes(normalized, "store").Exists())
 }
@@ -116,4 +123,5 @@ func TestNormalizeOpenAIResponsesCompactRequest_SubpathNotPromoted(t *testing.T)
 	require.True(t, ok)
 	require.Equal(t, "/v1/responses/resp_123/cancel", c.Request.URL.Path)
 	require.Equal(t, body, normalized)
+	require.Equal(t, service.OpenAICompactModeNone, service.OpenAICompactMode(c))
 }

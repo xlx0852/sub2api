@@ -232,7 +232,7 @@ import UserErrorRequestsTable from '@/components/user/UserErrorRequestsTable.vue
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
 import { BILLING_MODE_IMAGE, getBillingModeLabel } from '@/utils/billingMode'
-import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
+import { isUsageWSHTTPBridgeReplay, resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
 import type {
   ApiKey,
   EndpointStat,
@@ -378,6 +378,7 @@ const requestTypeOptions = computed<SelectOption[]>(() => [
   { value: 'ws_v2', label: t('usage.ws') },
   { value: 'stream', label: t('usage.stream') },
   { value: 'sync', label: t('usage.sync') },
+  { value: 'compact', label: t('usage.compact') },
 ])
 const billingTypeOptions = computed<SelectOption[]>(() => [
   { value: null, label: t('admin.usage.allBillingTypes') },
@@ -592,8 +593,10 @@ const handleIpGeoBatchFailed = () => {
 }
 
 const getRequestTypeExportText = (log: UsageLog): string => {
+  if (isUsageWSHTTPBridgeReplay(log)) return 'WS HTTP Bridge/Replay'
   const requestType = resolveUsageRequestType(log)
   if (requestType === 'cyber') return 'Cyber'
+  if (requestType === 'compact') return 'Compact'
   if (requestType === 'ws_v2') return 'WS'
   if (requestType === 'stream') return 'Stream'
   if (requestType === 'sync') return 'Sync'

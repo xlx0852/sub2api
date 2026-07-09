@@ -250,7 +250,7 @@
             <div class="flex min-w-0 flex-col gap-1">
               <div class="flex flex-wrap items-center gap-1">
                 <PlatformTypeBadge :platform="row.platform" :type="row.type"
-                  :plan-type="row.credentials?.plan_type || row.parent_plan_type"
+                  :plan-type="getPlatformPlanType(row)"
                   :privacy-mode="row.extra?.privacy_mode || row.parent_privacy_mode"
                   :subscription-expires-at="row.credentials?.subscription_expires_at || row.parent_subscription_expires_at" />
                 <span
@@ -832,11 +832,12 @@ const formatPercent = (value?: number | null) => {
 const requestTypeDisplayName = (requestType: string) => {
   if (requestType === 'ws_v2') return 'ws_v2'
   if (requestType === 'stream') return '流'
+  if (requestType === 'compact') return 'Compact'
   return requestType || '-'
 }
 
 const getPerformanceDetailItems = (stat: AccountRequestTypePerformanceStats) => {
-  return [
+  const items = [
     { label: '平均耗时', value: formatDurationSeconds(stat.avg_duration_ms) },
     { label: 'P90 耗时', value: formatDurationSeconds(stat.p90_duration_ms) },
     { label: '首 Token 平均', value: formatDurationSeconds(stat.avg_first_token_ms) },
@@ -850,6 +851,14 @@ const getPerformanceDetailItems = (stat: AccountRequestTypePerformanceStats) => 
     { label: '复用次数', value: String(stat.ws_conn_reused_count ?? 0) },
     { label: '预检失败', value: String(stat.ws_preflight_fail_count ?? 0) }
   ]
+  if (stat.request_type === 'compact') {
+    items.push(
+      { label: 'Compact 请求体', value: formatPayloadSize(stat.avg_compact_payload_bytes) },
+      { label: 'Compact 重试', value: String(stat.compact_retry_count ?? 0) },
+      { label: '客户端断开', value: String(stat.compact_client_canceled_count ?? 0) }
+    )
+  }
+  return items
 }
 
 const autoRefreshIntervalLabel = (sec: number) => {
@@ -1364,6 +1373,40 @@ function getAntigravityTierLabel(row: any): string | null {
     case 'g1-ultra-tier': return t('admin.accounts.tier.ultra')
     default: return null
   }
+}
+
+function normalizeGrokPlanLabel(plan: string): string {
+  const value = plan.trim()
+  const normalized = value.toLowerCase().replace(/[\s_-]+/g, '')
+  switch (normalized) {
+    case 'supergrok':
+      return 'SuperGrok'
+    case 'supergrokheavy':
+      return 'SuperGrok Heavy'
+    default:
+      return value
+  }
+}
+
+function getGrokPlanType(row: any): string {
+  if (row.platform !== 'grok') return ''
+  const extra = row.extra as Record<string, unknown> | undefined
+  const credentials = row.credentials as Record<string, unknown> | undefined
+  const billing = (extra?.grok_billing_snapshot || extra?.grok_billing) as Record<string, unknown> | undefined
+  const candidates = [
+    billing?.plan,
+    extra?.subscription_tier,
+    credentials?.subscription_tier
+  ]
+  const plan = candidates.find((value): value is string => typeof value === 'string' && value.trim() !== '')
+  return plan ? normalizeGrokPlanLabel(plan) : ''
+}
+
+function getPlatformPlanType(row: any): string {
+  if (row.platform === 'grok') {
+    return getGrokPlanType(row)
+  }
+  return row.credentials?.plan_type || row.parent_plan_type || ''
 }
 
 // 账号显示邮箱:优先账号自身(extra/credentials),影子账号回退母账号 parent_email。

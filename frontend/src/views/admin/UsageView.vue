@@ -163,7 +163,7 @@ import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'; import { adminAPI } from '@/api/admin'; import { adminUsageAPI } from '@/api/admin/usage'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
-import { preferRequestTypeFilter, resolveUsageRequestType } from '@/utils/usageRequestType'
+import { isUsageWSHTTPBridgeReplay, preferRequestTypeFilter, resolveUsageRequestType } from '@/utils/usageRequestType'
 import { getUsageServiceTierLabel } from '@/utils/usageServiceTier'
 import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination from '@/components/common/Pagination.vue'; import Select from '@/components/common/Select.vue'; import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'; import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
@@ -492,8 +492,10 @@ const handleIpGeoBatchFailed = () => {
 const cancelExport = () => exportAbortController?.abort()
 const openCleanupDialog = () => { cleanupDialogVisible.value = true }
 const getRequestTypeLabel = (log: AdminUsageLog): string => {
+  if (isUsageWSHTTPBridgeReplay(log)) return t('usage.wsBridgeReplay')
   const requestType = resolveUsageRequestType(log)
   if (requestType === 'cyber') return t('usage.cyber')
+  if (requestType === 'compact') return t('usage.compact')
   if (requestType === 'ws_v2') return t('usage.ws')
   if (requestType === 'stream') return t('usage.stream')
   if (requestType === 'sync') return t('usage.sync')
