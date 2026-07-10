@@ -31,6 +31,8 @@ const messages: Record<string, string> = {
   'usage.original': 'Original',
   'usage.userBilled': 'User billed',
   'usage.accountBilled': 'Account billed',
+  'usage.latencyFirstToken': 'First',
+  'usage.latencyTotal': 'Total',
   'usage.imageUnit': ' images',
   'usage.imageCount': 'Image count',
   'usage.imageBillingSize': 'Billing size',
@@ -72,6 +74,7 @@ const DataTableStub = {
         <slot name="cell-billing_mode" :row="row" />
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cost" :row="row" />
+        <slot name="cell-latency" :row="row" />
       </div>
     </div>
   `,
@@ -328,6 +331,38 @@ describe('admin UsageTable tooltip', () => {
     expect(text).toContain('Per-image price')
     expect(text).toContain('not recorded')
     expect(text).not.toContain('(2K)')
+  })
+})
+
+describe('admin UsageTable latency', () => {
+  it('combines first-token and total duration with readable minute formatting', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{
+          ...baseImageRow,
+          request_id: 'req-latency',
+          first_token_ms: 8_590,
+          duration_ms: 77_000,
+        }],
+        loading: false,
+        columns: [],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('First')
+    expect(wrapper.text()).toContain('8.59s')
+    expect(wrapper.text()).toContain('Total')
+    expect(wrapper.text()).toContain('1m 17s')
+    expect(wrapper.find('.bg-emerald-500').exists()).toBe(true)
+    expect(wrapper.find('.bg-amber-400').exists()).toBe(true)
   })
 })
 
