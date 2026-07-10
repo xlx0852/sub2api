@@ -425,6 +425,96 @@ export interface ModelMappingEntry {
   to: string
 }
 
+export function replaceExactModelsWithUpstream(existing: string[], upstream: string[]) {
+  const exactExisting = new Set<string>()
+  const wildcards: string[] = []
+  const seenWildcards = new Set<string>()
+  for (const value of existing) {
+    const model = value.trim()
+    if (!model) continue
+    if (model.includes('*')) {
+      if (!seenWildcards.has(model)) {
+        seenWildcards.add(model)
+        wildcards.push(model)
+      }
+      continue
+    }
+    exactExisting.add(model)
+  }
+
+  const exactUpstream: string[] = []
+  const seenUpstream = new Set<string>()
+  for (const value of upstream) {
+    const model = value.trim()
+    if (!model || model.includes('*') || seenUpstream.has(model)) continue
+    seenUpstream.add(model)
+    exactUpstream.push(model)
+  }
+
+  const upstreamSet = new Set(exactUpstream)
+  const addedCount = exactUpstream.filter((model) => !exactExisting.has(model)).length
+  const removedCount = [...exactExisting].filter((model) => !upstreamSet.has(model)).length
+  const models = [...exactUpstream, ...wildcards]
+
+  return {
+    models,
+    addedCount,
+    removedCount,
+    preservedWildcardCount: wildcards.length,
+    changed: addedCount > 0 || removedCount > 0
+  }
+}
+
+export function replaceIdentityModelMappingsWithUpstream(
+  existing: ModelMappingEntry[],
+  upstream: string[]
+) {
+  const manualMappings: ModelMappingEntry[] = []
+  const manualFrom = new Set<string>()
+  const identityExisting = new Set<string>()
+  const seenManual = new Set<string>()
+
+  for (const entry of existing) {
+    const from = entry.from.trim()
+    const to = entry.to.trim()
+    if (!from || !to) continue
+    if (from === to) {
+      identityExisting.add(from)
+      continue
+    }
+    const key = `${from}\u0000${to}`
+    if (seenManual.has(key)) continue
+    seenManual.add(key)
+    manualFrom.add(from)
+    manualMappings.push({ from, to })
+  }
+
+  const upstreamModels: string[] = []
+  const upstreamSet = new Set<string>()
+  for (const value of upstream) {
+    const model = value.trim()
+    if (!model || model.includes('*') || upstreamSet.has(model)) continue
+    upstreamSet.add(model)
+    upstreamModels.push(model)
+  }
+
+  const identityMappings = upstreamModels
+    .filter((model) => !manualFrom.has(model))
+    .filter((model) => !identityExisting.has(model))
+    .map((model) => ({ from: model, to: model }))
+  const addedCount = identityMappings.length
+  const removedCount = [...identityExisting].filter((model) => !upstreamSet.has(model) && !manualFrom.has(model)).length
+  const mappings = [...identityMappings, ...manualMappings]
+
+  return {
+    mappings,
+    addedCount,
+    removedCount,
+    preservedMappingCount: manualMappings.length,
+    changed: addedCount > 0 || removedCount > 0
+  }
+}
+
 export function splitModelMappingObject(
   modelMapping?: Record<string, unknown> | null
 ): { allowedModels: string[]; modelMappings: ModelMappingEntry[] } {
