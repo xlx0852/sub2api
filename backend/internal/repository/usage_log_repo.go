@@ -234,3 +234,19 @@ func buildRequestTypeFilterConditionWithColumns(startArgIndex int, requestType i
 		return fmt.Sprintf("%s = $%d", requestTypeColumn, startArgIndex), []any{requestTypeArg}
 	}
 }
+
+// buildRequestTypeFilterConditionWithAlias keeps trend queries compatible with
+// the shared column-aware filter while allowing callers to pass a SQL alias.
+func buildRequestTypeFilterConditionWithAlias(startArgIndex int, requestType int16, alias string) (string, []any) {
+	prefix := ""
+	if alias = strings.TrimSpace(alias); alias != "" {
+		prefix = alias + "."
+	}
+	return buildRequestTypeFilterConditionWithColumns(
+		startArgIndex,
+		requestType,
+		prefix+"request_type",
+		prefix+"stream",
+		prefix+"openai_ws_mode",
+	)
+}
