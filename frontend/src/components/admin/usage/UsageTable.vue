@@ -191,13 +191,23 @@
           </div>
         </template>
 
-        <template #cell-first_token="{ row }">
-          <span v-if="row.first_token_ms != null" class="text-sm text-gray-600 dark:text-gray-400">{{ formatDuration(row.first_token_ms) }}</span>
-          <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
-        </template>
-
-        <template #cell-duration="{ row }">
-          <span class="text-sm text-gray-600 dark:text-gray-400">{{ formatDuration(row.duration_ms) }}</span>
+        <template #cell-latency="{ row }">
+          <div class="flex min-w-[8.5rem] items-center gap-2.5">
+            <div class="flex h-10 w-1.5 shrink-0 flex-col overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+              <span class="min-h-0 flex-1" :class="getLatencyBarClass(row.first_token_ms, 'first_token')"></span>
+              <span class="min-h-0 flex-1" :class="getLatencyBarClass(row.duration_ms, 'duration')"></span>
+            </div>
+            <div class="grid grid-cols-[auto_auto] gap-x-2 gap-y-0.5 text-sm tabular-nums">
+              <span class="whitespace-nowrap text-gray-400 dark:text-gray-500">{{ t('usage.latencyFirstToken') }}</span>
+              <span class="whitespace-nowrap font-medium" :class="getLatencyTextClass(row.first_token_ms, 'first_token')">
+                {{ formatDuration(row.first_token_ms) }}
+              </span>
+              <span class="whitespace-nowrap text-gray-400 dark:text-gray-500">{{ t('usage.latencyTotal') }}</span>
+              <span class="whitespace-nowrap font-medium" :class="getLatencyTextClass(row.duration_ms, 'duration')">
+                {{ formatDuration(row.duration_ms) }}
+              </span>
+            </div>
+          </div>
         </template>
 
         <template #cell-created_at="{ value }">
@@ -572,7 +582,40 @@ const formatUserAgent = (ua: string): string => {
 const formatDuration = (ms: number | null | undefined): string => {
   if (ms == null) return '-'
   if (ms < 1000) return `${ms}ms`
+  if (ms >= 60_000) {
+    const minutes = Math.floor(ms / 60_000)
+    const seconds = Math.floor((ms % 60_000) / 1000)
+    return `${minutes}m ${seconds}s`
+  }
   return `${(ms / 1000).toFixed(2)}s`
+}
+
+type LatencyMetric = 'first_token' | 'duration'
+type LatencyTone = 'good' | 'warning' | 'slow' | 'missing'
+
+const getLatencyTone = (ms: number | null | undefined, metric: LatencyMetric): LatencyTone => {
+  if (ms == null) return 'missing'
+  const warningThreshold = metric === 'first_token' ? 10_000 : 60_000
+  const slowThreshold = metric === 'first_token' ? 20_000 : 180_000
+  if (ms < warningThreshold) return 'good'
+  if (ms < slowThreshold) return 'warning'
+  return 'slow'
+}
+
+const getLatencyBarClass = (ms: number | null | undefined, metric: LatencyMetric): string => {
+  const tone = getLatencyTone(ms, metric)
+  if (tone === 'good') return 'bg-emerald-500'
+  if (tone === 'warning') return 'bg-amber-400'
+  if (tone === 'slow') return 'bg-rose-500'
+  return 'bg-gray-300 dark:bg-gray-600'
+}
+
+const getLatencyTextClass = (ms: number | null | undefined, metric: LatencyMetric): string => {
+  const tone = getLatencyTone(ms, metric)
+  if (tone === 'good') return 'text-emerald-600 dark:text-emerald-400'
+  if (tone === 'warning') return 'text-amber-600 dark:text-amber-400'
+  if (tone === 'slow') return 'text-rose-600 dark:text-rose-400'
+  return 'text-gray-400 dark:text-gray-500'
 }
 
 // Cost tooltip functions
