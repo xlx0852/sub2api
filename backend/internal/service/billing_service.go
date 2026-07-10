@@ -769,10 +769,13 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 	cloned := *pricing
 	if isGPT56 {
 		if cloned.CacheCreationPricePerToken <= 0 {
-			cloned.CacheCreationPricePerToken = cloned.InputPricePerToken
+			// OpenAI GPT-5.6 cache writes are billed at 1.25x the input rate.
+			// Keep an explicit upstream/cache catalog price untouched; this only
+			// supplies the official fallback for incomplete pricing payloads.
+			cloned.CacheCreationPricePerToken = cloned.InputPricePerToken * 1.25
 		}
 		if cloned.CacheCreationPricePerTokenPriority <= 0 {
-			cloned.CacheCreationPricePerTokenPriority = cloned.InputPricePerTokenPriority
+			cloned.CacheCreationPricePerTokenPriority = cloned.InputPricePerTokenPriority * 1.25
 		}
 	}
 	if cloned.LongContextInputThreshold <= 0 {
