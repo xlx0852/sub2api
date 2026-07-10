@@ -1014,34 +1014,37 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	if account.Type == AccountTypeOAuth {
 		compatMessagesBridge := isOpenAICompatMessagesBridgeContext(c) || isOpenAICompatMessagesBridgeBody(body)
 		// 清除客户端透传的 session 头，后续用隔离后的值重新设置，防止跨用户会话碰撞。
-		clientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
+		// 兼容旧 session_id/conversation_id 与官方 0.144 session-id/thread-id。
+		clientConversationID := firstNonEmptyHeader(req.Header, "conversation_id", "thread-id", "thread_id")
 		req.Header.Del("conversation_id")
 		req.Header.Del("session_id")
+		req.Header.Del("session-id")
+		req.Header.Del("thread-id")
+		req.Header.Del("thread_id")
 
 		if compatMessagesBridge {
 			req.Header.Del("OpenAI-Beta")
 			req.Header.Del("originator")
 		} else {
-			req.Header.Set("OpenAI-Beta", "responses=experimental")
+			// Codex 官方自 #5892 起已移除 HTTP OpenAI-Beta=responses=experimental。
+			// 仅透传客户端自带值；不要再强制注入旧 beta，降低非官方指纹。
 			req.Header.Set("originator", resolveOpenAIUpstreamOriginator(c, isCodexCLI))
 		}
 		apiKeyID := getAPIKeyIDFromContext(c)
+		// 官方 openai provider 固定带 version=CARGO_PKG_VERSION；客户端未带时补默认伪装版本。
+		if req.Header.Get("version") == "" {
+			req.Header.Set("version", codexCLIVersion)
+		}
 		if isOpenAICompactUpstreamRequest(c) {
 			req.Header.Set("accept", "application/json")
-			if req.Header.Get("version") == "" {
-				req.Header.Set("version", codexCLIVersion)
-			}
 			compactSession := resolveOpenAICompactSessionID(c)
-			req.Header.Set("session_id", isolateOpenAISessionID(apiKeyID, compactSession))
+			setOpenAIIsolatedSessionHeaders(req.Header, isolateOpenAISessionID(apiKeyID, compactSession), true)
 		} else {
 			req.Header.Set("accept", "text/event-stream")
 		}
 		if promptCacheKey != "" {
 			isolated := isolateOpenAISessionID(apiKeyID, promptCacheKey)
-			req.Header.Set("session_id", isolated)
-			if !compatMessagesBridge || clientConversationID != "" {
-				req.Header.Set("conversation_id", isolated)
-			}
+			setOpenAIIsolatedSessionHeaders(req.Header, isolated, !compatMessagesBridge || clientConversationID != "")
 		}
 	} else if isOpenAIResponsesCompactPath(c) {
 		// compact 上游是 unary JSON 协议：API-key 账号也显式声明 Accept，

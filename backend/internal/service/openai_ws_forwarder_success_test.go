@@ -661,10 +661,18 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.True(t, gjson.Get(requestJSON, "stream").Exists(), "WSv2 payload 应保留 stream 字段")
 	require.True(t, gjson.Get(requestJSON, "stream").Bool(), "OAuth Codex 规范化后应强制 stream=true")
 	require.Equal(t, openAIWSBetaV2Value, captureDialer.lastHeaders.Get("OpenAI-Beta"))
+	require.Equal(t, codexCLIVersion, captureDialer.lastHeaders.Get("version"))
 	// OAuth 账号的 session_id/conversation_id 应被 isolateOpenAISessionID 隔离，
 	// 测试中未设置 api_key 到 context，apiKeyID=0。
-	require.Equal(t, isolateOpenAISessionID(0, "sess-oauth-1"), captureDialer.lastHeaders.Get("session_id"))
-	require.Equal(t, isolateOpenAISessionID(0, "conv-oauth-1"), captureDialer.lastHeaders.Get("conversation_id"))
+	// 同时双写官方 0.144 session-id/thread-id，并回填 x-client-request-id=thread。
+	isolatedSession := isolateOpenAISessionID(0, "sess-oauth-1")
+	isolatedConversation := isolateOpenAISessionID(0, "conv-oauth-1")
+	require.Equal(t, isolatedSession, captureDialer.lastHeaders.Get("session_id"))
+	require.Equal(t, isolatedSession, captureDialer.lastHeaders.Get("session-id"))
+	require.Equal(t, isolatedConversation, captureDialer.lastHeaders.Get("conversation_id"))
+	require.Equal(t, isolatedConversation, captureDialer.lastHeaders.Get("thread-id"))
+	require.Equal(t, isolatedConversation, captureDialer.lastHeaders.Get("thread_id"))
+	require.Equal(t, isolatedConversation, captureDialer.lastHeaders.Get("x-client-request-id"))
 }
 
 func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testing.T) {

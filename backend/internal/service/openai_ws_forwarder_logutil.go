@@ -65,17 +65,28 @@ func resolveOpenAIWSSessionHeaders(c *gin.Context, promptCacheKey string) openAI
 		ConversationSource: "none",
 	}
 	if c != nil && c.Request != nil {
+		// 兼容旧 session_id 与官方 0.144 session-id。
 		if sessionID := strings.TrimSpace(c.Request.Header.Get("session_id")); sessionID != "" {
 			resolution.SessionID = sessionID
 			resolution.SessionSource = "header_session_id"
+		} else if sessionID := strings.TrimSpace(c.Request.Header.Get("session-id")); sessionID != "" {
+			resolution.SessionID = sessionID
+			resolution.SessionSource = "header_session-id"
 		}
+		// 兼容旧 conversation_id 与官方 thread-id / thread_id。
 		if conversationID := strings.TrimSpace(c.Request.Header.Get("conversation_id")); conversationID != "" {
 			resolution.ConversationID = conversationID
 			resolution.ConversationSource = "header_conversation_id"
-			if resolution.SessionID == "" {
-				resolution.SessionID = conversationID
-				resolution.SessionSource = "header_conversation_id"
-			}
+		} else if conversationID := strings.TrimSpace(c.Request.Header.Get("thread-id")); conversationID != "" {
+			resolution.ConversationID = conversationID
+			resolution.ConversationSource = "header_thread-id"
+		} else if conversationID := strings.TrimSpace(c.Request.Header.Get("thread_id")); conversationID != "" {
+			resolution.ConversationID = conversationID
+			resolution.ConversationSource = "header_thread_id"
+		}
+		if resolution.ConversationID != "" && resolution.SessionID == "" {
+			resolution.SessionID = resolution.ConversationID
+			resolution.SessionSource = resolution.ConversationSource
 		}
 	}
 

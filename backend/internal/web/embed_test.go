@@ -432,10 +432,14 @@ func TestFrontendServer_Middleware(t *testing.T) {
 
 		apiPaths := []string{
 			"/api/v1/users",
+			"/models",
 			"/v1/models",
 			"/v1beta/chat",
 			"/backend-api/codex/responses",
 			"/backend-api/codex/responses/compact",
+			"/chat/completions",
+			"/embeddings",
+			"/videos/123",
 			"/antigravity/test",
 			"/setup/init",
 			"/health",
@@ -486,6 +490,45 @@ func TestFrontendServer_Middleware(t *testing.T) {
 		assert.True(t, nextCalled, "next handler should be called for compact API route")
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.JSONEq(t, `{"ok":true}`, w.Body.String())
+	})
+
+	t.Run("skips_non_get_requests_for_gateway_aliases", func(t *testing.T) {
+		provider := &mockSettingsProvider{
+			settings: map[string]string{"test": "value"},
+		}
+
+		server, err := NewFrontendServer(provider)
+		require.NoError(t, err)
+
+		testCases := []struct {
+			method string
+			path   string
+		}{
+			{method: http.MethodPost, path: "/chat/completions"},
+			{method: http.MethodPost, path: "/embeddings"},
+			{method: http.MethodPost, path: "/videos/generations"},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+				router := gin.New()
+				router.Use(server.Middleware())
+				nextCalled := false
+				router.Handle(tc.method, tc.path, func(c *gin.Context) {
+					nextCalled = true
+					c.String(http.StatusOK, "ok")
+				})
+
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{}`))
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+
+				assert.True(t, nextCalled, "next handler should be called for non-GET gateway route")
+				assert.Equal(t, http.StatusOK, w.Code)
+				assert.Equal(t, "ok", w.Body.String())
+			})
+		}
 	})
 
 	t.Run("serves_index_for_spa_routes", func(t *testing.T) {

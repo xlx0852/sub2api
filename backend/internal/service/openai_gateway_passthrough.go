@@ -350,22 +350,28 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		}
 		apiKeyID := getAPIKeyIDFromContext(c)
 		// 先保存客户端原始值，再做 compact 补充，避免后续统一隔离时读到已处理的值。
-		clientSessionID := strings.TrimSpace(req.Header.Get("session_id"))
-		clientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
+		// 兼容旧 session_id/conversation_id 与官方 0.144 session-id/thread-id。
+		clientSessionID := firstNonEmptyHeader(req.Header, "session_id", "session-id")
+		clientConversationID := firstNonEmptyHeader(req.Header, "conversation_id", "thread-id", "thread_id")
+		req.Header.Del("session_id")
+		req.Header.Del("session-id")
+		req.Header.Del("conversation_id")
+		req.Header.Del("thread-id")
+		req.Header.Del("thread_id")
+		// 官方 openai provider 固定带 version=CARGO_PKG_VERSION；客户端未带时补默认伪装版本。
+		if req.Header.Get("version") == "" {
+			req.Header.Set("version", codexCLIVersion)
+		}
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
-			if req.Header.Get("version") == "" {
-				req.Header.Set("version", codexCLIVersion)
-			}
 			if clientSessionID == "" {
 				clientSessionID = resolveOpenAICompactSessionID(c)
 			}
 		} else if req.Header.Get("accept") == "" {
 			req.Header.Set("accept", "text/event-stream")
 		}
-		if req.Header.Get("OpenAI-Beta") == "" {
-			req.Header.Set("OpenAI-Beta", "responses=experimental")
-		}
+		// Codex 官方 HTTP 路径不再强制 OpenAI-Beta=responses=experimental。
+		// 透传模式：客户端带了就放行，没带不补（WS 仍走 responses_websockets=2026-02-06）。
 		if req.Header.Get("originator") == "" {
 			req.Header.Set("originator", "codex_cli_rs")
 		}
@@ -377,10 +383,14 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			clientConversationID = promptCacheKey
 		}
 		if clientSessionID != "" {
-			req.Header.Set("session_id", isolateOpenAISessionID(apiKeyID, clientSessionID))
+			setOpenAIIsolatedSessionHeaders(req.Header, isolateOpenAISessionID(apiKeyID, clientSessionID), false)
 		}
 		if clientConversationID != "" {
-			req.Header.Set("conversation_id", isolateOpenAISessionID(apiKeyID, clientConversationID))
+			// conversation/thread 与 session 可能不同；分别隔离后双写新旧头名。
+			isolatedConversation := isolateOpenAISessionID(apiKeyID, clientConversationID)
+			req.Header.Set("conversation_id", isolatedConversation)
+			req.Header.Set("thread-id", isolatedConversation)
+			req.Header.Set("thread_id", isolatedConversation)
 		}
 	} else if isOpenAIResponsesCompactPath(c) {
 		// 透传白名单会放行客户端的 Accept: text/event-stream；compact 上游是
