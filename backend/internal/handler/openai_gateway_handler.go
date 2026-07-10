@@ -492,7 +492,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		// Forward request
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
 		forwardStart := time.Now()
-		writerSizeBeforeForward := c.Writer.Size()
+		writerSizeBeforeForward := service.OpenAICompactKeepaliveAdjustedWrittenSize(c)
 		forwardCtx := c.Request.Context()
 		var cancelForward context.CancelFunc
 		compactSoftTimeoutActive := false
@@ -578,7 +578,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
 					if !canRetryCompact {
-						h.handleFailoverExhausted(c, failoverErr, streamStarted || c.Writer.Size() != writerSizeBeforeForward)
+						h.handleFailoverExhausted(c, failoverErr, streamStarted || service.OpenAICompactKeepaliveAdjustedWrittenSize(c) != writerSizeBeforeForward)
 						return
 					}
 					if !requireCompact {
@@ -2213,7 +2213,7 @@ func openAIForwardErrorAlreadyCommunicated(c *gin.Context, writerSizeBeforeForwa
 	if service.IsResponseCommitted(c) || service.IsOpenAICompactTerminalCommitted(c) {
 		return true
 	}
-	if c.Writer.Size() == writerSizeBeforeForward {
+	if service.OpenAICompactKeepaliveAdjustedWrittenSize(c) == writerSizeBeforeForward {
 		return false
 	}
 
