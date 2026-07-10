@@ -165,5 +165,5 @@ func CanRetryOpenAICompactAfterForwardError(c *gin.Context, writerSizeBeforeForw
 	if c == nil || c.Writer == nil {
 		return true
 	}
-	return c.Writer.Size() == writerSizeBeforeForward
+	return OpenAICompactKeepaliveAdjustedWrittenSize(c) == writerSizeBeforeForward
 }
