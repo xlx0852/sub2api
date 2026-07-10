@@ -59,30 +59,52 @@ const (
 )
 
 // OpenAI allowed headers whitelist (for non-passthrough).
+// 对齐 Codex rust-v0.144.0 常见请求头：session-id/thread-id、version、x-codex-window-id 等。
 var openaiAllowedHeaders = map[string]bool{
-	"accept-language":       true,
-	"content-type":          true,
-	"conversation_id":       true,
-	"user-agent":            true,
-	"originator":            true,
-	"session_id":            true,
-	"x-codex-turn-state":    true,
-	"x-codex-turn-metadata": true,
+	"accept-language":            true,
+	"content-type":               true,
+	"conversation_id":            true, // 兼容旧客户端
+	"session_id":                 true, // 兼容旧客户端
+	"session-id":                 true, // 官方 0.144 主形态
+	"thread-id":                  true, // 官方 0.144 主形态
+	"thread_id":                  true,
+	"user-agent":                 true,
+	"originator":                 true,
+	"openai-beta":                true, // 官方 HTTP 已不再强制；仅透传客户端自带值
+	"version":                    true, // provider http_headers: CARGO_PKG_VERSION
+	"x-client-request-id":        true,
+	"x-codex-beta-features":      true,
+	"x-codex-installation-id":    true,
+	"x-codex-parent-thread-id":   true,
+	"x-codex-turn-state":         true,
+	"x-codex-turn-metadata":      true,
+	"x-codex-window-id":          true,
+	"x-openai-subagent":          true,
 }
 
 // OpenAI passthrough allowed headers whitelist.
 // 透传模式下仅放行这些低风险请求头，避免将非标准/环境噪声头传给上游触发风控。
 var openaiPassthroughAllowedHeaders = map[string]bool{
-	"accept":                true,
-	"accept-language":       true,
-	"content-type":          true,
-	"conversation_id":       true,
-	"openai-beta":           true,
-	"user-agent":            true,
-	"originator":            true,
-	"session_id":            true,
-	"x-codex-turn-state":    true,
-	"x-codex-turn-metadata": true,
+	"accept":                     true,
+	"accept-language":            true,
+	"content-type":               true,
+	"conversation_id":            true,
+	"session_id":                 true,
+	"session-id":                 true,
+	"thread-id":                  true,
+	"thread_id":                  true,
+	"openai-beta":                true,
+	"user-agent":                 true,
+	"originator":                 true,
+	"version":                    true,
+	"x-client-request-id":        true,
+	"x-codex-beta-features":      true,
+	"x-codex-installation-id":    true,
+	"x-codex-parent-thread-id":   true,
+	"x-codex-turn-state":         true,
+	"x-codex-turn-metadata":      true,
+	"x-codex-window-id":          true,
+	"x-openai-subagent":          true,
 }
 
 // codex_cli_only 拒绝时记录的请求头白名单（仅用于诊断日志，不参与上游透传）
@@ -956,6 +978,39 @@ func isolateOpenAISessionID(apiKeyID int64, raw string) string {
 	_, _ = fmt.Fprintf(h, "k%d:", apiKeyID)
 	_, _ = h.WriteString(raw)
 	return fmt.Sprintf("%016x", h.Sum64())
+}
+
+// firstNonEmptyHeader returns the first non-empty header value among keys.
+func firstNonEmptyHeader(h http.Header, keys ...string) string {
+	if h == nil {
+		return ""
+	}
+	for _, key := range keys {
+		if v := strings.TrimSpace(h.Get(key)); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// setOpenAIIsolatedSessionHeaders writes isolated session IDs using both legacy
+// underscore names (session_id/conversation_id) and official 0.144 hyphenated
+// names (session-id/thread-id).
+func setOpenAIIsolatedSessionHeaders(h http.Header, isolated string, withConversation bool) {
+	if h == nil {
+		return
+	}
+	isolated = strings.TrimSpace(isolated)
+	if isolated == "" {
+		return
+	}
+	h.Set("session_id", isolated)
+	h.Set("session-id", isolated)
+	if withConversation {
+		h.Set("conversation_id", isolated)
+		h.Set("thread-id", isolated)
+		h.Set("thread_id", isolated)
+	}
 }
 
 func logCodexCLIOnlyDetection(ctx context.Context, c *gin.Context, account *Account, apiKeyID int64, result CodexClientRestrictionDetectionResult, body []byte) {

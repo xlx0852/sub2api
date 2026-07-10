@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -126,4 +128,63 @@ func TestIsOpenAIWSTokenEvent_DisjointWithTerminal(t *testing.T) {
 			require.False(t, isOpenAIWSTokenEvent(ev), "terminal event %q must NOT be classified as token event (issue #2651)", ev)
 		})
 	}
+}
+
+func TestResolveOpenAIWSSessionHeaders_OfficialHyphenNames(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(nil)
+	req, err := http.NewRequest(http.MethodPost, "/v1/responses", nil)
+	require.NoError(t, err)
+	req.Header.Set("session-id", "sess-official")
+	req.Header.Set("thread-id", "thread-official")
+	c.Request = req
+
+	got := resolveOpenAIWSSessionHeaders(c, "")
+	require.Equal(t, "sess-official", got.SessionID)
+	require.Equal(t, "header_session-id", got.SessionSource)
+	require.Equal(t, "thread-official", got.ConversationID)
+	require.Equal(t, "header_thread-id", got.ConversationSource)
+}
+
+func TestBuildOpenAIWSHeaders_Codex144Fingerprint(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(nil)
+	req, err := http.NewRequest(http.MethodPost, "/v1/responses", nil)
+	require.NoError(t, err)
+	req.Header.Set("session-id", "sess-1")
+	req.Header.Set("thread-id", "thread-1")
+	req.Header.Set("x-codex-window-id", "thread-1:1")
+	req.Header.Set("User-Agent", "codex_cli_rs/0.144.0 (Mac OS 15.0; arm64) ghostty")
+	c.Request = req
+
+	svc := &OpenAIGatewayService{}
+	account := &Account{
+		ID:       1,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key": "sk-test",
+		},
+	}
+	headers, _, err := svc.buildOpenAIWSHeaders(
+		context.Background(),
+		c,
+		account,
+		"tok",
+		OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2},
+		true,
+		"",
+		"",
+		"",
+	)
+	require.NoError(t, err)
+	require.Equal(t, openAIWSBetaV2Value, headers.Get("OpenAI-Beta"))
+	require.Equal(t, codexCLIVersion, headers.Get("version"))
+	require.Equal(t, "sess-1", headers.Get("session_id"))
+	require.Equal(t, "sess-1", headers.Get("session-id"))
+	require.Equal(t, "thread-1", headers.Get("conversation_id"))
+	require.Equal(t, "thread-1", headers.Get("thread-id"))
+	require.Equal(t, "thread-1", headers.Get("x-client-request-id"))
+	require.Equal(t, "thread-1:1", headers.Get("x-codex-window-id"))
+	require.Equal(t, "codex_cli_rs", headers.Get("originator"))
 }

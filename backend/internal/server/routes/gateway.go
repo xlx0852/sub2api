@@ -225,6 +225,16 @@ func RegisterGatewayRoutes(
 		})
 		codexDirect.GET("/models", h.OpenAIGateway.CodexModels)
 	}
+	// Codex ModelsClient joins provider.base_url + "models". Custom providers often
+	// set base_url to the gateway root (no /v1, no /backend-api/codex), so bare
+	// GET /models?client_version=... must also serve the Codex manifest.
+	r.GET("/models", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
+		if isOpenAIGatewayPlatform(c) && c.Query("client_version") != "" {
+			h.OpenAIGateway.CodexModels(c)
+			return
+		}
+		h.Gateway.Models(c)
+	})
 	// OpenAI Chat Completions API（不带v1前缀的别名）— auto-route based on group platform
 	r.POST("/chat/completions", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
 		if isOpenAIResponsesCompatibleGatewayPlatform(c) {

@@ -56,6 +56,17 @@ func (s *OpenAIGatewayService) buildOpenAIResponsesWSURL(account *Account) (stri
 	return parsed.String(), nil
 }
 
+// openAIWSPassthroughFingerprintHeaders 是官方 Codex 0.144 WS 握手常见的可选指纹头。
+// 客户端自带则透传；网关不伪造 installation/window 等身份相关值。
+var openAIWSPassthroughFingerprintHeaders = []string{
+	"x-codex-window-id",
+	"x-codex-parent-thread-id",
+	"x-codex-installation-id",
+	"x-codex-beta-features",
+	"x-openai-subagent",
+	"x-responsesapi-include-timing-metrics",
+}
+
 func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	ctx context.Context,
 	c *gin.Context,
@@ -75,23 +86,45 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		if v := strings.TrimSpace(c.Request.Header.Get("accept-language")); v != "" {
 			headers.Set("accept-language", v)
 		}
+		// 透传官方 0.144 常见兼容指纹头（有则放行）。
+		for _, name := range openAIWSPassthroughFingerprintHeaders {
+			if v := strings.TrimSpace(c.Request.Header.Get(name)); v != "" {
+				headers.Set(name, v)
+			}
+		}
+		if v := strings.TrimSpace(c.Request.Header.Get("version")); v != "" {
+			headers.Set("version", v)
+		}
+		if v := strings.TrimSpace(c.Request.Header.Get("x-client-request-id")); v != "" {
+			headers.Set("x-client-request-id", v)
+		}
 	}
+
+	// 会话头：兼容旧 underscore + 官方 hyphen 双写。
 	// OAuth 账号：将 apiKeyID 混入 session 标识符，防止跨用户会话碰撞。
+	sessionID := strings.TrimSpace(sessionResolution.SessionID)
+	conversationID := strings.TrimSpace(sessionResolution.ConversationID)
 	if account != nil && account.Type == AccountTypeOAuth {
 		apiKeyID := getAPIKeyIDFromContext(c)
-		if sessionResolution.SessionID != "" {
-			headers.Set("session_id", isolateOpenAISessionID(apiKeyID, sessionResolution.SessionID))
+		if sessionID != "" {
+			sessionID = isolateOpenAISessionID(apiKeyID, sessionID)
 		}
-		if sessionResolution.ConversationID != "" {
-			headers.Set("conversation_id", isolateOpenAISessionID(apiKeyID, sessionResolution.ConversationID))
+		if conversationID != "" {
+			conversationID = isolateOpenAISessionID(apiKeyID, conversationID)
 		}
-	} else {
-		if sessionResolution.SessionID != "" {
-			headers.Set("session_id", sessionResolution.SessionID)
-		}
-		if sessionResolution.ConversationID != "" {
-			headers.Set("conversation_id", sessionResolution.ConversationID)
-		}
+	}
+	if sessionID != "" {
+		headers.Set("session_id", sessionID)
+		headers.Set("session-id", sessionID)
+	}
+	if conversationID != "" {
+		headers.Set("conversation_id", conversationID)
+		headers.Set("thread-id", conversationID)
+		headers.Set("thread_id", conversationID)
+	}
+	// 官方：x-client-request-id == thread_id。客户端未带时用 thread/conversation 回填。
+	if headers.Get("x-client-request-id") == "" && conversationID != "" {
+		headers.Set("x-client-request-id", conversationID)
 	}
 	if state := strings.TrimSpace(turnState); state != "" {
 		headers.Set(openAIWSTurnStateHeader, state)
@@ -104,7 +137,24 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		if err := resolveAndSetOpenAIChatGPTAccountHeaders(ctx, s.accountRepo, headers, account); err != nil {
 			return nil, sessionResolution, fmt.Errorf("resolve chatgpt account headers: %w", err)
 		}
+	}
+	// 官方 default_headers 始终带 originator；OAuth 必设，其它账号仅在客户端缺失时补。
+	if account != nil && account.Type == AccountTypeOAuth {
 		headers.Set("originator", resolveOpenAIUpstreamOriginator(c, isCodexCLI))
+	} else if headers.Get("originator") == "" {
+		if c != nil {
+			if originator := strings.TrimSpace(c.GetHeader("originator")); originator != "" {
+				headers.Set("originator", originator)
+			}
+		}
+		if headers.Get("originator") == "" && isCodexCLI {
+			headers.Set("originator", "codex_cli_rs")
+		}
+	}
+
+	// 官方 openai provider 固定 version=CARGO_PKG_VERSION。
+	if headers.Get("version") == "" {
+		headers.Set("version", codexCLIVersion)
 	}
 
 	betaValue := openAIWSBetaV2Value

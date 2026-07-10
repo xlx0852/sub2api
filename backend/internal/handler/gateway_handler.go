@@ -1005,6 +1005,12 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 
 	// Get available models from account configurations for the selected group platform.
 	availableModels := h.gatewayService.GetAvailableModels(c.Request.Context(), groupID, platform)
+	// OpenAI /v1/models must surface catalog models even when account model_mapping
+	// lags (common for new Codex families like gpt-5.6-*). Mapping-only extras are
+	// kept so wildcards / account-specific IDs still appear.
+	if platform == service.PlatformOpenAI {
+		availableModels = mergeOpenAICatalogModels(availableModels)
+	}
 	if apiKey != nil && apiKey.Group != nil && apiKey.Group.CustomModelsListEnabled() {
 		fallbackModels := defaultModelIDsForPlatform(platform)
 		availableModels = filterModelsByCustomList(customModelsListSource(platform, availableModels, fallbackModels), fallbackModels, apiKey.Group.ModelsListConfig.Models)
@@ -1013,6 +1019,10 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 	}
 
 	if len(availableModels) > 0 {
+		if platform == service.PlatformOpenAI {
+			writeOpenAIModelsList(c, availableModels)
+			return
+		}
 		writeModelsList(c, availableModels)
 		return
 	}
@@ -1038,6 +1048,13 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 		"object": "list",
 		"data":   claude.DefaultModels,
 	})
+}
+
+// mergeOpenAICatalogModels unions the embedded OpenAI catalog with account-derived
+// model IDs. Catalog entries lead so newly shipped models stay discoverable without
+// requiring every account's model_mapping to be hand-updated first.
+func mergeOpenAICatalogModels(availableModels []string) []string {
+	return mergeModelIDs(openai.DefaultModelIDs(), availableModels)
 }
 
 func writeModelsList(c *gin.Context, modelIDs []string) {

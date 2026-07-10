@@ -84,6 +84,11 @@ func (s *FrontendServer) InvalidateCache() {
 // Middleware returns the Gin middleware handler
 func (s *FrontendServer) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+			c.Next()
+			return
+		}
+
 		path := c.Request.URL.Path
 
 		// Skip API routes
@@ -305,8 +310,13 @@ func shouldBypassEmbeddedFrontend(path string) bool {
 		strings.HasPrefix(trimmed, "/antigravity/") ||
 		strings.HasPrefix(trimmed, "/setup/") ||
 		trimmed == "/health" ||
+		trimmed == "/models" ||
+		strings.HasPrefix(trimmed, "/chat/") ||
+		trimmed == "/embeddings" ||
+		strings.HasPrefix(trimmed, "/embeddings/") ||
 		trimmed == "/responses" ||
 		strings.HasPrefix(trimmed, "/responses/") ||
+		strings.HasPrefix(trimmed, "/videos/") ||
 		strings.HasPrefix(trimmed, "/images/")
 }
 
