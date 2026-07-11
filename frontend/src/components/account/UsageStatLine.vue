@@ -1,24 +1,34 @@
 <template>
   <div
     :class="[
-      'text-[9px] leading-[13px] text-gray-500 tabular-nums dark:text-gray-400',
-      stacked ? 'grid gap-y-0' : 'flex items-center gap-2 whitespace-nowrap'
+      'grid min-w-0 gap-1 tabular-nums',
+      stacked ? 'grid-cols-2' : 'grid-cols-4'
     ]"
   >
-    <span data-testid="usage-stat-volume" class="whitespace-nowrap">
-      {{ requests }} req <span aria-hidden="true" class="text-gray-300 dark:text-gray-600">·</span> {{ tokens }}
-    </span>
-    <span
-      data-testid="usage-stat-billing"
-      class="whitespace-nowrap"
-      :class="stacked ? '' : 'border-l border-gray-200 pl-2 dark:border-gray-700'"
-    >
-      <span :title="t('usage.accountBilled')">A ${{ accountCost }}</span>
-      <template v-if="userCost != null">
-        <span aria-hidden="true" class="text-gray-300 dark:text-gray-600"> · </span>
-        <span :title="t('usage.userBilled')">U ${{ userCost }}</span>
-      </template>
-    </span>
+    <div data-testid="usage-stat-volume" class="contents">
+      <span class="usage-metric usage-metric-indigo">
+        <span class="usage-metric-label">{{ t('usage.totalRequests') }}</span>
+        <strong>{{ requests }} req</strong>
+      </span>
+      <span class="usage-metric usage-metric-cyan">
+        <span class="usage-metric-label">{{ t('usage.totalTokens') }}</span>
+        <strong>{{ tokens }}</strong>
+      </span>
+    </div>
+    <div data-testid="usage-stat-billing" class="contents">
+      <span class="usage-metric usage-metric-amber" :title="t('usage.accountBilled')">
+        <span class="usage-metric-label">{{ t('usage.accountCost') }}</span>
+        <strong>A ${{ accountCost }}</strong>
+      </span>
+      <span
+        v-if="userCost != null"
+        class="usage-metric usage-metric-emerald"
+        :title="t('usage.userBilled')"
+      >
+        <span class="usage-metric-label">{{ t('usage.userBilled') }}</span>
+        <strong>U ${{ userCost }}</strong>
+      </span>
+    </div>
   </div>
 </template>
 
@@ -38,3 +48,22 @@ withDefaults(defineProps<{
 
 const { t } = useI18n()
 </script>
+
+<style scoped>
+.usage-metric {
+  @apply flex min-w-[66px] flex-col rounded-md border border-gray-100 bg-gray-50 px-1.5 py-1 text-[10px] leading-3 text-gray-700 dark:border-white/5 dark:bg-white/[0.04] dark:text-gray-200;
+}
+
+.usage-metric-label {
+  @apply mb-0.5 text-[8px] font-medium leading-3 text-gray-400 dark:text-gray-500;
+}
+
+.usage-metric strong {
+  @apply whitespace-nowrap font-semibold;
+}
+
+.usage-metric-indigo strong { @apply text-indigo-600 dark:text-indigo-300; }
+.usage-metric-cyan strong { @apply text-cyan-600 dark:text-cyan-300; }
+.usage-metric-amber strong { @apply text-amber-600 dark:text-amber-300; }
+.usage-metric-emerald strong { @apply text-emerald-600 dark:text-emerald-300; }
+</style>

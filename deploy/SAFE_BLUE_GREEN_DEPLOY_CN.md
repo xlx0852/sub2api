@@ -291,7 +291,16 @@ echo \"保留部署备份: $BACKUP_DIR\"
 "
 ```
 
-清理时必须从当前、回滚容器的 Docker mounts 读取要保留的二进制和资源路径，不能仅按时间猜测。完成后再次检查公网健康、Nginx 上游和回滚容器是否仍存在。线上只保留一个历史版本，不累积第二个或更早的回滚版本。
+清理时必须从当前、回滚容器的 Docker mounts 读取要保留的二进制和资源路径，不能仅按时间猜测。资源挂载源是 `resources-*/resources` 子目录，而实际清理对象是它的父目录 `resources-*`，因此保留集合必须使用挂载源的父目录：
+
+```bash
+CURRENT_RES_MOUNT=$(docker inspect "$CURRENT_NAME" --format '{{range .Mounts}}{{if eq .Destination "/app/resources"}}{{.Source}}{{end}}{{end}}')
+ROLLBACK_RES_MOUNT=$(docker inspect "$ROLLBACK_NAME" --format '{{range .Mounts}}{{if eq .Destination "/app/resources"}}{{.Source}}{{end}}{{end}}')
+CURRENT_RES_DIR=$(dirname "$CURRENT_RES_MOUNT")
+ROLLBACK_RES_DIR=$(dirname "$ROLLBACK_RES_MOUNT")
+```
+
+不得直接拿 `resources-*/resources` 与 `resources-*` 比较，否则会误删当前和回滚版本的资源父目录。完成后再次检查公网健康、Nginx 上游和回滚容器是否仍存在，并分别确认当前、回滚资源目录中的 model pricing 与 catalog 文件可读。线上只保留一个历史版本，不累积第二个或更早的回滚版本。
 
 ## 回滚流程
 

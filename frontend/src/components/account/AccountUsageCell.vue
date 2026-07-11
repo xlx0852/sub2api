@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootRef" v-if="showUsageWindows">
+  <div ref="rootRef" v-if="showUsageWindows" class="w-[372px] max-w-full">
     <!-- Anthropic OAuth and Setup Token accounts: fetch real usage data -->
     <template
       v-if="
@@ -85,28 +85,13 @@
           >
             {{ t('admin.accounts.usageWindow.passiveSampled') }}
           </span>
-          <button
-            type="button"
-            class="inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] font-medium text-gray-500 transition-colors hover:text-gray-900 disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-100"
-            :disabled="activeQueryLoading"
+          <QuotaActionButton
+            :loading="activeQueryLoading"
+            :title="t('admin.accounts.usageWindow.activeQuery')"
             @click="loadActiveUsage"
           >
-            <svg
-              class="h-2.5 w-2.5"
-              :class="{ 'animate-spin': activeQueryLoading }"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
             {{ t('admin.accounts.usageWindow.activeQuery') }}
-          </button>
+          </QuotaActionButton>
         </div>
       </div>
 
@@ -146,28 +131,13 @@
         -->
         <OpenAIQuotaResetCell :account="account">
           <template #pre-actions>
-            <button
-              type="button"
-              class="inline-flex items-center gap-0.5 px-1 py-0.5 text-[10px] font-medium text-gray-500 transition-colors hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-100"
-              :disabled="activeQueryLoading"
+            <QuotaActionButton
+              :loading="activeQueryLoading"
+              :title="t('admin.accounts.usageWindow.activeQuery')"
               @click="loadActiveUsage"
             >
-              <svg
-                class="h-2.5 w-2.5"
-                :class="{ 'animate-spin': activeQueryLoading }"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
               {{ t('admin.accounts.usageWindow.activeQuery') }}
-            </button>
+            </QuotaActionButton>
           </template>
         </OpenAIQuotaResetCell>
       </div>
@@ -522,7 +492,7 @@
   </div>
 
   <!-- Non-OAuth/Setup-Token accounts -->
-  <div ref="rootRef" v-else>
+  <div ref="rootRef" v-else class="w-[372px] max-w-full">
     <!-- Gemini API Key accounts: show quota info -->
     <AccountQuotaInfo v-if="account.platform === 'gemini'" :account="account" />
     <!-- Key/Bedrock accounts: show today stats + optional quota bars -->
@@ -587,6 +557,7 @@ import UsageStatLine from './UsageStatLine.vue'
 import AccountQuotaInfo from './AccountQuotaInfo.vue'
 import OpenAIQuotaResetCell from './OpenAIQuotaResetCell.vue'
 import GrokQuotaProbeCell from './GrokQuotaProbeCell.vue'
+import QuotaActionButton from './QuotaActionButton.vue'
 import type { GrokBillingSnapshot } from '@/api/admin/grok'
 
 // Module-level cache shared across all AccountUsageCell instances

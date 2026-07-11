@@ -14,53 +14,24 @@
     <div class="flex flex-wrap items-center gap-1.5">
       <slot name="pre-actions" />
 
-      <button
-        type="button"
-        class="inline-flex items-center gap-0.5 px-1 py-0.5 text-[10px] font-medium text-gray-500 transition-colors hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-100"
-        :disabled="loading || resetting"
+      <QuotaActionButton
+        :loading="loading"
+        :disabled="resetting"
         :title="countButtonTitle"
         @click="handleQuery"
       >
-        <svg
-          class="h-2.5 w-2.5"
-          :class="{ 'animate-spin': loading }"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-          />
-        </svg>
-        {{ t('admin.accounts.openaiQuotaReset.count') }}<span v-if="data"> {{ availableResetCount }}</span>
-      </button>
+        {{ t('admin.accounts.openaiQuotaReset.count') }}<span v-if="data"> · {{ availableResetCount }}</span>
+      </QuotaActionButton>
 
-      <button
-        type="button"
-        class="inline-flex items-center gap-0.5 border-l border-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 transition-colors hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100"
-        :disabled="resetting || loading || !canReset"
+      <QuotaActionButton
+        tone="neutral"
+        :loading="resetting"
+        :disabled="loading || !canReset"
         :title="resetButtonTitle"
         @click="openResetConfirm"
       >
-        <svg
-          class="h-2.5 w-2.5"
-          :class="{ 'animate-spin': resetting }"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M20 12a8 8 0 11-2.343-5.657L20 8m0 0V4m0 4h-4"
-          />
-        </svg>
         {{ t('admin.accounts.openaiQuotaReset.reset') }}
-      </button>
+      </QuotaActionButton>
     </div>
 
     <div v-if="primaryResetCreditExpiry" class="space-y-1">
@@ -142,6 +113,7 @@ import {
   type OpenAIQuotaResetResult
 } from '@/api/admin/accounts'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import QuotaActionButton from './QuotaActionButton.vue'
 
 const props = defineProps<{
   account: Account
