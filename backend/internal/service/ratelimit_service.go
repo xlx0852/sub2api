@@ -972,13 +972,19 @@ func (s *RateLimitService) handle429(ctx context.Context, account *Account, head
 	if resetTimestamp == "" {
 		switch account.Platform {
 		case PlatformOpenAI:
-			// 尝试解析 OpenAI 的 usage_limit_reached 错误
+			// 尝试解析 OpenAI 的 usage_limit_reached / plan-limited 错误
 			if resetAt := parseOpenAIRateLimitResetTime(responseBody); resetAt != nil {
 				resetTime := time.Unix(*resetAt, 0)
 				s.notifyAccountSchedulingBlocked(account, resetTime, "429")
 				if err := s.accountRepo.SetRateLimited(ctx, account.ID, resetTime); err != nil {
 					slog.Warn("rate_limit_set_failed", "account_id", account.ID, "error", err)
 					return
+				}
+				// 同步额度窗口为满，避免管理端只显示上游英文报错。
+				if updates := buildOpenAIPlanLimitedUsageExtraUpdates(headers, responseBody, resetTime, time.Now()); len(updates) > 0 {
+					if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
+						slog.Warn("openai_plan_limited_usage_extra_failed", "account_id", account.ID, "error", err)
+					}
 				}
 				slog.Info("account_rate_limited", "account_id", account.ID, "platform", account.Platform, "reset_at", resetTime, "reset_in", time.Until(resetTime).Truncate(time.Second))
 				return
@@ -1464,17 +1470,34 @@ func (s *RateLimitService) persistOpenAICodexSnapshot(ctx context.Context, accou
 func parseOpenAIRateLimitResetTime(body []byte) *int64 {
 	var parsed map[string]any
 	if err := json.Unmarshal(body, &parsed); err != nil {
+		// 非 JSON 时仍尝试解析 “Please wait N minutes / plan is currently limited”。
+		if wait := parseOpenAIPlanLimitedWaitSeconds(string(body)); wait > 0 {
+			ts := time.Now().Unix() + wait
+			return &ts
+		}
 		return nil
 	}
 
 	errObj, ok := parsed["error"].(map[string]any)
 	if !ok {
+		// ChatGPT 偶发返回 {"detail":"Your plan is currently limited..."}。
+		if wait := parseOpenAIPlanLimitedWaitSeconds(extractOpenAIErrorMessage(parsed)); wait > 0 {
+			ts := time.Now().Unix() + wait
+			return &ts
+		}
 		return nil
 	}
 
 	// 检查是否为 usage_limit_reached 或 rate_limit_exceeded 类型
 	errType, _ := errObj["type"].(string)
-	if errType != "usage_limit_reached" && errType != "rate_limit_exceeded" {
+	msg, _ := errObj["message"].(string)
+	isUsageLimit := errType == "usage_limit_reached" || errType == "rate_limit_exceeded" || isOpenAIPlanLimitedMessage(msg)
+	if !isUsageLimit {
+		// 即使 type 缺失，body 里也可能只有 plan-limited 文案。
+		if wait := parseOpenAIPlanLimitedWaitSeconds(msg); wait > 0 {
+			ts := time.Now().Unix() + wait
+			return &ts
+		}
 		return nil
 	}
 
@@ -1501,7 +1524,77 @@ func parseOpenAIRateLimitResetTime(body []byte) *int64 {
 		}
 	}
 
+	// “Your plan is currently limited. Please wait 10 minutes...”
+	if wait := parseOpenAIPlanLimitedWaitSeconds(msg); wait > 0 {
+		ts := time.Now().Unix() + wait
+		return &ts
+	}
+
 	return nil
+}
+
+func extractOpenAIErrorMessage(parsed map[string]any) string {
+	if parsed == nil {
+		return ""
+	}
+	if msg, ok := parsed["detail"].(string); ok {
+		return msg
+	}
+	if msg, ok := parsed["message"].(string); ok {
+		return msg
+	}
+	if errObj, ok := parsed["error"].(map[string]any); ok {
+		if msg, ok := errObj["message"].(string); ok {
+			return msg
+		}
+	}
+	return ""
+}
+
+// isOpenAIPlanLimitedMessage detects ChatGPT “plan is currently limited” style
+// exhaustion messages. These mean the usage window is full, not a hard account error.
+func isOpenAIPlanLimitedMessage(msg string) bool {
+	lower := strings.ToLower(strings.TrimSpace(msg))
+	if lower == "" {
+		return false
+	}
+	return strings.Contains(lower, "plan is currently limited") ||
+		strings.Contains(lower, "usage limit has been reached") ||
+		strings.Contains(lower, "usage limit reached") ||
+		(strings.Contains(lower, "please wait") &&
+			(strings.Contains(lower, "minute") || strings.Contains(lower, "second") || strings.Contains(lower, "min") || strings.Contains(lower, "sec")))
+}
+
+// parseOpenAIPlanLimitedWaitSeconds extracts “Please wait N minutes/seconds”.
+// Returns 0 when the message is not a plan-limited wait hint.
+func parseOpenAIPlanLimitedWaitSeconds(msg string) int64 {
+	msg = strings.TrimSpace(msg)
+	if msg == "" || !isOpenAIPlanLimitedMessage(msg) {
+		return 0
+	}
+	lower := strings.ToLower(msg)
+	re := regexp.MustCompile(`(?i)wait\s+(\d+)\s*(minute|minutes|min|mins|second|seconds|sec|secs)`)
+	m := re.FindStringSubmatch(lower)
+	if len(m) < 3 {
+		// 识别到 plan-limited 但没写 wait 时长时，给一个保守 10 分钟冷却。
+		return 10 * 60
+	}
+	n, err := strconv.ParseInt(m[1], 10, 64)
+	if err != nil || n <= 0 {
+		return 10 * 60
+	}
+	unit := m[2]
+	if strings.HasPrefix(unit, "sec") {
+		if n < 30 {
+			return 30
+		}
+		return n
+	}
+	// minutes
+	if n > 24*60 {
+		n = 24 * 60
+	}
+	return n * 60
 }
 
 func parseOpenAIRateLimitPlanType(body []byte) string {

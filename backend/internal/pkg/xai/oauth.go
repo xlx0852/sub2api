@@ -253,20 +253,22 @@ func ValidateOAuthEndpointURL(raw string) (string, error) {
 
 func ValidateBaseURL(raw string) (string, error) {
 	if AllowUnsafeURLOverrides() {
-		return urlvalidator.ValidateURLFormat(raw, true)
+		normalized, err := urlvalidator.ValidateURLFormat(raw, true)
+		if err != nil {
+			return "", err
+		}
+		return normalizeBaseURLPath(normalized)
 	}
 	normalized, err := urlvalidator.ValidateHTTPSURL(raw, urlvalidator.ValidationOptions{
-		AllowedHosts:     baseURLAllowedHosts,
-		RequireAllowlist: true,
-		AllowPrivate:     false,
+		AllowPrivate: false,
 	})
 	if err != nil {
 		return "", err
 	}
-	return normalizeKnownBaseURLPath(normalized)
+	return normalizeBaseURLPath(normalized)
 }
 
-func normalizeKnownBaseURLPath(raw string) (string, error) {
+func normalizeBaseURLPath(raw string) (string, error) {
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return "", fmt.Errorf("invalid url: %s", raw)
@@ -277,12 +279,22 @@ func normalizeKnownBaseURLPath(raw string) (string, error) {
 		parsed.RawPath = ""
 		return strings.TrimRight(parsed.String(), "/"), nil
 	}
-	if path != "/v1" {
+	if isKnownBaseURLHost(parsed.Hostname()) && path != "/v1" {
 		return "", fmt.Errorf("base URL path must be /v1")
 	}
 	parsed.Path = path
 	parsed.RawPath = ""
 	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func isKnownBaseURLHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	for _, allowedHost := range baseURLAllowedHosts {
+		if host == allowedHost {
+			return true
+		}
+	}
+	return false
 }
 
 func AllowUnsafeURLOverrides() bool {

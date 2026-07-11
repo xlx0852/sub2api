@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -20,22 +21,30 @@ func (s *OpenAIGatewayService) buildOpenAIResponsesWSURL(account *Account) (stri
 		return "", errors.New("account is nil")
 	}
 	var targetURL string
-	switch account.Type {
-	case AccountTypeOAuth:
-		targetURL = chatgptCodexURL
-	case AccountTypeAPIKey:
-		baseURL := account.GetOpenAIBaseURL()
-		if baseURL == "" {
-			targetURL = openaiPlatformAPIURL
-		} else {
-			validatedURL, err := s.validateUpstreamBaseURL(baseURL)
-			if err != nil {
-				return "", err
-			}
-			targetURL = buildOpenAIResponsesURL(validatedURL)
+	if account.Platform == PlatformGrok {
+		responsesURL, err := xai.BuildResponsesURL(account.GetGrokOfficialBaseURL())
+		if err != nil {
+			return "", err
 		}
-	default:
-		targetURL = openaiPlatformAPIURL
+		targetURL = responsesURL
+	} else {
+		switch account.Type {
+		case AccountTypeOAuth:
+			targetURL = chatgptCodexURL
+		case AccountTypeAPIKey:
+			baseURL := account.GetOpenAIBaseURL()
+			if baseURL == "" {
+				targetURL = openaiPlatformAPIURL
+			} else {
+				validatedURL, err := s.validateUpstreamBaseURL(baseURL)
+				if err != nil {
+					return "", err
+				}
+				targetURL = buildOpenAIResponsesURL(validatedURL)
+			}
+		default:
+			targetURL = openaiPlatformAPIURL
+		}
 	}
 
 	parsed, err := url.Parse(strings.TrimSpace(targetURL))

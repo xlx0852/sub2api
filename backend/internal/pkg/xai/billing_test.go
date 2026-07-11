@@ -135,5 +135,17 @@ func TestApplyGrokCLIBillingHeaders(t *testing.T) {
 	require.Equal(t, "user-1", req.Header.Get(GrokCLIUserIDHeader))
 }
 
+func TestApplyGrokCLIChatHeaders(t *testing.T) {
+	req, err := http.NewRequest(http.MethodPost, DefaultCLIBaseURL+"/responses", nil)
+	require.NoError(t, err)
+
+	ApplyGrokCLIChatHeaders(req)
+
+	require.Equal(t, GrokCLITokenAuthValue, req.Header.Get(GrokCLITokenAuthHeader))
+	require.Equal(t, GrokCLIVersionValue, req.Header.Get(GrokCLIVersionHeader))
+	require.True(t, IsCLIChatProxyBaseURL(DefaultCLIBaseURL+"/"))
+	require.False(t, IsCLIChatProxyBaseURL(DefaultBaseURL))
+}
+
 func floatPtr(v float64) *float64 { return &v }
 func int64Ptr(v int64) *int64     { return &v }

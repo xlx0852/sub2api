@@ -25,6 +25,21 @@ export function applyAntigravityProjectID(
   }
 }
 
+export const GROK_API_BASE_URL = 'https://api.x.ai/v1'
+
+export function applyGrokAPIKeyRouting(
+  credentials: Record<string, unknown>,
+  platform: string,
+  accountType: string
+): void {
+  if (platform !== 'grok' || accountType !== 'apikey') return
+
+  const configuredBaseURL =
+    typeof credentials.base_url === 'string' ? credentials.base_url.trim() : ''
+  credentials.base_url = configuredBaseURL || GROK_API_BASE_URL
+  credentials.using_api = true
+}
+
 // ========== 请求头覆写（仅 anthropic/openai 平台的 api_key 账号） ==========
 
 export const HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY = 'header_override_enabled'

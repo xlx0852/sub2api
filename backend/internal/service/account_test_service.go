@@ -652,16 +652,10 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	return s.processOpenAIStream(c, resp.Body)
 }
 
-// testGrokAccountConnection tests a Grok OAuth account through xAI's Responses API.
+// testGrokAccountConnection tests a Grok OAuth or API Key account through xAI's Responses API.
 func (s *AccountTestService) testGrokAccountConnection(c *gin.Context, account *Account, modelID string) error {
 	ctx := c.Request.Context()
 
-	if account.Type != AccountTypeOAuth {
-		return s.sendErrorAndEnd(c, fmt.Sprintf("Unsupported Grok account type: %s", account.Type))
-	}
-	if s.grokTokenProvider == nil {
-		return s.sendErrorAndEnd(c, "Grok token provider not configured")
-	}
 	if s.httpUpstream == nil {
 		return s.sendErrorAndEnd(c, "HTTP upstream not configured")
 	}
@@ -674,12 +668,27 @@ func (s *AccountTestService) testGrokAccountConnection(c *gin.Context, account *
 		testModelID = mapped
 	}
 
-	authToken, err := s.grokTokenProvider.GetAccessToken(ctx, account)
-	if err != nil {
-		return s.sendErrorAndEnd(c, fmt.Sprintf("Failed to get Grok access token: %s", err.Error()))
+	var authToken string
+	switch account.Type {
+	case AccountTypeOAuth:
+		if s.grokTokenProvider == nil {
+			return s.sendErrorAndEnd(c, "Grok token provider not configured")
+		}
+		var err error
+		authToken, err = s.grokTokenProvider.GetAccessToken(ctx, account)
+		if err != nil {
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Failed to get Grok access token: %s", err.Error()))
+		}
+	case AccountTypeAPIKey:
+		authToken = strings.TrimSpace(account.GetCredential("api_key"))
+		if authToken == "" {
+			return s.sendErrorAndEnd(c, "Grok API key not found in credentials")
+		}
+	default:
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Unsupported Grok account type: %s", account.Type))
 	}
 
-	apiURL, err := xai.BuildResponsesURL(account.GetGrokBaseURL())
+	apiURL, err := xai.BuildResponsesURL(account.GetGrokChatBaseURL())
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid Grok base URL: %s", err.Error()))
 	}
@@ -709,6 +718,9 @@ func (s *AccountTestService) testGrokAccountConnection(c *gin.Context, account *
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Authorization", "Bearer "+authToken)
 	req.Header.Set("User-Agent", "sub2api-grok/1.0")
+	if xai.IsCLIChatProxyBaseURL(account.GetGrokChatBaseURL()) {
+		xai.ApplyGrokCLIChatHeaders(req)
+	}
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -920,6 +932,7 @@ func (s *AccountTestService) reconcileOpenAI429State(ctx context.Context, accoun
 
 	persistOpenAI429PlanType(ctx, s.accountRepo, account, body)
 
+	// Prefer header snapshot (x-codex-*); body-only plan-limited still yields a wait window.
 	var resetAt *time.Time
 	if calculated := calculateOpenAI429ResetTime(headers); calculated != nil {
 		resetAt = calculated
@@ -939,6 +952,12 @@ func (s *AccountTestService) reconcileOpenAI429State(ctx context.Context, accoun
 	account.RateLimitedAt = &now
 	account.RateLimitResetAt = resetAt
 
+	// 跑满时同步额度窗口为 100%，避免 UI 只看到上游英文报错而看不到“满了”。
+	if updates := buildOpenAIPlanLimitedUsageExtraUpdates(headers, body, *resetAt, now); len(updates) > 0 {
+		_ = s.accountRepo.UpdateExtra(ctx, account.ID, updates)
+		mergeAccountExtra(account, updates)
+	}
+
 	if account.Status == StatusError {
 		if err := s.accountRepo.ClearError(ctx, account.ID); err != nil {
 			return
@@ -946,6 +965,41 @@ func (s *AccountTestService) reconcileOpenAI429State(ctx context.Context, accoun
 		account.Status = StatusActive
 		account.ErrorMessage = ""
 	}
+}
+
+// buildOpenAIPlanLimitedUsageExtraUpdates marks the primary usage window as full
+// when ChatGPT reports plan-limited / usage-limit-reached without precise percent headers.
+func buildOpenAIPlanLimitedUsageExtraUpdates(headers http.Header, body []byte, resetAt, now time.Time) map[string]any {
+	if snapshot := ParseCodexRateLimitHeaders(headers); snapshot != nil {
+		return buildCodexUsageExtraUpdates(snapshot, now)
+	}
+
+	msg := strings.TrimSpace(string(body))
+	var parsed map[string]any
+	if json.Unmarshal(body, &parsed) == nil {
+		msg = extractOpenAIErrorMessage(parsed)
+	}
+	if !isOpenAIPlanLimitedMessage(msg) {
+		// usage_limit_reached without percent headers still means the window is exhausted.
+		if !bytes.Contains(bytes.ToLower(body), []byte("usage_limit_reached")) &&
+			!bytes.Contains(bytes.ToLower(body), []byte("rate_limit_exceeded")) {
+			return nil
+		}
+	}
+
+	resetAfter := int(resetAt.Sub(now).Seconds())
+	if resetAfter < 1 {
+		resetAfter = 1
+	}
+	updates := map[string]any{
+		"codex_5h_used_percent":             100.0,
+		"codex_5h_reset_after_seconds":      resetAfter,
+		"codex_5h_reset_at":                 resetAt.Format(time.RFC3339),
+		"codex_usage_updated_at":            now.Format(time.RFC3339),
+		"codex_primary_used_percent":        100.0,
+		"codex_primary_reset_after_seconds": resetAfter,
+	}
+	return updates
 }
 
 // testGeminiAccountConnection tests a Gemini account's connection

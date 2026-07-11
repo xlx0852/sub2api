@@ -517,3 +517,21 @@ func TestCalculateOpenAI429ResetTime_5MinFallbackWhenNoReset(t *testing.T) {
 		t.Errorf("expected nil when no reset_after_seconds, got %v", resetAt)
 	}
 }
+
+func TestParseOpenAIPlanLimitedWaitSeconds(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, int64(10*60), parseOpenAIPlanLimitedWaitSeconds("Your plan is currently limited. Please wait 10 minutes before trying again."))
+	require.Equal(t, int64(5*60), parseOpenAIPlanLimitedWaitSeconds("plan is currently limited, please wait 5 mins"))
+	require.Equal(t, int64(90), parseOpenAIPlanLimitedWaitSeconds("please wait 90 seconds"))
+	require.Equal(t, int64(10*60), parseOpenAIPlanLimitedWaitSeconds("Your plan is currently limited."))
+	require.Zero(t, parseOpenAIPlanLimitedWaitSeconds("invalid api key"))
+}
+
+func TestParseOpenAIRateLimitResetTime_PlanLimitedDetail(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"detail":"Your plan is currently limited. Please wait 10 minutes before trying again. If you have additional needs, please contact OpenAI support at help.openai.com"}`)
+	ts := parseOpenAIRateLimitResetTime(body)
+	require.NotNil(t, ts)
+	delta := *ts - time.Now().Unix()
+	require.InDelta(t, 10*60, float64(delta), 5)
+}

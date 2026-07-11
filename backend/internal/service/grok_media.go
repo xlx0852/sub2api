@@ -302,7 +302,7 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	if err != nil {
 		return nil, err
 	}
-	targetURL, err := endpoint.upstreamURL(account.GetGrokBaseURL(), requestID)
+	targetURL, err := endpoint.upstreamURL(account.GetGrokOfficialBaseURL(), requestID)
 	if err != nil {
 		return nil, err
 	}

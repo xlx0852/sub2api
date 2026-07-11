@@ -165,7 +165,27 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 	}
 	if !resp.IsSuccessState() {
 		status := resp.StatusCode
-		body := truncate(resp.String(), 240)
+		body := resp.String()
+		// 额度跑满时 ChatGPT 常返回 plan-limited 文案。映射为限流错误码，前端展示“已满”而不是原始英文报错。
+		if status == http.StatusTooManyRequests || isOpenAIPlanLimitedMessage(body) {
+			waitSec := parseOpenAIPlanLimitedWaitSeconds(body)
+			if waitSec <= 0 {
+				if ts := parseOpenAIRateLimitResetTime([]byte(body)); ts != nil {
+					waitSec = *ts - time.Now().Unix()
+				}
+			}
+			if waitSec < 30 {
+				waitSec = 10 * 60
+			}
+			slog.Info("openai_quota_query_plan_limited", "account_id", accountID, "wait_seconds", waitSec)
+			return nil, infraerrors.Newf(
+				http.StatusTooManyRequests,
+				"OPENAI_QUOTA_PLAN_LIMITED",
+				"plan limited; retry after %d seconds",
+				waitSec,
+			)
+		}
+		body = truncate(body, 240)
 		slog.Warn("openai_quota_query_failed", "account_id", accountID, "status", status, "body", body)
 		return nil, infraerrors.Newf(mapUpstreamStatus(status), "OPENAI_QUOTA_UPSTREAM_ERROR", "upstream returned %d: %s", status, body)
 	}

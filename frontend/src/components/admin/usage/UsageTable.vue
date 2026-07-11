@@ -192,20 +192,26 @@
         </template>
 
         <template #cell-latency="{ row }">
-          <div class="flex min-w-[8.5rem] items-center gap-2.5">
-            <div class="flex h-10 w-1.5 shrink-0 flex-col overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-              <span class="min-h-0 flex-1" :class="getLatencyBarClass(row.first_token_ms, 'first_token')"></span>
-              <span class="min-h-0 flex-1" :class="getLatencyBarClass(row.duration_ms, 'duration')"></span>
-            </div>
-            <div class="grid grid-cols-[auto_auto] gap-x-2 gap-y-0.5 text-sm tabular-nums">
-              <span class="whitespace-nowrap text-gray-400 dark:text-gray-500">{{ t('usage.latencyFirstToken') }}</span>
-              <span class="whitespace-nowrap font-medium" :class="getLatencyTextClass(row.first_token_ms, 'first_token')">
-                {{ formatDuration(row.first_token_ms) }}
-              </span>
-              <span class="whitespace-nowrap text-gray-400 dark:text-gray-500">{{ t('usage.latencyTotal') }}</span>
-              <span class="whitespace-nowrap font-medium" :class="getLatencyTextClass(row.duration_ms, 'duration')">
-                {{ formatDuration(row.duration_ms) }}
-              </span>
+          <div class="flex min-w-[9.5rem] items-center">
+            <div class="grid min-w-0 gap-1 text-sm tabular-nums">
+              <div class="flex items-center justify-between gap-3 rounded-md bg-gray-50/80 px-1.5 py-0.5 dark:bg-gray-800/50">
+                <span class="flex items-center gap-1.5 whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
+                  <span class="h-1.5 w-1.5 rounded-full" :class="getLatencyBarClass(row.first_token_ms, 'first_token')"></span>
+                  {{ t('usage.latencyFirstToken') }}
+                </span>
+                <span class="w-[4.5rem] whitespace-nowrap text-right font-semibold" :class="getLatencyTextClass(row.first_token_ms, 'first_token')">
+                  {{ formatDuration(row.first_token_ms) }}
+                </span>
+              </div>
+              <div class="flex items-center justify-between gap-3 rounded-md bg-gray-50/80 px-1.5 py-0.5 dark:bg-gray-800/50">
+                <span class="flex items-center gap-1.5 whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
+                  <span class="h-1.5 w-1.5 rounded-full" :class="getLatencyBarClass(row.duration_ms, 'duration')"></span>
+                  {{ t('usage.latencyTotal') }}
+                </span>
+                <span class="w-[4.5rem] whitespace-nowrap text-right font-semibold" :class="getLatencyTextClass(row.duration_ms, 'duration')">
+                  {{ formatDuration(row.duration_ms) }}
+                </span>
+              </div>
             </div>
           </div>
         </template>

@@ -235,14 +235,16 @@ func (r *ModelPricingResolver) GetIntervalPricing(resolved *ResolvedPricing, tot
 		return resolved.BasePricing
 	}
 
-	return intervalToModelPricing(iv, resolved.SupportsCacheBreakdown, resolved.channelPricing)
+	return intervalToModelPricing(iv, resolved.BasePricing, resolved.SupportsCacheBreakdown, resolved.channelPricing)
 }
 
-// intervalToModelPricing 将区间定价转换为 ModelPricing
-func intervalToModelPricing(iv *PricingInterval, supportsCacheBreakdown bool, chPricing *ChannelModelPricing) *ModelPricing {
-	pricing := &ModelPricing{
-		SupportsCacheBreakdown: supportsCacheBreakdown,
+// intervalToModelPricing 将区间定价叠加到基础定价上。
+func intervalToModelPricing(iv *PricingInterval, base *ModelPricing, supportsCacheBreakdown bool, chPricing *ChannelModelPricing) *ModelPricing {
+	pricing := &ModelPricing{}
+	if base != nil {
+		*pricing = *base
 	}
+	pricing.SupportsCacheBreakdown = supportsCacheBreakdown
 	if iv.InputPrice != nil {
 		pricing.InputPricePerToken = *iv.InputPrice
 		pricing.InputPricePerTokenPriority = *iv.InputPrice

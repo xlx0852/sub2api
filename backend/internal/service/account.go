@@ -1261,6 +1261,45 @@ func (a *Account) GetGrokBaseURL() string {
 	return xai.DefaultBaseURL
 }
 
+func (a *Account) GrokUsesOfficialAPI() bool {
+	if a == nil || !a.IsGrok() {
+		return true
+	}
+	if raw, ok := a.Credentials["using_api"]; ok && raw != nil {
+		switch value := raw.(type) {
+		case bool:
+			return value
+		case string:
+			if parsed, err := strconv.ParseBool(strings.TrimSpace(value)); err == nil {
+				return parsed
+			}
+		}
+	}
+	return !a.IsGrokOAuth()
+}
+
+func (a *Account) GetGrokChatBaseURL() string {
+	baseURL := strings.TrimRight(strings.TrimSpace(a.GetGrokBaseURL()), "/")
+	if a.GrokUsesOfficialAPI() {
+		if xai.IsCLIChatProxyBaseURL(baseURL) {
+			return xai.DefaultBaseURL
+		}
+		return baseURL
+	}
+	if baseURL != "" && baseURL != xai.DefaultBaseURL {
+		return baseURL
+	}
+	return xai.DefaultCLIBaseURL
+}
+
+func (a *Account) GetGrokOfficialBaseURL() string {
+	baseURL := strings.TrimRight(strings.TrimSpace(a.GetGrokBaseURL()), "/")
+	if xai.IsCLIChatProxyBaseURL(baseURL) {
+		return xai.DefaultBaseURL
+	}
+	return baseURL
+}
+
 func (a *Account) GetGrokAccessToken() string {
 	if !a.IsGrok() {
 		return ""

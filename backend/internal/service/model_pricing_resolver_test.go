@@ -97,6 +97,42 @@ func TestGetIntervalPricing_MatchesInterval(t *testing.T) {
 	require.InDelta(t, 3e-6, result2.InputPricePerToken, 1e-12)
 }
 
+func TestGetIntervalPricing_PartialIntervalInheritsBasePricing(t *testing.T) {
+	r := NewModelPricingResolver(&ChannelService{}, newTestBillingServiceForResolver())
+	basePricing := &ModelPricing{
+		InputPricePerToken:                 5e-6,
+		InputPricePerTokenPriority:         10e-6,
+		OutputPricePerToken:                15e-6,
+		OutputPricePerTokenPriority:        30e-6,
+		CacheCreationPricePerToken:         6.25e-6,
+		CacheCreationPricePerTokenPriority: 12.5e-6,
+		CacheCreationPriceExplicit:         true,
+		CacheReadPricePerToken:             0.5e-6,
+		CacheReadPricePerTokenPriority:     1e-6,
+	}
+	resolved := &ResolvedPricing{
+		Mode:                   BillingModeToken,
+		BasePricing:            basePricing,
+		SupportsCacheBreakdown: true,
+		Intervals: []PricingInterval{
+			{MinTokens: 0, MaxTokens: testPtrInt(128000), InputPrice: testPtrFloat64(7e-6)},
+		},
+	}
+
+	result := r.GetIntervalPricing(resolved, 50000)
+	require.NotSame(t, basePricing, result)
+	require.InDelta(t, 7e-6, result.InputPricePerToken, 1e-12)
+	require.InDelta(t, 7e-6, result.InputPricePerTokenPriority, 1e-12)
+	require.InDelta(t, 15e-6, result.OutputPricePerToken, 1e-12)
+	require.InDelta(t, 30e-6, result.OutputPricePerTokenPriority, 1e-12)
+	require.InDelta(t, 6.25e-6, result.CacheCreationPricePerToken, 1e-12)
+	require.InDelta(t, 12.5e-6, result.CacheCreationPricePerTokenPriority, 1e-12)
+	require.True(t, result.CacheCreationPriceExplicit)
+	require.InDelta(t, 0.5e-6, result.CacheReadPricePerToken, 1e-12)
+	require.InDelta(t, 1e-6, result.CacheReadPricePerTokenPriority, 1e-12)
+	require.True(t, result.SupportsCacheBreakdown)
+}
+
 func TestGetIntervalPricing_NoMatch_FallsBackToBase(t *testing.T) {
 	bs := newTestBillingServiceForResolver()
 	r := NewModelPricingResolver(&ChannelService{}, bs)
@@ -142,7 +178,7 @@ func TestGPT56ExplicitZeroCacheWritePriceIsPreserved(t *testing.T) {
 	})
 
 	t.Run("interval price", func(t *testing.T) {
-		pricing := intervalToModelPricing(&PricingInterval{CacheWritePrice: &zero}, false, nil)
+		pricing := intervalToModelPricing(&PricingInterval{CacheWritePrice: &zero}, nil, false, nil)
 		require.True(t, pricing.CacheCreationPriceExplicit)
 
 		cost, err := bs.CalculateCostUnified(CostInput{

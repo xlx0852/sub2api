@@ -61,50 +61,50 @@ const (
 // OpenAI allowed headers whitelist (for non-passthrough).
 // 对齐 Codex rust-v0.144.0 常见请求头：session-id/thread-id、version、x-codex-window-id 等。
 var openaiAllowedHeaders = map[string]bool{
-	"accept-language":            true,
-	"content-type":               true,
-	"conversation_id":            true, // 兼容旧客户端
-	"session_id":                 true, // 兼容旧客户端
-	"session-id":                 true, // 官方 0.144 主形态
-	"thread-id":                  true, // 官方 0.144 主形态
-	"thread_id":                  true,
-	"user-agent":                 true,
-	"originator":                 true,
-	"openai-beta":                true, // 官方 HTTP 已不再强制；仅透传客户端自带值
-	"version":                    true, // provider http_headers: CARGO_PKG_VERSION
-	"x-client-request-id":        true,
-	"x-codex-beta-features":      true,
-	"x-codex-installation-id":    true,
-	"x-codex-parent-thread-id":   true,
-	"x-codex-turn-state":         true,
-	"x-codex-turn-metadata":      true,
-	"x-codex-window-id":          true,
-	"x-openai-subagent":          true,
+	"accept-language":          true,
+	"content-type":             true,
+	"conversation_id":          true, // 兼容旧客户端
+	"session_id":               true, // 兼容旧客户端
+	"session-id":               true, // 官方 0.144 主形态
+	"thread-id":                true, // 官方 0.144 主形态
+	"thread_id":                true,
+	"user-agent":               true,
+	"originator":               true,
+	"openai-beta":              true, // 官方 HTTP 已不再强制；仅透传客户端自带值
+	"version":                  true, // provider http_headers: CARGO_PKG_VERSION
+	"x-client-request-id":      true,
+	"x-codex-beta-features":    true,
+	"x-codex-installation-id":  true,
+	"x-codex-parent-thread-id": true,
+	"x-codex-turn-state":       true,
+	"x-codex-turn-metadata":    true,
+	"x-codex-window-id":        true,
+	"x-openai-subagent":        true,
 }
 
 // OpenAI passthrough allowed headers whitelist.
 // 透传模式下仅放行这些低风险请求头，避免将非标准/环境噪声头传给上游触发风控。
 var openaiPassthroughAllowedHeaders = map[string]bool{
-	"accept":                     true,
-	"accept-language":            true,
-	"content-type":               true,
-	"conversation_id":            true,
-	"session_id":                 true,
-	"session-id":                 true,
-	"thread-id":                  true,
-	"thread_id":                  true,
-	"openai-beta":                true,
-	"user-agent":                 true,
-	"originator":                 true,
-	"version":                    true,
-	"x-client-request-id":        true,
-	"x-codex-beta-features":      true,
-	"x-codex-installation-id":    true,
-	"x-codex-parent-thread-id":   true,
-	"x-codex-turn-state":         true,
-	"x-codex-turn-metadata":      true,
-	"x-codex-window-id":          true,
-	"x-openai-subagent":          true,
+	"accept":                   true,
+	"accept-language":          true,
+	"content-type":             true,
+	"conversation_id":          true,
+	"session_id":               true,
+	"session-id":               true,
+	"thread-id":                true,
+	"thread_id":                true,
+	"openai-beta":              true,
+	"user-agent":               true,
+	"originator":               true,
+	"version":                  true,
+	"x-client-request-id":      true,
+	"x-codex-beta-features":    true,
+	"x-codex-installation-id":  true,
+	"x-codex-parent-thread-id": true,
+	"x-codex-turn-state":       true,
+	"x-codex-turn-metadata":    true,
+	"x-codex-window-id":        true,
+	"x-openai-subagent":        true,
 }
 
 // codex_cli_only 拒绝时记录的请求头白名单（仅用于诊断日志，不参与上游透传）
@@ -233,10 +233,11 @@ type OpenAIUsage struct {
 
 // OpenAIForwardResult represents the result of forwarding
 type OpenAIForwardResult struct {
-	RequestID  string
-	ResponseID string
-	Usage      OpenAIUsage
-	Model      string // 原始模型（用于响应和日志显示）
+	RequestID        string
+	ResponseID       string
+	BillingRequestID string // 本地生成的计费幂等 ID，不信任上游 response ID 唯一性
+	Usage            OpenAIUsage
+	Model            string // 原始模型（用于响应和日志显示）
 	// BillingModel is the model used for cost calculation.
 	// When non-empty, CalculateCost uses this instead of Model.
 	// This is set by the Anthropic Messages conversion path where
@@ -250,28 +251,28 @@ type OpenAIForwardResult struct {
 	ServiceTier *string
 	// ReasoningEffort is extracted from request body (reasoning.effort) or derived from model suffix.
 	// Stored for usage records display; nil means not provided / not applicable.
-	ReasoningEffort    *string
-	Stream             bool
-	OpenAIWSMode       bool
-	ResponseHeaders    http.Header
-	Duration           time.Duration
-	FirstTokenMs       *int
-	ClientDisconnect   bool
-	WSPayloadBytes     *int64
-	WSEventCount       *int
-	Compact            bool
+	ReasoningEffort       *string
+	Stream                bool
+	OpenAIWSMode          bool
+	ResponseHeaders       http.Header
+	Duration              time.Duration
+	FirstTokenMs          *int
+	ClientDisconnect      bool
+	WSPayloadBytes        *int64
+	WSEventCount          *int
+	Compact               bool
 	CompactPayloadBytes   *int64
 	CompactRetryCount     int
 	CompactClientCanceled bool
-	ImageCount         int
-	ImageSize          string
-	ImageInputSize     string
-	ImageOutputSize    string
-	ImageOutputSizes   []string
-	ImageSizeSource    string
-	ImageSizeBreakdown map[string]int
-	VideoCount         int
-	VideoResolution    string
+	ImageCount            int
+	ImageSize             string
+	ImageInputSize        string
+	ImageOutputSize       string
+	ImageOutputSizes      []string
+	ImageSizeSource       string
+	ImageSizeBreakdown    map[string]int
+	VideoCount            int
+	VideoResolution       string
 	// VideoDurationSeconds 是提交时请求的生成时长（xAI 按输出秒数计费），已归一化到 1-15 秒。
 	VideoDurationSeconds int
 

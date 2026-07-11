@@ -14,6 +14,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -186,6 +187,9 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	}
 	if userAgent != "" {
 		upstreamReq.Header.Set("user-agent", userAgent)
+	}
+	if account.Platform == PlatformGrok && xai.IsCLIChatProxyBaseURL(account.GetGrokChatBaseURL()) {
+		xai.ApplyGrokCLIChatHeaders(upstreamReq)
 	}
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效）

@@ -1,9 +1,9 @@
 <template>
   <div v-if="visible" class="space-y-1">
-    <div class="flex flex-wrap items-center gap-1.5">
+    <div class="flex items-center">
       <button
         type="button"
-        class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-cyan-700 transition-colors hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-cyan-300 dark:hover:bg-cyan-900/30"
+        class="inline-flex items-center gap-0.5 px-1 py-0.5 text-[10px] font-medium text-gray-500 transition-colors hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-100"
         :disabled="loading"
         :title="t('admin.accounts.usageWindow.grokProbeTooltip')"
         @click="handleProbe"
@@ -25,14 +25,6 @@
         {{ t('admin.accounts.usageWindow.grokProbe') }}
       </button>
 
-      <button
-        type="button"
-        class="inline-flex cursor-not-allowed items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-gray-400 opacity-70 dark:text-gray-500"
-        disabled
-        :title="t('admin.accounts.usageWindow.grokResetUnsupportedTooltip')"
-      >
-        {{ t('admin.accounts.usageWindow.grokResetUnsupported') }}
-      </button>
     </div>
 
     <div v-if="error" class="truncate text-[10px] text-red-600 dark:text-red-400" :title="error">

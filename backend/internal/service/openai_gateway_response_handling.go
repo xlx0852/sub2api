@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -704,14 +706,66 @@ func (s *OpenAIGatewayService) parseSSEUsageBytes(data []byte, usage *OpenAIUsag
 	}
 }
 
+// dumpUpstreamUsageRaw writes raw upstream usage payloads when
+// SUB2API_UPSTREAM_USAGE_DUMP is set to a directory path. Used for local
+// cache_write_tokens packet investigation only.
+func dumpUpstreamUsageRaw(source string, body []byte, parsed OpenAIUsage) {
+	dir := strings.TrimSpace(os.Getenv("SUB2API_UPSTREAM_USAGE_DUMP"))
+	if dir == "" || len(body) == 0 {
+		return
+	}
+	_ = os.MkdirAll(dir, 0o755)
+	usageNode := gjson.GetBytes(body, "usage")
+	if !usageNode.Exists() {
+		usageNode = gjson.GetBytes(body, "response.usage")
+	}
+	eventType := gjson.GetBytes(body, "type").String()
+	responseID := strings.TrimSpace(gjson.GetBytes(body, "response.id").String())
+	if responseID == "" {
+		responseID = strings.TrimSpace(gjson.GetBytes(body, "id").String())
+	}
+	model := strings.TrimSpace(gjson.GetBytes(body, "response.model").String())
+	if model == "" {
+		model = strings.TrimSpace(gjson.GetBytes(body, "model").String())
+	}
+	payload := map[string]any{
+		"ts":            time.Now().Format(time.RFC3339Nano),
+		"source":        source,
+		"event_type":    eventType,
+		"response_id":   responseID,
+		"model":         model,
+		"raw_usage":     json.RawMessage(usageNode.Raw),
+		"raw_usage_text": usageNode.Raw,
+		"parsed": map[string]any{
+			"input_tokens":                parsed.InputTokens,
+			"output_tokens":               parsed.OutputTokens,
+			"cache_creation_input_tokens": parsed.CacheCreationInputTokens,
+			"cache_read_input_tokens":     parsed.CacheReadInputTokens,
+			"image_output_tokens":         parsed.ImageOutputTokens,
+		},
+		"raw_event": json.RawMessage(body),
+	}
+	b, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return
+	}
+	name := fmt.Sprintf("%s_%d.json", time.Now().Format("150405.000000"), time.Now().UnixNano()%1e6)
+	_ = os.WriteFile(filepath.Join(dir, name), b, 0o600)
+}
+
 func extractOpenAIUsageFromJSONBytes(body []byte) (OpenAIUsage, bool) {
 	if len(body) == 0 || !gjson.ValidBytes(body) {
 		return OpenAIUsage{}, false
 	}
 	if usage, ok := openAIUsageFromGJSON(gjson.GetBytes(body, "usage")); ok {
+		dumpUpstreamUsageRaw("json.usage", body, usage)
 		return usage, true
 	}
-	return openAIUsageFromGJSON(gjson.GetBytes(body, "response.usage"))
+	usage, ok := openAIUsageFromGJSON(gjson.GetBytes(body, "response.usage"))
+	if ok {
+		dumpUpstreamUsageRaw("json.response.usage", body, usage)
+	}
+	return usage, ok
 }
 
 func extractOpenAIResponseIDFromJSONBytes(body []byte) string {

@@ -137,11 +137,22 @@ func TestBuildGrokMediaURLs(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestValidateXAIURLsRejectArbitraryHostsByDefault(t *testing.T) {
-	_, err := ValidateOAuthEndpointURL("https://auth.example.test/oauth2/token")
-	require.Error(t, err)
+func TestValidateXAIURLsAllowCompatibleCustomBaseURL(t *testing.T) {
+	baseURL, err := ValidateBaseURL("https://gateway.example.test")
+	require.NoError(t, err)
+	require.Equal(t, "https://gateway.example.test/v1", baseURL)
 
-	_, err = ValidateBaseURL("https://xai.test/v1")
+	baseURL, err = ValidateBaseURL("https://gateway.example.test/api/v1/")
+	require.NoError(t, err)
+	require.Equal(t, "https://gateway.example.test/api/v1", baseURL)
+
+	responsesURL, err := BuildResponsesURL("https://gateway.example.test")
+	require.NoError(t, err)
+	require.Equal(t, "https://gateway.example.test/v1/responses", responsesURL)
+}
+
+func TestValidateXAIURLsRejectUnsafeBaseURLsByDefault(t *testing.T) {
+	_, err := ValidateOAuthEndpointURL("https://auth.example.test/oauth2/token")
 	require.Error(t, err)
 
 	_, err = ValidateBaseURL("http://127.0.0.1:8080/v1")

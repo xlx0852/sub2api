@@ -902,6 +902,30 @@ func TestOpenAIGatewayServiceRecordUsage_WSModePrefersUpstreamRequestIDOverClien
 	require.Equal(t, "resp_openai_ws_turn_456", usageRepo.lastLog.RequestID)
 }
 
+func TestOpenAIGatewayServiceRecordUsage_WSModePrefersLocalBillingRequestID(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{}
+	billingRepo := &openAIRecordUsageBillingRepoStub{result: &UsageBillingApplyResult{Applied: true}}
+	svc := newOpenAIRecordUsageServiceWithBillingRepoForTest(usageRepo, billingRepo, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{}, nil)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID:        "reused-upstream-response-id",
+			BillingRequestID: "ws-turn-local-123",
+			OpenAIWSMode:     true,
+			Usage:            OpenAIUsage{InputTokens: 8, OutputTokens: 4},
+			Model:            "gpt-5.1",
+			Duration:         time.Second,
+		},
+		APIKey:  &APIKey{ID: 10051},
+		User:    &User{ID: 20051},
+		Account: &Account{ID: 30051},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "local:ws-turn-local-123", billingRepo.lastCmd.RequestID)
+	require.Equal(t, "local:ws-turn-local-123", usageRepo.lastLog.RequestID)
+}
+
 func TestOpenAIGatewayServiceRecordUsage_CopiesWSHTTPBridgeMetrics(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{}
 	billingRepo := &openAIRecordUsageBillingRepoStub{result: &UsageBillingApplyResult{Applied: true}}

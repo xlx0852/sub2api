@@ -16,7 +16,7 @@
 
       <button
         type="button"
-        class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+        class="inline-flex items-center gap-0.5 px-1 py-0.5 text-[10px] font-medium text-gray-500 transition-colors hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-100"
         :disabled="loading || resetting"
         :title="countButtonTitle"
         @click="handleQuery"
@@ -40,7 +40,7 @@
 
       <button
         type="button"
-        class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-orange-600 transition-colors hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-orange-400 dark:hover:bg-orange-900/30"
+        class="inline-flex items-center gap-0.5 border-l border-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 transition-colors hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100"
         :disabled="resetting || loading || !canReset"
         :title="resetButtonTitle"
         @click="openResetConfirm"
@@ -88,7 +88,7 @@
       <div
         v-if="showResetCreditDetails && resetCreditExpirations.length > 1"
         data-testid="reset-credit-expiry-details"
-        class="inline-grid max-w-full gap-0.5 rounded border border-gray-200 bg-white px-1.5 py-1 text-[10px] leading-4 text-gray-600 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+        class="inline-grid max-w-full gap-0.5 rounded border border-gray-200 bg-white px-1.5 py-1 text-[10px] leading-4 text-gray-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
       >
         <span class="sr-only">{{ t('admin.accounts.openaiQuotaReset.expirationDetails') }}</span>
         <span
@@ -106,8 +106,8 @@
     <!-- Error / success feedback -->
     <div
       v-if="error"
-      class="text-[10px] text-red-600 dark:text-red-400"
-      :title="error"
+      :class="errorClass"
+      :title="isPlanLimitedError(error) ? planLimitedFriendlyMessage : error"
     >
       {{ truncatedError }}
     </div>
@@ -202,9 +202,45 @@ const countButtonTitle = computed(() => {
   return t('admin.accounts.openaiQuotaReset.countTooltipRefresh')
 })
 
+const isPlanLimitedError = (message: string | null | undefined): boolean => {
+  const text = (message ?? '').toLowerCase()
+  if (!text) return false
+  return (
+    text.includes('plan is currently limited') ||
+    text.includes('usage limit has been reached') ||
+    text.includes('usage limit reached') ||
+    text.includes('openai_quota_plan_limited') ||
+    (text.includes('please wait') && text.includes('minute'))
+  )
+}
+
+const planLimitedFriendlyMessage = computed(() => {
+  const raw = error.value ?? ''
+  const match = raw.match(/wait\s+(\d+)\s*(minute|minutes|min|mins|second|seconds|sec|secs)/i)
+  if (match) {
+    const n = Number(match[1])
+    const unit = match[2].toLowerCase()
+    if (unit.startsWith('sec')) {
+      return t('admin.accounts.openaiQuotaReset.planLimitedSeconds', { seconds: n })
+    }
+    return t('admin.accounts.openaiQuotaReset.planLimitedMinutes', { minutes: n })
+  }
+  return t('admin.accounts.openaiQuotaReset.planLimited')
+})
+
 const truncatedError = computed(() => {
   if (!error.value) return ''
+  if (isPlanLimitedError(error.value)) {
+    return planLimitedFriendlyMessage.value
+  }
   return error.value.length > 80 ? `${error.value.slice(0, 80)}…` : error.value
+})
+
+const errorClass = computed(() => {
+  if (isPlanLimitedError(error.value)) {
+    return 'text-[10px] text-amber-600 dark:text-amber-400'
+  }
+  return 'text-[10px] text-red-600 dark:text-red-400'
 })
 
 const getResetCreditExpiryTime = (value: string): number => {

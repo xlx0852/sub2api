@@ -35,7 +35,7 @@
       </div>
 
       <!-- Usage data -->
-      <div v-else-if="usageInfo" class="space-y-1">
+      <div v-else-if="usageInfo" class="space-y-0.5">
         <!-- API error (degraded response) -->
         <div v-if="usageInfo.error" class="text-xs text-amber-600 dark:text-amber-400 truncate max-w-[200px]" :title="usageInfo.error">
           {{ usageInfo.error }}
@@ -81,13 +81,13 @@
         <div class="flex items-center gap-1.5 mt-0.5">
           <span
             v-if="usageInfo.source === 'passive'"
-            class="text-[9px] text-gray-400 dark:text-gray-500 italic"
+            class="text-[9px] text-gray-400 dark:text-gray-500"
           >
             {{ t('admin.accounts.usageWindow.passiveSampled') }}
           </span>
           <button
             type="button"
-            class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors"
+            class="inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] font-medium text-gray-500 transition-colors hover:text-gray-900 disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-100"
             :disabled="activeQueryLoading"
             @click="loadActiveUsage"
           >
@@ -120,7 +120,7 @@
 
     <!-- OpenAI OAuth accounts: single source from /usage API -->
     <template v-else-if="account.platform === 'openai' && account.type === 'oauth'">
-      <div v-if="hasOpenAIUsageFallback" class="space-y-1">
+      <div v-if="hasOpenAIUsageFallback" class="space-y-0.5">
         <UsageProgressBar
           v-if="usageInfo?.five_hour"
           label="5h"
@@ -148,7 +148,7 @@
           <template #pre-actions>
             <button
               type="button"
-              class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              class="inline-flex items-center gap-0.5 px-1 py-0.5 text-[10px] font-medium text-gray-500 transition-colors hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:text-gray-100"
               :disabled="activeQueryLoading"
               @click="loadActiveUsage"
             >
@@ -194,12 +194,7 @@
     <template v-else-if="account.platform === 'antigravity' && account.type === 'oauth'">
       <!-- 账户类型徽章 -->
       <div v-if="antigravityTierLabel" class="mb-1 flex items-center gap-1">
-        <span
-          :class="[
-            'inline-block rounded px-1.5 py-0.5 text-[10px] font-medium',
-            antigravityTierClass
-          ]"
-        >
+        <span class="border-l-2 border-gray-300 pl-1 text-[10px] font-semibold text-gray-600 dark:border-gray-600 dark:text-gray-300">
           {{ antigravityTierLabel }}
         </span>
         <!-- 不合格账户警告图标 -->
@@ -241,7 +236,7 @@
             :href="validationURL"
             target="_blank"
             rel="noopener noreferrer"
-            class="text-[10px] text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+            class="text-[10px] text-gray-500 hover:text-gray-900 hover:underline dark:text-gray-400 dark:hover:text-gray-100"
             :title="t('admin.accounts.openVerification')"
           >
             {{ t('admin.accounts.openVerification') }}
@@ -286,7 +281,7 @@
       </div>
 
       <!-- Usage data from API -->
-      <div v-else-if="hasAntigravityQuotaFromAPI" class="space-y-1">
+      <div v-else-if="hasAntigravityQuotaFromAPI" class="space-y-0.5">
         <!-- Gemini 3 Pro -->
         <UsageProgressBar
           v-if="antigravity3ProUsageFromAPI !== null"
@@ -323,12 +318,12 @@
           color="amber"
         />
 
-        <div v-if="aiCreditsDisplay" class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
-          💳 {{ t('admin.accounts.aiCreditsBalance') }}: {{ aiCreditsDisplay }}
+        <div v-if="aiCreditsDisplay" class="mt-0.5 border-l-2 border-gray-300 pl-1 text-[10px] text-gray-500 dark:border-gray-600 dark:text-gray-400">
+          {{ t('admin.accounts.aiCreditsBalance') }}: {{ aiCreditsDisplay }}
         </div>
       </div>
-      <div v-else-if="aiCreditsDisplay" class="text-[10px] text-gray-500 dark:text-gray-400">
-        💳 {{ t('admin.accounts.aiCreditsBalance') }}: {{ aiCreditsDisplay }}
+      <div v-else-if="aiCreditsDisplay" class="border-l-2 border-gray-300 pl-1 text-[10px] text-gray-500 dark:border-gray-600 dark:text-gray-400">
+        {{ t('admin.accounts.aiCreditsBalance') }}: {{ aiCreditsDisplay }}
       </div>
       <div v-else class="text-xs text-gray-400">-</div>
     </template>
@@ -350,34 +345,22 @@
           {{ t('admin.accounts.needsReauth') }}
         </span>
       </div>
-      <div v-else-if="isForbidden" class="space-y-1">
+      <div v-else-if="isForbidden && !effectiveGrokBilling" class="space-y-1">
         <span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
           {{ grokPlanOrEntitlementLabel || t('admin.accounts.forbidden') }}
         </span>
       </div>
-      <div v-else class="space-y-1">
-        <div v-if="grokLocalUsage" class="mb-0.5 flex items-center">
-          <div class="flex items-center gap-1.5 text-[9px] text-gray-500 dark:text-gray-400">
-            <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
-              {{ formatWindowRequests(grokLocalUsage) }} req
-            </span>
-            <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
-              {{ formatWindowTokens(grokLocalUsage) }}
-            </span>
-            <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800" :title="t('usage.accountBilled')">
-              A ${{ formatWindowCost(grokLocalUsage) }}
-            </span>
-            <span
-              v-if="grokLocalUsage.user_cost != null"
-              class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800"
-              :title="t('usage.userBilled')"
-            >
-              U ${{ formatWindowUserCost(grokLocalUsage) }}
-            </span>
-          </div>
-        </div>
+      <div v-else class="space-y-0.5">
+        <UsageStatLine
+          v-if="grokLocalUsage"
+          class="mb-0.5"
+          :requests="formatWindowRequests(grokLocalUsage)"
+          :tokens="formatWindowTokens(grokLocalUsage)"
+          :account-cost="formatWindowCost(grokLocalUsage)"
+          :user-cost="grokLocalUsage.user_cost != null ? formatWindowUserCost(grokLocalUsage) : null"
+        />
 
-        <!-- Official billing: weekly / products / monthly credits (same source as CLIProxyAPI management panel) -->
+        <!-- Official billing: weekly + monthly credits -->
         <template v-if="effectiveGrokBilling">
           <UsageProgressBar
             v-if="grokWeeklyBar"
@@ -386,67 +369,14 @@
             :resets-at="grokWeeklyBar.resetsAt"
             color="indigo"
           />
-          <!-- Build / API / Chat: collapsed by default -->
-          <div v-if="grokProductBars.length > 0" class="space-y-1">
-            <button
-              type="button"
-              class="flex w-full items-center gap-1 rounded text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/60"
-              :title="
-                grokProductsExpanded
-                  ? t('admin.accounts.usageWindow.grokProductsCollapse')
-                  : t('admin.accounts.usageWindow.grokProductsExpand')
-              "
-              @click="grokProductsExpanded = !grokProductsExpanded"
-            >
-              <span class="w-[32px] shrink-0 rounded bg-emerald-100 px-1 text-center text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                {{ t('admin.accounts.usageWindow.grokProducts') }}
-              </span>
-              <div class="h-1.5 w-8 shrink-0 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                <div
-                  class="h-full transition-all duration-300"
-                  :class="grokProductsSummaryBarClass"
-                  :style="{ width: `${Math.min(grokProductsSummary?.utilization ?? 0, 100)}%` }"
-                ></div>
-              </div>
-              <span class="w-[32px] shrink-0 text-right text-[10px] font-medium text-gray-600 dark:text-gray-400">
-                {{ grokProductsSummary?.displayPercent ?? '--' }}
-              </span>
-              <svg
-                class="h-2.5 w-2.5 shrink-0 text-gray-400 transition-transform"
-                :class="{ 'rotate-180': grokProductsExpanded }"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            <div v-if="grokProductsExpanded" class="space-y-1 pl-0.5">
-              <UsageProgressBar
-                v-for="product in grokProductBars"
-                :key="product.key"
-                :label="product.label"
-                :utilization="product.utilization"
-                :display-percent="product.displayPercent"
-                :resets-at="null"
-                color="emerald"
-              />
-            </div>
-          </div>
           <UsageProgressBar
             v-if="grokMonthlyCreditsBar"
             :label="t('admin.accounts.usageWindow.grokMonthly')"
             :utilization="grokMonthlyCreditsBar.utilization"
             :resets-at="grokMonthlyCreditsBar.resetsAt"
+            :extra-stats="grokMonthlyCreditsText ? [{ label: grokMonthlyCreditsText, title: grokMonthlyCreditsText }] : []"
             color="amber"
           />
-          <div
-            v-if="grokMonthlyCreditsText"
-            class="text-[10px] text-gray-500 dark:text-gray-400"
-            :title="grokMonthlyCreditsText"
-          >
-            {{ grokMonthlyCreditsText }}
-          </div>
         </template>
 
         <!-- Fallback: passive rate-limit request/token windows -->
@@ -470,8 +400,19 @@
           </div>
         </template>
 
-        <div v-if="grokRetryAfterLabel" class="text-[10px] text-amber-600 dark:text-amber-400">
-          {{ t('admin.accounts.usageWindow.grokRetryAfter', { time: grokRetryAfterLabel }) }}
+        <div
+          v-if="grokRetryAfterLabel || grokQuotaStatusLine"
+          class="flex items-center gap-2 whitespace-nowrap text-[9px] leading-[13px] text-gray-500 dark:text-gray-400"
+        >
+          <span v-if="grokRetryAfterLabel">
+            {{ t('admin.accounts.usageWindow.grokRetryAfter', { time: grokRetryAfterLabel }) }}
+          </span>
+          <span
+            v-if="grokQuotaStatusLine"
+            :class="grokRetryAfterLabel ? 'border-l border-gray-200 pl-2 dark:border-gray-700' : ''"
+          >
+            {{ grokQuotaStatusLine }}
+          </span>
         </div>
         <div
           v-if="usageInfo?.error && !effectiveGrokBilling"
@@ -479,9 +420,6 @@
           :title="usageInfo.error"
         >
           {{ usageErrorLabel }}
-        </div>
-        <div v-if="grokQuotaStatusLine" class="text-[10px] text-gray-500 dark:text-gray-400">
-          {{ grokQuotaStatusLine }}
         </div>
         <GrokQuotaProbeCell :account="account" @refreshed="onGrokBillingRefreshed" />
       </div>
@@ -491,12 +429,7 @@
     <template v-else-if="account.platform === 'gemini'">
       <!-- Auth Type + Tier Badge (first line) -->
       <div v-if="geminiAuthTypeLabel" class="mb-1 flex items-center gap-1">
-        <span
-          :class="[
-            'inline-block rounded px-1.5 py-0.5 text-[10px] font-medium',
-            geminiTierClass
-          ]"
-        >
+        <span class="border-l-2 border-gray-300 pl-1 text-[10px] font-semibold text-gray-600 dark:border-gray-600 dark:text-gray-300">
           {{ geminiAuthTypeLabel }}
         </span>
         <!-- Help icon -->
@@ -533,30 +466,15 @@
       </div>
 
       <!-- Usage data or unlimited flow -->
-      <div class="space-y-1">
-        <div
+      <div class="space-y-0.5">
+        <UsageStatLine
           v-if="showGeminiTodayStats && todayStats"
-          class="mb-0.5 flex items-center"
-        >
-          <div class="flex items-center gap-1.5 text-[9px] text-gray-500 dark:text-gray-400">
-            <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
-              {{ formatKeyRequests }} req
-            </span>
-            <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
-              {{ formatKeyTokens }}
-            </span>
-            <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800" :title="t('usage.accountBilled')">
-              A ${{ formatKeyCost }}
-            </span>
-            <span
-              v-if="todayStats.user_cost != null"
-              class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800"
-              :title="t('usage.userBilled')"
-            >
-              U ${{ formatKeyUserCost }}
-            </span>
-          </div>
-        </div>
+          class="mb-0.5"
+          :requests="formatKeyRequests"
+          :tokens="formatKeyTokens"
+          :account-cost="formatKeyCost"
+          :user-cost="todayStats.user_cost != null ? formatKeyUserCost : null"
+        />
         <div
           v-else-if="showGeminiTodayStats && todayStatsLoading"
           class="mb-0.5 flex items-center gap-1"
@@ -576,7 +494,7 @@
           {{ error }}
         </div>
         <!-- Gemini: show daily usage bars when available -->
-        <div v-else-if="geminiUsageAvailable" class="space-y-1">
+        <div v-else-if="geminiUsageAvailable" class="space-y-0.5">
           <UsageProgressBar
             v-for="bar in geminiUsageBars"
             :key="bar.key"
@@ -608,31 +526,16 @@
     <!-- Gemini API Key accounts: show quota info -->
     <AccountQuotaInfo v-if="account.platform === 'gemini'" :account="account" />
     <!-- Key/Bedrock accounts: show today stats + optional quota bars -->
-    <div v-else class="space-y-1">
+    <div v-else class="space-y-0.5">
       <!-- Today stats row (requests, tokens, cost, user_cost) -->
-      <div
+      <UsageStatLine
         v-if="todayStats"
-        class="mb-0.5 flex items-center"
-      >
-        <div class="flex items-center gap-1.5 text-[9px] text-gray-500 dark:text-gray-400">
-          <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
-            {{ formatKeyRequests }} req
-          </span>
-          <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
-            {{ formatKeyTokens }}
-          </span>
-          <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800" :title="t('usage.accountBilled')">
-            A ${{ formatKeyCost }}
-          </span>
-          <span
-            v-if="todayStats.user_cost != null"
-            class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800"
-            :title="t('usage.userBilled')"
-          >
-            U ${{ formatKeyUserCost }}
-          </span>
-        </div>
-      </div>
+        class="mb-0.5"
+        :requests="formatKeyRequests"
+        :tokens="formatKeyTokens"
+        :account-cost="formatKeyCost"
+        :user-cost="todayStats.user_cost != null ? formatKeyUserCost : null"
+      />
       <!-- Loading skeleton for today stats -->
       <div
         v-else-if="todayStatsLoading"
@@ -680,6 +583,7 @@ import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { enqueueUsageRequest } from '@/utils/usageLoadQueue'
 import { formatCompactNumber, formatRelativeTime } from '@/utils/format'
 import UsageProgressBar from './UsageProgressBar.vue'
+import UsageStatLine from './UsageStatLine.vue'
 import AccountQuotaInfo from './AccountQuotaInfo.vue'
 import OpenAIQuotaResetCell from './OpenAIQuotaResetCell.vue'
 import GrokQuotaProbeCell from './GrokQuotaProbeCell.vue'
@@ -840,7 +744,11 @@ const antigravity3FlashUsageFromAPI = computed(() => getAntigravityUsageFromAPI(
 
 // Gemini Image from API
 const antigravity3ImageUsageFromAPI = computed(() =>
-  getAntigravityUsageFromAPI(['gemini-3.1-flash-image'])
+  getAntigravityUsageFromAPI([
+    'gemini-2.5-flash-image',
+    'gemini-3.1-flash-image',
+    'gemini-3-pro-image'
+  ])
 )
 
 // Claude from API (all Claude model variants)
@@ -968,30 +876,6 @@ const geminiAuthTypeLabel = computed(() => {
   if (props.account.platform !== 'gemini') return null
   if (!geminiChannelShort.value) return null
   return geminiUserLevel.value ? `${geminiChannelShort.value} ${geminiUserLevel.value}` : geminiChannelShort.value
-})
-
-// Gemini 账户类型徽章样式（统一样式）
-const geminiTierClass = computed(() => {
-  // Use channel+level to choose a stable color without depending on raw tier_id variants.
-  const channel = geminiChannelShort.value
-  const level = geminiUserLevel.value
-
-  if (channel === 'client' || channel === 'ai studio') {
-    return 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
-  }
-
-  if (channel === 'google one') {
-    if (level === 'ultra') return 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300'
-    if (level === 'pro') return 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
-    return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-  }
-
-  if (channel === 'gcp') {
-    if (level === 'enterprise') return 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300'
-    return 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
-  }
-
-  return ''
 })
 
 // Gemini 配额政策信息
@@ -1137,14 +1021,6 @@ const formatUsdFromCents = (cents: number | null | undefined): string => {
   return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(cents / 100)
 }
 
-const shortenProductLabel = (product: string): string => {
-  const p = product.trim()
-  if (/grokbuild/i.test(p)) return t('admin.accounts.usageWindow.grokBuildShort')
-  if (/grokchat/i.test(p)) return t('admin.accounts.usageWindow.grokChatShort')
-  if (/^api$/i.test(p)) return t('admin.accounts.usageWindow.grokApiShort')
-  return p.length > 5 ? p.slice(0, 5) : p
-}
-
 const grokWeeklyBar = computed((): GrokQuotaBarInfo | null => {
   const b = effectiveGrokBilling.value
   if (!b || b.usage_percent == null) return null
@@ -1156,46 +1032,6 @@ const grokWeeklyBar = computed((): GrokQuotaBarInfo | null => {
     utilization: Math.max(0, Math.min(100, b.usage_percent)),
     resetsAt: b.period_end || null
   }
-})
-
-/** Product rows (Build/API/Chat) stay collapsed until the user expands them. */
-const grokProductsExpanded = ref(false)
-
-const grokProductBars = computed(() => {
-  const products = effectiveGrokBilling.value?.product_usage
-  if (!products?.length) return []
-  return products.map((p, idx) => {
-    const hasValue = p.usage_percent != null && !Number.isNaN(p.usage_percent)
-    return {
-      key: `${p.product}-${idx}`,
-      label: shortenProductLabel(p.product || `P${idx + 1}`),
-      utilization: hasValue ? Math.max(0, Math.min(100, p.usage_percent as number)) : 0,
-      displayPercent: hasValue ? null : '--',
-      hasValue
-    }
-  })
-})
-
-/** Collapsed summary: max known product utilization (CPAMC-style “highest used”). */
-const grokProductsSummary = computed(() => {
-  const bars = grokProductBars.value
-  if (!bars.length) return null
-  const known = bars.filter((b) => b.hasValue)
-  if (!known.length) {
-    return { utilization: 0, displayPercent: '--' }
-  }
-  const max = Math.max(...known.map((b) => b.utilization))
-  return {
-    utilization: max,
-    displayPercent: `${Math.round(max)}%`
-  }
-})
-
-const grokProductsSummaryBarClass = computed(() => {
-  const u = grokProductsSummary.value?.utilization ?? 0
-  if (u >= 100) return 'bg-red-500'
-  if (u >= 80) return 'bg-amber-500'
-  return 'bg-green-500'
 })
 
 const grokMonthlyCreditsBar = computed((): GrokQuotaBarInfo | null => {
@@ -1288,20 +1124,6 @@ const antigravityTierLabel = computed(() => {
       return t('admin.accounts.tier.ultra')
     default:
       return null
-  }
-})
-
-// 账户类型徽章样式
-const antigravityTierClass = computed(() => {
-  switch (antigravityTier.value) {
-    case 'free-tier':
-      return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-    case 'g1-pro-tier':
-      return 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
-    case 'g1-ultra-tier':
-      return 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300'
-    default:
-      return ''
   }
 })
 
@@ -1572,7 +1394,6 @@ watch(
   () => props.account.id,
   () => {
     liveGrokBilling.value = null
-    grokProductsExpanded.value = false
   }
 )
 

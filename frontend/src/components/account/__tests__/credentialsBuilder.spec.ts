@@ -4,6 +4,7 @@ import {
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
   applyAntigravityProjectID,
+  applyGrokAPIKeyRouting,
   applyHeaderOverride,
   applyInterceptWarmup,
   buildHeaderOverridesObject,
@@ -12,6 +13,34 @@ import {
   splitHeaderOverridesObject,
   validateHeaderOverrideRows
 } from '../credentialsBuilder'
+
+describe('applyGrokAPIKeyRouting', () => {
+  it('selects the official xAI API for Grok API Key accounts', () => {
+    const credentials: Record<string, unknown> = { api_key: 'xai-key', base_url: '  ' }
+    applyGrokAPIKeyRouting(credentials, 'grok', 'apikey')
+    expect(credentials.base_url).toBe('https://api.x.ai/v1')
+    expect(credentials.using_api).toBe(true)
+  })
+
+  it('preserves an explicit compatible upstream', () => {
+    const credentials: Record<string, unknown> = {
+      api_key: 'xai-key',
+      base_url: ' https://xai.example.com/v1 '
+    }
+    applyGrokAPIKeyRouting(credentials, 'grok', 'apikey')
+    expect(credentials.base_url).toBe('https://xai.example.com/v1')
+    expect(credentials.using_api).toBe(true)
+  })
+
+  it('does not change Grok OAuth or non-Grok accounts', () => {
+    const oauth: Record<string, unknown> = { access_token: 'token' }
+    const openai: Record<string, unknown> = { api_key: 'key' }
+    applyGrokAPIKeyRouting(oauth, 'grok', 'oauth')
+    applyGrokAPIKeyRouting(openai, 'openai', 'apikey')
+    expect(oauth).toEqual({ access_token: 'token' })
+    expect(openai).toEqual({ api_key: 'key' })
+  })
+})
 
 describe('applyInterceptWarmup', () => {
   it('create + enabled=true: should set intercept_warmup_requests to true', () => {
