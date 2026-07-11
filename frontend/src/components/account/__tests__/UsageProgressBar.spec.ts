@@ -97,7 +97,7 @@ describe('UsageProgressBar', () => {
     expect(wrapper.text()).not.toContain('usage.resetPending')
   })
 
-  it('将用量字段按流量和计费合并到紧凑窗口行', () => {
+  it('将窗口状态和用量指标拆成可扫读的统一区块', () => {
     const wrapper = mount(UsageProgressBar, {
       props: {
         label: '5h',
@@ -114,9 +114,12 @@ describe('UsageProgressBar', () => {
     })
 
     expect(wrapper.get('[data-testid="usage-window-row"]').text()).toContain('5h')
-    expect(wrapper.get('[data-testid="usage-stat-volume"]').text()).toContain('100 req · 21.8M')
-    expect(wrapper.get('[data-testid="usage-stat-billing"]').text()).toContain('A $20.66 · U $20.66')
-    expect(wrapper.html()).not.toContain('bg-indigo')
+    expect(wrapper.get('[data-testid="usage-stat-volume"]').text()).toContain('100 req')
+    expect(wrapper.get('[data-testid="usage-stat-volume"]').text()).toContain('21.8M')
+    expect(wrapper.get('[data-testid="usage-stat-billing"]').text()).toContain('A $20.66')
+    expect(wrapper.get('[data-testid="usage-stat-billing"]').text()).toContain('U $20.66')
+    expect(wrapper.html()).toContain('bg-indigo-500')
+    expect(wrapper.findAll('.usage-metric')).toHaveLength(4)
     expect(wrapper.html()).not.toContain('shadow')
   })
 })

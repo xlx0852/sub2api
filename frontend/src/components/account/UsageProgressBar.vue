@@ -2,32 +2,31 @@
   <div
     data-testid="usage-window-row"
     :class="[
-      'grid items-center gap-x-2 py-px',
-      hasStatsRow ? 'grid-cols-[auto_auto]' : 'grid-cols-[auto]'
+      'grid w-[372px] max-w-full items-stretch gap-1.5 py-0.5',
+      hasStatsRow ? 'grid-cols-[142px_minmax(208px,1fr)]' : 'grid-cols-[142px]'
     ]"
   >
-    <div class="flex items-center gap-1.5 whitespace-nowrap text-[10px] leading-4">
-      <span class="w-[32px] shrink-0 border-l-2 border-gray-300 pl-1 font-semibold text-gray-700 dark:border-gray-600 dark:text-gray-200">
-        {{ label }}
-      </span>
-
-      <div class="h-1 w-7 shrink-0 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+    <div class="flex min-h-11 flex-col justify-center rounded-md border border-gray-100 bg-gray-50/80 px-2 py-1.5 dark:border-white/5 dark:bg-white/[0.03]">
+      <div class="mb-1 flex items-center gap-1.5 whitespace-nowrap text-[10px] leading-3">
+        <span :class="['max-w-[48px] truncate rounded px-1.5 py-0.5 font-semibold', colorClasses.badge]" :title="label">
+          {{ label }}
+        </span>
+        <span class="ml-auto font-semibold text-gray-700 tabular-nums dark:text-gray-200">
+          {{ displayPercent }}
+        </span>
+        <span v-if="shouldShowResetTime" class="text-gray-400 tabular-nums dark:text-gray-500">
+          {{ formatResetTime }}
+        </span>
+      </div>
+      <div class="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
         <div
-          class="h-full bg-gray-600 transition-all duration-300 dark:bg-gray-300"
+          :class="['h-full rounded-full transition-all duration-300', colorClasses.bar]"
           :style="{ width: barWidth }"
         ></div>
       </div>
-
-      <span class="w-[32px] shrink-0 text-right font-medium text-gray-600 tabular-nums dark:text-gray-400">
-        {{ displayPercent }}
-      </span>
-
-      <span v-if="shouldShowResetTime" class="shrink-0 text-gray-400 tabular-nums dark:text-gray-500">
-        {{ formatResetTime }}
-      </span>
     </div>
 
-    <div v-if="hasStatsRow" class="border-l border-gray-200 pl-2 dark:border-gray-700">
+    <div v-if="hasStatsRow" class="min-w-0">
       <UsageStatLine
         v-if="showWindowStats"
         :requests="formatRequests"
@@ -38,7 +37,7 @@
       />
       <div
         v-if="visibleExtraStats.length > 0"
-        class="flex items-center gap-1.5 whitespace-nowrap text-[9px] leading-[13px] text-gray-500 dark:text-gray-400"
+        class="flex min-h-11 items-center rounded-md border border-amber-100 bg-amber-50/60 px-2 text-[10px] font-medium leading-4 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300"
       >
         <span v-for="stat in visibleExtraStats" :key="stat.label" :title="stat.title">
           {{ stat.label }}
@@ -118,6 +117,25 @@ const visibleExtraStats = computed(() => props.extraStats ?? [])
 const hasStatsRow = computed(() => {
   return showWindowStats.value || visibleExtraStats.value.length > 0
 })
+
+const colorClasses = computed(() => ({
+  indigo: {
+    badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300',
+    bar: 'bg-indigo-500 dark:bg-indigo-400'
+  },
+  emerald: {
+    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300',
+    bar: 'bg-emerald-500 dark:bg-emerald-400'
+  },
+  purple: {
+    badge: 'bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300',
+    bar: 'bg-purple-500 dark:bg-purple-400'
+  },
+  amber: {
+    badge: 'bg-amber-100 text-amber-700 dark:bg-amber-950/70 dark:text-amber-300',
+    bar: 'bg-amber-500 dark:bg-amber-400'
+  }
+}[props.color]))
 
 const shouldShowResetTime = computed(() => {
   if (props.resetsAt) return true
