@@ -283,7 +283,8 @@ func TestAccountTestService_OpenAI429BodyOnlyPersistsRateLimitAndClearsStaleErro
 	require.Equal(t, StatusActive, account.Status)
 	require.Empty(t, account.ErrorMessage)
 	require.NotNil(t, account.RateLimitResetAt)
-	require.Empty(t, repo.updatedExtra)
+	// body-only usage_limit_reached should also mark the window as full for UI
+	require.Equal(t, 100.0, repo.updatedExtra["codex_5h_used_percent"])
 }
 
 func TestAccountTestService_OpenAI429SyncsObservedPlanType(t *testing.T) {
@@ -537,4 +538,33 @@ func TestAccountTestService_OpenAIChatCompletionsPathRejectsNonJSONStream(t *tes
 	require.Contains(t, err.Error(), "Invalid Chat Completions response from /v1/chat/completions")
 	require.Contains(t, recorder.Body.String(), "/v1/chat/completions")
 	require.NotContains(t, recorder.Body.String(), `"success":true`)
+}
+
+func TestAccountTestService_OpenAI429PlanLimitedDetailMarksFullUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := newTestContext()
+
+	resp := newJSONResponse(http.StatusTooManyRequests, `{"detail":"Your plan is currently limited. Please wait 10 minutes before trying again. If you have additional needs, please contact OpenAI support at help.openai.com"}`)
+
+	repo := &openAIAccountTestRepo{}
+	upstream := &queuedHTTPUpstream{responses: []*http.Response{resp}}
+	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
+	account := &Account{
+		ID:           82,
+		Platform:     PlatformOpenAI,
+		Type:         AccountTypeOAuth,
+		Status:       StatusError,
+		ErrorMessage: "stale error",
+		Concurrency:  1,
+		Credentials:  map[string]any{"access_token": "test-token"},
+	}
+
+	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
+	require.Error(t, err)
+	require.Equal(t, account.ID, repo.rateLimitedID)
+	require.NotNil(t, repo.rateLimitedAt)
+	require.Equal(t, 100.0, repo.updatedExtra["codex_5h_used_percent"])
+	require.Equal(t, account.ID, repo.clearedErrorID)
+	require.Equal(t, StatusActive, account.Status)
+	require.Empty(t, account.ErrorMessage)
 }

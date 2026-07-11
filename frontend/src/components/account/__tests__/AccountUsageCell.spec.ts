@@ -149,6 +149,82 @@ describe('AccountUsageCell', () => {
     expect(wrapper.text()).toContain('25')
   })
 
+  it('Claude 和 Grok 共用同一套灰阶紧凑窗口样式', async () => {
+    getUsage.mockResolvedValueOnce({
+      five_hour: {
+        utilization: 12,
+        resets_at: '2026-07-12T08:00:00Z',
+        window_stats: {
+          requests: 12,
+          tokens: 3400,
+          cost: 1.23,
+          standard_cost: 1.23,
+          user_cost: 1.23
+        }
+      },
+      seven_day: {
+        utilization: 21,
+        resets_at: '2026-07-18T08:00:00Z'
+      }
+    })
+
+    const claude = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id: 9001, platform: 'anthropic', type: 'oauth', extra: {} })
+      },
+      global: {
+        stubs: {
+          AccountQuotaInfo: true,
+          GrokQuotaProbeCell: true
+        }
+      }
+    })
+
+    await flushPromises()
+    expect(claude.findAll('[data-testid="usage-window-row"]')).toHaveLength(2)
+    expect(claude.html()).not.toContain('bg-indigo')
+    expect(claude.html()).not.toContain('bg-emerald')
+    claude.unmount()
+
+    getUsage.mockResolvedValueOnce({
+      grok_local_usage: {
+        requests: 8,
+        tokens: 5200,
+        cost: 0.45,
+        standard_cost: 0.45,
+        user_cost: 0.45
+      },
+      grok_billing: {
+        period_type: 'weekly',
+        usage_percent: 28,
+        period_end: '2026-07-16T08:00:00Z',
+        monthly_limit_cents: 15000,
+        used_cents: 4200,
+        included_used_cents: 4200,
+        used_percent: 28,
+        product_usage: [{ product: 'GrokBuild', usage_percent: 10 }]
+      }
+    })
+
+    const grok = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id: 9002, platform: 'grok', type: 'oauth', extra: {} })
+      },
+      global: {
+        stubs: {
+          AccountQuotaInfo: true,
+          GrokQuotaProbeCell: true
+        }
+      }
+    })
+
+    await flushPromises()
+    expect(grok.findAll('[data-testid="usage-window-row"]').length).toBeGreaterThanOrEqual(2)
+    expect(grok.text()).not.toContain('admin.accounts.usageWindow.grokProducts')
+    expect(grok.html()).not.toContain('bg-indigo')
+    expect(grok.html()).not.toContain('bg-emerald')
+  })
+
 
   it('OpenAI OAuth 快照已过期时首屏会重新请求 usage', async () => {
     getUsage.mockResolvedValue({
@@ -616,6 +692,53 @@ describe('AccountUsageCell', () => {
     const badges = wrapper.findAll('span[title]')
     expect(badges.some(node => node.attributes('title') === 'usage.accountBilled')).toBe(true)
     expect(badges.some(node => node.attributes('title') === 'usage.userBilled')).toBe(true)
+  })
+
+  it('Grok OAuth 额度耗尽但有账单快照时仍展示 100% 用量', async () => {
+    getUsage.mockResolvedValue({
+      is_forbidden: true,
+      grok_entitlement_status: 'personal-team-blocked:spending-limit',
+      grok_billing: {
+        period_type: 'weekly',
+        usage_percent: 100,
+        period_end: '2026-07-16T08:00:00Z',
+        monthly_limit_cents: 15000,
+        used_cents: 11005,
+        included_used_cents: 11005,
+        used_percent: 73.36666666666667,
+        plan: 'SuperGrok',
+        status_code: 403
+      }
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({
+          id: 3862,
+          platform: 'grok',
+          type: 'oauth',
+          status: 'error',
+          schedulable: false,
+          extra: {}
+        })
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization', 'resetsAt', 'color'],
+            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|{{ resetsAt }}</div>'
+          },
+          AccountQuotaInfo: true,
+          GrokQuotaProbeCell: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('admin.accounts.usageWindow.grokWeekly|100|2026-07-16T08:00:00Z')
+    expect(wrapper.text()).toContain('admin.accounts.usageWindow.grokMonthly|73.36666666666667')
+    expect(wrapper.text()).not.toContain('personal-team-blocked:spending-limit')
   })
 
   it('Key 账号在 today stats loading 时显示骨架屏', async () => {

@@ -302,6 +302,20 @@ func ValidateIntervals(intervals []PricingInterval, mode BillingMode) error {
 
 	// per_request / image 模式按 tier_label 匹配，不做 token 区间重叠校验
 	if mode == BillingModePerRequest || mode == BillingModeImage {
+		if mode == BillingModeImage {
+			seen := make(map[string]struct{}, len(sorted))
+			for i := range sorted {
+				label := strings.TrimSpace(sorted[i].TierLabel)
+				if label == "" {
+					return fmt.Errorf("interval #%d: tier_label is required for image billing", i+1)
+				}
+				key := strings.ToLower(label)
+				if _, exists := seen[key]; exists {
+					return fmt.Errorf("interval #%d: duplicate tier_label %q", i+1, label)
+				}
+				seen[key] = struct{}{}
+			}
+		}
 		return nil
 	}
 	return validateIntervalOverlap(sorted)

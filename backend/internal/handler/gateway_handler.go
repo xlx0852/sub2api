@@ -780,6 +780,12 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				return
 			}
 			attemptBody := attemptParsedReq.Body.Bytes()
+			upstreamBillingModel := account.GetMappedModel(attemptParsedReq.Model)
+			if err := h.gatewayService.ValidatePricingAdmission(c.Request.Context(), currentAPIKey.GroupID, channelMapping.BillingModelSource, reqModel, attemptParsedReq.Model, upstreamBillingModel); err != nil {
+				status, code, message, _ := billingErrorDetails(err)
+				h.errorResponse(c, status, code, message)
+				return
+			}
 
 			// 转发请求 - 根据账号平台分流
 			c.Set("parsed_request", attemptParsedReq)
@@ -2123,6 +2129,10 @@ func extractQuotaResetSeconds(err error) int {
 }
 
 func billingErrorDetails(err error) (status int, code, message string, retryAfter int) {
+	if errors.Is(err, service.ErrPricingUnavailable) {
+		msg := pkgerrors.Message(err)
+		return http.StatusServiceUnavailable, "pricing_unavailable", msg, 0
+	}
 	if errors.Is(err, service.ErrBillingServiceUnavailable) {
 		msg := pkgerrors.Message(err)
 		if msg == "" {

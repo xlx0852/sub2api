@@ -489,8 +489,9 @@ export default {
         modelRestrictionDisabledByPassthrough: 'Automatic passthrough is enabled: model whitelist/mapping will not take effect.',
       },
       grok: {
-        baseUrlHint: 'Grok OAuth accounts forward to the official xAI API base URL.',
-        apiKeyHint: 'Grok subscription support uses OAuth refresh tokens; API keys are out of scope for this account type.'
+        baseUrlHint: 'Leave default for the official xAI API (https://api.x.ai/v1).',
+        apiKeyHint: 'Your xAI API Key',
+        accountTypeHint: 'OAuth uses a Grok subscription; API Key uses xAI API credits and the official API.'
       },
       anthropic: {
         apiKeyPassthrough: 'Auto passthrough (auth only)',
@@ -1202,18 +1203,10 @@ export default {
         grokTokens: 'Tok',
         grokWeekly: 'Wk',
         grokMonthly: 'Mo$',
-        grokBuildShort: 'Build',
-        grokChatShort: 'Chat',
-        grokApiShort: 'API',
-        grokProducts: 'Prod',
-        grokProductsExpand: 'Expand Build / API / Chat usage',
-        grokProductsCollapse: 'Collapse product usage details',
         grokUnknown: 'Grok quota unknown — click Refresh to query official billing, or wait for rate-limit headers.',
         grokRetryAfter: 'Retry after {time}',
         grokProbe: 'Refresh',
         grokProbeTooltip: 'Query xAI cli-chat-proxy /v1/billing for SuperGrok weekly limits, product usage, and monthly credits (same source as CLIProxyAPI panel)',
-        grokResetUnsupported: 'Reset unsupported',
-        grokResetUnsupportedTooltip: 'xAI does not expose reset credits for Grok OAuth accounts',
         grokNoHeaders: 'No quota headers observed',
         grokLastStatus: 'Status {status}',
         grokLastProbe: 'Probe {time}',
@@ -1238,7 +1231,10 @@ export default {
         noCreditsAvailable: 'No reset credits available',
         resetSuccess: 'Reset {windows} window(s)',
         confirmTitle: 'Confirm Weekly Limit Reset',
-        confirmMessage: 'This will consume 1 reset credit to immediately restore the current window ({count} remaining). This action cannot be undone. Continue?'
+        confirmMessage: 'This will consume 1 reset credit to immediately restore the current window ({count} remaining). This action cannot be undone. Continue?',
+        planLimited: 'Quota full',
+        planLimitedMinutes: 'Quota full, retry in about {minutes} min',
+        planLimitedSeconds: 'Quota full, retry in about {seconds}s'
       },
       tier: {
         free: 'Free',

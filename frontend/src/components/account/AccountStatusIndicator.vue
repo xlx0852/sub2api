@@ -176,10 +176,31 @@ const emit = defineEmits<{
   (e: 'show-temp-unsched', account: Account): void
 }>()
 
+const isOpenAIPlanLimitedMessage = (message: string | null | undefined): boolean => {
+  const text = (message ?? '').toLowerCase()
+  if (!text) return false
+  return (
+    text.includes('plan is currently limited') ||
+    text.includes('usage limit has been reached') ||
+    text.includes('usage limit reached') ||
+    (text.includes('please wait') &&
+      (text.includes('minute') || text.includes('second') || text.includes('min') || text.includes('sec')))
+  )
+}
+
+// OpenAI plan-limited is a full-quota signal, not a hard account error.
+const isOpenAIPlanLimited = computed(() => {
+  if (props.account.platform !== 'openai') return false
+  return isOpenAIPlanLimitedMessage(props.account.error_message)
+})
+
 // Computed: is rate limited (429)
 const isRateLimited = computed(() => {
-  if (!props.account.rate_limit_reset_at) return false
-  return new Date(props.account.rate_limit_reset_at) > new Date()
+  if (props.account.rate_limit_reset_at) {
+    return new Date(props.account.rate_limit_reset_at) > new Date()
+  }
+  // 上游 plan-limited 但尚未写入 reset_at 时，仍按限流满额展示，避免显示“错误”。
+  return isOpenAIPlanLimited.value
 })
 
 type AccountModelStatusItem = {
@@ -291,6 +312,7 @@ const isTempUnschedulable = computed(() => {
 
 // Computed: has error status
 const hasError = computed(() => {
+  if (isOpenAIPlanLimited.value) return false
   return props.account.status === 'error'
 })
 
@@ -306,6 +328,9 @@ const isGrokSpendingLimitBlocked = computed(() => {
 })
 
 const errorTooltipText = computed(() => {
+  if (isOpenAIPlanLimited.value) {
+    return t('admin.accounts.openaiQuotaReset.planLimited')
+  }
   if (!hasError.value) return ''
   if (isGrokSpendingLimitBlocked.value) {
     return t('admin.accounts.status.grokSpendingLimitHelp')
@@ -329,8 +354,13 @@ const rateLimitCountdown = computed(() => {
 })
 
 const rateLimitResumeText = computed(() => {
-  if (!rateLimitCountdown.value) return ''
-  return t('admin.accounts.status.rateLimitedAutoResume', { time: rateLimitCountdown.value })
+  if (rateLimitCountdown.value) {
+    return t('admin.accounts.status.rateLimitedAutoResume', { time: rateLimitCountdown.value })
+  }
+  if (isOpenAIPlanLimited.value) {
+    return t('admin.accounts.openaiQuotaReset.planLimited')
+  }
+  return ''
 })
 
 // Computed: countdown text for overload (529)
@@ -365,6 +395,9 @@ const statusClass = computed(() => {
 const statusText = computed(() => {
   if (isGrokSpendingLimitBlocked.value) {
     return t('admin.accounts.status.grokSpendingLimit')
+  }
+  if (isOpenAIPlanLimited.value) {
+    return t('admin.accounts.openaiQuotaReset.planLimited')
   }
   if (hasError.value) {
     return t('admin.accounts.status.error')

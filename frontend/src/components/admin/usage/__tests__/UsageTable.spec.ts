@@ -363,6 +363,7 @@ describe('admin UsageTable latency', () => {
     expect(wrapper.text()).toContain('1m 17s')
     expect(wrapper.find('.bg-emerald-500').exists()).toBe(true)
     expect(wrapper.find('.bg-amber-400').exists()).toBe(true)
+    expect(wrapper.find('[title="First / Total"]').exists()).toBe(false)
   })
 })
 

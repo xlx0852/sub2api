@@ -96,4 +96,27 @@ describe('UsageProgressBar', () => {
     expect(wrapper.text()).toContain('usage.resetNow')
     expect(wrapper.text()).not.toContain('usage.resetPending')
   })
+
+  it('将用量字段按流量和计费合并到紧凑窗口行', () => {
+    const wrapper = mount(UsageProgressBar, {
+      props: {
+        label: '5h',
+        utilization: 4,
+        resetsAt: '2026-03-17T04:26:00Z',
+        color: 'indigo',
+        windowStats: {
+          requests: 100,
+          tokens: 21_800_000,
+          cost: 20.66,
+          user_cost: 20.66
+        }
+      }
+    })
+
+    expect(wrapper.get('[data-testid="usage-window-row"]').text()).toContain('5h')
+    expect(wrapper.get('[data-testid="usage-stat-volume"]').text()).toContain('100 req · 21.8M')
+    expect(wrapper.get('[data-testid="usage-stat-billing"]').text()).toContain('A $20.66 · U $20.66')
+    expect(wrapper.html()).not.toContain('bg-indigo')
+    expect(wrapper.html()).not.toContain('shadow')
+  })
 })

@@ -510,6 +510,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					cancelForward()
 				}
 			}()
+			mappedModel := reqModel
+			if channelMapping.Mapped {
+				mappedModel = channelMapping.MappedModel
+			}
+			if admissionErr := h.gatewayService.ValidatePricingAdmission(forwardCtx, apiKey.GroupID, channelMapping.BillingModelSource, reqModel, mappedModel, account.GetMappedModel(mappedModel)); admissionErr != nil {
+				return nil, admissionErr
+			}
 			return h.gatewayService.Forward(forwardCtx, c, account, forwardBody)
 		}()
 		if service.IsOpenAICompactV2SSEStarted(c) {
@@ -531,6 +538,11 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			service.SetOpsLatencyMs(c, service.OpsTimeToFirstTokenMsKey, int64(*result.FirstTokenMs))
 		}
 		if err != nil {
+			if errors.Is(err, service.ErrPricingUnavailable) {
+				status, code, message, _ := billingErrorDetails(err)
+				h.handleStreamingAwareError(c, status, code, message, streamStarted)
+				return
+			}
 			// Partial success: upstream work (image generation / compact) already
 			// produced billable usage. Fall through to usage recording instead of
 			// the pure-error retry/failover path.
@@ -1071,6 +1083,13 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 					accountReleaseFunc()
 				}
 			}()
+			mappedModel := reqModel
+			if channelMappingMsg.Mapped {
+				mappedModel = channelMappingMsg.MappedModel
+			}
+			if admissionErr := h.gatewayService.ValidatePricingAdmission(c.Request.Context(), apiKey.GroupID, channelMappingMsg.BillingModelSource, reqModel, mappedModel, account.GetMappedModel(mappedModel)); admissionErr != nil {
+				return nil, admissionErr
+			}
 			return h.gatewayService.ForwardAsAnthropic(c.Request.Context(), c, account, forwardBody, promptCacheKey, defaultMappedModel)
 		}()
 		cyberBlockKeyMsg := ""
@@ -1089,6 +1108,11 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			service.SetOpsLatencyMs(c, service.OpsTimeToFirstTokenMsKey, int64(*result.FirstTokenMs))
 		}
 		if err != nil {
+			if errors.Is(err, service.ErrPricingUnavailable) {
+				status, code, message, _ := billingErrorDetails(err)
+				h.anthropicStreamingAwareError(c, status, code, message, streamStarted)
+				return
+			}
 			if result != nil && result.ImageCount > 0 {
 				reqLog.Warn("openai_messages.forward_partial_error_with_image_result",
 					zap.Int64("account_id", account.ID),
@@ -1825,6 +1849,15 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 
 		// WebSocket 首包可能很大，hash 必须在 hooks 外算成字符串，避免 AfterTurn 闭包保活请求体。
 		requestPayloadHash = service.HashUsageRequestPayload(wsFirstMessage)
+		mappedModel := reqModel
+		if channelMappingWS.Mapped {
+			mappedModel = channelMappingWS.MappedModel
+		}
+		if err := h.gatewayService.ValidatePricingAdmission(ctx, apiKey.GroupID, channelMappingWS.BillingModelSource, reqModel, mappedModel, account.GetMappedModel(mappedModel)); err != nil {
+			closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "model pricing unavailable")
+			releaseAccountSlot()
+			return
+		}
 
 		if err := h.gatewayService.ProxyResponsesWebSocketFromClient(ctx, c, wsConn, account, token, wsFirstMessage, hooks); err != nil {
 			var failoverErr *service.UpstreamFailoverError

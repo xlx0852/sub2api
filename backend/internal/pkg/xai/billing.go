@@ -19,13 +19,25 @@ const (
 	PlanSuperGrok      = "SuperGrok"
 	PlanSuperGrokHeavy = "SuperGrok Heavy"
 
-	GrokCLITokenAuthHeader  = "x-xai-token-auth"
-	GrokCLITokenAuthValue   = "xai-grok-cli"
-	GrokCLIVersionHeader    = "x-grok-client-version"
-	GrokCLIVersionValue     = "0.2.91"
-	GrokCLIUserAgent        = "grok-pager/0.2.91 grok-shell/0.2.91 (macos; aarch64)"
-	GrokCLIUserIDHeader     = "x-userid"
+	GrokCLITokenAuthHeader = "x-xai-token-auth"
+	GrokCLITokenAuthValue  = "xai-grok-cli"
+	GrokCLIVersionHeader   = "x-grok-client-version"
+	GrokCLIVersionValue    = "0.2.93"
+	GrokCLIUserAgent       = "grok-pager/0.2.93 grok-shell/0.2.93 (macos; aarch64)"
+	GrokCLIUserIDHeader    = "x-userid"
 )
+
+func IsCLIChatProxyBaseURL(baseURL string) bool {
+	return strings.TrimRight(strings.TrimSpace(baseURL), "/") == DefaultCLIBaseURL
+}
+
+func ApplyGrokCLIChatHeaders(req *http.Request) {
+	if req == nil {
+		return
+	}
+	req.Header.Set(GrokCLITokenAuthHeader, GrokCLITokenAuthValue)
+	req.Header.Set(GrokCLIVersionHeader, GrokCLIVersionValue)
+}
 
 // BillingProductUsage is one product row from xAI billing (e.g. GrokBuild / Api / GrokChat).
 type BillingProductUsage struct {

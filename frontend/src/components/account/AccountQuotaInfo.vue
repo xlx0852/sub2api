@@ -2,7 +2,7 @@
   <div v-if="shouldShowQuota">
     <!-- First line: Platform + Tier Badge -->
     <div class="mb-1 flex items-center gap-1">
-      <span :class="['badge text-xs px-2 py-0.5 rounded font-medium', tierBadgeClass]">
+      <span class="border-l-2 border-gray-300 pl-1 text-[10px] font-semibold text-gray-600 dark:border-gray-600 dark:text-gray-300">
         {{ tierLabel }}
       </span>
     </div>
@@ -93,39 +93,6 @@ const tierLabel = computed(() => {
   if (tier === 'aistudio_paid') return 'AI Studio Pay-as-you-go'
   if (tier === 'aistudio_free') return 'AI Studio Free Tier'
   return 'AI Studio'
-})
-
-// Tier Badge 样式（统一样式）
-const tierBadgeClass = computed(() => {
-  const creds = props.account.credentials as GeminiCredentials | undefined
-
-  if (isCodeAssist.value) {
-    const tier = (creds?.tier_id || '').toString().trim().toLowerCase()
-    if (tier === 'gcp_enterprise') return 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300'
-    if (tier === 'gcp_standard') return 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
-    // Backward compatibility
-    const upper = (creds?.tier_id || '').toString().trim().toUpperCase()
-    if (upper.includes('ULTRA') || upper.includes('ENTERPRISE')) return 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300'
-    return 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
-  }
-
-  if (isGoogleOne.value) {
-    const tier = (creds?.tier_id || '').toString().trim().toLowerCase()
-    if (tier === 'google_ai_ultra') return 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300'
-    if (tier === 'google_ai_pro') return 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
-    if (tier === 'google_one_free') return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-    // Backward compatibility
-    const upper = (creds?.tier_id || '').toString().trim().toUpperCase()
-    if (upper === 'GOOGLE_ONE_UNLIMITED') return 'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300'
-    if (upper === 'AI_PREMIUM') return 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
-    return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-  }
-
-  // AI Studio 默认样式：蓝色
-  const tier = (creds?.tier_id || '').toString().trim().toLowerCase()
-  if (tier === 'aistudio_paid') return 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
-  if (tier === 'aistudio_free') return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-  return 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
 })
 
 // 是否限流

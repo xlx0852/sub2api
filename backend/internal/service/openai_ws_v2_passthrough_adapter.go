@@ -523,7 +523,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			OnTurnComplete: func(turn openaiwsv2.RelayTurnResult) {
 				turnNo := int(completedTurns.Add(1))
 				turnResult := &OpenAIForwardResult{
-					RequestID: turn.RequestID,
+					RequestID:        turn.RequestID,
+					ResponseID:       turn.RequestID,
+					BillingRequestID: "ws-turn:" + generateRequestID(),
 					Usage: OpenAIUsage{
 						InputTokens:              turn.Usage.InputTokens,
 						OutputTokens:             turn.Usage.OutputTokens,

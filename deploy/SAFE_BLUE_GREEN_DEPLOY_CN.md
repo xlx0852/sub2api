@@ -1,6 +1,6 @@
 # Sub2API 生产安全蓝绿部署流程
 
-本文档用于当前生产站点 `code.sicts.shop` 的后续版本更新。核心原则是：**本地打包、服务器只接收构建产物、新实例验证通过后再用 Nginx 切流、旧实例保留用于回滚**。
+本文档用于当前生产站点 `code.sicts.shop` 的后续版本更新。核心原则是：**本地打包、服务器只接收构建产物、新实例验证通过后再用 Nginx 切流、只保留上一个版本用于回滚**。
 
 ## 适用范围
 
@@ -18,7 +18,9 @@
 - 不重新初始化项目。
 - 不修改数据库连接配置。
 - 新容器验证通过前不停止旧容器。
-- 切流后旧容器只停止，不删除，便于快速回滚。
+- 切流后停止旧容器，并将其作为唯一回滚版本保留。
+- 每次部署验证完成后删除更早的容器、二进制、资源目录和部署备份；线上始终只保留“当前版本 + 上一个版本”。
+- `model-catalog/catalog.json` 固定保存在 `$REMOTE_BASE/shared/model-catalog/`，发布资源同步到该目录后再只读挂载，清理历史版本时不得删除。
 - 密码、Token、`.env` 内容不得写进文档、提交或命令历史。
 
 ## 部署变量
@@ -35,6 +37,7 @@ export BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 export OUT="/tmp/sub2api-${VERSION}-${TS}-${COMMIT}-linux-amd64"
 export REMOTE_BIN="${REMOTE_BASE}/sub2api-${VERSION}-${TS}-${COMMIT}-linux-amd64"
 export REMOTE_RESOURCES="${REMOTE_BASE}/resources-${TS}"
+export REMOTE_CATALOG="${REMOTE_BASE}/shared/model-catalog/catalog.json"
 export BACKUP_DIR="${REMOTE_BASE}/backups/deploy-${TS}"
 export IMAGE="sub2api:codex-ws-20260601044722"
 export NEW_PORT="18098"
@@ -125,6 +128,10 @@ rm -rf '$REMOTE_RESOURCES'
 mkdir -p '$REMOTE_RESOURCES'
 tar -xzf - -C '$REMOTE_RESOURCES'
 chmod +x '$REMOTE_BIN'
+chmod -R a+rX '$REMOTE_RESOURCES'
+mkdir -p '$REMOTE_BASE/shared/model-catalog'
+cp -a '$REMOTE_RESOURCES/resources/model-catalog/catalog.json' '$REMOTE_CATALOG'
+chmod 0644 '$REMOTE_CATALOG'
 ls -lh '$REMOTE_BIN'
 find '$REMOTE_RESOURCES' -maxdepth 2 -type f | head
 "
@@ -150,6 +157,7 @@ docker run -d \
   -v '$REMOTE_BIN:/app/sub2api:ro' \
   -v '$REMOTE_BASE/data:/app/data' \
   -v '$REMOTE_RESOURCES/resources:/app/resources:ro' \
+  -v '$REMOTE_BASE/shared/model-catalog:/app/resources/model-catalog:ro' \
   -p 127.0.0.1:'$NEW_PORT':8080 \
   '$IMAGE'
 docker ps --filter name='$NEW_NAME' --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
@@ -246,11 +254,44 @@ docker stop '$OLD_NAME'
 printf '%s\n' '$NEW_NAME' > '$REMOTE_BASE/.codex-current-container'
 printf '%s\n' '$REMOTE_BIN' > '$REMOTE_BASE/.codex-current-binary'
 printf '%s\n' '$NEW_PORT' > '$REMOTE_BASE/.codex-current-port'
+printf '%s\n' '$REMOTE_RESOURCES' > '$REMOTE_BASE/.codex-current-resources'
+printf '%s\n' '$REMOTE_CATALOG' > '$REMOTE_BASE/.codex-current-catalog'
+printf '%s\n' '$OLD_NAME' > '$REMOTE_BASE/.codex-rollback-container'
+printf '%s\n' '$OLD_PORT' > '$REMOTE_BASE/.codex-rollback-port'
 docker ps -a --filter name=sub2api --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
 "
 ```
 
-旧容器至少保留到新版本稳定运行后再清理。
+旧容器及其挂载的二进制、资源目录是唯一回滚版本，不得在本次部署中删除。
+
+## 11. 清理更早的发布历史
+
+只在公网验证、新实例日志检查和第 10 步元信息更新全部完成后执行。清理目标包括：
+
+- 当前和回滚标记之外的应用容器（PostgreSQL、Redis 不在清理范围）。
+- 当前和回滚容器未挂载的历史二进制及 `resources-*` 目录。
+- 当前部署的 `$BACKUP_DIR` 之外的 `backups/deploy-*` 目录。
+- 已解压后不再参与运行或回滚的历史资源压缩包。
+
+执行前先输出保留对象并确认 Nginx 正在使用当前端口：
+
+```bash
+ssh "$SSH_TARGET" "set -euo pipefail
+CURRENT_NAME=\$(cat '$REMOTE_BASE/.codex-current-container')
+CURRENT_PORT=\$(cat '$REMOTE_BASE/.codex-current-port')
+ROLLBACK_NAME=\$(cat '$REMOTE_BASE/.codex-rollback-container')
+
+grep -q \"127.0.0.1:\${CURRENT_PORT}\" /etc/nginx/conf.d/code-sicts-shop.conf
+test \"\$(docker inspect \"\$CURRENT_NAME\" --format '{{.State.Health.Status}}')\" = healthy
+docker inspect \"\$ROLLBACK_NAME\" >/dev/null
+
+echo \"保留当前容器: \$CURRENT_NAME\"
+echo \"保留回滚容器: \$ROLLBACK_NAME\"
+echo \"保留部署备份: $BACKUP_DIR\"
+"
+```
+
+清理时必须从当前、回滚容器的 Docker mounts 读取要保留的二进制和资源路径，不能仅按时间猜测。完成后再次检查公网健康、Nginx 上游和回滚容器是否仍存在。线上只保留一个历史版本，不累积第二个或更早的回滚版本。
 
 ## 回滚流程
 
@@ -326,5 +367,7 @@ curl -fsS https://code.sicts.shop/api/v1/settings/public
 - Nginx `nginx -t` 通过并已 reload。
 - 公网 `/health` 正常。
 - 公网版本号正确。
-- 旧容器已停止但未删除。
+- 上一个容器已停止并作为唯一回滚版本保留。
+- 更早的应用容器、二进制、资源目录及部署备份已清理。
+- 当前与回滚容器的挂载文件均存在，持久化 model catalog 未被清理。
 - `/opt/sub2api/.codex-current-*` 已更新。

@@ -455,6 +455,17 @@ func TestValidateIntervals_ImageModeStillRejectsNegativePrice(t *testing.T) {
 	require.Contains(t, err.Error(), "must be >= 0")
 }
 
+func TestValidateIntervals_ImageModeRequiresUniqueTierLabels(t *testing.T) {
+	price := testPtrFloat64(0.04)
+	require.ErrorContains(t, ValidateIntervals([]PricingInterval{
+		{TierLabel: "", PerRequestPrice: price},
+	}, BillingModeImage), "tier_label is required")
+	require.ErrorContains(t, ValidateIntervals([]PricingInterval{
+		{TierLabel: "1K", PerRequestPrice: price},
+		{TierLabel: "1k", PerRequestPrice: price},
+	}, BillingModeImage), "duplicate tier_label")
+}
+
 func TestValidateIntervals_ImageModeStillRejectsBadMaxTokens(t *testing.T) {
 	// image 模式仍校验 max <= min 这种单条不合法。
 	intervals := []PricingInterval{
@@ -512,7 +523,6 @@ func TestSupportedModels_WildcardExpandedFromPricing(t *testing.T) {
 		require.NotContains(t, m.Name, "*")
 	}
 }
-
 
 func TestSupportedModels_MissingPricingKeepsNilPricing(t *testing.T) {
 	ch := &Channel{

@@ -1,64 +1,49 @@
 <template>
-  <div>
-    <!-- Window stats row (above progress bar) -->
-    <div
-      v-if="hasStatsRow"
-      class="mb-0.5 flex items-center"
-    >
-      <div class="flex items-center gap-1.5 text-[9px] text-gray-500 dark:text-gray-400">
-        <span v-if="showWindowStats" class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
-          {{ formatRequests }} req
-        </span>
-        <span v-if="showWindowStats" class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
-          {{ formatTokens }}
-        </span>
-        <span v-if="showWindowStats" class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800" :title="t('usage.accountBilled')">
-          A ${{ formatAccountCost }}
-        </span>
-        <span
-          v-if="showWindowStats && windowStats?.user_cost != null"
-          class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800"
-          :title="t('usage.userBilled')"
-        >
-          U ${{ formatUserCost }}
-        </span>
-        <span
-          v-for="stat in visibleExtraStats"
-          :key="stat.label"
-          class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800"
-          :title="stat.title"
-        >
-          {{ stat.label }}
-        </span>
-      </div>
-    </div>
-
-    <!-- Progress bar row -->
-    <div class="flex items-center gap-1">
-      <!-- Label badge (fixed width for alignment) -->
-      <span
-        :class="['w-[32px] shrink-0 rounded px-1 text-center text-[10px] font-medium', labelClass]"
-      >
+  <div
+    data-testid="usage-window-row"
+    :class="[
+      'grid items-center gap-x-2 py-px',
+      hasStatsRow ? 'grid-cols-[auto_auto]' : 'grid-cols-[auto]'
+    ]"
+  >
+    <div class="flex items-center gap-1.5 whitespace-nowrap text-[10px] leading-4">
+      <span class="w-[32px] shrink-0 border-l-2 border-gray-300 pl-1 font-semibold text-gray-700 dark:border-gray-600 dark:text-gray-200">
         {{ label }}
       </span>
 
-      <!-- Progress bar container -->
-      <div class="h-1.5 w-8 shrink-0 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+      <div class="h-1 w-7 shrink-0 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
         <div
-          :class="['h-full transition-all duration-300', barClass]"
+          class="h-full bg-gray-600 transition-all duration-300 dark:bg-gray-300"
           :style="{ width: barWidth }"
         ></div>
       </div>
 
-      <!-- Percentage -->
-      <span :class="['w-[32px] shrink-0 text-right text-[10px] font-medium', textClass]">
+      <span class="w-[32px] shrink-0 text-right font-medium text-gray-600 tabular-nums dark:text-gray-400">
         {{ displayPercent }}
       </span>
 
-      <!-- Reset time -->
-      <span v-if="shouldShowResetTime" class="shrink-0 text-[10px] text-gray-400">
+      <span v-if="shouldShowResetTime" class="shrink-0 text-gray-400 tabular-nums dark:text-gray-500">
         {{ formatResetTime }}
       </span>
+    </div>
+
+    <div v-if="hasStatsRow" class="border-l border-gray-200 pl-2 dark:border-gray-700">
+      <UsageStatLine
+        v-if="showWindowStats"
+        :requests="formatRequests"
+        :tokens="formatTokens"
+        :account-cost="formatAccountCost"
+        :user-cost="windowStats?.user_cost != null ? formatUserCost : null"
+        stacked
+      />
+      <div
+        v-if="visibleExtraStats.length > 0"
+        class="flex items-center gap-1.5 whitespace-nowrap text-[9px] leading-[13px] text-gray-500 dark:text-gray-400"
+      >
+        <span v-for="stat in visibleExtraStats" :key="stat.label" :title="stat.title">
+          {{ stat.label }}
+        </span>
+      </div>
     </div>
   </div>
 </template>
@@ -69,6 +54,7 @@ import { useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import type { WindowStats } from '@/types'
 import { formatCompactNumber } from '@/utils/format'
+import UsageStatLine from './UsageStatLine.vue'
 
 interface ExtraStat {
   label: string
@@ -110,39 +96,6 @@ watch(
     }
   },
 )
-
-// Label background colors
-const labelClass = computed(() => {
-  const colors = {
-    indigo: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
-    emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-    purple: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-  }
-  return colors[props.color]
-})
-
-// Progress bar color based on utilization
-const barClass = computed(() => {
-  if (props.utilization >= 100) {
-    return 'bg-red-500'
-  } else if (props.utilization >= 80) {
-    return 'bg-amber-500'
-  } else {
-    return 'bg-green-500'
-  }
-})
-
-// Text color based on utilization
-const textClass = computed(() => {
-  if (props.utilization >= 100) {
-    return 'text-red-600 dark:text-red-400'
-  } else if (props.utilization >= 80) {
-    return 'text-amber-600 dark:text-amber-400'
-  } else {
-    return 'text-gray-600 dark:text-gray-400'
-  }
-})
 
 // Bar width (capped at 100%)
 const barWidth = computed(() => {

@@ -321,18 +321,10 @@ export default {
         grokTokens: 'Token',
         grokWeekly: '周限',
         grokMonthly: '月积',
-        grokBuildShort: 'Build',
-        grokChatShort: 'Chat',
-        grokApiShort: 'API',
-        grokProducts: '产品',
-        grokProductsExpand: '展开 Build / API / Chat 用量',
-        grokProductsCollapse: '收起产品用量明细',
         grokUnknown: 'Grok 额度未知：请点击「刷新额度」查询官方 billing，或等待上游 rate-limit 响应头。',
         grokRetryAfter: '{time} 后重试',
         grokProbe: '刷新额度',
         grokProbeTooltip: '调用 xAI cli-chat-proxy /v1/billing 查询 SuperGrok 周限、产品用量与月度积分（与 CLIProxyAPI 管理面板同源）',
-        grokResetUnsupported: '不支持重置',
-        grokResetUnsupportedTooltip: 'xAI 未向 Grok OAuth 账号开放重置额度接口',
         grokNoHeaders: '未观察到配额响应头',
         grokLastStatus: '状态 {status}',
         grokLastProbe: '探测 {time}',
@@ -357,7 +349,10 @@ export default {
         noCreditsAvailable: '没有可用的重置次数',
         resetSuccess: '已重置 {windows} 个窗口',
         confirmTitle: '确认重置周限',
-        confirmMessage: '将消耗 1 次重置次数立即恢复当前窗口，剩余 {count} 次。此操作不可撤销，确定继续吗？'
+        confirmMessage: '将消耗 1 次重置次数立即恢复当前窗口，剩余 {count} 次。此操作不可撤销，确定继续吗？',
+        planLimited: '额度已满',
+        planLimitedMinutes: '额度已满，约 {minutes} 分钟后恢复',
+        planLimitedSeconds: '额度已满，约 {seconds} 秒后恢复'
       },
       tier: {
         free: 'Free',
@@ -595,8 +590,9 @@ export default {
         modelRestrictionDisabledByPassthrough: '已开启自动透传：模型白名单/映射不会生效。',
       },
       grok: {
-        baseUrlHint: 'Grok OAuth 账号会转发到官方 xAI API Base URL。',
-        apiKeyHint: 'Grok 订阅支持使用 OAuth refresh token；API Key 账号不在本次范围内。'
+        baseUrlHint: '留空使用官方 xAI API（https://api.x.ai/v1）',
+        apiKeyHint: '您的 xAI API Key',
+        accountTypeHint: 'OAuth 使用 Grok 订阅；API Key 使用 xAI API 余额并直连官方接口。'
       },
       anthropic: {
         apiKeyPassthrough: '自动透传（仅替换认证）',
