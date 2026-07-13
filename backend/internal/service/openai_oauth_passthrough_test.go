@@ -231,6 +231,10 @@ func (r *openAIPassthroughFailoverRepo) SetOverloaded(_ context.Context, _ int64
 	return nil
 }
 
+func (r *openAIPassthroughFailoverRepo) UpdateExtra(_ context.Context, _ int64, _ map[string]any) error {
+	return nil
+}
+
 var structuredLogCaptureMu sync.Mutex
 
 type inMemoryLogSink struct {

@@ -1247,6 +1247,10 @@ func (s *openAIWSFailoverHandlerAccountRepoStub) SetRateLimited(ctx context.Cont
 	return nil
 }
 
+func (s *openAIWSFailoverHandlerAccountRepoStub) UpdateExtra(context.Context, int64, map[string]any) error {
+	return nil
+}
+
 type openAIWSUsageHandlerUsageLogRepoStub struct {
 	service.UsageLogRepository
 	created chan *service.UsageLog
