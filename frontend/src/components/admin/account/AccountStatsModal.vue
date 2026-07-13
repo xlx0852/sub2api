@@ -1,41 +1,5 @@
 <template>
-  <BaseDialog
-    :show="show"
-    :title="t('admin.accounts.usageStatistics')"
-    width="extra-wide"
-    @close="handleClose"
-  >
-    <div class="space-y-6">
-      <!-- Account Info Header -->
-      <div
-        v-if="account"
-        class="flex items-center justify-between rounded-xl border border-primary-200 bg-gradient-to-r from-primary-50 to-primary-100 p-3 dark:border-primary-700/50 dark:from-primary-900/20 dark:to-primary-800/20"
-      >
-        <div class="flex items-center gap-3">
-          <div
-            class="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-600"
-          >
-            <Icon name="chartBar" size="md" class="text-white" />
-          </div>
-          <div>
-            <div class="font-semibold text-gray-900 dark:text-gray-100">{{ account.name }}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">
-              {{ t('admin.accounts.last30DaysUsage') }}
-            </div>
-          </div>
-        </div>
-        <span
-          :class="[
-            'rounded-full px-2.5 py-1 text-xs font-semibold',
-            account.status === 'active'
-              ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400'
-              : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
-          ]"
-        >
-          {{ account.status }}
-        </span>
-      </div>
-
+  <div class="space-y-6">
       <!-- Loading State -->
       <div v-if="loading" class="flex items-center justify-center py-12">
         <LoadingSpinner />
@@ -43,7 +7,7 @@
 
       <template v-else-if="stats">
         <!-- Row 1: Main Stats Cards -->
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <!-- 30-Day Total Cost -->
           <div
             class="card border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-4 dark:border-emerald-800/30 dark:from-emerald-900/10 dark:to-dark-700"
@@ -155,7 +119,7 @@
         </div>
 
         <!-- Row 2: Today, Highest Cost, Highest Requests -->
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <!-- Today Overview -->
           <div class="card p-4">
             <div class="mb-3 flex items-center gap-2">
@@ -288,7 +252,7 @@
         </div>
 
         <!-- Row 3: Token Stats -->
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <!-- Accumulated Tokens -->
           <div class="card p-4">
             <div class="mb-3 flex items-center gap-2">
@@ -432,19 +396,7 @@
         <Icon name="chartBar" size="xl" class="mb-4 h-12 w-12" />
         <p class="text-sm">{{ t('admin.accounts.stats.noData') }}</p>
       </div>
-    </div>
-
-    <template #footer>
-      <div class="flex justify-end">
-        <button
-          @click="handleClose"
-          class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-dark-600 dark:text-gray-300 dark:hover:bg-dark-500"
-        >
-          {{ t('common.close') }}
-        </button>
-      </div>
-    </template>
-  </BaseDialog>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -462,7 +414,6 @@ import {
   Filler
 } from 'chart.js'
 import { Line } from 'vue-chartjs'
-import BaseDialog from '@/components/common/BaseDialog.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
@@ -484,16 +435,12 @@ ChartJS.register(
 const { t } = useI18n()
 
 const props = defineProps<{
-  show: boolean
   account: Account | null
-}>()
-
-const emit = defineEmits<{
-  (e: 'close'): void
 }>()
 
 const loading = ref(false)
 const stats = ref<AccountUsageStatsResponse | null>(null)
+let loadSequence = 0
 
 // Dark mode detection
 const isDarkMode = computed(() => {
@@ -642,35 +589,40 @@ const lineChartOptions = computed(() => ({
   }
 }))
 
-// Load stats when modal opens
-watch(
-  () => props.show,
-  async (newVal) => {
-    if (newVal && props.account) {
-      await loadStats()
-    } else {
-      stats.value = null
-    }
-  }
-)
-
 const loadStats = async () => {
   if (!props.account) return
 
+  const accountID = props.account.id
+  const sequence = ++loadSequence
   loading.value = true
   try {
-    stats.value = await adminAPI.accounts.getStats(props.account.id, 30)
+    const response = await adminAPI.accounts.getStats(accountID, 30)
+    if (sequence === loadSequence && props.account?.id === accountID) {
+      stats.value = response
+    }
   } catch (error) {
-    console.error('Failed to load account stats:', error)
-    stats.value = null
+    if (sequence === loadSequence && props.account?.id === accountID) {
+      console.error('Failed to load account stats:', error)
+      stats.value = null
+    }
   } finally {
-    loading.value = false
+    if (sequence === loadSequence) loading.value = false
   }
 }
 
-const handleClose = () => {
-  emit('close')
-}
+watch(
+  () => props.account?.id,
+  async (accountID) => {
+    if (accountID && props.account) {
+      await loadStats()
+    } else {
+      loadSequence += 1
+      stats.value = null
+      loading.value = false
+    }
+  },
+  { immediate: true }
+)
 
 // Format helpers
 const formatCost = (value: number): string => {

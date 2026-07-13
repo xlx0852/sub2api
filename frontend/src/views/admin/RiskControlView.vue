@@ -27,7 +27,7 @@
           <div
             v-for="item in overviewItems"
             :key="item.key"
-            class="rounded-lg border border-gray-100 bg-white px-4 py-3 shadow-sm dark:border-dark-700 dark:bg-dark-800"
+            class="rounded-lg border border-gray-100 bg-white px-4 py-3 dark:border-dark-700 dark:bg-dark-800"
           >
             <div class="flex min-w-0 items-center gap-3">
               <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" :class="item.iconClass">
@@ -253,11 +253,11 @@
                 <span
                   v-for="model in modelFilterPreviewModels"
                   :key="model"
-                  class="inline-flex max-w-[180px] items-center truncate rounded-md bg-white px-2 py-1 font-mono text-xs text-gray-600 shadow-sm dark:bg-dark-800 dark:text-gray-300"
+                  class="inline-flex max-w-[180px] items-center truncate rounded-md border border-gray-200 bg-white px-2 py-1 font-mono text-xs text-gray-600 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-300"
                 >
                   {{ model }}
                 </span>
-                <span v-if="hiddenModelFilterModelCount > 0" class="inline-flex rounded-md bg-white px-2 py-1 text-xs text-gray-500 shadow-sm dark:bg-dark-800 dark:text-gray-400">
+                <span v-if="hiddenModelFilterModelCount > 0" class="inline-flex rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-500 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400">
                   +{{ hiddenModelFilterModelCount }}
                 </span>
               </div>
@@ -426,7 +426,7 @@
               </div>
             </div>
 
-            <div class="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-800">
+            <div class="overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-dark-700 dark:bg-dark-800">
               <div class="flex flex-col gap-4 border-b border-gray-100 bg-gray-50 px-4 py-4 dark:border-dark-700 dark:bg-dark-800/60 lg:flex-row lg:items-center lg:justify-between">
                 <div class="flex items-start gap-3">
                   <span class="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-300">
@@ -477,11 +477,11 @@
                       <span class="font-medium text-gray-700 dark:text-gray-200">{{ t('admin.riskControl.apiKeysWriteMode') }}</span>
                       <span class="ml-2">{{ apiKeysModeHint }}</span>
                     </div>
-                    <div class="inline-flex rounded-lg bg-white p-1 shadow-sm dark:bg-dark-800">
+                    <div class="inline-flex rounded-lg border border-gray-200 bg-white p-1 dark:border-dark-700 dark:bg-dark-800">
                       <button
                         type="button"
                         class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                        :class="configForm.api_keys_mode === 'append' ? 'bg-primary-500 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700'"
+                        :class="configForm.api_keys_mode === 'append' ? 'bg-primary-500 text-white ' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700'"
                         :disabled="configForm.clear_api_key"
                         @click="setAPIKeysMode('append')"
                       >
@@ -490,7 +490,7 @@
                       <button
                         type="button"
                         class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-                        :class="configForm.api_keys_mode === 'replace' ? 'bg-amber-500 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700'"
+                        :class="configForm.api_keys_mode === 'replace' ? 'bg-amber-500 text-white ' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700'"
                         :disabled="configForm.clear_api_key"
                         @click="setAPIKeysMode('replace')"
                       >
@@ -589,7 +589,7 @@
                       <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.apiKeyHealth') }}</p>
                       <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.apiKeyFreezeRule') }}</p>
                     </div>
-                    <span class="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-white px-2 py-0.5 text-[11px] font-medium leading-5 text-gray-600 shadow-sm dark:bg-dark-800 dark:text-gray-300">
+                    <span class="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-medium leading-5 text-gray-600 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-300">
                       {{ t('admin.riskControl.apiKeyRows', { count: apiKeyRows.length }) }}
                     </span>
                   </div>
@@ -604,7 +604,7 @@
                       <div
                         v-for="(row, index) in visibleApiKeyRows"
                         :key="apiKeyRowKey(row, index)"
-                        class="rounded-lg border bg-white p-2.5 shadow-sm dark:bg-dark-800"
+                        class="rounded-lg border bg-white p-2.5 dark:bg-dark-800"
                         :class="isStoredApiKeyPendingDelete(row) ? 'border-amber-200 opacity-70 dark:border-amber-800/60' : 'border-gray-100 dark:border-dark-700'"
                       >
                         <div class="flex items-start justify-between gap-2">
@@ -705,7 +705,7 @@
                 <button
                   type="button"
                   class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-                  :class="configForm.all_groups ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-800 dark:text-white' : 'text-gray-500 dark:text-gray-400'"
+                  :class="configForm.all_groups ? 'bg-white text-gray-900  dark:bg-dark-800 dark:text-white' : 'text-gray-500 dark:text-gray-400'"
                   @click="configForm.all_groups = true"
                 >
                   {{ t('admin.riskControl.allGroups') }}
@@ -713,7 +713,7 @@
                 <button
                   type="button"
                   class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-                  :class="!configForm.all_groups ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-800 dark:text-white' : 'text-gray-500 dark:text-gray-400'"
+                  :class="!configForm.all_groups ? 'bg-white text-gray-900  dark:bg-dark-800 dark:text-white' : 'text-gray-500 dark:text-gray-400'"
                   @click="configForm.all_groups = false"
                 >
                   {{ t('admin.riskControl.selectedGroups') }}
@@ -768,7 +768,7 @@
                   type="button"
                   class="rounded-lg border p-3 text-left transition-colors"
                   :class="configForm.model_filter_type === option.value
-                    ? 'border-primary-300 bg-primary-50 text-primary-900 shadow-sm dark:border-primary-700 dark:bg-primary-900/20 dark:text-primary-100'
+                    ? 'border-primary-300 bg-primary-50 text-primary-900  dark:border-primary-700 dark:bg-primary-900/20 dark:text-primary-100'
                     : 'border-gray-100 hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-700/60'"
                   @click="setModelFilterType(option.value)"
                 >
@@ -933,7 +933,7 @@
                       {{ t('admin.riskControl.riskThresholdDefault', { value: formatThresholdPercent(row.defaultValue) }) }}
                     </p>
                   </div>
-                  <span class="inline-flex shrink-0 rounded-md bg-white px-2 py-1 font-mono text-xs font-medium text-gray-600 shadow-sm dark:bg-dark-800 dark:text-gray-300">
+                  <span class="inline-flex shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 font-mono text-xs font-medium text-gray-600 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-300">
                     {{ formatThresholdPercent(row.value) }}
                   </span>
                 </div>
@@ -984,7 +984,7 @@
                   type="button"
                   class="rounded-lg border p-3 text-left transition-colors"
                   :class="configForm.keyword_blocking_mode === option.value
-                    ? 'border-primary-300 bg-primary-50 text-primary-900 shadow-sm dark:border-primary-700 dark:bg-primary-900/20 dark:text-primary-100'
+                    ? 'border-primary-300 bg-primary-50 text-primary-900  dark:border-primary-700 dark:bg-primary-900/20 dark:text-primary-100'
                     : 'border-gray-100 hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-700/60'"
                   @click="configForm.keyword_blocking_mode = option.value"
                 >
@@ -1087,7 +1087,7 @@
             </div>
           </div>
 
-          <div class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-800">
+          <div class="rounded-xl border border-gray-100 bg-white p-4 dark:border-dark-700 dark:bg-dark-800">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.inputDetailContent') }}</p>

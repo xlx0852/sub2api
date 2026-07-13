@@ -65,12 +65,12 @@ export default {
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace']
       },
       boxShadow: {
-        glass: '0 8px 32px rgba(0, 0, 0, 0.08)',
-        'glass-sm': '0 4px 16px rgba(0, 0, 0, 0.06)',
+        glass: 'none',
+        'glass-sm': 'none',
         glow: '0 0 20px rgba(20, 184, 166, 0.25)',
         'glow-lg': '0 0 40px rgba(20, 184, 166, 0.35)',
-        card: '0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)',
-        'card-hover': '0 10px 40px rgba(0, 0, 0, 0.08)',
+        card: 'none',
+        'card-hover': 'none',
         'inner-glow': 'inset 0 1px 0 rgba(255, 255, 255, 0.1)'
       },
       backgroundImage: {

@@ -139,7 +139,7 @@
           <div
             v-for="(image, index) in generatedImages"
             :key="`${image.url}-${index}`"
-            class="group/img relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition hover:border-primary-300 hover:shadow-md dark:border-dark-500 dark:bg-dark-700"
+            class="group/img relative cursor-pointer overflow-hidden rounded-xl border border-gray-200 bg-white  transition hover:border-primary-300  dark:border-dark-500 dark:bg-dark-700"
             @click="previewImageUrl = image.url"
           >
             <img :src="image.url" :alt="`test-image-${index + 1}`" class="max-h-[360px] w-full object-contain" />
@@ -170,7 +170,7 @@
             <img
               :src="previewImageUrl"
               alt="preview"
-              class="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+              class="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-lg"
             />
           </div>
         </Transition>

@@ -149,7 +149,7 @@ describe('AccountUsageCell', () => {
     expect(wrapper.text()).toContain('25')
   })
 
-  it('Claude 和 Grok 共用同一套尺寸和语义色窗口样式', async () => {
+  it('Claude 和 Grok 共用同一套尺寸和剩余额度阶段色', async () => {
     getUsage.mockResolvedValueOnce({
       five_hour: {
         utilization: 12,
@@ -182,9 +182,11 @@ describe('AccountUsageCell', () => {
 
     await flushPromises()
     expect(claude.findAll('[data-testid="usage-window-row"]')).toHaveLength(2)
-    expect(claude.html()).toContain('bg-indigo-500')
-    expect(claude.html()).toContain('bg-emerald-500')
-    expect(claude.classes()).toContain('w-[372px]')
+    expect(
+      claude.findAll('[data-testid="usage-progress-fill"]').every((bar) => bar.classes().includes('bg-emerald-500'))
+    ).toBe(true)
+    expect(claude.classes()).toContain('w-full')
+    expect(claude.classes()).toContain('min-w-0')
     claude.unmount()
 
     getUsage.mockResolvedValueOnce({
@@ -222,9 +224,11 @@ describe('AccountUsageCell', () => {
     await flushPromises()
     expect(grok.findAll('[data-testid="usage-window-row"]').length).toBeGreaterThanOrEqual(2)
     expect(grok.text()).not.toContain('admin.accounts.usageWindow.grokProducts')
-    expect(grok.html()).toContain('bg-indigo-500')
-    expect(grok.html()).toContain('bg-amber-500')
-    expect(grok.classes()).toContain('w-[372px]')
+    expect(
+      grok.findAll('[data-testid="usage-progress-fill"]').every((bar) => bar.classes().includes('bg-emerald-500'))
+    ).toBe(true)
+    expect(grok.classes()).toContain('w-full')
+    expect(grok.classes()).toContain('min-w-0')
   })
 
 

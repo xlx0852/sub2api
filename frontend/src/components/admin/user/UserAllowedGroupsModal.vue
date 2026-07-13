@@ -3,7 +3,7 @@
     <div v-if="user" class="space-y-6">
       <!-- 用户信息头部 -->
       <div class="flex items-center gap-4 rounded-2xl bg-gradient-to-r from-primary-50 to-primary-100 p-5 dark:from-primary-900/30 dark:to-primary-800/20">
-        <div class="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-sm dark:bg-dark-700">
+        <div class="flex h-14 w-14 items-center justify-center rounded-full bg-white  dark:bg-dark-700">
           <span class="text-2xl font-semibold text-primary-600 dark:text-primary-400">{{ user.email.charAt(0).toUpperCase() }}</span>
         </div>
         <div class="flex-1">
@@ -34,7 +34,7 @@
               :key="config.groupId"
               class="group relative overflow-hidden rounded-xl border-2 p-4 transition-all duration-200"
               :class="config.isSelected
-                ? 'border-primary-400 bg-primary-50/50 shadow-sm dark:border-primary-500 dark:bg-primary-900/20'
+                ? 'border-primary-400 bg-primary-50/50  dark:border-primary-500 dark:bg-primary-900/20'
                 : 'border-gray-200 bg-white hover:border-gray-300 dark:border-dark-600 dark:bg-dark-800 dark:hover:border-dark-500'"
             >
               <div class="flex items-center gap-4">

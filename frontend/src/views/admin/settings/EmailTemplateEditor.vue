@@ -101,7 +101,7 @@
               {{ selectedEventMeta.label }}
             </div>
             <span
-              class="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-gray-600 shadow-sm ring-1 ring-gray-200 dark:bg-dark-800 dark:text-gray-300 dark:ring-dark-600"
+              class="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-gray-600  ring-1 ring-gray-200 dark:bg-dark-800 dark:text-gray-300 dark:ring-dark-600"
             >
               {{ selectedEventMeta.categoryLabel }}
             </span>

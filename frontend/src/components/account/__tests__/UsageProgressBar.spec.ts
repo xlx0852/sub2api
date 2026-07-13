@@ -118,8 +118,25 @@ describe('UsageProgressBar', () => {
     expect(wrapper.get('[data-testid="usage-stat-volume"]').text()).toContain('21.8M')
     expect(wrapper.get('[data-testid="usage-stat-billing"]').text()).toContain('A $20.66')
     expect(wrapper.get('[data-testid="usage-stat-billing"]').text()).toContain('U $20.66')
-    expect(wrapper.html()).toContain('bg-indigo-500')
+    expect(wrapper.get('[data-testid="usage-progress-fill"]').classes()).toContain('bg-emerald-500')
     expect(wrapper.findAll('.usage-metric')).toHaveLength(4)
     expect(wrapper.html()).not.toContain('shadow')
+  })
+
+  it.each([
+    { utilization: 79, colorClass: 'bg-emerald-500' },
+    { utilization: 80, colorClass: 'bg-amber-500' },
+    { utilization: 99, colorClass: 'bg-amber-500' },
+    { utilization: 100, colorClass: 'bg-red-500' }
+  ])('利用率 $utilization% 使用 $colorClass', ({ utilization, colorClass }) => {
+    const wrapper = mount(UsageProgressBar, {
+      props: {
+        label: '5h',
+        utilization,
+        color: 'indigo'
+      }
+    })
+
+    expect(wrapper.get('[data-testid="usage-progress-fill"]').classes()).toContain(colorClass)
   })
 })

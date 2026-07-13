@@ -1483,9 +1483,9 @@
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
-        <div class="overflow-hidden rounded-lg border border-sky-100 bg-sky-50/60 shadow-sm dark:border-sky-900/50 dark:bg-sky-950/20">
+        <div class="overflow-hidden rounded-lg border border-sky-100 bg-sky-50/60  dark:border-sky-900/50 dark:bg-sky-950/20">
           <div class="flex items-start gap-3 px-4 py-3">
-            <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-sky-600 shadow-sm ring-1 ring-sky-100 dark:bg-dark-800 dark:text-sky-300 dark:ring-sky-900/60">
+            <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-sky-600  ring-1 ring-sky-100 dark:bg-dark-800 dark:text-sky-300 dark:ring-sky-900/60">
               <Icon name="sparkles" size="sm" />
             </div>
             <div class="min-w-0 flex-1">
@@ -2339,7 +2339,7 @@
             <label class="input-label text-xs">{{ t('admin.accounts.quotaControl.cacheTTLOverride.target') }}</label>
             <select
               v-model="cacheTTLOverrideTarget"
-              class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-dark-500 dark:bg-dark-700 dark:text-white"
+              class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm  focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-dark-500 dark:bg-dark-700 dark:text-white"
             >
               <option value="5m">5m</option>
               <option value="1h">1h</option>
@@ -2836,28 +2836,28 @@ const codexImageToolOptions = computed<Array<{
     value: 'inherit',
     label: t('admin.accounts.openai.codexImageToolInherit'),
     description: t('admin.accounts.openai.codexImageToolInheritDesc'),
-    selectedCardClass: 'border-sky-300 bg-sky-50 text-sky-900 shadow-sm ring-1 ring-sky-200 dark:border-sky-700 dark:bg-sky-900/25 dark:text-sky-100 dark:ring-sky-800',
+    selectedCardClass: 'border-sky-300 bg-sky-50 text-sky-900  ring-1 ring-sky-200 dark:border-sky-700 dark:bg-sky-900/25 dark:text-sky-100 dark:ring-sky-800',
     selectedDotClass: 'border-sky-500 bg-sky-500 text-white'
   },
   {
     value: 'enabled',
     label: t('admin.accounts.openai.codexImageToolEnabled'),
     description: t('admin.accounts.openai.codexImageToolEnabledDesc'),
-    selectedCardClass: 'border-emerald-300 bg-emerald-50 text-emerald-900 shadow-sm ring-1 ring-emerald-200 dark:border-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-100 dark:ring-emerald-800',
+    selectedCardClass: 'border-emerald-300 bg-emerald-50 text-emerald-900  ring-1 ring-emerald-200 dark:border-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-100 dark:ring-emerald-800',
     selectedDotClass: 'border-emerald-500 bg-emerald-500 text-white'
   },
   {
     value: 'disabled',
     label: t('admin.accounts.openai.codexImageToolDisabled'),
     description: t('admin.accounts.openai.codexImageToolDisabledDesc'),
-    selectedCardClass: 'border-amber-300 bg-amber-50 text-amber-900 shadow-sm ring-1 ring-amber-200 dark:border-amber-700 dark:bg-amber-900/25 dark:text-amber-100 dark:ring-amber-800',
+    selectedCardClass: 'border-amber-300 bg-amber-50 text-amber-900  ring-1 ring-amber-200 dark:border-amber-700 dark:bg-amber-900/25 dark:text-amber-100 dark:ring-amber-800',
     selectedDotClass: 'border-amber-500 bg-amber-500 text-white'
   },
   {
     value: 'block',
     label: t('admin.accounts.openai.codexImageToolBlock'),
     description: t('admin.accounts.openai.codexImageToolBlockDesc'),
-    selectedCardClass: 'border-rose-300 bg-rose-50 text-rose-900 shadow-sm ring-1 ring-rose-200 dark:border-rose-700 dark:bg-rose-900/25 dark:text-rose-100 dark:ring-rose-800',
+    selectedCardClass: 'border-rose-300 bg-rose-50 text-rose-900  ring-1 ring-rose-200 dark:border-rose-700 dark:bg-rose-900/25 dark:text-rose-100 dark:ring-rose-800',
     selectedDotClass: 'border-rose-500 bg-rose-500 text-white'
   }
 ])

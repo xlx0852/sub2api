@@ -1327,7 +1327,7 @@
 
           <div v-if="createForm.allow_messages_dispatch" class="mt-3">
             <div
-              class="relative overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-dark-600 dark:bg-dark-800"
+              class="relative overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-dark-600 dark:bg-dark-800"
             >
               <div
                 class="border-b border-gray-100 bg-gray-50/80 px-4 py-3 dark:border-dark-700 dark:bg-dark-700/50"
@@ -1391,7 +1391,7 @@
             </div>
 
             <div
-              class="mt-5 relative overflow-hidden rounded-xl border border-primary-200 bg-white shadow-sm dark:border-primary-900/50 dark:bg-dark-800"
+              class="mt-5 relative overflow-hidden rounded-xl border border-primary-200 bg-white dark:border-primary-900/50 dark:bg-dark-800"
             >
               <div
                 class="border-b border-primary-100 bg-primary-50/80 px-4 py-3 dark:border-primary-900/40 dark:bg-primary-900/20"
@@ -1438,7 +1438,7 @@
                   <div
                     v-for="row in createForm.exact_model_mappings"
                     :key="getCreateMessagesDispatchRowKey(row)"
-                    class="group relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-all hover:border-primary-300 hover:shadow-md dark:border-dark-600 dark:bg-dark-700 dark:hover:border-primary-700"
+                    class="group relative rounded-xl border border-gray-200 bg-white p-4 transition-colors hover:border-primary-300 hover:bg-gray-50 dark:border-dark-600 dark:bg-dark-700 dark:hover:border-primary-700 dark:hover:bg-dark-600"
                   >
                     <div class="flex items-center gap-4">
                       <div
@@ -2801,7 +2801,7 @@
 
           <div v-if="editForm.allow_messages_dispatch" class="mt-3">
             <div
-              class="relative overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-dark-600 dark:bg-dark-800"
+              class="relative overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-dark-600 dark:bg-dark-800"
             >
               <div
                 class="border-b border-gray-100 bg-gray-50/80 px-4 py-3 dark:border-dark-700 dark:bg-dark-700/50"
@@ -2865,7 +2865,7 @@
             </div>
 
             <div
-              class="mt-5 relative overflow-hidden rounded-xl border border-primary-200 bg-white shadow-sm dark:border-primary-900/50 dark:bg-dark-800"
+              class="mt-5 relative overflow-hidden rounded-xl border border-primary-200 bg-white dark:border-primary-900/50 dark:bg-dark-800"
             >
               <div
                 class="border-b border-primary-100 bg-primary-50/80 px-4 py-3 dark:border-primary-900/40 dark:bg-primary-900/20"
@@ -2912,7 +2912,7 @@
                   <div
                     v-for="row in editForm.exact_model_mappings"
                     :key="getEditMessagesDispatchRowKey(row)"
-                    class="group relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-all hover:border-primary-300 hover:shadow-md dark:border-dark-600 dark:bg-dark-700 dark:hover:border-primary-700"
+                    class="group relative rounded-xl border border-gray-200 bg-white p-4 transition-colors hover:border-primary-300 hover:bg-gray-50 dark:border-dark-600 dark:bg-dark-700 dark:hover:border-primary-700 dark:hover:bg-dark-600"
                   >
                     <div class="flex items-center gap-4">
                       <div
@@ -3361,7 +3361,7 @@
           <div
             v-for="group in sortableGroups"
             :key="group.id"
-            class="flex cursor-grab items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 transition-shadow hover:shadow-md active:cursor-grabbing dark:border-dark-600 dark:bg-dark-700"
+            class="flex cursor-grab items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 transition-colors hover:border-primary-300 hover:bg-gray-50 active:cursor-grabbing dark:border-dark-600 dark:bg-dark-700 dark:hover:border-primary-700 dark:hover:bg-dark-600"
           >
             <div class="text-gray-400">
               <Icon name="menu" size="md" />

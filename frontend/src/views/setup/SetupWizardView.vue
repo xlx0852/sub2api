@@ -58,7 +58,7 @@
       </div>
 
       <!-- Step Content -->
-      <div class="rounded-2xl bg-white p-8 shadow-xl dark:bg-dark-800">
+      <div class="rounded-2xl bg-white p-8 shadow-lg dark:bg-dark-800">
         <!-- Step 1: Database -->
         <div v-if="currentStep === 0" class="space-y-6">
           <div class="mb-6 text-center">

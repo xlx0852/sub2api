@@ -78,7 +78,7 @@
                 </button>
                 <div
                   v-if="showAccountToolsDropdown"
-                  class="absolute right-0 z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] origin-top-right overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800"
+                  class="absolute right-0 z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] origin-top-right overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
                 >
                   <div class="max-h-[70vh] overflow-y-auto p-2">
                     <div class="px-2 py-2">
@@ -210,25 +210,8 @@
           <template #cell-select="{ row }">
             <input type="checkbox" :checked="isSelected(row.id)" @change="toggleSel(row.id)" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
           </template>
-          <template #cell-id="{ row, value }">
-            <div class="flex min-w-[8rem] flex-col gap-1">
-              <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ value }}</span>
-              <button
-                v-if="getPrimaryPerformanceStat(Number(value))"
-                type="button"
-                class="inline-flex w-fit items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[11px] font-medium leading-4 text-gray-600 transition-colors hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-300 dark:hover:border-primary-700 dark:hover:bg-primary-900/20 dark:hover:text-primary-300"
-                @click.stop="openPerformanceDetails(row)"
-              >
-                <Icon name="chart" size="xs" />
-                <span>性能详情</span>
-              </button>
-              <span
-                v-else-if="performanceStatsLoading"
-                class="text-[11px] leading-4 text-gray-400 dark:text-dark-500"
-              >
-                ...
-              </span>
-            </div>
+          <template #cell-id="{ value }">
+            <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ value }}</span>
           </template>
           <template #cell-name="{ row, value }">
             <div class="flex flex-col">
@@ -308,6 +291,8 @@
               :today-stats="todayStatsByAccountId[String(row.id)] ?? null"
               :today-stats-loading="todayStatsLoading"
               :manual-refresh-token="usageManualRefreshToken"
+              variant="summary"
+              @open-details="openUsageDetails(row)"
             />
           </template>
           <template #cell-proxy="{ row }">
@@ -412,71 +397,18 @@
     <EditAccountModal :show="showEdit" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
-    <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
-    <BaseDialog
-      :show="showPerformanceDetails"
-      :title="performanceDialogTitle"
-      width="wide"
-      @close="closePerformanceDetails"
-    >
-      <div class="space-y-4">
-        <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-dark-600 dark:bg-dark-800/60">
-          <div class="flex flex-wrap items-center gap-2 text-sm">
-            <span class="font-semibold text-gray-900 dark:text-white">{{ selectedPerformanceAccount?.name }}</span>
-            <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ selectedPerformanceAccount?.id }}</span>
-            <span
-              v-if="selectedPerformanceAccount"
-              class="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600 dark:bg-dark-700 dark:text-gray-300"
-            >
-              {{ selectedPerformanceAccount.platform }} / {{ selectedPerformanceAccount.type }}
-            </span>
-          </div>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            最近 {{ selectedPerformanceStats?.window_hours ?? 24 }} 小时请求性能
-          </p>
-        </div>
-
-        <div v-if="selectedPerformanceStatRows.length === 0" class="rounded-lg border border-dashed border-gray-200 py-8 text-center text-sm text-gray-500 dark:border-dark-600 dark:text-gray-400">
-          暂无性能数据
-        </div>
-
-        <div v-else class="grid gap-3 md:grid-cols-2">
-          <div
-            v-for="stat in selectedPerformanceStatRows"
-            :key="stat.request_type"
-            class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-600 dark:bg-dark-800"
-          >
-            <div class="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <div class="text-sm font-semibold text-gray-900 dark:text-white">
-                  {{ requestTypeDisplayName(stat.request_type) }}
-                </div>
-                <div class="text-xs text-gray-500 dark:text-gray-400">
-                  {{ stat.request_count }} 次请求
-                </div>
-              </div>
-              <span
-                v-if="(stat.ws_preflight_fail_count ?? 0) > 0"
-                class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
-              >
-                预检失败 {{ stat.ws_preflight_fail_count }}
-              </span>
-            </div>
-
-            <dl class="grid grid-cols-2 gap-2 text-xs">
-              <div
-                v-for="item in getPerformanceDetailItems(stat)"
-                :key="item.label"
-                class="rounded-md bg-gray-50 px-3 py-2 dark:bg-dark-700/70"
-              >
-                <dt class="text-gray-500 dark:text-gray-400">{{ item.label }}</dt>
-                <dd class="mt-0.5 font-mono font-semibold text-gray-800 dark:text-gray-100">{{ item.value }}</dd>
-              </div>
-            </dl>
-          </div>
-        </div>
-      </div>
-    </BaseDialog>
+    <AccountUsageDrawer
+      :show="showUsageDetails"
+      :account="usageDetailsAcc"
+      :today-stats="selectedUsageTodayStats"
+      :today-stats-loading="todayStatsLoading"
+      :performance-stats="selectedUsagePerformanceStats"
+      :performance-loading="performanceStatsLoading"
+      :manual-refresh-token="usageManualRefreshToken"
+      :initial-tab="usageDetailsInitialTab"
+      @close="closeUsageDetails"
+      @reauthorize="handleReAuth"
+    />
     <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
     <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
@@ -519,7 +451,6 @@ import { useTableSelection } from '@/composables/useTableSelection'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
-import BaseDialog from '@/components/common/BaseDialog.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -531,11 +462,11 @@ import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
 import ImportDataModal from '@/components/admin/account/ImportDataModal.vue'
 import ReAuthAccountModal from '@/components/admin/account/ReAuthAccountModal.vue'
 import AccountTestModal from '@/components/admin/account/AccountTestModal.vue'
-import AccountStatsModal from '@/components/admin/account/AccountStatsModal.vue'
 import ScheduledTestsPanel from '@/components/admin/account/ScheduledTestsPanel.vue'
 import type { SelectOption } from '@/components/common/Select.vue'
 import AccountStatusIndicator from '@/components/account/AccountStatusIndicator.vue'
 import AccountUsageCell from '@/components/account/AccountUsageCell.vue'
+import AccountUsageDrawer from '@/components/account/AccountUsageDrawer.vue'
 import AccountTodayStatsCell from '@/components/account/AccountTodayStatsCell.vue'
 import AccountGroupsCell from '@/components/account/AccountGroupsCell.vue'
 import AccountCapacityCell from '@/components/account/AccountCapacityCell.vue'
@@ -547,7 +478,7 @@ import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { formatDateTime, formatRelativeTime } from '@/utils/format'
 import { proxyExpiryBadgeClass, proxyExpiryLabelKey } from '@/utils/proxyExpiry'
 import type { Account, AccountPlatform, AccountSchedulerGroupScore, AccountType, Proxy as AccountProxy, AdminGroup, WindowStats, ClaudeModel } from '@/types'
-import type { AccountPerformanceStats, AccountRequestTypePerformanceStats } from '@/api/admin/accounts'
+import type { AccountPerformanceStats } from '@/api/admin/accounts'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -609,8 +540,7 @@ const showDeleteDialog = ref(false)
 const showCreateShadowDialog = ref(false)
 const showReAuth = ref(false)
 const showTest = ref(false)
-const showStats = ref(false)
-const selectedPerformanceAccount = ref<Account | null>(null)
+const usageDetailsAcc = ref<Account | null>(null)
 const showErrorPassthrough = ref(false)
 const showTLSFingerprintProfiles = ref(false)
 const edAcc = ref<Account | null>(null)
@@ -619,7 +549,6 @@ const deletingAcc = ref<Account | null>(null)
 const creatingShadowAcc = ref<Account | null>(null)
 const reAuthAcc = ref<Account | null>(null)
 const testingAcc = ref<Account | null>(null)
-const statsAcc = ref<Account | null>(null)
 const showSchedulePanel = ref(false)
 const scheduleAcc = ref<Account | null>(null)
 const scheduleModelOptions = ref<SelectOption[]>([])
@@ -695,6 +624,16 @@ const performanceStatsLoading = ref(false)
 const performanceStatsReqSeq = ref(0)
 const pendingTodayStatsRefresh = ref(false)
 const usageManualRefreshToken = ref(0)
+
+const showUsageDetails = computed(() => usageDetailsAcc.value !== null)
+const selectedUsageTodayStats = computed(() => {
+  if (!usageDetailsAcc.value) return null
+  return todayStatsByAccountId.value[String(usageDetailsAcc.value.id)] ?? null
+})
+const selectedUsagePerformanceStats = computed(() => {
+  if (!usageDetailsAcc.value) return null
+  return performanceStatsByAccountId.value[String(usageDetailsAcc.value.id)] ?? null
+})
 
 const buildDefaultTodayStats = (): WindowStats => ({
   requests: 0,
@@ -783,82 +722,6 @@ const refreshAccountListStats = async () => {
     refreshTodayStatsBatch(),
     refreshPerformanceStatsBatch()
   ])
-}
-
-const getPrimaryPerformanceStat = (accountID: number): AccountRequestTypePerformanceStats | null => {
-  const stats = performanceStatsByAccountId.value[String(accountID)]?.stats ?? []
-  return stats.find(stat => stat.request_type === 'ws_v2') ?? stats.find(stat => stat.request_type === 'stream') ?? null
-}
-
-const selectedPerformanceStats = computed(() => {
-  if (!selectedPerformanceAccount.value) return null
-  return performanceStatsByAccountId.value[String(selectedPerformanceAccount.value.id)] ?? null
-})
-
-const selectedPerformanceStatRows = computed(() => selectedPerformanceStats.value?.stats ?? [])
-
-const showPerformanceDetails = computed(() => selectedPerformanceAccount.value !== null)
-
-const performanceDialogTitle = computed(() => {
-  if (!selectedPerformanceAccount.value) return '性能详情'
-  return `性能详情 #${selectedPerformanceAccount.value.id}`
-})
-
-const openPerformanceDetails = (account: Account) => {
-  selectedPerformanceAccount.value = account
-}
-
-const closePerformanceDetails = () => {
-  selectedPerformanceAccount.value = null
-}
-
-const formatDurationSeconds = (ms?: number | null) => {
-  if (ms == null || !Number.isFinite(ms)) return '--'
-  return `${(ms / 1000).toFixed(1)}s`
-}
-
-const formatPayloadSize = (bytes?: number | null) => {
-  if (bytes == null || !Number.isFinite(bytes)) return '--'
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)}MB`
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)}KB`
-  return `${Math.round(bytes)}B`
-}
-
-const formatPercent = (value?: number | null) => {
-  if (value == null || !Number.isFinite(value)) return '--'
-  return `${Math.round(value * 100)}%`
-}
-
-const requestTypeDisplayName = (requestType: string) => {
-  if (requestType === 'ws_v2') return 'ws_v2'
-  if (requestType === 'stream') return '流'
-  if (requestType === 'compact') return 'Compact'
-  return requestType || '-'
-}
-
-const getPerformanceDetailItems = (stat: AccountRequestTypePerformanceStats) => {
-  const items = [
-    { label: '平均耗时', value: formatDurationSeconds(stat.avg_duration_ms) },
-    { label: 'P90 耗时', value: formatDurationSeconds(stat.p90_duration_ms) },
-    { label: '首 Token 平均', value: formatDurationSeconds(stat.avg_first_token_ms) },
-    { label: '首 Token P90', value: formatDurationSeconds(stat.p90_first_token_ms) },
-    { label: '连接选择平均', value: formatDurationSeconds(stat.avg_ws_conn_pick_ms) },
-    { label: '连接选择 P90', value: formatDurationSeconds(stat.p90_ws_conn_pick_ms) },
-    { label: '队列等待', value: formatDurationSeconds(stat.avg_ws_queue_wait_ms) },
-    { label: '平均请求体', value: formatPayloadSize(stat.avg_ws_payload_bytes) },
-    { label: '平均事件数', value: stat.avg_ws_event_count == null ? '--' : stat.avg_ws_event_count.toFixed(1) },
-    { label: '连接复用率', value: formatPercent(stat.ws_conn_reused_rate) },
-    { label: '复用次数', value: String(stat.ws_conn_reused_count ?? 0) },
-    { label: '预检失败', value: String(stat.ws_preflight_fail_count ?? 0) }
-  ]
-  if (stat.request_type === 'compact') {
-    items.push(
-      { label: 'Compact 请求体', value: formatPayloadSize(stat.avg_compact_payload_bytes) },
-      { label: 'Compact 重试', value: String(stat.compact_retry_count ?? 0) },
-      { label: '客户端断开', value: String(stat.compact_client_canceled_count ?? 0) }
-    )
-  }
-  return items
 }
 
 const autoRefreshIntervalLabel = (sec: number) => {
@@ -1172,8 +1035,7 @@ const isAnyModalOpen = computed(() => {
     showDeleteDialog.value ||
     showReAuth.value ||
     showTest.value ||
-    showStats.value ||
-    showPerformanceDetails.value ||
+    showUsageDetails.value ||
     showSchedulePanel.value ||
     showErrorPassthrough.value ||
     showTLSFingerprintProfiles.value
@@ -1437,13 +1299,13 @@ function getOpenAICompactMeta(row: any): { label: string; className: string; dot
       return {
         label: t('admin.accounts.openai.compactSupported'),
         className: 'text-emerald-600 dark:text-emerald-300',
-        dotClass: 'bg-emerald-500 shadow-[0_0_0_2px_rgba(16,185,129,0.14)]'
+        dotClass: 'bg-emerald-500 ring-2 ring-emerald-500/15'
       }
     case 'blocked':
       return {
         label: t('admin.accounts.openai.compactUnsupported'),
         className: 'text-rose-600 dark:text-rose-300',
-        dotClass: 'bg-rose-500 shadow-[0_0_0_2px_rgba(244,63,94,0.14)]'
+        dotClass: 'bg-rose-500 ring-2 ring-rose-500/15'
       }
     case 'auto':
       return {
@@ -1901,10 +1763,20 @@ const handleExportData = async () => {
   }
 }
 const closeTestModal = () => { showTest.value = false; testingAcc.value = null }
-const closeStatsModal = () => { showStats.value = false; statsAcc.value = null }
 const closeReAuthModal = () => { showReAuth.value = false; reAuthAcc.value = null }
 const handleTest = (a: Account) => { testingAcc.value = a; showTest.value = true }
-const handleViewStats = (a: Account) => { statsAcc.value = a; showStats.value = true }
+const handleViewStats = (a: Account) => { openUsageDetails(a, 'statistics') }
+const usageDetailsInitialTab = ref<'quota' | 'statistics'>('quota')
+const openUsageDetails = (account: Account, initialTab: 'quota' | 'statistics' = 'quota') => {
+  usageDetailsAcc.value = account
+  usageDetailsInitialTab.value = initialTab
+  if (!performanceStatsByAccountId.value[String(account.id)] && !performanceStatsLoading.value) {
+    refreshPerformanceStatsBatch().catch((error) => {
+      console.error('Failed to load account performance stats for usage drawer:', error)
+    })
+  }
+}
+const closeUsageDetails = () => { usageDetailsAcc.value = null }
 const handleSchedule = async (a: Account) => {
   scheduleAcc.value = a
   scheduleModelOptions.value = []

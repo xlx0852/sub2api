@@ -77,7 +77,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'anthropic'
-                ? 'bg-white text-orange-600 shadow-sm dark:bg-dark-600 dark:text-orange-400'
+                ? 'bg-white text-orange-600  dark:bg-dark-600 dark:text-orange-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -90,7 +90,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'openai'
-                ? 'bg-white text-green-600 shadow-sm dark:bg-dark-600 dark:text-green-400'
+                ? 'bg-white text-green-600  dark:bg-dark-600 dark:text-green-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -115,7 +115,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'gemini'
-                ? 'bg-white text-blue-600 shadow-sm dark:bg-dark-600 dark:text-blue-400'
+                ? 'bg-white text-blue-600  dark:bg-dark-600 dark:text-blue-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -140,7 +140,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'antigravity'
-                ? 'bg-white text-purple-600 shadow-sm dark:bg-dark-600 dark:text-purple-400'
+                ? 'bg-white text-purple-600  dark:bg-dark-600 dark:text-purple-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -153,7 +153,7 @@
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'grok'
-                ? 'bg-white text-zinc-900 shadow-sm dark:bg-dark-600 dark:text-zinc-100'
+                ? 'bg-white text-zinc-900  dark:bg-dark-600 dark:text-zinc-100'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
@@ -2614,7 +2614,7 @@
             <label class="input-label text-xs">{{ t('admin.accounts.quotaControl.cacheTTLOverride.target') }}</label>
             <select
               v-model="cacheTTLOverrideTarget"
-              class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-dark-500 dark:bg-dark-700 dark:text-white"
+              class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm  focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-dark-500 dark:bg-dark-700 dark:text-white"
             >
               <option value="5m">5m</option>
               <option value="1h">1h</option>
