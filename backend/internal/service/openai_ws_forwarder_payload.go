@@ -106,6 +106,12 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		if v := strings.TrimSpace(c.Request.Header.Get("x-client-request-id")); v != "" {
 			headers.Set("x-client-request-id", v)
 		}
+		headers.Del("x-codex-beta-features")
+		for _, value := range c.Request.Header.Values("x-codex-beta-features") {
+			if value = strings.TrimSpace(value); value != "" {
+				headers.Add("x-codex-beta-features", value)
+			}
+		}
 	}
 
 	// 会话头：兼容旧 underscore + 官方 hyphen 双写。
