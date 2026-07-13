@@ -49,8 +49,12 @@ func TestShouldRefreshOpenAICodexSnapshot(t *testing.T) {
 		t.Fatal("expected complete non-rate-limited usage to skip codex snapshot refresh")
 	}
 
-	if !shouldRefreshOpenAICodexSnapshot(&Account{}, &UsageInfo{FiveHour: nil, SevenDay: &UsageProgress{}}, now) {
-		t.Fatal("expected missing 5h snapshot to require refresh")
+	if shouldRefreshOpenAICodexSnapshot(&Account{}, &UsageInfo{FiveHour: nil, SevenDay: &UsageProgress{}}, now) {
+		t.Fatal("expected a weekly-only snapshot to be complete")
+	}
+
+	if !shouldRefreshOpenAICodexSnapshot(&Account{}, &UsageInfo{}, now) {
+		t.Fatal("expected usage with no upstream windows to require refresh")
 	}
 
 	staleAt := now.Add(-(openAIProbeCacheTTL + time.Minute)).Format(time.RFC3339)
@@ -242,6 +246,16 @@ func TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow(t *testing.T) {
 		}
 	})
 
+	t.Run("explicitly cleared 5h window stays absent", func(t *testing.T) {
+		extra := map[string]any{
+			"codex_5h_used_percent": nil,
+			"codex_7d_used_percent": 3.0,
+		}
+		if progress := buildCodexUsageProgressFromExtra(extra, "5h", now); progress != nil {
+			t.Fatalf("expected nil 5h progress, got %#v", progress)
+		}
+	})
+
 	t.Run("expired 7d window zeroes utilization", func(t *testing.T) {
 		extra := map[string]any{
 			"codex_7d_used_percent": 88.0,
@@ -255,4 +269,27 @@ func TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow(t *testing.T) {
 			t.Fatalf("expected Utilization=0 for expired 7d window, got %v", progress.Utilization)
 		}
 	})
+}
+
+func TestApplyExtraToUsage_RemovesStaleFiveHourWindow(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 7, 13, 3, 5, 0, 0, time.UTC)
+	usage := &UsageInfo{
+		FiveHour: &UsageProgress{Utilization: 75},
+		SevenDay: &UsageProgress{Utilization: 20},
+	}
+	extra := map[string]any{
+		"codex_5h_used_percent": nil,
+		"codex_7d_used_percent": 3.0,
+		"codex_7d_reset_at":     "2026-07-20T03:05:00Z",
+	}
+
+	applyExtraToUsage(usage, extra, now)
+
+	if usage.FiveHour != nil {
+		t.Fatalf("expected stale 5h window to be removed, got %#v", usage.FiveHour)
+	}
+	if usage.SevenDay == nil || usage.SevenDay.Utilization != 3.0 {
+		t.Fatalf("expected weekly window utilization 3, got %#v", usage.SevenDay)
+	}
 }

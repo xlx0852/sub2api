@@ -499,7 +499,16 @@ func buildCodexSparkWindowExtraUpdates(usage *OpenAIQuotaUsage, now time.Time) m
 		return nil
 	}
 
-	updates := make(map[string]any)
+	updates := map[string]any{
+		"codex_5h_used_percent":        nil,
+		"codex_5h_reset_after_seconds": nil,
+		"codex_5h_window_minutes":      nil,
+		"codex_5h_reset_at":            nil,
+		"codex_7d_used_percent":        nil,
+		"codex_7d_reset_after_seconds": nil,
+		"codex_7d_window_minutes":      nil,
+		"codex_7d_reset_at":            nil,
+	}
 	if normalized.Used5hPercent != nil {
 		updates["codex_5h_used_percent"] = *normalized.Used5hPercent
 	}
