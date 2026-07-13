@@ -757,6 +757,21 @@ func isBareOpenAIResponsesPath(c *gin.Context) bool {
 	return strings.HasSuffix(normalizedPath, "/responses")
 }
 
+func isOpenAIRemoteCompactionV2Request(c *gin.Context, body []byte) bool {
+	stream, valid := parseOpenAICompatibleStream(body)
+	if !valid || !stream || c == nil || c.Request == nil {
+		return false
+	}
+	for _, header := range c.Request.Header.Values("x-codex-beta-features") {
+		for _, feature := range strings.Split(header, ",") {
+			if strings.TrimSpace(feature) == "remote_compaction_v2" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // normalizeOpenAIResponsesCompactRequest 分类两种入站 compact 形态：
 //
 //  1. legacy_path: POST .../responses/compact → unary JSON contract
@@ -766,6 +781,10 @@ func isBareOpenAIResponsesPath(c *gin.Context) bool {
 //
 // 返回归一化后的 body；ok=false 表示错误响应已写出，调用方应直接 return。
 func (h *OpenAIGatewayHandler) normalizeOpenAIResponsesCompactRequest(c *gin.Context, reqLog *zap.Logger, body []byte) ([]byte, bool) {
+	if isBareOpenAIResponsesPath(c) && service.HasCompactionTriggerInInput(body) && isOpenAIRemoteCompactionV2Request(c, body) {
+		return body, true
+	}
+
 	if service.IsOpenAIResponsesCompactPathForTest(c) || isOpenAIRemoteCompactPath(c) {
 		service.SetOpenAICompactMode(c, service.OpenAICompactModeLegacyPath)
 		if compactSeed := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String()); compactSeed != "" {
@@ -784,6 +803,9 @@ func (h *OpenAIGatewayHandler) normalizeOpenAIResponsesCompactRequest(c *gin.Con
 
 	if isBareOpenAIResponsesPath(c) && service.HasCompactionTriggerInInput(body) {
 		service.SetOpenAICompactMode(c, service.OpenAICompactModeBodySignalV2)
+		if gjson.GetBytes(body, "stream").Bool() {
+			service.MarkOpenAICompactClientStream(c)
+		}
 		// Force upstream legacy compact endpoint while keeping client path on /responses.
 		service.SetOpenAICompactForceUpstreamSuffix(c, "/compact")
 		if compactSeed := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String()); compactSeed != "" {
