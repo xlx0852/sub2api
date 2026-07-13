@@ -43,9 +43,14 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 	if strings.TrimSpace(upstreamModel) == "" {
 		upstreamModel = xai.DefaultChatModel
 	}
+	cacheIdentity := resolveGrokCacheIdentity(c, body, "", upstreamModel)
 	patchedBody, err := patchGrokResponsesBody(body, upstreamModel)
 	if err != nil {
 		return nil, err
+	}
+	patchedBody, err = applyGrokResponsesCacheIdentity(patchedBody, body, cacheIdentity, account.IsGrokOAuth())
+	if err != nil {
+		return nil, fmt.Errorf("apply grok prompt cache identity: %w", err)
 	}
 
 	token, _, err := s.GetAccessToken(ctx, account)
@@ -55,7 +60,7 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	defer releaseUpstreamCtx()
-	upstreamReq, err := buildGrokResponsesRequest(upstreamCtx, c, account, patchedBody, token)
+	upstreamReq, err := buildGrokResponsesRequest(upstreamCtx, c, account, patchedBody, token, cacheIdentity)
 	if err != nil {
 		return nil, err
 	}
@@ -654,7 +659,9 @@ func (s *OpenAIGatewayService) describeGrokComposerImage(
 	}
 
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
-	upstreamReq, err := buildGrokResponsesRequest(upstreamCtx, c, account, body, token)
+	// Image-description probes are auxiliary requests, not conversation turns.
+	// Do not bind them to the caller's Grok prompt-cache identity.
+	upstreamReq, err := buildGrokResponsesRequest(upstreamCtx, c, account, body, token, "")
 	releaseUpstreamCtx()
 	if err != nil {
 		return "", OpenAIUsage{}, fmt.Errorf("build grok composer image bridge request: %w", err)
@@ -820,7 +827,7 @@ func addOpenAIUsage(dst *OpenAIUsage, usage OpenAIUsage) {
 	dst.ImageOutputTokens += usage.ImageOutputTokens
 }
 
-func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token string) (*http.Request, error) {
+func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, cacheIdentity string) (*http.Request, error) {
 	targetURL, err := xai.BuildResponsesURL(account.GetGrokChatBaseURL())
 	if err != nil {
 		return nil, err
@@ -836,6 +843,7 @@ func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Acc
 	if xai.IsCLIChatProxyBaseURL(account.GetGrokChatBaseURL()) {
 		xai.ApplyGrokCLIChatHeaders(req)
 	}
+	applyGrokCacheHeaders(req.Header, cacheIdentity)
 	if c != nil {
 		if v := c.GetHeader("OpenAI-Beta"); strings.TrimSpace(v) != "" {
 			req.Header.Set("OpenAI-Beta", v)
