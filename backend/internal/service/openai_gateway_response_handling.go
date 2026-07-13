@@ -226,13 +226,22 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 		sendErrorEvent("stream_read_error")
 		return resultWithUsage(), fmt.Errorf("stream read error: %w", scanErr), true
 	}
-	processSSELine := func(line string, queueDrained bool) {
+	var processSSELine func(line string, queueDrained bool)
+	processSSELine = func(line string, queueDrained bool) {
 		if streamEarlyErr != nil {
 			return
 		}
 		// Extract data from SSE line (supports both "data: " and "data:" formats)
 		if data, ok := extractOpenAISSEDataLine(line); ok {
 			dataBytes := []byte(data)
+			if translation := getGrokCodexTranslation(c); translation != nil {
+				if payloads, rewritten := rewriteGrokCodexSSEData(dataBytes, translation); rewritten {
+					for index, payload := range payloads {
+						processSSELine("data: "+string(payload), queueDrained && index == len(payloads)-1)
+					}
+					return
+				}
+			}
 			if openAIStreamEventIsTerminal(data) {
 				sawTerminalEvent = true
 			}
@@ -863,6 +872,15 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		return nil, err
+	}
+	if translation := getGrokCodexTranslation(c); translation != nil {
+		if isEventStreamResponse(resp.Header) || bodyHasSSEFraming(body) {
+			if rewritten, changed := rewriteGrokCodexSSEBody(body, translation); changed {
+				body = rewritten
+			}
+		} else if rewritten, changed := rewriteGrokCustomCallsInJSON(body, translation); changed {
+			body = rewritten
+		}
 	}
 
 	// Detect SSE responses for ALL account types via Content-Type header.
