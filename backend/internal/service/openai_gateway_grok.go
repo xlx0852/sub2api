@@ -44,10 +44,11 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 		upstreamModel = xai.DefaultChatModel
 	}
 	cacheIdentity := resolveGrokCacheIdentity(c, body, "", upstreamModel)
-	patchedBody, err := patchGrokResponsesBody(body, upstreamModel)
+	patchedBody, translation, err := patchGrokResponsesBodyWithTranslation(body, upstreamModel)
 	if err != nil {
 		return nil, err
 	}
+	setGrokCodexTranslation(c, translation)
 	patchedBody, err = applyGrokResponsesCacheIdentity(patchedBody, body, cacheIdentity, account.IsGrokOAuth())
 	if err != nil {
 		return nil, fmt.Errorf("apply grok prompt cache identity: %w", err)
@@ -148,12 +149,18 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 }
 
 func patchGrokResponsesBody(body []byte, upstreamModel string) ([]byte, error) {
+	out, _, err := patchGrokResponsesBodyWithTranslation(body, upstreamModel)
+	return out, err
+}
+
+func patchGrokResponsesBodyWithTranslation(body []byte, upstreamModel string) ([]byte, *grokCodexTranslation, error) {
 	if !json.Valid(body) {
-		return nil, fmt.Errorf("invalid json request body")
+		return nil, nil, fmt.Errorf("invalid json request body")
 	}
+	translation := newGrokCodexTranslation(body)
 	out, err := sjson.SetBytes(body, "model", upstreamModel)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, unsupportedField := range []string{
 		"previous_response_id",
@@ -164,7 +171,7 @@ func patchGrokResponsesBody(body []byte, upstreamModel string) ([]byte, error) {
 		if gjson.GetBytes(out, unsupportedField).Exists() {
 			out, err = sjson.DeleteBytes(out, unsupportedField)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 	}
@@ -173,28 +180,28 @@ func patchGrokResponsesBody(body []byte, upstreamModel string) ([]byte, error) {
 			if gjson.GetBytes(out, unsupportedField).Exists() {
 				out, err = sjson.DeleteBytes(out, unsupportedField)
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 			}
 		}
 	}
 	out, err = sanitizeGrokResponsesUnsupportedFields(out)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	out, err = normalizeGrokResponsesInput(out)
+	out, err = normalizeGrokResponsesInput(out, translation)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	out, err = sanitizeGrokResponsesTools(out)
+	out, err = sanitizeGrokResponsesTools(out, translation)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	out, err = normalizeGrokResponsesTopLevel(out)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return out, nil
+	return out, translation, nil
 }
 
 func normalizeGrokResponsesTopLevel(body []byte) ([]byte, error) {
@@ -223,7 +230,7 @@ func normalizeGrokResponsesTopLevel(body []byte) ([]byte, error) {
 	return json.Marshal(payload)
 }
 
-func normalizeGrokResponsesInput(body []byte) ([]byte, error) {
+func normalizeGrokResponsesInput(body []byte, translation *grokCodexTranslation) ([]byte, error) {
 	var payload map[string]any
 	if err := decodeGrokJSON(body, &payload); err != nil {
 		return nil, err
@@ -242,6 +249,16 @@ func normalizeGrokResponsesInput(body []byte) ([]byte, error) {
 		}
 		itemType, _ := item["type"].(string)
 		switch strings.TrimSpace(itemType) {
+		case "custom_tool_call":
+			item["type"] = "function_call"
+			item["arguments"] = encodeGrokCustomToolInput(item["input"])
+			delete(item, "input")
+			delete(item, "status")
+			if name := strings.TrimSpace(fmt.Sprint(item["name"])); name != "" && translation != nil {
+				translation.customTools[name] = struct{}{}
+			}
+		case "custom_tool_call_output":
+			item["type"] = "function_call_output"
 		case "reasoning":
 			if item["content"] == nil {
 				delete(item, "content")
@@ -365,7 +382,7 @@ var grokResponsesSupportedToolTypes = map[string]struct{}{
 	"x_search":           {},
 }
 
-func sanitizeGrokResponsesTools(body []byte) ([]byte, error) {
+func sanitizeGrokResponsesTools(body []byte, translation *grokCodexTranslation) ([]byte, error) {
 	tools := gjson.GetBytes(body, "tools")
 	if !tools.Exists() || !tools.IsArray() {
 		return body, nil
@@ -377,8 +394,12 @@ func sanitizeGrokResponsesTools(body []byte) ([]byte, error) {
 		toolType := strings.TrimSpace(tool.Get("type").String())
 		if toolType == "namespace" {
 			namespaceName := firstNonEmpty(tool.Get("name").String(), tool.Get("namespace").String())
-			for _, nested := range tool.Get("tools").Array() {
-				normalized, keep, err := normalizeGrokResponsesTool(nested, namespaceName)
+			nestedTools := tool.Get("tools")
+			if !nestedTools.IsArray() {
+				nestedTools = tool.Get("children")
+			}
+			for _, nested := range nestedTools.Array() {
+				normalized, keep, err := normalizeGrokResponsesTool(nested, namespaceName, translation)
 				if err != nil {
 					return nil, err
 				}
@@ -388,7 +409,7 @@ func sanitizeGrokResponsesTools(body []byte) ([]byte, error) {
 			}
 			continue
 		}
-		normalized, keep, err := normalizeGrokResponsesTool(tool, "")
+		normalized, keep, err := normalizeGrokResponsesTool(tool, "", translation)
 		if err != nil {
 			return nil, err
 		}
@@ -415,6 +436,22 @@ func sanitizeGrokResponsesTools(body []byte) ([]byte, error) {
 	}
 
 	toolChoice := gjson.GetBytes(body, "tool_choice")
+	if toolChoice.IsObject() && strings.TrimSpace(toolChoice.Get("type").String()) == "custom" {
+		var choice map[string]any
+		if err := decodeGrokJSON([]byte(toolChoice.Raw), &choice); err != nil {
+			return nil, err
+		}
+		choice["type"] = "function"
+		encoded, err := json.Marshal(choice)
+		if err != nil {
+			return nil, err
+		}
+		body, err = sjson.SetRawBytes(body, "tool_choice", encoded)
+		if err != nil {
+			return nil, err
+		}
+		toolChoice = gjson.GetBytes(body, "tool_choice")
+	}
 	if toolChoice.Exists() && shouldDropGrokToolChoice(toolChoice, filteredTools) {
 		body, err = sjson.DeleteBytes(body, "tool_choice")
 		if err != nil {
@@ -430,7 +467,7 @@ func sanitizeGrokResponsesTools(body []byte) ([]byte, error) {
 	return body, nil
 }
 
-func normalizeGrokResponsesTool(tool gjson.Result, namespaceName string) (json.RawMessage, bool, error) {
+func normalizeGrokResponsesTool(tool gjson.Result, namespaceName string, translation *grokCodexTranslation) (json.RawMessage, bool, error) {
 	var item map[string]any
 	if err := decodeGrokJSON([]byte(tool.Raw), &item); err != nil {
 		return nil, false, err
@@ -440,10 +477,13 @@ func normalizeGrokResponsesTool(tool gjson.Result, namespaceName string) (json.R
 	case "tool_search", "image_generation":
 		return nil, false, nil
 	case "custom":
-		if strings.EqualFold(strings.TrimSpace(tool.Get("name").String()), "apply_patch") {
-			return nil, false, nil
+		name := strings.TrimSpace(tool.Get("name").String())
+		if name != "" && translation != nil {
+			translation.customTools[name] = struct{}{}
 		}
 		item["type"] = "function"
+		item["parameters"] = grokCustomFunctionParameters()
+		delete(item, "format")
 		toolType = "function"
 	}
 	if _, supported := grokResponsesSupportedToolTypes[toolType]; !supported {
