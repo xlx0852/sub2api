@@ -2,8 +2,10 @@
   <div
     data-testid="usage-window-row"
     :class="[
-      'grid w-[372px] max-w-full items-stretch gap-1.5 py-0.5',
-      hasStatsRow ? 'grid-cols-[142px_minmax(208px,1fr)]' : 'grid-cols-[142px]'
+      'grid min-w-0 w-full max-w-full items-stretch gap-1.5 py-0.5',
+      hasStatsRow
+        ? 'grid-cols-1 sm:grid-cols-[142px_minmax(208px,1fr)]'
+        : 'grid-cols-[minmax(0,142px)]'
     ]"
   >
     <div class="flex min-h-11 flex-col justify-center rounded-md border border-gray-100 bg-gray-50/80 px-2 py-1.5 dark:border-white/5 dark:bg-white/[0.03]">
@@ -20,7 +22,8 @@
       </div>
       <div class="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
         <div
-          :class="['h-full rounded-full transition-all duration-300', colorClasses.bar]"
+          data-testid="usage-progress-fill"
+          :class="['h-full rounded-full transition-all duration-300', progressToneClass]"
           :style="{ width: barWidth }"
         ></div>
       </div>
@@ -108,6 +111,12 @@ const displayPercent = computed(() => {
   return percent > 999 ? '>999%' : `${percent}%`
 })
 
+const progressToneClass = computed(() => {
+  if (props.utilization >= 100) return 'bg-red-500 dark:bg-red-400'
+  if (props.utilization >= 80) return 'bg-amber-500 dark:bg-amber-400'
+  return 'bg-emerald-500 dark:bg-emerald-400'
+})
+
 const showWindowStats = computed(() => {
   return !!props.windowStats && (props.windowStats.requests > 0 || props.windowStats.tokens > 0)
 })
@@ -120,20 +129,16 @@ const hasStatsRow = computed(() => {
 
 const colorClasses = computed(() => ({
   indigo: {
-    badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300',
-    bar: 'bg-indigo-500 dark:bg-indigo-400'
+    badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300'
   },
   emerald: {
-    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300',
-    bar: 'bg-emerald-500 dark:bg-emerald-400'
+    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300'
   },
   purple: {
-    badge: 'bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300',
-    bar: 'bg-purple-500 dark:bg-purple-400'
+    badge: 'bg-purple-100 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300'
   },
   amber: {
-    badge: 'bg-amber-100 text-amber-700 dark:bg-amber-950/70 dark:text-amber-300',
-    bar: 'bg-amber-500 dark:bg-amber-400'
+    badge: 'bg-amber-100 text-amber-700 dark:bg-amber-950/70 dark:text-amber-300'
   }
 }[props.color]))
 

@@ -1,5 +1,14 @@
 <template>
-  <div ref="rootRef" v-if="showUsageWindows" class="w-[372px] max-w-full">
+  <div ref="rootRef" v-if="variant === 'summary'" class="w-[304px] max-w-full">
+    <AccountUsageSummary
+      :presentation="presentation"
+      :loading="loading || todayStatsLoading"
+      :error="error"
+      @open="emit('open-details')"
+    />
+  </div>
+
+  <div ref="rootRef" v-else-if="showUsageWindows" class="account-usage-detail min-w-0 w-full max-w-full">
     <!-- Anthropic OAuth and Setup Token accounts: fetch real usage data -->
     <template
       v-if="
@@ -371,18 +380,10 @@
         </template>
 
         <div
-          v-if="grokRetryAfterLabel || grokQuotaStatusLine"
-          class="flex items-center gap-2 whitespace-nowrap text-[9px] leading-[13px] text-gray-500 dark:text-gray-400"
+          v-if="grokRetryAfterLabel"
+          class="whitespace-nowrap text-[9px] leading-[13px] text-gray-500 dark:text-gray-400"
         >
-          <span v-if="grokRetryAfterLabel">
-            {{ t('admin.accounts.usageWindow.grokRetryAfter', { time: grokRetryAfterLabel }) }}
-          </span>
-          <span
-            v-if="grokQuotaStatusLine"
-            :class="grokRetryAfterLabel ? 'border-l border-gray-200 pl-2 dark:border-gray-700' : ''"
-          >
-            {{ grokQuotaStatusLine }}
-          </span>
+          {{ t('admin.accounts.usageWindow.grokRetryAfter', { time: grokRetryAfterLabel }) }}
         </div>
         <div
           v-if="usageInfo?.error && !effectiveGrokBilling"
@@ -492,7 +493,7 @@
   </div>
 
   <!-- Non-OAuth/Setup-Token accounts -->
-  <div ref="rootRef" v-else class="w-[372px] max-w-full">
+  <div ref="rootRef" v-else class="w-full max-w-full">
     <!-- Gemini API Key accounts: show quota info -->
     <AccountQuotaInfo v-if="account.platform === 'gemini'" :account="account" />
     <!-- Key/Bedrock accounts: show today stats + optional quota bars -->
@@ -551,14 +552,19 @@ import { adminAPI } from '@/api/admin'
 import type { Account, AccountUsageInfo, GeminiCredentials, WindowStats } from '@/types'
 import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { enqueueUsageRequest } from '@/utils/usageLoadQueue'
-import { formatCompactNumber, formatRelativeTime } from '@/utils/format'
+import { formatCompactNumber } from '@/utils/format'
 import UsageProgressBar from './UsageProgressBar.vue'
 import UsageStatLine from './UsageStatLine.vue'
 import AccountQuotaInfo from './AccountQuotaInfo.vue'
 import OpenAIQuotaResetCell from './OpenAIQuotaResetCell.vue'
 import GrokQuotaProbeCell from './GrokQuotaProbeCell.vue'
 import QuotaActionButton from './QuotaActionButton.vue'
+import AccountUsageSummary from './AccountUsageSummary.vue'
 import type { GrokBillingSnapshot } from '@/api/admin/grok'
+import {
+  buildAccountUsagePresentation,
+  type AccountUsagePresentation
+} from '@/utils/accountUsagePresentation'
 
 // Module-level cache shared across all AccountUsageCell instances
 const _usageCache = new Map<number, { data: AccountUsageInfo; ts: number }>()
@@ -570,13 +576,25 @@ const props = withDefaults(
     todayStats?: WindowStats | null
     todayStatsLoading?: boolean
     manualRefreshToken?: number
+    variant?: 'summary' | 'detail'
   }>(),
   {
     todayStats: null,
     todayStatsLoading: false,
-    manualRefreshToken: 0
+    manualRefreshToken: 0,
+    variant: 'detail'
   }
 )
+
+const emit = defineEmits<{
+  'open-details': []
+  'state-change': [state: {
+    usageInfo: AccountUsageInfo | null
+    loading: boolean
+    error: string | null
+    presentation: AccountUsagePresentation
+  }]
+}>()
 
 const { t } = useI18n()
 const desktopViewportQuery = '(min-width: 768px)'
@@ -981,6 +999,26 @@ const effectiveGrokBilling = computed<GrokBillingSnapshot | null>(() => {
   return liveGrokBilling.value || usageInfo.value?.grok_billing || null
 })
 
+const presentationUsageInfo = computed<AccountUsageInfo | null>(() => {
+  if (!liveGrokBilling.value) return usageInfo.value
+  return {
+    ...(usageInfo.value || {
+      updated_at: liveGrokBilling.value.fetched_at || null,
+      five_hour: null,
+      seven_day: null,
+      seven_day_sonnet: null
+    }),
+    grok_billing: liveGrokBilling.value
+  }
+})
+
+const presentation = computed(() => buildAccountUsagePresentation({
+  account: props.account,
+  usageInfo: presentationUsageInfo.value,
+  todayStats: props.todayStats,
+  t
+}))
+
 const onGrokBillingRefreshed = (billing: GrokBillingSnapshot | null) => {
   liveGrokBilling.value = billing
   // Invalidate usage cache so next mount reload picks up persisted snapshot.
@@ -1039,30 +1077,6 @@ const grokQuotaUnknownLabel = computed(() => {
   return usageInfo.value?.grok_quota_snapshot_state === 'no_headers'
     ? t('admin.accounts.usageWindow.grokNoHeaders')
     : t('admin.accounts.usageWindow.grokUnknown')
-})
-const grokQuotaStatusLine = computed(() => {
-  if (props.account.platform !== 'grok') return null
-  const parts: string[] = []
-  const status = usageInfo.value?.grok_last_status_code || effectiveGrokBilling.value?.status_code
-  if (status) {
-    parts.push(t('admin.accounts.usageWindow.grokLastStatus', { status }))
-  }
-  const probeAt = usageInfo.value?.grok_last_quota_probe_at || effectiveGrokBilling.value?.fetched_at
-  if (probeAt) {
-    parts.push(
-      t('admin.accounts.usageWindow.grokLastProbe', {
-        time: formatRelativeTime(probeAt)
-      })
-    )
-  }
-  if (usageInfo.value?.grok_last_headers_seen_at) {
-    parts.push(
-      t('admin.accounts.usageWindow.grokLastHeadersSeen', {
-        time: formatRelativeTime(usageInfo.value.grok_last_headers_seen_at)
-      })
-    )
-  }
-  return parts.length > 0 ? parts.join(' | ') : null
 })
 const grokLocalUsage = computed(() => usageInfo.value?.grok_local_usage || props.todayStats || null)
 const grokPlanOrEntitlementLabel = computed(() => {
@@ -1391,6 +1405,19 @@ watch(
 )
 
 watch(
+  [presentationUsageInfo, loading, error, presentation],
+  () => {
+    emit('state-change', {
+      usageInfo: presentationUsageInfo.value,
+      loading: loading.value,
+      error: error.value,
+      presentation: presentation.value
+    })
+  },
+  { immediate: true }
+)
+
+watch(
   [rootRef, shouldLazyLoadOnMobile],
   () => {
     if (shouldLazyLoadOnMobile.value) {
@@ -1426,3 +1453,11 @@ onUnmounted(() => {
   desktopViewportMediaQuery = null
 })
 </script>
+
+<style scoped>
+.account-usage-detail :deep([data-testid='usage-window-row']) {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem;
+}
+
+</style>
