@@ -171,6 +171,29 @@ func TestBuildCodexUsageExtraUpdates_StoresFiveHourUsedPercent(t *testing.T) {
 	}
 }
 
+func TestBuildCodexUsageExtraUpdates_WeeklyOnlyClearsFiveHourWindow(t *testing.T) {
+	weeklyUsed := 3.0
+	weeklyReset := 7 * 24 * 60 * 60
+	weeklyWindow := 7 * 24 * 60
+	snapshot := &OpenAICodexUsageSnapshot{
+		PrimaryUsedPercent:       &weeklyUsed,
+		PrimaryResetAfterSeconds: &weeklyReset,
+		PrimaryWindowMinutes:     &weeklyWindow,
+		UpdatedAt:                "2026-07-13T03:05:00Z",
+	}
+
+	updates := buildCodexUsageExtraUpdates(snapshot, time.Time{})
+	if got := updates["codex_7d_used_percent"]; got != 3.0 {
+		t.Fatalf("codex_7d_used_percent = %v, want 3", got)
+	}
+	if got, ok := updates["codex_5h_used_percent"]; !ok || got != nil {
+		t.Fatalf("codex_5h_used_percent = %v, present=%v; want explicit nil", got, ok)
+	}
+	if got, ok := updates["codex_secondary_used_percent"]; !ok || got != nil {
+		t.Fatalf("codex_secondary_used_percent = %v, present=%v; want explicit nil", got, ok)
+	}
+}
+
 func TestBuildCodexUsageExtraUpdates_FallbackToNowWhenUpdatedAtInvalid(t *testing.T) {
 	primaryUsed := 15.0
 	primaryReset := 30

@@ -119,6 +119,26 @@ func TestBuildCodexSparkWindowExtraUpdates_ContainsCodexKeys(t *testing.T) {
 	require.InDelta(t, 0.15, updates["codex_7d_used_percent"], 1e-9)
 }
 
+func TestBuildCodexSparkWindowExtraUpdates_WeeklyOnlyClearsFiveHourWindow(t *testing.T) {
+	usage := &OpenAIQuotaUsage{
+		AdditionalRateLimits: []OpenAIAdditionalRateLimit{{
+			MeteredFeature: "codex_bengalfox",
+			RateLimit: &OpenAIRateLimit{
+				PrimaryWindow: &OpenAIRateLimitWindow{
+					UsedPercent:        3,
+					LimitWindowSeconds: 604800,
+					ResetAfterSeconds:  604800,
+				},
+			},
+		}},
+	}
+
+	updates := buildCodexSparkWindowExtraUpdates(usage, time.Now().UTC())
+	require.Equal(t, 3.0, updates["codex_7d_used_percent"])
+	require.Contains(t, updates, "codex_5h_used_percent")
+	require.Nil(t, updates["codex_5h_used_percent"])
+}
+
 // TestBuildCodexSparkWindowExtraUpdates_NilUsage 验证 nil usage 返回 nil。
 func TestBuildCodexSparkWindowExtraUpdates_NilUsage(t *testing.T) {
 	require.Nil(t, buildCodexSparkWindowExtraUpdates(nil, time.Now()))
