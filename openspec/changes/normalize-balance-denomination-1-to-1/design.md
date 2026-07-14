@@ -7,7 +7,7 @@
 ### Goals
 
 - 新用户余额与充值金额按 `1:1` 表达。
-- 迁移前后普通用户的可调用量不变；唯一历史 `1:5` 充值账户按运营方确认的实际充值倍率恢复本金口径。
+- 迁移前后普通用户的可调用量不变；两个历史 `1:5` 充值账户按运营方确认的实际充值倍率恢复充值本金口径。
 - 每个模型、分组和媒体类能力的相对售价不变。
 - 平台同等实付金额可承载的上游成本和利润不变。
 - 用户在余额、API Key 限额、用量记录和邀请返利页面看到一致的新单位。
@@ -21,23 +21,25 @@
 
 ## Core Invariant
 
-设全站客户计费放大因子 `S = 10`；普通资产因子也是 `10`，唯一特殊账户 `s928215036@gmail.com` 的充值资产因子 `A = 5`：
+设全站客户计费放大因子 `S = 10`，特殊充值因子 `A = 5`：
 
 ```text
-new_balance = old_balance / A
+normal_migrated_balance = old_balance / S
+special_recharge_delta = completed_old_recharge * (1 / A - 1 / S)
+new_balance = normal_migrated_balance + special_recharge_delta
 new_customer_charge = old_customer_charge / S
 new_recharge_multiplier = old_effective_recharge_multiplier / S = 1
 ```
 
-普通用户 `A = S = 10`，可调用量保持不变：
+普通用户没有 `special_recharge_delta`，可调用量保持不变：
 
 ```text
 old_balance / old_customer_charge
-  = (old_balance / A) / (old_customer_charge / S)
+  = (old_balance / S) / (old_customer_charge / S)
   = new_balance / new_customer_charge
 ```
 
-特殊账户按 `A = 5` 折算其充值资产是明确的运营例外，不适用普通用户可调用量不变的等式；其费率和用量字段仍使用 `S = 10`，避免形成用户专属计费单位。
+特殊账户只对历史充值事件使用 `A = 5`。不能把包含历史消耗后的净余额整体除以 `5`，否则会错误放大基础赠送与消耗；费率和用量字段仍使用 `S = 10`。
 
 ## Data Classification
 
@@ -45,7 +47,7 @@ old_balance / old_customer_charge
 
 | Domain | Fields |
 | --- | --- |
-| User funds | 普通用户的 `users.balance`, `users.frozen_balance`, `users.total_recharged` 和固定阈值；特殊账户这些字段除以 `5` |
+| User funds | 普通用户字段除以 `10`；特殊账户余额先按 `÷10`，再增加已完成充值的 `1/10` 差额，`total_recharged` 按 `÷5` |
 | Default grants | `default_balance` and every `auth_source_default_*_balance` setting |
 | API key quota | `api_keys.quota`, `api_keys.quota_used` |
 | Platform quota | all limit and usage fields in `user_platform_quotas` |
@@ -148,7 +150,7 @@ Keep the before/after reconciliation export available for support inquiries.
 
 - Partial migration creates direct monetary loss or windfall. Mitigation: one DB transaction, a short end-of-transaction billing-write drain lock, and automatic rollback on any guard failure.
 - Stale Redis values can apply old deductions to new balances. Mitigation: targeted billing/auth/quota cache invalidation before traffic resumes.
-- Historical order ratios vary. Mitigation: follow the operator-confirmed single exception instead of inferring live balances from all payment orders, and record the exact special user ID/factors in the migration marker.
+- Historical order ratios vary. Mitigation: restrict the exception to the two operator-confirmed accounts, derive the balance correction from completed recharge events, and record exact before/after values in an idempotent marker.
 - Users may interpret the smaller balance number as lost funds. Mitigation: publish the exact before/after formula and retain a reconciliation export.
 - Historical refund behavior is not part of acceptance per operator decision; no in-flight refund may exist at cutover.
 

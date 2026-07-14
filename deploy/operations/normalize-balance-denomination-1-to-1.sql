@@ -8,6 +8,10 @@
 --   3. a verified PostgreSQL backup exists;
 --   4. exactly one special historical 1:5 recharge account exists.
 -- This script is intentionally not embedded in application startup migrations.
+-- Historical note: this is the exact 2026-07-14 cutover script. Do not reuse it
+-- without also applying compensate-special-1-to-5-accounts.sql; that follow-up
+-- separates 1:5 recharge credits from globally 1:10 usage charges and adds the
+-- second operator-confirmed special account.
 
 BEGIN;
 SET LOCAL lock_timeout = '10s';
