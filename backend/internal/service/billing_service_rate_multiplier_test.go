@@ -35,6 +35,19 @@ func TestCalculateCost_RateMultiplier_NegativeClampedToZero(t *testing.T) {
 	}
 }
 
+func TestBalanceDenominationOneToOnePreservesNormalPurchasingPower(t *testing.T) {
+	svc := newTestBillingService()
+	tokens := UsageTokens{InputTokens: 1000, OutputTokens: 500}
+
+	oldCost, err := svc.CalculateCost("claude-sonnet-4", tokens, 1)
+	require.NoError(t, err)
+	newCost, err := svc.CalculateCost("claude-sonnet-4", tokens, 0.1)
+	require.NoError(t, err)
+
+	require.InDelta(t, oldCost.ActualCost/10, newCost.ActualCost, 1e-12)
+	require.InDelta(t, 100/oldCost.ActualCost, 10/newCost.ActualCost, 1e-9)
+}
+
 // TestCalculateImageCost_RateMultiplier_NegativeClampedToZero 图片按次计费路径
 // 同样遵循"负数 → 0"语义。
 func TestCalculateImageCost_RateMultiplier_NegativeClampedToZero(t *testing.T) {
