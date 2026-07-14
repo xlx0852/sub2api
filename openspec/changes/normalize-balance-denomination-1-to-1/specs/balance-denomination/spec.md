@@ -2,13 +2,20 @@
 
 ### Requirement: Purchasing Power Preservation
 
-The system SHALL preserve each user's purchasing power when converting the balance denomination from effective `1:10` to `1:1`.
+The system SHALL preserve normal users' purchasing power when converting the balance denomination from effective `1:10` to `1:1`.
 
 #### Scenario: Existing balance and request charge are converted
 
 - **WHEN** an old balance and its corresponding customer charge are migrated
 - **THEN** both values SHALL be divided by `10`
 - **AND** the number of equivalent requests purchasable with that balance SHALL remain unchanged
+
+#### Scenario: Confirmed historical 1:5 recharge account is converted
+
+- **WHEN** the unique account `s928215036@gmail.com` is migrated
+- **THEN** its recharge-backed balance assets and balance-order denomination SHALL be divided by `5`
+- **AND** its customer usage charges, API-key quotas and platform usage SHALL still be divided by `10`
+- **AND** the migration SHALL fail if the email does not resolve to exactly one user
 
 ### Requirement: One-to-One Recharge
 
@@ -22,7 +29,7 @@ After cutover, the system SHALL credit one balance unit for each one unit of rec
 
 ### Requirement: Atomic Denomination Migration
 
-The migration SHALL update all customer-denominated balances, limits, rates and histories atomically while application writes are stopped.
+The migration SHALL update all customer-denominated balances, limits, rates and histories atomically, using a short billing-write drain lock only for the final hot-field conversion.
 
 #### Scenario: Migration succeeds
 

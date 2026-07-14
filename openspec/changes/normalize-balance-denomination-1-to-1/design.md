@@ -7,7 +7,7 @@
 ### Goals
 
 - 新用户余额与充值金额按 `1:1` 表达。
-- 迁移前后每个用户的可调用量不变。
+- 迁移前后普通用户的可调用量不变；唯一历史 `1:5` 充值账户按运营方确认的实际充值倍率恢复本金口径。
 - 每个模型、分组和媒体类能力的相对售价不变。
 - 平台同等实付金额可承载的上游成本和利润不变。
 - 用户在余额、API Key 限额、用量记录和邀请返利页面看到一致的新单位。
@@ -21,23 +21,23 @@
 
 ## Core Invariant
 
-设旧单位放大因子 `S = 10`：
+设全站客户计费放大因子 `S = 10`；普通资产因子也是 `10`，唯一特殊账户 `s928215036@gmail.com` 的充值资产因子 `A = 5`：
 
 ```text
-new_balance = old_balance / S
+new_balance = old_balance / A
 new_customer_charge = old_customer_charge / S
 new_recharge_multiplier = old_effective_recharge_multiplier / S = 1
 ```
 
-用户可调用量保持不变：
+普通用户 `A = S = 10`，可调用量保持不变：
 
 ```text
 old_balance / old_customer_charge
-  = (old_balance / S) / (old_customer_charge / S)
+  = (old_balance / A) / (old_customer_charge / S)
   = new_balance / new_customer_charge
 ```
 
-这一等式是切换的唯一业务验收标准。
+特殊账户按 `A = 5` 折算其充值资产是明确的运营例外，不适用普通用户可调用量不变的等式；其费率和用量字段仍使用 `S = 10`，避免形成用户专属计费单位。
 
 ## Data Classification
 
@@ -45,7 +45,7 @@ old_balance / old_customer_charge
 
 | Domain | Fields |
 | --- | --- |
-| User funds | `users.balance`, `users.frozen_balance`, `users.total_recharged`; fixed `balance_notify_threshold` |
+| User funds | 普通用户的 `users.balance`, `users.frozen_balance`, `users.total_recharged` 和固定阈值；特殊账户这些字段除以 `5` |
 | Default grants | `default_balance` and every `auth_source_default_*_balance` setting |
 | API key quota | `api_keys.quota`, `api_keys.quota_used` |
 | Platform quota | all limit and usage fields in `user_platform_quotas` |
@@ -53,7 +53,8 @@ old_balance / old_customer_charge
 | Independent media rate | `groups.image_rate_multiplier` only when `image_rate_independent=true`; `groups.video_rate_multiplier` only when `video_rate_independent=true` |
 | Subscription quota | non-zero group daily/weekly/monthly limits and corresponding `user_subscriptions.*_usage_usd` |
 | Customer usage history | `usage_logs.actual_cost`, `usage_logs.rate_multiplier`; dashboard hourly/daily `actual_cost` |
-| Balance order denomination | `payment_orders.amount` and balance-order `refund_amount`; `pay_amount` remains unchanged |
+| Billing consistency ledger | `billing_usage_entries.delta_usd` |
+| Balance order denomination | 普通余额订单的 `amount/refund_amount` 除以 `10`，特殊账户余额订单除以 `5`；`pay_amount` 不变 |
 | Redeem and promotion | monetary `redeem_codes.value`, `promo_codes.bonus_amount`, `promo_code_usages.bonus_amount` |
 | Affiliate accounting | `user_affiliates` quota/history fields and monetary/snapshot fields in `user_affiliate_ledger` |
 | Batch billing | customer-denominated estimated, held, actual and billed fields, only if preflight finds historical rows |
@@ -79,24 +80,24 @@ old_balance / old_customer_charge
 
 ### 1. Freeze and preflight
 
-1. Select a low-traffic window and publish a short maintenance notice.
+1. Select a low-traffic window and pre-warm a parallel application instance.
 2. Disable new recharge orders.
 3. Confirm there are no payment orders in `PENDING`, `PAID`, `RECHARGING`, refund-pending or other in-flight states.
 4. Confirm there are no running batch jobs and no active billing workers holding unsettled amounts.
 5. Record row counts and sums for every field to be migrated.
 6. Back up PostgreSQL, `.env`, Compose, Nginx and the current binary/resources.
 
-### 2. Stop writes
+### 2. Online history conversion and write drain
 
-1. Route Nginx to a maintenance response or stop the application after draining requests.
-2. Verify no new `usage_logs`, payment orders or affiliate ledger rows are being written.
-3. Acquire a PostgreSQL advisory lock dedicated to this migration.
+1. Keep the active application and Nginx online while the transaction converts historical usage rows up to a captured ID.
+2. Acquire a PostgreSQL advisory lock dedicated to this migration.
+3. At the end of the transaction, briefly lock `users` to drain billing transactions, capture the new usage-log high-water mark and convert the catch-up range.
 
 ### 3. Atomic conversion
 
 Execute one reviewed SQL transaction that:
 
-1. Converts every stored old-denomination field with decimal division by `10`.
+1. Converts every stored old-denomination field with decimal division by `10`, except the explicitly identified special recharge assets which divide by `5`.
 2. Sets `BALANCE_RECHARGE_MULTIPLIER=1`.
 3. Converts group/user-specific customer billing multipliers by `10`.
 4. Leaves raw costs, pay amounts and relative factors unchanged.
@@ -107,8 +108,9 @@ Do not perform the migration as a sequence of admin API calls because concurrent
 ### 4. Cache and service recovery
 
 1. Invalidate only application billing/auth/quota caches; do not use an unconditional Redis `FLUSHALL`.
-2. Start a new application instance against the migrated database.
-3. Keep recharge disabled until all reconciliation checks pass.
+2. Restart the already healthy parallel instance against the migrated database so it has no old in-process rate cache.
+3. Switch Nginx only after the parallel instance is healthy; then drain the old instance and reconcile any old-denomination in-flight usage rows.
+4. Keep recharge disabled until all reconciliation checks pass.
 
 ### 5. Reconciliation
 
@@ -131,24 +133,25 @@ Then create a small recharge order and confirm payment `P` credits exactly `P` b
 
 Publish the following explicit message before users next see their balances:
 
-> 系统已将余额记账单位从 1:10 统一为 1:1。您的余额数字和每次使用费用均同比缩小为原来的 1/10，可用请求量和实际价格不变。例如，原余额 1000、单次扣费 10，调整后为余额 100、单次扣费 1。
+> 系统余额记账单位已由旧的放大单位统一调整为 1:1。普通历史余额及每次使用费用均同比缩小为原来的 1/10；历史特殊倍率充值已按其实际充值倍率折算。此次调整只改变显示和记账单位，不改变正常账户的可用请求量、模型实际价格或充值本金价值。此后充值本金 1 元将到账 1 个余额单位。
 
 Keep the before/after reconciliation export available for support inquiries.
 
 ## Rollback
 
 - Do not roll back by multiplying live values by `10`; requests written after cutover would be corrupted.
-- If validation fails before reopening traffic, keep writes stopped and restore the complete pre-migration PostgreSQL backup plus the previous application/config bundle.
-- Restore the old Nginx upstream only after the old database and old `BALANCE_RECHARGE_MULTIPLIER` are both active.
+- Any failure before commit rolls the transaction back and leaves the old service/database denomination active.
+- After commit, do not restore a stale backup over new writes. Keep the new denomination and forward-reconcile old-instance in-flight rows from the recorded usage-log high-water mark.
+- A full backup restore is reserved for an operator-declared disaster recovery event with traffic explicitly frozen and acknowledged data-loss boundaries.
 
 ## Risks / Trade-offs
 
-- Partial migration creates direct monetary loss or windfall. Mitigation: one DB transaction with writes stopped.
+- Partial migration creates direct monetary loss or windfall. Mitigation: one DB transaction, a short end-of-transaction billing-write drain lock, and automatic rollback on any guard failure.
 - Stale Redis values can apply old deductions to new balances. Mitigation: targeted billing/auth/quota cache invalidation before traffic resumes.
-- Old `1:5` order records do not represent the manual 50% compensation alone. Mitigation: use the confirmed effective `1:10` denomination globally, including admin balance adjustments, instead of deriving user balances from payment orders.
+- Historical order ratios vary. Mitigation: follow the operator-confirmed single exception instead of inferring live balances from all payment orders, and record the exact special user ID/factors in the migration marker.
 - Users may interpret the smaller balance number as lost funds. Mitigation: publish the exact before/after formula and retain a reconciliation export.
 - Historical refund behavior is not part of acceptance per operator decision; no in-flight refund may exist at cutover.
 
 ## Approval Gate
 
-This document records the plan only. No setting, database row, multiplier or production service shall be changed until the operator explicitly approves execution during a low-traffic window.
+The operator explicitly approved execution. Production completed the transactional cutover on 2026-07-14, followed by blue-green traffic switching, tail reconciliation and announcement publication.
