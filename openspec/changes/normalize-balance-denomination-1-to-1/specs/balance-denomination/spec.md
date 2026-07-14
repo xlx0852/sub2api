@@ -10,12 +10,13 @@ The system SHALL preserve normal users' purchasing power when converting the bal
 - **THEN** both values SHALL be divided by `10`
 - **AND** the number of equivalent requests purchasable with that balance SHALL remain unchanged
 
-#### Scenario: Confirmed historical 1:5 recharge account is converted
+#### Scenario: Confirmed historical 1:5 recharge accounts are converted
 
-- **WHEN** the unique account `s928215036@gmail.com` is migrated
-- **THEN** its recharge-backed balance assets and balance-order denomination SHALL be divided by `5`
-- **AND** its customer usage charges, API-key quotas and platform usage SHALL still be divided by `10`
-- **AND** the migration SHALL fail if the email does not resolve to exactly one user
+- **WHEN** `s928215036@gmail.com` and `shizeying@joyme.sg` are migrated
+- **THEN** their completed historical recharge credits and balance-order denomination SHALL be divided by `5`
+- **AND** their base grants, customer usage charges, API-key quotas and platform usage SHALL still be divided by `10`
+- **AND** each net balance SHALL be rebuilt from the normal `1:10` balance plus the missing recharge-credit delta
+- **AND** the migration SHALL fail if either email does not resolve to exactly one user
 
 ### Requirement: One-to-One Recharge
 

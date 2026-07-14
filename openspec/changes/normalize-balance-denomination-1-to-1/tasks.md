@@ -29,3 +29,4 @@
 - [x] 4.4 Observe a completed production recharge canary where `50.00` principal credited `50.00` balance.
 - [x] 4.5 Switch traffic, publish the popup customer notice and monitor billing errors.
 - [x] 4.6 Retain the old application bundle and verified database backup for rollback.
+- [x] 4.7 Correct both operator-confirmed 1:5 recharge accounts with event-based balance compensation and an idempotent audit marker.
