@@ -60,6 +60,11 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 		return true
 	}
 	shouldDisable := s.rateLimitService.HandleUpstreamError(stateCtx, account, statusCode, headers, responseBody)
+	class := ClassifyUpstreamOutcome(statusCode, nil, false)
+	if class == UpstreamOutcomeCredential || class == UpstreamOutcomeQuota {
+		// Invalidate process-local sticky epochs so subsequent sticky hits fall through.
+		BumpOpenAIAccountStickyEpoch(account.ID)
+	}
 	if shouldDisable {
 		s.BlockAccountScheduling(account, time.Time{}, "upstream_disable")
 	}

@@ -391,9 +391,13 @@ func (s *OpenAIGatewayService) resolveAccountByPreviousResponseIDForCapability(
 		_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
 		return 0, nil, "", nil
 	}
-	// 非 WSv2 场景（如 force_http/全局关闭）不应使用 previous_response_id 粘连，
-	// 以保持“回滚到 HTTP”后的历史行为一致性。
-	if s.getOpenAIWSProtocolResolver().Resolve(account).Transport != OpenAIUpstreamTransportResponsesWebsocketV2 {
+	// force_http keeps historical behavior: ignore previous_response_id affinity entirely.
+	if account.IsOpenAIWSForceHTTPEnabled() || (s.cfg != nil && s.cfg.Gateway.OpenAIWS.ForceHTTP) {
+		return 0, nil, "", nil
+	}
+	// HTTP/SSE affinity is allowed when a binding exists (written after successful turns).
+	if !s.responseAccountEpochMatches(ctx, derefGroupID(groupID), responseID, account) {
+		_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
 		return 0, nil, "", nil
 	}
 	if shouldClearStickySession(account, requestedModel) || !account.IsOpenAI() || !account.IsSchedulable() {
