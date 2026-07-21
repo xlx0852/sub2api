@@ -28,16 +28,24 @@
         <div class="home-nav-links">
           <a href="#features">{{ t('home.navigation.features') }}</a>
           <a href="#providers">{{ t('home.navigation.models') }}</a>
-          <a v-if="docUrl" :href="docUrl" target="_blank" rel="noopener noreferrer">
+          <a
+            v-if="isExternalDocUrl"
+            :href="docUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             {{ t('home.navigation.docs') }}
           </a>
+          <router-link v-else to="/docs">
+            {{ t('home.navigation.docs') }}
+          </router-link>
         </div>
 
         <div class="home-nav-actions">
           <LocaleSwitcher />
 
           <a
-            v-if="docUrl"
+            v-if="isExternalDocUrl"
             :href="docUrl"
             target="_blank"
             rel="noopener noreferrer"
@@ -47,6 +55,15 @@
           >
             <Icon name="book" size="md" />
           </a>
+          <router-link
+            v-else
+            to="/docs"
+            class="home-icon-btn"
+            :title="t('home.viewDocs')"
+            :aria-label="t('home.viewDocs')"
+          >
+            <Icon name="book" size="md" />
+          </router-link>
 
           <button
             type="button"
@@ -107,7 +124,7 @@
                   <Icon name="arrowRight" size="sm" :stroke-width="2" />
                 </router-link>
                 <a
-                  v-if="docUrl"
+                  v-if="isExternalDocUrl"
                   :href="docUrl"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -115,6 +132,13 @@
                 >
                   {{ t('home.docs') }}
                 </a>
+                <router-link
+                  v-else
+                  to="/docs"
+                  class="home-btn home-btn-secondary"
+                >
+                  {{ t('home.docs') }}
+                </router-link>
               </div>
             </div>
 
@@ -329,7 +353,7 @@
               <Icon name="arrowRight" size="sm" :stroke-width="2" />
             </router-link>
             <a
-              v-if="docUrl"
+              v-if="isExternalDocUrl"
               :href="docUrl"
               target="_blank"
               rel="noopener noreferrer"
@@ -337,6 +361,13 @@
             >
               {{ t('home.docs') }}
             </a>
+            <router-link
+              v-else
+              to="/docs"
+              class="home-btn home-btn-secondary"
+            >
+              {{ t('home.docs') }}
+            </router-link>
           </div>
         </div>
       </section>
@@ -356,13 +387,16 @@
           </div>
           <div class="footer-links">
             <a
-              v-if="docUrl"
+              v-if="isExternalDocUrl"
               :href="docUrl"
               target="_blank"
               rel="noopener noreferrer"
             >
               {{ t('home.docs') }}
             </a>
+            <router-link v-else to="/docs">
+              {{ t('home.docs') }}
+            </router-link>
           </div>
         </div>
         <div class="footer-bottom">
@@ -417,7 +451,9 @@ const siteLogo = computed(() => appStore.cachedPublicSettings?.site_logo || appS
     ? configuredSubtitle
     : t('home.defaultSubtitle')
 })
-const docUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))
+const externalDocUrl = computed(() => sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || ''))
+const docUrl = computed(() => externalDocUrl.value || '/docs')
+const isExternalDocUrl = computed(() => Boolean(externalDocUrl.value))
 const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')
 
 // Check if homeContent is a URL (for iframe display)

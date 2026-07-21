@@ -34,3 +34,21 @@ describe('doc_url sanitization', () => {
     expect(keyUsageViewSource).toContain('sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl')
   })
 })
+
+describe('doc_url fallback to built-in /docs', () => {
+  it('HomeView falls back to /docs when external doc_url is empty', () => {
+    expect(homeViewSource).toContain("externalDocUrl.value || '/docs'")
+    expect(homeViewSource).toContain('isExternalDocUrl')
+  })
+
+  it('AppHeader falls back to /docs when external doc_url is empty', () => {
+    expect(headerSource).toContain("externalDocUrl.value || '/docs'")
+    expect(headerSource).toContain('isExternalDocUrl')
+  })
+
+  it('KeyUsageView falls back to /docs when external doc_url is empty', () => {
+    expect(keyUsageViewSource).toContain("externalDocUrl.value || '/docs'")
+    expect(keyUsageViewSource).toContain('isExternalDocUrl')
+  })
+})
+

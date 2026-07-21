@@ -123,11 +123,13 @@ describe('UseKeyModal', () => {
 
     const tabLabels = wrapper.findAll('button').map((b) => b.text())
     expect(tabLabels.some((t) => t.includes('keys.useKeyModal.cliTabs.codexCli'))).toBe(true)
-    expect(tabLabels.some((t) => t.includes('keys.useKeyModal.cliTabs.codexCliWs'))).toBe(true)
+    expect(tabLabels.some((t) => t.includes('keys.useKeyModal.cliTabs.codexCliWs'))).toBe(false)
     expect(tabLabels.some((t) => t.includes('keys.useKeyModal.cliTabs.claudeCode'))).toBe(true)
+    expect(configToml).not.toContain('supports_websockets')
+    expect(configToml).not.toContain('responses_websockets_v2')
   })
 
-  it('renders Grok Codex WebSocket config', async () => {
+  it('does not advertise WebSocket transport for Grok', () => {
     const wrapper = mount(UseKeyModal, {
       props: {
         show: true,
@@ -147,21 +149,11 @@ describe('UseKeyModal', () => {
       }
     })
 
-    const wsTab = wrapper.findAll('button').find((button) =>
-      button.text().includes('keys.useKeyModal.cliTabs.codexCliWs')
-    )
-    expect(wsTab).toBeDefined()
-    await wsTab!.trigger('click')
-    await nextTick()
-
+    const wsTab = wrapper.findAll('button').find((button) => button.text().includes('keys.useKeyModal.cliTabs.codexCliWs'))
     const codeBlocks = wrapper.findAll('pre code').map((code) => code.text())
-    const configToml = codeBlocks.find((content) => content.includes('supports_websockets = true'))
 
-    expect(configToml).toBeDefined()
-    expect(configToml).toContain('model_provider = "Grok"')
-    expect(configToml).toContain('model = "grok-4.5"')
-    expect(configToml).toContain('base_url = "https://code.sicts.shop/v1"')
-    expect(configToml).toContain('[features]\nresponses_websockets_v2 = true\ngoals = true')
+    expect(wsTab).toBeUndefined()
+    expect(codeBlocks.some((content) => content.includes('supports_websockets = true'))).toBe(false)
   })
 
   it('renders Grok models in OpenCode config', async () => {
