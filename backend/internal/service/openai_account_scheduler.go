@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -33,6 +34,7 @@ const (
 	openAIQuotaHeadroomNeutralFactor      = 0.5
 	openAIQuotaHeadroomSecondaryLowRemain = 0.10
 	openAIQuotaHeadroomSnapshotStaleAfter = 8 * time.Hour
+	grokQuotaHeadroomSnapshotStaleAfter   = 24 * time.Hour
 )
 
 const (
@@ -60,6 +62,9 @@ type openAIAdvancedSchedulerRuntimeSettings struct {
 var openAIAdvancedSchedulerSettingCache atomic.Value // *cachedOpenAIAdvancedSchedulerSetting
 var openAIAdvancedSchedulerSettingSF singleflight.Group
 
+var stickyReevalLastAt sync.Map // sessionHash -> int64 unix nano
+
+
 type OpenAIAccountScheduleRequest struct {
 	GroupID                 *int64
 	Platform                string
@@ -76,6 +81,7 @@ type OpenAIAccountScheduleRequest struct {
 	RequiredCapability      OpenAIEndpointCapability
 	RequiredImageCapability OpenAIImagesCapability
 	RequireCompact          bool
+	RequiredCredentialClass OpenAICredentialClass
 	ExcludedIDs             map[int64]struct{}
 }
 
@@ -83,6 +89,7 @@ type OpenAIAccountScheduleDecision struct {
 	Layer               string
 	StickyPreviousHit   bool
 	StickySessionHit    bool
+	StickyReevalSwitch  bool
 	CandidateCount      int
 	TopK                int
 	LatencyMs           int64
@@ -403,6 +410,7 @@ func (s *defaultOpenAIAccountScheduler) Select(
 			decision.SelectedAccountType = selection.Account.Type
 			if req.SessionHash != "" {
 				_ = s.service.BindStickySession(ctx, req.GroupID, req.SessionHash, selection.Account.ID)
+				s.service.setStickySessionAccountEpoch(ctx, req.GroupID, req.SessionHash, selection.Account, s.service.openAIWSSessionStickyTTL())
 			}
 			return selection, decision, nil
 		}
@@ -483,6 +491,14 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
 		return nil, false, nil
 	}
+	if !OpenAICredentialClassMatches(account, req.RequiredCredentialClass) {
+		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
+		return nil, false, nil
+	}
+	if !s.service.stickySessionEpochMatches(ctx, req.GroupID, sessionHash, account) {
+		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
+		return nil, false, nil
+	}
 	if !s.isAccountRequestCompatible(ctx, account, req) {
 		return nil, false, nil
 	}
@@ -494,6 +510,16 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 	if account == nil || !openAIStickyAccountMatchesGroup(account, req.GroupID) || !s.isAccountTransportCompatible(account, req.RequiredTransport) {
 		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
 		return nil, false, nil
+	}
+	// Interval-gated quota re-eval: if bound account is hot and a cooler same-class account exists, escape sticky.
+	if s.shouldReevalStickyForUsage(ctx, req, account) {
+		slog.Info("sticky_reeval_switch",
+			"account_id", account.ID,
+			"usage_score", ComputeOpenAIUsageScore(account, time.Now()),
+			"session_hash", sessionHash,
+		)
+		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
+		return nil, true, nil
 	}
 	escapeCfg := s.service.openAIStickyEscapeConfig()
 	if reason, errorRate, ttft, shouldEscape := s.shouldEscapeStickyAccount(accountID, escapeCfg); shouldEscape {
@@ -508,6 +534,7 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 	result, acquireErr := s.service.tryAcquireAccountSlot(ctx, accountID, account.Concurrency)
 	if acquireErr == nil && result != nil && result.Acquired {
 		_ = s.service.refreshStickySessionTTL(ctx, req.GroupID, sessionHash, s.service.openAIWSSessionStickyTTL())
+		s.service.setStickySessionAccountEpoch(ctx, req.GroupID, sessionHash, account, s.service.openAIWSSessionStickyTTL())
 		return &AccountSelectionResult{
 			Account:     account,
 			Acquired:    true,
@@ -539,6 +566,63 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 		}, false, nil
 	}
 	return nil, false, nil
+}
+
+
+func (s *defaultOpenAIAccountScheduler) shouldReevalStickyForUsage(ctx context.Context, req OpenAIAccountScheduleRequest, bound *Account) bool {
+	if s == nil || s.service == nil || bound == nil {
+		return false
+	}
+	now := time.Now()
+	sessionKey := strings.TrimSpace(req.SessionHash)
+	if sessionKey != "" {
+		if raw, ok := stickyReevalLastAt.Load(sessionKey); ok {
+			if lastNano, ok := raw.(int64); ok {
+				if now.Sub(time.Unix(0, lastNano)) < openAIStickyReevalInterval {
+					return false
+				}
+			}
+		}
+		stickyReevalLastAt.Store(sessionKey, now.UnixNano())
+	}
+	boundScore := ComputeOpenAIUsageScore(bound, now)
+	if boundScore < openAIStickyAutoSwitchPct {
+		return false
+	}
+	// Look for any eligible cooler account in the same group/platform/class.
+	// Best-effort: use snapshot list when available; otherwise skip.
+	if s.service.schedulerSnapshot == nil {
+		return false
+	}
+	accounts, _, err := s.service.schedulerSnapshot.ListSchedulableAccounts(ctx, req.GroupID, normalizeOpenAICompatiblePlatform(req.Platform), false)
+	if err != nil || len(accounts) == 0 {
+		return false
+	}
+	for i := range accounts {
+		cand := &accounts[i]
+		if cand.ID == bound.ID {
+			continue
+		}
+		if req.ExcludedIDs != nil {
+			if _, excluded := req.ExcludedIDs[cand.ID]; excluded {
+				continue
+			}
+		}
+		if !cand.IsSchedulable() || !cand.IsOpenAICompatible() {
+			continue
+		}
+		if !OpenAICredentialClassMatches(cand, req.RequiredCredentialClass) && !OpenAICredentialClassMatches(cand, OpenAIAccountCredentialClass(bound)) {
+			continue
+		}
+		if !s.isAccountRequestCompatible(ctx, cand, req) {
+			continue
+		}
+		score := ComputeOpenAIUsageScore(cand, now)
+		if score < boundScore {
+			return true
+		}
+	}
+	return false
 }
 
 func openAIStickyAccountMatchesGroup(account *Account, groupID *int64) bool {
@@ -1005,6 +1089,28 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAIAccountLoadPlan(
 		plan.topK = 1
 	}
 
+	// New sessions (no sticky preference): prefer lowest usage before weighted exploration.
+	if !req.StickyWeighted && req.StickyAccountID <= 0 && req.StickyPreviousAccountID <= 0 && strings.TrimSpace(req.PreviousResponseID) == "" && strings.TrimSpace(req.SessionHash) == "" {
+		sort.SliceStable(plan.candidates, func(i, j int) bool {
+			si := ComputeOpenAIUsageScore(plan.candidates[i].account, now)
+			sj := ComputeOpenAIUsageScore(plan.candidates[j].account, now)
+			if si != sj {
+				return si < sj
+			}
+			// Stable tie-break: higher existing score, then lower account id.
+			if plan.candidates[i].score != plan.candidates[j].score {
+				return plan.candidates[i].score > plan.candidates[j].score
+			}
+			idI, idJ := int64(0), int64(0)
+			if plan.candidates[i].account != nil {
+				idI = plan.candidates[i].account.ID
+			}
+			if plan.candidates[j].account != nil {
+				idJ = plan.candidates[j].account.ID
+			}
+			return idI < idJ
+		})
+	}
 	plan.selectionOrder = s.buildOpenAISelectionOrder(req, plan)
 	return plan
 }
@@ -1040,6 +1146,13 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAISelectionOrder(
 		// success/latency history should still explore via weighted selection.
 		if req.RequireCompact && hasOpenAICompactFailureSignals(ranked) {
 			return ranked
+		}
+		// Fresh sessions: keep lowest-usage order from buildLoadPlan (not score topK).
+		if !req.StickyWeighted && req.StickyAccountID <= 0 && req.StickyPreviousAccountID <= 0 && strings.TrimSpace(req.PreviousResponseID) == "" && strings.TrimSpace(req.SessionHash) == "" {
+			if groupTopK >= len(pool) {
+				return append([]openAIAccountCandidateScore(nil), pool...)
+			}
+			return append([]openAIAccountCandidateScore(nil), pool[:groupTopK]...)
 		}
 		return buildOpenAIWeightedSelectionOrder(ranked, req)
 	}
@@ -1243,6 +1356,9 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 			}
 		}
 		if !account.IsSchedulable() || account.Platform != normalizeOpenAICompatiblePlatform(req.Platform) || !account.IsOpenAICompatible() {
+			continue
+		}
+		if !OpenAICredentialClassMatches(account, req.RequiredCredentialClass) {
 			continue
 		}
 		if s.service.isOpenAIAccountRuntimeBlocked(account) {
@@ -1924,6 +2040,20 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 	if stickyWeighted && previousResponseCanMove && strings.TrimSpace(previousResponseID) != "" && platform == PlatformOpenAI {
 		stickyPreviousAccountID = s.ResolveAccountIDByPreviousResponseIDForScheduler(ctx, groupID, previousResponseID, requestedModel, excludedIDs, requiredCapability, requireCompact)
 	}
+	requiredCredentialClass := OpenAICredentialClassUnspecified
+	// When failover already chose a credential class via excluded set + first failed account is unavailable here,
+	// keep Unspecified for first hop. If sticky account is known, pin class to that account.
+	for _, id := range []int64{stickyAccountID, stickyPreviousAccountID} {
+		if id <= 0 {
+			continue
+		}
+		if acc, err := s.getSchedulableAccount(ctx, id); err == nil && acc != nil {
+			if class := OpenAIAccountCredentialClass(acc); class != OpenAICredentialClassUnspecified {
+				requiredCredentialClass = class
+				break
+			}
+		}
+	}
 
 	return scheduler.Select(ctx, OpenAIAccountScheduleRequest{
 		GroupID:                 groupID,
@@ -1940,6 +2070,7 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 		RequiredCapability:      requiredCapability,
 		RequiredImageCapability: requiredImageCapability,
 		RequireCompact:          requireCompact,
+		RequiredCredentialClass: requiredCredentialClass,
 		ExcludedIDs:             excludedIDs,
 	})
 }
@@ -2313,6 +2444,9 @@ func buildOpenAIAccountSchedulerScoreSnapshot(
 }
 
 func openAIQuotaHeadroomFactor(account *Account, now time.Time) float64 {
+	if account != nil && account.Platform == PlatformGrok {
+		return grokQuotaHeadroomFactor(account, now)
+	}
 	if account == nil || len(account.Extra) == 0 || openAIQuotaHeadroomSnapshotStale(account.Extra, now) {
 		return openAIQuotaHeadroomNeutralFactor
 	}
@@ -2330,6 +2464,82 @@ func openAIQuotaHeadroomFactor(account *Account, now time.Time) float64 {
 		}
 	}
 	return factor
+}
+
+func grokQuotaHeadroomFactor(account *Account, now time.Time) float64 {
+	if account == nil || len(account.Extra) == 0 {
+		return openAIQuotaHeadroomNeutralFactor
+	}
+	if billing, err := grokBillingSnapshotFromExtra(account.Extra); err == nil && billing != nil {
+		if factor, ok := grokBillingHeadroomFactor(billing, now); ok {
+			return factor
+		}
+	}
+	if snapshot, err := grokQuotaSnapshotFromExtra(account.Extra); err == nil && snapshot != nil {
+		if factor, ok := grokAPIQuotaHeadroomFactor(snapshot, now); ok {
+			return factor
+		}
+	}
+	return openAIQuotaHeadroomNeutralFactor
+}
+
+func grokBillingHeadroomFactor(snapshot *xai.BillingSnapshot, now time.Time) (float64, bool) {
+	if snapshot == nil || snapshot.StatusCode < 200 || snapshot.StatusCode >= 300 {
+		return 0, false
+	}
+	fetchedAt, err := time.Parse(time.RFC3339, strings.TrimSpace(snapshot.FetchedAt))
+	if err != nil || fetchedAt.After(now) || now.Sub(fetchedAt) >= grokQuotaHeadroomSnapshotStaleAfter {
+		return 0, false
+	}
+	if snapshot.UsagePercent != nil {
+		return 1 - clamp01(*snapshot.UsagePercent/100), true
+	}
+	if snapshot.UsedPercent != nil {
+		return 1 - clamp01(*snapshot.UsedPercent/100), true
+	}
+	if snapshot.MonthlyLimitCents != nil && *snapshot.MonthlyLimitCents > 0 && snapshot.UsedCents != nil {
+		return 1 - clamp01(float64(*snapshot.UsedCents)/float64(*snapshot.MonthlyLimitCents)), true
+	}
+	return 0, false
+}
+
+func grokAPIQuotaHeadroomFactor(snapshot *xai.QuotaSnapshot, now time.Time) (float64, bool) {
+	if snapshot == nil {
+		return 0, false
+	}
+	updatedAt, err := time.Parse(time.RFC3339, strings.TrimSpace(snapshot.UpdatedAt))
+	if err != nil || updatedAt.After(now) || now.Sub(updatedAt) >= grokQuotaHeadroomSnapshotStaleAfter {
+		return 0, false
+	}
+
+	factor := 1.0
+	found := false
+	for _, window := range []*xai.QuotaWindow{snapshot.Requests, snapshot.Tokens} {
+		if window == nil || window.Limit == nil || *window.Limit <= 0 || window.Remaining == nil {
+			continue
+		}
+		resetAt, ok := grokQuotaWindowResetAt(window)
+		if !ok || !now.Before(resetAt) {
+			continue
+		}
+		remaining := clamp01(float64(*window.Remaining) / float64(*window.Limit))
+		if !found || remaining < factor {
+			factor = remaining
+		}
+		found = true
+	}
+	return factor, found
+}
+
+func grokQuotaWindowResetAt(window *xai.QuotaWindow) (time.Time, bool) {
+	if window == nil {
+		return time.Time{}, false
+	}
+	if window.ResetUnix != nil {
+		return time.Unix(*window.ResetUnix, 0), true
+	}
+	resetAt, err := time.Parse(time.RFC3339, strings.TrimSpace(window.ResetAt))
+	return resetAt, err == nil
 }
 
 func openAIQuotaHeadroomSnapshotStale(extra map[string]any, now time.Time) bool {
