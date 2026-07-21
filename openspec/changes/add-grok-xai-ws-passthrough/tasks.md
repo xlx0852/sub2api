@@ -11,7 +11,7 @@
 ## 2. Frontend / Admin
 
 - [x] 2.1 Add or expose Grok WS passthrough mode controls where account/group transport settings are managed.
-- [ ] 2.2 Show Grok WS fallback and connection health hints in account performance details.
+- [ ] 2.2 Superseded by `remove-grok-websocket-ingress`; do not expose Grok WS health controls.
 
 ## 3. Validation
 
