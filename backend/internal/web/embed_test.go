@@ -525,6 +525,7 @@ func TestFrontendServer_Middleware(t *testing.T) {
 		}{
 			{method: http.MethodPost, path: "/chat/completions"},
 			{method: http.MethodPost, path: "/embeddings"},
+			{method: http.MethodPost, path: "/alpha/search"},
 			{method: http.MethodPost, path: "/videos/generations"},
 		}
 
