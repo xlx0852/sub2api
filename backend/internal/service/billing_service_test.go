@@ -572,6 +572,21 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		},
 
 		// ---- 月之暗面 Kimi ----
+		// Official K3 (platform.kimi.ai): cache miss $3 / cache hit $0.30 / output $15 per 1M tokens
+		{
+			name:              "kimi coding short name k3",
+			model:             "k3",
+			expectedInput:     3e-6,
+			expectedOutput:    floatPtr(15e-6),
+			expectedCacheRead: floatPtr(0.3e-6),
+		},
+		{
+			name:              "kimi k3 full name",
+			model:             "kimi-k3",
+			expectedInput:     3e-6,
+			expectedOutput:    floatPtr(15e-6),
+			expectedCacheRead: floatPtr(0.3e-6),
+		},
 		{
 			name:              "kimi k2.6 flagship",
 			model:             "kimi-k2.6",
