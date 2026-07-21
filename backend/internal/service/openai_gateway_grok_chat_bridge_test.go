@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -35,9 +36,9 @@ func TestGrokChatResponsesBridgeEligibility(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "safe generation options",
-			body: `{"model":"grok","messages":[{"role":"user","content":"hi"}],"stream":true,"stream_options":{"include_usage":true},"max_completion_tokens":256,"temperature":0.2,"top_p":0.9,"prompt_cache_key":"session","tools":[],"functions":null,"tool_choice":"none"}`,
-			want: true,
+			name:   "streaming uses raw chat",
+			body:   `{"model":"grok","messages":[{"role":"user","content":"hi"}],"stream":true,"stream_options":{"include_usage":true},"max_completion_tokens":256,"temperature":0.2,"top_p":0.9,"prompt_cache_key":"session","tools":[],"functions":null,"tool_choice":"none"}`,
+			reason: "streaming_requires_raw_chat",
 		},
 		{
 			name:   "stop falls back",
@@ -163,7 +164,7 @@ func TestForwardGrokChatViaResponsesNonStreamingCachesAndReturnsChat(t *testing.
 	require.NotNil(t, repo.updates[account.ID][grokQuotaSnapshotExtraKey])
 }
 
-func TestForwardGrokChatViaResponsesStreamingPropagatesCachedUsage(t *testing.T) {
+func TestForwardGrokStreamingChatUsesRawEndpointWithExactUsage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	body := []byte(`{"model":"grok","messages":[{"role":"user","content":"hi"}],"stream":true}`)
@@ -176,7 +177,19 @@ func TestForwardGrokChatViaResponsesStreamingPropagatesCachedUsage(t *testing.T)
 	repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{
 		accountsByID: map[int64]*Account{account.ID: account},
 	}}
-	upstream := &httpUpstreamRecorder{resp: grokChatBridgeCompletedResponse("resp_grok_chat_stream", 4096)}
+	upstreamBody := strings.Join([]string{
+		`data: {"id":"chatcmpl_grok_stream","object":"chat.completion.chunk","model":"grok-4.5","choices":[{"index":0,"delta":{"role":"assistant","content":"raw ok"},"finish_reason":null}]}`,
+		"",
+		`data: {"id":"chatcmpl_grok_stream","object":"chat.completion.chunk","model":"grok-4.5","choices":[],"usage":{"prompt_tokens":9908,"completion_tokens":12,"total_tokens":9920,"prompt_tokens_details":{"cached_tokens":4096}}}`,
+		"",
+		"data: [DONE]",
+		"",
+	}, "\n")
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       io.NopCloser(strings.NewReader(upstreamBody)),
+	}}
 	svc := &OpenAIGatewayService{
 		httpUpstream:      upstream,
 		grokTokenProvider: NewGrokTokenProvider(repo, nil),
@@ -187,10 +200,15 @@ func TestForwardGrokChatViaResponsesStreamingPropagatesCachedUsage(t *testing.T)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.True(t, result.Stream)
-	require.Equal(t, grokChatResponsesEndpoint, result.UpstreamEndpoint)
+	require.Equal(t, xai.DefaultCLIBaseURL+"/chat/completions", upstream.lastReq.URL.String())
+	require.Equal(t, grokChatRawEndpoint, result.UpstreamEndpoint)
+	require.True(t, gjson.GetBytes(upstream.lastBody, "stream_options.include_usage").Bool())
+	require.False(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").Exists())
+	require.Equal(t, 9908, result.Usage.InputTokens)
+	require.Equal(t, 12, result.Usage.OutputTokens)
 	require.Equal(t, 4096, result.Usage.CacheReadInputTokens)
 	require.Contains(t, recorder.Header().Get("Content-Type"), "text/event-stream")
-	require.Contains(t, recorder.Body.String(), `"content":"cached ok"`)
+	require.Contains(t, recorder.Body.String(), `"content":"raw ok"`)
 	require.Contains(t, recorder.Body.String(), `"cached_tokens":4096`)
 	require.Contains(t, recorder.Body.String(), "data: [DONE]")
 }
@@ -284,12 +302,158 @@ func TestForwardGrokChatViaResponses429UsesGrokRateLimitPolicy(t *testing.T) {
 	var failoverErr *UpstreamFailoverError
 	require.True(t, errors.As(err, &failoverErr))
 	require.Equal(t, http.StatusTooManyRequests, failoverErr.StatusCode)
+	require.True(t, failoverErr.GrokAccountPenaltyApplied)
 	require.Equal(t, xai.DefaultCLIBaseURL+"/responses", upstream.lastReq.URL.String())
 	require.Equal(t, grokChatResponsesEndpoint, GetActualOpenAIUpstreamEndpoint(c))
 	require.Equal(t, 1, repo.tempUnschedCalls)
 	require.WithinDuration(t, before.Add(45*time.Second), repo.lastTempUnschedUntil, time.Second)
 	require.Equal(t, "grok rate limited", repo.lastTempUnschedReason)
 	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
+}
+
+func TestForwardGrokChatViaResponsesDefersConfiguredRetryPenalty(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"grok","messages":[{"role":"user","content":"hi"}],"stream":false}`)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, grokChatRawEndpoint, bytes.NewReader(body))
+	c.Set("api_key", &APIKey{ID: 7502})
+
+	account := grokChatBridgeTestAccount(752)
+	repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{
+		accountsByID: map[int64]*Account{account.ID: account},
+	}}
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusTooManyRequests,
+		Header: http.Header{
+			"Content-Type": []string{"application/json"},
+			"Retry-After":  []string{"45"},
+		},
+		Body: io.NopCloser(strings.NewReader(`{"error":{"message":"rate limited"}}`)),
+	}}
+	svc := &OpenAIGatewayService{
+		httpUpstream:      upstream,
+		grokTokenProvider: NewGrokTokenProvider(repo, nil),
+		accountRepo:       repo,
+		cfg: &config.Config{Gateway: config.GatewayConfig{
+			GrokSameAccountRetry: config.GrokSameAccountRetryConfig{
+				Enabled: true, MaxRetries: 1, Statuses: []int{429, 502, 503, 504, 529},
+			},
+		}},
+	}
+
+	result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "")
+	require.Error(t, err)
+	require.Nil(t, result)
+	var failoverErr *UpstreamFailoverError
+	require.True(t, errors.As(err, &failoverErr))
+	require.True(t, failoverErr.GrokSameAccountRetry)
+	require.True(t, failoverErr.RetryableOnSameAccount)
+	require.Equal(t, "45", failoverErr.ResponseHeaders.Get("Retry-After"))
+	require.Zero(t, repo.tempUnschedCalls)
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
+
+	svc.ApplyGrokSameAccountRetryPenalty(context.Background(), account, failoverErr)
+	require.Equal(t, 1, repo.tempUnschedCalls)
+	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
+}
+
+func TestForwardGrokResponsesDefersConfiguredRetryPenalty(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"grok-4.3","input":"hi","stream":false}`)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Set("api_key", &APIKey{ID: 7503})
+
+	account := grokChatBridgeTestAccount(753)
+	repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{
+		accountsByID: map[int64]*Account{account.ID: account},
+	}}
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusServiceUnavailable,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"temporary"}}`)),
+	}}
+	svc := &OpenAIGatewayService{
+		httpUpstream:      upstream,
+		grokTokenProvider: NewGrokTokenProvider(repo, nil),
+		accountRepo:       repo,
+		cfg: &config.Config{Gateway: config.GatewayConfig{
+			GrokSameAccountRetry: config.GrokSameAccountRetryConfig{
+				Enabled: true, MaxRetries: 1, Statuses: []int{429, 502, 503, 504, 529},
+			},
+		}},
+	}
+
+	result, err := svc.Forward(context.Background(), c, account, body)
+	require.Error(t, err)
+	require.Nil(t, result)
+	var failoverErr *UpstreamFailoverError
+	require.True(t, errors.As(err, &failoverErr))
+	require.True(t, failoverErr.GrokSameAccountRetry)
+	require.True(t, failoverErr.RetryableOnSameAccount)
+	require.False(t, failoverErr.GrokAccountPenaltyApplied)
+	require.Zero(t, repo.tempUnschedCalls)
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
+}
+
+func TestGrokSameAccountRetryClassificationRequiresHTTPPostRootAlias(t *testing.T) {
+	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{
+		GrokSameAccountRetry: config.GrokSameAccountRetryConfig{
+			Enabled: true, MaxRetries: 1, Statuses: []int{429, 502, 503, 504, 529},
+		},
+	}}}
+
+	newContext := func(method, path string, headers http.Header) *gin.Context {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(method, path, nil)
+		c.Request.Header = headers
+		return c
+	}
+
+	for _, path := range []string{
+		"/v1/responses",
+		"/responses",
+		"/backend-api/codex/responses",
+		"/v1/chat/completions",
+		"/chat/completions",
+	} {
+		c := newContext(http.MethodPost, path, nil)
+		for _, status := range []int{429, 502, 503, 504, 529} {
+			require.True(t, svc.isGrokSameAccountRetry(c, status), "path %s status %d", path, status)
+		}
+		for _, status := range []int{400, 401, 403, 404, 409, 422} {
+			require.False(t, svc.isGrokSameAccountRetry(c, status), "path %s status %d", path, status)
+		}
+	}
+
+	excluded := []struct {
+		name    string
+		method  string
+		path    string
+		headers http.Header
+	}{
+		{name: "messages", method: http.MethodPost, path: "/v1/messages"},
+		{name: "responses compact", method: http.MethodPost, path: "/v1/responses/compact"},
+		{name: "responses subpath", method: http.MethodPost, path: "/v1/responses/resp_123"},
+		{name: "websocket get", method: http.MethodGet, path: "/v1/responses"},
+		{name: "websocket upgrade", method: http.MethodPost, path: "/v1/responses", headers: http.Header{"Upgrade": []string{"websocket"}}},
+		{name: "media", method: http.MethodPost, path: "/v1/images/generations"},
+		{name: "unknown", method: http.MethodPost, path: "/unknown"},
+	}
+	for _, tc := range excluded {
+		t.Run(tc.name, func(t *testing.T) {
+			require.False(t, svc.isGrokSameAccountRetry(newContext(tc.method, tc.path, tc.headers), http.StatusServiceUnavailable))
+		})
+	}
+	require.False(t, svc.isGrokSameAccountRetry(nil, http.StatusServiceUnavailable))
+	emptyContext, _ := gin.CreateTestContext(httptest.NewRecorder())
+	require.False(t, svc.isGrokSameAccountRetry(emptyContext, http.StatusServiceUnavailable))
+	emptyContext.Request = &http.Request{Method: http.MethodPost}
+	require.False(t, svc.isGrokSameAccountRetry(emptyContext, http.StatusServiceUnavailable))
 }
 
 func TestForwardGrokRawChatErrorRecordsActualEndpoint(t *testing.T) {

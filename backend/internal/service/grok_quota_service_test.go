@@ -85,7 +85,12 @@ func TestGrokQuotaServiceProbeUsageMergesBilling(t *testing.T) {
 			Body:       io.NopCloser(strings.NewReader(monthlyBody)),
 		},
 	}}
-	svc := NewGrokQuotaService(repo, nil, NewGrokTokenProvider(repo, nil), upstream)
+	svc := NewGrokQuotaService(
+		repo,
+		nil,
+		NewGrokTokenProvider(repo, nil),
+		upstream,
+	)
 
 	result, err := svc.ProbeUsage(context.Background(), 42)
 	require.NoError(t, err)

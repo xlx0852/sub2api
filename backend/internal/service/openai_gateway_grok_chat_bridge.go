@@ -77,6 +77,9 @@ func grokChatResponsesBridgeEligibility(body []byte) (bool, string) {
 		if json.Unmarshal(raw, &stream) != nil || stream == nil {
 			return false, "invalid_stream"
 		}
+		if *stream {
+			return false, "streaming_requires_raw_chat"
+		}
 	}
 	if raw, ok := root["stream_options"]; ok {
 		var options map[string]json.RawMessage
@@ -252,8 +255,15 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 		return nil, policyErr
 	}
 	responsesBody = updatedBody
+	responsesBody, err = s.optimizeGrokPayload(account, responsesBody, grokPayloadResponses)
+	if err != nil {
+		if handleGrokPayloadOptimizationError(c, grokPayloadChat, err) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("optimize Grok Responses bridge payload: %w", err)
+	}
 
-	token, _, err := s.GetAccessToken(ctx, account)
+	token, _, credential, err := s.getGrokAccessTokenWithDescriptor(ctx, account)
 	if err != nil {
 		return nil, fmt.Errorf("get grok access token: %w", err)
 	}
@@ -280,7 +290,12 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 		if upstreamMsg == "" {
 			upstreamMsg = fmt.Sprintf("xAI upstream returned status %d", resp.StatusCode)
 		}
-		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+		attribution := s.attributeGrokUnauthorized(ctx, c, account, resp.StatusCode, credential)
+		retryDisabled := grokUpstreamExplicitlyDisablesRetry(resp.Header)
+		if retryDisabled {
+			return s.handleChatCompletionsErrorResponse(resp, c, account, billingModel)
+		}
+		opsEvent := OpsUpstreamErrorEvent{
 			Platform:           account.Platform,
 			AccountID:          account.ID,
 			AccountName:        account.Name,
@@ -288,19 +303,29 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 			UpstreamRequestID:  firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id")),
 			Kind:               "failover",
 			Message:            upstreamMsg,
-		})
-		s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+		}
+		applyGrokUnauthorizedAttribution(&opsEvent, attribution)
+		appendOpsUpstreamError(c, opsEvent)
+		grokSameAccountRetry := s.isGrokSameAccountRetry(c, resp.StatusCode)
+		penalizeAccount := shouldPenalizeGrokUnauthorized(resp.StatusCode, attribution)
+		if !grokSameAccountRetry && penalizeAccount {
+			s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+		}
 		if s.shouldFailoverUpstreamError(resp.StatusCode) {
 			return nil, &UpstreamFailoverError{
-				StatusCode:             resp.StatusCode,
-				ResponseBody:           respBody,
-				RetryableOnSameAccount: account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
+				StatusCode:                resp.StatusCode,
+				ResponseBody:              respBody,
+				ResponseHeaders:           resp.Header.Clone(),
+				RetryableOnSameAccount:    grokSameAccountRetry || (account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode)),
+				GrokSameAccountRetry:      grokSameAccountRetry,
+				GrokAccountPenaltyApplied: !grokSameAccountRetry && penalizeAccount,
+				GrokStaleCredential:       !penalizeAccount,
 			}
 		}
 		return s.handleChatCompletionsErrorResponse(resp, c, account, billingModel)
 	}
 
-	s.updateGrokUsageSnapshot(ctx, account.ID, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
+	s.updateGrokUsageSnapshot(ctx, account, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
 
 	var result *OpenAIForwardResult
 	if clientStream {

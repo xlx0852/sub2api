@@ -26,6 +26,7 @@ const (
 	GrokMediaEndpointImagesGenerations GrokMediaEndpoint = "images_generations"
 	GrokMediaEndpointImagesEdits       GrokMediaEndpoint = "images_edits"
 	GrokMediaEndpointVideosGenerations GrokMediaEndpoint = "videos_generations"
+	GrokMediaEndpointVideosEdits       GrokMediaEndpoint = "videos_edits"
 	GrokMediaEndpointVideoStatus       GrokMediaEndpoint = "video_status"
 )
 
@@ -35,7 +36,7 @@ func (e GrokMediaEndpoint) RequiresRequestBody() bool {
 
 func (e GrokMediaEndpoint) IsGenerationRequest() bool {
 	switch e {
-	case GrokMediaEndpointImagesGenerations, GrokMediaEndpointImagesEdits, GrokMediaEndpointVideosGenerations:
+	case GrokMediaEndpointImagesGenerations, GrokMediaEndpointImagesEdits, GrokMediaEndpointVideosGenerations, GrokMediaEndpointVideosEdits:
 		return true
 	default:
 		return false
@@ -274,6 +275,8 @@ func (e GrokMediaEndpoint) upstreamURL(baseURL, requestID string) (string, error
 		return xai.BuildImagesEditsURL(baseURL)
 	case GrokMediaEndpointVideosGenerations:
 		return xai.BuildVideosGenerationsURL(baseURL)
+	case GrokMediaEndpointVideosEdits:
+		return xai.BuildVideosEditsURL(baseURL)
 	case GrokMediaEndpointVideoStatus:
 		return xai.BuildVideoURL(baseURL, requestID)
 	default:
@@ -357,11 +360,11 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 	requestIDHeader := firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id"))
 	requestModel := requestInfo.Model
 	if resp.StatusCode >= 400 {
-		s.updateGrokUsageSnapshot(ctx, account.ID, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
+		s.updateGrokUsageSnapshot(ctx, account, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
 		return s.handleGrokMediaErrorResponse(ctx, resp, c, account, requestIDHeader, requestModel)
 	}
 
-	s.updateGrokUsageSnapshot(ctx, account.ID, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
+	s.updateGrokUsageSnapshot(ctx, account, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
 	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		return nil, err
@@ -532,17 +535,40 @@ func grokMediaUsageFromResponse(endpoint GrokMediaEndpoint, requestInfo GrokMedi
 		meta.ImageSize = requestInfo.SizeTier
 		meta.ImageInputSize = requestInfo.Size
 		meta.ImageOutputSizes = collectOpenAIResponseImageOutputSizesFromJSONBytes(responseBody)
-	case GrokMediaEndpointVideosGenerations:
+	case GrokMediaEndpointVideosGenerations, GrokMediaEndpointVideosEdits:
 		meta.ResponseID = extractGrokMediaVideoRequestID(responseBody)
 		meta.VideoCount = 1
-		meta.VideoResolution = requestInfo.Resolution
-		meta.VideoDurationSeconds = requestInfo.DurationSeconds
+		meta.VideoResolution = extractGrokMediaVideoResolution(responseBody, requestInfo.Resolution)
+		meta.VideoDurationSeconds = extractGrokMediaVideoDuration(responseBody, requestInfo.DurationSeconds)
 		// Keep the legacy media-unit counter populated for existing usage displays.
 		meta.ImageCount = 1
 		meta.ImageSize = ""
 		meta.ImageInputSize = ""
 	}
 	return meta
+}
+
+func extractGrokMediaVideoResolution(body []byte, fallback string) string {
+	if len(body) > 0 && gjson.ValidBytes(body) {
+		for _, path := range []string{"resolution", "data.resolution", "video.resolution"} {
+			if resolution := strings.TrimSpace(gjson.GetBytes(body, path).String()); resolution != "" {
+				return NormalizeVideoBillingResolutionOrDefault(resolution)
+			}
+		}
+	}
+	return NormalizeVideoBillingResolutionOrDefault(fallback)
+}
+
+func extractGrokMediaVideoDuration(body []byte, fallback int) int {
+	if len(body) > 0 && gjson.ValidBytes(body) {
+		for _, path := range []string{"duration", "duration_seconds", "data.duration", "data.duration_seconds", "video.duration", "video.duration_seconds"} {
+			duration := gjson.GetBytes(body, path)
+			if duration.Exists() && duration.Type == gjson.Number {
+				return NormalizeVideoBillingDurationSecondsOrDefault(int(duration.Int()))
+			}
+		}
+	}
+	return NormalizeVideoBillingDurationSecondsOrDefault(fallback)
 }
 
 func extractGrokMediaVideoRequestID(body []byte) string {

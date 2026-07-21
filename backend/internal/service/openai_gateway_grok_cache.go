@@ -47,6 +47,7 @@ func resolveGrokCacheIdentity(c *gin.Context, body []byte, explicitKey, upstream
 	if seed == "" {
 		return ""
 	}
+	rememberGrokRequestSessionIdentity(c, apiKeyID, seed)
 
 	// generateSessionUUID hashes the whole seed before formatting it as a UUID.
 	// Include a versioned namespace so this identity cannot collide with other

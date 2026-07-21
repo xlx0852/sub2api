@@ -33,6 +33,12 @@ func TestShouldRecordGrokMediaUsage(t *testing.T) {
 			want:     true,
 		},
 		{
+			name:     "video edit records usage",
+			endpoint: service.GrokMediaEndpointVideosEdits,
+			model:    "grok-imagine-video-1.5",
+			want:     true,
+		},
+		{
 			name:     "video status skips empty model usage",
 			endpoint: service.GrokMediaEndpointVideoStatus,
 			model:    "",
@@ -51,4 +57,11 @@ func TestShouldRecordGrokMediaUsage(t *testing.T) {
 			require.Equal(t, tt.want, shouldRecordGrokMediaUsage(tt.endpoint, tt.model))
 		})
 	}
+}
+
+func TestShouldBindGrokMediaVideoRequest(t *testing.T) {
+	require.True(t, shouldBindGrokMediaVideoRequest(service.GrokMediaEndpointVideosGenerations, "generation-request"))
+	require.True(t, shouldBindGrokMediaVideoRequest(service.GrokMediaEndpointVideosEdits, "edit-request"))
+	require.False(t, shouldBindGrokMediaVideoRequest(service.GrokMediaEndpointVideosEdits, " "))
+	require.False(t, shouldBindGrokMediaVideoRequest(service.GrokMediaEndpointImagesEdits, "image-request"))
 }
