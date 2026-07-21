@@ -137,22 +137,30 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 	failedAccountIDs := make(map[int64]struct{})
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
+	grokRetry := newGrokSameAccountRetryState(h.cfg)
 
 	for {
-		reqLog.Debug("openai_chat_completions.account_selecting", zap.Int("excluded_account_count", len(failedAccountIDs)))
-		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithSchedulerForCapability(
-			c.Request.Context(),
-			apiKey.GroupID,
-			"",
-			sessionHash,
-			reqModel,
-			failedAccountIDs,
-			service.OpenAIUpstreamTransportAny,
-			service.OpenAIEndpointCapabilityChatCompletions,
-			false,
-			false,
-			requestPlatform,
-		)
+		selection, pinnedRetry := grokRetry.takePinnedSelection()
+		var scheduleDecision service.OpenAIAccountScheduleDecision
+		var err error
+		if !pinnedRetry {
+			reqLog.Debug("openai_chat_completions.account_selecting", zap.Int("excluded_account_count", len(failedAccountIDs)))
+			selection, scheduleDecision, err = h.gatewayService.SelectAccountWithSchedulerForCapability(
+				c.Request.Context(),
+				apiKey.GroupID,
+				"",
+				sessionHash,
+				reqModel,
+				failedAccountIDs,
+				service.OpenAIUpstreamTransportAny,
+				service.OpenAIEndpointCapabilityChatCompletions,
+				false,
+				false,
+				requestPlatform,
+			)
+		} else {
+			reqLog.Debug("grok.same_account_retry_pinned", zap.Int64("account_id", selection.Account.ID))
+		}
 		if err != nil {
 			reqLog.Warn("openai_chat_completions.account_select_failed",
 				zap.Error(err),
@@ -190,11 +198,17 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 
 		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, reqStream, &streamStarted, reqLog)
 		if !acquired {
+			if penalty := grokRetry.penaltyForFailedAttempt(nil); penalty != nil {
+				h.gatewayService.ApplyGrokSameAccountRetryPenalty(c.Request.Context(), account, penalty)
+			}
 			return
 		}
 
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
 		forwardStart := time.Now()
+		if attempt := grokRetry.beginAttempt(account); attempt > 0 {
+			service.SetGrokUpstreamAttempt(c, attempt)
+		}
 
 		forwardBody := body
 		if channelMapping.Mapped {
@@ -239,9 +253,40 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 						h.handleFailoverExhausted(c, failoverErr, true)
 						return
 					}
-					h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
-					// Pool mode: retry on the same account
-					if failoverErr.RetryableOnSameAccount {
+					if canStartGrokSameAccountRetry(c, writerSizeBeforeForward) {
+						if delay, retry := grokRetry.schedule(c.Request.Context(), account, selection.WaitPlan, failoverErr); retry {
+							reqLog.Warn("grok.same_account_retry",
+								zap.Int64("account_id", account.ID),
+								zap.Int("upstream_status", failoverErr.StatusCode),
+								zap.Int("attempt", grokRetry.retryCount[account.ID]),
+								zap.Int("max_attempts", grokRetry.cfg.MaxRetries),
+								zap.Duration("delay", delay),
+							)
+							if !sleepWithContext(c.Request.Context(), delay) {
+								if penalty := grokRetry.cancelScheduledRetryPenalty(); penalty != nil {
+									h.gatewayService.ApplyGrokSameAccountRetryPenalty(c.Request.Context(), account, penalty)
+								}
+								return
+							}
+							continue
+						}
+					}
+					if !failoverErr.IsCredentialFailure() {
+						penalty := grokRetry.penaltyForFailedAttempt(failoverErr)
+						if penalty == nil {
+							penalty = failoverErr
+						}
+						h.gatewayService.ApplyGrokSameAccountRetryPenalty(c.Request.Context(), account, penalty)
+					}
+					if !failoverErr.GrokStaleCredential && failoverErr.ShouldReportAccountScheduleFailure() {
+						h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+					}
+					if !failoverErr.ShouldRetryNextAccount() {
+						h.handleFailoverExhausted(c, failoverErr, streamStarted)
+						return
+					}
+					// Pool mode: retry on the same account (credential failures skip)
+					if !failoverErr.IsCredentialFailure() && failoverErr.RetryableOnSameAccount && !failoverErr.GrokSameAccountRetry {
 						retryLimit := account.GetPoolModeRetryCount()
 						if sameAccountRetryCount[account.ID] < retryLimit {
 							sameAccountRetryCount[account.ID]++
@@ -274,10 +319,15 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 					reqLog.Warn("openai_chat_completions.upstream_failover_switching",
 						zap.Int64("account_id", account.ID),
 						zap.Int("upstream_status", failoverErr.StatusCode),
+						zap.String("failure_stage", string(failoverErr.Stage)),
+						zap.String("failure_reason", string(failoverErr.Reason)),
 						zap.Int("switch_count", switchCount),
 						zap.Int("max_switches", maxAccountSwitches),
 					)
 					continue
+				}
+				if penalty := grokRetry.penaltyForFailedAttempt(nil); penalty != nil {
+					h.gatewayService.ApplyGrokSameAccountRetryPenalty(c.Request.Context(), account, penalty)
 				}
 				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
 				upstreamErrorAlreadyCommunicated := openAIForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err)
@@ -295,6 +345,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			}
 		}
 		if result != nil {
+			grokRetry.finishSuccessfulAttempt()
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, result.FirstTokenMs)
 		} else {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, nil)

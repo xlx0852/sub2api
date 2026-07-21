@@ -25,12 +25,15 @@ func TestNormalizeInboundEndpoint(t *testing.T) {
 		{"/v1/messages", EndpointMessages},
 		{"/v1/chat/completions", EndpointChatCompletions},
 		{"/v1/embeddings", EndpointEmbeddings},
+		{"/v1/alpha/search", EndpointAlphaSearch},
 		{"/v1/responses", EndpointResponses},
 		{"/v1/responses/compact", EndpointResponsesCompact},
 		{"/v1/responses/compact/detail", EndpointResponsesCompact},
 		{"/v1/images/generations", EndpointImagesGenerations},
 		{"/v1/images/edits", EndpointImagesEdits},
 		{"/v1/videos/generations", EndpointVideosGenerations},
+		{"/v1/videos/edits", EndpointVideosEdits},
+		{"/videos/edits", EndpointVideosEdits},
 		{"/v1/videos/req_123", EndpointVideos},
 		{"/v1beta/models", EndpointGeminiModels},
 
@@ -50,11 +53,13 @@ func TestNormalizeInboundEndpoint(t *testing.T) {
 		{"/responses", EndpointResponses},
 		{"/responses/compact", EndpointResponsesCompact},
 		{"/responses/compact/detail", EndpointResponsesCompact},
+		{"/alpha/search", EndpointAlphaSearch},
 
 		// Bare Codex direct alias route — root vs. compact.
 		{"/backend-api/codex/responses", EndpointResponses},
 		{"/backend-api/codex/responses/compact", EndpointResponsesCompact},
 		{"/backend-api/codex/responses/compact/detail", EndpointResponsesCompact},
+		{"/backend-api/codex/alpha/search", EndpointAlphaSearch},
 
 		// Must NOT generalize to arbitrary paths merely ending in
 		// "/responses" (or "/responses/compact") that are unrelated to
@@ -119,11 +124,13 @@ func TestDeriveUpstreamEndpoint(t *testing.T) {
 		{"openai from messages", EndpointMessages, "/v1/messages", service.PlatformOpenAI, EndpointResponses},
 		{"openai from completions", EndpointChatCompletions, "/v1/chat/completions", service.PlatformOpenAI, EndpointResponses},
 		{"openai embeddings", EndpointEmbeddings, "/v1/embeddings", service.PlatformOpenAI, EndpointEmbeddings},
+		{"openai alpha search", EndpointAlphaSearch, "/backend-api/codex/alpha/search", service.PlatformOpenAI, EndpointAlphaSearch},
 		{"openai image generations", EndpointImagesGenerations, "/v1/images/generations", service.PlatformOpenAI, EndpointImagesGenerations},
 		{"openai image edits", EndpointImagesEdits, "/openai/v1/images/edits", service.PlatformOpenAI, EndpointImagesEdits},
 		{"grok chat defaults to responses without runtime result", EndpointChatCompletions, "/v1/chat/completions", service.PlatformGrok, EndpointResponses},
 		{"grok responses", EndpointResponses, "/v1/responses", service.PlatformGrok, EndpointResponses},
 		{"grok video generations", EndpointVideosGenerations, "/v1/videos/generations", service.PlatformGrok, EndpointVideosGenerations},
+		{"grok video edits", EndpointVideosEdits, "/videos/edits", service.PlatformGrok, EndpointVideosEdits},
 		{"grok video status", EndpointVideos, "/videos/req_123", service.PlatformGrok, EndpointVideos},
 
 		// Antigravity — uses inbound to pick Claude vs Gemini upstream.
