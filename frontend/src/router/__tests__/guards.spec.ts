@@ -80,7 +80,7 @@ function simulateGuard(
       return authState.isAdmin ? '/admin/dashboard' : '/dashboard'
     }
     if (authState.backendModeEnabled && !authState.isAuthenticated) {
-      const allowed = ['/login', '/key-usage', '/setup', '/payment/result']
+      const allowed = ['/login', '/key-usage', '/docs', '/setup', '/payment/result']
       const callbackPaths = [
         '/auth/callback',
         '/auth/linuxdo/callback',
@@ -90,7 +90,7 @@ function simulateGuard(
       ]
       const pendingAuthPaths = ['/register', '/email-verify']
       const isAllowed =
-        allowed.some((path) => toPath === path || toPath.startsWith(path)) ||
+        allowed.some((path) => toPath === path || (path !== '/docs' && toPath.startsWith(path))) ||
         callbackPaths.includes(toPath) ||
         (authState.hasPendingAuthSession && pendingAuthPaths.includes(toPath))
       if (!isAllowed) {
@@ -129,7 +129,7 @@ function simulateGuard(
     if (authState.isAuthenticated && authState.isAdmin) {
       return null
     }
-    const allowed = ['/login', '/key-usage', '/setup', '/payment/result']
+    const allowed = ['/login', '/key-usage', '/docs', '/setup', '/payment/result']
     const callbackPaths = [
       '/auth/callback',
       '/auth/linuxdo/callback',
@@ -139,7 +139,7 @@ function simulateGuard(
     ]
     const pendingAuthPaths = ['/register', '/email-verify']
     const isAllowed =
-      allowed.some((path) => toPath === path || toPath.startsWith(path)) ||
+      allowed.some((path) => toPath === path || (path !== '/docs' && toPath.startsWith(path))) ||
       callbackPaths.includes(toPath) ||
       (authState.hasPendingAuthSession && pendingAuthPaths.includes(toPath))
     if (!isAllowed) {
@@ -366,6 +366,18 @@ describe('路由守卫逻辑', () => {
       }
       const redirect = simulateGuard('/key-usage', { requiresAuth: false }, authState)
       expect(redirect).toBeNull()
+    })
+
+    it('unauthenticated: /docs is allowed without exposing /docs/batch-image', () => {
+      const authState: MockAuthState = {
+        isAuthenticated: false,
+        isAdmin: false,
+        isSimpleMode: false,
+        backendModeEnabled: true,
+        hasPendingAuthSession: false,
+      }
+      expect(simulateGuard('/docs', { requiresAuth: false }, authState)).toBeNull()
+      expect(simulateGuard('/docs/batch-image', { requiresAuth: false }, authState)).toBe('/login')
     })
 
     it('unauthenticated: /setup is allowed', () => {

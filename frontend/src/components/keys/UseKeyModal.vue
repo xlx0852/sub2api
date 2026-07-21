@@ -281,7 +281,6 @@ const clientTabs = computed((): TabConfig[] => {
     case 'grok': {
       const tabs: TabConfig[] = [
         { id: 'codex', label: t('keys.useKeyModal.cliTabs.codexCli'), icon: TerminalIcon },
-        { id: 'codex-ws', label: t('keys.useKeyModal.cliTabs.codexCliWs'), icon: TerminalIcon },
       ]
       // Grok groups support Claude-compatible /v1/messages for CLI-style clients.
       tabs.push({ id: 'claude', label: t('keys.useKeyModal.cliTabs.claudeCode'), icon: TerminalIcon })
@@ -449,9 +448,6 @@ const currentFiles = computed((): FileConfig[] => {
     case 'grok':
       if (activeClientTab.value === 'claude') {
         return generateAnthropicFiles(baseUrl, apiKey)
-      }
-      if (activeClientTab.value === 'codex-ws') {
-        return generateGrokWsFiles(baseUrl, apiKey)
       }
       return generateGrokFiles(baseUrl, apiKey)
     case 'gemini':
@@ -671,47 +667,6 @@ wire_api = "responses"
 requires_openai_auth = true
 
 [features]
-goals = true`
-
-  const authContent = `{
-  "OPENAI_API_KEY": "${apiKey}"
-}`
-
-  return [
-    {
-      path: `${configDir}/config.toml`,
-      content: configContent,
-      hint: t('keys.useKeyModal.grok.configTomlHint')
-    },
-    {
-      path: `${configDir}/auth.json`,
-      content: authContent
-    }
-  ]
-}
-
-function generateGrokWsFiles(baseUrl: string, apiKey: string): FileConfig[] {
-  const isWindows = activeTab.value === 'windows'
-  const configDir = isWindows ? '%userprofile%\\.codex' : '~/.codex'
-  const providerBase = normalizeCodexBaseUrl(baseUrl)
-
-  const configContent = `model_provider = "Grok"
-model = "grok-4.5"
-review_model = "grok-4.5"
-model_reasoning_effort = "high"
-disable_response_storage = true
-network_access = "enabled"
-windows_wsl_setup_acknowledged = true
-
-[model_providers.Grok]
-name = "Grok"
-base_url = "${providerBase}"
-wire_api = "responses"
-supports_websockets = true
-requires_openai_auth = true
-
-[features]
-responses_websockets_v2 = true
 goals = true`
 
   const authContent = `{
