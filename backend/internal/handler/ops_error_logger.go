@@ -1276,6 +1276,10 @@ func parseOpsErrorResponse(body []byte) parsedOpsError {
 	// Fast path: attempt to decode into a generic map.
 	var m map[string]any
 	if err := json.Unmarshal(body, &m); err != nil {
+		// Cloudflare/proxy HTML pages (504/524) must not land as raw error_message.
+		if summarized := service.SummarizeNonJSONUpstreamErrorBody(body); summarized != "" {
+			return parsedOpsError{ErrorType: "upstream_error", Message: summarized}
+		}
 		return parsedOpsError{Message: truncateString(string(body), 1024)}
 	}
 

@@ -323,11 +323,11 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "previous_response_id must be a response.id (resp_*), not a message id")
 			return
 		}
-		reqLog.Warn("openai.request_validation_failed",
-			zap.String("reason", "previous_response_id_requires_wsv2"),
+		// Keep previous_response_id for local account affinity. Upstream wire may still
+		// strip it for non-WSv2 transports in the forward path.
+		reqLog.Debug("openai.previous_response_id_accepted_for_affinity",
+			zap.String("previous_response_id_kind", previousResponseIDKind),
 		)
-		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "previous_response_id is only supported on Responses WebSocket v2")
-		return
 	}
 
 	compactMode := service.OpenAICompactMode(c)
@@ -417,24 +417,44 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	failedAccountIDs := make(map[int64]struct{})
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
+	grokRetry := newGrokSameAccountRetryState(h.cfg)
+	if imageIntent {
+		grokRetry.cfg.Enabled = false
+	}
 
 	for {
-		// Select account supporting the requested model
-		reqLog.Debug("openai.account_selecting", zap.Int("excluded_account_count", len(failedAccountIDs)))
-		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithSchedulerForCapability(
-			c.Request.Context(),
-			apiKey.GroupID,
-			previousResponseID,
-			sessionHash,
-			reqModel,
-			failedAccountIDs,
-			service.OpenAIUpstreamTransportAny,
-			service.OpenAIEndpointCapabilityChatCompletions,
-			requireCompact,
-			false,
-			requestPlatform,
-		)
+		// Streaming Forward detaches upstream so usage can drain after disconnect.
+		// Re-check client context before every account attempt so a canceled
+		// request never starts a failover replay that looks like account exhaustion.
+		if failoverClientGone(c) {
+			return
+		}
+		selection, pinnedRetry := grokRetry.takePinnedSelection()
+		var scheduleDecision service.OpenAIAccountScheduleDecision
+		var err error
+		if !pinnedRetry {
+			// Select account supporting the requested model
+			reqLog.Debug("openai.account_selecting", zap.Int("excluded_account_count", len(failedAccountIDs)))
+			selection, scheduleDecision, err = h.gatewayService.SelectAccountWithSchedulerForCapability(
+				c.Request.Context(),
+				apiKey.GroupID,
+				previousResponseID,
+				sessionHash,
+				reqModel,
+				failedAccountIDs,
+				service.OpenAIUpstreamTransportAny,
+				service.OpenAIEndpointCapabilityChatCompletions,
+				requireCompact,
+				false,
+				requestPlatform,
+			)
+		} else {
+			reqLog.Debug("grok.same_account_retry_pinned", zap.Int64("account_id", selection.Account.ID))
+		}
 		if err != nil {
+			if failoverClientGone(c) {
+				return
+			}
 			reqLog.Warn("openai.account_select_failed",
 				zap.Error(err),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
@@ -486,12 +506,18 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 
 		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, reqStream, &streamStarted, reqLog)
 		if !acquired {
+			if penalty := grokRetry.penaltyForFailedAttempt(nil); penalty != nil {
+				h.gatewayService.ApplyGrokSameAccountRetryPenalty(c.Request.Context(), account, penalty)
+			}
 			return
 		}
 
 		// Forward request
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
 		forwardStart := time.Now()
+		if attempt := grokRetry.beginAttempt(account); attempt > 0 {
+			service.SetGrokUpstreamAttempt(c, attempt)
+		}
 		writerSizeBeforeForward := service.OpenAICompactKeepaliveAdjustedWrittenSize(c)
 		forwardCtx := c.Request.Context()
 		var cancelForward context.CancelFunc
@@ -593,14 +619,44 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted || service.OpenAICompactKeepaliveAdjustedWrittenSize(c) != writerSizeBeforeForward)
 						return
 					}
-					if !requireCompact {
+					if canStartGrokSameAccountRetry(c, writerSizeBeforeForward) {
+						if delay, retry := grokRetry.schedule(c.Request.Context(), account, selection.WaitPlan, failoverErr); retry {
+							reqLog.Warn("grok.same_account_retry",
+								zap.Int64("account_id", account.ID),
+								zap.Int("upstream_status", failoverErr.StatusCode),
+								zap.Int("attempt", grokRetry.retryCount[account.ID]),
+								zap.Int("max_attempts", grokRetry.cfg.MaxRetries),
+								zap.Duration("delay", delay),
+							)
+							if !sleepWithContext(c.Request.Context(), delay) {
+								if penalty := grokRetry.cancelScheduledRetryPenalty(); penalty != nil {
+									h.gatewayService.ApplyGrokSameAccountRetryPenalty(c.Request.Context(), account, penalty)
+								}
+								return
+							}
+							continue
+						}
+					}
+					// Credential failures: do not same-account retry / mis-penalize provider-scoped errors.
+					if !failoverErr.IsCredentialFailure() {
+						penalty := grokRetry.penaltyForFailedAttempt(failoverErr)
+						if penalty == nil {
+							penalty = failoverErr
+						}
+						h.gatewayService.ApplyGrokSameAccountRetryPenalty(c.Request.Context(), account, penalty)
+					}
+					if !requireCompact && !failoverErr.GrokStaleCredential && failoverErr.ShouldReportAccountScheduleFailure() {
 						h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
 					}
 					if requireCompact {
 						h.gatewayService.ReportOpenAICompactScheduleResult(account.ID, false, time.Since(forwardStart))
 					}
-					// 池模式：同账号重试
-					if failoverErr.RetryableOnSameAccount {
+					if !failoverErr.ShouldRetryNextAccount() {
+						h.handleFailoverExhausted(c, failoverErr, streamStarted)
+						return
+					}
+					// 池模式：同账号重试（凭据失败不走同号重试）
+					if !failoverErr.IsCredentialFailure() && failoverErr.RetryableOnSameAccount && !failoverErr.GrokSameAccountRetry {
 						retryLimit := account.GetPoolModeRetryCount()
 						if sameAccountRetryCount[account.ID] < retryLimit {
 							sameAccountRetryCount[account.ID]++
@@ -633,10 +689,15 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					reqLog.Warn("openai.upstream_failover_switching",
 						zap.Int64("account_id", account.ID),
 						zap.Int("upstream_status", failoverErr.StatusCode),
+						zap.String("failure_stage", string(failoverErr.Stage)),
+						zap.String("failure_reason", string(failoverErr.Reason)),
 						zap.Int("switch_count", switchCount),
 						zap.Int("max_switches", maxAccountSwitches),
 					)
 					continue
+				}
+				if penalty := grokRetry.penaltyForFailedAttempt(nil); penalty != nil {
+					h.gatewayService.ApplyGrokSameAccountRetryPenalty(c.Request.Context(), account, penalty)
 				}
 				if !requireCompact {
 					h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
@@ -664,6 +725,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			}
 		}
 		if result != nil {
+			grokRetry.finishSuccessfulAttempt()
 			if requireCompact {
 				result.CompactRetryCount = compactRetryCount
 			}
@@ -1466,6 +1528,18 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		h.errorResponse(c, http.StatusUnauthorized, "authentication_error", "Invalid API key")
 		return
 	}
+	// Grok only supports the HTTP Responses/SSE transport. Reject before
+	// coderws.Accept so fallback-capable clients can retry with POST /responses
+	// and no WebSocket ingress or concurrency lease is consumed.
+	if openAICompatibleRequestPlatform(apiKey) == service.PlatformGrok {
+		h.errorResponse(
+			c,
+			http.StatusUpgradeRequired,
+			"websocket_not_supported",
+			"Grok Responses WebSocket is not supported; retry with HTTP Responses/SSE",
+		)
+		return
+	}
 	subject, ok := middleware2.GetAuthSubjectFromContext(c)
 	if !ok {
 		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
@@ -1508,17 +1582,44 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	wsConn.SetReadLimit(service.ResolveOpenAIWSClientReadLimitBytes(h.cfg))
 
 	ctx := c.Request.Context()
-	readCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	maxIngressConnections := 0
+	if h.cfg != nil {
+		maxIngressConnections = h.cfg.Gateway.OpenAIWS.MaxIngressConnectionsPerAPIKey
+	}
+	ingressLease, ingressLeaseAcquired, ingressLeaseErr := h.concurrencyHelper.AcquireOpenAIWSIngressLease(ctx, apiKey.ID, maxIngressConnections)
+	if ingressLeaseErr != nil {
+		reqLog.Error("openai.websocket_ingress_lease_acquire_failed", zap.Error(ingressLeaseErr))
+		closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "failed to reserve websocket ingress capacity")
+		return
+	}
+	if !ingressLeaseAcquired {
+		reqLog.Info("openai.websocket_ingress_capacity_rejected", zap.Int("max_ingress_connections_per_api_key", maxIngressConnections))
+		closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "too many open websocket connections, please retry later")
+		return
+	}
+	if ingressLease != nil {
+		defer ingressLease.Release()
+		ctx = ingressLease.Context()
+		c.Request = c.Request.WithContext(ctx)
+	}
+
+	firstMessageTimeout := service.ResolveOpenAIWSClientFirstMessageTimeout(h.cfg)
+	readCtx, cancel := context.WithTimeout(ctx, firstMessageTimeout)
 	msgType, firstMessage, err := wsConn.Read(readCtx)
 	cancel()
 	if err != nil {
+		if errors.Is(context.Cause(ctx), service.ErrOpenAIWSIngressLeaseLost) {
+			reqLog.Warn("openai.websocket_ingress_lease_lost_before_first_message", zap.Error(err))
+			closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "websocket ingress capacity lease lost; please reconnect")
+			return
+		}
 		closeStatus, closeReason := summarizeWSCloseErrorForLog(err)
 		reqLog.Warn("openai.websocket_read_first_message_failed",
 			zap.Error(err),
 			zap.String("client_ip", clientIP),
 			zap.String("close_status", closeStatus),
 			zap.String("close_reason", closeReason),
-			zap.Duration("read_timeout", 30*time.Second),
+			zap.Duration("read_timeout", firstMessageTimeout),
 		)
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "missing first response.create message")
 		return
@@ -1719,6 +1820,33 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		token, _, err := h.gatewayService.GetAccessToken(ctx, account)
 		if err != nil {
 			reqLog.Warn("openai.websocket_get_access_token_failed", zap.Int64("account_id", account.ID), zap.Error(err))
+			var failoverErr *service.UpstreamFailoverError
+			if errors.As(err, &failoverErr) {
+				if failoverErr.ShouldReportAccountScheduleFailure() {
+					h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+				}
+				currentAccountRelease()
+				currentAccountRelease = nil
+				if !failoverErr.ShouldRetryNextAccount() {
+					closeOpenAIWSFailoverExhausted(wsConn, failoverErr)
+					return
+				}
+				h.gatewayService.RecordOpenAIAccountSwitch()
+				failedAccountIDs[account.ID] = struct{}{}
+				lastFailoverErr = failoverErr
+				if switchCount >= maxAccountSwitches {
+					closeOpenAIWSFailoverExhausted(wsConn, failoverErr)
+					return
+				}
+				switchCount++
+				reqLog.Warn("openai.websocket_credential_failover_switching",
+					zap.Int64("account_id", account.ID),
+					zap.String("failure_stage", string(failoverErr.Stage)),
+					zap.String("failure_reason", string(failoverErr.Reason)),
+					zap.Int("switch_count", switchCount),
+				)
+				continue
+			}
 			closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "failed to get access token")
 			return
 		}
@@ -1910,6 +2038,25 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				continue
 			}
 
+			if errors.Is(context.Cause(ctx), service.ErrOpenAIWSIngressLeaseLost) {
+				reqLog.Warn("openai.websocket_ingress_lease_lost",
+					zap.Int64("account_id", account.ID),
+					zap.Error(err),
+				)
+				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "websocket ingress capacity lease lost; please reconnect")
+				return
+			}
+
+			var closeErr *service.OpenAIWSClientCloseError
+			if errors.As(err, &closeErr) && closeErr.StatusCode() == coderws.StatusNormalClosure {
+				reqLog.Info("openai.websocket_ingress_closed_normally",
+					zap.Int64("account_id", account.ID),
+					zap.String("reason", closeErr.Reason()),
+				)
+				closeOpenAIClientWS(wsConn, closeErr.StatusCode(), closeErr.Reason())
+				return
+			}
+
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
 			closeStatus, closeReason := summarizeWSCloseErrorForLog(err)
 			reqLog.Warn("openai.websocket_proxy_failed",
@@ -1918,7 +2065,6 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				zap.String("close_status", closeStatus),
 				zap.String("close_reason", closeReason),
 			)
-			var closeErr *service.OpenAIWSClientCloseError
 			if errors.As(err, &closeErr) {
 				closeOpenAIClientWS(wsConn, closeErr.StatusCode(), closeErr.Reason())
 				return
@@ -2120,6 +2266,28 @@ func (h *OpenAIGatewayHandler) handleConcurrencyError(c *gin.Context, err error,
 }
 
 func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverErr *service.UpstreamFailoverError, streamStarted bool) {
+	if failoverErr == nil {
+		h.handleFailoverExhaustedSimple(c, http.StatusBadGateway, streamStarted)
+		return
+	}
+	copyFailoverRetryAfter(c, failoverErr.ResponseHeaders)
+	if failoverErr.IsCredentialFailure() {
+		status, message := credentialFailoverClientResponse(failoverErr)
+		service.SetOpsUpstreamError(c, status, message, "")
+		h.handleStreamingAwareError(c, status, "upstream_error", message, streamStarted)
+		return
+	}
+	if failoverErr.IsOpenAIRequestBodyTooLarge() {
+		service.SetOpsUpstreamError(c, http.StatusRequestEntityTooLarge, service.OpenAIRequestBodyTooLargeClientMessage, "")
+		h.handleStreamingAwareError(
+			c,
+			http.StatusRequestEntityTooLarge,
+			"invalid_request_error",
+			service.OpenAIRequestBodyTooLargeClientMessage,
+			streamStarted,
+		)
+		return
+	}
 	statusCode := failoverErr.StatusCode
 	responseBody := failoverErr.ResponseBody
 	if service.IsOpenAISilentRefusalErrorBody(responseBody) {
@@ -2142,6 +2310,19 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
 			if !rule.PassthroughBody && rule.CustomMessage != nil {
 				msg = *rule.CustomMessage
 			}
+			// Cloudflare HTML 5xx must not leak raw pages / empty messages.
+			if summarized := service.SummarizeNonJSONUpstreamErrorBody(responseBody); summarized != "" {
+				mappedStatus, _, mappedMsg := service.MapOpenAIUpstreamErrorStatus(statusCode)
+				if rule.PassthroughCode || respCode == statusCode {
+					respCode = mappedStatus
+				}
+				if strings.TrimSpace(msg) == "" {
+					msg = summarized
+					if msg == "" {
+						msg = mappedMsg
+					}
+				}
+			}
 
 			if rule.SkipMonitoring {
 				c.Set(service.OpsSkipPassthroughKey, true)
@@ -2158,6 +2339,9 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
 
 	// 使用默认的错误映射
 	status, errType, errMsg := h.mapUpstreamError(statusCode)
+	if summarized := service.SummarizeNonJSONUpstreamErrorBody(responseBody); summarized != "" {
+		errMsg = summarized
+	}
 	h.handleStreamingAwareError(c, status, errType, errMsg, streamStarted)
 }
 
@@ -2168,21 +2352,45 @@ func (h *OpenAIGatewayHandler) handleFailoverExhaustedSimple(c *gin.Context, sta
 	h.handleStreamingAwareError(c, status, errType, errMsg, streamStarted)
 }
 
-func (h *OpenAIGatewayHandler) mapUpstreamError(statusCode int) (int, string, string) {
-	switch statusCode {
-	case 401:
-		return http.StatusBadGateway, "upstream_error", "Upstream authentication failed, please contact administrator"
-	case 403:
-		return http.StatusBadGateway, "upstream_error", "Upstream access forbidden, please contact administrator"
-	case 429:
-		return http.StatusTooManyRequests, "rate_limit_error", "Upstream rate limit exceeded, please retry later"
-	case 529:
-		return http.StatusServiceUnavailable, "upstream_error", "Upstream service overloaded, please retry later"
-	case 500, 502, 503, 504:
-		return http.StatusBadGateway, "upstream_error", "Upstream service temporarily unavailable"
-	default:
-		return http.StatusBadGateway, "upstream_error", "Upstream request failed"
+func credentialFailoverClientResponse(failoverErr *service.UpstreamFailoverError) (int, string) {
+	_ = failoverErr
+	return http.StatusServiceUnavailable, service.GrokCredentialUnavailableClientMessage
+}
+
+func copyFailoverRetryAfter(c *gin.Context, headers http.Header) {
+	if c == nil || headers == nil {
+		return
 	}
+	retryAfter := strings.TrimSpace(headers.Get("Retry-After"))
+	if retryAfter == "" || len(retryAfter) > 128 || strings.ContainsAny(retryAfter, "\r\n") || !isSafeRetryAfter(retryAfter) {
+		return
+	}
+	c.Header("Retry-After", retryAfter)
+}
+
+func isSafeRetryAfter(value string) bool {
+	digitsOnly := true
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			digitsOnly = false
+			break
+		}
+	}
+	if digitsOnly {
+		seconds, err := strconv.ParseUint(value, 10, 32)
+		return err == nil && seconds <= uint64((7*24*time.Hour)/time.Second)
+	}
+	retryAt, err := http.ParseTime(value)
+	if err != nil {
+		return false
+	}
+	return !retryAt.After(time.Now().Add(7 * 24 * time.Hour))
+}
+
+func (h *OpenAIGatewayHandler) mapUpstreamError(statusCode int) (int, string, string) {
+	// Shared mapping so Cloudflare 524 (origin timeout) is treated like other
+	// upstream 5xx failures instead of falling into the generic "request failed".
+	return service.MapOpenAIUpstreamErrorStatus(statusCode)
 }
 
 // handleStreamingAwareError handles errors that may occur after streaming has started
@@ -2368,6 +2576,10 @@ func closeOpenAIClientWS(conn *coderws.Conn, status coderws.StatusCode, reason s
 func closeOpenAIWSFailoverExhausted(conn *coderws.Conn, failoverErr *service.UpstreamFailoverError) {
 	if failoverErr == nil {
 		closeOpenAIClientWS(conn, coderws.StatusInternalError, "upstream websocket proxy failed")
+		return
+	}
+	if failoverErr.IsCredentialFailure() {
+		closeOpenAIClientWS(conn, coderws.StatusTryAgainLater, service.GrokCredentialUnavailableClientMessage)
 		return
 	}
 	switch failoverErr.StatusCode {
