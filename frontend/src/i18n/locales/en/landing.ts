@@ -1,4 +1,18 @@
 export default {
+  docs: {
+    pageTitle: 'Integration Guide',
+    navLabel: 'Docs',
+    quickStart: 'Quick Start',
+    badge: 'SicTs Docs',
+    apiBase: 'API Base URL',
+    getKey: 'Get API Key',
+    toggleMenu: 'Open menu',
+    prev: 'Previous',
+    next: 'Next',
+    copy: 'Copy',
+    copied: 'Copied',
+    copyFailed: 'Copy failed'
+  },
   batchImageGuide: {
     title: 'Batch Image Generation',
     description: 'Submit multiple prompts in one job and download the generated images when complete'
