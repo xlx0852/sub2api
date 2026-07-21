@@ -93,6 +93,24 @@ func (r *schedulerOutboxRepository) ListAfterAndReleaseDedup(ctx context.Context
 	return events, nil
 }
 
+func (r *schedulerOutboxRepository) FirstCreatedAtAfter(ctx context.Context, afterID int64) (time.Time, bool, error) {
+	var createdAt time.Time
+	err := r.db.QueryRowContext(ctx, `
+		SELECT created_at
+		FROM scheduler_outbox
+		WHERE id > $1
+		ORDER BY id ASC
+		LIMIT 1
+	`, afterID).Scan(&createdAt)
+	if err == sql.ErrNoRows {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	return createdAt, true, nil
+}
+
 func (r *schedulerOutboxRepository) MaxID(ctx context.Context) (int64, error) {
 	var maxID int64
 	if err := r.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(id), 0) FROM scheduler_outbox").Scan(&maxID); err != nil {
@@ -190,6 +208,34 @@ func enqueueSchedulerOutbox(ctx context.Context, exec sqlExecutor, eventType str
 	}
 	_, err := exec.ExecContext(ctx, query, args...)
 	return err
+}
+
+// enqueueSchedulerOutboxWithRetry 在 DB 已提交后的 best-effort outbox 写入上加重试，
+// 降低 AutoPause / 代理到期等“库已改、缓存未刷”窗口。attempts<=1 时等同单次写入。
+func enqueueSchedulerOutboxWithRetry(ctx context.Context, exec sqlExecutor, eventType string, accountID *int64, groupID *int64, payload any, attempts int) error {
+	if attempts < 1 {
+		attempts = 1
+	}
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		lastErr = enqueueSchedulerOutbox(ctx, exec, eventType, accountID, groupID, payload)
+		if lastErr == nil {
+			return nil
+		}
+		if i+1 >= attempts {
+			break
+		}
+		// 短退避：瞬时连接抖动时足够；不阻塞过久以免拖死定时任务。
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Duration(i+1) * 50 * time.Millisecond):
+		}
+	}
+	return lastErr
 }
 
 func schedulerOutboxDedupKey(eventType string, accountID *int64, groupID *int64, payloadJSON []byte) string {
