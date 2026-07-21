@@ -35,3 +35,26 @@ func TestSchedulerMetadataAccountKeepsOpenAISubscriptionIdentity(t *testing.T) {
 	require.True(t, metadata.IsOpenAIChatGPTSubscription())
 	require.Empty(t, metadata.GetCredential("access_token"))
 }
+
+func TestBuildSchedulerMetadataAccountKeepsGrokQuotaSnapshots(t *testing.T) {
+	billing := map[string]any{
+		"usage_percent": 25.0,
+		"status_code":   200,
+		"fetched_at":    "2026-07-15T09:00:00Z",
+	}
+	quota := map[string]any{
+		"requests":   map[string]any{"limit": 100, "remaining": 75},
+		"updated_at": "2026-07-15T09:00:00Z",
+	}
+	account := service.Account{ID: 89, Platform: service.PlatformGrok, Extra: map[string]any{
+		"grok_billing_snapshot": billing,
+		"grok_usage_snapshot":   quota,
+		"unused_large_field":    "drop-me",
+	}}
+
+	got := buildSchedulerMetadataAccount(account)
+
+	require.Equal(t, billing, got.Extra["grok_billing_snapshot"])
+	require.Equal(t, quota, got.Extra["grok_usage_snapshot"])
+	require.NotContains(t, got.Extra, "unused_large_field")
+}
