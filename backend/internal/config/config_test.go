@@ -182,6 +182,28 @@ func TestLoadDefaultOpenAIWSConfig(t *testing.T) {
 	if cfg.Gateway.OpenAIWS.IngressModeDefault != "ctx_pool" {
 		t.Fatalf("Gateway.OpenAIWS.IngressModeDefault = %q, want %q", cfg.Gateway.OpenAIWS.IngressModeDefault, "ctx_pool")
 	}
+	if cfg.Gateway.OpenAIWS.ClientFirstMessageTimeoutSeconds != DefaultOpenAIWSClientFirstMessageTimeoutSeconds {
+		t.Fatalf(
+			"Gateway.OpenAIWS.ClientFirstMessageTimeoutSeconds = %d, want %d",
+			cfg.Gateway.OpenAIWS.ClientFirstMessageTimeoutSeconds,
+			DefaultOpenAIWSClientFirstMessageTimeoutSeconds,
+		)
+	}
+	if cfg.Gateway.OpenAIWS.IngressInterTurnIdleTimeoutSeconds != 300 {
+		t.Fatalf("Gateway.OpenAIWS.IngressInterTurnIdleTimeoutSeconds = %d, want 300", cfg.Gateway.OpenAIWS.IngressInterTurnIdleTimeoutSeconds)
+	}
+	if cfg.Gateway.OpenAIWS.MaxIngressConnectionsPerAPIKey != 64 {
+		t.Fatalf("Gateway.OpenAIWS.MaxIngressConnectionsPerAPIKey = %d, want 64", cfg.Gateway.OpenAIWS.MaxIngressConnectionsPerAPIKey)
+	}
+}
+
+func TestLoadOpenAIWSClientFirstMessageTimeoutFromEnv(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("GATEWAY_OPENAI_WS_CLIENT_FIRST_MESSAGE_TIMEOUT_SECONDS", "120")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, 120, cfg.Gateway.OpenAIWS.ClientFirstMessageTimeoutSeconds)
 }
 
 func TestLoadDefaultOpenAICompactModel(t *testing.T) {
@@ -225,6 +247,18 @@ func TestLoadDefaultOpenAIResponseHeaderTimeoutUnlimited(t *testing.T) {
 	cfg, err := Load()
 	require.NoError(t, err)
 	require.Equal(t, 0, cfg.Gateway.OpenAIResponseHeaderTimeout)
+}
+
+func TestLoadDefaultGrokPayloadConfig(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.True(t, cfg.Gateway.GrokPayload.DeduplicateImages)
+	require.True(t, cfg.Gateway.GrokPayload.DisableStoreOnImages)
+	require.Equal(t, int64(16*1024*1024), cfg.Gateway.GrokPayload.SoftLimitBytes)
+	require.Equal(t, int64(32*1024*1024), cfg.Gateway.GrokPayload.HardLimitBytes)
+	require.Equal(t, 256*1024, cfg.Gateway.GrokPayload.ToolOutputMaxBytes)
 }
 
 func TestLoadOpenAIResponseHeaderTimeoutFromEnv(t *testing.T) {
@@ -392,6 +426,47 @@ func TestLoadDefaultSecurityToggles(t *testing.T) {
 	}
 	if !cfg.Security.ResponseHeaders.Enabled {
 		t.Fatalf("ResponseHeaders.Enabled = false, want true")
+	}
+}
+
+func TestLoadDefaultGrokSameAccountRetry(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.True(t, cfg.Gateway.GrokSameAccountRetry.Enabled)
+	require.Equal(t, 1, cfg.Gateway.GrokSameAccountRetry.MaxRetries)
+	require.Equal(t, []int{429, 502, 503, 504, 529}, cfg.Gateway.GrokSameAccountRetry.Statuses)
+	require.Equal(t, 500, cfg.Gateway.GrokSameAccountRetry.FallbackDelayMS)
+	require.Equal(t, 2000, cfg.Gateway.GrokSameAccountRetry.MaxRetryAfterMS)
+}
+
+func TestValidateGrokSameAccountRetry(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	cfg, err := Load()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name   string
+		mutate func(*GrokSameAccountRetryConfig)
+	}{
+		{name: "negative retries", mutate: func(c *GrokSameAccountRetryConfig) { c.MaxRetries = -1 }},
+		{name: "excessive retries", mutate: func(c *GrokSameAccountRetryConfig) { c.MaxRetries = 11 }},
+		{name: "negative fallback", mutate: func(c *GrokSameAccountRetryConfig) { c.FallbackDelayMS = -1 }},
+		{name: "negative retry after", mutate: func(c *GrokSameAccountRetryConfig) { c.MaxRetryAfterMS = -1 }},
+		{name: "invalid status", mutate: func(c *GrokSameAccountRetryConfig) { c.Statuses = []int{401} }},
+		{name: "duplicate status", mutate: func(c *GrokSameAccountRetryConfig) { c.Statuses = []int{429, 429} }},
+		{name: "empty enabled policy", mutate: func(c *GrokSameAccountRetryConfig) { c.Statuses = nil }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			copyCfg := *cfg
+			copyCfg.Gateway = cfg.Gateway
+			retryCfg := cfg.Gateway.GrokSameAccountRetry
+			tt.mutate(&retryCfg)
+			copyCfg.Gateway.GrokSameAccountRetry = retryCfg
+			require.Error(t, copyCfg.Validate())
+		})
 	}
 }
 
@@ -1307,6 +1382,29 @@ func TestValidateConfigErrors(t *testing.T) {
 			wantErr: "gateway.max_body_size",
 		},
 		{
+			name:    "gateway grok payload soft limit",
+			mutate:  func(c *Config) { c.Gateway.GrokPayload.SoftLimitBytes = -1 },
+			wantErr: "gateway.grok_payload.soft_limit_bytes",
+		},
+		{
+			name:    "gateway grok payload hard limit",
+			mutate:  func(c *Config) { c.Gateway.GrokPayload.HardLimitBytes = -1 },
+			wantErr: "gateway.grok_payload.hard_limit_bytes",
+		},
+		{
+			name:    "gateway grok payload tool output max",
+			mutate:  func(c *Config) { c.Gateway.GrokPayload.ToolOutputMaxBytes = -1 },
+			wantErr: "gateway.grok_payload.tool_output_max_bytes",
+		},
+		{
+			name: "gateway grok payload hard below soft",
+			mutate: func(c *Config) {
+				c.Gateway.GrokPayload.SoftLimitBytes = 1024
+				c.Gateway.GrokPayload.HardLimitBytes = 512
+			},
+			wantErr: "gateway.grok_payload.hard_limit_bytes",
+		},
+		{
 			name:    "gateway response header timeout",
 			mutate:  func(c *Config) { c.Gateway.ResponseHeaderTimeout = -1 },
 			wantErr: "gateway.response_header_timeout",
@@ -1639,6 +1737,26 @@ func TestValidateConfig_OpenAIWSRules(t *testing.T) {
 			name:    "max_conns_per_account 必须为正数",
 			mutate:  func(c *Config) { c.Gateway.OpenAIWS.MaxConnsPerAccount = 0 },
 			wantErr: "gateway.openai_ws.max_conns_per_account",
+		},
+		{
+			name:    "client_first_message_timeout_seconds 必须为正数",
+			mutate:  func(c *Config) { c.Gateway.OpenAIWS.ClientFirstMessageTimeoutSeconds = 0 },
+			wantErr: "gateway.openai_ws.client_first_message_timeout_seconds",
+		},
+		{
+			name:    "client_first_message_timeout_seconds 不能为负数",
+			mutate:  func(c *Config) { c.Gateway.OpenAIWS.ClientFirstMessageTimeoutSeconds = -1 },
+			wantErr: "gateway.openai_ws.client_first_message_timeout_seconds",
+		},
+		{
+			name:    "ingress_inter_turn_idle_timeout_seconds 不能为负数",
+			mutate:  func(c *Config) { c.Gateway.OpenAIWS.IngressInterTurnIdleTimeoutSeconds = -1 },
+			wantErr: "gateway.openai_ws.ingress_inter_turn_idle_timeout_seconds",
+		},
+		{
+			name:    "max_ingress_connections_per_api_key 不能为负数",
+			mutate:  func(c *Config) { c.Gateway.OpenAIWS.MaxIngressConnectionsPerAPIKey = -1 },
+			wantErr: "gateway.openai_ws.max_ingress_connections_per_api_key",
 		},
 		{
 			name:    "min_idle_per_account 不能为负数",
