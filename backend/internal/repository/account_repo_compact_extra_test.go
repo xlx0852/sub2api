@@ -23,3 +23,14 @@ func TestShouldEnqueueSchedulerOutboxForExtraUpdates_OpenAIResponsesCapabilityKe
 		t.Fatalf("expected responses capability updates to enqueue scheduler outbox")
 	}
 }
+
+func TestShouldEnqueueSchedulerOutboxForExtraUpdates_GrokQuotaSnapshotsAreNeutral(t *testing.T) {
+	updates := map[string]any{
+		"grok_billing_snapshot": map[string]any{"used_percent": 25},
+		"grok_usage_snapshot":   map[string]any{"requests": map[string]any{"remaining": 75}},
+	}
+
+	if shouldEnqueueSchedulerOutboxForExtraUpdates(updates) {
+		t.Fatal("expected Grok quota observations to refresh only the single-account scheduler snapshot")
+	}
+}
