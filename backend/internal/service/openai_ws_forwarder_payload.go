@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -20,31 +19,26 @@ func (s *OpenAIGatewayService) buildOpenAIResponsesWSURL(account *Account) (stri
 	if account == nil {
 		return "", errors.New("account is nil")
 	}
-	var targetURL string
 	if account.Platform == PlatformGrok {
-		responsesURL, err := xai.BuildResponsesURL(account.GetGrokOfficialBaseURL())
-		if err != nil {
-			return "", err
-		}
-		targetURL = responsesURL
-	} else {
-		switch account.Type {
-		case AccountTypeOAuth:
-			targetURL = chatgptCodexURL
-		case AccountTypeAPIKey:
-			baseURL := account.GetOpenAIBaseURL()
-			if baseURL == "" {
-				targetURL = openaiPlatformAPIURL
-			} else {
-				validatedURL, err := s.validateUpstreamBaseURL(baseURL)
-				if err != nil {
-					return "", err
-				}
-				targetURL = buildOpenAIResponsesURL(validatedURL)
-			}
-		default:
+		return "", errors.New("Grok Responses WebSocket is not supported")
+	}
+	var targetURL string
+	switch account.Type {
+	case AccountTypeOAuth:
+		targetURL = chatgptCodexURL
+	case AccountTypeAPIKey:
+		baseURL := account.GetOpenAIBaseURL()
+		if baseURL == "" {
 			targetURL = openaiPlatformAPIURL
+		} else {
+			validatedURL, err := s.validateUpstreamBaseURL(baseURL)
+			if err != nil {
+				return "", err
+			}
+			targetURL = buildOpenAIResponsesURL(validatedURL)
 		}
+	default:
+		targetURL = openaiPlatformAPIURL
 	}
 
 	parsed, err := url.Parse(strings.TrimSpace(targetURL))
@@ -223,7 +217,87 @@ func (s *OpenAIGatewayService) buildOpenAIWSCreatePayload(reqBody map[string]any
 	if account != nil && account.Type == AccountTypeOAuth && !s.isOpenAIWSStoreRecoveryAllowed(account) {
 		payload["store"] = false
 	}
+	// 与 HTTP 路径对齐：超长 call_id 必须在进上游前收敛，否则 WS 同样 400。
+	clampOpenAIResponsesCallIDsInMap(payload)
 	return payload
+}
+
+// sanitizeOpenAIWSResponseCreateFrame 收敛 WS response.create 帧的兼容性字段：
+// 1) clamp input[].call_id（所有账号）
+// 2) OAuth 路径额外剥离 max_output_tokens / max_completion_tokens
+//    （与 HTTP OAuth 透传/非 CLI strip 一致，避免 ChatGPT internal 400）
+func sanitizeOpenAIWSResponseCreateFrame(frame []byte, account *Account) ([]byte, bool, error) {
+	if len(frame) == 0 {
+		return frame, false, nil
+	}
+	if !gjson.ValidBytes(frame) {
+		return frame, false, nil
+	}
+	if strings.TrimSpace(gjson.GetBytes(frame, "type").String()) != "response.create" {
+		return frame, false, nil
+	}
+
+	normalized := frame
+	changed := false
+
+	next, callIDsChanged, err := clampOpenAIResponsesCallIDsInBody(normalized)
+	if err != nil {
+		return frame, false, err
+	}
+	if callIDsChanged {
+		normalized = next
+		changed = true
+	}
+
+	if account != nil && account.Platform == PlatformOpenAI && account.Type == AccountTypeOAuth {
+		for _, field := range openAIPassthroughOAuthUnsupportedFields {
+			if value := gjson.GetBytes(normalized, field); !value.Exists() {
+				continue
+			}
+			next, delErr := sjson.DeleteBytes(normalized, field)
+			if delErr != nil {
+				return frame, false, fmt.Errorf("sanitize ws response.create delete %s: %w", field, delErr)
+			}
+			normalized = next
+			changed = true
+		}
+	}
+
+	return normalized, changed, nil
+}
+
+// clampOpenAIResponsesCallIDsInMap 对 map 形态的 response.create /responses body
+// 做与 clampOpenAIResponsesCallIDsInBody 相同的确定性 call_id 收敛。
+func clampOpenAIResponsesCallIDsInMap(body map[string]any) bool {
+	if body == nil {
+		return false
+	}
+	rawInput, ok := body["input"]
+	if !ok || rawInput == nil {
+		return false
+	}
+	items, ok := rawInput.([]any)
+	if !ok {
+		return false
+	}
+	changed := false
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		raw, ok := m["call_id"].(string)
+		if !ok || raw == "" {
+			continue
+		}
+		fixed := clampOpenAIResponsesCallID(raw)
+		if fixed == raw {
+			continue
+		}
+		m["call_id"] = fixed
+		changed = true
+	}
+	return changed
 }
 
 func setOpenAIWSTurnMetadata(payload map[string]any, turnMetadata string) {
