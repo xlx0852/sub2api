@@ -35,8 +35,12 @@ func ResponsesToChatCompletionsRequest(req *ResponsesRequest) (*ChatCompletionsR
 	if req.Reasoning != nil {
 		out.ReasoningEffort = req.Reasoning.Effort
 	}
-	if len(req.Tools) > 0 {
-		out.Tools = responsesToolsToChatTools(req.Tools)
+	effectiveTools, err := EffectiveResponsesTools(req)
+	if err != nil {
+		return nil, err
+	}
+	if len(effectiveTools) > 0 {
+		out.Tools = responsesToolsToChatTools(effectiveTools)
 	}
 	// tools 全部被丢弃（如仅含 web_search/image_generation 等服务端工具）时不再转发
 	// tool_choice：上游会拒绝 "'tool_choice' is only allowed when 'tools' are specified"。
@@ -48,6 +52,43 @@ func ResponsesToChatCompletionsRequest(req *ResponsesRequest) (*ChatCompletionsR
 	}
 
 	return out, nil
+}
+
+// EffectiveResponsesTools returns all client-executable tools declared by a
+// Responses request. Newer Codex clients place runtime tools in an input item
+// shaped as {"type":"additional_tools","tools":[...]}.
+func EffectiveResponsesTools(req *ResponsesRequest) ([]ResponsesTool, error) {
+	if req == nil {
+		return nil, nil
+	}
+
+	tools := append([]ResponsesTool(nil), req.Tools...)
+	inputRaw := bytesTrimSpace(req.Input)
+	if len(inputRaw) == 0 || string(inputRaw) == "null" || inputRaw[0] != '[' {
+		return tools, nil
+	}
+
+	var items []json.RawMessage
+	if err := json.Unmarshal(inputRaw, &items); err != nil {
+		return nil, fmt.Errorf("parse responses input for additional tools: %w", err)
+	}
+	for _, raw := range items {
+		raw = bytesTrimSpace(raw)
+		if len(raw) == 0 || raw[0] != '{' {
+			continue
+		}
+		var item struct {
+			Type  string          `json:"type"`
+			Tools []ResponsesTool `json:"tools"`
+		}
+		if err := json.Unmarshal(raw, &item); err != nil {
+			return nil, fmt.Errorf("parse responses additional tools item: %w", err)
+		}
+		if item.Type == "additional_tools" {
+			tools = append(tools, item.Tools...)
+		}
+	}
+	return tools, nil
 }
 
 // CustomToolNames 收集 Responses 请求中 custom/freeform 工具的名字。chat 桥回程时
