@@ -1,0 +1,4 @@
+interface:
+  display_name: "SicTs Image Gen"
+  short_description: "Default image gen/edit via SicTs gateway (not system imagegen)"
+  default_prompt: "Use $sicts-imagegen (sicts-image-gen CLI) to generate or edit images through the SicTs/Sub2API Images API. Do not use system $imagegen or scripts/image_gen.py."
