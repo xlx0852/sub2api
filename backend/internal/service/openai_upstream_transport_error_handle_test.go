@@ -129,6 +129,10 @@ func TestHandleOpenAIUpstreamTransportError_ContextCanceled_NoFailoverNoEviction
 
 	// Must NOT write a response body.
 	require.Equal(t, 0, rec.Body.Len())
+	_, hasUpstreamErrors := c.Get(OpsUpstreamErrorsKey)
+	require.False(t, hasUpstreamErrors, "context.Canceled must not emit an upstream Ops event")
+	_, hasUpstreamMessage := c.Get(OpsUpstreamErrorMessageKey)
+	require.False(t, hasUpstreamMessage, "context.Canceled must not be attributed to upstream")
 }
 
 // context.Canceled wrapped inside another error must also avoid failover.
@@ -145,6 +149,8 @@ func TestHandleOpenAIUpstreamTransportError_WrappedContextCanceled_NoFailover(t 
 	require.False(t, errors.As(err, &fo), "wrapped context.Canceled must NOT return *UpstreamFailoverError")
 	require.Empty(t, repo.tempUnschedCalls)
 	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
+	_, hasUpstreamErrors := c.Get(OpsUpstreamErrorsKey)
+	require.False(t, hasUpstreamErrors, "wrapped context.Canceled must not emit an upstream Ops event")
 }
 
 // When accountRepo is nil (no DB), in-memory block must still happen but the

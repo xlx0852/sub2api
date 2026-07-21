@@ -1182,8 +1182,12 @@ func TestOpenAIStreamingTimeout(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "stream data interval timeout") {
 		t.Fatalf("expected stream timeout error, got %v", err)
 	}
-	if !strings.Contains(rec.Body.String(), "\"type\":\"error\"") || !strings.Contains(rec.Body.String(), "stream_timeout") {
-		t.Fatalf("expected OpenAI-compatible error SSE event, got %q", rec.Body.String())
+	body := rec.Body.String()
+	if !strings.Contains(body, `"type":"response.incomplete"`) || !strings.Contains(body, OpenAIStreamStallReason) {
+		t.Fatalf("expected OpenAI-compatible incomplete SSE event, got %q", body)
+	}
+	if strings.Contains(body, `"status":"completed"`) {
+		t.Fatalf("stalled stream must not complete successfully, got %q", body)
 	}
 }
 
@@ -2044,6 +2048,211 @@ func TestOpenAIStreamingPassthroughResponseIncompleteWithoutDoneMarkerStillSucce
 	require.Equal(t, 2, result.usage.InputTokens)
 	require.Equal(t, 3, result.usage.OutputTokens)
 	require.Equal(t, 1, result.usage.CacheReadInputTokens)
+}
+
+func TestOpenAIStreamingPassthroughSplitMultiDataFrameValidJSON(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	upstream := "event: response.done\n" +
+		"data: {\"type\":\"response.done\",\n" +
+		"data: \"response\":{\"id\":\"resp_split\",\"usage\":{\"input_tokens\":2,\"output_tokens\":3}}}\n\n"
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(upstream)),
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+	}
+
+	result, err := svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, &Account{ID: 1}, time.Now(), "", "")
+	require.NoError(t, err)
+	require.Equal(t, "resp_split", result.responseID)
+	require.Equal(t, 2, result.usage.InputTokens)
+	require.Equal(t, 3, result.usage.OutputTokens)
+	require.Equal(t, upstream, rec.Body.String())
+}
+
+func TestOpenAIStreamingPassthroughRewritesSplitMultiDataFrameAsValidSSE(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	upstream := "event: response.done\n" +
+		"data: {\"type\":\"response.done\",\n" +
+		"data: \"response\":{\"id\":\"resp_split_rewrite\",\"model\":\"mapped-model\",\"usage\":{\"input_tokens\":2,\"output_tokens\":3}}}\n\n"
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(upstream)),
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+	}
+
+	_, err := svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, &Account{ID: 1}, time.Now(), "client-model", "mapped-model")
+	require.NoError(t, err)
+	body := rec.Body.String()
+	dataLines := make([]string, 0, 2)
+	for _, line := range strings.Split(strings.TrimSpace(body), "\n") {
+		if data, ok := extractOpenAISSEDataLine(line); ok {
+			dataLines = append(dataLines, data)
+		}
+	}
+	payload := strings.Join(dataLines, "\n")
+	require.JSONEq(t, `{"type":"response.done","response":{"id":"resp_split_rewrite","model":"client-model","usage":{"input_tokens":2,"output_tokens":3}}}`, payload)
+}
+
+func TestOpenAIStreamingPassthroughMalformedFrameBeforeOutputReturnsFailoverWithoutEmission(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	malformed := `{"type":"response.output_text.delta","delta":"truncated`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body: io.NopCloser(strings.NewReader(
+			"event: response.created\n" +
+				"data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n\n" +
+				"event: response.output_text.delta\n" +
+				"data: " + malformed + "\n\n" +
+				"data: [DONE]\n\n",
+		)),
+		Header: http.Header{"X-Request-Id": []string{"rid-invalid-before-output"}},
+	}
+
+	_, err := svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, &Account{ID: 1, Platform: PlatformOpenAI}, time.Now(), "", "")
+	require.Error(t, err)
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	require.Empty(t, rec.Body.String())
+	require.NotContains(t, rec.Body.String(), malformed)
+}
+
+func TestOpenAIStreamingPassthroughMalformedFrameAfterOutputEmitsProtocolFailure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	malformed := `{"type":"response.output_text.delta","delta":"truncated`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body: io.NopCloser(strings.NewReader(
+			"event: response.output_text.delta\n" +
+				"data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n" +
+				"event: response.output_text.delta\n" +
+				"data: " + malformed + "\n\n" +
+				"data: {\"type\":\"response.done\",\"response\":{\"id\":\"resp_drained\",\"usage\":{\"input_tokens\":7,\"output_tokens\":11}}}\n\n" +
+				"data: [DONE]\n\n",
+		)),
+		Header: http.Header{"X-Request-Id": []string{"rid-invalid-after-output"}},
+	}
+
+	result, err := svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, &Account{ID: 1, Platform: PlatformOpenAI}, time.Now(), "", "")
+	require.Error(t, err)
+	var failoverErr *UpstreamFailoverError
+	require.False(t, errors.As(err, &failoverErr))
+	require.Equal(t, 7, result.usage.InputTokens)
+	require.Equal(t, 11, result.usage.OutputTokens)
+	body := rec.Body.String()
+	require.Contains(t, body, `"delta":"partial"`)
+	require.NotContains(t, body, malformed)
+	require.NotContains(t, body, "resp_drained")
+	require.Equal(t, 1, strings.Count(body, "event: response.failed"))
+	failedEvent := strings.Split(strings.Split(body, "event: response.failed\n")[1], "\n\n")[0][len("data: "):]
+	require.Equal(t, "response.failed", gjson.Get(failedEvent, "type").String())
+	require.NotEmpty(t, gjson.Get(failedEvent, "response.id").String())
+	require.Equal(t, "response", gjson.Get(failedEvent, "response.object").String())
+	require.True(t, gjson.Get(failedEvent, "response.output").IsArray())
+	require.Contains(t, body, `"code":"invalid_upstream_sse"`)
+}
+
+func TestOpenAIStreamingPassthroughValidTerminalFrameRemainsUnchanged(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	upstream := "event: response.done\n" +
+		"data: {\"type\":\"response.done\",\"response\":{\"id\":\"resp_terminal\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n"
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(upstream)),
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+	}
+
+	_, err := svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, &Account{ID: 1}, time.Now(), "", "")
+	require.NoError(t, err)
+	require.Equal(t, upstream, rec.Body.String())
+}
+
+func TestOpenAIStreamingPassthroughUsesEventNameWhenPayloadTypeMissing(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	upstream := "event: response.done\n" +
+		"data: {\"response\":{\"id\":\"resp_event_name\",\"usage\":{\"input_tokens\":3,\"output_tokens\":5}}}\n\n"
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(upstream)),
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+	}
+
+	result, err := svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, &Account{ID: 1}, time.Now(), "", "")
+	require.NoError(t, err)
+	require.Equal(t, "resp_event_name", result.responseID)
+	require.Equal(t, 3, result.usage.InputTokens)
+	require.Equal(t, 5, result.usage.OutputTokens)
+	require.Contains(t, rec.Body.String(), `"type":"response.done"`)
+}
+
+func TestOpenAIStreamingPassthroughPreservesKeepaliveAfterOutput(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	upstream := "data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n" +
+		": keepalive\n\n" +
+		"data: {\"type\":\"response.done\",\"response\":{\"id\":\"resp_keepalive\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n"
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(upstream)),
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+	}
+
+	_, err := svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, &Account{ID: 1}, time.Now(), "", "")
+	require.NoError(t, err)
+	require.Equal(t, upstream, rec.Body.String())
+}
+
+func TestOpenAIStreamingPassthroughPreservesTrailingKeepaliveAfterTerminal(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	upstream := "data: {\"type\":\"response.done\",\"response\":{\"id\":\"resp_trailing_keepalive\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n" +
+		": trailing keepalive"
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(upstream)),
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+	}
+
+	_, err := svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, &Account{ID: 1}, time.Now(), "", "")
+	require.NoError(t, err)
+	require.Equal(t, upstream+"\n", rec.Body.String())
 }
 
 func TestOpenAIStreamingTooLong(t *testing.T) {

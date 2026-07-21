@@ -1,12 +1,48 @@
 package service
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 )
+
+// OpenAI Responses 上游对 call_id 有硬限制：最大 64 字符。
+// 客户端（如 pi / 部分自定义工具）可能生成更长 ID，导致 400 string_above_max_length。
+const openAIResponsesCallIDMaxLen = 64
+
+// clampOpenAIResponsesCallID 将 call_id 收敛到上游长度限制。
+// 超长时用原始 ID 的 SHA-256 做确定性压缩，保证 function_call 与
+// function_call_output 两侧得到相同结果，配对不丢。
+func clampOpenAIResponsesCallID(id string) string {
+	if id == "" || len(id) <= openAIResponsesCallIDMaxLen {
+		return id
+	}
+	sum := sha256.Sum256([]byte(id))
+	digest := hex.EncodeToString(sum[:])
+
+	prefix := ""
+	switch {
+	case strings.HasPrefix(id, "fc_"):
+		prefix = "fc_"
+	case strings.HasPrefix(id, "call_"):
+		// 保留 call_ 前缀仅在未做前缀改写时；压缩后仍需 ≤64。
+		prefix = "call_"
+	case strings.HasPrefix(id, "fc"):
+		prefix = "fc"
+	}
+	budget := openAIResponsesCallIDMaxLen - len(prefix)
+	if budget <= 0 {
+		return digest[:openAIResponsesCallIDMaxLen]
+	}
+	if budget > len(digest) {
+		budget = len(digest)
+	}
+	return prefix + digest[:budget]
+}
 
 var codexModelMap = map[string]string{
 	"gpt-5.6-sol":          "gpt-5.6-sol",
@@ -838,6 +874,11 @@ func ensureOpenAIResponsesImageGenerationTool(reqBody map[string]any) bool {
 	if isCodexSparkModel(firstNonEmptyString(reqBody["model"])) {
 		return false
 	}
+	// Detect hosted image_generation, image_gen namespace, and Responses Lite
+	// additional_tools so we never inject a second conflicting tool.
+	if hasOpenAIImageGenerationTool(reqBody) {
+		return false
+	}
 
 	tool := map[string]any{
 		"type":          "image_generation",
@@ -854,15 +895,6 @@ func ensureOpenAIResponsesImageGenerationTool(reqBody map[string]any) bool {
 	if !ok {
 		reqBody["tools"] = []any{tool}
 		return true
-	}
-	for _, rawTool := range tools {
-		toolMap, ok := rawTool.(map[string]any)
-		if !ok {
-			continue
-		}
-		if strings.TrimSpace(firstNonEmptyString(toolMap["type"])) == "image_generation" {
-			return false
-		}
 	}
 
 	reqBody["tools"] = append(tools, tool)
@@ -1310,17 +1342,21 @@ func filterCodexInputWithOptions(input []any, opts codexInputFilterOptions) []an
 
 		// 仅修正真正的 tool/function call 标识，避免误改普通 message/reasoning id；
 		// 若 item_reference 指向 legacy call_* 标识，则仅修正该引用本身。
+		// 无论是否 PreserveCallIDs，最终都要满足上游 call_id ≤64 的硬限制。
 		fixCallIDPrefix := func(id string) string {
-			if opts.PreserveCallIDs {
+			if id == "" {
 				return id
 			}
-			if id == "" || strings.HasPrefix(id, "fc") {
-				return id
+			if opts.PreserveCallIDs {
+				return clampOpenAIResponsesCallID(id)
+			}
+			if strings.HasPrefix(id, "fc") {
+				return clampOpenAIResponsesCallID(id)
 			}
 			if strings.HasPrefix(id, "call_") {
-				return "fc_" + strings.TrimPrefix(id, "call_")
+				return clampOpenAIResponsesCallID("fc_" + strings.TrimPrefix(id, "call_"))
 			}
-			return "fc_" + id
+			return clampOpenAIResponsesCallID("fc_" + id)
 		}
 
 		if typ == "item_reference" {

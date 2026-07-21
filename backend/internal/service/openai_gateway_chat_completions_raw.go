@@ -106,10 +106,28 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 		return nil, policyErr
 	}
 	upstreamBody = updatedBody
+	if account.Platform == PlatformGrok {
+		optimizedBody, optimizeErr := s.optimizeGrokPayloadBeforeImageBridge(account, upstreamBody)
+		if optimizeErr != nil {
+			if handleGrokPayloadOptimizationError(c, grokPayloadChat, optimizeErr) {
+				return nil, optimizeErr
+			}
+			return nil, fmt.Errorf("optimize Grok Chat payload: %w", optimizeErr)
+		}
+		upstreamBody = optimizedBody
+	}
 
 	// Grok Composer does not accept image_url parts directly, but Grok Build
 	// can describe the images first. Bridge only this exact failure mode.
-	token, tokenKind, err := s.GetAccessToken(ctx, account)
+	var token string
+	var tokenKind string
+	var credential grokCredentialDescriptor
+	var err error
+	if account.Platform == PlatformGrok {
+		token, tokenKind, credential, err = s.getGrokAccessTokenWithDescriptor(ctx, account)
+	} else {
+		token, tokenKind, err = s.GetAccessToken(ctx, account)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -145,6 +163,19 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 		if err != nil {
 			return nil, fmt.Errorf("remove Responses-only Grok prompt cache key: %w", err)
 		}
+		// Cursor/Claude Desktop often omit additionalProperties:false on tool
+		// object schemas; xAI rejects those with 400 invalid_request_error.
+		upstreamBody, err = sanitizeGrokChatTools(upstreamBody)
+		if err != nil {
+			return nil, fmt.Errorf("sanitize Grok Chat tools: %w", err)
+		}
+		upstreamBody, err = s.optimizeGrokPayload(account, upstreamBody, grokPayloadChat)
+		if err != nil {
+			if handleGrokPayloadOptimizationError(c, grokPayloadChat, err) {
+				return nil, err
+			}
+			return nil, fmt.Errorf("optimize Grok Chat payload: %w", err)
+		}
 	}
 
 	logger.L().Debug("openai chat_completions raw: forwarding without protocol conversion",
@@ -175,8 +206,13 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	if resp.StatusCode >= 400 {
 		respBody, upstreamMsg := s.readOpenAIUpstreamError(resp)
 		if account.Platform == PlatformGrok {
-			s.updateGrokUsageSnapshot(ctx, account.ID, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
-			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			s.updateGrokUsageSnapshot(ctx, account, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
+			attribution := s.attributeGrokUnauthorized(ctx, c, account, resp.StatusCode, credential)
+			retryDisabled := grokUpstreamExplicitlyDisablesRetry(resp.Header)
+			if retryDisabled {
+				return s.handleChatCompletionsErrorResponse(resp, c, account, billingModel)
+			}
+			opsEvent := OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
 				AccountID:          account.ID,
 				AccountName:        account.Name,
@@ -184,13 +220,23 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 				UpstreamRequestID:  firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id")),
 				Kind:               "failover",
 				Message:            upstreamMsg,
-			})
-			s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+			}
+			applyGrokUnauthorizedAttribution(&opsEvent, attribution)
+			appendOpsUpstreamError(c, opsEvent)
+			grokSameAccountRetry := s.isGrokSameAccountRetry(c, resp.StatusCode)
+			penalizeAccount := shouldPenalizeGrokUnauthorized(resp.StatusCode, attribution)
+			if !grokSameAccountRetry && penalizeAccount {
+				s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+			}
 			if s.shouldFailoverUpstreamError(resp.StatusCode) {
 				return nil, &UpstreamFailoverError{
-					StatusCode:             resp.StatusCode,
-					ResponseBody:           respBody,
-					RetryableOnSameAccount: account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
+					StatusCode:                resp.StatusCode,
+					ResponseBody:              respBody,
+					ResponseHeaders:           resp.Header.Clone(),
+					RetryableOnSameAccount:    grokSameAccountRetry || (account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode)),
+					GrokSameAccountRetry:      grokSameAccountRetry,
+					GrokAccountPenaltyApplied: !grokSameAccountRetry && penalizeAccount,
+					GrokStaleCredential:       !penalizeAccount,
 				}
 			}
 			return s.handleChatCompletionsErrorResponse(resp, c, account, billingModel)
@@ -202,7 +248,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	}
 
 	if account.Platform == PlatformGrok {
-		s.updateGrokUsageSnapshot(ctx, account.ID, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
+		s.updateGrokUsageSnapshot(ctx, account, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
 	}
 
 	// 8. Forward response

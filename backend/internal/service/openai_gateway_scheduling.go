@@ -130,7 +130,13 @@ func (s *OpenAIGatewayService) BindStickySession(ctx context.Context, groupID *i
 	if s != nil && s.cfg != nil && s.cfg.Gateway.OpenAIWS.StickySessionTTLSeconds > 0 {
 		ttl = time.Duration(s.cfg.Gateway.OpenAIWS.StickySessionTTLSeconds) * time.Second
 	}
-	return s.setStickySessionAccountID(ctx, groupID, sessionHash, accountID, ttl)
+	if err := s.setStickySessionAccountID(ctx, groupID, sessionHash, accountID, ttl); err != nil {
+		return err
+	}
+	if account, err := s.getSchedulableAccount(ctx, accountID); err == nil && account != nil {
+		s.setStickySessionAccountEpoch(ctx, groupID, sessionHash, account, ttl)
+	}
+	return nil
 }
 
 // SelectAccount selects an OpenAI account with sticky session support

@@ -1701,6 +1701,10 @@ func sanitizeUpstreamErrorMessage(msg string) string {
 	if msg == "" {
 		return msg
 	}
+	// Never keep raw Cloudflare/proxy HTML pages in client or ops messages.
+	if summarized := summarizeNonJSONUpstreamErrorBody([]byte(msg)); summarized != "" {
+		return summarized
+	}
 	return sensitiveQueryParamRegex.ReplaceAllString(msg, `$1***`)
 }
 

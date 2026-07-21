@@ -304,7 +304,86 @@ func extractUpstreamErrorMessage(body []byte) string {
 	}
 
 	// 兜底：尝试顶层 message
-	return gjson.GetBytes(body, "message").String()
+	if msg := gjson.GetBytes(body, "message").String(); strings.TrimSpace(msg) != "" {
+		return msg
+	}
+
+	// Cloudflare / reverse-proxy HTML timeout pages (504/524) are not JSON.
+	// Map them to a short diagnostic string so ops logs and client errors
+	// do not store raw HTML.
+	if summarized := summarizeNonJSONUpstreamErrorBody(body); summarized != "" {
+		return summarized
+	}
+	return ""
+}
+
+// looksLikeHTMLUpstreamErrorBody reports whether body is an HTML error page
+// rather than a structured JSON/SSE upstream error payload.
+func looksLikeHTMLUpstreamErrorBody(body []byte) bool {
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return false
+	}
+	lower := strings.ToLower(trimmed)
+	if strings.HasPrefix(lower, "<!doctype html") || strings.HasPrefix(lower, "<html") {
+		return true
+	}
+	// Truncated CF pages may start mid-document but still contain clear markers.
+	return strings.Contains(lower, "<html") &&
+		(strings.Contains(lower, "cloudflare") ||
+			strings.Contains(lower, "cf-error") ||
+			strings.Contains(lower, "error code") ||
+			strings.Contains(lower, "gateway time-out") ||
+			strings.Contains(lower, "a timeout occurred"))
+}
+
+// SummarizeNonJSONUpstreamErrorBody converts HTML/proxy timeout bodies into a
+// short stable message suitable for client responses and ops_error_logs.
+func SummarizeNonJSONUpstreamErrorBody(body []byte) string {
+	return summarizeNonJSONUpstreamErrorBody(body)
+}
+
+// summarizeNonJSONUpstreamErrorBody converts HTML/proxy timeout bodies into a
+// short stable message suitable for client responses and ops_error_logs.
+func summarizeNonJSONUpstreamErrorBody(body []byte) string {
+	if !looksLikeHTMLUpstreamErrorBody(body) {
+		return ""
+	}
+	lower := strings.ToLower(string(body))
+	switch {
+	case strings.Contains(lower, "error code 524") || strings.Contains(lower, "a timeout occurred"):
+		return "Upstream Cloudflare timeout (524)"
+	case strings.Contains(lower, "error code 504") || strings.Contains(lower, "gateway time-out") || strings.Contains(lower, "gateway timeout"):
+		return "Upstream Cloudflare gateway timeout (504)"
+	case strings.Contains(lower, "error code 502") || strings.Contains(lower, "bad gateway"):
+		return "Upstream Cloudflare bad gateway (502)"
+	case strings.Contains(lower, "error code 503") || strings.Contains(lower, "service unavailable"):
+		return "Upstream Cloudflare service unavailable (503)"
+	default:
+		return "Upstream returned an HTML error page"
+	}
+}
+
+// MapOpenAIUpstreamErrorStatus maps upstream HTTP status codes to client-facing
+// status/type/message. Cloudflare-specific 524 (origin timeout) is treated like
+// other 5xx gateway failures.
+func MapOpenAIUpstreamErrorStatus(statusCode int) (int, string, string) {
+	switch statusCode {
+	case 401:
+		return http.StatusBadGateway, "upstream_error", "Upstream authentication failed, please contact administrator"
+	case 402:
+		return http.StatusBadGateway, "upstream_error", "Upstream payment required: insufficient balance or billing issue"
+	case 403:
+		return http.StatusBadGateway, "upstream_error", "Upstream access forbidden, please contact administrator"
+	case 429:
+		return http.StatusTooManyRequests, "rate_limit_error", "Upstream rate limit exceeded, please retry later"
+	case 529:
+		return http.StatusServiceUnavailable, "upstream_error", "Upstream service overloaded, please retry later"
+	case 500, 502, 503, 504, 524:
+		return http.StatusBadGateway, "upstream_error", "Upstream service temporarily unavailable"
+	default:
+		return http.StatusBadGateway, "upstream_error", "Upstream request failed"
+	}
 }
 
 func extractUpstreamErrorCode(body []byte) string {
@@ -487,18 +566,14 @@ func (s *GatewayService) handleErrorResponse(ctx context.Context, resp *http.Res
 		statusCode = http.StatusTooManyRequests
 		errType = "rate_limit_error"
 		errMsg = "Upstream rate limit exceeded, please retry later"
-	case 529:
-		statusCode = http.StatusServiceUnavailable
-		errType = "overloaded_error"
-		errMsg = "Upstream service overloaded, please retry later"
-	case 500, 502, 503, 504:
-		statusCode = http.StatusBadGateway
-		errType = "upstream_error"
-		errMsg = "Upstream service temporarily unavailable"
 	default:
-		statusCode = http.StatusBadGateway
-		errType = "upstream_error"
-		errMsg = "Upstream request failed"
+		statusCode, errType, errMsg = MapOpenAIUpstreamErrorStatus(resp.StatusCode)
+		if statusCode == http.StatusServiceUnavailable && resp.StatusCode == 529 {
+			errType = "overloaded_error"
+		}
+		if summarized := summarizeNonJSONUpstreamErrorBody(body); summarized != "" {
+			errMsg = summarized
+		}
 	}
 
 	// 返回自定义错误响应

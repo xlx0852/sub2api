@@ -135,12 +135,20 @@ func sanitizeEncryptedReasoningInputItem(item any) (next any, changed bool, keep
 		return item, false, true
 	}
 
-	_, hasEncryptedContent := inputItem["encrypted_content"]
-	if !hasEncryptedContent {
-		return item, false, true
+	if _, has := inputItem["encrypted_content"]; has {
+		delete(inputItem, "encrypted_content")
+		changed = true
 	}
 
-	delete(inputItem, "encrypted_content")
+	// xAI 422: "content": null breaks untagged enum deserialization.
+	if v, has := inputItem["content"]; has && v == nil {
+		delete(inputItem, "content")
+		changed = true
+	}
+
+	if !changed {
+		return item, false, true
+	}
 	if len(inputItem) == 1 {
 		return nil, true, false
 	}
@@ -368,15 +376,57 @@ func newOpenAIRequestView(body []byte) openAIRequestView {
 	if len(body) == 0 {
 		return openAIRequestView{}
 	}
-	return openAIRequestView{
-		body:               body,
-		Model:              strings.TrimSpace(gjson.GetBytes(body, "model").String()),
-		Stream:             gjson.GetBytes(body, "stream").Bool(),
-		PromptCacheKey:     strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String()),
-		PreviousResponseID: strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String()),
-		ServiceTier:        strings.TrimSpace(gjson.GetBytes(body, "service_tier").String()),
-		ReasoningEffort:    strings.TrimSpace(gjson.GetBytes(body, "reasoning.effort").String()),
-	}
+
+	const (
+		modelField uint8 = 1 << iota
+		streamField
+		promptCacheKeyField
+		previousResponseIDField
+		serviceTierField
+		reasoningField
+		allRequestViewFields = modelField | streamField | promptCacheKeyField |
+			previousResponseIDField | serviceTierField | reasoningField
+	)
+
+	view := openAIRequestView{body: body}
+	var seen uint8
+	// parseRawJSONView reads body without copying; view keeps body alive for extracted strings.
+	parseRawJSONView(body).ForEach(func(key, value gjson.Result) bool {
+		switch key.Str {
+		case "model":
+			if seen&modelField == 0 {
+				view.Model = strings.TrimSpace(value.String())
+				seen |= modelField
+			}
+		case "stream":
+			if seen&streamField == 0 {
+				view.Stream = value.Bool()
+				seen |= streamField
+			}
+		case "prompt_cache_key":
+			if seen&promptCacheKeyField == 0 {
+				view.PromptCacheKey = strings.TrimSpace(value.String())
+				seen |= promptCacheKeyField
+			}
+		case "previous_response_id":
+			if seen&previousResponseIDField == 0 {
+				view.PreviousResponseID = strings.TrimSpace(value.String())
+				seen |= previousResponseIDField
+			}
+		case "service_tier":
+			if seen&serviceTierField == 0 {
+				view.ServiceTier = strings.TrimSpace(value.String())
+				seen |= serviceTierField
+			}
+		case "reasoning":
+			if seen&reasoningField == 0 {
+				view.ReasoningEffort = strings.TrimSpace(value.Get("effort").String())
+				seen |= reasoningField
+			}
+		}
+		return seen != allRequestViewFields
+	})
+	return view
 }
 
 // Decode 保留阶段一既有 full-map 行为；后续阶段会把调用点下沉到复杂分支。
@@ -505,9 +555,20 @@ func extractOpenAIRequestMetaFromBody(body []byte) (model string, stream bool, p
 	return view.Model, view.Stream, view.PromptCacheKey
 }
 
+// openAIPassthroughOAuthUnsupportedFields: ChatGPT internal OAuth 透传路径也需剥离的
+// 采样/限长字段。非 CLI 客户端（pi 等）常带 max_output_tokens，透传若不删会 400。
+// 比 openAICodexOAuthUnsupportedFields 更保守：不在此删 temperature/top_p 等，
+// 避免改变官方 Codex CLI 透传语义；只修明确会炸的限长参数。
+var openAIPassthroughOAuthUnsupportedFields = []string{
+	"max_output_tokens",
+	"max_completion_tokens",
+}
+
 // normalizeOpenAIPassthroughOAuthBody 将透传 OAuth 请求体收敛为旧链路关键行为：
 // 1) 删除 ChatGPT internal API 不支持的顶层 Responses 参数
-// 2) store=false 3) 非 compact 保持 stream=true；compact 强制 stream=false
+// 2) 删除 max_output_tokens / max_completion_tokens（第三方客户端兼容）
+// 3) store=false 4) 非 compact 保持 stream=true；compact 强制 stream=false
+// 5) clamp 超长 call_id
 func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, bool, error) {
 	if len(body) == 0 {
 		return body, false, nil
@@ -517,6 +578,19 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, boo
 	changed := false
 
 	for _, field := range openAIChatGPTInternalUnsupportedFields {
+		if value := gjson.GetBytes(normalized, field); !value.Exists() {
+			continue
+		}
+		next, err := sjson.DeleteBytes(normalized, field)
+		if err != nil {
+			return body, false, fmt.Errorf("normalize passthrough body delete %s: %w", field, err)
+		}
+		normalized = next
+		changed = true
+	}
+
+	// OAuth ChatGPT internal 与非 CLI 路径一致：剥离限长参数，避免 Unsupported parameter。
+	for _, field := range openAIPassthroughOAuthUnsupportedFields {
 		if value := gjson.GetBytes(normalized, field); !value.Exists() {
 			continue
 		}
@@ -564,6 +638,53 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, boo
 		}
 	}
 
+	// 透传路径不走 codex transform，需在此收敛超长 call_id，避免上游 400。
+	next, callIDsChanged, err := clampOpenAIResponsesCallIDsInBody(normalized)
+	if err != nil {
+		return body, false, err
+	}
+	if callIDsChanged {
+		normalized = next
+		changed = true
+	}
+
+	return normalized, changed, nil
+}
+
+// clampOpenAIResponsesCallIDsInBody 扫描 input 数组中的 call_id，对超过上游
+// 64 字符限制的值做确定性压缩；function_call 与对应 output 使用同一原始 ID
+// 时会得到相同结果，配对保持。
+func clampOpenAIResponsesCallIDsInBody(body []byte) ([]byte, bool, error) {
+	if len(body) == 0 {
+		return body, false, nil
+	}
+	input := gjson.GetBytes(body, "input")
+	if !input.Exists() || !input.IsArray() {
+		return body, false, nil
+	}
+
+	normalized := body
+	changed := false
+	for i, item := range input.Array() {
+		if !item.IsObject() {
+			continue
+		}
+		callID := item.Get("call_id")
+		if !callID.Exists() || callID.Type != gjson.String {
+			continue
+		}
+		raw := callID.String()
+		fixed := clampOpenAIResponsesCallID(raw)
+		if fixed == raw {
+			continue
+		}
+		next, err := sjson.SetBytes(normalized, fmt.Sprintf("input.%d.call_id", i), fixed)
+		if err != nil {
+			return body, false, fmt.Errorf("clamp call_id at input[%d]: %w", i, err)
+		}
+		normalized = next
+		changed = true
+	}
 	return normalized, changed, nil
 }
 

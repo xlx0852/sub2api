@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 )
 
@@ -193,10 +194,11 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 		xai.ApplyGrokCLIChatHeaders(upstreamReq)
 	}
 
-	// 账号级请求头覆写（仅 openai api_key 账号启用时生效）
+	// 账号级请求头覆写（OpenAI/Anthropic api_key + Grok api_key/oauth）
 	account.ApplyHeaderOverrides(upstreamReq.Header)
 	if account.Platform == PlatformGrok {
 		applyGrokCacheHeaders(upstreamReq.Header, grokCacheIdentity)
+		applyGrokRequestIdentityHeaders(upstreamReq.Header, c, grokCacheIdentity, gjson.GetBytes(body, "model").String())
 	}
 
 	proxyURL := ""
