@@ -279,6 +279,13 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	if policyErr != nil {
 		return fmt.Errorf("apply openai fast policy on first ws frame: %w", policyErr)
 	}
+	if blocked == nil && policyErr == nil {
+		if sanitized, sanitizeChanged, sanitizeErr := sanitizeOpenAIWSResponseCreateFrame(updatedFirst, account); sanitizeErr != nil {
+			return fmt.Errorf("sanitize first ws response.create: %w", sanitizeErr)
+		} else if sanitizeChanged {
+			updatedFirst = sanitized
+		}
+	}
 	if blocked != nil {
 		MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
 		// coder/websocket@v1.8.14 Conn.Write is synchronous: it acquires
@@ -439,6 +446,13 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				model = capturedSessionModel
 			}
 			out, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(ctx, account, model, payload)
+			if policyErr == nil && blocked == nil {
+				if sanitized, sanitizeChanged, sanitizeErr := sanitizeOpenAIWSResponseCreateFrame(out, account); sanitizeErr != nil {
+					return out, nil, sanitizeErr
+				} else if sanitizeChanged {
+					out = sanitized
+				}
+			}
 			// 多轮 passthrough usage：仅在成功（non-block / non-err）
 			// 的 response.create 帧上更新 usageMeta，使用
 			// filter 处理后的 payload，与首帧 policy-after-extract 语义
