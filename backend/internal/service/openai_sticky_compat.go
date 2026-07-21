@@ -219,3 +219,70 @@ func (s *OpenAIGatewayService) deleteStickySessionAccountID(ctx context.Context,
 	}
 	return err
 }
+
+
+func (s *OpenAIGatewayService) setStickySessionAccountEpoch(ctx context.Context, groupID *int64, sessionHash string, account *Account, ttl time.Duration) {
+	if s == nil || s.cache == nil || account == nil {
+		return
+	}
+	epochKey := openAIStickyEpochCacheKey(sessionHash)
+	if epochKey == "" {
+		return
+	}
+	epoch := OpenAIAccountStickyEpoch(account)
+	if epoch <= 0 {
+		return
+	}
+	if ttl <= 0 {
+		ttl = openaiStickySessionTTL
+	}
+	_ = s.cache.SetSessionAccountID(ctx, derefGroupID(groupID), epochKey, epoch, ttl)
+}
+
+func (s *OpenAIGatewayService) stickySessionEpochMatches(ctx context.Context, groupID *int64, sessionHash string, account *Account) bool {
+	if s == nil || s.cache == nil || account == nil {
+		return true
+	}
+	epochKey := openAIStickyEpochCacheKey(sessionHash)
+	if epochKey == "" {
+		return true
+	}
+	stored, err := s.cache.GetSessionAccountID(ctx, derefGroupID(groupID), epochKey)
+	if err != nil || stored <= 0 {
+		return true // legacy binding without epoch
+	}
+	return stored == OpenAIAccountStickyEpoch(account)
+}
+
+func (s *OpenAIGatewayService) setResponseAccountEpoch(ctx context.Context, groupID int64, responseID string, account *Account, ttl time.Duration) {
+	if s == nil || s.cache == nil || account == nil {
+		return
+	}
+	epochKey := openAIResponseStickyEpochCacheKey(responseID)
+	if epochKey == "" {
+		return
+	}
+	epoch := OpenAIAccountStickyEpoch(account)
+	if epoch <= 0 {
+		return
+	}
+	if ttl <= 0 {
+		ttl = openaiStickySessionTTL
+	}
+	_ = s.cache.SetSessionAccountID(ctx, groupID, epochKey, epoch, ttl)
+}
+
+func (s *OpenAIGatewayService) responseAccountEpochMatches(ctx context.Context, groupID int64, responseID string, account *Account) bool {
+	if s == nil || s.cache == nil || account == nil {
+		return true
+	}
+	epochKey := openAIResponseStickyEpochCacheKey(responseID)
+	if epochKey == "" {
+		return true
+	}
+	stored, err := s.cache.GetSessionAccountID(ctx, groupID, epochKey)
+	if err != nil || stored <= 0 {
+		return true
+	}
+	return stored == OpenAIAccountStickyEpoch(account)
+}
