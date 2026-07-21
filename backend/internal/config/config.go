@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -734,6 +735,14 @@ type ImageConcurrencyConfig struct {
 	MaxWaitingRequests int `mapstructure:"max_waiting_requests"`
 }
 
+type GrokPayloadConfig struct {
+	DeduplicateImages    bool  `mapstructure:"deduplicate_images"`
+	DisableStoreOnImages bool  `mapstructure:"disable_store_on_images"`
+	SoftLimitBytes       int64 `mapstructure:"soft_limit_bytes"`
+	HardLimitBytes       int64 `mapstructure:"hard_limit_bytes"`
+	ToolOutputMaxBytes   int   `mapstructure:"tool_output_max_bytes"`
+}
+
 const (
 	ImageConcurrencyOverflowModeReject = "reject"
 	ImageConcurrencyOverflowModeWait   = "wait"
@@ -747,6 +756,14 @@ type GatewayConfig struct {
 	// OpenAIResponseHeaderTimeout: OpenAI/Codex 上游等待响应头的超时时间（秒），0表示无超时
 	// OpenAI/Codex 请求可能在上游排队较久；默认不使用通用响应头超时截断。
 	OpenAIResponseHeaderTimeout int `mapstructure:"openai_response_header_timeout"`
+	// OpenAIFirstOutputTimeoutSeconds: native HTTP Responses 首个语义输出超时（秒），0表示禁用。
+	OpenAIFirstOutputTimeoutSeconds int `mapstructure:"openai_first_output_timeout_seconds"`
+	// OpenAIStreamStallTimeoutSeconds: OpenAI Responses 上流静默超时（秒）。
+	// 0 表示沿用 StreamDataIntervalTimeout；>0 时覆盖 OpenAI 流路径的 stall 预算。
+	OpenAIStreamStallTimeoutSeconds int `mapstructure:"openai_stream_stall_timeout_seconds"`
+	// OpenAIHighEffortFirstOutputTimeoutSeconds: high/xhigh/max 推理的首个语义输出超时（秒）。
+	// 0 表示回退到 OpenAIFirstOutputTimeoutSeconds。
+	OpenAIHighEffortFirstOutputTimeoutSeconds int `mapstructure:"openai_high_effort_first_output_timeout_seconds"`
 	// 请求体最大字节数，用于网关请求体大小限制
 	MaxBodySize int64 `mapstructure:"max_body_size"`
 	// 非流式上游响应体读取上限（字节），用于防止无界读取导致内存放大
@@ -783,6 +800,10 @@ type GatewayConfig struct {
 	OpenAIHTTP2 GatewayOpenAIHTTP2Config `mapstructure:"openai_http2"`
 	// ImageConcurrency: 图片生成独立并发限制配置（默认关闭）
 	ImageConcurrency ImageConcurrencyConfig `mapstructure:"image_concurrency"`
+	// GrokPayload: Grok Responses/Chat 请求体的保守优化配置
+	GrokPayload GrokPayloadConfig `mapstructure:"grok_payload"`
+	// GrokSameAccountRetry: Grok HTTP Responses/Chat 瞬时错误的同账号重试策略
+	GrokSameAccountRetry GrokSameAccountRetryConfig `mapstructure:"grok_same_account_retry"`
 
 	// HTTP 上游连接池配置（性能优化：支持高并发场景调优）
 	// MaxIdleConns: 所有主机的最大空闲连接总数
@@ -859,6 +880,14 @@ type GatewayConfig struct {
 	UserMessageQueue UserMessageQueueConfig `mapstructure:"user_message_queue"`
 }
 
+type GrokSameAccountRetryConfig struct {
+	Enabled         bool  `mapstructure:"enabled"`
+	MaxRetries      int   `mapstructure:"max_retries"`
+	Statuses        []int `mapstructure:"statuses"`
+	FallbackDelayMS int   `mapstructure:"fallback_delay_ms"`
+	MaxRetryAfterMS int   `mapstructure:"max_retry_after_ms"`
+}
+
 // GatewayOpenAIHTTP2Config OpenAI HTTP 上游协议配置。
 // 默认启用 HTTP/2；在部分代理不兼容时按策略回退 HTTP/1.1。
 type GatewayOpenAIHTTP2Config struct {
@@ -916,6 +945,9 @@ func (c *UserMessageQueueConfig) GetEffectiveMode() string {
 	return ""
 }
 
+// DefaultOpenAIWSClientFirstMessageTimeoutSeconds preserves the legacy ingress deadline.
+const DefaultOpenAIWSClientFirstMessageTimeoutSeconds = 30
+
 // GatewayOpenAIWSConfig OpenAI Responses WebSocket 配置。
 // 注意：默认全局开启；如需回滚可使用 force_http 或关闭 enabled。
 type GatewayOpenAIWSConfig struct {
@@ -923,6 +955,15 @@ type GatewayOpenAIWSConfig struct {
 	ModeRouterV2Enabled bool `mapstructure:"mode_router_v2_enabled"`
 	// IngressModeDefault: ingress 默认模式（off/ctx_pool/passthrough/http_bridge）
 	IngressModeDefault string `mapstructure:"ingress_mode_default"`
+	// ClientFirstMessageTimeoutSeconds bounds the total time to read and decompress
+	// the first client response.create message after the WebSocket upgrade.
+	ClientFirstMessageTimeoutSeconds int `mapstructure:"client_first_message_timeout_seconds"`
+	// IngressInterTurnIdleTimeoutSeconds bounds the time a client may remain idle
+	// between completed ingress turns. Zero disables this protection.
+	IngressInterTurnIdleTimeoutSeconds int `mapstructure:"ingress_inter_turn_idle_timeout_seconds"`
+	// MaxIngressConnectionsPerAPIKey bounds live client WebSocket ingress sessions
+	// per API key across all instances. Zero disables this protection.
+	MaxIngressConnectionsPerAPIKey int `mapstructure:"max_ingress_connections_per_api_key"`
 	// Enabled: 全局总开关（默认 true）
 	Enabled bool `mapstructure:"enabled"`
 	// OAuthEnabled: 是否允许 OpenAI OAuth 账号使用 WS
@@ -1947,6 +1988,8 @@ func setDefaults() {
 	// Gateway
 	viper.SetDefault("gateway.response_header_timeout", 600) // 600秒(10分钟)等待上游响应头，LLM高负载时可能排队较久
 	viper.SetDefault("gateway.openai_response_header_timeout", 0)
+	viper.SetDefault("gateway.openai_first_output_timeout_seconds", 0)
+	viper.SetDefault("gateway.openai_high_effort_first_output_timeout_seconds", 0)
 	viper.SetDefault("gateway.log_upstream_error_body", true)
 	viper.SetDefault("gateway.log_upstream_error_body_max_bytes", 2048)
 	viper.SetDefault("gateway.inject_beta_for_apikey", false)
@@ -1961,6 +2004,9 @@ func setDefaults() {
 	viper.SetDefault("gateway.openai_ws.enabled", true)
 	viper.SetDefault("gateway.openai_ws.mode_router_v2_enabled", false)
 	viper.SetDefault("gateway.openai_ws.ingress_mode_default", "ctx_pool")
+	viper.SetDefault("gateway.openai_ws.client_first_message_timeout_seconds", DefaultOpenAIWSClientFirstMessageTimeoutSeconds)
+	viper.SetDefault("gateway.openai_ws.ingress_inter_turn_idle_timeout_seconds", 300)
+	viper.SetDefault("gateway.openai_ws.max_ingress_connections_per_api_key", 64)
 	viper.SetDefault("gateway.openai_ws.oauth_enabled", true)
 	viper.SetDefault("gateway.openai_ws.apikey_enabled", true)
 	viper.SetDefault("gateway.openai_ws.force_http", false)
@@ -2027,6 +2073,16 @@ func setDefaults() {
 	viper.SetDefault("gateway.image_concurrency.overflow_mode", ImageConcurrencyOverflowModeReject)
 	viper.SetDefault("gateway.image_concurrency.wait_timeout_seconds", 30)
 	viper.SetDefault("gateway.image_concurrency.max_waiting_requests", 100)
+	viper.SetDefault("gateway.grok_payload.deduplicate_images", true)
+	viper.SetDefault("gateway.grok_payload.disable_store_on_images", true)
+	viper.SetDefault("gateway.grok_payload.soft_limit_bytes", int64(16*1024*1024))
+	viper.SetDefault("gateway.grok_payload.hard_limit_bytes", int64(32*1024*1024))
+	viper.SetDefault("gateway.grok_payload.tool_output_max_bytes", 256*1024)
+	viper.SetDefault("gateway.grok_same_account_retry.enabled", true)
+	viper.SetDefault("gateway.grok_same_account_retry.max_retries", 1)
+	viper.SetDefault("gateway.grok_same_account_retry.statuses", []int{429, 502, 503, 504, 529})
+	viper.SetDefault("gateway.grok_same_account_retry.fallback_delay_ms", 500)
+	viper.SetDefault("gateway.grok_same_account_retry.max_retry_after_ms", 2000)
 	viper.SetDefault("gateway.antigravity_fallback_cooldown_minutes", 1)
 	viper.SetDefault("gateway.antigravity_extra_retries", 10)
 	viper.SetDefault("gateway.max_body_size", int64(256*1024*1024))
@@ -2645,6 +2701,42 @@ func (c *Config) Validate() error {
 	if c.Gateway.MaxBodySize <= 0 {
 		return fmt.Errorf("gateway.max_body_size must be positive")
 	}
+	if c.Gateway.GrokPayload.SoftLimitBytes < 0 {
+		return fmt.Errorf("gateway.grok_payload.soft_limit_bytes must be non-negative")
+	}
+	if c.Gateway.GrokPayload.HardLimitBytes < 0 {
+		return fmt.Errorf("gateway.grok_payload.hard_limit_bytes must be non-negative")
+	}
+	if c.Gateway.GrokPayload.ToolOutputMaxBytes < 0 {
+		return fmt.Errorf("gateway.grok_payload.tool_output_max_bytes must be non-negative")
+	}
+	if c.Gateway.GrokPayload.SoftLimitBytes > 0 &&
+		c.Gateway.GrokPayload.HardLimitBytes > 0 &&
+		c.Gateway.GrokPayload.HardLimitBytes < c.Gateway.GrokPayload.SoftLimitBytes {
+		return fmt.Errorf("gateway.grok_payload.hard_limit_bytes must be greater than or equal to soft_limit_bytes")
+	}
+	if c.Gateway.GrokSameAccountRetry.MaxRetries < 0 || c.Gateway.GrokSameAccountRetry.MaxRetries > 10 {
+		return fmt.Errorf("gateway.grok_same_account_retry.max_retries must be between 0 and 10")
+	}
+	if c.Gateway.GrokSameAccountRetry.FallbackDelayMS < 0 {
+		return fmt.Errorf("gateway.grok_same_account_retry.fallback_delay_ms must be non-negative")
+	}
+	if c.Gateway.GrokSameAccountRetry.MaxRetryAfterMS < 0 {
+		return fmt.Errorf("gateway.grok_same_account_retry.max_retry_after_ms must be non-negative")
+	}
+	seenGrokRetryStatuses := make(map[int]struct{}, len(c.Gateway.GrokSameAccountRetry.Statuses))
+	for _, status := range c.Gateway.GrokSameAccountRetry.Statuses {
+		if status != http.StatusTooManyRequests && (status < 500 || status > 599) {
+			return fmt.Errorf("gateway.grok_same_account_retry.statuses may contain only 429 or 5xx status codes")
+		}
+		if _, exists := seenGrokRetryStatuses[status]; exists {
+			return fmt.Errorf("gateway.grok_same_account_retry.statuses must not contain duplicates")
+		}
+		seenGrokRetryStatuses[status] = struct{}{}
+	}
+	if c.Gateway.GrokSameAccountRetry.Enabled && c.Gateway.GrokSameAccountRetry.MaxRetries > 0 && len(c.Gateway.GrokSameAccountRetry.Statuses) == 0 {
+		return fmt.Errorf("gateway.grok_same_account_retry.statuses must not be empty when retries are enabled")
+	}
 	if c.Gateway.UpstreamResponseReadMaxBytes <= 0 {
 		return fmt.Errorf("gateway.upstream_response_read_max_bytes must be positive")
 	}
@@ -2656,6 +2748,18 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.OpenAIResponseHeaderTimeout < 0 {
 		return fmt.Errorf("gateway.openai_response_header_timeout must be non-negative")
+	}
+	if c.Gateway.OpenAIFirstOutputTimeoutSeconds < 0 || c.Gateway.OpenAIFirstOutputTimeoutSeconds > 600 ||
+		(c.Gateway.OpenAIFirstOutputTimeoutSeconds > 0 && c.Gateway.OpenAIFirstOutputTimeoutSeconds < 30) {
+		return fmt.Errorf("gateway.openai_first_output_timeout_seconds must be 0 or between 30-600 seconds")
+	}
+	if c.Gateway.OpenAIStreamStallTimeoutSeconds < 0 || c.Gateway.OpenAIStreamStallTimeoutSeconds > 600 ||
+		(c.Gateway.OpenAIStreamStallTimeoutSeconds > 0 && c.Gateway.OpenAIStreamStallTimeoutSeconds < 30) {
+		return fmt.Errorf("gateway.openai_stream_stall_timeout_seconds must be 0 or between 30-600 seconds")
+	}
+	if c.Gateway.OpenAIHighEffortFirstOutputTimeoutSeconds < 0 || c.Gateway.OpenAIHighEffortFirstOutputTimeoutSeconds > 1800 ||
+		(c.Gateway.OpenAIHighEffortFirstOutputTimeoutSeconds > 0 && c.Gateway.OpenAIHighEffortFirstOutputTimeoutSeconds < 30) {
+		return fmt.Errorf("gateway.openai_high_effort_first_output_timeout_seconds must be 0 or between 30-1800 seconds")
 	}
 	if strings.TrimSpace(c.Gateway.ConnectionPoolIsolation) != "" {
 		switch c.Gateway.ConnectionPoolIsolation {
@@ -2738,6 +2842,15 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.OpenAIWS.MaxConnsPerAccount <= 0 {
 		return fmt.Errorf("gateway.openai_ws.max_conns_per_account must be positive")
+	}
+	if c.Gateway.OpenAIWS.ClientFirstMessageTimeoutSeconds <= 0 {
+		return fmt.Errorf("gateway.openai_ws.client_first_message_timeout_seconds must be positive")
+	}
+	if c.Gateway.OpenAIWS.IngressInterTurnIdleTimeoutSeconds < 0 {
+		return fmt.Errorf("gateway.openai_ws.ingress_inter_turn_idle_timeout_seconds must be non-negative")
+	}
+	if c.Gateway.OpenAIWS.MaxIngressConnectionsPerAPIKey < 0 {
+		return fmt.Errorf("gateway.openai_ws.max_ingress_connections_per_api_key must be non-negative")
 	}
 	if c.Gateway.OpenAIWS.MinIdlePerAccount < 0 {
 		return fmt.Errorf("gateway.openai_ws.min_idle_per_account must be non-negative")

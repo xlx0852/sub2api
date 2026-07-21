@@ -247,6 +247,22 @@ gateway:
   # Use this to avoid compact failures when newer models are not yet supported by the compact endpoint.
   # 当 compact 端点暂未支持更新模型时，可通过这里降级规避失败。
   openai_compact_model: "gpt-5.4"
+  # Retry transient Grok HTTP Responses/Chat failures once on the exact same account before failover.
+  # Grok HTTP Responses/Chat 临时失败时，在故障转移前固定原账号重试一次。
+  grok_same_account_retry:
+    enabled: true
+    max_retries: 1
+    statuses: [429, 502, 503, 504, 529]
+    fallback_delay_ms: 500
+    max_retry_after_ms: 2000
+  # Conservative Grok Responses/Chat payload optimization.
+  # Grok Responses/Chat 请求体保守优化；字节阈值设为 0 可关闭对应处理。
+  grok_payload:
+    deduplicate_images: true
+    disable_store_on_images: true
+    soft_limit_bytes: 16777216
+    hard_limit_bytes: 33554432
+    tool_output_max_bytes: 262144
   # OpenAI Responses WebSocket 配置（默认开启，可按需回滚到 HTTP）
   openai_ws:
     # 新版 WS mode 路由（默认关闭）。关闭时保持当前 legacy 实现行为。
@@ -254,6 +270,10 @@ gateway:
     # ingress 默认模式：off|ctx_pool|passthrough|http_bridge（仅 mode_router_v2_enabled=true 生效）
     # 兼容旧值：shared/dedicated 会按 ctx_pool 处理。
     ingress_mode_default: ctx_pool
+    # Close a client WebSocket that stays idle between completed turns (seconds). Set 0 to disable.
+    ingress_inter_turn_idle_timeout_seconds: 300
+    # Limit live client WebSocket ingress sessions per API key across all instances. Set 0 to disable.
+    max_ingress_connections_per_api_key: 64
     # 全局总开关，默认 true；关闭时所有请求保持原有 HTTP/SSE 路由
     enabled: true
     # 按账号类型细分开关
