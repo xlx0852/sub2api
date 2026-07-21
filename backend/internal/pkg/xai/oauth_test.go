@@ -129,6 +129,10 @@ func TestBuildGrokMediaURLs(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, DefaultBaseURL+"/videos/generations", videosURL)
 
+	videoEditsURL, err := BuildVideosEditsURL(DefaultBaseURL)
+	require.NoError(t, err)
+	require.Equal(t, DefaultBaseURL+"/videos/edits", videoEditsURL)
+
 	videoURL, err := BuildVideoURL(DefaultBaseURL, "req 123")
 	require.NoError(t, err)
 	require.Equal(t, DefaultBaseURL+"/videos/req%20123", videoURL)
@@ -149,6 +153,44 @@ func TestValidateXAIURLsAllowCompatibleCustomBaseURL(t *testing.T) {
 	responsesURL, err := BuildResponsesURL("https://gateway.example.test")
 	require.NoError(t, err)
 	require.Equal(t, "https://gateway.example.test/v1/responses", responsesURL)
+}
+
+func TestOfficialAndRegionalBaseURLHelpers(t *testing.T) {
+	require.True(t, IsOfficialBaseURLHost("api.x.ai"))
+	require.True(t, IsOfficialBaseURLHost("us-east-1.api.x.ai"))
+	require.True(t, IsOfficialBaseURLHost("cli-chat-proxy.grok.com"))
+	require.False(t, IsOfficialBaseURLHost("gateway.example.test"))
+
+	require.True(t, IsOfficialAPIBaseURLHost("api.x.ai"))
+	require.True(t, IsOfficialAPIBaseURLHost("eu-west-1.api.x.ai"))
+	require.False(t, IsOfficialAPIBaseURLHost("cli-chat-proxy.grok.com"))
+
+	require.True(t, IsParseableBaseURL("https://us-west-2.api.x.ai/v1"))
+	require.False(t, IsParseableBaseURL("not a url"))
+	require.False(t, IsParseableBaseURL(""))
+
+	require.True(t, IsOfficialBaseURL(DefaultBaseURL))
+	require.True(t, IsOfficialBaseURL(DefaultCLIBaseURL))
+	require.True(t, IsOfficialAPIBaseURL("https://us-east-1.api.x.ai/v1"))
+	require.False(t, IsOfficialAPIBaseURL(DefaultCLIBaseURL))
+
+	regional, err := ValidateBaseURL("https://us-east-1.api.x.ai")
+	require.NoError(t, err)
+	require.Equal(t, "https://us-east-1.api.x.ai/v1", regional)
+
+	// Official hosts still force /v1; custom hosts keep path prefixes.
+	_, err = ValidateBaseURL("https://api.x.ai/custom")
+	require.Error(t, err)
+	custom, err := ValidateBaseURL("https://gateway.example.test/proxy/v1")
+	require.NoError(t, err)
+	require.Equal(t, "https://gateway.example.test/proxy/v1", custom)
+}
+
+func TestGrokFreeRolling24hTokenLimitHelpers(t *testing.T) {
+	require.Equal(t, int64(1_000_000), GrokFreeRolling24hTokenLimit)
+	require.True(t, IsGrokFreeRolling24hTokenLimit(1_000_000))
+	require.True(t, IsGrokFreeRolling24hTokenLimit(2_000_000))
+	require.False(t, IsGrokFreeRolling24hTokenLimit(500_000))
 }
 
 func TestValidateXAIURLsRejectUnsafeBaseURLsByDefault(t *testing.T) {

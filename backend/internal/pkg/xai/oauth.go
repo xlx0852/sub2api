@@ -40,7 +40,9 @@ const (
 
 var (
 	oauthEndpointAllowedHosts = []string{"x.ai", "*.x.ai"}
-	baseURLAllowedHosts       = []string{"api.x.ai", "cli-chat-proxy.grok.com"}
+	// *.api.x.ai covers regional xAI endpoints (us-east-1/us-west-2/eu-west-1, ...)
+	// so operators can switch hosts when a single official endpoint is degraded.
+	baseURLAllowedHosts = []string{"api.x.ai", "*.api.x.ai", "cli-chat-proxy.grok.com"}
 )
 
 // OAuthSession stores one PKCE OAuth flow.
@@ -268,6 +270,12 @@ func ValidateBaseURL(raw string) (string, error) {
 	return normalizeBaseURLPath(normalized)
 }
 
+// normalizeBaseURLPath normalizes the path portion of a Grok base URL:
+//   - official hosts always use the /v1 prefix (empty path is filled; other paths rejected);
+//   - other hosts keep the operator-configured path prefix (third-party relays often use
+//     /xxx/v1 style prefixes); empty path still defaults to /v1.
+//
+// All hosts forbid userinfo/query/fragment and trailing slashes are trimmed.
 func normalizeBaseURLPath(raw string) (string, error) {
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
@@ -279,7 +287,8 @@ func normalizeBaseURLPath(raw string) (string, error) {
 		parsed.RawPath = ""
 		return strings.TrimRight(parsed.String(), "/"), nil
 	}
-	if isKnownBaseURLHost(parsed.Hostname()) && path != "/v1" {
+	// Official hosts still force /v1; custom hosts may keep any path prefix.
+	if path != "/v1" && IsOfficialBaseURLHost(parsed.Hostname()) {
 		return "", fmt.Errorf("base URL path must be /v1")
 	}
 	parsed.Path = path
@@ -287,14 +296,79 @@ func normalizeBaseURLPath(raw string) (string, error) {
 	return strings.TrimRight(parsed.String(), "/"), nil
 }
 
-func isKnownBaseURLHost(host string) bool {
+// IsOfficialBaseURLHost reports whether host is an official API / regional API / CLI gateway host.
+func IsOfficialBaseURLHost(host string) bool {
 	host = strings.ToLower(strings.TrimSpace(host))
-	for _, allowedHost := range baseURLAllowedHosts {
-		if host == allowedHost {
+	for _, allowed := range baseURLAllowedHosts {
+		if strings.HasPrefix(allowed, "*.") {
+			suffix := strings.TrimPrefix(allowed, "*.")
+			if host == suffix || strings.HasSuffix(host, "."+suffix) {
+				return true
+			}
+			continue
+		}
+		if host == allowed {
 			return true
 		}
 	}
 	return false
+}
+
+// IsOfficialAPIBaseURLHost reports whether host is the public API (api.x.ai / regional *.api.x.ai),
+// excluding the CLI chat proxy.
+func IsOfficialAPIBaseURLHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" || host == "cli-chat-proxy.grok.com" {
+		return false
+	}
+	return IsOfficialBaseURLHost(host)
+}
+
+// IsParseableBaseURL reports whether raw can be parsed into a host-bearing URL.
+// Used on the read path for dirty stored credentials: unparseable values should fall
+// back to the default endpoint instead of sending traffic to an undefined target.
+func IsParseableBaseURL(raw string) bool {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return false
+	}
+	parsed, err := url.Parse(trimmed)
+	return err == nil && parsed.Host != ""
+}
+
+// IsOfficialBaseURL reports whether raw points at an official host (api.x.ai / *.api.x.ai /
+// CLI gateway). Tolerates legacy credential variants (case, explicit :443, percent-encoded path).
+// Unparseable values are treated as official so callers fall back to a known default endpoint.
+func IsOfficialBaseURL(raw string) bool {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return true
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Host == "" {
+		return true
+	}
+	return IsOfficialBaseURLHost(parsed.Hostname())
+}
+
+// IsOfficialAPIBaseURL reports whether raw points at the public/regional API hosts,
+// not the CLI chat proxy. Empty/unparseable values are treated as non-API so OAuth
+// routing can keep its CLI default.
+func IsOfficialAPIBaseURL(raw string) bool {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return false
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	return IsOfficialAPIBaseURLHost(parsed.Hostname())
+}
+
+// isKnownBaseURLHost is kept as a thin alias for older call sites / tests.
+func isKnownBaseURLHost(host string) bool {
+	return IsOfficialBaseURLHost(host)
 }
 
 func AllowUnsafeURLOverrides() bool {
@@ -471,6 +545,14 @@ func BuildVideosGenerationsURL(baseURL string) (string, error) {
 		return "", fmt.Errorf("invalid base url: %w", err)
 	}
 	return validatedBaseURL + "/videos/generations", nil
+}
+
+func BuildVideosEditsURL(baseURL string) (string, error) {
+	validatedBaseURL, err := ValidatedBaseURL(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid base url: %w", err)
+	}
+	return validatedBaseURL + "/videos/edits", nil
 }
 
 func BuildVideoURL(baseURL, requestID string) (string, error) {
