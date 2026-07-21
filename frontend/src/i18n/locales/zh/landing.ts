@@ -1,4 +1,18 @@
 export default {
+  docs: {
+    pageTitle: '接入教程',
+    navLabel: '接入教程',
+    quickStart: '快速上手',
+    badge: 'SicTs 文档',
+    apiBase: 'API 地址',
+    getKey: '获取 API Key',
+    toggleMenu: '打开目录',
+    prev: '上一章',
+    next: '下一章',
+    copy: '复制',
+    copied: '已复制',
+    copyFailed: '复制失败'
+  },
   batchImageGuide: {
     title: '图片批量生成',
     description: '一次提交多条提示词，任务完成后可统一下载图片结果'
