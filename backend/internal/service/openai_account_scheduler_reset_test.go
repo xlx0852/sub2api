@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/stretchr/testify/require"
 )
 
@@ -194,4 +195,151 @@ func TestBuildOpenAIAccountLoadPlan_QuotaHeadroomZeroNoEffect(t *testing.T) {
 	plan := sched.buildOpenAIAccountLoadPlan(context.Background(), OpenAIAccountScheduleRequest{}, filtered, map[int64]*AccountLoadInfo{})
 	scores := openAIPlanScores(plan)
 	require.Equal(t, scores[1], scores[2], "quota_headroom 权重为 0 时不应影响打分")
+}
+
+func TestGrokQuotaHeadroomFactor_FreshBillingPreferred(t *testing.T) {
+	now := time.Date(2026, 7, 15, 10, 0, 0, 0, time.UTC)
+	used := 20.0
+	limit, remaining, reset := int64(100), int64(5), now.Add(time.Hour).Unix()
+	account := &Account{
+		Platform: PlatformGrok,
+		Extra: map[string]any{
+			grokBillingSnapshotKey: &xai.BillingSnapshot{
+				UsagePercent: &used,
+				StatusCode:   200,
+				FetchedAt:    now.Add(-time.Hour).Format(time.RFC3339),
+			},
+			grokQuotaSnapshotExtraKey: &xai.QuotaSnapshot{
+				Requests:  &xai.QuotaWindow{Limit: &limit, Remaining: &remaining, ResetUnix: &reset},
+				UpdatedAt: now.Add(-time.Minute).Format(time.RFC3339),
+			},
+		},
+	}
+
+	require.InDelta(t, 0.8, openAIQuotaHeadroomFactor(account, now), 0.0001)
+}
+
+func TestGrokQuotaHeadroomFactor_StaleBillingFallsBackToConservativeAPIQuota(t *testing.T) {
+	now := time.Date(2026, 7, 15, 10, 0, 0, 0, time.UTC)
+	used := 10.0
+	requestLimit, requestRemaining := int64(100), int64(70)
+	tokenLimit, tokenRemaining := int64(1000), int64(300)
+	reset := now.Add(time.Hour).Unix()
+	account := &Account{
+		Platform: PlatformGrok,
+		Extra: map[string]any{
+			grokBillingSnapshotKey: &xai.BillingSnapshot{
+				UsagePercent: &used,
+				StatusCode:   200,
+				FetchedAt:    now.Add(-25 * time.Hour).Format(time.RFC3339),
+			},
+			grokQuotaSnapshotExtraKey: &xai.QuotaSnapshot{
+				Requests:  &xai.QuotaWindow{Limit: &requestLimit, Remaining: &requestRemaining, ResetUnix: &reset},
+				Tokens:    &xai.QuotaWindow{Limit: &tokenLimit, Remaining: &tokenRemaining, ResetUnix: &reset},
+				UpdatedAt: now.Add(-time.Minute).Format(time.RFC3339),
+			},
+		},
+	}
+
+	require.InDelta(t, 0.3, openAIQuotaHeadroomFactor(account, now), 0.0001)
+}
+
+func TestGrokQuotaHeadroomFactor_MissingInvalidAndExpiredAreNeutral(t *testing.T) {
+	now := time.Date(2026, 7, 15, 10, 0, 0, 0, time.UTC)
+	limit, remaining, expired := int64(100), int64(50), now.Add(-time.Minute).Unix()
+	cases := []*Account{
+		{Platform: PlatformGrok},
+		{Platform: PlatformGrok, Extra: map[string]any{grokBillingSnapshotKey: "damaged"}},
+		{Platform: PlatformGrok, Extra: map[string]any{
+			grokQuotaSnapshotExtraKey: &xai.QuotaSnapshot{
+				Requests:  &xai.QuotaWindow{Limit: &limit, Remaining: &remaining, ResetUnix: &expired},
+				UpdatedAt: now.Add(-time.Minute).Format(time.RFC3339),
+			},
+		}},
+	}
+
+	for _, account := range cases {
+		require.Equal(t, openAIQuotaHeadroomNeutralFactor, openAIQuotaHeadroomFactor(account, now))
+	}
+}
+
+func TestBuildOpenAIAccountLoadPlan_GrokQuotaHeadroomPrefersFreshRemaining(t *testing.T) {
+	now := time.Now().UTC()
+	highUsed, lowUsed := 90.0, 10.0
+	accounts := []*Account{
+		{ID: 1, Platform: PlatformGrok, Extra: map[string]any{
+			grokBillingSnapshotKey: &xai.BillingSnapshot{UsagePercent: &highUsed, StatusCode: 200, FetchedAt: now.Format(time.RFC3339)},
+		}},
+		{ID: 2, Platform: PlatformGrok, Extra: map[string]any{
+			grokBillingSnapshotKey: &xai.BillingSnapshot{UsagePercent: &lowUsed, StatusCode: 200, FetchedAt: now.Format(time.RFC3339)},
+		}},
+	}
+
+	plan := openAIQuotaHeadroomTestScheduler(1).buildOpenAIAccountLoadPlan(
+		context.Background(), OpenAIAccountScheduleRequest{}, accounts, map[int64]*AccountLoadInfo{},
+	)
+	scores := openAIPlanScores(plan)
+	require.Greater(t, scores[2], scores[1])
+}
+
+func TestGrokQuotaHeadroomFactor_ExhaustedFreshQuotaIsZero(t *testing.T) {
+	now := time.Now().UTC()
+	limit, remaining, reset := int64(100), int64(0), now.Add(time.Hour).Unix()
+	account := &Account{Platform: PlatformGrok, Extra: map[string]any{
+		grokQuotaSnapshotExtraKey: &xai.QuotaSnapshot{
+			Requests:  &xai.QuotaWindow{Limit: &limit, Remaining: &remaining, ResetUnix: &reset},
+			UpdatedAt: now.Format(time.RFC3339),
+		},
+	}}
+
+	require.Zero(t, openAIQuotaHeadroomFactor(account, now))
+}
+
+func TestGrokQuotaSoftWeightDoesNotOverrideStickyOrHardExclusion(t *testing.T) {
+	now := time.Now().UTC()
+	lowRemaining, highRemaining := 90.0, 10.0
+	sticky := &Account{
+		ID: 71, Platform: PlatformGrok, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true, Concurrency: 1,
+		Extra: map[string]any{grokBillingSnapshotKey: &xai.BillingSnapshot{
+			UsagePercent: &lowRemaining, StatusCode: 200, FetchedAt: now.Format(time.RFC3339),
+		}},
+	}
+	backup := &Account{
+		ID: 72, Platform: PlatformGrok, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true, Concurrency: 1,
+		Extra: map[string]any{grokBillingSnapshotKey: &xai.BillingSnapshot{
+			UsagePercent: &highRemaining, StatusCode: 200, FetchedAt: now.Format(time.RFC3339),
+		}},
+	}
+	snapshotCache := &openAISnapshotCacheStub{
+		snapshotAccounts: []*Account{sticky, backup},
+		accountsByID:     map[int64]*Account{sticky.ID: sticky, backup.ID: backup},
+	}
+	svc := &OpenAIGatewayService{
+		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: []Account{*sticky, *backup}},
+		cache:              &schedulerTestGatewayCache{},
+		cfg:                &config.Config{},
+		schedulerSnapshot:  &SchedulerSnapshotService{cache: snapshotCache},
+		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
+	}
+	scheduler := newDefaultOpenAIAccountScheduler(svc, nil)
+
+	selection, decision, err := scheduler.Select(context.Background(), OpenAIAccountScheduleRequest{
+		Platform: PlatformGrok, StickyAccountID: sticky.ID, SessionHash: "grok-sticky",
+	})
+	require.NoError(t, err)
+	require.Equal(t, sticky.ID, selection.Account.ID)
+	require.True(t, decision.StickySessionHit)
+	selection.ReleaseFunc()
+
+	blockedUntil := now.Add(time.Hour)
+	blocked := *sticky
+	blocked.TempUnschedulableUntil = &blockedUntil
+	snapshotCache.accountsByID[sticky.ID] = &blocked
+	selection, decision, err = scheduler.Select(context.Background(), OpenAIAccountScheduleRequest{
+		Platform: PlatformGrok, StickyAccountID: sticky.ID, SessionHash: "grok-sticky",
+	})
+	require.NoError(t, err)
+	require.Equal(t, backup.ID, selection.Account.ID)
+	require.False(t, decision.StickySessionHit)
+	selection.ReleaseFunc()
 }
