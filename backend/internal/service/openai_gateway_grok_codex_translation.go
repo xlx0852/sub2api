@@ -96,7 +96,8 @@ func grokCustomFunctionParameters() map[string]any {
 				"description": "The raw input for this tool, passed through verbatim.",
 			},
 		},
-		"required": []any{"input"},
+		"required":             []any{"input"},
+		"additionalProperties": false,
 	}
 }
 

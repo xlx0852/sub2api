@@ -21,6 +21,7 @@ func TestGrokQuotaFetcherBuildUsageInfoUnknownUntilFirstSnapshot(t *testing.T) {
 	require.Equal(t, "passive", usage.Source)
 	require.Equal(t, "quota_unknown", usage.ErrorCode)
 	require.Contains(t, usage.Error, "unknown until")
+	require.Equal(t, xai.GrokFreeRolling24hTokenLimit, usage.GrokFreeTokenLimit)
 }
 
 func TestGrokQuotaFetcherBuildUsageInfoFromBilling(t *testing.T) {

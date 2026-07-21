@@ -104,9 +104,10 @@ func (s *GrokQuotaService) ProbeUsage(ctx context.Context, accountID int64) (*Gr
 	}
 
 	// Persist for account list passive display.
-	if err := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
+	updates := map[string]any{
 		grokBillingSnapshotKey: merged,
-	}); err != nil {
+	}
+	if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
 		slog.Warn("grok_billing_persist_failed",
 			"account_id", account.ID,
 			"error", err,
@@ -167,6 +168,10 @@ func (s *GrokQuotaService) fetchBilling(
 		return nil, 0, infraerrors.Newf(http.StatusInternalServerError, "GROK_BILLING_REQUEST_BUILD_FAILED", "failed to build billing request: %v", err)
 	}
 	xai.ApplyGrokCLIBillingHeaders(req, token, userID)
+	// Custom upstream relays may require extra admission headers; apply after defaults.
+	if account != nil {
+		account.ApplyHeaderOverrides(req.Header)
+	}
 
 	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, maxInt(account.Concurrency, 1))
 	if err != nil {

@@ -24,7 +24,10 @@ const (
 	grokAutomationUpdateToolName           = "automation_update"
 )
 
-var grokSafeFunctionParameters = json.RawMessage(`{"type":"object","properties":{},"additionalProperties":true}`)
+// xAI rejects function tools whose object schemas omit additionalProperties:false
+// (Cursor/Claude Desktop often send open object schemas). Keep empty open-ended
+// fallbacks closed as well so automation_update and similar tools stay valid.
+var grokSafeFunctionParameters = json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
 
 func (s *OpenAIGatewayService) forwardGrokResponses(
 	ctx context.Context,
@@ -53,8 +56,15 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 	if err != nil {
 		return nil, fmt.Errorf("apply grok prompt cache identity: %w", err)
 	}
+	patchedBody, err = s.optimizeGrokPayload(account, patchedBody, grokPayloadResponses)
+	if err != nil {
+		if handleGrokPayloadOptimizationError(c, grokPayloadResponses, err) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("optimize Grok Responses payload: %w", err)
+	}
 
-	token, _, err := s.GetAccessToken(ctx, account)
+	token, _, credential, err := s.getGrokAccessTokenWithDescriptor(ctx, account)
 	if err != nil {
 		return nil, err
 	}
@@ -82,12 +92,17 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)
 		resp.Body = io.NopCloser(bytes.NewReader(respBody))
-		s.updateGrokUsageSnapshot(ctx, account.ID, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
+		s.updateGrokUsageSnapshot(ctx, account, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
 		upstreamMsg := sanitizeUpstreamErrorMessage(extractUpstreamErrorMessage(respBody))
 		if upstreamMsg == "" {
 			upstreamMsg = fmt.Sprintf("xAI upstream returned status %d", resp.StatusCode)
 		}
-		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+		attribution := s.attributeGrokUnauthorized(ctx, c, account, resp.StatusCode, credential)
+		retryDisabled := grokUpstreamExplicitlyDisablesRetry(resp.Header)
+		if retryDisabled {
+			return s.handleErrorResponse(ctx, resp, c, account, patchedBody, upstreamModel)
+		}
+		opsEvent := OpsUpstreamErrorEvent{
 			Platform:           account.Platform,
 			AccountID:          account.ID,
 			AccountName:        account.Name,
@@ -95,19 +110,29 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 			UpstreamRequestID:  firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id")),
 			Kind:               "failover",
 			Message:            upstreamMsg,
-		})
-		s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+		}
+		applyGrokUnauthorizedAttribution(&opsEvent, attribution)
+		appendOpsUpstreamError(c, opsEvent)
+		grokSameAccountRetry := s.isGrokSameAccountRetry(c, resp.StatusCode)
+		penalizeAccount := shouldPenalizeGrokUnauthorized(resp.StatusCode, attribution)
+		if !grokSameAccountRetry && penalizeAccount {
+			s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+		}
 		if s.shouldFailoverUpstreamError(resp.StatusCode) {
 			return nil, &UpstreamFailoverError{
-				StatusCode:             resp.StatusCode,
-				ResponseBody:           respBody,
-				RetryableOnSameAccount: account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
+				StatusCode:                resp.StatusCode,
+				ResponseBody:              respBody,
+				ResponseHeaders:           resp.Header.Clone(),
+				RetryableOnSameAccount:    grokSameAccountRetry || (account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode)),
+				GrokSameAccountRetry:      grokSameAccountRetry,
+				GrokAccountPenaltyApplied: !grokSameAccountRetry && penalizeAccount,
+				GrokStaleCredential:       !penalizeAccount,
 			}
 		}
 		return s.handleErrorResponse(ctx, resp, c, account, patchedBody, upstreamModel)
 	}
 
-	s.updateGrokUsageSnapshot(ctx, account.ID, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
+	s.updateGrokUsageSnapshot(ctx, account, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
 
 	var usage *OpenAIUsage
 	var firstTokenMs *int
@@ -164,6 +189,7 @@ func patchGrokResponsesBodyWithTranslation(body []byte, upstreamModel string) ([
 	}
 	for _, unsupportedField := range []string{
 		"previous_response_id",
+		"context_management",
 		"prompt_cache_retention",
 		"safety_identifier",
 		"stream_options",
@@ -189,6 +215,14 @@ func patchGrokResponsesBodyWithTranslation(body []byte, upstreamModel string) ([
 	if err != nil {
 		return nil, nil, err
 	}
+	out, err = sanitizeGrokResponsesModelCapabilities(out, upstreamModel)
+	if err != nil {
+		return nil, nil, err
+	}
+	out, err = sanitizeGrokReasoningNullContent(out)
+	if err != nil {
+		return nil, nil, err
+	}
 	out, err = normalizeGrokResponsesInput(out, translation)
 	if err != nil {
 		return nil, nil, err
@@ -202,6 +236,66 @@ func patchGrokResponsesBodyWithTranslation(body []byte, upstreamModel string) ([
 		return nil, nil, err
 	}
 	return out, translation, nil
+}
+
+// sanitizeGrokResponsesModelCapabilities strips reasoning controls that certain
+// Grok Composer models reject (422).
+func sanitizeGrokResponsesModelCapabilities(body []byte, upstreamModel string) ([]byte, error) {
+	if !grokModelRejectsReasoningEffort(upstreamModel) {
+		return body, nil
+	}
+	out := body
+	for _, field := range []string{"reasoning", "reasoning_effort", "reasoningEffort"} {
+		if !gjson.GetBytes(out, field).Exists() {
+			continue
+		}
+		var err error
+		out, err = sjson.DeleteBytes(out, field)
+		if err != nil {
+			return nil, fmt.Errorf("remove unsupported Grok Composer %s: %w", field, err)
+		}
+	}
+	return out, nil
+}
+
+func grokModelRejectsReasoningEffort(model string) bool {
+	model = strings.TrimSpace(strings.ToLower(model))
+	if slash := strings.LastIndex(model, "/"); slash >= 0 {
+		model = strings.TrimSpace(model[slash+1:])
+	}
+	switch model {
+	case "grok-composer", "grok-composer-2.5-fast", "composer-2.5":
+		return true
+	default:
+		return false
+	}
+}
+
+// sanitizeGrokReasoningNullContent deletes reasoning items' "content": null.
+// xAI's untagged enum deserializer rejects that field with 422. Local
+// normalizeGrokResponsesInput already rewrites reasoning into assistant text,
+// but keep this strip as a defensive pre-pass for any retained reasoning shape.
+func sanitizeGrokReasoningNullContent(body []byte) ([]byte, error) {
+	input := gjson.GetBytes(body, "input")
+	if !input.Exists() || !input.IsArray() {
+		return body, nil
+	}
+	items := input.Array()
+	for i := len(items) - 1; i >= 0; i-- {
+		item := items[i]
+		if strings.TrimSpace(item.Get("type").String()) != "reasoning" {
+			continue
+		}
+		contentResult := item.Get("content")
+		if contentResult.Exists() && contentResult.Type == gjson.Null {
+			var err error
+			body, err = sjson.DeleteBytes(body, fmt.Sprintf("input.%d.content", i))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return body, nil
 }
 
 func normalizeGrokResponsesTopLevel(body []byte) ([]byte, error) {
@@ -230,96 +324,504 @@ func normalizeGrokResponsesTopLevel(body []byte) ([]byte, error) {
 	return json.Marshal(payload)
 }
 
+// xAI ModelInput only reliably accepts easy messages plus function_call /
+// function_call_output on the Grok OAuth / CLI proxy surface. Search/MCP/shell
+// call items from Codex history fail untagged-enum decode even when the type
+// name looks OpenAI-compatible.
+var grokResponsesKeepInputTypes = map[string]struct{}{
+	"message":              {},
+	"function_call":        {},
+	"function_call_output": {},
+}
+
+var grokResponsesDropInputTypes = map[string]struct{}{
+	"computer_call":           {},
+	"computer_call_output":    {},
+	"tool_search_call":        {},
+	"tool_search_output":      {},
+	"apply_patch_call":        {},
+	"apply_patch_call_output": {},
+}
+
+var grokResponsesCollapseInputTypes = map[string]string{
+	"web_search_call":       "web search",
+	"x_search_call":         "x search",
+	"file_search_call":      "file search",
+	"code_interpreter_call": "code interpreter",
+	"code_execution_call":   "code execution",
+	"mcp_call":              "mcp",
+	"shell_call":            "shell",
+}
+
 func normalizeGrokResponsesInput(body []byte, translation *grokCodexTranslation) ([]byte, error) {
 	var payload map[string]any
 	if err := decodeGrokJSON(body, &payload); err != nil {
 		return nil, err
 	}
-	input, ok := payload["input"].([]any)
-	if !ok {
+
+	switch input := payload["input"].(type) {
+	case []any:
+		payload["input"] = normalizeGrokResponsesInputItems(input, translation)
+	case map[string]any:
+		normalized := normalizeGrokResponsesInputItems([]any{input}, translation)
+		switch len(normalized) {
+		case 0:
+			delete(payload, "input")
+		case 1:
+			payload["input"] = normalized[0]
+		default:
+			payload["input"] = normalized
+		}
+	default:
 		return body, nil
 	}
+	return json.Marshal(payload)
+}
 
+func normalizeGrokResponsesInputItems(input []any, translation *grokCodexTranslation) []any {
 	normalized := make([]any, 0, len(input))
+	localShellCallIDs := make(map[string]any)
+	for _, rawItem := range input {
+		item, ok := rawItem.(map[string]any)
+		if !ok || strings.TrimSpace(fmt.Sprint(item["type"])) != "local_shell_call" {
+			continue
+		}
+		itemID := strings.TrimSpace(fmt.Sprint(item["id"]))
+		if itemID != "" {
+			localShellCallIDs[itemID] = firstNonEmptyAny(item["call_id"], item["id"], "call_shell")
+		}
+	}
 	for _, rawItem := range input {
 		item, ok := rawItem.(map[string]any)
 		if !ok {
-			normalized = append(normalized, rawItem)
+			// Bare strings are valid easy ModelInput text.
+			if text, ok := rawItem.(string); ok {
+				normalized = append(normalized, text)
+			}
 			continue
-		}
-		itemType, _ := item["type"].(string)
-		switch strings.TrimSpace(itemType) {
-		case "custom_tool_call":
-			item["type"] = "function_call"
-			item["arguments"] = encodeGrokCustomToolInput(item["input"])
-			delete(item, "input")
-			delete(item, "status")
-			if name := strings.TrimSpace(fmt.Sprint(item["name"])); name != "" && translation != nil {
-				translation.customTools[name] = struct{}{}
-			}
-		case "custom_tool_call_output":
-			item["type"] = "function_call_output"
-		case "reasoning":
-			if item["content"] == nil {
-				delete(item, "content")
-			}
-			if shouldDropForeignGrokEncryptedContent(item["encrypted_content"]) {
-				delete(item, "encrypted_content")
-			}
-			if summary, exists := item["summary"]; !exists || summary == nil {
-				item["summary"] = []any{}
-			}
-		case "compaction":
-			if shouldDropForeignGrokEncryptedContent(item["encrypted_content"]) {
-				continue
-			}
 		}
 
-		if len(normalized) > 0 && mergeAdjacentGrokReasoningSummary(normalized[len(normalized)-1], item) {
+		itemType, _ := item["type"].(string)
+		itemType = strings.TrimSpace(itemType)
+
+		// Easy message: {role, content} without type — keep with cleaned content only.
+		if itemType == "" && item["role"] != nil {
+			if cleaned := normalizeGrokMessageItem(item); cleaned != nil {
+				normalized = append(normalized, cleaned)
+			}
 			continue
 		}
-		normalized = append(normalized, item)
+
+		switch itemType {
+		case "compaction", "ghost_snapshot":
+			// Opaque foreign state — never forward.
+			continue
+		case "reasoning":
+			// Convert human-readable summary into plain assistant text so multi-turn
+			// context is not completely lost, but drop the opaque reasoning item itself.
+			if summary := extractGrokReasoningSummaryText(item); summary != "" {
+				normalized = append(normalized, grokAssistantTextItem("[reasoning] "+summary))
+			}
+			continue
+		case "message":
+			if cleaned := normalizeGrokMessageItem(item); cleaned != nil {
+				normalized = append(normalized, cleaned)
+			}
+			continue
+		case "custom_tool_call":
+			if converted := convertGrokCustomToolCallItem(item, translation); converted != nil {
+				normalized = append(normalized, converted)
+			}
+			continue
+		case "custom_tool_call_output":
+			if converted := convertGrokFunctionCallOutputItem(item); converted != nil {
+				normalized = append(normalized, converted)
+			}
+			continue
+		case "function_call":
+			if converted := convertGrokFunctionCallItem(item); converted != nil {
+				normalized = append(normalized, converted)
+			}
+			continue
+		case "function_call_output":
+			if converted := convertGrokFunctionCallOutputItem(item); converted != nil {
+				normalized = append(normalized, converted)
+			}
+			continue
+		case "local_shell_call":
+			// Codex shell history uses local_shell_call; xAI ModelInput does not accept it.
+			// Preserve continuity by rewriting into a plain function_call.
+			if converted := convertGrokLocalShellCallItem(item); converted != nil {
+				normalized = append(normalized, converted)
+			}
+			continue
+		case "local_shell_call_output":
+			callID := firstNonEmptyAny(localShellCallIDs[strings.TrimSpace(fmt.Sprint(item["id"]))], item["call_id"], item["id"], "call_unknown")
+			if converted := convertGrokFunctionCallOutputItemWithCallID(item, callID); converted != nil {
+				normalized = append(normalized, converted)
+			}
+			continue
+		case "image_generation_call":
+			path := firstNonEmptyStringField(item, "path", "result", "output", "revised_prompt")
+			if path == "" {
+				path = "image"
+			}
+			normalized = append(normalized, grokAssistantTextItem("[image generated: "+path+"]"))
+			continue
+		case "web_search_call", "x_search_call", "file_search_call", "code_interpreter_call", "code_execution_call", "mcp_call", "shell_call":
+			// These OpenAI call item types are not accepted by xAI ModelInput on the
+			// Grok proxy. Collapse them to a short assistant note so history remains.
+			label := grokResponsesCollapseInputTypes[itemType]
+			if label == "" {
+				label = itemType
+			}
+			detail := firstNonEmptyStringField(item, "query")
+			if detail == "" {
+				if action, ok := item["action"].(map[string]any); ok {
+					detail = firstNonEmptyStringField(action, "query", "url", "pattern")
+				}
+			}
+			text := "[" + label + "]"
+			if detail != "" {
+				text = "[" + label + ": " + detail + "]"
+			}
+			normalized = append(normalized, grokAssistantTextItem(text))
+			continue
+		case "output_text", "input_text":
+			if text, ok := item["text"]; ok && text != nil {
+				normalized = append(normalized, map[string]any{
+					"role": "user",
+					"content": []any{
+						map[string]any{"type": "input_text", "text": text},
+					},
+				})
+			}
+			continue
+		}
+
+		if _, drop := grokResponsesDropInputTypes[itemType]; drop {
+			continue
+		}
+
+		// Unknown tagged type: keep only if it looks like a message.
+		if item["role"] != nil {
+			if cleaned := normalizeGrokMessageItem(item); cleaned != nil {
+				normalized = append(normalized, cleaned)
+			}
+		}
 	}
-	payload["input"] = normalized
-	return json.Marshal(payload)
+	return normalized
+}
+
+func grokAssistantTextItem(text string) map[string]any {
+	return map[string]any{
+		"role": "assistant",
+		"content": []any{
+			map[string]any{"type": "input_text", "text": text},
+		},
+	}
+}
+
+func normalizeGrokMessageItem(item map[string]any) map[string]any {
+	role := strings.TrimSpace(fmt.Sprint(item["role"]))
+	if role == "" || role == "<nil>" {
+		role = "user"
+	}
+	content := normalizeGrokContentValue(item["content"])
+	if content == nil {
+		return nil
+	}
+	return map[string]any{
+		"type":    "message",
+		"role":    role,
+		"content": content,
+	}
+}
+
+func normalizeGrokContentValue(raw any) any {
+	switch typed := raw.(type) {
+	case string:
+		return typed
+	case []any:
+		parts := make([]any, 0, len(typed))
+		for _, rawPart := range typed {
+			switch part := rawPart.(type) {
+			case string:
+				if strings.TrimSpace(part) == "" {
+					continue
+				}
+				parts = append(parts, map[string]any{"type": "input_text", "text": part})
+			case map[string]any:
+				if cleaned := normalizeGrokContentPart(part); cleaned != nil {
+					parts = append(parts, cleaned)
+				}
+			}
+		}
+		if len(parts) == 0 {
+			return nil
+		}
+		return parts
+	default:
+		return nil
+	}
+}
+
+func normalizeGrokContentPart(part map[string]any) map[string]any {
+	partType := strings.TrimSpace(fmt.Sprint(part["type"]))
+	switch partType {
+	case "output_text", "text":
+		partType = "input_text"
+	case "output_image":
+		partType = "input_image"
+	case "input_text", "input_image":
+		// keep
+	default:
+		// Unknown content part types are not safe for xAI ModelInput.
+		if text, ok := part["text"].(string); ok && strings.TrimSpace(text) != "" {
+			return map[string]any{"type": "input_text", "text": text}
+		}
+		return nil
+	}
+	out := map[string]any{"type": partType}
+	switch partType {
+	case "input_text":
+		text, _ := part["text"].(string)
+		if strings.TrimSpace(text) == "" {
+			return nil
+		}
+		out["text"] = text
+	case "input_image":
+		imageURL := firstNonEmptyStringField(part, "image_url", "url")
+		if imageURL == "" {
+			// image_url may itself be an object {"url": "..."}
+			if nested, ok := part["image_url"].(map[string]any); ok {
+				imageURL = firstNonEmptyStringField(nested, "url", "image_url")
+			}
+		}
+		if imageURL == "" {
+			return nil
+		}
+		out["image_url"] = imageURL
+	}
+	return out
+}
+
+func convertGrokCustomToolCallItem(item map[string]any, translation *grokCodexTranslation) map[string]any {
+	name := strings.TrimSpace(fmt.Sprint(item["name"]))
+	if name == "" || name == "<nil>" {
+		name = "custom_tool"
+	}
+	if translation != nil {
+		translation.customTools[name] = struct{}{}
+	}
+	callID := firstNonEmptyAny(item["call_id"], item["id"], "call_"+name)
+
+	var arguments string
+	switch {
+	case item["input"] != nil:
+		arguments = encodeGrokCustomToolInput(item["input"])
+	default:
+		arguments = normalizeGrokFunctionArguments(item["arguments"])
+	}
+
+	return map[string]any{
+		"type":      "function_call",
+		"call_id":   callID,
+		"name":      name,
+		"arguments": arguments,
+	}
+}
+
+func convertGrokFunctionCallItem(item map[string]any) map[string]any {
+	name := strings.TrimSpace(fmt.Sprint(item["name"]))
+	if name == "" || name == "<nil>" {
+		name = "function"
+	}
+	return map[string]any{
+		"type":      "function_call",
+		"call_id":   firstNonEmptyAny(item["call_id"], item["id"], "call_"+name),
+		"name":      name,
+		"arguments": normalizeGrokFunctionArguments(item["arguments"]),
+	}
+}
+
+func convertGrokLocalShellCallItem(item map[string]any) map[string]any {
+	callID := firstNonEmptyAny(item["call_id"], item["id"], "call_shell")
+	arguments := "{}"
+	if action, ok := item["action"].(map[string]any); ok {
+		encoded, err := json.Marshal(action)
+		if err == nil {
+			arguments = string(encoded)
+		}
+	} else if rawArgs := item["arguments"]; rawArgs != nil {
+		arguments = normalizeGrokFunctionArguments(rawArgs)
+	}
+	return map[string]any{
+		"type":      "function_call",
+		"call_id":   callID,
+		"name":      "shell",
+		"arguments": arguments,
+	}
+}
+
+func convertGrokFunctionCallOutputItem(item map[string]any) map[string]any {
+	callID := firstNonEmptyAny(item["call_id"], item["id"], "call_unknown")
+	return convertGrokFunctionCallOutputItemWithCallID(item, callID)
+}
+
+func convertGrokFunctionCallOutputItemWithCallID(item map[string]any, callID any) map[string]any {
+	output := stringifyGrokToolOutput(item["output"])
+	return map[string]any{
+		"type":    "function_call_output",
+		"call_id": callID,
+		"output":  output,
+	}
+}
+
+func normalizeGrokFunctionArguments(raw any) string {
+	switch typed := raw.(type) {
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if trimmed == "" {
+			return "{}"
+		}
+		if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+			return typed
+		}
+		return encodeGrokCustomToolInput(typed)
+	case map[string]any, []any:
+		encoded, err := json.Marshal(typed)
+		if err != nil {
+			return "{}"
+		}
+		return string(encoded)
+	case nil:
+		return "{}"
+	default:
+		return encodeGrokCustomToolInput(typed)
+	}
+}
+
+func stringifyGrokToolOutput(raw any) string {
+	switch typed := raw.(type) {
+	case nil:
+		return ""
+	case string:
+		return typed
+	case []any:
+		// Codex may encode function_call_output.output as content items:
+		// [{"type":"input_text","text":"..."}, {"type":"input_image", ...}]
+		// xAI ModelInput expects a plain string here.
+		parts := make([]string, 0, len(typed))
+		for _, rawPart := range typed {
+			part, ok := rawPart.(map[string]any)
+			if !ok {
+				continue
+			}
+			switch strings.TrimSpace(fmt.Sprint(part["type"])) {
+			case "input_text", "output_text", "text":
+				if text, ok := part["text"].(string); ok && strings.TrimSpace(text) != "" {
+					parts = append(parts, text)
+				}
+			case "input_image", "output_image":
+				// Drop image payloads; keep a short marker so tool continuity remains.
+				parts = append(parts, "[image]")
+			}
+		}
+		if len(parts) == 0 {
+			encoded, err := json.Marshal(typed)
+			if err != nil {
+				return ""
+			}
+			return string(encoded)
+		}
+		return strings.Join(parts, "\n")
+	case map[string]any:
+		encoded, err := json.Marshal(typed)
+		if err != nil {
+			return ""
+		}
+		return string(encoded)
+	default:
+		encoded, err := json.Marshal(typed)
+		if err != nil {
+			return fmt.Sprint(typed)
+		}
+		return string(encoded)
+	}
+}
+
+func firstNonEmptyStringField(item map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if text, ok := item[key].(string); ok && strings.TrimSpace(text) != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+func firstNonEmptyAny(values ...any) any {
+	for _, value := range values {
+		switch typed := value.(type) {
+		case nil:
+			continue
+		case string:
+			if strings.TrimSpace(typed) == "" || typed == "<nil>" {
+				continue
+			}
+			return typed
+		default:
+			text := strings.TrimSpace(fmt.Sprint(typed))
+			if text == "" || text == "<nil>" {
+				continue
+			}
+			return typed
+		}
+	}
+	return "call_unknown"
+}
+
+func stripGrokEncryptedAnywhere(value any) {
+	switch typed := value.(type) {
+	case map[string]any:
+		delete(typed, "encrypted_content")
+		for _, child := range typed {
+			stripGrokEncryptedAnywhere(child)
+		}
+	case []any:
+		for _, child := range typed {
+			stripGrokEncryptedAnywhere(child)
+		}
+	}
+}
+
+func extractGrokReasoningSummaryText(item map[string]any) string {
+	summary, ok := item["summary"].([]any)
+	if !ok || len(summary) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(summary))
+	for _, rawPart := range summary {
+		part, ok := rawPart.(map[string]any)
+		if !ok {
+			continue
+		}
+		text, ok := part["text"].(string)
+		if !ok {
+			continue
+		}
+		text = strings.TrimSpace(text)
+		if text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 func decodeGrokJSON(body []byte, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.UseNumber()
 	return decoder.Decode(target)
-}
-
-func shouldDropForeignGrokEncryptedContent(value any) bool {
-	if value == nil {
-		return true
-	}
-	text, ok := value.(string)
-	if !ok {
-		return true
-	}
-	text = strings.TrimSpace(text)
-	return text == "" || strings.HasPrefix(text, "gAAAA")
-}
-
-func mergeAdjacentGrokReasoningSummary(previous any, current map[string]any) bool {
-	previousItem, ok := previous.(map[string]any)
-	if !ok || previousItem["type"] != "reasoning" || current["type"] != "reasoning" {
-		return false
-	}
-	if len(current) != 2 {
-		return false
-	}
-	currentSummary, ok := current["summary"].([]any)
-	if !ok || len(currentSummary) == 0 {
-		return false
-	}
-	previousSummary, ok := previousItem["summary"].([]any)
-	if !ok {
-		return false
-	}
-	previousItem["summary"] = append(previousSummary, currentSummary...)
-	return true
 }
 
 var grokResponsesUnsupportedRecursiveFields = map[string]struct{}{
@@ -384,55 +886,62 @@ var grokResponsesSupportedToolTypes = map[string]struct{}{
 
 func sanitizeGrokResponsesTools(body []byte, translation *grokCodexTranslation) ([]byte, error) {
 	tools := gjson.GetBytes(body, "tools")
-	if !tools.Exists() || !tools.IsArray() {
-		return body, nil
-	}
-
-	rawTools := tools.Array()
-	filteredTools := make([]json.RawMessage, 0, len(rawTools))
-	for _, tool := range rawTools {
-		toolType := strings.TrimSpace(tool.Get("type").String())
-		if toolType == "namespace" {
-			namespaceName := firstNonEmpty(tool.Get("name").String(), tool.Get("namespace").String())
-			nestedTools := tool.Get("tools")
-			if !nestedTools.IsArray() {
-				nestedTools = tool.Get("children")
-			}
-			for _, nested := range nestedTools.Array() {
-				normalized, keep, err := normalizeGrokResponsesTool(nested, namespaceName, translation)
-				if err != nil {
-					return nil, err
-				}
-				if keep {
-					filteredTools = append(filteredTools, normalized)
-				}
-			}
-			continue
-		}
-		normalized, keep, err := normalizeGrokResponsesTool(tool, "", translation)
-		if err != nil {
-			return nil, err
-		}
-		if keep {
-			filteredTools = append(filteredTools, normalized)
-		}
-	}
-
+	filteredTools := make([]json.RawMessage, 0)
 	var err error
-	if len(filteredTools) != len(rawTools) || !rawJSONMessagesEqual(filteredTools, rawTools) {
-		if len(filteredTools) == 0 {
-			body, err = sjson.DeleteBytes(body, "tools")
-		} else {
-			var encoded []byte
-			encoded, err = json.Marshal(filteredTools)
+
+	if tools.Exists() && tools.IsArray() {
+		rawTools := tools.Array()
+		filteredTools = make([]json.RawMessage, 0, len(rawTools))
+		for _, tool := range rawTools {
+			toolType := strings.TrimSpace(tool.Get("type").String())
+			if toolType == "namespace" {
+				namespaceName := firstNonEmpty(tool.Get("name").String(), tool.Get("namespace").String())
+				nestedTools := tool.Get("tools")
+				if !nestedTools.IsArray() {
+					nestedTools = tool.Get("children")
+				}
+				for _, nested := range nestedTools.Array() {
+					normalized, keep, err := normalizeGrokResponsesTool(nested, namespaceName, translation)
+					if err != nil {
+						return nil, err
+					}
+					if keep {
+						filteredTools = append(filteredTools, normalized)
+					}
+				}
+				continue
+			}
+			normalized, keep, err := normalizeGrokResponsesTool(tool, "", translation)
 			if err != nil {
 				return nil, err
 			}
-			body, err = sjson.SetRawBytes(body, "tools", encoded)
+			if keep {
+				filteredTools = append(filteredTools, normalized)
+			}
 		}
+
+		if len(filteredTools) != len(rawTools) || !rawJSONMessagesEqual(filteredTools, rawTools) {
+			if len(filteredTools) == 0 {
+				body, err = sjson.DeleteBytes(body, "tools")
+			} else {
+				var encoded []byte
+				encoded, err = json.Marshal(filteredTools)
+				if err != nil {
+					return nil, err
+				}
+				body, err = sjson.SetRawBytes(body, "tools", encoded)
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else if tools.Exists() && !tools.IsArray() {
+		// Invalid tools shape: drop it so orphan tool_choice cleanup can run.
+		body, err = sjson.DeleteBytes(body, "tools")
 		if err != nil {
 			return nil, err
 		}
+		filteredTools = nil
 	}
 
 	toolChoice := gjson.GetBytes(body, "tool_choice")
@@ -492,7 +1001,11 @@ func normalizeGrokResponsesTool(tool gjson.Result, namespaceName string, transla
 	delete(item, "external_web_access")
 	if toolType == "function" {
 		if _, exists := item["parameters"]; !exists {
-			item["parameters"] = map[string]any{"type": "object", "properties": map[string]any{}}
+			item["parameters"] = map[string]any{
+				"type":                 "object",
+				"properties":           map[string]any{},
+				"additionalProperties": false,
+			}
 		}
 		if strings.EqualFold(strings.TrimSpace(namespaceName), grokCodexAppNamespaceName) &&
 			strings.EqualFold(strings.TrimSpace(tool.Get("name").String()), grokAutomationUpdateToolName) {
@@ -505,9 +1018,174 @@ func normalizeGrokResponsesTool(tool gjson.Result, namespaceName string, transla
 				item["strict"] = false
 			}
 		}
+		// Force closed object schemas for every function tool. Nested object /
+		// array-item schemas are walked so Cursor-style tools (e.g.
+		// run_terminal_cmd_v2) stop failing xAI's additionalProperties gate.
+		if params, ok := item["parameters"].(map[string]any); ok {
+			enforceGrokClosedObjectSchemas(params)
+			item["parameters"] = params
+		}
 	}
 	normalized, err := json.Marshal(item)
 	return normalized, err == nil, err
+}
+
+// sanitizeGrokChatTools enforces xAI tool-schema rules on Chat Completions
+// bodies (tools[].function.parameters and legacy tools[].parameters).
+func sanitizeGrokChatTools(body []byte) ([]byte, error) {
+	tools := gjson.GetBytes(body, "tools")
+	if !tools.Exists() || !tools.IsArray() {
+		return body, nil
+	}
+	changed := false
+	normalizedTools := make([]json.RawMessage, 0, len(tools.Array()))
+	for _, tool := range tools.Array() {
+		var item map[string]any
+		if err := decodeGrokJSON([]byte(tool.Raw), &item); err != nil {
+			return nil, err
+		}
+		toolChanged := false
+
+		// OpenAI Chat Completions shape: {type:function, function:{name,parameters}}
+		if fn, ok := item["function"].(map[string]any); ok {
+			if params, ok := fn["parameters"].(map[string]any); ok {
+				if enforceGrokClosedObjectSchemas(params) {
+					fn["parameters"] = params
+					item["function"] = fn
+					toolChanged = true
+				}
+			} else if _, exists := fn["parameters"]; !exists {
+				fn["parameters"] = map[string]any{
+					"type":                 "object",
+					"properties":           map[string]any{},
+					"additionalProperties": false,
+				}
+				item["function"] = fn
+				toolChanged = true
+			}
+		}
+
+		// Responses-like / flattened shape on chat endpoint.
+		if params, ok := item["parameters"].(map[string]any); ok {
+			if enforceGrokClosedObjectSchemas(params) {
+				item["parameters"] = params
+				toolChanged = true
+			}
+		}
+
+		encoded, err := json.Marshal(item)
+		if err != nil {
+			return nil, err
+		}
+		if toolChanged || !bytes.Equal(encoded, []byte(tool.Raw)) {
+			changed = true
+		}
+		normalizedTools = append(normalizedTools, encoded)
+	}
+	if !changed {
+		return body, nil
+	}
+	encoded, err := json.Marshal(normalizedTools)
+	if err != nil {
+		return nil, err
+	}
+	return sjson.SetRawBytes(body, "tools", encoded)
+}
+
+// enforceGrokClosedObjectSchemas walks a JSON Schema fragment and forces every
+// object node to declare additionalProperties:false. Returns whether any node changed.
+func enforceGrokClosedObjectSchemas(schema map[string]any) bool {
+	if schema == nil {
+		return false
+	}
+	changed := false
+	if isJSONSchemaObjectType(schema["type"]) || schemaHasObjectShape(schema) {
+		if raw, exists := schema["additionalProperties"]; !exists {
+			schema["additionalProperties"] = false
+			changed = true
+		} else if asBool, ok := raw.(bool); ok && asBool {
+			// xAI currently rejects open object schemas on tools.
+			schema["additionalProperties"] = false
+			changed = true
+		} else if nested, ok := raw.(map[string]any); ok {
+			if enforceGrokClosedObjectSchemas(nested) {
+				changed = true
+			}
+		}
+	}
+	for _, key := range []string{"properties", "$defs", "definitions", "patternProperties"} {
+		nestedMap, ok := schema[key].(map[string]any)
+		if !ok {
+			continue
+		}
+		for childKey, child := range nestedMap {
+			childMap, ok := child.(map[string]any)
+			if !ok {
+				continue
+			}
+			if enforceGrokClosedObjectSchemas(childMap) {
+				nestedMap[childKey] = childMap
+				changed = true
+			}
+		}
+		schema[key] = nestedMap
+	}
+	for _, key := range []string{"items", "contains", "not"} {
+		if childMap, ok := schema[key].(map[string]any); ok {
+			if enforceGrokClosedObjectSchemas(childMap) {
+				schema[key] = childMap
+				changed = true
+			}
+		}
+	}
+	for _, key := range []string{"anyOf", "oneOf", "allOf", "prefixItems"} {
+		list, ok := schema[key].([]any)
+		if !ok {
+			continue
+		}
+		for i, child := range list {
+			childMap, ok := child.(map[string]any)
+			if !ok {
+				continue
+			}
+			if enforceGrokClosedObjectSchemas(childMap) {
+				list[i] = childMap
+				changed = true
+			}
+		}
+		schema[key] = list
+	}
+	return changed
+}
+
+func isJSONSchemaObjectType(raw any) bool {
+	switch typed := raw.(type) {
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), "object")
+	case []any:
+		for _, item := range typed {
+			if s, ok := item.(string); ok && strings.EqualFold(strings.TrimSpace(s), "object") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func schemaHasObjectShape(schema map[string]any) bool {
+	if schema == nil {
+		return false
+	}
+	if _, ok := schema["properties"]; ok {
+		return true
+	}
+	if _, ok := schema["additionalProperties"]; ok {
+		return true
+	}
+	if _, ok := schema["patternProperties"]; ok {
+		return true
+	}
+	return false
 }
 
 func rawJSONMessagesEqual(normalized []json.RawMessage, original []gjson.Result) bool {
@@ -720,7 +1398,7 @@ func (s *OpenAIGatewayService) describeGrokComposerImage(
 
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)
-		s.updateGrokUsageSnapshot(ctx, account.ID, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
+		s.updateGrokUsageSnapshot(ctx, account, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
 		upstreamMsg := sanitizeUpstreamErrorMessage(extractUpstreamErrorMessage(respBody))
 		if upstreamMsg == "" {
 			upstreamMsg = fmt.Sprintf("xAI image bridge upstream returned status %d", resp.StatusCode)
@@ -745,7 +1423,7 @@ func (s *OpenAIGatewayService) describeGrokComposerImage(
 		return "", OpenAIUsage{}, fmt.Errorf("grok composer image bridge upstream error: %s", upstreamMsg)
 	}
 
-	s.updateGrokUsageSnapshot(ctx, account.ID, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
+	s.updateGrokUsageSnapshot(ctx, account, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
 	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, nil)
 	if err != nil {
 		return "", OpenAIUsage{}, fmt.Errorf("read grok composer image bridge response: %w", err)
@@ -889,19 +1567,26 @@ func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Acc
 			req.Header.Set("OpenAI-Beta", v)
 		}
 	}
+	applyGrokRequestIdentityHeaders(req.Header, c, cacheIdentity, gjson.GetBytes(body, "model").String())
+	// Header overrides must run after built-in defaults so operators can patch
+	// relay-required headers without losing CLI/auth identity headers.
+	account.ApplyHeaderOverrides(req.Header)
 	return req, nil
 }
 
-func (s *OpenAIGatewayService) updateGrokUsageSnapshot(ctx context.Context, accountID int64, snapshot *xai.QuotaSnapshot) {
-	if s == nil || s.accountRepo == nil || accountID <= 0 || snapshot == nil {
+func (s *OpenAIGatewayService) updateGrokUsageSnapshot(ctx context.Context, account *Account, snapshot *xai.QuotaSnapshot) {
+	if s == nil || s.accountRepo == nil || account == nil || account.ID <= 0 || snapshot == nil {
 		return
 	}
-	if s.codexSnapshotThrottle != nil && !s.codexSnapshotThrottle.Allow(accountID, time.Now()) {
+	if s.codexSnapshotThrottle != nil && !s.codexSnapshotThrottle.Allow(account.ID, time.Now()) {
 		return
 	}
-	_ = s.accountRepo.UpdateExtra(ctx, accountID, map[string]any{
+	updates := map[string]any{
 		grokQuotaSnapshotExtraKey: snapshot,
-	})
+	}
+	if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
+		return
+	}
 }
 
 func (s *OpenAIGatewayService) handleGrokAccountUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte) {
@@ -928,6 +1613,49 @@ func (s *OpenAIGatewayService) handleGrokAccountUpstreamError(ctx context.Contex
 			s.tempUnscheduleGrok(ctx, account, 2*time.Minute, "grok upstream temporary error")
 		}
 	}
+}
+
+func (s *OpenAIGatewayService) isGrokSameAccountRetry(c *gin.Context, statusCode int) bool {
+	if s == nil || s.cfg == nil || c == nil || c.Request == nil || c.Request.URL == nil ||
+		c.Request.Method != http.MethodPost || isWebSocketUpgradeRequest(c.Request) {
+		return false
+	}
+	switch c.Request.URL.Path {
+	case "/v1/responses", "/responses", "/backend-api/codex/responses",
+		"/v1/chat/completions", "/chat/completions":
+	default:
+		return false
+	}
+	if statusCode != http.StatusTooManyRequests && (statusCode < 500 || statusCode > 599) {
+		return false
+	}
+	retryCfg := s.cfg.Gateway.GrokSameAccountRetry
+	if !retryCfg.Enabled || retryCfg.MaxRetries <= 0 {
+		return false
+	}
+	for _, configuredStatus := range retryCfg.Statuses {
+		if configuredStatus == statusCode {
+			return true
+		}
+	}
+	return false
+}
+
+func isWebSocketUpgradeRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(r.Header.Get("Upgrade")), "websocket")
+}
+
+// ApplyGrokSameAccountRetryPenalty applies the deferred health penalty after a
+// pinned Grok retry fails. It intentionally accepts the original failure so
+// Retry-After and the upstream body remain available to the existing policy.
+func (s *OpenAIGatewayService) ApplyGrokSameAccountRetryPenalty(ctx context.Context, account *Account, failoverErr *UpstreamFailoverError) {
+	if failoverErr == nil || !failoverErr.GrokSameAccountRetry {
+		return
+	}
+	s.handleGrokAccountUpstreamError(ctx, account, failoverErr.StatusCode, failoverErr.ResponseHeaders, failoverErr.ResponseBody)
 }
 
 func (s *OpenAIGatewayService) tempUnscheduleGrok(ctx context.Context, account *Account, cooldown time.Duration, reason string) {
