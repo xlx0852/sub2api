@@ -325,8 +325,21 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 		return s.fallbackPrices["glm-4-32b-0414-128k"]
 	}
 
-	// 月之暗面 Kimi（kimi-k2.6 / kimi-for-coding / kimi-k2.5 / kimi-k2-thinking / kimi-k2）
+	// 月之暗面 Kimi（kimi-k3 / k3 / kimi-k2.6 / kimi-for-coding / kimi-k2.5 / kimi-k2-thinking / kimi-k2）
 	// K2-0905 / K2-0711 官方未保留定价，不进入 fallback。
+	// Kimi Coding 上游短名 "k3" / "kimi-k3"：优先专用价，否则回落 coding/k2.6 价。
+	if modelLower == "k3" || strings.Contains(modelLower, "kimi-k3") || strings.Contains(modelLower, "kimi/k3") {
+		if p := s.fallbackPrices["k3"]; p != nil {
+			return p
+		}
+		if p := s.fallbackPrices["kimi-k3"]; p != nil {
+			return p
+		}
+		if p := s.fallbackPrices["kimi-for-coding"]; p != nil {
+			return p
+		}
+		return s.fallbackPrices["kimi-k2.6"]
+	}
 	if strings.Contains(modelLower, "kimi-for-coding") {
 		return s.fallbackPrices["kimi-for-coding"]
 	}
@@ -520,6 +533,9 @@ type CostInput struct {
 	ServiceTier    string                // "priority","flex","" 等
 	Resolver       *ModelPricingResolver // 定价解析器
 	Resolved       *ResolvedPricing      // 可选：预解析的定价结果（避免重复 Resolve 调用）
+	// LongContextBillingEnabled 为 nil 时保持旧行为（允许整会话长上下文加价）；
+	// 非 nil 时按显式开关控制。OpenAI 网关路径会传入账号级默认关闭开关。
+	LongContextBillingEnabled *bool
 }
 
 // CalculateCostUnified 统一计费入口，支持三种计费模式。
@@ -527,7 +543,11 @@ type CostInput struct {
 func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, error) {
 	if input.Resolver == nil {
 		// 无 Resolver，回退到旧路径
-		return s.calculateCostInternal(input.Model, input.Tokens, input.RateMultiplier, input.ServiceTier, nil)
+		applyLongCtx := true
+		if input.LongContextBillingEnabled != nil {
+			applyLongCtx = *input.LongContextBillingEnabled
+		}
+		return s.calculateCostInternal(input.Model, input.Tokens, input.RateMultiplier, input.ServiceTier, nil, applyLongCtx)
 	}
 
 	// 优先使用预解析结果，避免重复 Resolve 调用
@@ -574,6 +594,9 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 
 	// 长上下文定价仅在无区间定价时应用（区间定价已包含上下文分层）
 	applyLongCtx := len(resolved.Intervals) == 0
+	if input.LongContextBillingEnabled != nil {
+		applyLongCtx = applyLongCtx && *input.LongContextBillingEnabled
+	}
 
 	return s.computeTokenBreakdown(pricing, input.Tokens, input.RateMultiplier, input.ServiceTier, applyLongCtx), nil
 }
@@ -734,10 +757,14 @@ func (s *BillingService) CalculateCost(model string, tokens UsageTokens, rateMul
 }
 
 func (s *BillingService) CalculateCostWithServiceTier(model string, tokens UsageTokens, rateMultiplier float64, serviceTier string) (*CostBreakdown, error) {
-	return s.calculateCostInternal(model, tokens, rateMultiplier, serviceTier, nil)
+	return s.calculateCostWithServiceTierPolicy(model, tokens, rateMultiplier, serviceTier, true)
 }
 
-func (s *BillingService) calculateCostInternal(model string, tokens UsageTokens, rateMultiplier float64, serviceTier string, channelPricing *ChannelModelPricing) (*CostBreakdown, error) {
+func (s *BillingService) calculateCostWithServiceTierPolicy(model string, tokens UsageTokens, rateMultiplier float64, serviceTier string, longContextBillingEnabled bool) (*CostBreakdown, error) {
+	return s.calculateCostInternal(model, tokens, rateMultiplier, serviceTier, nil, longContextBillingEnabled)
+}
+
+func (s *BillingService) calculateCostInternal(model string, tokens UsageTokens, rateMultiplier float64, serviceTier string, channelPricing *ChannelModelPricing, longContextBillingEnabled ...bool) (*CostBreakdown, error) {
 	var pricing *ModelPricing
 	var err error
 	if channelPricing != nil {
@@ -749,8 +776,12 @@ func (s *BillingService) calculateCostInternal(model string, tokens UsageTokens,
 		return nil, err
 	}
 
-	// 旧路径始终检查长上下文定价（无区间定价概念）
-	return s.computeTokenBreakdown(pricing, tokens, rateMultiplier, serviceTier, true), nil
+	applyLongCtx := true
+	if len(longContextBillingEnabled) > 0 {
+		applyLongCtx = longContextBillingEnabled[0]
+	}
+	// 旧路径默认检查长上下文定价（无区间定价概念）；OpenAI 网关可显式关闭。
+	return s.computeTokenBreakdown(pricing, tokens, rateMultiplier, serviceTier, applyLongCtx), nil
 }
 
 func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *ModelPricing) *ModelPricing {
@@ -979,6 +1010,7 @@ const (
 	defaultGrokImagineVideo15Price720P  = 0.14
 	defaultGrokImagineVideo15Price1080P = 0.25
 )
+
 // CalculateImageCost 计算图片生成费用
 // model: 请求的模型名称（用于获取 LiteLLM 默认价格）
 // imageSize: 图片尺寸 "1K", "2K", "4K"
@@ -1038,6 +1070,7 @@ func (s *BillingService) CalculateVideoCost(model string, resolution string, vid
 		BillingMode: string(BillingModeVideo),
 	}
 }
+
 // getImageUnitPrice 获取图片单价
 func (s *BillingService) getImageUnitPrice(model string, imageSize string, groupConfig *ImagePriceConfig) float64 {
 	// 优先使用分组配置的价格

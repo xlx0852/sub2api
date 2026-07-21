@@ -27,14 +27,26 @@ func TestAccountGrokUpstreamRouting(t *testing.T) {
 			wantOfficial: xai.DefaultBaseURL,
 		},
 		{
-			name: "oauth persisted official base still defaults to cli chat",
+			name: "oauth persisted official base is honored for chat",
 			account: &Account{
 				Platform:    PlatformGrok,
 				Type:        AccountTypeOAuth,
 				Credentials: map[string]any{"base_url": xai.DefaultBaseURL},
 			},
-			wantChat:     xai.DefaultCLIBaseURL,
+			wantUsingAPI: true,
+			wantChat:     xai.DefaultBaseURL,
 			wantOfficial: xai.DefaultBaseURL,
+		},
+		{
+			name: "oauth regional api host is honored",
+			account: &Account{
+				Platform:    PlatformGrok,
+				Type:        AccountTypeOAuth,
+				Credentials: map[string]any{"base_url": "https://us-east-1.api.x.ai/v1"},
+			},
+			wantUsingAPI: true,
+			wantChat:     "https://us-east-1.api.x.ai/v1",
+			wantOfficial: "https://us-east-1.api.x.ai/v1",
 		},
 		{
 			name: "boolean using api selects official",
@@ -62,6 +74,20 @@ func TestAccountGrokUpstreamRouting(t *testing.T) {
 			},
 			wantUsingAPI: true,
 			wantChat:     xai.DefaultBaseURL,
+			wantOfficial: xai.DefaultBaseURL,
+		},
+		{
+			name: "using_api false keeps explicit cli host",
+			account: &Account{
+				Platform: PlatformGrok,
+				Type:     AccountTypeOAuth,
+				Credentials: map[string]any{
+					"base_url":  xai.DefaultCLIBaseURL,
+					"using_api": false,
+				},
+			},
+			wantUsingAPI: false,
+			wantChat:     xai.DefaultCLIBaseURL,
 			wantOfficial: xai.DefaultBaseURL,
 		},
 		{
@@ -95,7 +121,7 @@ func TestAccountGrokUpstreamRouting(t *testing.T) {
 	}
 }
 
-func TestBuildOpenAIResponsesWSURLForGrokUsesOfficialAPI(t *testing.T) {
+func TestBuildOpenAIResponsesWSURLRejectsGrok(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	account := &Account{
 		Platform:    PlatformGrok,
@@ -104,6 +130,7 @@ func TestBuildOpenAIResponsesWSURLForGrokUsesOfficialAPI(t *testing.T) {
 	}
 
 	got, err := svc.buildOpenAIResponsesWSURL(account)
-	require.NoError(t, err)
-	require.Equal(t, "wss://api.x.ai/v1/responses", got)
+	require.Error(t, err)
+	require.Empty(t, got)
+	require.Contains(t, err.Error(), "not supported")
 }

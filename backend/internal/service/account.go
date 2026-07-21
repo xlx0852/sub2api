@@ -82,9 +82,14 @@ type Account struct {
 
 type OpenAIEndpointCapability string
 
+// openAILongContextBillingEnabledKey 控制 OpenAI 账号是否启用整会话长上下文加价。
+// 0.1.155 起默认关闭：仅当账号 extra 显式设为 true 时才加倍计费。
+const openAILongContextBillingEnabledKey = "openai_long_context_billing_enabled"
+
 const (
 	OpenAIEndpointCapabilityChatCompletions OpenAIEndpointCapability = "chat_completions"
 	OpenAIEndpointCapabilityEmbeddings      OpenAIEndpointCapability = "embeddings"
+	OpenAIEndpointCapabilityAlphaSearch     OpenAIEndpointCapability = "alpha_search"
 )
 
 const openAIEndpointCapabilitiesCredentialKey = "openai_capabilities"
@@ -1191,6 +1196,18 @@ func (a *Account) IsOpenAI() bool {
 	return a.Platform == PlatformOpenAI
 }
 
+// IsOpenAILongContextBillingEnabled reports whether this OpenAI account should
+// apply whole-session long-context multipliers (gpt-5.4/5.5/... above threshold).
+// Default is false: missing/invalid extra keeps billing at base rates to avoid
+// unexpected double-charging on large contexts.
+func (a *Account) IsOpenAILongContextBillingEnabled() bool {
+	if a == nil || !a.IsOpenAI() || a.Extra == nil {
+		return false
+	}
+	enabled, ok := a.Extra[openAILongContextBillingEnabledKey].(bool)
+	return ok && enabled
+}
+
 func (a *Account) IsAnthropic() bool {
 	return a.Platform == PlatformAnthropic
 }
@@ -1250,15 +1267,41 @@ func (a *Account) GetOpenAIRefreshToken() string {
 	return a.GetCredential("refresh_token")
 }
 
+// GetGrokBaseURL selects the upstream used by Grok text and Responses traffic.
+//
+// The stored base_url only rewrites forwarding endpoints. Credential lifecycle
+// traffic (OAuth authorization and token refresh) always uses the official
+// auth endpoints regardless of this value.
 func (a *Account) GetGrokBaseURL() string {
 	if !a.IsGrok() {
 		return ""
 	}
-	baseURL := a.GetCredential("base_url")
+	baseURL := strings.TrimSpace(a.GetCredential("base_url"))
+	if a.IsGrokOAuth() {
+		// Operators switch subscription traffic between the official CLI
+		// gateway, the official/regional API hosts and third-party relays
+		// (individual endpoints go down from time to time). A stored
+		// parseable value is honored as-is; only empty/unparseable values
+		// fall back to the default CLI gateway.
+		if baseURL == "" || !xai.IsParseableBaseURL(baseURL) {
+			return xai.DefaultCLIBaseURL
+		}
+		return baseURL
+	}
 	if baseURL != "" {
 		return baseURL
 	}
 	return xai.DefaultBaseURL
+}
+
+// GetGrokMediaBaseURL selects the upstream used by Grok Imagine APIs.
+// It currently resolves the same way as text traffic; the separate accessor
+// preserves the media/text distinction at call sites.
+func (a *Account) GetGrokMediaBaseURL() string {
+	if !a.IsGrok() {
+		return ""
+	}
+	return a.GetGrokBaseURL()
 }
 
 func (a *Account) GrokUsesOfficialAPI() bool {
@@ -1275,7 +1318,17 @@ func (a *Account) GrokUsesOfficialAPI() bool {
 			}
 		}
 	}
-	return !a.IsGrokOAuth()
+	// Explicit using_api wins. Otherwise infer from the stored host:
+	// official/regional API hosts count as API traffic; CLI proxy / custom
+	// relays do not. API-key accounts default to official API.
+	if a.IsGrokOAuth() {
+		baseURL := strings.TrimSpace(a.GetCredential("base_url"))
+		if baseURL != "" && xai.IsOfficialAPIBaseURL(baseURL) {
+			return true
+		}
+		return false
+	}
+	return true
 }
 
 func (a *Account) GetGrokChatBaseURL() string {
@@ -1286,7 +1339,9 @@ func (a *Account) GetGrokChatBaseURL() string {
 		}
 		return baseURL
 	}
-	if baseURL != "" && baseURL != xai.DefaultBaseURL {
+	// Subscription / CLI path: honor explicit stored hosts (CLI, regional,
+	// third-party). Only empty values fall back to the default CLI gateway.
+	if baseURL != "" {
 		return baseURL
 	}
 	return xai.DefaultCLIBaseURL
@@ -1297,7 +1352,10 @@ func (a *Account) GetGrokOfficialBaseURL() string {
 	if xai.IsCLIChatProxyBaseURL(baseURL) {
 		return xai.DefaultBaseURL
 	}
-	return baseURL
+	if baseURL != "" {
+		return baseURL
+	}
+	return xai.DefaultBaseURL
 }
 
 func (a *Account) GetGrokAccessToken() string {
@@ -1399,6 +1457,14 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 	}
 	switch capability {
 	case OpenAIEndpointCapabilityChatCompletions:
+	case OpenAIEndpointCapabilityAlphaSearch:
+		// alpha/search 的转发按账号类型分流：OAuth/PAT 走
+		// chatgpt.com/backend-api/codex/alpha/search，API key 走
+		// {base_url}/v1/alpha/search（见 openAIAlphaSearchURL），两类账号
+		// 都可承接独立搜索请求。上游不支持该端点时由转发层 failover 兜底。
+		if a.Type != AccountTypeOAuth && a.Type != AccountTypeAPIKey {
+			return false
+		}
 	case OpenAIEndpointCapabilityEmbeddings:
 		if a.Type != AccountTypeAPIKey {
 			return false
@@ -1409,6 +1475,10 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 
 	configured, found := a.openAIEndpointCapabilitySet()
 	if !found {
+		return true
+	}
+	// chat_completions 能力集隐含放行独立搜索，避免旧配置把 alpha_search 整段关掉。
+	if capability == OpenAIEndpointCapabilityAlphaSearch && configured[string(OpenAIEndpointCapabilityChatCompletions)] {
 		return true
 	}
 	return configured[string(capability)]

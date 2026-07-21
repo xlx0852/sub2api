@@ -30,7 +30,8 @@ func TestIsHeaderOverrideEligible(t *testing.T) {
 		{"anthropic oauth", PlatformAnthropic, AccountTypeOAuth, false},
 		{"openai oauth", PlatformOpenAI, AccountTypeOAuth, false},
 		{"gemini apikey", PlatformGemini, AccountTypeAPIKey, false},
-		{"grok apikey", PlatformGrok, AccountTypeAPIKey, false},
+		{"grok apikey", PlatformGrok, AccountTypeAPIKey, true},
+		{"grok oauth", PlatformGrok, AccountTypeOAuth, true},
 		{"antigravity apikey", PlatformAntigravity, AccountTypeAPIKey, false},
 		{"anthropic bedrock", PlatformAnthropic, AccountTypeBedrock, false},
 	}
@@ -112,10 +113,37 @@ func TestGetHeaderOverrides(t *testing.T) {
 			"sec-websocket-key":        "forged",
 			"content-type":             "application/json", // 名单扩充前落库的数据也要被拦截
 			"x-claude-code-session-id": "pinned-session",
+			"x-grok-conv-id":           "pinned-conv",
 			"x-ok":                     "ok",
 		},
 	})
 	require.Equal(t, map[string]string{"x-ok": "ok"}, defensive.GetHeaderOverrides())
+}
+
+func TestGrokHeaderOverrideEligibleAndAppliesAfterDefaults(t *testing.T) {
+	acc := headerOverrideTestAccount(PlatformGrok, AccountTypeOAuth, map[string]any{
+		credKeyHeaderOverrideEnabled: true,
+		credKeyHeaderOverrides: map[string]any{
+			"user-agent":     "relay-agent/1.0",
+			"x-relay-token":  "abc",
+			"x-grok-conv-id": "must-not-pin",
+			"authorization":  "Bearer evil",
+		},
+	})
+	require.True(t, acc.IsHeaderOverrideEligible())
+	require.True(t, acc.IsHeaderOverrideEnabled())
+
+	h := http.Header{}
+	h.Set("Authorization", "Bearer real")
+	h.Set("User-Agent", "sub2api-grok/1.0")
+	h.Set("x-grok-conv-id", "per-request")
+	acc.ApplyHeaderOverrides(h)
+
+	require.Equal(t, "Bearer real", h.Get("Authorization"))
+	require.Equal(t, "relay-agent/1.0", h.Get("User-Agent"))
+	// Unknown headers are written with lowercase wire keys; use raw lookup.
+	require.Equal(t, "abc", getHeaderRaw(h, "x-relay-token"))
+	require.Equal(t, "per-request", h.Get("x-grok-conv-id"))
 }
 
 func TestApplyHeaderOverrides(t *testing.T) {

@@ -239,6 +239,9 @@ type UsageInfo struct {
 	GrokLastHeadersSeenAt  string           `json:"grok_last_headers_seen_at,omitempty"`
 	GrokLastStatusCode     int              `json:"grok_last_status_code,omitempty"`
 	GrokLocalUsage         *WindowStats     `json:"grok_local_usage,omitempty"`
+	// GrokFreeTokenLimit is the current Free-tier rolling 24h policy constant
+	// (UI/ops can show it even before the first probe returns headers).
+	GrokFreeTokenLimit int64 `json:"grok_free_token_limit,omitempty"`
 	// GrokBilling 来自 cli-chat-proxy /v1/billing（与 CPAMC 同源）
 	GrokBilling *xai.BillingSnapshot `json:"grok_billing,omitempty"`
 
