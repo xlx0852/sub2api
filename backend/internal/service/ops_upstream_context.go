@@ -191,6 +191,13 @@ type OpsUpstreamErrorEvent struct {
 
 	Message string `json:"message,omitempty"`
 	Detail  string `json:"detail,omitempty"`
+
+	TokenState              string `json:"token_state,omitempty"`
+	TokenSource             string `json:"token_source,omitempty"`
+	SentTokenVersion        int64  `json:"sent_token_version,omitempty"`
+	CurrentTokenVersion     int64  `json:"current_token_version,omitempty"`
+	SentTokenFingerprint    string `json:"sent_token_fingerprint,omitempty"`
+	CurrentTokenFingerprint string `json:"current_token_fingerprint,omitempty"`
 }
 
 func appendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent) {

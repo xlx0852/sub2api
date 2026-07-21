@@ -1,6 +1,10 @@
 package service
 
-import "github.com/gin-gonic/gin"
+import (
+	"strings"
+
+	"github.com/gin-gonic/gin"
+)
 
 const errorPassthroughServiceContextKey = "error_passthrough_service"
 
@@ -60,6 +64,25 @@ func applyErrorPassthroughRule(
 	if !rule.PassthroughBody && rule.CustomMessage != nil {
 		errMsg = *rule.CustomMessage
 	}
+	// Cloudflare HTML 5xx pages must not surface as empty/raw client messages,
+	// and should not force the original 524/504 status when body is not JSON.
+	if looksLikeHTMLUpstreamErrorBody(responseBody) {
+		if mappedStatus, mappedType, mappedMsg := MapOpenAIUpstreamErrorStatus(upstreamStatus); mappedStatus > 0 {
+			if rule.PassthroughCode || status == upstreamStatus {
+				status = mappedStatus
+			}
+			errType = mappedType
+			if strings.TrimSpace(errMsg) == "" || looksLikeHTMLUpstreamErrorBody([]byte(errMsg)) {
+				errMsg = mappedMsg
+				if summarized := summarizeNonJSONUpstreamErrorBody(responseBody); summarized != "" {
+					errMsg = summarized
+				}
+			}
+		}
+	}
+	if strings.TrimSpace(errMsg) == "" {
+		errMsg = defaultErrMsg
+	}
 
 	// 命中 skip_monitoring 时在 context 中标记，供 ops_error_logger 跳过记录。
 	if rule.SkipMonitoring {
@@ -67,6 +90,8 @@ func applyErrorPassthroughRule(
 	}
 
 	// 与现有 failover 场景保持一致：命中规则时统一返回 upstream_error。
-	errType = "upstream_error"
+	if errType == "" {
+		errType = "upstream_error"
+	}
 	return status, errType, errMsg, true
 }

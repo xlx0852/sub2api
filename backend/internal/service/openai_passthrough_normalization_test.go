@@ -31,3 +31,17 @@ func TestNormalizeOpenAIPassthroughOAuthBody_CompactRemovesUnsupportedUser(t *te
 	require.False(t, gjson.GetBytes(normalized, "stream").Exists())
 	require.False(t, gjson.GetBytes(normalized, "store").Exists())
 }
+
+func TestNormalizeOpenAIPassthroughOAuthBody_StripsMaxOutputTokens(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.4","max_output_tokens":4096,"max_completion_tokens":2048,"input":"hello","temperature":0.2}`)
+
+	normalized, changed, err := normalizeOpenAIPassthroughOAuthBody(body, false)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.False(t, gjson.GetBytes(normalized, "max_output_tokens").Exists())
+	require.False(t, gjson.GetBytes(normalized, "max_completion_tokens").Exists())
+	// 透传路径保守：不在此删除 temperature，避免改变官方 CLI 语义。
+	require.True(t, gjson.GetBytes(normalized, "temperature").Exists())
+	require.True(t, gjson.GetBytes(normalized, "stream").Bool())
+	require.False(t, gjson.GetBytes(normalized, "store").Bool())
+}

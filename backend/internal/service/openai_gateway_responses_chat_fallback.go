@@ -26,6 +26,13 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 ) (*OpenAIForwardResult, error) {
 	startTime := time.Now()
 
+	flattenedBody, err := flattenOpenAIResponsesNamespaces(c, body)
+	if err != nil {
+		writeOpenAIResponsesFallbackError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+		return nil, fmt.Errorf("flatten responses namespace tools: %w", err)
+	}
+	body = flattenedBody
+
 	var responsesReq apicompat.ResponsesRequest
 	if err := json.Unmarshal(body, &responsesReq); err != nil {
 		writeOpenAIResponsesFallbackError(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")
@@ -41,7 +48,12 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 	serviceTier := extractOpenAIServiceTierFromBody(body)
 	// custom 工具（如 codex 的 exec）降级为 function 工具转发，回程需按名字还原为
 	// custom_tool_call 项，先记下名字集合。
-	customTools := apicompat.CustomToolNames(responsesReq.Tools)
+	effectiveTools, err := apicompat.EffectiveResponsesTools(&responsesReq)
+	if err != nil {
+		writeOpenAIResponsesFallbackError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+		return nil, fmt.Errorf("resolve responses tools: %w", err)
+	}
+	customTools := apicompat.CustomToolNames(effectiveTools)
 
 	chatReq, err := apicompat.ResponsesToChatCompletionsRequest(&responsesReq)
 	if err != nil {
@@ -125,11 +137,19 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsResponses(
 		return nil, err
 	}
 	responsesResp := apicompat.ChatCompletionsResponseToResponses(ccResp, originalModel, customTools)
+	responseBody, err := json.Marshal(responsesResp)
+	if err != nil {
+		return nil, fmt.Errorf("marshal responses fallback response: %w", err)
+	}
+	responseBody, err = restoreOpenAIResponsesNamespacePayload(c, responseBody)
+	if err != nil {
+		return nil, fmt.Errorf("restore responses fallback namespace: %w", err)
+	}
 
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	}
-	c.JSON(http.StatusOK, responsesResp)
+	c.Data(http.StatusOK, "application/json; charset=utf-8", responseBody)
 
 	return &OpenAIForwardResult{
 		RequestID:       requestID,
@@ -168,7 +188,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 		}
 		writeStreamHeaders()
 		for _, event := range events {
-			sse, err := apicompat.ResponsesEventToSSE(event)
+			eventBody, err := json.Marshal(event)
 			if err != nil {
 				logger.L().Warn("openai responses chat fallback: failed to marshal stream event",
 					zap.Error(err),
@@ -176,6 +196,15 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 				)
 				continue
 			}
+			eventBody, err = restoreOpenAIResponsesNamespacePayload(c, eventBody)
+			if err != nil {
+				logger.L().Warn("openai responses chat fallback: failed to restore namespace",
+					zap.Error(err),
+					zap.String("request_id", requestID),
+				)
+				continue
+			}
+			sse := fmt.Sprintf("event: %s\ndata: %s\n\n", event.Type, eventBody)
 			if _, err := fmt.Fprint(c.Writer, sse); err != nil {
 				clientDisconnected = true
 				logger.L().Debug("openai responses chat fallback: client disconnected, continuing to drain upstream for billing",

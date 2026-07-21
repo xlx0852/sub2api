@@ -106,6 +106,12 @@ func classifyOpenAITransportError(err error) openAITransportErrorClass {
 //
 // passthrough tags the Ops error event for the OpenAI passthrough forward path.
 func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Context, c *gin.Context, account *Account, err error, passthrough bool) error {
+	// Client disconnected: do NOT attribute the cancellation to the upstream,
+	// fail over, or evict the selected account.
+	if errors.Is(err, context.Canceled) {
+		return err
+	}
+
 	safeErr := sanitizeUpstreamErrorMessage(err.Error())
 	setOpsUpstreamError(c, 0, safeErr, "")
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -117,12 +123,6 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 		Kind:               "request_error",
 		Message:            safeErr,
 	})
-
-	// Client disconnected: do NOT fail over to another account and do NOT evict
-	// this one — the upstream never had a chance to exhibit a fault.
-	if errors.Is(err, context.Canceled) {
-		return err
-	}
 
 	if classifyOpenAITransportError(err).Persistent {
 		s.tempUnscheduleOpenAITransportError(ctx, account, safeErr)

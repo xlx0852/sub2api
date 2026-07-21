@@ -79,6 +79,7 @@ var openaiAllowedHeaders = map[string]bool{
 	"x-codex-parent-thread-id": true,
 	"x-codex-turn-state":       true,
 	"x-codex-turn-metadata":    true,
+	responsesLiteHeaderKey:     true,
 	"x-codex-window-id":        true,
 	"x-openai-subagent":        true,
 }
@@ -104,6 +105,7 @@ var openaiPassthroughAllowedHeaders = map[string]bool{
 	"x-codex-parent-thread-id": true,
 	"x-codex-turn-state":       true,
 	"x-codex-turn-metadata":    true,
+	responsesLiteHeaderKey:     true,
 	"x-codex-window-id":        true,
 	"x-openai-subagent":        true,
 }
@@ -1148,13 +1150,13 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 			if s.grokTokenProvider != nil {
 				accessToken, err := s.grokTokenProvider.GetAccessToken(ctx, account)
 				if err != nil {
-					return "", "", err
+					return "", "", s.wrapGrokOAuthCredentialError(account, err)
 				}
 				return accessToken, "oauth", nil
 			}
 			accessToken := account.GetGrokAccessToken()
 			if accessToken == "" {
-				return "", "", errors.New("access_token not found in credentials")
+				return "", "", s.wrapGrokOAuthCredentialError(account, errors.New("access_token not found in credentials"))
 			}
 			return accessToken, "oauth", nil
 		}

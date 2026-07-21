@@ -102,6 +102,41 @@ func TestForwardResponses_ForceChatCompletionsRoutesStreamingToChatCompletions(t
 	require.NotNil(t, result.FirstTokenMs)
 }
 
+func TestForwardResponses_ChatFallbackRestoresNamespacedCustomTool(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{
+		"model":"gpt-5.4",
+		"input":"list files",
+		"stream":false,
+		"tools":[{"type":"namespace","name":"workspace","tools":[{"type":"custom","name":"exec","description":"run a command"}]}]
+	}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body: io.NopCloser(strings.NewReader(
+			`{"id":"chatcmpl_namespace","object":"chat.completion","model":"gpt-5.4","choices":[{"index":0,"message":{"role":"assistant","tool_calls":[{"id":"call_1","type":"function","function":{"name":"workspace__exec","arguments":"{\"input\":\"dir\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}`,
+		)),
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:          rawChatCompletionsTestConfig(),
+		httpUpstream: upstream,
+	}
+
+	_, err := svc.Forward(context.Background(), c, forceChatResponsesFallbackAccount(), body)
+	require.NoError(t, err)
+	require.Equal(t, "workspace__exec", gjson.GetBytes(upstream.lastBody, "tools.0.function.name").String())
+	require.Equal(t, "custom_tool_call", gjson.Get(rec.Body.String(), "output.0.type").String())
+	require.Equal(t, "exec", gjson.Get(rec.Body.String(), "output.0.name").String())
+	require.Equal(t, "workspace", gjson.Get(rec.Body.String(), "output.0.namespace").String())
+	require.Equal(t, "dir", gjson.Get(rec.Body.String(), "output.0.input").String())
+}
+
 func TestForwardResponses_DeepSeekReasoningOnlyStreamProducesVisibleText(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

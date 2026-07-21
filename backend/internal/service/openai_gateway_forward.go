@@ -43,6 +43,28 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		body = normalizedBody
 	}
 
+	// Resolve WS transport early so namespace flatten can skip when the request
+	// will actually ride WSv2 (egress relays events without HTTP restore).
+	earlyWSDecision := s.getOpenAIWSProtocolResolver().Resolve(account)
+	earlyWSDecision = resolveOpenAIWSDecisionByClientTransport(earlyWSDecision, GetOpenAIClientTransport(c), false)
+	if IsOpenAICompactRequest(c) {
+		earlyWSDecision = OpenAIWSProtocolDecision{
+			Transport: OpenAIUpstreamTransportHTTPSSE,
+			Reason:    "compact_request_forces_http",
+		}
+	}
+	earlyPassthroughEnabled := account.IsOpenAIPassthroughEnabled()
+	if shouldFlattenOpenAIResponsesNamespaces(account, earlyWSDecision.Transport, earlyPassthroughEnabled) {
+		body, err = flattenOpenAIResponsesNamespaces(c, body)
+		if err != nil {
+			setOpsUpstreamError(c, http.StatusBadRequest, err.Error(), "")
+			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{
+				"type": "invalid_request_error", "message": err.Error(), "param": "tools",
+			}})
+			return nil, err
+		}
+	}
+
 	originalBody := body
 	requestView := newOpenAIRequestView(body)
 	reqModel, reqStream, promptCacheKey := requestView.Model, requestView.Stream, requestView.PromptCacheKey
@@ -187,7 +209,11 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if apiKey != nil {
 		imageGenerationAllowed = GroupAllowsImageGeneration(apiKey.Group)
 	}
-	codexImageGenerationBridgeEnabled := isCodexCLI && imageGenerationAllowed && codexImageGenerationExplicitToolPolicy != codexImageGenerationExplicitToolPolicyStrip && s.isCodexImageGenerationBridgeEnabled(ctx, account, apiKey)
+	codexImageGenerationBridgeEnabled := isCodexCLI &&
+		!isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)) &&
+		imageGenerationAllowed &&
+		codexImageGenerationExplicitToolPolicy != codexImageGenerationExplicitToolPolicyStrip &&
+		s.isCodexImageGenerationBridgeEnabled(ctx, account, apiKey)
 	var imageIntent bool
 	if isCodexCLI && codexImageGenerationExplicitToolPolicy == codexImageGenerationExplicitToolPolicyStrip {
 		decoded, decodeErr := ensureReqBody()
@@ -363,9 +389,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if maxOutputTokens.Exists() {
 			switch account.Platform {
 			case PlatformOpenAI:
-				if account.Type == AccountTypeAPIKey {
-					markPatchDelete("max_output_tokens")
-				}
+				// 非 Codex CLI 的第三方客户端（如 pi）不应透传 max_output_tokens，
+				// 否则 OAuth 自动透传路径上游会返回 400 Unsupported parameter。
+				markPatchDelete("max_output_tokens")
 			case PlatformAnthropic:
 				decoded, decodeErr := ensureReqBody()
 				if decodeErr != nil {
@@ -711,6 +737,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	}
 
 	httpInvalidEncryptedContentRetryTried := false
+	rejectedFieldRetryState := newOpenAIResponsesRejectedFieldRetryState(body)
 	for {
 		// Build upstream request.
 		// Body-signal v2 keeps the compact soft-timeout deadline but detaches from
@@ -719,17 +746,33 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		var upstreamReq *http.Request
 		var err error
 		upstreamCtx := ctx
+		var headerGuard *openAIFirstOutputHeaderGuard
 		if bodySignalCompactV2 {
 			var releaseUpstreamCtx context.CancelFunc
 			upstreamCtx, releaseUpstreamCtx = detachOpenAICompactUpstreamContext(ctx)
 			defer releaseUpstreamCtx()
 			upstreamReq, err = s.buildUpstreamRequest(upstreamCtx, c, account, upstreamBody, token, upstreamStream, promptCacheKey, isCodexCLI)
 		} else {
-			upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+			var releaseUpstreamCtx context.CancelFunc
+			upstreamCtx, releaseUpstreamCtx = detachUpstreamContext(ctx)
+			// Opt-in first-output budget also covers waiting for response headers so a
+			// stalled HTTP/SSE attempt can fail over before any client bytes are written.
+			if reqStream && account.Platform == PlatformOpenAI {
+				if timeout := s.openAIFirstOutputTimeout(""); timeout > 0 {
+					upstreamCtx, headerGuard = newOpenAIFirstOutputHeaderGuard(
+						upstreamCtx, releaseUpstreamCtx, startTime.Add(timeout),
+					)
+				}
+			}
 			upstreamReq, err = s.buildUpstreamRequest(upstreamCtx, c, account, upstreamBody, token, upstreamStream, promptCacheKey, isCodexCLI)
-			releaseUpstreamCtx()
+			if headerGuard == nil {
+				releaseUpstreamCtx()
+			}
 		}
 		if err != nil {
+			if headerGuard != nil {
+				headerGuard.close()
+			}
 			return nil, err
 		}
 
@@ -750,7 +793,23 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
 		}
 		SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
+		if headerGuard != nil && headerGuard.stopHeaderWait() {
+			if resp != nil && resp.Body != nil {
+				_ = resp.Body.Close()
+			}
+			headerGuard.close()
+			return nil, s.newOpenAIFirstOutputTimeoutError(
+				ctx, c, account, startTime, originalModel, "",
+				s.openAIFirstOutputTimeout(""), "response_headers", nil,
+			)
+		}
 		if err != nil {
+			if resp != nil && resp.Body != nil {
+				_ = resp.Body.Close()
+			}
+			if headerGuard != nil {
+				headerGuard.close()
+			}
 			// Soft-timeout / client cancel while waiting for unary compact.
 			if bodySignalCompactV2 && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 				return nil, err
@@ -759,6 +818,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			// a failover so the handler switches to a healthy account, and temporarily
 			// unschedule the account on durable faults (e.g. rejected proxy credentials).
 			return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
+		}
+		if headerGuard != nil {
+			resp.Body = &openAIRequestContextReadCloser{ReadCloser: resp.Body, cleanup: headerGuard.close}
 		}
 
 		// Handle error response
@@ -789,10 +851,28 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 						upstreamBody = prepared
 					}
 					httpInvalidEncryptedContentRetryTried = true
+					rejectedFieldRetryState.remember(body)
 					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying non-WSv2 request once after invalid_encrypted_content (account: %s)", account.Name)
 					continue
 				}
 				logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Skip non-WSv2 invalid_encrypted_content retry because encrypted reasoning items are missing (account: %s)", account.Name)
+			}
+			if retryBody, reason, changed, retryErr := normalizeOpenAIResponsesRejectedFieldRetryBody(resp.StatusCode, body, respBody); retryErr != nil {
+				return nil, fmt.Errorf("normalize rejected Responses field retry body: %w", retryErr)
+			} else if changed && rejectedFieldRetryState.Allow(retryBody) {
+				body = retryBody
+				requestView = newOpenAIRequestView(body)
+				reqBody = nil
+				upstreamBody = body
+				if bodySignalCompactV2 {
+					prepared, prepErr := prepareOpenAIBodySignalV2UpstreamBody(body)
+					if prepErr != nil {
+						return nil, prepErr
+					}
+					upstreamBody = prepared
+				}
+				logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying non-WSv2 request after %s (account: %s)", reason, account.Name)
+				continue
 			}
 			if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
 				upstreamDetail := ""
@@ -815,11 +895,13 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				})
 
 				s.handleFailoverSideEffects(ctx, resp, account, respBody, upstreamModel)
-				return nil, &UpstreamFailoverError{
-					StatusCode:             resp.StatusCode,
-					ResponseBody:           respBody,
-					RetryableOnSameAccount: account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
-				}
+				return nil, newOpenAIUpstreamFailoverError(
+					resp.StatusCode,
+					resp.Header,
+					respBody,
+					upstreamMsg,
+					account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
+				)
 			}
 			// Body-signal v2 may have already committed 200 text/event-stream headers
 			// via keepalives from a prior soft-timeout attempt; JSON error bodies would
