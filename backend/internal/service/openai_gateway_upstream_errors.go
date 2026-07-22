@@ -322,6 +322,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 	requestedModel ...string,
 ) (*OpenAIForwardResult, error) {
 	body := s.readUpstreamErrorBody(resp)
+	body = s.redactAgentIdentitySensitiveBody(ctx, account, body)
 
 	// Body-signal v2 may already have committed 200 text/event-stream (keepalives
 	// from a prior soft-timeout attempt). JSON c.Data/c.JSON would corrupt the

@@ -270,11 +270,21 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	// snapshot. Codex CLI only refreshes the picker under ChatGPT OAuth; a
 	// stale access_token here produces upstream 401 which surfaces as 502 and
 	// freezes the client on its bundled catalog.
-	accessToken, tokenType, err := s.GetAccessToken(ctx, credAccount)
-	if err != nil {
-		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_TOKEN_MISSING", "get codex backend access token: %v", err)
+	// Agent Identity accounts authenticate via assertion headers instead of OAuth.
+	var accessToken string
+	if credAccount.IsOpenAIAgentIdentity() {
+		accessToken = strings.TrimSpace(credAccount.GetOpenAIAccessToken())
+	} else {
+		token, tokenType, err := s.GetAccessToken(ctx, credAccount)
+		if err != nil {
+			return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_TOKEN_MISSING", "get codex backend access token: %v", err)
+		}
+		if tokenType != "oauth" || strings.TrimSpace(token) == "" {
+			return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_CODEX_MODELS_TOKEN_MISSING", "account has no Codex backend access token")
+		}
+		accessToken = token
 	}
-	if tokenType != "oauth" || strings.TrimSpace(accessToken) == "" {
+	if accessToken == "" && !credAccount.IsOpenAIAgentIdentity() {
 		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_CODEX_MODELS_TOKEN_MISSING", "account has no Codex backend access token")
 	}
 
@@ -290,7 +300,15 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_REQUEST_FAILED", "create codex models request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
+	authHeaders, err := s.buildOpenAIAuthenticationHeaders(ctx, credAccount, accessToken)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_AUTH_FAILED", "build Codex models authentication: %v", err)
+	}
+	for key, values := range authHeaders {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
+	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Originator", "codex_cli_rs")
 	req.Header.Set("Version", clientVersion)
