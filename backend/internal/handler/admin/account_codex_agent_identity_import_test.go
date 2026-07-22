@@ -47,6 +47,81 @@ func TestNormalizeCodexImportEntryAcceptsAgentIdentityAuthJSON(t *testing.T) {
 	require.NotEmpty(t, item.WarningTexts)
 }
 
+
+func TestNormalizeCodexImportEntryAcceptsSub2APIDataAgentIdentityBlob(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	der, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	require.NoError(t, err)
+	privateKeyBase64 := base64.StdEncoding.EncodeToString(der)
+
+	item, err := normalizeCodexImportEntry(codexImportEntry{
+		Index: 1,
+		Value: map[string]any{
+			"name":     "agent-export@example.invalid",
+			"platform": "openai",
+			"type":     "oauth",
+			"credentials": map[string]any{
+				"auth_mode":                  service.OpenAIAuthModeAgentIdentity,
+				"agent_runtime_id":           "runtime-export",
+				"agent_private_key":          privateKeyBase64,
+				"task_id":                    "task-export",
+				"account_id":                 "account-export",
+				"chatgpt_account_id":         "account-export",
+				"chatgpt_user_id":            "user-export",
+				"email":                      "agent-export@example.invalid",
+				"plan_type":                  "k12",
+				"chatgpt_account_is_fedramp": false,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, item.IsAgentIdentity)
+	require.Equal(t, "runtime-export", item.Credentials["agent_runtime_id"])
+	require.Equal(t, privateKeyBase64, item.Credentials["agent_private_key"])
+	require.Equal(t, "task-export", item.Credentials["task_id"])
+	require.Equal(t, "account-export", item.Credentials["chatgpt_account_id"])
+	require.Equal(t, "user-export", item.Credentials["chatgpt_user_id"])
+	require.Equal(t, "agent-export@example.invalid", item.Name)
+	require.NotContains(t, item.Credentials, "access_token")
+}
+
+func TestFlattenCodexImportValuesUnwrapsSub2APIDataEnvelope(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	der, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	require.NoError(t, err)
+	privateKeyBase64 := base64.StdEncoding.EncodeToString(der)
+
+	values := flattenCodexImportValues([]any{
+		map[string]any{
+			"type":    "sub2api-data",
+			"version": 1,
+			"accounts": []any{
+				map[string]any{
+					"name":     "wrapped@example.invalid",
+					"platform": "openai",
+					"type":     "oauth",
+					"credentials": map[string]any{
+						"auth_mode":          service.OpenAIAuthModeAgentIdentity,
+						"agent_runtime_id":   "runtime-wrapped",
+						"agent_private_key":  privateKeyBase64,
+						"chatgpt_account_id": "account-wrapped",
+						"chatgpt_user_id":    "user-wrapped",
+						"task_id":            "task-wrapped",
+					},
+				},
+			},
+		},
+	})
+	require.Len(t, values, 1)
+	item, err := normalizeCodexImportEntry(codexImportEntry{Index: 1, Value: values[0]})
+	require.NoError(t, err)
+	require.True(t, item.IsAgentIdentity)
+	require.Equal(t, "runtime-wrapped", item.Credentials["agent_runtime_id"])
+	require.Equal(t, "task-wrapped", item.Credentials["task_id"])
+}
+
 func TestBuildCodexAgentIdentityKeysUseChatGPTAccountOnly(t *testing.T) {
 	keys := buildCodexAgentIdentityKeys("team-a")
 	require.Equal(t, []string{"account:team-a"}, keys)
