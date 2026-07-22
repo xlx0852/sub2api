@@ -171,12 +171,12 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 	}
 	if !resp.IsSuccessState() {
 		status := resp.StatusCode
-		body := resp.String()
+rawBody := resp.String()
 		// 额度跑满时 ChatGPT 常返回 plan-limited 文案。映射为限流错误码，前端展示“已满”而不是原始英文报错。
-		if status == http.StatusTooManyRequests || isOpenAIPlanLimitedMessage(body) {
-			waitSec := parseOpenAIPlanLimitedWaitSeconds(body)
+		if status == http.StatusTooManyRequests || isOpenAIPlanLimitedMessage(rawBody) {
+			waitSec := parseOpenAIPlanLimitedWaitSeconds(rawBody)
 			if waitSec <= 0 {
-				if ts := parseOpenAIRateLimitResetTime([]byte(body)); ts != nil {
+				if ts := parseOpenAIRateLimitResetTime([]byte(rawBody)); ts != nil {
 					waitSec = *ts - time.Now().Unix()
 				}
 			}
@@ -191,7 +191,7 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 				waitSec,
 			)
 		}
-		body = truncate(body, 240)
+		body := truncate(s.redactQuotaErrorBody(ctx, accountID, rawBody), 240)
 		slog.Warn("openai_quota_query_failed", "account_id", accountID, "status", status, "body", body)
 		return nil, infraerrors.Newf(mapUpstreamStatus(status), "OPENAI_QUOTA_UPSTREAM_ERROR", "upstream returned %d: %s", status, body)
 	}
@@ -288,7 +288,7 @@ func (s *OpenAIQuotaService) ResetCredit(ctx context.Context, accountID int64) (
 	}
 	if !resp.IsSuccessState() {
 		status := resp.StatusCode
-		body := truncate(resp.String(), 240)
+		body := truncate(s.redactQuotaErrorBody(callCtx, accountID, resp.String()), 240)
 		slog.Warn("openai_quota_reset_failed", "account_id", accountID, "status", status, "body", body)
 		return nil, infraerrors.Newf(mapUpstreamStatus(status), "OPENAI_QUOTA_RESET_UPSTREAM_ERROR", "upstream returned %d: %s", status, body)
 	}
@@ -411,6 +411,17 @@ func (s *OpenAIQuotaService) buildCodexQuotaHeaders(ctx context.Context, account
 	}
 	headers["authorization"] = assertion
 	return headers, nil
+}
+
+func (s *OpenAIQuotaService) redactQuotaErrorBody(ctx context.Context, accountID int64, body string) string {
+	if s == nil || s.accountRepo == nil {
+		return body
+	}
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil || account == nil {
+		return body
+	}
+	return string(redactAgentIdentitySensitiveBodyForAccount(ctx, s.accountRepo, account, []byte(body)))
 }
 
 // buildCodexCommonHeaders sets the request headers expected by the chatgpt.com
