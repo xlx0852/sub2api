@@ -56,7 +56,9 @@ func TestBuildAgentAssertionMatchesCodexEnvelopeAndSignature(t *testing.T) {
 	require.Equal(t, "2026-07-14T00:09:10Z", envelope.Timestamp)
 	signature, err := base64.StdEncoding.DecodeString(envelope.Signature)
 	require.NoError(t, err)
-	require.True(t, ed25519.Verify(key.privateKey.Public().(ed25519.PublicKey), []byte("runtime-test:task-test:2026-07-14T00:09:10Z"), signature))
+	publicKey, ok := key.privateKey.Public().(ed25519.PublicKey)
+	require.True(t, ok)
+	require.True(t, ed25519.Verify(publicKey, []byte("runtime-test:task-test:2026-07-14T00:09:10Z"), signature))
 }
 
 func TestDecryptAgentTaskIDSupportsCodexSealedBoxResponse(t *testing.T) {
