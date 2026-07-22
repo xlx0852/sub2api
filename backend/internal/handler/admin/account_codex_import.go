@@ -475,6 +475,18 @@ func flattenCodexImportValues(values []any) []any {
 			}
 			return
 		}
+		if m, ok := value.(map[string]any); ok {
+			// Accept exported account-data envelopes pasted into Codex session import.
+			typeName := strings.TrimSpace(firstCodexString(m, []string{"type"}))
+			if typeName == "" || strings.EqualFold(typeName, "sub2api-data") || strings.EqualFold(typeName, "sub2api-bundle") {
+				if accounts, ok := m["accounts"].([]any); ok && len(accounts) > 0 {
+					for _, item := range accounts {
+						appendValue(item)
+					}
+					return
+				}
+			}
+		}
 		out = append(out, value)
 	}
 	for _, value := range values {
@@ -497,17 +509,47 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 	case string:
 		item.AccessToken = strings.TrimSpace(raw)
 	case map[string]any:
-		if agentIdentity, ok := firstCodexMap(raw, []string{"agent_identity"}, []string{"agentIdentity"}); ok || strings.EqualFold(firstCodexString(raw, []string{"auth_mode"}, []string{"authMode"}), service.OpenAIAuthModeAgentIdentity) {
-			if !ok {
-				agentIdentity = raw
+		// Support both nested agent_identity objects and exported account blobs
+		// where auth_mode/credentials live under credentials (sub2api-data).
+		credentialsMap, _ := firstCodexMap(raw, []string{"credentials"})
+		agentIdentity, hasNestedIdentity := firstCodexMap(raw, []string{"agent_identity"}, []string{"agentIdentity"})
+		authMode := firstCodexString(raw, []string{"auth_mode"}, []string{"authMode"})
+		if authMode == "" && credentialsMap != nil {
+			authMode = firstCodexString(credentialsMap, []string{"auth_mode"}, []string{"authMode"})
+		}
+		isAgentIdentity := hasNestedIdentity || strings.EqualFold(authMode, service.OpenAIAuthModeAgentIdentity)
+		if isAgentIdentity {
+			if !hasNestedIdentity {
+				if credentialsMap != nil && (strings.EqualFold(firstCodexString(credentialsMap, []string{"auth_mode"}, []string{"authMode"}), service.OpenAIAuthModeAgentIdentity) ||
+					firstCodexString(credentialsMap, []string{"agent_runtime_id"}, []string{"agentRuntimeId"}) != "" ||
+					firstCodexString(credentialsMap, []string{"agent_private_key"}, []string{"agentPrivateKey"}) != "") {
+					agentIdentity = credentialsMap
+				} else {
+					agentIdentity = raw
+				}
 			}
 			item.IsAgentIdentity = true
 			item.AgentRuntimeID = firstCodexString(agentIdentity, []string{"agent_runtime_id"}, []string{"agentRuntimeId"})
 			item.AgentPrivateKey = firstCodexString(agentIdentity, []string{"agent_private_key"}, []string{"agentPrivateKey"})
 			item.AgentTaskID = firstCodexString(agentIdentity, []string{"task_id"}, []string{"taskId"})
-			item.AccountID = firstCodexString(agentIdentity, []string{"account_id"}, []string{"accountId"})
-			item.UserID = firstCodexString(agentIdentity, []string{"chatgpt_user_id"}, []string{"chatgptUserId"})
+			item.AccountID = firstCodexString(agentIdentity,
+				[]string{"account_id"},
+				[]string{"accountId"},
+				[]string{"chatgpt_account_id"},
+				[]string{"chatgptAccountId"},
+				[]string{"workspace_id"},
+				[]string{"workspaceId"},
+			)
+			item.UserID = firstCodexString(agentIdentity,
+				[]string{"chatgpt_user_id"},
+				[]string{"chatgptUserId"},
+				[]string{"user_id"},
+				[]string{"userId"},
+			)
 			item.Email = firstCodexString(agentIdentity, []string{"email"})
+			if item.Email == "" {
+				item.Email = firstCodexString(raw, []string{"email"}, []string{"name"})
+			}
 			item.PlanType = firstCodexString(agentIdentity, []string{"plan_type"}, []string{"planType"})
 			item.AgentFedRAMP = firstCodexBool(agentIdentity, []string{"chatgpt_account_is_fedramp"}, []string{"chatgptAccountIsFedramp"})
 			if item.AgentRuntimeID == "" || item.AgentPrivateKey == "" || item.AccountID == "" || item.UserID == "" {
@@ -525,11 +567,22 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 			setCodexCredentialIfNotEmpty(item.Credentials, "task_id", item.AgentTaskID)
 			setCodexCredentialIfNotEmpty(item.Credentials, "email", item.Email)
 			setCodexCredentialIfNotEmpty(item.Credentials, "plan_type", item.PlanType)
+			// Preserve useful extras from exported account blobs without requiring access tokens.
+			if workspaceID := firstCodexString(agentIdentity, []string{"workspace_id"}, []string{"workspaceId"}); workspaceID != "" {
+				item.Credentials["workspace_id"] = workspaceID
+			}
+			if idToken := firstCodexString(agentIdentity, []string{"id_token"}, []string{"idToken"}); idToken != "" {
+				item.Credentials["id_token"] = idToken
+			}
 			if item.AgentTaskID == "" {
 				item.WarningTexts = append(item.WarningTexts, "未包含 task_id，首次请求会使用现有 runtime 注册新 task")
 			}
 			item.IdentityKeys = buildCodexAgentIdentityKeys(item.AccountID)
-			item.Name = buildCodexImportAccountName(item, entry.Index)
+			if preferredName := strings.TrimSpace(firstCodexString(raw, []string{"name"})); preferredName != "" {
+				item.Name = preferredName
+			} else {
+				item.Name = buildCodexImportAccountName(item, entry.Index)
+			}
 			return item, nil
 		}
 		item.AccessToken = firstCodexString(raw,
