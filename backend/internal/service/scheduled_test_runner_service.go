@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -10,7 +11,14 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-const scheduledTestDefaultMaxWorkers = 10
+const (
+	scheduledTestDefaultMaxWorkers   = 10
+	scheduledTestDefaultBatchSize    = 20
+	scheduledTestDefaultBatchTimeout = 4 * time.Minute
+	scheduledTestDefaultClaimLease   = 12 * time.Minute
+	scheduledTestDefaultPlanTimeout  = 90 * time.Second
+	scheduledTestTickDelay           = 5 * time.Second
+)
 
 // ScheduledTestRunnerService periodically scans due test plans and executes them.
 type ScheduledTestRunnerService struct {
@@ -23,6 +31,7 @@ type ScheduledTestRunnerService struct {
 	cron      *cron.Cron
 	startOnce sync.Once
 	stopOnce  sync.Once
+	running   atomic.Bool
 }
 
 // NewScheduledTestRunnerService creates a new runner.
@@ -63,7 +72,12 @@ func (s *ScheduledTestRunnerService) Start() {
 		}
 		s.cron = c
 		s.cron.Start()
-		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] started (tick=every minute)")
+		logger.LegacyPrintf(
+			"service.scheduled_test_runner",
+			"[ScheduledTestRunner] started (tick=every minute, workers=%d, batch=%d)",
+			s.maxWorkers(),
+			s.batchSize(),
+		)
 	})
 }
 
@@ -84,29 +98,66 @@ func (s *ScheduledTestRunnerService) Stop() {
 	})
 }
 
-func (s *ScheduledTestRunnerService) runScheduled() {
-	// Delay 10s so execution lands at ~:10 of each minute instead of :00.
-	time.Sleep(10 * time.Second)
+func (s *ScheduledTestRunnerService) maxWorkers() int {
+	return scheduledTestDefaultMaxWorkers
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+func (s *ScheduledTestRunnerService) batchSize() int {
+	return scheduledTestDefaultBatchSize
+}
+
+func (s *ScheduledTestRunnerService) batchTimeout() time.Duration {
+	return scheduledTestDefaultBatchTimeout
+}
+
+func (s *ScheduledTestRunnerService) claimLease() time.Duration {
+	return scheduledTestDefaultClaimLease
+}
+
+func (s *ScheduledTestRunnerService) planTimeout() time.Duration {
+	return scheduledTestDefaultPlanTimeout
+}
+
+func (s *ScheduledTestRunnerService) runScheduled() {
+	// Skip overlapping ticks so a slow batch does not pile up goroutines.
+	if !s.running.CompareAndSwap(false, true) {
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] previous batch still running, skip tick")
+		return
+	}
+	defer s.running.Store(false)
+
+	// Small delay avoids clashing with other top-of-minute jobs.
+	time.Sleep(scheduledTestTickDelay)
+
+	ctx, cancel := context.WithTimeout(context.Background(), s.batchTimeout())
 	defer cancel()
 
 	now := time.Now()
-	plans, err := s.planRepo.ListDue(ctx, now)
+	plans, err := s.planRepo.ClaimDue(ctx, now, s.batchSize(), s.claimLease())
 	if err != nil {
-		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] ListDue error: %v", err)
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] ClaimDue error: %v", err)
 		return
 	}
 	if len(plans) == 0 {
 		return
 	}
 
-	logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] found %d due plans", len(plans))
+	logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] claimed %d due plans", len(plans))
 
-	sem := make(chan struct{}, scheduledTestDefaultMaxWorkers)
+	workers := s.maxWorkers()
+	if workers > len(plans) {
+		workers = len(plans)
+	}
+	sem := make(chan struct{}, workers)
 	var wg sync.WaitGroup
 
 	for _, plan := range plans {
+		if ctx.Err() != nil {
+			// Batch timed out before we started this plan: release soon so next tick can retry.
+			s.releaseClaimedPlan(context.Background(), plan.ID)
+			continue
+		}
+
 		sem <- struct{}{}
 		wg.Add(1)
 		go func(p *ScheduledTestPlan) {
@@ -119,25 +170,46 @@ func (s *ScheduledTestRunnerService) runScheduled() {
 	wg.Wait()
 }
 
-func (s *ScheduledTestRunnerService) runOnePlan(ctx context.Context, plan *ScheduledTestPlan) {
+func (s *ScheduledTestRunnerService) releaseClaimedPlan(ctx context.Context, planID int64) {
+	// Push only 1 minute ahead so the next tick can reclaim without waiting for the full lease.
+	next := time.Now().Add(1 * time.Minute)
+	if err := s.planRepo.Reschedule(ctx, planID, next); err != nil {
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d release claim error: %v", planID, err)
+	}
+}
+
+func (s *ScheduledTestRunnerService) runOnePlan(parent context.Context, plan *ScheduledTestPlan) {
+	ctx, cancel := context.WithTimeout(parent, s.planTimeout())
+	defer cancel()
+
 	result, err := s.accountTestSvc.RunTestBackground(ctx, plan.AccountID, plan.ModelID)
 	if err != nil {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d RunTestBackground error: %v", plan.ID, err)
+		// Still advance schedule so a stuck plan does not thrash every tick after lease expiry.
+		s.finishPlanSchedule(context.Background(), plan)
 		return
 	}
 
-	if err := s.scheduledSvc.SaveResult(ctx, plan.ID, plan.MaxResults, result); err != nil {
+	if err := s.scheduledSvc.SaveResult(context.Background(), plan.ID, plan.MaxResults, result); err != nil {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d SaveResult error: %v", plan.ID, err)
 	}
 
 	// Auto-recover account if test succeeded and auto_recover is enabled.
 	if result.Status == "success" && plan.AutoRecover {
-		s.tryRecoverAccount(ctx, plan.AccountID, plan.ID)
+		s.tryRecoverAccount(context.Background(), plan.AccountID, plan.ID)
 	}
 
+	s.finishPlanSchedule(context.Background(), plan)
+}
+
+func (s *ScheduledTestRunnerService) finishPlanSchedule(ctx context.Context, plan *ScheduledTestPlan) {
 	nextRun, err := computeNextRun(plan.CronExpression, time.Now())
 	if err != nil {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d computeNextRun error: %v", plan.ID, err)
+		// Fall back to lease-like deferral so the plan stays schedulable.
+		if resErr := s.planRepo.Reschedule(ctx, plan.ID, time.Now().Add(s.claimLease())); resErr != nil {
+			logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d fallback reschedule error: %v", plan.ID, resErr)
+		}
 		return
 	}
 

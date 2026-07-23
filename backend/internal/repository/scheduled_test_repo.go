@@ -48,18 +48,58 @@ func (r *scheduledTestPlanRepository) ListByAccountID(ctx context.Context, accou
 	return scanPlans(rows)
 }
 
-func (r *scheduledTestPlanRepository) ListDue(ctx context.Context, now time.Time) ([]*service.ScheduledTestPlan, error) {
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, account_id, model_id, cron_expression, enabled, max_results, auto_recover, last_run_at, next_run_at, created_at, updated_at
-		FROM scheduled_test_plans
-		WHERE enabled = true AND next_run_at <= $1
-		ORDER BY next_run_at ASC
-	`, now)
+func (r *scheduledTestPlanRepository) ClaimDue(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]*service.ScheduledTestPlan, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	if lease <= 0 {
+		lease = 10 * time.Minute
+	}
+	leasedUntil := now.Add(lease)
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rows, err := tx.QueryContext(ctx, `
+		WITH due AS (
+			SELECT id
+			FROM scheduled_test_plans
+			WHERE enabled = true AND next_run_at <= $1
+			ORDER BY next_run_at ASC, id ASC
+			LIMIT $2
+			FOR UPDATE SKIP LOCKED
+		)
+		UPDATE scheduled_test_plans p
+		SET next_run_at = $3,
+		    updated_at = NOW()
+		FROM due
+		WHERE p.id = due.id
+		RETURNING p.id, p.account_id, p.model_id, p.cron_expression, p.enabled, p.max_results, p.auto_recover,
+		          p.last_run_at, p.next_run_at, p.created_at, p.updated_at
+	`, now, limit, leasedUntil)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	return scanPlans(rows)
+
+	plans, err := scanPlans(rows)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return plans, nil
+}
+
+func (r *scheduledTestPlanRepository) Reschedule(ctx context.Context, id int64, nextRunAt time.Time) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE scheduled_test_plans SET next_run_at = $2, updated_at = NOW() WHERE id = $1
+	`, id, nextRunAt)
+	return err
 }
 
 func (r *scheduledTestPlanRepository) Update(ctx context.Context, plan *service.ScheduledTestPlan) (*service.ScheduledTestPlan, error) {
