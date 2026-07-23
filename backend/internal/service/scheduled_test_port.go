@@ -38,7 +38,11 @@ type ScheduledTestPlanRepository interface {
 	Create(ctx context.Context, plan *ScheduledTestPlan) (*ScheduledTestPlan, error)
 	GetByID(ctx context.Context, id int64) (*ScheduledTestPlan, error)
 	ListByAccountID(ctx context.Context, accountID int64) ([]*ScheduledTestPlan, error)
-	ListDue(ctx context.Context, now time.Time) ([]*ScheduledTestPlan, error)
+	// ClaimDue atomically claims up to limit due plans for execution.
+	// Claimed rows have next_run_at pushed forward by lease so other runners skip them.
+	ClaimDue(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]*ScheduledTestPlan, error)
+	// Reschedule updates only next_run_at (used to release/defer a claimed plan).
+	Reschedule(ctx context.Context, id int64, nextRunAt time.Time) error
 	Update(ctx context.Context, plan *ScheduledTestPlan) (*ScheduledTestPlan, error)
 	Delete(ctx context.Context, id int64) error
 	UpdateAfterRun(ctx context.Context, id int64, lastRunAt time.Time, nextRunAt time.Time) error
