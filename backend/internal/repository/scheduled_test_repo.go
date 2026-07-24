@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"fmt"
+	"strings"
 	"context"
 	"database/sql"
 	"time"
@@ -191,6 +193,71 @@ func (r *scheduledTestResultRepository) PruneOldResults(ctx context.Context, pla
 		)
 	`, planID, keepCount)
 	return err
+}
+
+
+func (r *scheduledTestPlanRepository) ListDiagnosticsStatusByAccountIDs(ctx context.Context, accountIDs []int64) (map[int64]service.ScheduledDiagnosticsStatus, error) {
+	out := make(map[int64]service.ScheduledDiagnosticsStatus, len(accountIDs))
+	if len(accountIDs) == 0 {
+		return out, nil
+	}
+	for _, id := range accountIDs {
+		out[id] = service.ScheduledDiagnosticsStatus{AccountID: id}
+	}
+
+	const chunkSize = 200
+	for i := 0; i < len(accountIDs); i += chunkSize {
+		end := i + chunkSize
+		if end > len(accountIDs) {
+			end = len(accountIDs)
+		}
+		chunk := accountIDs[i:end]
+		placeholders := make([]string, len(chunk))
+		args := make([]any, len(chunk))
+		for idx, id := range chunk {
+			placeholders[idx] = fmt.Sprintf("$%d", idx+1)
+			args[idx] = id
+		}
+		q := fmt.Sprintf(`
+			SELECT account_id,
+			       COUNT(*)::int AS plan_count,
+			       COUNT(*) FILTER (WHERE enabled = true)::int AS enabled_count,
+			       MIN(next_run_at) FILTER (WHERE enabled = true) AS next_run_at
+			FROM scheduled_test_plans
+			WHERE account_id IN (%s)
+			GROUP BY account_id
+		`, strings.Join(placeholders, ","))
+		rows, err := r.db.QueryContext(ctx, q, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var accountID int64
+			var planCount, enabledCount int
+			var nextRun sql.NullTime
+			if err := rows.Scan(&accountID, &planCount, &enabledCount, &nextRun); err != nil {
+				_ = rows.Close()
+				return nil, err
+			}
+			st := service.ScheduledDiagnosticsStatus{
+				AccountID:    accountID,
+				PlanCount:    planCount,
+				EnabledCount: enabledCount,
+				Enabled:      enabledCount > 0,
+			}
+			if nextRun.Valid {
+				ts := nextRun.Time
+				st.NextRunAt = &ts
+			}
+			out[accountID] = st
+		}
+		err = rows.Err()
+		_ = rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 // --- scan helpers ---

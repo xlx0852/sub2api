@@ -205,6 +205,59 @@ WHERE user_id = $1
 	return count, nil
 }
 
+
+func (r *contentModerationRepository) ListLatestFlaggedLogsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*service.ContentModerationLog, error) {
+	out := make(map[int64]*service.ContentModerationLog, len(userIDs))
+	if r == nil || r.db == nil || len(userIDs) == 0 {
+		return out, nil
+	}
+	// 高危用户数量通常很小，逐个取最近一条 flagged 记录即可。
+	const q = `
+SELECT id, request_id, user_id, user_email, api_key_id, api_key_name, group_id, group_name,
+       endpoint, provider, model, mode, action, flagged, highest_category, highest_score,
+       matched_keyword, created_at
+FROM content_moderation_logs
+WHERE user_id = $1 AND flagged = TRUE
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+	for _, userID := range userIDs {
+		if userID <= 0 {
+			continue
+		}
+		var log service.ContentModerationLog
+		var uid sql.NullInt64
+		var apiKeyID sql.NullInt64
+		var groupID sql.NullInt64
+		err := r.db.QueryRowContext(ctx, q, userID).Scan(
+			&log.ID, &log.RequestID, &uid, &log.UserEmail, &apiKeyID, &log.APIKeyName, &groupID, &log.GroupName,
+			&log.Endpoint, &log.Provider, &log.Model, &log.Mode, &log.Action, &log.Flagged, &log.HighestCategory, &log.HighestScore,
+			&log.MatchedKeyword, &log.CreatedAt,
+		)
+		if err == sql.ErrNoRows {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("list latest flagged moderation log for user %d: %w", userID, err)
+		}
+		if uid.Valid {
+			id := uid.Int64
+			log.UserID = &id
+		}
+		if apiKeyID.Valid {
+			id := apiKeyID.Int64
+			log.APIKeyID = &id
+		}
+		if groupID.Valid {
+			id := groupID.Int64
+			log.GroupID = &id
+		}
+		item := log
+		out[userID] = &item
+	}
+	return out, nil
+}
+
 func (r *contentModerationRepository) UpdateLogEmailSent(ctx context.Context, id int64, sent bool) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE content_moderation_logs SET email_sent = $1 WHERE id = $2`, sent, id)
 	if err != nil {

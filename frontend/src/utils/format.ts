@@ -19,11 +19,25 @@ export function formatRelativeTime(
   if (!date) return translate('common.time.never')
 
   const now = new Date()
-  const past = new Date(date)
-  const diffMs = now.getTime() - past.getTime()
+  const target = new Date(date)
+  const diffMs = now.getTime() - target.getTime()
 
-  // 处理未来时间或无效日期
-  if (diffMs < 0 || isNaN(diffMs)) return translate('common.time.never')
+  // 无效日期
+  if (isNaN(diffMs)) return translate('common.time.never')
+
+  // 未来时间：显示“X 后”
+  if (diffMs < 0) {
+    const futureMs = Math.abs(diffMs)
+    const diffSecs = Math.floor(futureMs / 1000)
+    const diffMins = Math.floor(diffSecs / 60)
+    const diffHours = Math.floor(diffMins / 60)
+    const diffDays = Math.floor(diffHours / 24)
+
+    if (diffDays > 0) return translate('common.time.daysLater', { n: diffDays })
+    if (diffHours > 0) return translate('common.time.hoursLater', { n: diffHours })
+    if (diffMins > 0) return translate('common.time.minutesLater', { n: diffMins })
+    return translate('common.time.soon')
+  }
 
   const diffSecs = Math.floor(diffMs / 1000)
   const diffMins = Math.floor(diffSecs / 60)

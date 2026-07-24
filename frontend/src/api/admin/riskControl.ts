@@ -146,9 +146,21 @@ export interface ContentModerationRuntimeStatus {
   pre_block_api_key_loads: ContentModerationAPIKeyLoad[]
   api_key_statuses: ContentModerationAPIKeyStatus[]
   flagged_hash_count: number
+  elevated_user_count: number
+  elevated_users: ContentModerationElevatedUser[]
   last_cleanup_at?: string
   last_cleanup_deleted_hit: number
   last_cleanup_deleted_non_hit: number
+}
+
+export interface ContentModerationElevatedUser {
+  user_id: number
+  email: string
+  username: string
+  status: string
+  ttl_seconds: number
+  last_action?: string
+  last_at?: string
 }
 
 export interface ContentModerationAPIKeyLoad {

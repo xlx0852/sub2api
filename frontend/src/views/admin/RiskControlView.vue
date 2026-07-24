@@ -151,6 +151,57 @@
           </div>
         </div>
 
+        <div data-test="elevated-users-card" class="card">
+          <div class="flex flex-col gap-4 border-b border-gray-100 px-6 py-4 dark:border-dark-700 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.elevatedUsers') }}</h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.elevatedUsersHint') }}</p>
+            </div>
+            <span class="inline-flex w-fit items-center rounded-full bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700 dark:bg-rose-900/20 dark:text-rose-300">
+              {{ t('admin.riskControl.elevatedUsersCount', { count: elevatedUsers.length }) }}
+            </span>
+          </div>
+          <div class="p-6">
+            <div v-if="elevatedUsers.length > 0" class="overflow-x-auto">
+              <table class="min-w-full text-left text-sm">
+                <thead class="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  <tr>
+                    <th class="pb-2 pr-4 font-medium">{{ t('admin.riskControl.elevatedUserCol') }}</th>
+                    <th class="pb-2 pr-4 font-medium">ID</th>
+                    <th class="pb-2 pr-4 font-medium">{{ t('admin.riskControl.elevatedLastAction') }}</th>
+                    <th class="pb-2 pr-4 font-medium">TTL</th>
+                    <th class="pb-2 font-medium">{{ t('admin.riskControl.elevatedForceSample') }}</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
+                  <tr v-for="u in elevatedUsers" :key="u.user_id" class="text-gray-800 dark:text-gray-100">
+                    <td class="py-3 pr-4">
+                      <div class="min-w-0">
+                        <p class="truncate font-medium">{{ elevatedUserLabel(u) }}</p>
+                        <p v-if="u.status" class="truncate text-xs text-gray-500 dark:text-gray-400">{{ u.status }}</p>
+                      </div>
+                    </td>
+                    <td class="py-3 pr-4 font-mono text-xs">{{ u.user_id }}</td>
+                    <td class="py-3 pr-4">
+                      <div class="min-w-0">
+                        <p class="truncate">{{ u.last_action || '-' }}</p>
+                        <p v-if="u.last_at" class="truncate text-xs text-gray-500 dark:text-gray-400">{{ formatDateTime(u.last_at) }}</p>
+                      </div>
+                    </td>
+                    <td class="py-3 pr-4">{{ formatElevatedTTL(u.ttl_seconds) }}</td>
+                    <td class="py-3">
+                      <span class="inline-flex items-center rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 dark:bg-rose-900/20 dark:text-rose-300">100%</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p v-else class="rounded-lg bg-gray-50 p-4 text-sm text-gray-500 dark:bg-dark-700/50 dark:text-gray-400">
+              {{ t('admin.riskControl.elevatedUsersEmpty') }}
+            </p>
+          </div>
+        </div>
+
         <div v-if="showWorkerRuntimeCard" class="card">
           <div class="flex flex-col gap-4 border-b border-gray-100 px-6 py-4 dark:border-dark-700 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -1131,6 +1182,7 @@ import type {
   ContentModerationLog,
   ContentModerationModelFilter,
   ContentModerationModelFilterType,
+  ContentModerationElevatedUser,
   ContentModerationRuntimeStatus,
   ContentModerationTestAuditResult,
   KeywordBlockingMode,
@@ -1207,6 +1259,31 @@ const flaggedHashInput = ref('')
 const groups = ref<AdminGroup[]>([])
 const logs = ref<ContentModerationLog[]>([])
 const status = ref<ContentModerationRuntimeStatus | null>(null)
+
+const elevatedUsers = computed(() => status.value?.elevated_users ?? [])
+
+function elevatedUserLabel(u: ContentModerationElevatedUser): string {
+  const email = (u.email || '').trim()
+  const username = (u.username || '').trim()
+  if (email && username) return `${username} <${email}>`
+  if (email) return email
+  if (username) return username
+  return t('admin.riskControl.elevatedUnknownUser')
+}
+
+function formatElevatedTTL(seconds: number): string {
+  const s = Math.max(0, Number(seconds) || 0)
+  if (s <= 0) return t('admin.riskControl.elevatedTTL', { time: '-' })
+  const days = Math.floor(s / 86400)
+  const hours = Math.floor((s % 86400) / 3600)
+  const mins = Math.floor((s % 3600) / 60)
+  let time = ''
+  if (days > 0) time = `${days}d ${hours}h`
+  else if (hours > 0) time = `${hours}h ${mins}m`
+  else time = `${Math.max(mins, 1)}m`
+  return t('admin.riskControl.elevatedTTL', { time })
+}
+
 const testedApiKeyStatuses = ref<ContentModerationAPIKeyStatus[]>([])
 const pendingDeleteApiKeyHashes = ref<string[]>([])
 const apiKeyRowsExpanded = ref<boolean>(false)

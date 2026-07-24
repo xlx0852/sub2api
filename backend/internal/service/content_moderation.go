@@ -62,6 +62,12 @@ const (
 	maxModerationInputRunes           = 12000
 	maxModerationExcerptRunes         = 240
 
+	// 干净输入放行缓存：同一内容短期内不重复打 moderation API。
+	defaultContentModerationCleanHashTTL = 15 * time.Minute
+	defaultContentModerationElevatedUserTTL = 7 * 24 * time.Hour
+	defaultContentModerationElevatedMissTTL = 10 * time.Minute
+	defaultContentModerationNormalSampleRate = 15
+
 	defaultContentModerationWorkerCount          = 4
 	maxContentModerationWorkerCount              = 32
 	defaultContentModerationQueueSize            = 32768
@@ -447,9 +453,28 @@ type ContentModerationRuntimeStatus struct {
 	PreBlockAPIKeyLoads          []ContentModerationAPIKeyLoad   `json:"pre_block_api_key_loads"`
 	APIKeyStatuses               []ContentModerationAPIKeyStatus `json:"api_key_statuses"`
 	FlaggedHashCount             int64                           `json:"flagged_hash_count"`
+	ElevatedUserCount            int                             `json:"elevated_user_count"`
+	ElevatedUsers                []ContentModerationElevatedUser `json:"elevated_users"`
 	LastCleanupAt                *time.Time                      `json:"last_cleanup_at,omitempty"`
 	LastCleanupDeletedHit        int64                           `json:"last_cleanup_deleted_hit"`
 	LastCleanupDeletedNonHit     int64                           `json:"last_cleanup_deleted_non_hit"`
+}
+
+// ContentModerationElevatedUser 当前处于强制全量采样窗口的高危用户。
+type ContentModerationElevatedUser struct {
+	UserID     int64      `json:"user_id"`
+	Email      string     `json:"email"`
+	Username   string     `json:"username"`
+	Status     string     `json:"status"`
+	TTLSeconds int64      `json:"ttl_seconds"`
+	LastAction string     `json:"last_action,omitempty"`
+	LastAt     *time.Time `json:"last_at,omitempty"`
+}
+
+// ContentModerationElevatedUserCacheEntry Redis 中的高危用户标记。
+type ContentModerationElevatedUserCacheEntry struct {
+	UserID     int64
+	TTLSeconds int64
 }
 
 type ContentModerationUnbanUserResult struct {
@@ -472,6 +497,8 @@ type ContentModerationRepository interface {
 	// CountFlaggedByUserSince 统计窗口内计入封号的违规次数（排除 hash_block；
 	// excludeCyberPolicy 为 true 时额外排除 cyber_policy 行）。
 	CountFlaggedByUserSince(ctx context.Context, userID int64, since time.Time, excludeCyberPolicy bool) (int, error)
+	// ListLatestFlaggedLogsByUserIDs 返回每个用户最近一条 flagged 记录（含 cyber_policy）。
+	ListLatestFlaggedLogsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*ContentModerationLog, error)
 	CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time) (*ContentModerationCleanupResult, error)
 	// UpdateLogEmailSent 回写邮件发送结果（F7：CreateLog 先行后补 EmailSent）。
 	UpdateLogEmailSent(ctx context.Context, id int64, sent bool) error
@@ -480,6 +507,14 @@ type ContentModerationRepository interface {
 type ContentModerationHashCache interface {
 	RecordFlaggedInputHash(ctx context.Context, inputHash string) error
 	HasFlaggedInputHash(ctx context.Context, inputHash string) (bool, error)
+	// 干净输入短缓存：命中则跳过 moderation API（fail-open）。
+	RecordCleanInputHash(ctx context.Context, inputHash string, ttl time.Duration) error
+	HasCleanInputHash(ctx context.Context, inputHash string) (bool, error)
+	DeleteCleanInputHash(ctx context.Context, inputHash string) error
+	// 高风险用户采样标记：true=强制全量审；false=短负缓存。
+	SetElevatedUserSampling(ctx context.Context, userID int64, elevated bool, ttl time.Duration) error
+	GetElevatedUserSampling(ctx context.Context, userID int64) (known bool, elevated bool, err error)
+	ListElevatedUsers(ctx context.Context) ([]ContentModerationElevatedUserCacheEntry, error)
 	DeleteFlaggedInputHash(ctx context.Context, inputHash string) (bool, error)
 	ClearFlaggedInputHashes(ctx context.Context) (int64, error)
 	CountFlaggedInputHashes(ctx context.Context) (int64, error)
@@ -767,7 +802,7 @@ func (s *ContentModerationService) TestAPIKeys(ctx context.Context, input TestCo
 func (s *ContentModerationService) Check(ctx context.Context, input ContentModerationCheckInput) (*ContentModerationDecision, error) {
 	allow := &ContentModerationDecision{Allowed: true, Action: ContentModerationActionAllow}
 	if s == nil || s.settingRepo == nil || s.repo == nil {
-		slog.Info("content_moderation.skip_unavailable",
+		slog.Debug("content_moderation.skip_unavailable",
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
 			"group_id", contentModerationLogGroupID(input.GroupID),
@@ -776,7 +811,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 		return allow, nil
 	}
 	if !s.isRiskControlEnabled(ctx) {
-		slog.Info("content_moderation.skip_feature_disabled",
+		slog.Debug("content_moderation.skip_feature_disabled",
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
 			"group_id", contentModerationLogGroupID(input.GroupID),
@@ -797,7 +832,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 	}
 	inGroupScope := cfg.includesGroup(input.GroupID)
 	inModelScope := cfg.includesModel(input.Model)
-	slog.Info("content_moderation.config_loaded",
+	slog.Debug("content_moderation.config_loaded",
 		"user_id", input.UserID,
 		"api_key_id", input.APIKeyID,
 		"group_id", contentModerationLogGroupID(input.GroupID),
@@ -819,7 +854,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 		"pre_hash_check_enabled", cfg.PreHashCheckEnabled,
 		"record_non_hits", cfg.RecordNonHits)
 	if !cfg.Enabled {
-		slog.Info("content_moderation.skip_config_disabled",
+		slog.Debug("content_moderation.skip_config_disabled",
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
 			"group_id", contentModerationLogGroupID(input.GroupID),
@@ -828,7 +863,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 		return allow, nil
 	}
 	if cfg.Mode == ContentModerationModeOff {
-		slog.Info("content_moderation.skip_mode_off",
+		slog.Debug("content_moderation.skip_mode_off",
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
 			"group_id", contentModerationLogGroupID(input.GroupID),
@@ -837,7 +872,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 		return allow, nil
 	}
 	if !inGroupScope {
-		slog.Info("content_moderation.skip_group_out_of_scope",
+		slog.Debug("content_moderation.skip_group_out_of_scope",
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
 			"group_id", contentModerationLogGroupID(input.GroupID),
@@ -849,7 +884,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 		return allow, nil
 	}
 	if !inModelScope {
-		slog.Info("content_moderation.skip_model_out_of_scope",
+		slog.Debug("content_moderation.skip_model_out_of_scope",
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
 			"group_id", contentModerationLogGroupID(input.GroupID),
@@ -863,7 +898,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 	}
 	content := ExtractContentModerationInput(input.Protocol, input.Body)
 	if content.IsEmpty() {
-		slog.Info("content_moderation.skip_empty_input",
+		slog.Debug("content_moderation.skip_empty_input",
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
 			"group_id", contentModerationLogGroupID(input.GroupID),
@@ -873,7 +908,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 		return allow, nil
 	}
 	content.Normalize()
-	slog.Info("content_moderation.input_extracted",
+	slog.Debug("content_moderation.input_extracted",
 		"user_id", input.UserID,
 		"api_key_id", input.APIKeyID,
 		"group_id", contentModerationLogGroupID(input.GroupID),
@@ -913,7 +948,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 		}
 		if cfg.KeywordBlockingMode == ContentModerationKeywordModeKeywordOnly {
 			s.recordPreBlockSyncMetric(0, ContentModerationActionAllow)
-			slog.Info("content_moderation.skip_api_keyword_only",
+			slog.Debug("content_moderation.skip_api_keyword_only",
 				"user_id", input.UserID,
 				"api_key_id", input.APIKeyID,
 				"group_id", contentModerationLogGroupID(input.GroupID),
@@ -956,18 +991,46 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			}, nil
 		}
 	}
-	if !cfg.shouldSample(hashText) {
+	// 干净 hash 短缓存：近期已放行的相同输入直接跳过 moderation API。
+	if s.hashCache != nil && hashText != "" {
+		clean, err := s.hashCache.HasCleanInputHash(ctx, hashText)
+		if err != nil {
+			slog.Warn("content_moderation.clean_hash_check_failed", "user_id", input.UserID, "endpoint", input.Endpoint, "error", err)
+		} else if clean {
+			if cfg.Mode == ContentModerationModePreBlock {
+				s.recordPreBlockSyncMetric(0, ContentModerationActionAllow)
+			}
+			slog.Debug("content_moderation.skip_clean_hash_cache",
+				"user_id", input.UserID,
+				"api_key_id", input.APIKeyID,
+				"group_id", contentModerationLogGroupID(input.GroupID),
+				"endpoint", input.Endpoint,
+				"protocol", input.Protocol)
+			return allow, nil
+		}
+	}
+	elevatedUser := s.shouldForceSampleUser(ctx, cfg, input.UserID)
+	if !elevatedUser && !cfg.shouldSample(hashText) {
 		if cfg.Mode == ContentModerationModePreBlock {
 			s.recordPreBlockSyncMetric(0, ContentModerationActionAllow)
 		}
-		slog.Info("content_moderation.skip_sample_rate",
+		slog.Debug("content_moderation.skip_sample_rate",
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
 			"group_id", contentModerationLogGroupID(input.GroupID),
 			"endpoint", input.Endpoint,
 			"protocol", input.Protocol,
-			"sample_rate", cfg.SampleRate)
+			"sample_rate", cfg.SampleRate,
+			"elevated_user", false)
 		return allow, nil
+	}
+	if elevatedUser {
+		slog.Debug("content_moderation.force_sample_elevated_user",
+			"user_id", input.UserID,
+			"api_key_id", input.APIKeyID,
+			"group_id", contentModerationLogGroupID(input.GroupID),
+			"endpoint", input.Endpoint,
+			"protocol", input.Protocol)
 	}
 	if len(cfg.apiKeys()) == 0 {
 		if cfg.Mode == ContentModerationModePreBlock {
@@ -982,7 +1045,7 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 		return allow, nil
 	}
 	if cfg.Mode == ContentModerationModeObserve {
-		slog.Info("content_moderation.enqueue_observe",
+		slog.Debug("content_moderation.enqueue_observe",
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
 			"group_id", contentModerationLogGroupID(input.GroupID),
@@ -1041,7 +1104,11 @@ func (s *ContentModerationService) checkSync(ctx context.Context, input ContentM
 	if trackPreBlock {
 		s.recordPreBlockSyncMetric(latency, action)
 	}
-	slog.Info("content_moderation.audit_result",
+	logAudit := slog.Debug
+	if flagged || blocked {
+		logAudit = slog.Info
+	}
+	logAudit("content_moderation.audit_result",
 		"user_id", input.UserID,
 		"api_key_id", input.APIKeyID,
 		"group_id", contentModerationLogGroupID(input.GroupID),
@@ -1066,6 +1133,12 @@ func (s *ContentModerationService) checkSync(ctx context.Context, input ContentM
 		}
 	}
 	if blocked {
+		// 命中后清掉可能存在的干净缓存，避免短窗口误放行。
+		if s.hashCache != nil && hashText != "" {
+			if err := s.hashCache.DeleteCleanInputHash(ctx, hashText); err != nil {
+				slog.Warn("content_moderation.delete_clean_hash_failed", "user_id", input.UserID, "endpoint", input.Endpoint, "error", err)
+			}
+		}
 		return &ContentModerationDecision{
 			Allowed:         false,
 			Blocked:         true,
@@ -1076,6 +1149,11 @@ func (s *ContentModerationService) checkSync(ctx context.Context, input ContentM
 			HighestScore:    highestScore,
 			CategoryScores:  result.CategoryScores,
 			Action:          action,
+		}
+	}
+	if !flagged && s.hashCache != nil && hashText != "" {
+		if err := s.hashCache.RecordCleanInputHash(ctx, hashText, defaultContentModerationCleanHashTTL); err != nil {
+			slog.Warn("content_moderation.record_clean_hash_failed", "user_id", input.UserID, "endpoint", input.Endpoint, "error", err)
 		}
 	}
 	return &ContentModerationDecision{
@@ -1366,7 +1444,10 @@ func (s *ContentModerationService) GetStatus(ctx context.Context) (*ContentModer
 		t := time.Unix(unix, 0)
 		lastCleanupAt = &t
 	}
-	return &ContentModerationRuntimeStatus{
+		elevatedUsers := s.listElevatedUsers(ctx)
+	elevatedCount := len(elevatedUsers)
+
+return &ContentModerationRuntimeStatus{
 		Enabled:                      cfg.Enabled,
 		RiskControlEnabled:           riskEnabled,
 		Mode:                         cfg.Mode,
@@ -1393,6 +1474,8 @@ func (s *ContentModerationService) GetStatus(ctx context.Context) (*ContentModer
 		PreBlockAPIKeyLoads:          s.preBlockAPIKeyLoads(cfg.apiKeys()),
 		APIKeyStatuses:               s.apiKeyStatuses(cfg.apiKeys()),
 		FlaggedHashCount:             flaggedHashCount,
+		ElevatedUserCount:            elevatedCount,
+		ElevatedUsers:                elevatedUsers,
 		LastCleanupAt:                lastCleanupAt,
 		LastCleanupDeletedHit:        s.lastCleanupDeletedHit.Load(),
 		LastCleanupDeletedNonHit:     s.lastCleanupDeletedNonHit.Load(),
@@ -1657,6 +1740,8 @@ func (s *ContentModerationService) applyFlaggedAccountSideEffects(ctx context.Co
 	if s == nil || cfg == nil || log == nil || !log.Flagged || log.UserID == nil || *log.UserID <= 0 {
 		return false
 	}
+	// 违规用户进入强制全量采样窗口（写穿缓存，避免热路径反复查库）。
+	s.markElevatedUserSampling(ctx, cfg, *log.UserID, true)
 	count := 1
 	if s.repo != nil && cfg.ViolationWindowHours > 0 {
 		since := time.Now().Add(-time.Duration(cfg.ViolationWindowHours) * time.Hour)
@@ -1986,6 +2071,118 @@ func contentModerationLogGroupID(groupID *int64) int64 {
 		return 0
 	}
 	return *groupID
+}
+
+
+func (s *ContentModerationService) listElevatedUsers(ctx context.Context) []ContentModerationElevatedUser {
+	out := make([]ContentModerationElevatedUser, 0)
+	if s == nil || s.hashCache == nil {
+		return out
+	}
+	entries, err := s.hashCache.ListElevatedUsers(ctx)
+	if err != nil {
+		slog.Warn("content_moderation.list_elevated_users_failed", "error", err)
+		return out
+	}
+	if len(entries) == 0 {
+		return out
+	}
+	ids := make([]int64, 0, len(entries))
+	for _, e := range entries {
+		if e.UserID > 0 {
+			ids = append(ids, e.UserID)
+		}
+	}
+	var latest map[int64]*ContentModerationLog
+	if s.repo != nil && len(ids) > 0 {
+		if m, err := s.repo.ListLatestFlaggedLogsByUserIDs(ctx, ids); err != nil {
+			slog.Warn("content_moderation.list_latest_flagged_failed", "error", err)
+		} else {
+			latest = m
+		}
+	}
+	for _, e := range entries {
+		item := ContentModerationElevatedUser{
+			UserID:     e.UserID,
+			TTLSeconds: e.TTLSeconds,
+			Status:     "",
+		}
+		if s.userRepo != nil {
+			if u, err := s.userRepo.GetByID(ctx, e.UserID); err == nil && u != nil {
+				item.Email = u.Email
+				item.Username = u.Username
+				item.Status = u.Status
+			}
+		}
+		if latest != nil {
+			if log := latest[e.UserID]; log != nil {
+				item.LastAction = log.Action
+				if !log.CreatedAt.IsZero() {
+					ats := log.CreatedAt
+					item.LastAt = &ats
+				}
+				if item.Email == "" {
+					item.Email = log.UserEmail
+				}
+			}
+		}
+		out = append(out, item)
+	}
+	// 按 TTL 倒序（越新/越久越靠前），其次 user_id
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].TTLSeconds == out[j].TTLSeconds {
+			return out[i].UserID < out[j].UserID
+		}
+		return out[i].TTLSeconds > out[j].TTLSeconds
+	})
+	return out
+}
+
+func (s *ContentModerationService) elevatedUserTTL(cfg *ContentModerationConfig) time.Duration {
+	if cfg != nil && cfg.ViolationWindowHours > 0 {
+		return time.Duration(cfg.ViolationWindowHours) * time.Hour
+	}
+	return defaultContentModerationElevatedUserTTL
+}
+
+func (s *ContentModerationService) markElevatedUserSampling(ctx context.Context, cfg *ContentModerationConfig, userID int64, elevated bool) {
+	if s == nil || s.hashCache == nil || userID <= 0 {
+		return
+	}
+	ttl := s.elevatedUserTTL(cfg)
+	if !elevated {
+		ttl = defaultContentModerationElevatedMissTTL
+	}
+	if err := s.hashCache.SetElevatedUserSampling(ctx, userID, elevated, ttl); err != nil {
+		slog.Warn("content_moderation.elevated_user_cache_write_failed", "user_id", userID, "elevated", elevated, "error", err)
+	}
+}
+
+// shouldForceSampleUser 对窗口内有违规/cyber 记录的用户强制 100% 采样。
+// 先读缓存；未知时查库并回填正/负缓存，控制热路径 DB 压力。
+func (s *ContentModerationService) shouldForceSampleUser(ctx context.Context, cfg *ContentModerationConfig, userID int64) bool {
+	if s == nil || userID <= 0 {
+		return false
+	}
+	if s.hashCache != nil {
+		if known, elevated, err := s.hashCache.GetElevatedUserSampling(ctx, userID); err != nil {
+			slog.Warn("content_moderation.elevated_user_cache_read_failed", "user_id", userID, "error", err)
+		} else if known {
+			return elevated
+		}
+	}
+	elevated := false
+	if s.repo != nil {
+		since := time.Now().Add(-s.elevatedUserTTL(cfg))
+		// 不排除 cyber_policy：历史 cyber 也视为高风险用户。
+		if n, err := s.repo.CountFlaggedByUserSince(ctx, userID, since, false); err != nil {
+			slog.Warn("content_moderation.elevated_user_db_failed", "user_id", userID, "error", err)
+		} else {
+			elevated = n > 0
+		}
+	}
+	s.markElevatedUserSampling(ctx, cfg, userID, elevated)
+	return elevated
 }
 
 func (cfg *ContentModerationConfig) shouldSample(hashText string) bool {
@@ -2777,6 +2974,10 @@ func (s *ContentModerationService) RecordCyberPolicyEvent(ctx context.Context, i
 	}
 	// 开关开时 cyber_policy 不参与封号计数：当次不判定（此处跳过），
 	// 历史行由 CountFlaggedByUserSince 的 excludeCyberPolicy 排除。
+	// cyber 命中用户同样提升采样（即使排除出封号计数）。
+	if in.UserID > 0 {
+		s.markElevatedUserSampling(ctx, cfg, in.UserID, true)
+	}
 	autoBanned := false
 	if !cfg.CyberPolicyExcludeFromBanCount {
 		autoBanned = s.applyFlaggedAccountSideEffects(ctx, cfg, log)

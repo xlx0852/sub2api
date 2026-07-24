@@ -41,8 +41,9 @@ type AccountRuntimeBlocker interface {
 
 // SuccessfulTestRecoveryResult 表示测试成功后恢复了哪些运行时状态。
 type SuccessfulTestRecoveryResult struct {
-	ClearedError     bool
-	ClearedRateLimit bool
+	ClearedError       bool
+	ClearedRateLimit   bool
+	ClearedSchedulable bool
 }
 
 // AccountRecoveryOptions 控制账号恢复时的附加行为。
@@ -1912,9 +1913,20 @@ func (s *RateLimitService) RecoverAccountState(ctx context.Context, accountID in
 		}
 		result.ClearedRateLimit = true
 	}
-	if result.ClearedError || result.ClearedRateLimit {
+
+	// Manual/admin unschedulable is also recoverable after a successful connectivity probe.
+	// Without this, accounts can stay active but never selected by the scheduler.
+	if !account.Schedulable {
+		if err := s.accountRepo.SetSchedulable(ctx, accountID, true); err != nil {
+			return nil, err
+		}
+		result.ClearedSchedulable = true
+	}
+
+	if result.ClearedError || result.ClearedRateLimit || result.ClearedSchedulable {
 		s.ResetOpenAI403Counter(ctx, accountID)
-		if result.ClearedError && !result.ClearedRateLimit {
+		// ClearRateLimit already notifies scheduling-block clear; avoid double notify.
+		if !result.ClearedRateLimit && (result.ClearedError || result.ClearedSchedulable) {
 			s.notifyAccountSchedulingBlockCleared(accountID)
 		}
 	}
@@ -1922,8 +1934,48 @@ func (s *RateLimitService) RecoverAccountState(ctx context.Context, accountID in
 	return result, nil
 }
 
+// DemoteAccountAfterFailedDiagnostics temporarily removes an account from scheduling
+// after all diagnostic models fail, so users are less likely to hit hard errors.
+func (s *RateLimitService) DemoteAccountAfterFailedDiagnostics(ctx context.Context, accountID int64, duration time.Duration, reason string) error {
+	if s == nil || s.accountRepo == nil {
+		return nil
+	}
+	if duration <= 0 {
+		duration = 15 * time.Minute
+	}
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return err
+	}
+	until := time.Now().Add(duration)
+	msg := strings.TrimSpace(reason)
+	if msg == "" {
+		msg = "scheduled diagnostics failed for all candidate models"
+	}
+	// Keep reason compact for DB/admin display.
+	if len(msg) > 500 {
+		msg = msg[:500]
+	}
+	s.notifyAccountSchedulingBlocked(account, until, "scheduled_diagnostics_failed")
+	if err := s.accountRepo.SetTempUnschedulable(ctx, accountID, until, msg); err != nil {
+		return err
+	}
+	if s.tempUnschedCache != nil {
+		state := &TempUnschedState{
+			UntilUnix:       until.Unix(),
+			TriggeredAtUnix: time.Now().Unix(),
+			ErrorMessage:    msg,
+		}
+		if err := s.tempUnschedCache.SetTempUnsched(ctx, accountID, state); err != nil {
+			slog.Warn("temp_unsched_cache_set_failed", "account_id", accountID, "error", err)
+		}
+	}
+	slog.Info("account_demoted_after_failed_diagnostics", "account_id", accountID, "until", until, "reason", msg)
+	return nil
+}
+
 // RecoverAccountAfterSuccessfulTest 将一次成功测试视为正常请求，
-// 按需恢复 error / rate-limit / overload / temp-unsched / model-rate-limit 等运行时状态。
+// 按需恢复 error / rate-limit / overload / temp-unsched / model-rate-limit / unschedulable 等运行时状态。
 func (s *RateLimitService) RecoverAccountAfterSuccessfulTest(ctx context.Context, accountID int64) (*SuccessfulTestRecoveryResult, error) {
 	return s.RecoverAccountState(ctx, accountID, AccountRecoveryOptions{})
 }

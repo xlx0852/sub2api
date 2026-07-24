@@ -905,6 +905,10 @@ export interface Account {
 
   // Rate limit & scheduling fields
   schedulable: boolean
+  diagnostics_enabled?: boolean
+  diagnostics_plan_count?: number
+  diagnostics_enabled_count?: number
+  diagnostics_next_run_at?: string | null
   rate_limited_at: string | null
   rate_limit_reset_at: string | null
   overload_until: string | null

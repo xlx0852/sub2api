@@ -56,6 +56,7 @@ type AccountHandler struct {
 	rateLimitService        *service.RateLimitService
 	accountUsageService     *service.AccountUsageService
 	accountTestService      *service.AccountTestService
+	scheduledTestService    *service.ScheduledTestService
 	concurrencyService      *service.ConcurrencyService
 	crsSyncService          *service.CRSSyncService
 	sessionLimitCache       service.SessionLimitCache
@@ -73,6 +74,7 @@ func NewAccountHandler(
 	rateLimitService *service.RateLimitService,
 	accountUsageService *service.AccountUsageService,
 	accountTestService *service.AccountTestService,
+	scheduledTestService *service.ScheduledTestService,
 	concurrencyService *service.ConcurrencyService,
 	crsSyncService *service.CRSSyncService,
 	sessionLimitCache service.SessionLimitCache,
@@ -88,6 +90,7 @@ func NewAccountHandler(
 		rateLimitService:        rateLimitService,
 		accountUsageService:     accountUsageService,
 		accountTestService:      accountTestService,
+		scheduledTestService:    scheduledTestService,
 		concurrencyService:      concurrencyService,
 		crsSyncService:          crsSyncService,
 		sessionLimitCache:       sessionLimitCache,
@@ -179,7 +182,12 @@ type AccountWithConcurrency struct {
 	CurrentWindowCost *float64 `json:"current_window_cost,omitempty"` // 当前窗口费用
 	ActiveSessions    *int     `json:"active_sessions,omitempty"`     // 当前活跃会话数
 	CurrentRPM        *int     `json:"current_rpm,omitempty"`         // 当前分钟 RPM 计数
+	DiagnosticsEnabled      bool       `json:"diagnostics_enabled"`
+	DiagnosticsPlanCount    int        `json:"diagnostics_plan_count"`
+	DiagnosticsEnabledCount int        `json:"diagnostics_enabled_count"`
+	DiagnosticsNextRunAt    *time.Time `json:"diagnostics_next_run_at,omitempty"`
 }
+
 
 type AccountSchedulerScore struct {
 	BaseScore             float64 `json:"base_score"`
@@ -519,6 +527,13 @@ func (h *AccountHandler) List(c *gin.Context) {
 		accountIDs[i] = acc.ID
 	}
 
+	diagnosticsStatus := map[int64]service.ScheduledDiagnosticsStatus{}
+	if h.scheduledTestService != nil && len(accountIDs) > 0 {
+		if st, stErr := h.scheduledTestService.ListDiagnosticsStatusByAccountIDs(c.Request.Context(), accountIDs); stErr == nil && st != nil {
+			diagnosticsStatus = st
+		}
+	}
+
 	concurrencyCounts := make(map[int64]int)
 	var windowCosts map[int64]float64
 	var activeSessions map[int64]int
@@ -619,6 +634,12 @@ func (h *AccountHandler) List(c *gin.Context) {
 			CurrentConcurrency: concurrencyCounts[acc.ID],
 			SchedulerScore:     schedulerScores[acc.ID],
 			SchedulerScores:    schedulerGroupScores[acc.ID],
+		}
+		if st, ok := diagnosticsStatus[acc.ID]; ok {
+			item.DiagnosticsEnabled = st.Enabled
+			item.DiagnosticsPlanCount = st.PlanCount
+			item.DiagnosticsEnabledCount = st.EnabledCount
+			item.DiagnosticsNextRunAt = st.NextRunAt
 		}
 
 		// 添加窗口费用（仅当启用时）
@@ -852,6 +873,12 @@ func (h *AccountHandler) Create(c *gin.Context) {
 	// OpenAI APIKey 账号创建后异步探测上游 /v1/responses 能力。
 	// 探测失败不影响账号创建响应。
 	h.scheduleOpenAIResponsesProbe(createdAccount)
+	// Auto-enable scheduled diagnostics for newly created accounts.
+	if createdAccount != nil && h.scheduledTestService != nil {
+		if _, _, ensureErr := h.scheduledTestService.EnsureDefaultDiagnosticsPlan(c.Request.Context(), createdAccount.ID); ensureErr != nil {
+			slog.Warn("ensure_default_diagnostics_plan_failed", "account_id", createdAccount.ID, "error", ensureErr)
+		}
+	}
 	response.Success(c, result.Data)
 }
 

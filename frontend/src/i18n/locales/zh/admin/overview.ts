@@ -374,6 +374,19 @@ export default {
       invitesDescription: '查看全站邀请关系和被邀请用户累计返利',
       rebatesDescription: '查看每一笔产生返利的充值订单',
       transfersDescription: '查看返利额度转入账户余额的提取流水',
+      bind: {
+        title: '绑定邀请关系',
+        action: '绑定邀请',
+        hint: '将邀请人与被邀请人建立邀请关系；双方均需为有效用户。',
+        inviterUserId: '邀请人用户 ID',
+        inviteeUserId: '被邀请人用户 ID',
+        inviterPlaceholder: '输入邀请人用户 ID',
+        inviteePlaceholder: '输入被邀请人用户 ID',
+        submit: '确认绑定',
+        success: '邀请关系绑定成功',
+        invalidUserId: '请输入有效的用户 ID',
+        sameUser: '邀请人与被邀请人不能是同一用户'
+      },
       errors: {
         loadFailed: '加载邀请返利记录失败'
       },
@@ -417,6 +430,7 @@ export default {
     users: {
       title: '用户管理',
       description: '管理用户账户和权限',
+      passwordCopied: '密码已复制到剪贴板',
       createUser: '创建用户',
       editUser: '编辑用户',
       deleteUser: '删除用户',
@@ -1012,6 +1026,12 @@ export default {
         selectAccounts: '选择账号',
         noAccounts: '此分组暂无账号',
         loadingAccounts: '加载账号中...',
+        removeRule: '删除规则',
+        noRules: '暂无路由规则',
+        noRulesHint: '添加路由规则以将特定模型请求优先路由到指定账号',
+        searchAccountPlaceholder: '搜索账号...',
+        accountsHint: '选择此模型模式优先使用的账号'
+      },
       claudeMaxSimulation: {
         title: 'Claude Max 用量模拟',
         tooltip:
@@ -1019,12 +1039,6 @@ export default {
         enabled: '已启用（模拟 1h 缓存）',
         disabled: '已禁用',
         hint: '仅调整用量计费日志中的 token 类别。不会持久化每个请求的映射状态。'
-      },
-        removeRule: '删除规则',
-        noRules: '暂无路由规则',
-        noRulesHint: '添加路由规则以将特定模型请求优先路由到指定账号',
-        searchAccountPlaceholder: '搜索账号...',
-        accountsHint: '选择此模型模式优先使用的账号'
       },
       mcpXml: {
         title: 'MCP XML 协议注入',

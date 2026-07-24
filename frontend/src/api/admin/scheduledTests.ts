@@ -74,12 +74,23 @@ export async function listResults(planId: number, limit?: number): Promise<Sched
   return data ?? []
 }
 
+/**
+ * Ensure the account has a default diagnostics plan (auto-create if missing).
+ */
+export async function ensureDefault(accountId: number): Promise<{ created: boolean; plan: ScheduledTestPlan }> {
+  const { data } = await apiClient.post<{ created: boolean; plan: ScheduledTestPlan }>(
+    `/admin/accounts/${accountId}/scheduled-test-plans/ensure-default`
+  )
+  return data
+}
+
 export const scheduledTestsAPI = {
   listByAccount,
   create,
   update,
   delete: deletePlan,
-  listResults
+  listResults,
+  ensureDefault
 }
 
 export default scheduledTestsAPI
