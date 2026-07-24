@@ -55,6 +55,13 @@ func (r *stubScheduledPlanRepo) Update(ctx context.Context, plan *ScheduledTestP
 	return plan, nil
 }
 func (r *stubScheduledPlanRepo) Delete(ctx context.Context, id int64) error { return nil }
+func (r *stubScheduledPlanRepo) ListDiagnosticsStatusByAccountIDs(ctx context.Context, accountIDs []int64) (map[int64]ScheduledDiagnosticsStatus, error) {
+	out := make(map[int64]ScheduledDiagnosticsStatus, len(accountIDs))
+	for _, id := range accountIDs {
+		out[id] = ScheduledDiagnosticsStatus{AccountID: id}
+	}
+	return out, nil
+}
 func (r *stubScheduledPlanRepo) UpdateAfterRun(ctx context.Context, id int64, lastRunAt time.Time, nextRunAt time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

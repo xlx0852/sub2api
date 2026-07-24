@@ -318,7 +318,7 @@
 
   /* ============ 徽章样式 ============ */
   .badge {
-    @apply inline-flex items-center gap-1;
+    @apply inline-flex items-center gap-1 whitespace-nowrap;
     @apply rounded-full px-2.5 py-0.5 text-xs font-medium;
   }
 

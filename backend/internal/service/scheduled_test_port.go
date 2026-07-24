@@ -33,6 +33,15 @@ type ScheduledTestResult struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
+// ScheduledDiagnosticsStatus summarizes whether an account has diagnostics enabled.
+type ScheduledDiagnosticsStatus struct {
+	AccountID    int64      `json:"account_id"`
+	Enabled      bool       `json:"enabled"`
+	PlanCount    int        `json:"plan_count"`
+	EnabledCount int        `json:"enabled_count"`
+	NextRunAt    *time.Time `json:"next_run_at,omitempty"`
+}
+
 // ScheduledTestPlanRepository defines the data access interface for test plans.
 type ScheduledTestPlanRepository interface {
 	Create(ctx context.Context, plan *ScheduledTestPlan) (*ScheduledTestPlan, error)
@@ -46,6 +55,7 @@ type ScheduledTestPlanRepository interface {
 	Update(ctx context.Context, plan *ScheduledTestPlan) (*ScheduledTestPlan, error)
 	Delete(ctx context.Context, id int64) error
 	UpdateAfterRun(ctx context.Context, id int64, lastRunAt time.Time, nextRunAt time.Time) error
+	ListDiagnosticsStatusByAccountIDs(ctx context.Context, accountIDs []int64) (map[int64]ScheduledDiagnosticsStatus, error)
 }
 
 // ScheduledTestResultRepository defines the data access interface for test results.

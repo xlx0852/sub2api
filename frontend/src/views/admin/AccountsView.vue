@@ -211,8 +211,26 @@
           <template #cell-select="{ row }">
             <input type="checkbox" :checked="isSelected(row.id)" @change="toggleSel(row.id)" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
           </template>
-          <template #cell-id="{ value }">
-            <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ value }}</span>
+          <template #cell-id="{ row, value }">
+            <div class="inline-flex items-center gap-1">
+              <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ value }}</span>
+              <button
+                type="button"
+                class="inline-flex h-4 w-4 items-center justify-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                :class="row.diagnostics_enabled
+                  ? 'text-emerald-500 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40'
+                  : 'text-gray-300 hover:bg-gray-100 dark:text-gray-600 dark:hover:bg-dark-700'"
+                :title="row.diagnostics_enabled
+                  ? t('admin.accounts.usageDetails.diagnosticsOn')
+                  : t('admin.accounts.usageDetails.diagnosticsOff')"
+                :aria-label="row.diagnostics_enabled
+                  ? t('admin.accounts.usageDetails.diagnosticsOn')
+                  : t('admin.accounts.usageDetails.diagnosticsOff')"
+                @click.stop="openUsageDetails(row, 'diagnostics')"
+              >
+                <Icon name="beaker" size="xs" />
+              </button>
+            </div>
           </template>
           <template #cell-name="{ row, value }">
             <div class="flex flex-col">
@@ -410,8 +428,7 @@
       @close="closeUsageDetails"
       @reauthorize="handleReAuth"
     />
-    <ScheduledTestsPanel :show="showSchedulePanel" :account-id="scheduleAcc?.id ?? null" :model-options="scheduleModelOptions" @close="closeSchedulePanel" />
-    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
+    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />
     <BulkEditAccountModal
@@ -463,8 +480,6 @@ import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
 import ImportDataModal from '@/components/admin/account/ImportDataModal.vue'
 import ReAuthAccountModal from '@/components/admin/account/ReAuthAccountModal.vue'
 import AccountTestModal from '@/components/admin/account/AccountTestModal.vue'
-import ScheduledTestsPanel from '@/components/admin/account/ScheduledTestsPanel.vue'
-import type { SelectOption } from '@/components/common/Select.vue'
 import AccountStatusIndicator from '@/components/account/AccountStatusIndicator.vue'
 import AccountUsageCell from '@/components/account/AccountUsageCell.vue'
 import AccountUsageDrawer from '@/components/account/AccountUsageDrawer.vue'
@@ -478,7 +493,7 @@ import TLSFingerprintProfilesModal from '@/components/admin/TLSFingerprintProfil
 import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { formatDateTime, formatRelativeTime } from '@/utils/format'
 import { proxyExpiryBadgeClass, proxyExpiryLabelKey } from '@/utils/proxyExpiry'
-import type { Account, AccountPlatform, AccountSchedulerGroupScore, AccountType, Proxy as AccountProxy, AdminGroup, WindowStats, ClaudeModel } from '@/types'
+import type { Account, AccountPlatform, AccountSchedulerGroupScore, AccountType, Proxy as AccountProxy, AdminGroup, WindowStats } from '@/types'
 import type { AccountPerformanceStats } from '@/api/admin/accounts'
 
 const { t } = useI18n()
@@ -550,9 +565,6 @@ const deletingAcc = ref<Account | null>(null)
 const creatingShadowAcc = ref<Account | null>(null)
 const reAuthAcc = ref<Account | null>(null)
 const testingAcc = ref<Account | null>(null)
-const showSchedulePanel = ref(false)
-const scheduleAcc = ref<Account | null>(null)
-const scheduleModelOptions = ref<SelectOption[]>([])
 const togglingSchedulable = ref<number | null>(null)
 const menu = reactive<{show:boolean, acc:Account|null, pos:{top:number, left:number}|null}>({ show: false, acc: null, pos: null })
 const exportingData = ref(false)
@@ -1037,7 +1049,6 @@ const isAnyModalOpen = computed(() => {
     showReAuth.value ||
     showTest.value ||
     showUsageDetails.value ||
-    showSchedulePanel.value ||
     showErrorPassthrough.value ||
     showTLSFingerprintProfiles.value
   )
@@ -1767,10 +1778,11 @@ const closeTestModal = () => { showTest.value = false; testingAcc.value = null }
 const closeReAuthModal = () => { showReAuth.value = false; reAuthAcc.value = null }
 const handleTest = (a: Account) => { testingAcc.value = a; showTest.value = true }
 const handleViewStats = (a: Account) => { openUsageDetails(a, 'statistics') }
-const usageDetailsInitialTab = ref<'quota' | 'statistics'>('quota')
-const openUsageDetails = (account: Account, initialTab: 'quota' | 'statistics' = 'quota') => {
-  usageDetailsAcc.value = account
+const usageDetailsInitialTab = ref<'quota' | 'statistics' | 'diagnostics'>('quota')
+const openUsageDetails = (account: Account, initialTab: 'quota' | 'statistics' | 'diagnostics' = 'quota') => {
+  // Set tab first so drawer show/account watchers open directly on the target tab.
   usageDetailsInitialTab.value = initialTab
+  usageDetailsAcc.value = account
   if (!performanceStatsByAccountId.value[String(account.id)] && !performanceStatsLoading.value) {
     refreshPerformanceStatsBatch().catch((error) => {
       console.error('Failed to load account performance stats for usage drawer:', error)
@@ -1778,18 +1790,6 @@ const openUsageDetails = (account: Account, initialTab: 'quota' | 'statistics' =
   }
 }
 const closeUsageDetails = () => { usageDetailsAcc.value = null }
-const handleSchedule = async (a: Account) => {
-  scheduleAcc.value = a
-  scheduleModelOptions.value = []
-  showSchedulePanel.value = true
-  try {
-    const models = await adminAPI.accounts.getAvailableModels(a.id)
-    scheduleModelOptions.value = models.map((m: ClaudeModel) => ({ value: m.id, label: m.display_name || m.id }))
-  } catch {
-    scheduleModelOptions.value = []
-  }
-}
-const closeSchedulePanel = () => { showSchedulePanel.value = false; scheduleAcc.value = null; scheduleModelOptions.value = [] }
 const handleReAuth = (a: Account) => { reAuthAcc.value = a; showReAuth.value = true }
 const handleRefresh = async (a: Account) => {
   try {

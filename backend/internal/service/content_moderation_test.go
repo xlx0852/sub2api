@@ -113,6 +113,30 @@ func (r *contentModerationTestRepo) CountFlaggedByUserSince(ctx context.Context,
 	return count, nil
 }
 
+func (r *contentModerationTestRepo) ListLatestFlaggedLogsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*ContentModerationLog, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := map[int64]*ContentModerationLog{}
+	for _, uid := range userIDs {
+		var best *ContentModerationLog
+		for i := range r.logs {
+			log := r.logs[i]
+			if !log.Flagged || log.UserID == nil || *log.UserID != uid {
+				continue
+			}
+			if best == nil || log.CreatedAt.After(best.CreatedAt) {
+				item := log
+				best = &item
+			}
+		}
+		if best != nil {
+			out[uid] = best
+		}
+	}
+	return out, nil
+}
+
+
 func (r *contentModerationTestRepo) CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time) (*ContentModerationCleanupResult, error) {
 	return &ContentModerationCleanupResult{}, nil
 }
@@ -152,6 +176,8 @@ func requireRecordedHashCount(t *testing.T, cache *contentModerationTestHashCach
 type contentModerationTestHashCache struct {
 	mu            sync.Mutex
 	hashes        map[string]struct{}
+	clean         map[string]struct{}
+	elevated      map[int64]bool
 	recorded      []string
 	checked       []string
 	deleted       []string
@@ -324,6 +350,62 @@ func (c *contentModerationTestHashCache) HasFlaggedInputHash(ctx context.Context
 	}
 	_, ok := c.hashes[inputHash]
 	return ok, nil
+}
+
+func (c *contentModerationTestHashCache) RecordCleanInputHash(ctx context.Context, inputHash string, ttl time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.clean == nil {
+		c.clean = map[string]struct{}{}
+	}
+	c.clean[inputHash] = struct{}{}
+	return nil
+}
+
+func (c *contentModerationTestHashCache) HasCleanInputHash(ctx context.Context, inputHash string) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.clean[inputHash]
+	return ok, nil
+}
+
+func (c *contentModerationTestHashCache) DeleteCleanInputHash(ctx context.Context, inputHash string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.clean != nil {
+		delete(c.clean, inputHash)
+	}
+	return nil
+}
+
+func (c *contentModerationTestHashCache) SetElevatedUserSampling(ctx context.Context, userID int64, elevated bool, ttl time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.elevated == nil {
+		c.elevated = map[int64]bool{}
+	}
+	c.elevated[userID] = elevated
+	return nil
+}
+
+func (c *contentModerationTestHashCache) GetElevatedUserSampling(ctx context.Context, userID int64) (bool, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	v, ok := c.elevated[userID]
+	return ok, v, nil
+}
+
+func (c *contentModerationTestHashCache) ListElevatedUsers(ctx context.Context) ([]ContentModerationElevatedUserCacheEntry, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]ContentModerationElevatedUserCacheEntry, 0, len(c.elevated))
+	for uid, elevated := range c.elevated {
+		if !elevated {
+			continue
+		}
+		out = append(out, ContentModerationElevatedUserCacheEntry{UserID: uid, TTLSeconds: 3600})
+	}
+	return out, nil
 }
 
 func (c *contentModerationTestHashCache) DeleteFlaggedInputHash(ctx context.Context, inputHash string) (bool, error) {
@@ -1837,4 +1919,194 @@ func TestContentModerationUpdateConfig_CyberPolicyExcludeFromBanCount(t *testing
 	})
 	require.NoError(t, err)
 	require.False(t, view.CyberPolicyExcludeFromBanCount)
+}
+
+
+func TestContentModerationConfig_ShouldSampleDeterministic(t *testing.T) {
+	cfg := &ContentModerationConfig{SampleRate: 30}
+	// empty/invalid hash fails open to sample
+	if !cfg.shouldSample("zz") {
+		t.Fatalf("invalid hash should sample")
+	}
+	cfg.SampleRate = 100
+	if !cfg.shouldSample("ab") {
+		t.Fatalf("100 should always sample")
+	}
+	cfg.SampleRate = 0
+	if cfg.shouldSample("abcd") {
+		t.Fatalf("0 should never sample")
+	}
+}
+
+func TestContentModerationCheck_CleanHashCacheSkipsAPI(t *testing.T) {
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModePreBlock
+	cfg.SampleRate = 100
+	cfg.APIKeys = []string{"sk-test"}
+	cfg.PreHashCheckEnabled = true
+	raw, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	hashCache := &contentModerationTestHashCache{}
+	repo := &contentModerationTestRepo{}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: string(raw),
+		}},
+		repo,
+		hashCache,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	body := []byte(`{"messages":[{"role":"user","content":"hello clean cache"}]}`)
+	content := ExtractContentModerationInput(ContentModerationProtocolOpenAIChat, body)
+	content.Normalize()
+	require.NoError(t, hashCache.RecordCleanInputHash(context.Background(), content.Hash(), time.Minute))
+
+	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
+		UserID:   1,
+		APIKeyID: 1,
+		Endpoint: "/v1/chat/completions",
+		Protocol: ContentModerationProtocolOpenAIChat,
+		Model:    "gpt-test",
+		Body:     body,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, decision)
+	require.True(t, decision.Allowed)
+	require.False(t, decision.Blocked)
+	require.Equal(t, ContentModerationActionAllow, decision.Action)
+	require.Empty(t, repo.snapshotLogs())
+}
+
+
+func TestContentModerationCheck_ElevatedUserForcesSample(t *testing.T) {
+	// sample_rate=0 would skip normal users; elevated user must still be forced.
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModePreBlock
+	cfg.SampleRate = 0
+	cfg.APIKeys = []string{"sk-test"}
+	cfg.PreHashCheckEnabled = true
+	raw, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"id":"modr","model":"omni-moderation-latest","results":[{"flagged":false,"categories":{},"category_scores":{"sexual":0.01}}]}`))
+	}))
+	defer server.Close()
+	cfg.BaseURL = server.URL
+	raw, err = json.Marshal(cfg)
+	require.NoError(t, err)
+
+	hashCache := &contentModerationTestHashCache{elevated: map[int64]bool{42: true}}
+	repo := &contentModerationTestRepo{}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: string(raw),
+		}},
+		repo,
+		hashCache,
+		nil, nil, nil, nil,
+	)
+
+	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
+		UserID:   42,
+		Protocol: ContentModerationProtocolOpenAIChat,
+		Model:    "gpt-test",
+		Body:     []byte(`{"messages":[{"role":"user","content":"hello elevated"}]}`),
+	})
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	// API was called despite sample_rate=0; allow path may record clean hash.
+	require.NotNil(t, decision)
+}
+
+func TestContentModerationCheck_NormalUserHonorsZeroSample(t *testing.T) {
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModePreBlock
+	cfg.SampleRate = 0
+	cfg.APIKeys = []string{"sk-test"}
+	raw, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	called := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called++
+		_, _ = w.Write([]byte(`{"results":[{"flagged":false,"category_scores":{}}]}`))
+	}))
+	defer server.Close()
+	cfg.BaseURL = server.URL
+	raw, err = json.Marshal(cfg)
+	require.NoError(t, err)
+
+	hashCache := &contentModerationTestHashCache{elevated: map[int64]bool{7: false}}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: string(raw),
+		}},
+		&contentModerationTestRepo{},
+		hashCache,
+		nil, nil, nil, nil,
+	)
+	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
+		UserID:   7,
+		Protocol: ContentModerationProtocolOpenAIChat,
+		Body:     []byte(`{"messages":[{"role":"user","content":"hello normal"}]}`),
+	})
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	require.Equal(t, 0, called)
+}
+
+func TestContentModerationMarkElevatedOnFlaggedSideEffects(t *testing.T) {
+	cfg := defaultContentModerationConfig()
+	cfg.AutoBanEnabled = false
+	hashCache := &contentModerationTestHashCache{}
+	svc := NewContentModerationService(nil, &contentModerationTestRepo{}, hashCache, nil, nil, nil, nil)
+	uid := int64(99)
+	log := &ContentModerationLog{UserID: &uid, Flagged: true, Action: ContentModerationActionBlock, CreatedAt: time.Now()}
+	_ = svc.applyFlaggedAccountSideEffects(context.Background(), cfg, log)
+	known, elevated, err := hashCache.GetElevatedUserSampling(context.Background(), 99)
+	require.NoError(t, err)
+	require.True(t, known)
+	require.True(t, elevated)
+}
+
+
+func TestContentModerationGetStatus_ElevatedUsers(t *testing.T) {
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	raw, err := json.Marshal(cfg)
+	require.NoError(t, err)
+	uid := int64(9)
+	repo := &contentModerationTestRepo{logs: []ContentModerationLog{{
+		UserID: &uid, UserEmail: "aw@qq.com", Flagged: true, Action: ContentModerationActionCyberPolicy, CreatedAt: time.Now(),
+	}}}
+	hashCache := &contentModerationTestHashCache{elevated: map[int64]bool{9: true, 31: true, 7: false}}
+	userRepo := &contentModerationTestUserRepo{user: &User{ID: 9, Email: "aw@qq.com", Username: "阿无", Status: StatusActive}}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: string(raw),
+		}},
+		repo,
+		hashCache,
+		nil,
+		userRepo,
+		nil,
+		nil,
+	)
+	st, err := svc.GetStatus(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 2, st.ElevatedUserCount)
+	require.Len(t, st.ElevatedUsers, 2)
 }

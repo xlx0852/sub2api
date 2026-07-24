@@ -882,7 +882,7 @@
             <thead class="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-dark-800 dark:text-dark-400">
               <tr>
                 <th class="px-3 py-2 text-left">{{ t('admin.proxies.qualityTableTarget') }}</th>
-                <th class="px-3 py-2 text-left">{{ t('admin.proxies.qualityTableStatus') }}</th>
+                <th class="w-20 px-3 py-2 text-left">{{ t('admin.proxies.qualityTableStatus') }}</th>
                 <th class="px-3 py-2 text-left">HTTP</th>
                 <th class="px-3 py-2 text-left">{{ t('admin.proxies.qualityTableLatency') }}</th>
                 <th class="px-3 py-2 text-left">{{ t('admin.proxies.qualityTableMessage') }}</th>
@@ -890,9 +890,11 @@
             </thead>
             <tbody class="divide-y divide-gray-200 bg-white dark:divide-dark-700 dark:bg-dark-900">
               <tr v-for="item in qualityReport.items" :key="item.target">
-                <td class="px-3 py-2 text-gray-900 dark:text-white">{{ qualityTargetLabel(item.target) }}</td>
-                <td class="px-3 py-2">
-                  <span class="badge" :class="qualityStatusClass(item.status)">{{ qualityStatusLabel(item.status) }}</span>
+                <td class="px-3 py-2 text-gray-900 dark:text-white">
+                  <span class="inline-block max-w-[9rem] break-words leading-5">{{ qualityTargetLabel(item.target) }}</span>
+                </td>
+                <td class="w-20 px-3 py-2 align-middle">
+                  <span class="badge shrink-0 whitespace-nowrap" :class="qualityStatusClass(item.status)">{{ qualityStatusLabel(item.status) }}</span>
                 </td>
                 <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ item.http_status ?? '-' }}</td>
                 <td class="px-3 py-2 text-gray-600 dark:text-gray-300">

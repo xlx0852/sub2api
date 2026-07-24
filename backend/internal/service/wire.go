@@ -467,19 +467,32 @@ func ProvideIdempotencyCleanupService(repo IdempotencyRepository, cfg *config.Co
 func ProvideScheduledTestService(
 	planRepo ScheduledTestPlanRepository,
 	resultRepo ScheduledTestResultRepository,
+	accountRepo AccountRepository,
 ) *ScheduledTestService {
-	return NewScheduledTestService(planRepo, resultRepo)
+	return NewScheduledTestService(planRepo, resultRepo, accountRepo)
 }
 
 // ProvideScheduledTestRunnerService creates and starts ScheduledTestRunnerService.
 func ProvideScheduledTestRunnerService(
 	planRepo ScheduledTestPlanRepository,
+	accountRepo AccountRepository,
 	scheduledSvc *ScheduledTestService,
 	accountTestSvc *AccountTestService,
 	rateLimitSvc *RateLimitService,
 	cfg *config.Config,
 ) *ScheduledTestRunnerService {
-	svc := NewScheduledTestRunnerService(planRepo, scheduledSvc, accountTestSvc, rateLimitSvc, cfg)
+	svc := NewScheduledTestRunnerService(planRepo, accountRepo, scheduledSvc, accountTestSvc, rateLimitSvc, cfg)
+	// Auto-enable diagnostics for accounts that still have no plan.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if n, err := scheduledSvc.EnsureDefaultDiagnosticsPlansForAllActiveAccounts(ctx); err != nil {
+			// best-effort
+			_ = err
+		} else if n > 0 {
+			_ = n
+		}
+	}()
 	svc.Start()
 	return svc
 }

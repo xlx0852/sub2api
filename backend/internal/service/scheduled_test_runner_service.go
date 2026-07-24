@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,11 +20,14 @@ const (
 	scheduledTestDefaultClaimLease   = 12 * time.Minute
 	scheduledTestDefaultPlanTimeout  = 90 * time.Second
 	scheduledTestTickDelay           = 5 * time.Second
+	// Keep demotion shorter than the 5-minute probe cadence can recover from.
+	scheduledDiagnosticsDemoteDuration = 12 * time.Minute
 )
 
 // ScheduledTestRunnerService periodically scans due test plans and executes them.
 type ScheduledTestRunnerService struct {
 	planRepo       ScheduledTestPlanRepository
+	accountRepo    AccountRepository
 	scheduledSvc   *ScheduledTestService
 	accountTestSvc *AccountTestService
 	rateLimitSvc   *RateLimitService
@@ -37,6 +42,7 @@ type ScheduledTestRunnerService struct {
 // NewScheduledTestRunnerService creates a new runner.
 func NewScheduledTestRunnerService(
 	planRepo ScheduledTestPlanRepository,
+	accountRepo AccountRepository,
 	scheduledSvc *ScheduledTestService,
 	accountTestSvc *AccountTestService,
 	rateLimitSvc *RateLimitService,
@@ -44,6 +50,7 @@ func NewScheduledTestRunnerService(
 ) *ScheduledTestRunnerService {
 	return &ScheduledTestRunnerService{
 		planRepo:       planRepo,
+		accountRepo:    accountRepo,
 		scheduledSvc:   scheduledSvc,
 		accountTestSvc: accountTestSvc,
 		rateLimitSvc:   rateLimitSvc,
@@ -179,27 +186,151 @@ func (s *ScheduledTestRunnerService) releaseClaimedPlan(ctx context.Context, pla
 }
 
 func (s *ScheduledTestRunnerService) runOnePlan(parent context.Context, plan *ScheduledTestPlan) {
-	ctx, cancel := context.WithTimeout(parent, s.planTimeout())
+	// Whole multi-model chain shares one parent budget, with per-model timeouts.
+	ctx, cancel := context.WithTimeout(parent, s.planTimeout()*time.Duration(scheduledDiagnosticsMaxModels))
+	if d, ok := parent.Deadline(); ok {
+		// Never exceed parent batch deadline.
+		if time.Until(d) < s.planTimeout() {
+			cancel()
+			ctx, cancel = context.WithTimeout(parent, time.Until(d))
+		}
+	}
 	defer cancel()
 
-	result, err := s.accountTestSvc.RunTestBackground(ctx, plan.AccountID, plan.ModelID)
-	if err != nil {
-		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d RunTestBackground error: %v", plan.ID, err)
-		// Still advance schedule so a stuck plan does not thrash every tick after lease expiry.
-		s.finishPlanSchedule(context.Background(), plan)
-		return
-	}
+	result := s.runDiagnosticsChain(ctx, plan)
 
 	if err := s.scheduledSvc.SaveResult(context.Background(), plan.ID, plan.MaxResults, result); err != nil {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d SaveResult error: %v", plan.ID, err)
 	}
 
-	// Auto-recover account if test succeeded and auto_recover is enabled.
-	if result.Status == "success" && plan.AutoRecover {
-		s.tryRecoverAccount(context.Background(), plan.AccountID, plan.ID)
+	switch result.Status {
+	case "success":
+		if plan.AutoRecover {
+			s.tryRecoverAccount(context.Background(), plan.AccountID, plan.ID)
+		}
+	case "failed":
+		s.tryDemoteAccount(context.Background(), plan.AccountID, plan.ID, result.ErrorMessage)
 	}
 
 	s.finishPlanSchedule(context.Background(), plan)
+}
+
+func (s *ScheduledTestRunnerService) runDiagnosticsChain(ctx context.Context, plan *ScheduledTestPlan) *ScheduledTestResult {
+	startedAt := time.Now()
+	models := []string{strings.TrimSpace(plan.ModelID)}
+	if s.accountRepo != nil {
+		if account, err := s.accountRepo.GetByID(ctx, plan.AccountID); err == nil && account != nil {
+			models = ResolveScheduledDiagnosticsModels(account, plan.ModelID)
+		}
+	}
+	if len(models) == 0 {
+		models = []string{strings.TrimSpace(plan.ModelID)}
+	}
+
+	var (
+		attempts     []string
+		lastResult   *ScheduledTestResult
+		lastErrText  string
+		firstStarted = startedAt
+	)
+
+	for i, modelID := range models {
+		if ctx.Err() != nil {
+			lastErrText = ctx.Err().Error()
+			break
+		}
+		modelCtx, modelCancel := context.WithTimeout(ctx, s.planTimeout())
+		result, err := s.accountTestSvc.RunTestBackground(modelCtx, plan.AccountID, modelID)
+		modelCancel()
+		if err != nil {
+			msg := err.Error()
+			attempts = append(attempts, fmt.Sprintf("%s: error(%s)", modelID, truncateDiagText(msg, 160)))
+			lastErrText = msg
+			lastResult = &ScheduledTestResult{
+				Status:       "failed",
+				ErrorMessage: msg,
+				LatencyMs:    time.Since(startedAt).Milliseconds(),
+				StartedAt:    firstStarted,
+				FinishedAt:   time.Now(),
+			}
+			// Transport/setup errors: still try next model.
+			continue
+		}
+		if result == nil {
+			attempts = append(attempts, fmt.Sprintf("%s: empty_result", modelID))
+			continue
+		}
+		if firstStarted.IsZero() {
+			firstStarted = result.StartedAt
+		}
+		if result.Status == "success" {
+			prefix := ""
+			if i > 0 {
+				prefix = fmt.Sprintf("[diagnostics upgraded model=%s after %d failed attempt(s)]\n", modelID, i)
+				if len(attempts) > 0 {
+					prefix += "failed_models:\n- " + strings.Join(attempts, "\n- ") + "\n"
+				}
+			} else if modelID != "" && modelID != strings.TrimSpace(plan.ModelID) {
+				prefix = fmt.Sprintf("[diagnostics model=%s]\n", modelID)
+			}
+			result.ResponseText = prefix + result.ResponseText
+			if result.StartedAt.IsZero() {
+				result.StartedAt = firstStarted
+			}
+			return result
+		}
+
+		errText := strings.TrimSpace(result.ErrorMessage)
+		if errText == "" {
+			errText = "failed"
+		}
+		attempts = append(attempts, fmt.Sprintf("%s: %s", modelID, truncateDiagText(errText, 160)))
+		lastErrText = errText
+		lastResult = result
+	}
+
+	finishedAt := time.Now()
+	if lastResult == nil {
+		lastResult = &ScheduledTestResult{
+			Status:     "failed",
+			StartedAt:  firstStarted,
+			FinishedAt: finishedAt,
+			LatencyMs:  finishedAt.Sub(firstStarted).Milliseconds(),
+		}
+	}
+	lastResult.Status = "failed"
+	if lastResult.StartedAt.IsZero() {
+		lastResult.StartedAt = firstStarted
+	}
+	lastResult.FinishedAt = finishedAt
+	lastResult.LatencyMs = finishedAt.Sub(firstStarted).Milliseconds()
+
+	var b strings.Builder
+	if len(attempts) > 1 {
+		b.WriteString("all diagnostic models failed\n")
+		for _, item := range attempts {
+			b.WriteString("- ")
+			b.WriteString(item)
+			b.WriteByte('\n')
+		}
+	} else if len(attempts) == 1 {
+		// Keep a stable, parseable single-attempt format for the UI.
+		b.WriteString(attempts[0])
+	} else if lastErrText != "" {
+		b.WriteString(lastErrText)
+	} else {
+		b.WriteString("all diagnostic models failed")
+	}
+	lastResult.ErrorMessage = strings.TrimSpace(b.String())
+	return lastResult
+}
+
+func truncateDiagText(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
 }
 
 func (s *ScheduledTestRunnerService) finishPlanSchedule(ctx context.Context, plan *ScheduledTestPlan) {
@@ -239,4 +370,25 @@ func (s *ScheduledTestRunnerService) tryRecoverAccount(ctx context.Context, acco
 	if recovery.ClearedRateLimit {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d auto-recover: account=%d cleared rate-limit/runtime state", planID, accountID)
 	}
+	if recovery.ClearedSchedulable {
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d auto-recover: account=%d restored schedulable=true", planID, accountID)
+	}
+}
+
+func (s *ScheduledTestRunnerService) tryDemoteAccount(ctx context.Context, accountID int64, planID int64, errMsg string) {
+	if s.rateLimitSvc == nil {
+		return
+	}
+	reason := fmt.Sprintf("scheduled diagnostics failed (plan=%d): %s", planID, truncateDiagText(errMsg, 240))
+	if err := s.rateLimitSvc.DemoteAccountAfterFailedDiagnostics(ctx, accountID, scheduledDiagnosticsDemoteDuration, reason); err != nil {
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d auto-demote failed: %v", planID, err)
+		return
+	}
+	logger.LegacyPrintf(
+		"service.scheduled_test_runner",
+		"[ScheduledTestRunner] plan=%d auto-demote: account=%d temp_unschedulable for %s",
+		planID,
+		accountID,
+		scheduledDiagnosticsDemoteDuration,
+	)
 }

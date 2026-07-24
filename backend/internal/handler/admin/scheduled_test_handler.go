@@ -161,3 +161,23 @@ func (h *ScheduledTestHandler) ListResults(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, results)
 }
+
+// EnsureDefault POST /admin/accounts/:id/scheduled-test-plans/ensure-default
+// Ensures the account has an enabled default diagnostics plan.
+func (h *ScheduledTestHandler) EnsureDefault(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "invalid account id")
+		return
+	}
+	plan, created, err := h.scheduledTestSvc.EnsureDefaultDiagnosticsPlan(c.Request.Context(), accountID)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"created": created,
+		"plan":    plan,
+	})
+}
+

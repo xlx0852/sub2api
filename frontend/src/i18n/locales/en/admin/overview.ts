@@ -352,6 +352,19 @@ export default {
       invitesDescription: 'View site-wide inviter and invitee relationships',
       rebatesDescription: 'View recharge orders that generated affiliate rebates',
       transfersDescription: 'View affiliate quota transfers into account balance',
+      bind: {
+        title: 'Bind Invite Relationship',
+        action: 'Bind Invite',
+        hint: 'Link an inviter and invitee. Both users must be valid.',
+        inviterUserId: 'Inviter User ID',
+        inviteeUserId: 'Invitee User ID',
+        inviterPlaceholder: 'Enter inviter user ID',
+        inviteePlaceholder: 'Enter invitee user ID',
+        submit: 'Bind',
+        success: 'Invite relationship bound successfully',
+        invalidUserId: 'Please enter a valid user ID',
+        sameUser: 'Inviter and invitee cannot be the same user'
+      },
       errors: {
         loadFailed: 'Failed to load affiliate records'
       },
@@ -395,6 +408,7 @@ export default {
     users: {
       title: 'User Management',
       description: 'Manage users and their permissions',
+      passwordCopied: 'Password copied to clipboard',
       createUser: 'Create User',
       editUser: 'Edit User',
       deleteUser: 'Delete User',
@@ -771,6 +785,7 @@ export default {
       failedToCreate: 'Failed to create group',
       failedToUpdate: 'Failed to update group',
       failedToDelete: 'Failed to delete group',
+      failedToSave: 'Failed to save group',
       nameRequired: 'Please enter group name',
       rateMultipliers: 'Rate Multipliers',
       rateMultipliersTitle: 'Group Rate Multipliers',

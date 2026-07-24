@@ -1,21 +1,28 @@
 <template>
-  <BaseDialog
-    :show="show"
-    :title="t('admin.scheduledTests.title')"
-    width="wide"
+  <component
+    :is="embedded ? 'div' : BaseDialog"
+    v-bind="rootBind"
     @close="emit('close')"
   >
-    <div class="space-y-4">
-      <!-- Add Plan Button -->
-      <div class="flex items-center justify-between">
-        <p class="text-sm text-gray-500 dark:text-gray-400">
-          {{ t('admin.scheduledTests.title') }}
-        </p>
+    <div :class="embedded ? 'space-y-2' : 'space-y-4'">
+      <!-- Header / Add Plan -->
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0">
+          <p :class="embedded ? 'text-xs font-semibold text-gray-900 dark:text-white' : 'text-sm text-gray-500 dark:text-gray-400'">
+            {{ t('admin.scheduledTests.title') }}
+          </p>
+          <p v-if="embedded" class="mt-0.5 text-[11px] leading-4 text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.usageDetails.scheduledTestsManageHint') }}
+          </p>
+        </div>
         <button
+          type="button"
           @click="showAddForm = !showAddForm"
-          class="btn btn-primary flex items-center gap-1.5 text-sm"
+          :class="embedded
+            ? 'inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-primary-600 px-2 text-[11px] font-medium text-white transition-colors hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600'
+            : 'btn btn-primary flex items-center gap-1.5 text-sm'"
         >
-          <Icon name="plus" size="sm" :stroke-width="2" />
+          <Icon name="plus" :size="embedded ? 'xs' : 'sm'" :stroke-width="2" />
           {{ t('admin.scheduledTests.addPlan') }}
         </button>
       </div>
@@ -127,98 +134,118 @@
       </div>
 
       <!-- Loading State -->
-      <div v-if="loading" class="flex items-center justify-center py-8">
-        <Icon name="refresh" size="md" class="animate-spin text-gray-400" :stroke-width="2" />
-        <span class="ml-2 text-sm text-gray-500">{{ t('common.loading') }}...</span>
+      <div v-if="displayLoading" :class="embedded ? 'flex items-center justify-center py-4' : 'flex items-center justify-center py-8'">
+        <Icon name="refresh" :size="embedded ? 'sm' : 'md'" class="animate-spin text-gray-400" :stroke-width="2" />
+        <span class="ml-2 text-xs text-gray-500 sm:text-sm">{{ t('common.loading') }}...</span>
       </div>
 
       <!-- Empty State -->
       <div
-        v-else-if="plans.length === 0"
-        class="rounded-xl border border-dashed border-gray-300 py-10 text-center dark:border-dark-600"
+        v-else-if="displayPlans.length === 0"
+        :class="embedded
+          ? 'rounded-lg border border-dashed border-gray-300 py-4 text-center dark:border-dark-600'
+          : 'rounded-xl border border-dashed border-gray-300 py-10 text-center dark:border-dark-600'"
       >
-        <Icon name="calendar" size="lg" class="mx-auto mb-2 text-gray-400" :stroke-width="1.5" />
-        <p class="text-sm text-gray-500 dark:text-gray-400">
+        <Icon v-if="!embedded" name="calendar" size="lg" class="mx-auto mb-2 text-gray-400" :stroke-width="1.5" />
+        <p :class="embedded ? 'text-xs text-gray-500 dark:text-gray-400' : 'text-sm text-gray-500 dark:text-gray-400'">
           {{ t('admin.scheduledTests.noPlans') }}
         </p>
       </div>
 
       <!-- Plans List -->
-      <div v-else class="space-y-3">
+      <div v-else :class="embedded ? 'space-y-2' : 'space-y-3'">
         <div
-          v-for="plan in plans"
+          v-for="plan in displayPlans"
           :key="plan.id"
-          class="rounded-xl border border-gray-200 bg-white transition-all dark:border-dark-600 dark:bg-dark-800"
+          :class="embedded
+            ? 'rounded-lg border border-gray-200 bg-white dark:border-dark-600 dark:bg-dark-800'
+            : 'rounded-xl border border-gray-200 bg-white transition-all dark:border-dark-600 dark:bg-dark-800'"
         >
           <!-- Plan Header -->
           <div
-            class="flex cursor-pointer items-center justify-between px-4 py-3"
-            @click="toggleExpand(plan.id)"
+            class="flex items-center justify-between gap-2"
+            :class="embedded ? 'px-2.5 py-2' : 'cursor-pointer px-3 py-2.5 sm:px-4 sm:py-3'"
+            @click="embedded ? undefined : toggleExpand(plan.id)"
           >
-            <div class="flex flex-1 items-center gap-4">
+            <div class="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
               <!-- Model -->
-              <div class="min-w-0">
-                <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {{ plan.model_id }}
+              <div class="min-w-0 flex-1">
+                <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <div class="truncate text-xs font-semibold text-gray-900 dark:text-gray-100 sm:text-sm">
+                    {{ plan.model_id }}
+                  </div>
+                  <span
+                    v-if="plan.auto_recover"
+                    class="inline-flex h-5 shrink-0 items-center rounded-full bg-emerald-100 px-1.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400"
+                  >
+                    {{ t('admin.scheduledTests.autoRecover') }}
+                  </span>
                 </div>
-                <div class="mt-0.5 font-mono text-xs text-gray-500 dark:text-gray-400">
+                <div class="mt-0.5 font-mono text-[11px] text-gray-500 dark:text-gray-400">
                   {{ plan.cron_expression }}
+                </div>
+                <div
+                  v-if="embedded && (plan.last_run_at || plan.next_run_at)"
+                  class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-gray-400 dark:text-gray-500"
+                >
+                  <span v-if="plan.last_run_at">
+                    {{ t('admin.scheduledTests.lastRun') }}
+                    <span class="text-gray-500 dark:text-gray-400">{{ formatRelativeTime(plan.last_run_at) }}</span>
+                  </span>
+                  <span v-if="plan.next_run_at">
+                    {{ t('admin.scheduledTests.nextRun') }}
+                    <span class="text-gray-500 dark:text-gray-400">{{ formatRelativeTime(plan.next_run_at) }}</span>
+                  </span>
                 </div>
               </div>
 
               <!-- Enabled Toggle -->
-              <div class="flex items-center gap-1.5" @click.stop>
+              <div class="flex shrink-0 items-center gap-1" @click.stop>
                 <Toggle
                   :model-value="plan.enabled"
                   @update:model-value="(val: boolean) => handleToggleEnabled(plan, val)"
                 />
-                <span class="text-xs text-gray-500 dark:text-gray-400">
+                <span v-if="!embedded" class="text-xs text-gray-500 dark:text-gray-400">
                   {{ plan.enabled ? t('admin.scheduledTests.enabled') : '' }}
                 </span>
               </div>
-
-              <!-- Auto Recover Badge -->
-              <span
-                v-if="plan.auto_recover"
-                class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400"
-              >
-                {{ t('admin.scheduledTests.autoRecover') }}
-              </span>
             </div>
 
-            <div class="flex items-center gap-3">
-              <!-- Last Run -->
-              <div v-if="plan.last_run_at" class="hidden text-right text-xs text-gray-500 dark:text-gray-400 sm:block">
+            <div class="flex shrink-0 items-center gap-1.5 sm:gap-3">
+              <!-- Last/Next Run (dialog mode) -->
+              <div v-if="!embedded && plan.last_run_at" class="hidden text-right text-xs text-gray-500 dark:text-gray-400 sm:block">
                 <div>{{ t('admin.scheduledTests.lastRun') }}</div>
-                <div>{{ formatDateTime(plan.last_run_at) }}</div>
+                <div>{{ formatRelativeTime(plan.last_run_at) }}</div>
               </div>
 
-              <!-- Next Run -->
-              <div v-if="plan.next_run_at" class="hidden text-right text-xs text-gray-500 dark:text-gray-400 sm:block">
+              <div v-if="!embedded && plan.next_run_at" class="hidden text-right text-xs text-gray-500 dark:text-gray-400 sm:block">
                 <div>{{ t('admin.scheduledTests.nextRun') }}</div>
-                <div>{{ formatDateTime(plan.next_run_at) }}</div>
+                <div>{{ formatRelativeTime(plan.next_run_at) }}</div>
               </div>
 
               <!-- Actions -->
-              <div class="flex items-center gap-1" @click.stop>
+              <div class="flex items-center gap-0.5" @click.stop>
                 <button
+                  type="button"
                   @click="startEdit(plan)"
-                  class="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-500 dark:hover:bg-blue-900/20"
+                  :class="embedded ? 'rounded-md p-1 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-500 dark:hover:bg-blue-900/20' : 'rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-500 dark:hover:bg-blue-900/20'"
                   :title="t('admin.scheduledTests.editPlan')"
                 >
-                  <Icon name="edit" size="sm" :stroke-width="2" />
+                  <Icon name="edit" :size="embedded ? 'xs' : 'sm'" :stroke-width="2" />
                 </button>
                 <button
+                  type="button"
                   @click="confirmDeletePlan(plan)"
-                  class="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+                  :class="embedded ? 'rounded-md p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20' : 'rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20'"
                   :title="t('admin.scheduledTests.deletePlan')"
                 >
-                  <Icon name="trash" size="sm" :stroke-width="2" />
+                  <Icon name="trash" :size="embedded ? 'xs' : 'sm'" :stroke-width="2" />
                 </button>
               </div>
 
               <!-- Expand indicator -->
               <Icon
+                v-if="!embedded"
                 name="chevronDown"
                 size="sm"
                 :class="[
@@ -336,9 +363,9 @@
             </div>
           </div>
 
-          <!-- Expanded Results Section -->
+          <!-- Expanded Results Section (dialog mode only; drawer shows history separately) -->
           <div
-            v-if="expandedPlanId === plan.id"
+            v-if="!embedded && expandedPlanId === plan.id"
             class="border-t border-gray-100 px-4 py-3 dark:border-dark-700"
           >
             <div class="mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">
@@ -396,7 +423,7 @@
 
                   <!-- Started At -->
                   <span class="text-xs text-gray-400">
-                    {{ formatDateTime(result.started_at) }}
+                    {{ formatRelativeTime(result.started_at) }}
                   </span>
                 </div>
 
@@ -459,11 +486,11 @@
       @confirm="handleDelete"
       @cancel="showDeleteConfirm = false"
     />
-  </BaseDialog>
+  </component>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -474,27 +501,84 @@ import Toggle from '@/components/common/Toggle.vue'
 import { Icon } from '@/components/icons'
 import { adminAPI } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
-import { formatDateTime } from '@/utils/format'
+import { formatRelativeTime } from '@/utils/format'
 import type { ScheduledTestPlan, ScheduledTestResult } from '@/types'
 
 const { t } = useI18n()
 const appStore = useAppStore()
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   show: boolean
   accountId: number | null
-  modelOptions: SelectOption[]
-}>()
+  modelOptions?: SelectOption[]
+  embedded?: boolean
+  /** Optional externally loaded plans (embedded drawer shares history fetch). */
+  plans?: ScheduledTestPlan[] | null
+  loading?: boolean
+}>(), {
+  modelOptions: () => [],
+  embedded: false,
+  plans: null,
+  loading: false
+})
 
 const emit = defineEmits<{
   (e: 'close'): void
+  (e: 'changed'): void
 }>()
+
+const localModelOptions = ref<SelectOption[]>([])
+const modelOptions = computed<SelectOption[]>(() =>
+  (props.modelOptions && props.modelOptions.length > 0)
+    ? props.modelOptions
+    : localModelOptions.value
+)
+
+const rootBind = computed(() => {
+  if (props.embedded) {
+    return { class: 'space-y-2' }
+  }
+  return {
+    show: props.show,
+    title: t('admin.scheduledTests.title'),
+    width: 'wide'
+  }
+})
+
+const loadModelOptions = async () => {
+  if (!props.accountId) {
+    localModelOptions.value = []
+    return
+  }
+  if (props.modelOptions && props.modelOptions.length > 0) return
+  try {
+    const models = await adminAPI.accounts.getAvailableModels(props.accountId)
+    localModelOptions.value = (models || []).map((m: any) => ({
+      value: m.id,
+      label: m.display_name || m.id
+    }))
+  } catch {
+    localModelOptions.value = []
+  }
+}
 
 // State
 const loading = ref(false)
 const creating = ref(false)
 const loadingResults = ref(false)
 const plans = ref<ScheduledTestPlan[]>([])
+const isPlansControlled = computed(() => Array.isArray(props.plans))
+const displayPlans = computed<ScheduledTestPlan[]>(() => {
+  if (isPlansControlled.value) return props.plans as ScheduledTestPlan[]
+  return plans.value
+})
+const displayLoading = computed(() => {
+  // Embedded + controlled by parent: trust parent loading flag exclusively.
+  if (props.embedded && isPlansControlled.value) return Boolean(props.loading)
+  // Embedded without plans yet: show loading while parent may still be fetching.
+  if (props.embedded && props.loading) return true
+  return loading.value
+})
 const results = ref<ScheduledTestResult[]>([])
 const expandedPlanId = ref<number | null>(null)
 const expandedResultIds = reactive(new Set<number>())
@@ -527,21 +611,33 @@ const resetNewPlan = () => {
   newPlan.auto_recover = false
 }
 
-// Load plans when dialog opens
+// Load plans when dialog opens / embedded section becomes active
 watch(
-  () => props.show,
-  async (visible) => {
-    if (visible && props.accountId) {
-      await loadPlans()
-    } else {
-      plans.value = []
+  () => [props.show, props.accountId] as const,
+  async ([visible, accountId]) => {
+    if (visible && accountId) {
+      const tasks: Promise<unknown>[] = [loadModelOptions()]
+      // Embedded mode is always parent-controlled (even while plans still loading).
+      if (!props.embedded) {
+        tasks.unshift(loadPlans())
+      }
+      await Promise.all(tasks)
+      return
+    }
+    if (!visible) {
+      if (!props.embedded) {
+        plans.value = []
+        localModelOptions.value = []
+      }
       results.value = []
       expandedPlanId.value = null
       expandedResultIds.clear()
       showAddForm.value = false
       showDeleteConfirm.value = false
+      editingPlanId.value = null
     }
-  }
+  },
+  { immediate: true }
 )
 
 const loadPlans = async () => {
@@ -573,6 +669,7 @@ const handleCreate = async () => {
     showAddForm.value = false
     resetNewPlan()
     await loadPlans()
+    emit('changed')
   } catch (error: any) {
     appStore.showError(error?.message || 'Failed to create plan')
   } finally {
@@ -588,6 +685,7 @@ const handleToggleEnabled = async (plan: ScheduledTestPlan, enabled: boolean) =>
       plans.value[index] = updated
     }
     appStore.showSuccess(t('admin.scheduledTests.updateSuccess'))
+    emit('changed')
   } catch (error: any) {
     appStore.showError(error?.message || 'Failed to update plan')
   }
@@ -623,6 +721,7 @@ const handleEdit = async () => {
     }
     appStore.showSuccess(t('admin.scheduledTests.updateSuccess'))
     editingPlanId.value = null
+    emit('changed')
   } catch (error: any) {
     appStore.showError(error?.message || 'Failed to update plan')
   } finally {
@@ -641,6 +740,7 @@ const handleDelete = async () => {
     await adminAPI.scheduledTests.delete(deletingPlan.value.id)
     appStore.showSuccess(t('admin.scheduledTests.deleteSuccess'))
     plans.value = plans.value.filter((p) => p.id !== deletingPlan.value!.id)
+    emit('changed')
     if (expandedPlanId.value === deletingPlan.value.id) {
       expandedPlanId.value = null
       results.value = []

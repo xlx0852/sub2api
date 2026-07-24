@@ -12,18 +12,21 @@ var scheduledTestCronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom 
 
 // ScheduledTestService provides CRUD operations for scheduled test plans and results.
 type ScheduledTestService struct {
-	planRepo   ScheduledTestPlanRepository
-	resultRepo ScheduledTestResultRepository
+	planRepo    ScheduledTestPlanRepository
+	resultRepo  ScheduledTestResultRepository
+	accountRepo AccountRepository
 }
 
 // NewScheduledTestService creates a new ScheduledTestService.
 func NewScheduledTestService(
 	planRepo ScheduledTestPlanRepository,
 	resultRepo ScheduledTestResultRepository,
+	accountRepo AccountRepository,
 ) *ScheduledTestService {
 	return &ScheduledTestService{
-		planRepo:   planRepo,
-		resultRepo: resultRepo,
+		planRepo:    planRepo,
+		resultRepo:  resultRepo,
+		accountRepo: accountRepo,
 	}
 }
 
@@ -83,6 +86,74 @@ func (s *ScheduledTestService) SaveResult(ctx context.Context, planID int64, max
 		return err
 	}
 	return s.resultRepo.PruneOldResults(ctx, planID, maxResults)
+}
+
+// EnsureDefaultDiagnosticsPlan creates a default enabled plan when the account has none.
+// If plans already exist, it returns the first one without modification.
+func (s *ScheduledTestService) EnsureDefaultDiagnosticsPlan(ctx context.Context, accountID int64) (*ScheduledTestPlan, bool, error) {
+	if accountID <= 0 {
+		return nil, false, fmt.Errorf("invalid account id")
+	}
+	existing, err := s.planRepo.ListByAccountID(ctx, accountID)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(existing) > 0 {
+		return existing[0], false, nil
+	}
+
+	var account *Account
+	if s.accountRepo != nil {
+		account, err = s.accountRepo.GetByID(ctx, accountID)
+		if err != nil {
+			return nil, false, err
+		}
+	}
+
+	plan := &ScheduledTestPlan{
+		AccountID:      accountID,
+		ModelID:        DefaultScheduledDiagnosticsModel(account),
+		CronExpression: DefaultScheduledDiagnosticsCron(accountID),
+		Enabled:        true,
+		MaxResults:     50,
+		AutoRecover:    true,
+	}
+	created, err := s.CreatePlan(ctx, plan)
+	if err != nil {
+		return nil, false, err
+	}
+	return created, true, nil
+}
+
+// EnsureDefaultDiagnosticsPlansForAllActiveAccounts enables diagnostics for accounts missing plans.
+func (s *ScheduledTestService) EnsureDefaultDiagnosticsPlansForAllActiveAccounts(ctx context.Context) (created int, err error) {
+	if s.accountRepo == nil {
+		return 0, fmt.Errorf("account repository unavailable")
+	}
+	accounts, err := s.accountRepo.ListActive(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for i := range accounts {
+		account := accounts[i]
+		if account.ID <= 0 {
+			continue
+		}
+		if _, made, ensureErr := s.EnsureDefaultDiagnosticsPlan(ctx, account.ID); ensureErr != nil {
+			// Continue other accounts; return last error summary via count only.
+			continue
+		} else if made {
+			created++
+		}
+	}
+	return created, nil
+}
+
+func (s *ScheduledTestService) ListDiagnosticsStatusByAccountIDs(ctx context.Context, accountIDs []int64) (map[int64]ScheduledDiagnosticsStatus, error) {
+	if s.planRepo == nil {
+		return map[int64]ScheduledDiagnosticsStatus{}, nil
+	}
+	return s.planRepo.ListDiagnosticsStatusByAccountIDs(ctx, accountIDs)
 }
 
 func computeNextRun(cronExpr string, from time.Time) (time.Time, error) {
