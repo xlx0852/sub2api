@@ -1050,6 +1050,7 @@ export interface AccountUsageInfo {
   grok_local_usage?: WindowStats | null
   subscription_tier?: string
   subscription_tier_raw?: string
+  subscription_kind?: string
   /** Official billing from cli-chat-proxy (SuperGrok weekly / products / monthly credits). */
   grok_billing?: {
     period_type?: string

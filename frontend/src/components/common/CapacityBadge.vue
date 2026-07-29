@@ -7,6 +7,7 @@ const props = defineProps<{
   colorClass?: string
   tooltip?: string
   suffix?: string
+  compact?: boolean
 }>()
 
 const automaticColorClass = computed(() => {
@@ -27,17 +28,22 @@ const automaticColorClass = computed(() => {
 <template>
   <span
     :class="[
-      'inline-flex min-h-7 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-xs font-medium leading-none',
+      compact
+        ? 'inline-flex min-h-5 items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] font-medium leading-none'
+        : 'inline-flex min-h-7 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-xs font-medium leading-none',
       automaticColorClass
     ]"
     :title="tooltip"
   >
-    <span class="inline-flex h-3 w-3 shrink-0 items-center justify-center [&>svg]:h-3 [&>svg]:w-3">
+    <span
+      class="inline-flex shrink-0 items-center justify-center"
+      :class="compact ? 'h-2.5 w-2.5 [&>svg]:h-2.5 [&>svg]:w-2.5' : 'h-3 w-3 [&>svg]:h-3 [&>svg]:w-3'"
+    >
       <slot />
     </span>
     <span class="font-mono tabular-nums">{{ current }}</span>
     <span class="opacity-45">/</span>
     <span class="font-mono tabular-nums">{{ max }}</span>
-    <span v-if="suffix" class="text-[10px] opacity-60">{{ suffix }}</span>
+    <span v-if="suffix" :class="compact ? 'text-[9px]' : 'text-[10px]'" class="opacity-60">{{ suffix }}</span>
   </span>
 </template>

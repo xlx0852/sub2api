@@ -498,6 +498,163 @@ describe('AccountUsageCell', () => {
 	expect(wrapper.text()).toContain('7d|0|27700')
   })
 
+  it('Kimi OAuth 会展示官方 5h 和 7d 额度窗口', async () => {
+    getUsage.mockResolvedValue({
+      five_hour: {
+        utilization: 42,
+        resets_at: '2026-07-29T17:00:00Z',
+        remaining_seconds: 3600
+      },
+      seven_day: {
+        utilization: 13,
+        resets_at: '2026-08-01T12:00:00Z',
+        remaining_seconds: 3600
+      },
+      subscription_tier: 'SuperKimi'
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({
+          id: 99101,
+          platform: 'kimi',
+          type: 'oauth',
+          credentials: { device_id: 'kimi-device' },
+          extra: {}
+        })
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization', 'resetsAt', 'color'],
+            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|{{ resetsAt }}</div>'
+          },
+          QuotaActionButton: {
+            emits: ['click'],
+            template: '<button class="quota-action" @click="$emit(\'click\')"><slot /></button>'
+          },
+          AccountQuotaInfo: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(getUsage).toHaveBeenCalledWith(99101)
+    expect(wrapper.text()).toContain('5h|42|2026-07-29T17:00:00Z')
+    expect(wrapper.text()).toContain('7d|13|2026-08-01T12:00:00Z')
+  })
+
+  it('Kimi 窗口会展示请求数并按官方利用率预估满额消耗', async () => {
+    getUsage.mockResolvedValue({
+      five_hour: {
+        utilization: 0,
+        resets_at: '2026-07-29T17:00:00Z',
+        window_stats: {
+          requests: 774,
+          tokens: 111_300_000,
+          cost: 114.56,
+          user_cost: 13.75
+        }
+      },
+      seven_day: {
+        utilization: 5,
+        resets_at: '2026-08-01T12:00:00Z',
+        window_stats: {
+          requests: 773,
+          tokens: 111_300_000,
+          cost: 114.39,
+          user_cost: 13.73
+        }
+      }
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id: 99104, platform: 'kimi', type: 'oauth', extra: {} })
+      },
+      global: {
+        stubs: {
+          QuotaActionButton: true,
+          AccountQuotaInfo: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-testid="usage-stat-volume"]')).toHaveLength(3)
+    expect(wrapper.text()).toContain('774 req')
+    expect(wrapper.text()).toContain('773 req')
+    expect(wrapper.find('[data-testid="usage-full-estimate"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="usage-full-estimate"]').text()).toContain('15.5K req')
+  })
+
+  it('Kimi 手动刷新会绕过前端缓存请求 active usage', async () => {
+    getUsage
+      .mockResolvedValueOnce({
+        five_hour: { utilization: 10, resets_at: '2099-07-29T17:00:00Z' },
+        seven_day: { utilization: 5, resets_at: '2099-08-01T12:00:00Z' }
+      })
+      .mockResolvedValueOnce({
+        five_hour: { utilization: 20, resets_at: '2099-07-29T17:00:00Z' },
+        seven_day: { utilization: 15, resets_at: '2099-08-01T12:00:00Z' }
+      })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id: 99102, platform: 'kimi', type: 'oauth', extra: {} })
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization', 'resetsAt', 'color'],
+            template: '<div class="usage-bar">{{ label }}|{{ utilization }}</div>'
+          },
+          QuotaActionButton: {
+            emits: ['click'],
+            template: '<button class="quota-action" @click="$emit(\'click\')"><slot /></button>'
+          },
+          AccountQuotaInfo: true
+        }
+      }
+    })
+
+    await flushPromises()
+    expect(getUsage).toHaveBeenCalledTimes(1)
+
+    await wrapper.find('button.quota-action').trigger('click')
+    await flushPromises()
+
+    expect(getUsage).toHaveBeenCalledTimes(2)
+    expect(getUsage).toHaveBeenLastCalledWith(99102, 'active', true)
+    expect(wrapper.text()).toContain('5h|20')
+  })
+
+  it('Kimi 额度查询返回 401 时显示重新授权状态', async () => {
+    getUsage.mockResolvedValue({
+      needs_reauth: true,
+      error_code: 'unauthenticated',
+      error: 'usage API error'
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id: 99103, platform: 'kimi', type: 'oauth', extra: {} })
+      },
+      global: {
+        stubs: {
+          QuotaActionButton: true,
+          AccountQuotaInfo: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('admin.accounts.needsReauth')
+  })
+
   it('OpenAI OAuth 在行数据刷新但仍无 codex 快照时会重新拉取 usage', async () => {
 	getUsage
 	  .mockResolvedValueOnce({

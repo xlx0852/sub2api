@@ -139,7 +139,15 @@ const readPlan = (account: Account, usageInfo: AccountUsageInfo | null): string 
     extra?.plan_type
   ]
   const plan = candidates.find(value => typeof value === 'string' && value.trim())
-  return typeof plan === 'string' ? plan.trim() : null
+  if (typeof plan !== 'string') return null
+  const normalized = plan.trim()
+  if (account.platform === 'kimi' && normalized.startsWith('LEVEL_')) {
+    return normalized
+      .slice('LEVEL_'.length)
+      .toLowerCase()
+      .replace(/(^|_)([a-z])/g, (_, prefix: string, letter: string) => `${prefix ? ' ' : ''}${letter.toUpperCase()}`)
+  }
+  return normalized
 }
 
 export const buildAccountUsagePresentation = ({
@@ -151,7 +159,7 @@ export const buildAccountUsagePresentation = ({
   const windows: AccountUsageWindowPresentation[] = []
   const diagnostics: AccountUsageDiagnostic[] = []
 
-  if (account.platform === 'openai' || account.platform === 'anthropic') {
+  if (account.platform === 'openai' || account.platform === 'anthropic' || account.platform === 'kimi') {
     addUsageProgress(windows, 'five-hour', '5h', usageInfo?.five_hour || null, 'indigo')
     addUsageProgress(windows, 'seven-day', '7d', usageInfo?.seven_day || null, 'emerald')
     addUsageProgress(windows, 'seven-day-sonnet', '7d S', usageInfo?.seven_day_sonnet || null, 'purple')

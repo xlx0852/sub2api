@@ -4,7 +4,19 @@ import (
 	"fmt"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
 )
+
+func KimiDefaultModelIDs() []string {
+	models := modelcatalog.KimiModels()
+	ids := make([]string, 0, len(models))
+	for _, model := range models {
+		if model.ID != "" {
+			ids = append(ids, model.ID)
+		}
+	}
+	return ids
+}
 
 // Status constants
 const (

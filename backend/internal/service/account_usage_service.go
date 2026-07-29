@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	httppool "github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
 	openaipkg "github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -109,6 +110,22 @@ type antigravityUsageCache struct {
 	timestamp time.Time
 }
 
+// kimiUsageCache stores successful and degraded Kimi quota responses. Degraded
+// responses are cached briefly to avoid retry storms while still recovering
+// without a manual action.
+type kimiUsageCache struct {
+	usageInfo *UsageInfo
+	timestamp time.Time
+}
+
+// kimiWindowStatsCache 缓存 Kimi 额度窗口对应的本地请求统计。
+// 官方额度缓存 10 分钟，本站请求统计单独保持 1 分钟刷新，避免抽屉内的请求数长期不变。
+type kimiWindowStatsCache struct {
+	fiveHour  *WindowStats
+	sevenDay  *WindowStats
+	timestamp time.Time
+}
+
 const (
 	apiCacheTTL             = 3 * time.Minute
 	apiErrorCacheTTL        = 1 * time.Minute        // 负缓存 TTL：429 等错误缓存 1 分钟
@@ -117,6 +134,9 @@ const (
 	windowStatsCacheTTL     = 1 * time.Minute
 	openAIProbeCacheTTL     = 10 * time.Minute
 	openAICodexProbeVersion = "0.144.1"
+	kimiQuotaCacheTTL       = 10 * time.Minute
+	kimiQuotaErrorTTL       = 1 * time.Minute
+	kimiWindowStatsCacheTTL = 1 * time.Minute
 )
 
 // UsageCache 封装账户使用量相关的缓存
@@ -127,6 +147,9 @@ type UsageCache struct {
 	apiFlight         singleflight.Group // 防止同一账号的并发请求击穿缓存（Anthropic）
 	antigravityFlight singleflight.Group // 防止同一 Antigravity 账号的并发请求击穿缓存
 	openAIProbeCache  sync.Map           // accountID -> time.Time
+	kimiQuotaCache    sync.Map           // accountID -> *kimiUsageCache
+	kimiQuotaFlight   singleflight.Group // 防止同一 Kimi 账号的并发额度查询
+	kimiWindowStats   sync.Map           // accountID -> *kimiWindowStatsCache
 }
 
 // NewUsageCache 创建 UsageCache 实例
@@ -248,6 +271,7 @@ type UsageInfo struct {
 	// Antigravity 账号级信息
 	SubscriptionTier    string `json:"subscription_tier,omitempty"`     // 归一化订阅等级: FREE/PRO/ULTRA/UNKNOWN
 	SubscriptionTierRaw string `json:"subscription_tier_raw,omitempty"` // 上游原始订阅等级名称
+	SubscriptionKind    string `json:"subscription_kind,omitempty"`     // 上游订阅来源/购买类型
 
 	// Antigravity 模型详细能力信息（与 antigravity_quota 同 key）
 	AntigravityQuotaDetails map[string]*AntigravityModelDetail `json:"antigravity_quota_details,omitempty"`
@@ -327,6 +351,7 @@ type AccountUsageService struct {
 	antigravityQuotaFetcher *AntigravityQuotaFetcher
 	grokQuotaFetcher        *GrokQuotaFetcher
 	openAIQuotaService      *OpenAIQuotaService
+	kimiQuotaService        KimiQuotaQuerier
 	cache                   *UsageCache
 	identityCache           IdentityCache
 	tlsFPProfileService     *TLSFingerprintProfileService
@@ -361,8 +386,16 @@ func NewAccountUsageService(
 	}
 }
 
+// SetKimiQuotaService injects the Kimi quota client while keeping existing
+// constructor call sites source compatible.
+func (s *AccountUsageService) SetKimiQuotaService(service KimiQuotaQuerier) {
+	if s != nil {
+		s.kimiQuotaService = service
+	}
+}
+
 // GetUsage 获取账号使用量
-// OAuth账号: 调用Anthropic API获取真实数据（需要profile scope），API响应缓存10分钟，窗口统计缓存1分钟
+// OAuth账号: 按平台查询官方额度（Anthropic/OpenAI/Kimi 等），并在服务端做缓存；窗口统计缓存1分钟
 // Setup Token账号: 根据session_window推算5h窗口，7d数据不可用（没有profile scope）
 // API Key账号: 不支持usage查询
 func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, force ...bool) (*UsageInfo, error) {
@@ -376,6 +409,14 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 	if account.Platform == PlatformOpenAI && account.Type == AccountTypeOAuth {
 		usage, err := s.getOpenAIUsage(ctx, account, forceProbe)
 		if err == nil {
+			s.tryClearRecoverableAccountError(ctx, account)
+		}
+		return usage, err
+	}
+
+	if account.Platform == PlatformKimi && account.Type == AccountTypeOAuth {
+		usage, err := s.getKimiUsage(ctx, account, forceProbe)
+		if err == nil && usage != nil && usage.Error == "" {
 			s.tryClearRecoverableAccountError(ctx, account)
 		}
 		return usage, err
@@ -1005,6 +1046,194 @@ func (s *AccountUsageService) getGrokUsage(ctx context.Context, account *Account
 
 	enrichUsageWithAccountError(usage, account)
 	return usage, nil
+}
+
+func (s *AccountUsageService) getKimiUsage(ctx context.Context, account *Account, force bool) (*UsageInfo, error) {
+	now := time.Now()
+	if account == nil || s.kimiQuotaService == nil {
+		return &UsageInfo{Source: "active", UpdatedAt: &now}, nil
+	}
+	if s.cache == nil {
+		quota, err := s.kimiQuotaService.QueryUsage(ctx, account.ID)
+		if err != nil {
+			return buildKimiDegradedUsage(err), nil
+		}
+		usage := buildKimiUsageInfo(quota, now)
+		s.addKimiWindowStats(ctx, account, usage)
+		return usage, nil
+	}
+
+	if !force {
+		if cached, ok := s.cache.kimiQuotaCache.Load(account.ID); ok {
+			if entry, ok := cached.(*kimiUsageCache); ok && time.Since(entry.timestamp) < kimiUsageCacheTTLFor(entry.usageInfo) {
+				usage := cloneKimiUsageInfo(entry.usageInfo, time.Now())
+				s.addKimiWindowStats(ctx, account, usage)
+				return usage, nil
+			}
+		}
+	}
+
+	flightKey := fmt.Sprintf("kimi-usage:%d", account.ID)
+	result, flightErr, _ := s.cache.kimiQuotaFlight.Do(flightKey, func() (any, error) {
+		if !force {
+			if cached, ok := s.cache.kimiQuotaCache.Load(account.ID); ok {
+				if entry, ok := cached.(*kimiUsageCache); ok && time.Since(entry.timestamp) < kimiUsageCacheTTLFor(entry.usageInfo) {
+					return cloneKimiUsageInfo(entry.usageInfo, time.Now()), nil
+				}
+			}
+		}
+
+		fetchCtx, cancel := context.WithTimeout(context.Background(), kimiQuotaUpstreamTimeout+5*time.Second)
+		defer cancel()
+		quota, queryErr := s.kimiQuotaService.QueryUsage(fetchCtx, account.ID)
+		if queryErr != nil {
+			degraded := buildKimiDegradedUsage(queryErr)
+			s.cache.kimiQuotaCache.Store(account.ID, &kimiUsageCache{usageInfo: degraded, timestamp: time.Now()})
+			return degraded, nil
+		}
+		usage := buildKimiUsageInfo(quota, time.Now())
+		s.cache.kimiQuotaCache.Store(account.ID, &kimiUsageCache{usageInfo: usage, timestamp: time.Now()})
+		return usage, nil
+	})
+	if flightErr != nil {
+		return nil, flightErr
+	}
+	usage, ok := result.(*UsageInfo)
+	if !ok || usage == nil {
+		return &UsageInfo{Source: "active", UpdatedAt: &now}, nil
+	}
+	usage = cloneKimiUsageInfo(usage, time.Now())
+	s.addKimiWindowStats(ctx, account, usage)
+	return usage, nil
+}
+
+// addKimiWindowStats attaches local request/token/cost statistics to the
+// official Kimi windows. The official endpoint reports quota utilization but
+// not the number of requests routed through this Sub2API account, so those
+// figures must come from usage_logs.
+func (s *AccountUsageService) addKimiWindowStats(ctx context.Context, account *Account, usage *UsageInfo) {
+	if s == nil || s.usageLogRepo == nil || account == nil || usage == nil {
+		return
+	}
+
+	var cached *kimiWindowStatsCache
+	if s.cache != nil {
+		if raw, ok := s.cache.kimiWindowStats.Load(account.ID); ok {
+			if entry, ok := raw.(*kimiWindowStatsCache); ok && time.Since(entry.timestamp) < kimiWindowStatsCacheTTL {
+				cached = entry
+			}
+		}
+	}
+
+	if cached == nil {
+		now := time.Now()
+		cached = &kimiWindowStatsCache{timestamp: now}
+		if usage.FiveHour != nil {
+			if stats, err := s.usageLogRepo.GetAccountWindowStats(ctx, account.ID, codexWindowStatsStart(usage.FiveHour, 5*time.Hour, now)); err == nil {
+				cached.fiveHour = windowStatsFromAccountStats(stats)
+			}
+		}
+		if usage.SevenDay != nil {
+			if stats, err := s.usageLogRepo.GetAccountWindowStats(ctx, account.ID, codexWindowStatsStart(usage.SevenDay, 7*24*time.Hour, now)); err == nil {
+				cached.sevenDay = windowStatsFromAccountStats(stats)
+			}
+		}
+		if s.cache != nil && (cached.fiveHour != nil || cached.sevenDay != nil) {
+			s.cache.kimiWindowStats.Store(account.ID, cached)
+		}
+	}
+
+	if usage.FiveHour != nil && cached.fiveHour != nil {
+		stats := *cached.fiveHour
+		usage.FiveHour.WindowStats = &stats
+	}
+	if usage.SevenDay != nil && cached.sevenDay != nil {
+		stats := *cached.sevenDay
+		usage.SevenDay.WindowStats = &stats
+	}
+}
+
+func buildKimiUsageInfo(quota *KimiQuotaUsage, now time.Time) *UsageInfo {
+	usage := &UsageInfo{Source: "active", UpdatedAt: &now}
+	if quota == nil {
+		usage.ErrorCode = errorCodeNetworkError
+		usage.Error = "Kimi quota response was empty"
+		return usage
+	}
+	usage.FiveHour = cloneUsageProgress(quota.FiveHour)
+	usage.SevenDay = cloneUsageProgress(quota.SevenDay)
+	usage.SubscriptionTier = quota.SubscriptionTier
+	usage.SubscriptionTierRaw = quota.SubscriptionTier
+	usage.SubscriptionKind = quota.SubscriptionKind
+	if quota.FetchedAt > 0 {
+		fetchedAt := time.Unix(quota.FetchedAt, 0)
+		usage.UpdatedAt = &fetchedAt
+	}
+	return usage
+}
+
+func buildKimiDegradedUsage(err error) *UsageInfo {
+	now := time.Now()
+	usage := &UsageInfo{
+		Source:    "active",
+		UpdatedAt: &now,
+		Error:     fmt.Sprintf("usage API error: %s", infraerrors.Message(err)),
+		ErrorCode: errorCodeNetworkError,
+	}
+	switch {
+	case infraerrors.Code(err) == http.StatusUnauthorized || infraerrors.Reason(err) == "KIMI_QUOTA_UNAUTHENTICATED":
+		usage.ErrorCode = errorCodeUnauthenticated
+		usage.NeedsReauth = true
+	case infraerrors.Code(err) == http.StatusForbidden || infraerrors.Reason(err) == "KIMI_QUOTA_FORBIDDEN":
+		usage.ErrorCode = errorCodeForbidden
+		usage.IsForbidden = true
+		usage.ForbiddenType = forbiddenTypeForbidden
+	case infraerrors.Code(err) == http.StatusTooManyRequests || infraerrors.Reason(err) == "KIMI_QUOTA_RATE_LIMITED":
+		usage.ErrorCode = errorCodeRateLimited
+	}
+	return usage
+}
+
+func kimiUsageCacheTTLFor(info *UsageInfo) time.Duration {
+	if info == nil || info.Error != "" || info.ErrorCode != "" {
+		return kimiQuotaErrorTTL
+	}
+	return kimiQuotaCacheTTL
+}
+
+func cloneUsageProgress(progress *UsageProgress) *UsageProgress {
+	if progress == nil {
+		return nil
+	}
+	cloned := *progress
+	if progress.WindowStats != nil {
+		stats := *progress.WindowStats
+		cloned.WindowStats = &stats
+	}
+	return &cloned
+}
+
+func cloneKimiUsageInfo(info *UsageInfo, now time.Time) *UsageInfo {
+	if info == nil {
+		return nil
+	}
+	cloned := *info
+	cloned.FiveHour = cloneUsageProgress(info.FiveHour)
+	cloned.SevenDay = cloneUsageProgress(info.SevenDay)
+	if info.UpdatedAt != nil {
+		updatedAt := *info.UpdatedAt
+		cloned.UpdatedAt = &updatedAt
+	}
+	for _, window := range []*UsageProgress{cloned.FiveHour, cloned.SevenDay} {
+		if window != nil && window.ResetsAt != nil {
+			remaining := int(window.ResetsAt.Sub(now).Seconds())
+			if remaining < 0 {
+				remaining = 0
+			}
+			window.RemainingSeconds = remaining
+		}
+	}
+	return &cloned
 }
 
 // recalcAntigravityRemainingSeconds 重新计算 Antigravity UsageInfo 中各窗口的 RemainingSeconds

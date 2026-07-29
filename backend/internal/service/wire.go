@@ -136,6 +136,16 @@ func ProvideOpenAIQuotaService(
 	return service
 }
 
+// ProvideKimiQuotaService wires the Kimi official quota query service.
+func ProvideKimiQuotaService(
+	accountRepo AccountRepository,
+	proxyRepo ProxyRepository,
+	tokenProvider *KimiTokenProvider,
+	httpUpstream HTTPUpstream,
+) *KimiQuotaService {
+	return NewKimiQuotaService(accountRepo, proxyRepo, tokenProvider, httpUpstream)
+}
+
 func ProvideAccountUsageService(
 	accountRepo AccountRepository,
 	usageLogRepo UsageLogRepository,
@@ -144,6 +154,7 @@ func ProvideAccountUsageService(
 	antigravityQuotaFetcher *AntigravityQuotaFetcher,
 	grokQuotaFetcher *GrokQuotaFetcher,
 	openAIQuotaService *OpenAIQuotaService,
+	kimiQuotaService *KimiQuotaService,
 	cache *UsageCache,
 	identityCache IdentityCache,
 	tlsFPProfileService *TLSFingerprintProfileService,
@@ -161,6 +172,7 @@ func ProvideAccountUsageService(
 		identityCache,
 		tlsFPProfileService,
 	)
+	service.SetKimiQuotaService(kimiQuotaService)
 	service.agentIdentityWS = openAIGatewayService
 	return service
 }
@@ -680,6 +692,7 @@ var ProviderSet = wire.NewSet(
 	ProvideKimiTokenProvider,
 	ProvideOpenAITokenProvider,
 	ProvideOpenAIQuotaService,
+	ProvideKimiQuotaService,
 	ProvideGrokQuotaService,
 	ProvideClaudeTokenProvider,
 	NewAntigravityGatewayService,

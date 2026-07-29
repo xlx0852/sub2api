@@ -30,7 +30,7 @@
       <div class="flex gap-2">
         <button v-if="session.status === 'pending'" type="button" class="btn btn-secondary" @click="$emit('cancel')">{{ t('common.cancel') }}</button>
         <button v-if="session.status !== 'pending' && session.status !== 'authorized'" type="button" class="btn btn-secondary" @click="$emit('start')">{{ text('retry') }}</button>
-        <button v-if="session.status === 'authorized'" type="button" class="btn btn-primary" :disabled="loading" @click="$emit('complete')">
+        <button v-if="session.status === 'authorized' && (!autoComplete || loading || autoCompleteFailed)" type="button" class="btn btn-primary" :disabled="loading" @click="handleManualComplete">
           {{ loading ? (loadingLabel || t('admin.accounts.creating')) : (completeLabel || text('createAccount')) }}
         </button>
       </div>
@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { DeviceAuthorization } from '@/api/admin/deviceOAuth'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
@@ -54,10 +54,13 @@ const props = withDefaults(defineProps<{
   provider?: DeviceProvider
   completeLabel?: string
   loadingLabel?: string
+  // 授权成功后自动创建账号（短延迟让用户看到成功状态）
+  autoComplete?: boolean
 }>(), {
-  provider: 'kimi'
+  provider: 'kimi',
+  autoComplete: true
 })
-defineEmits<{ start: []; cancel: []; complete: [] }>()
+const emit = defineEmits<{ start: []; cancel: []; complete: [] }>()
 const { t } = useI18n()
 const authorizationUrl = computed(() => props.session?.verification_uri_complete || props.session?.verification_uri || '#')
 const text = (key: string, params?: Record<string, unknown>) => {
@@ -72,4 +75,54 @@ const statusText = computed(() => {
   return text('waiting')
 })
 const statusClass = computed(() => props.session?.status === 'authorized' ? 'font-medium text-green-600' : props.session?.status === 'denied' ? 'font-medium text-red-600' : 'font-medium text-amber-700 dark:text-amber-300')
+
+// 自动创建：授权成功 → 短延迟后自动触发 complete；失败（error 出现且不再 loading）→ 显示手动按钮
+const autoCompleteFailed = ref(false)
+let autoTimer: ReturnType<typeof setTimeout> | null = null
+let autoFiredFor: string | null = null
+
+function clearAutoTimer() {
+  if (autoTimer) {
+    clearTimeout(autoTimer)
+    autoTimer = null
+  }
+}
+
+watch(
+  () => [props.session?.status, props.session?.user_code] as const,
+  ([status, userCode]) => {
+    clearAutoTimer()
+    if (status !== 'authorized' || !props.autoComplete) return
+    if (!userCode) return
+    // 同一授权码只自动触发一次，失败也不要立刻循环重试
+    if (autoFiredFor === userCode && autoCompleteFailed.value) return
+    if (autoFiredFor === userCode) return
+    autoFiredFor = userCode
+    autoCompleteFailed.value = false
+    autoTimer = setTimeout(() => {
+      autoTimer = null
+      if (props.session?.status === 'authorized' && !props.loading) {
+        emit('complete')
+      }
+    }, 600)
+  },
+  { immediate: true }
+)
+
+// 自动创建失败后允许手动重试
+watch(
+  () => [props.loading, props.error] as const,
+  ([loading, error]) => {
+    if (!loading && error && props.session?.status === 'authorized') {
+      autoCompleteFailed.value = true
+    }
+  }
+)
+
+function handleManualComplete() {
+  autoCompleteFailed.value = false
+  emit('complete')
+}
+
+onUnmounted(clearAutoTimer)
 </script>

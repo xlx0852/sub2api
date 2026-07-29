@@ -213,6 +213,19 @@ func GrokDefaultMapping() map[string]string {
 	return m
 }
 
+// --- Kimi ---
+
+func KimiModels() []ModelEntry {
+	return append([]ModelEntry(nil), platform("kimi").Models...)
+}
+
+func KimiDefaultTestModel() string {
+	if v := platform("kimi").DefaultTestModel; v != "" {
+		return v
+	}
+	return "k3"
+}
+
 // --- Bedrock ---
 
 func BedrockDefaultMapping() map[string]string {

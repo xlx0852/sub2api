@@ -376,6 +376,7 @@ export default {
       editAnnouncement: '编辑公告',
       deleteAnnouncement: '删除公告',
       searchAnnouncements: '搜索公告...',
+      emptyDescription: '还没有公告，创建后可向用户发布重要消息。',
       status: '状态',
       allStatus: '全部状态',
       columns: {
@@ -450,6 +451,7 @@ export default {
       editCode: '编辑优惠码',
       deleteCode: '删除优惠码',
       searchCodes: '搜索优惠码...',
+      emptyDescription: '还没有优惠码，创建后即可用于注册活动和余额奖励。',
       allStatus: '全部状态',
       columns: {
         code: '优惠码',

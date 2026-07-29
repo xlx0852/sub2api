@@ -21,6 +21,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
@@ -210,7 +211,7 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 			return s.sendErrorAndEnd(c, fmt.Sprintf("Failed to get Kimi access token: %s", err.Error()))
 		}
 		if strings.TrimSpace(modelID) == "" {
-			modelID = "kimi-k3"
+			modelID = modelcatalog.KimiDefaultTestModel()
 		}
 		modelID = normalizeKimiUpstreamModel(account.GetMappedModel(modelID))
 		baseURL := strings.TrimSpace(account.GetCredential("base_url"))

@@ -174,6 +174,91 @@
       </div>
     </template>
 
+    <!-- Kimi OAuth accounts: official five-hour and weekly quota windows -->
+    <template v-else-if="account.platform === 'kimi' && account.type === 'oauth'">
+      <div v-if="loading" class="space-y-1.5">
+        <div class="flex items-center gap-1">
+          <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-1.5 w-8 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+        </div>
+        <div class="flex items-center gap-1">
+          <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-1.5 w-8 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+        </div>
+      </div>
+      <div v-else-if="error" class="text-xs text-red-500">
+        {{ error }}
+      </div>
+      <div v-else-if="needsReauth" class="space-y-1">
+        <span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
+          {{ t('admin.accounts.needsReauth') }}
+        </span>
+        <QuotaActionButton
+          :loading="activeQueryLoading"
+          :title="t('admin.accounts.usageWindow.activeQuery')"
+          @click="loadActiveUsage"
+        >
+          {{ t('admin.accounts.usageWindow.activeQuery') }}
+        </QuotaActionButton>
+      </div>
+      <div v-else-if="isForbidden" class="space-y-1">
+        <span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+          {{ t('admin.accounts.forbidden') }}
+        </span>
+      </div>
+      <div v-else-if="usageInfo?.error" class="space-y-1">
+        <span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+          {{ usageErrorLabel }}
+        </span>
+        <QuotaActionButton
+          :loading="activeQueryLoading"
+          :title="t('admin.accounts.usageWindow.activeQuery')"
+          @click="loadActiveUsage"
+        >
+          {{ t('admin.accounts.usageWindow.activeQuery') }}
+        </QuotaActionButton>
+      </div>
+      <div v-else-if="usageInfo" class="space-y-0.5">
+        <UsageProgressBar
+          v-if="usageInfo.five_hour"
+          label="5h"
+          :utilization="usageInfo.five_hour.utilization"
+          :resets-at="usageInfo.five_hour.resets_at"
+          :window-stats="usageInfo.five_hour.window_stats"
+          :show-now-when-idle="true"
+          color="indigo"
+        />
+        <UsageProgressBar
+          v-if="usageInfo.seven_day"
+          label="7d"
+          :utilization="usageInfo.seven_day.utilization"
+          :resets-at="usageInfo.seven_day.resets_at"
+          :window-stats="usageInfo.seven_day.window_stats"
+          :show-now-when-idle="true"
+          color="emerald"
+        />
+        <QuotaActionButton
+          :loading="activeQueryLoading"
+          :title="t('admin.accounts.usageWindow.activeQuery')"
+          @click="loadActiveUsage"
+        >
+          {{ t('admin.accounts.usageWindow.activeQuery') }}
+        </QuotaActionButton>
+      </div>
+      <div v-else class="space-y-1">
+        <div class="text-xs text-gray-400">-</div>
+        <QuotaActionButton
+          :loading="activeQueryLoading"
+          :title="t('admin.accounts.usageWindow.activeQuery')"
+          @click="loadActiveUsage"
+        >
+          {{ t('admin.accounts.usageWindow.activeQuery') }}
+        </QuotaActionButton>
+      </div>
+    </template>
+
     <!-- Antigravity OAuth accounts: fetch usage from API -->
     <template v-else-if="account.platform === 'antigravity' && account.type === 'oauth'">
       <!-- 账户类型徽章 -->
@@ -654,6 +739,9 @@ const shouldFetchUsage = computed(() => {
     return props.account.type === 'oauth'
   }
   if (props.account.platform === 'openai') {
+    return props.account.type === 'oauth'
+  }
+  if (props.account.platform === 'kimi') {
     return props.account.type === 'oauth'
   }
   return false
@@ -1273,7 +1361,9 @@ const attachVisibilityObserver = () => {
 const loadActiveUsage = async () => {
   activeQueryLoading.value = true
   try {
-    usageInfo.value = await adminAPI.accounts.getUsage(props.account.id, 'active', true)
+    const result = await adminAPI.accounts.getUsage(props.account.id, 'active', true)
+    usageInfo.value = result
+    _usageCache.set(props.account.id, { data: result, ts: Date.now() })
   } catch (e: any) {
     console.error('Failed to load active usage:', e)
   } finally {

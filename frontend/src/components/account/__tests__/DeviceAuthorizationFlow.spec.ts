@@ -6,24 +6,62 @@ vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string, params?: Record<string, number>) => params ? `${key}:${params.seconds}` : key })
 }))
 
+const authorizedSession = {
+  session_id: 'session-1', status: 'authorized', verification_uri: 'https://kimi.test/device',
+  user_code: 'ABCD-EFGH', expires_in: 600, interval: 5
+}
+
 describe('DeviceAuthorizationFlow', () => {
-  it('shows the Kimi user code and emits complete after authorization', async () => {
+  it('auto-emits complete after authorization when autoComplete is on', async () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = mount(DeviceAuthorizationFlow, {
+        props: { session: authorizedSession, loading: false, error: '', remainingSeconds: 540 }
+      })
+
+      expect(wrapper.text()).toContain('ABCD-EFGH')
+      expect(wrapper.find('button.btn-primary').exists()).toBe(false)
+      expect(wrapper.emitted('complete')).toBeUndefined()
+      vi.advanceTimersByTime(700)
+      await wrapper.vm.$nextTick()
+      expect(wrapper.emitted('complete')).toHaveLength(1)
+      // 同一授权码不重复自动触发
+      vi.advanceTimersByTime(2000)
+      expect(wrapper.emitted('complete')).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows manual create button when autoComplete is off', async () => {
     const wrapper = mount(DeviceAuthorizationFlow, {
-      props: {
-        session: {
-          session_id: 'session-1', status: 'authorized', verification_uri: 'https://kimi.test/device',
-          user_code: 'ABCD-EFGH', expires_in: 600, interval: 5
-        },
-        loading: false,
-        error: '',
-        remainingSeconds: 540
-      }
+      props: { session: authorizedSession, loading: false, error: '', remainingSeconds: 540, autoComplete: false }
     })
 
-    expect(wrapper.text()).toContain('ABCD-EFGH')
     expect(wrapper.get('a').attributes('href')).toBe('https://kimi.test/device')
     await wrapper.get('button.btn-primary').trigger('click')
     expect(wrapper.emitted('complete')).toHaveLength(1)
+  })
+
+  it('shows manual retry button after auto-complete fails', async () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = mount(DeviceAuthorizationFlow, {
+        props: { session: authorizedSession, loading: false, error: '', remainingSeconds: 540 }
+      })
+      vi.advanceTimersByTime(700)
+      await wrapper.vm.$nextTick()
+      expect(wrapper.emitted('complete')).toHaveLength(1)
+
+      // 创建失败：error 出现且 loading 结束 → 显示手动按钮
+      await wrapper.setProps({ loading: true })
+      await wrapper.setProps({ loading: false, error: 'create failed' })
+      const btn = wrapper.get('button.btn-primary')
+      await btn.trigger('click')
+      expect(wrapper.emitted('complete')).toHaveLength(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('starts a new device flow when no session exists', async () => {
