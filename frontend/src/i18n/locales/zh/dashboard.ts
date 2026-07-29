@@ -268,6 +268,7 @@ export default {
     accountBilled: '账号计费',
     resetNow: '现在',
     resetPending: '待刷新',
+    fullUtilizationEstimate: '满额预估（按当前消耗结构）',
     accountMultiplier: '账号倍率',
     avgDuration: '平均耗时',
     inSelectedRange: '所选范围内',

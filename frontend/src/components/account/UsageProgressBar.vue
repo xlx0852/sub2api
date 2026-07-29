@@ -39,6 +39,22 @@
         stacked
       />
       <div
+        v-if="showFullUtilizationEstimate"
+        data-testid="usage-full-estimate"
+        class="mt-1 rounded-md border border-dashed border-gray-200 bg-white/70 p-1.5 dark:border-dark-600 dark:bg-dark-800/40"
+      >
+        <div class="mb-1 text-[9px] font-medium text-gray-400 dark:text-gray-500">
+          {{ t('usage.fullUtilizationEstimate') }}
+        </div>
+        <UsageStatLine
+          :requests="formatEstimatedRequests"
+          :tokens="formatEstimatedTokens"
+          :account-cost="formatEstimatedAccountCost"
+          :user-cost="windowStats?.user_cost != null ? formatEstimatedUserCost : null"
+          stacked
+        />
+      </div>
+      <div
         v-if="visibleExtraStats.length > 0"
         class="flex min-h-11 items-center rounded-md border border-amber-100 bg-amber-50/60 px-2 text-[10px] font-medium leading-4 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300"
       >
@@ -121,6 +137,16 @@ const showWindowStats = computed(() => {
   return !!props.windowStats && (props.windowStats.requests > 0 || props.windowStats.tokens > 0)
 })
 
+// Linear projection: current local window usage / upstream utilized share.
+// Values above 100% are excluded because they no longer describe a useful
+// "full quota" projection and would produce an estimate below actual usage.
+const fullUtilizationFactor = computed(() => {
+  if (!showWindowStats.value || props.utilization <= 0 || props.utilization > 100) return null
+  return 100 / props.utilization
+})
+
+const showFullUtilizationEstimate = computed(() => fullUtilizationFactor.value != null)
+
 const visibleExtraStats = computed(() => props.extraStats ?? [])
 
 const hasStatsRow = computed(() => {
@@ -198,5 +224,23 @@ const formatUserCost = computed(() => {
   if (!props.windowStats || props.windowStats.user_cost == null) return '0.00'
   return props.windowStats.user_cost.toFixed(2)
 })
+
+const estimatedStats = computed<WindowStats | null>(() => {
+  if (!props.windowStats || fullUtilizationFactor.value == null) return null
+  const factor = fullUtilizationFactor.value
+  return {
+    requests: props.windowStats.requests * factor,
+    tokens: props.windowStats.tokens * factor,
+    cost: props.windowStats.cost * factor,
+    user_cost: props.windowStats.user_cost == null ? undefined : props.windowStats.user_cost * factor
+  }
+})
+
+const formatEstimatedRequests = computed(() =>
+  formatCompactNumber(estimatedStats.value?.requests ?? 0, { allowBillions: false })
+)
+const formatEstimatedTokens = computed(() => formatCompactNumber(estimatedStats.value?.tokens ?? 0))
+const formatEstimatedAccountCost = computed(() => (estimatedStats.value?.cost ?? 0).toFixed(2))
+const formatEstimatedUserCost = computed(() => (estimatedStats.value?.user_cost ?? 0).toFixed(2))
 
 </script>
