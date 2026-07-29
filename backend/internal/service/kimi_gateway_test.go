@@ -34,11 +34,20 @@ func TestKimiCodingTargetAndStreamingUsage(t *testing.T) {
 
 func TestNormalizeKimiUpstreamModel(t *testing.T) {
 	tests := map[string]string{
-		"kimi-k3": "k3", "kimi-k3[1m]": "k3", "kimi-k3(1024)": "k3(1024)", "kimi-k3[1m](high)": "k3(high)", "k2.7-code": "k2.7-code",
+		"k3": "k3", "k3-256k": "k3-256k", "kimi-for-coding": "kimi-for-coding", "kimi-for-coding-highspeed": "kimi-for-coding-highspeed",
+		"kimi-k3": "k3", "kimi-k3[1m]": "k3", "kimi-k3(1024)": "k3(1024)", "kimi-k3[1m](high)": "k3(high)",
+		"kimi-k2.7-code": "kimi-for-coding", "kimi-k2.7-code-highspeed": "kimi-for-coding-highspeed", "k2.7-code": "kimi-for-coding",
+		"k3-highspeed": "k3-highspeed",
 	}
 	for input, expected := range tests {
 		require.Equal(t, expected, normalizeKimiUpstreamModel(input))
 	}
+}
+
+func TestKimiDefaultModelIDsOnlyExposeOfficialCodingIDs(t *testing.T) {
+	require.Equal(t, []string{"k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"}, KimiDefaultModelIDs())
+	require.NotContains(t, KimiDefaultModelIDs(), "k3-highspeed")
+	require.NotContains(t, KimiDefaultModelIDs(), "kimi-k3-highspeed")
 }
 
 func TestNormalizeKimiToolMessageLinks(t *testing.T) {

@@ -76,7 +76,7 @@ func (g *Group) ResolveMessagesDispatchModel(requestedModel string) string {
 	}
 	if g.Platform == PlatformKimi {
 		if claudeMessagesDispatchFamily(requestedModel) != "" {
-			return "kimi-k3"
+			return "k3"
 		}
 		return ""
 	}

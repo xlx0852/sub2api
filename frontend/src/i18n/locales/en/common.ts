@@ -19,6 +19,7 @@ export default {
     required: 'Required',
     sending: 'Sending...',
     tryAgain: 'Please try again',
+    retry: 'Retry',
     confirm: 'Confirm',
     reset: 'Reset',
     search: 'Search',

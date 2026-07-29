@@ -1,6 +1,7 @@
 package modelcatalog
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -43,5 +44,20 @@ func TestEmbeddedCatalogLoads(t *testing.T) {
 	}
 	if !IsOpenAIRetired("gpt-5.2") {
 		t.Fatalf("expected gpt-5.2 retired")
+	}
+}
+
+func TestKimiCatalogUsesOfficialCodingModelIDs(t *testing.T) {
+	models := KimiModels()
+	got := make([]string, 0, len(models))
+	for _, model := range models {
+		got = append(got, model.ID)
+	}
+	want := []string{"k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("KimiModels() = %v, want %v", got, want)
+	}
+	if KimiDefaultTestModel() != "k3" {
+		t.Fatalf("KimiDefaultTestModel() = %q, want k3", KimiDefaultTestModel())
 	}
 }

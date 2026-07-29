@@ -1063,10 +1063,18 @@ func normalizeKimiUpstreamModel(model string) string {
 		model = model[:len(model)-4]
 	}
 	model = strings.TrimSpace(model)
-	if strings.HasPrefix(strings.ToLower(model), "kimi-") {
-		model = model[len("kimi-"):]
+	normalized := strings.ToLower(model)
+	switch normalized {
+	case "kimi-k3":
+		normalized = "k3"
+	case "kimi-k3-256k":
+		normalized = "k3-256k"
+	case "kimi-k2.7-code", "kimi-k2-7-code", "k2.7-code", "k2-7-code":
+		normalized = "kimi-for-coding"
+	case "kimi-k2.7-code-highspeed", "kimi-k2-7-code-highspeed", "k2.7-code-highspeed", "k2-7-code-highspeed":
+		normalized = "kimi-for-coding-highspeed"
 	}
-	return strings.ToLower(strings.TrimSpace(model)) + suffix
+	return normalized + suffix
 }
 
 func SupportsVerbosity(model string) bool {

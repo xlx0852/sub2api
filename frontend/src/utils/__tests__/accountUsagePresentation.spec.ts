@@ -81,6 +81,23 @@ describe('buildAccountUsagePresentation', () => {
     expect(presentation.windows.map(window => window.label)).toEqual(['7d'])
   })
 
+  it('Kimi 使用 membership.level 展示可读套餐等级而不是购买类型', () => {
+    const presentation = buildAccountUsagePresentation({
+      account: makeAccount({ platform: 'kimi' }),
+      usageInfo: baseUsage({
+        subscription_tier: 'LEVEL_INTERMEDIATE',
+        subscription_kind: 'TYPE_PURCHASE',
+        five_hour: { utilization: 26, resets_at: '2026-07-29T17:00:00Z', remaining_seconds: 0 },
+        seven_day: { utilization: 89, resets_at: '2026-08-01T12:00:00Z', remaining_seconds: 0 }
+      }),
+      todayStats: today,
+      t
+    })
+
+    expect(presentation.plan).toBe('Intermediate')
+    expect(presentation.plan).not.toBe('TYPE_PURCHASE')
+  })
+
   it('将 Grok 周限和月度积分映射到同一窗口模型', () => {
     const presentation = buildAccountUsagePresentation({
       account: makeAccount({ platform: 'grok' }),

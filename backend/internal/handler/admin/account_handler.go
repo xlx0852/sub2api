@@ -2501,7 +2501,7 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 	}
 
 	if account.Platform == service.PlatformKimi {
-		ids := []string{"kimi-k3", "kimi-k3-highspeed", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6", "kimi-k2.5"}
+		ids := service.KimiDefaultModelIDs()
 		models := make([]xai.Model, 0, len(ids))
 		for _, id := range ids {
 			models = append(models, xai.Model{ID: id, Object: "model", OwnedBy: "moonshot", DisplayName: id})

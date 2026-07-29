@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "updated_at": "2026-07-29T05:52:00Z",
+  "version": 3,
+  "updated_at": "2026-07-29T06:18:00Z",
   "platforms": {
     "openai": {
       "default_test_model": "gpt-5.4",
@@ -450,6 +450,54 @@
         "grok-imagine-video-1.5": "grok-imagine-video-1.5"
       }
     },
+    "kimi": {
+      "default_test_model": "k3",
+      "default_chat_model": "k3",
+      "models": [
+        {
+          "id": "k3",
+          "display_name": "Kimi K3 (1M)",
+          "object": "model",
+          "owned_by": "moonshot",
+          "family": "kimi-k3",
+          "is_reasoning": true,
+          "media": {"image": true, "video": true}
+        },
+        {
+          "id": "k3-256k",
+          "display_name": "Kimi K3 (256K)",
+          "object": "model",
+          "owned_by": "moonshot",
+          "family": "kimi-k3",
+          "is_reasoning": true,
+          "media": {"image": true, "video": false}
+        },
+        {
+          "id": "kimi-for-coding",
+          "display_name": "Kimi K2.7 Code",
+          "object": "model",
+          "owned_by": "moonshot",
+          "family": "kimi-k2.7-code",
+          "is_reasoning": true,
+          "media": {"image": true, "video": true}
+        },
+        {
+          "id": "kimi-for-coding-highspeed",
+          "display_name": "Kimi K2.7 Code HighSpeed",
+          "object": "model",
+          "owned_by": "moonshot",
+          "family": "kimi-k2.7-code",
+          "is_reasoning": true,
+          "media": {"image": true, "video": true}
+        }
+      ],
+      "aliases": {
+        "kimi-k3": "k3",
+        "kimi-k3-256k": "k3-256k",
+        "kimi-k2.7-code": "kimi-for-coding",
+        "kimi-k2.7-code-highspeed": "kimi-for-coding-highspeed"
+      }
+    },
     "bedrock": {
       "default_mapping": {
         "claude-fable-5": "anthropic.claude-fable-5",
@@ -759,20 +807,14 @@
       "output_cost_per_token": 1.5e-05,
       "cache_read_input_token_cost": 3e-07
     },
+    "k3-256k": {
+      "alias_of": "k3"
+    },
     "kimi-k3": {
-      "input_cost_per_token": 3e-06,
-      "output_cost_per_token": 1.5e-05,
-      "cache_read_input_token_cost": 3e-07
+      "alias_of": "k3"
     },
-    "kimi-k3-highspeed": {
-      "input_cost_per_token": 3e-06,
-      "output_cost_per_token": 1.5e-05,
-      "cache_read_input_token_cost": 3e-07
-    },
-    "kimi-for-coding-k3": {
-      "input_cost_per_token": 3e-06,
-      "output_cost_per_token": 1.5e-05,
-      "cache_read_input_token_cost": 3e-07
+    "kimi-for-coding-highspeed": {
+      "alias_of": "kimi-for-coding"
     }
   },
   "image_defaults": {
@@ -866,6 +908,12 @@
         "from": "grok-build",
         "to": "grok-build-0.1"
       }
+    ],
+    "kimi": [
+      {"label": "Kimi K3 (1M)", "from": "k3", "to": "k3"},
+      {"label": "Kimi K3 (256K)", "from": "k3-256k", "to": "k3-256k"},
+      {"label": "Kimi K2.7 Code", "from": "kimi-for-coding", "to": "kimi-for-coding"},
+      {"label": "Kimi K2.7 Code HighSpeed", "from": "kimi-for-coding-highspeed", "to": "kimi-for-coding-highspeed"}
     ],
     "antigravity": [
       {

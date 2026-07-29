@@ -113,7 +113,7 @@ func platformDefaultDiagnosticModels(account *Account) []string {
 			"grok-composer-2.5-fast",
 		}
 	case account.Platform == PlatformKimi:
-		return []string{"kimi-k3", "kimi-k2.7-code", "kimi-k2.6"}
+		return KimiDefaultModelIDs()
 	case account.IsGemini():
 		return []string{
 			geminicli.CurrentDefaultTestModel(),

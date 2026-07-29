@@ -315,6 +315,7 @@ export default {
       editAnnouncement: 'Edit Announcement',
       deleteAnnouncement: 'Delete Announcement',
       searchAnnouncements: 'Search announcements...',
+      emptyDescription: 'No announcements yet. Create one to share important updates with users.',
       status: 'Status',
       allStatus: 'All Status',
       columns: {
@@ -389,6 +390,7 @@ export default {
       editCode: 'Edit Promo Code',
       deleteCode: 'Delete Promo Code',
       searchCodes: 'Search codes...',
+      emptyDescription: 'No promo codes yet. Create one for registration campaigns and balance rewards.',
       allStatus: 'All Status',
       columns: {
         code: 'Code',

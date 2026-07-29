@@ -151,10 +151,10 @@ const yiModels = [
 ]
 
 // Moonshot/Kimi
-const moonshotModels = [
+let moonshotModels = [
   'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k',
-  'kimi-latest', 'kimi-k2.5', 'kimi-k2.6', 'kimi-k2.7-code',
-  'kimi-k2.7-code-highspeed', 'kimi-k3', 'kimi-k3-highspeed'
+  'kimi-latest', 'kimi-k2.5', 'kimi-k2.6',
+  'k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed'
 ]
 
 // 字节跳动 豆包
@@ -282,6 +282,12 @@ let grokPresetMappings = [
   { label: 'Imagine Video', from: 'grok-imagine-video-1.5', to: 'grok-imagine-video-1.5', color: 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400' }
 ]
 
+let kimiPresetMappings = [
+  { label: 'Kimi K3 (1M)', from: 'k3', to: 'k3', color: 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-300' },
+  { label: 'Kimi K3 (256K)', from: 'k3-256k', to: 'k3-256k', color: 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-300' },
+  { label: 'Kimi K2.7 Code', from: 'kimi-for-coding', to: 'kimi-for-coding', color: 'bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-300' }
+]
+
 // Antigravity 预设映射（支持通配符）
 let antigravityPresetMappings = [
   // Claude 通配符映射
@@ -402,6 +408,7 @@ export function getPresetMappingsByPlatform(platform: string) {
   if (platform === 'openai') return openaiPresetMappings
   if (platform === 'gemini') return geminiPresetMappings
   if (platform === 'grok' || platform === 'xai') return grokPresetMappings
+	if (platform === 'kimi' || platform === 'moonshot') return kimiPresetMappings
   if (platform === 'antigravity') return antigravityPresetMappings
   if (platform === 'bedrock') return bedrockPresetMappings
   return anthropicPresetMappings
@@ -626,24 +633,28 @@ export async function ensureModelCatalogLoaded(): Promise<void> {
       const gemini = platformModelIDs(catalog, 'gemini')
       const antigravity = platformModelIDs(catalog, 'antigravity')
       const grok = platformModelIDs(catalog, 'grok')
+	  const kimi = platformModelIDs(catalog, 'kimi')
 
       if (openai.length) openaiModels = openai
       if (anthropic.length) claudeModels = anthropic
       if (gemini.length) geminiModels = gemini
       if (antigravity.length) antigravityModels = antigravity
       if (grok.length) xaiModels = grok
+	  if (kimi.length) moonshotModels = kimi
 
       const presets = catalog.ui_presets || {}
       const o = mapPresets(presets.openai)
       const a = mapPresets(presets.anthropic)
       const g = mapPresets(presets.gemini)
       const gr = mapPresets(presets.grok)
+	  const k = mapPresets(presets.kimi)
       const ag = mapPresets(presets.antigravity)
       const b = mapPresets(presets.bedrock)
       if (o) openaiPresetMappings = o
       if (a) anthropicPresetMappings = a
       if (g) geminiPresetMappings = g
       if (gr) grokPresetMappings = gr
+	  if (k) kimiPresetMappings = k
       if (ag) antigravityPresetMappings = ag
       if (b) bedrockPresetMappings = b
 
