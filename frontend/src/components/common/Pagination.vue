@@ -1,47 +1,47 @@
 <template>
   <div
-    class="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 dark:border-dark-700 dark:bg-dark-800 sm:px-6"
+    class="flex items-center justify-between border-t border-gray-100 bg-white px-4 py-3.5 dark:border-dark-700 dark:bg-dark-800 sm:px-6"
   >
-    <div class="flex flex-1 items-center justify-between sm:hidden">
+    <div class="flex min-w-0 flex-1 items-center justify-between gap-2 sm:hidden">
       <!-- Mobile pagination -->
       <button
         @click="goToPage(page - 1)"
         :disabled="page === 1"
-        class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200 dark:hover:bg-dark-600"
+        class="relative inline-flex min-h-11 flex-shrink-0 items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200 dark:hover:bg-dark-600"
       >
         {{ t('pagination.previous') }}
       </button>
-      <span class="text-sm text-gray-700 dark:text-gray-300">
+      <span class="min-w-0 text-center text-xs text-gray-700 sm:text-sm dark:text-gray-300">
         {{ t('pagination.pageOf', { page, total: totalPages }) }}
       </span>
       <button
         @click="goToPage(page + 1)"
         :disabled="page === totalPages"
-        class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200 dark:hover:bg-dark-600"
+        class="relative inline-flex min-h-11 flex-shrink-0 items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200 dark:hover:bg-dark-600"
       >
         {{ t('pagination.next') }}
       </button>
     </div>
 
-    <div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+    <div class="hidden min-w-0 flex-1 flex-wrap items-center justify-between gap-x-6 gap-y-3 sm:flex">
       <!-- Desktop pagination info -->
-      <div class="flex items-center space-x-4">
-        <p class="text-sm text-gray-700 dark:text-gray-300">
+      <div class="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
+        <p class="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
           {{ t('pagination.showing') }}
-          <span class="font-medium">{{ fromItem }}</span>
+          <span class="font-semibold tabular-nums text-gray-800 dark:text-gray-100">{{ fromItem }}</span>
           {{ t('pagination.to') }}
-          <span class="font-medium">{{ toItem }}</span>
+          <span class="font-semibold tabular-nums text-gray-800 dark:text-gray-100">{{ toItem }}</span>
           {{ t('pagination.of') }}
-          <span class="font-medium">{{ total }}</span>
+          <span class="font-semibold tabular-nums text-gray-800 dark:text-gray-100">{{ total }}</span>
           {{ t('pagination.results') }}
         </p>
 
         <!-- Page size selector -->
-        <div v-if="showPageSizeSelector" class="flex items-center space-x-2">
-          <span class="text-sm text-gray-700 dark:text-gray-300"
+        <div v-if="showPageSizeSelector" class="flex items-center gap-2">
+          <span class="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400"
             >{{ t('pagination.perPage') }}:</span
           >
-          <div class="page-size-select w-20">
+          <div class="page-size-select w-[78px]">
             <Select
               :model-value="pageSize"
               :options="pageSizeSelectOptions"
@@ -50,8 +50,8 @@
           </div>
         </div>
 
-        <div v-if="showJump" class="flex items-center space-x-2">
-          <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('pagination.jumpTo') }}</span>
+        <div v-if="showJump" class="flex items-center gap-2">
+          <span class="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{{ t('pagination.jumpTo') }}</span>
           <input
             v-model="jumpPage"
             type="number"
@@ -69,14 +69,14 @@
 
       <!-- Desktop pagination buttons -->
       <nav
-        class="relative z-0 inline-flex -space-x-px rounded-md "
+        class="relative z-0 inline-flex shrink-0 items-center gap-1"
         aria-label="Pagination"
       >
         <!-- Previous button -->
         <button
           @click="goToPage(page - 1)"
           :disabled="page === 1"
-          class="relative inline-flex items-center rounded-l-md border border-gray-300 bg-white px-2 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-400 dark:hover:bg-dark-600"
+          class="pagination-button text-gray-500 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-400 dark:hover:border-dark-500 dark:hover:bg-dark-700 dark:hover:text-gray-100"
           :aria-label="t('pagination.previous')"
         >
           <Icon name="chevronLeft" size="md" />
@@ -89,11 +89,11 @@
           @click="typeof pageNum === 'number' && goToPage(pageNum)"
           :disabled="typeof pageNum !== 'number'"
           :class="[
-            'relative inline-flex items-center border px-4 py-2 text-sm font-medium',
+            'pagination-button min-w-9 px-2.5 tabular-nums',
             pageNum === page
-              ? 'z-10 border-primary-500 bg-primary-50 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400'
-              : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-300 dark:hover:bg-dark-600',
-            typeof pageNum !== 'number' && 'cursor-default'
+              ? 'border-primary-600 bg-primary-600 font-semibold text-white shadow-sm dark:border-primary-500 dark:bg-primary-500'
+              : 'text-gray-600 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:border-dark-500 dark:hover:bg-dark-700 dark:hover:text-white',
+            typeof pageNum !== 'number' && 'cursor-default border-transparent bg-transparent hover:border-transparent hover:bg-transparent'
           ]"
           :aria-label="
             typeof pageNum === 'number' ? t('pagination.goToPage', { page: pageNum }) : undefined
@@ -107,7 +107,7 @@
         <button
           @click="goToPage(page + 1)"
           :disabled="page === totalPages"
-          class="relative inline-flex items-center rounded-r-md border border-gray-300 bg-white px-2 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-400 dark:hover:bg-dark-600"
+          class="pagination-button text-gray-500 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-400 dark:hover:border-dark-500 dark:hover:bg-dark-700 dark:hover:text-gray-100"
           :aria-label="t('pagination.next')"
         >
           <Icon name="chevronRight" size="md" />
@@ -242,6 +242,10 @@ const submitJump = () => {
 
 <style scoped>
 .page-size-select :deep(.select-trigger) {
-  @apply px-3 py-1.5 text-sm;
+  @apply min-h-9 rounded-lg border-gray-200 bg-gray-50/70 px-3 py-1.5 text-sm font-medium tabular-nums shadow-none hover:border-gray-300 hover:bg-white dark:border-dark-600 dark:bg-dark-700 dark:hover:border-dark-500;
+}
+
+.pagination-button {
+  @apply relative inline-flex h-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-sm font-medium transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/30 dark:border-dark-600 dark:bg-dark-800;
 }
 </style>
