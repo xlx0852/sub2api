@@ -2,13 +2,14 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProfitView from '../ProfitView.vue'
 
-const { overview, showError } = vi.hoisted(() => ({
+const { overview, supplyForecast, showError } = vi.hoisted(() => ({
   overview: vi.fn(),
+  supplyForecast: vi.fn(),
   showError: vi.fn()
 }))
 
 vi.mock('@/api/admin', () => ({
-  adminAPI: { profit: { overview } }
+  adminAPI: { profit: { overview, supplyForecast } }
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -41,11 +42,13 @@ vi.mock('vue-chartjs', () => ({
 describe('ProfitView', () => {
   beforeEach(() => {
     overview.mockReset()
+    supplyForecast.mockReset()
     showError.mockReset()
   })
 
   it('在全局趋势下方展示与汇总日期一致的账号明细', async () => {
     overview.mockResolvedValue({
+      generated_at: '2026-07-28T10:30:00Z',
       summary: {
         start: '2026-07-22',
         end: '2026-07-28',
@@ -85,6 +88,26 @@ describe('ProfitView', () => {
       },
       points: [{ date: '2026-07-22', revenue: 180, cost: 75, profit: 105 }]
     })
+    supplyForecast.mockResolvedValue({
+      generated_at: '2026-07-29T08:00:00Z',
+      history_start: '2026-06-30T00:00:00Z',
+      history_end: '2026-07-30T00:00:00Z',
+      timezone: 'UTC',
+      horizon_days: 30,
+      safety_margin: 0.2,
+      spendable_balance: 1000,
+      frozen_balance: 50,
+      eligible_users: 3,
+      daily_burn_7: 20,
+      daily_burn_30: 15,
+      base_daily_demand: 20,
+      planning_daily_demand: 24,
+      projected_consumption: 600,
+      planning_consumption: 720,
+      runway_days: 50,
+      available: true,
+      platforms: []
+    })
 
     const wrapper = mount(ProfitView, {
       global: {
@@ -102,7 +125,9 @@ describe('ProfitView', () => {
     await flushPromises()
 
     expect(overview).toHaveBeenCalledTimes(1)
-    expect(overview).toHaveBeenCalledWith(expect.any(String), expect.any(String))
+    expect(supplyForecast).not.toHaveBeenCalled()
+    expect(overview).toHaveBeenCalledWith(expect.any(String), expect.any(String), false)
+    expect(wrapper.find('[data-testid="profit-snapshot-time"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('admin.profit.accountDetails')
     expect(wrapper.find('[data-transparent="true"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('GPT-自有 1')
@@ -114,5 +139,15 @@ describe('ProfitView', () => {
     expect(wrapper.findAll('[data-testid="revenue-bar"]')).toHaveLength(2)
     expect(wrapper.findAll('[data-testid="cost-bar"]')).toHaveLength(2)
     expect(wrapper.find('[data-testid="revenue-bar"]').attributes('style')).toContain('width: 100%')
+
+    await wrapper.find('[data-testid="profit-refresh"]').trigger('click')
+    await flushPromises()
+    expect(overview).toHaveBeenCalledTimes(2)
+    expect(overview).toHaveBeenLastCalledWith(expect.any(String), expect.any(String), true)
+
+    await wrapper.find('[data-testid="profit-forecast-tab"]').trigger('click')
+    await flushPromises()
+    expect(supplyForecast).toHaveBeenCalledTimes(1)
+    expect(supplyForecast).toHaveBeenCalledWith(30, 0.2, false)
   })
 })

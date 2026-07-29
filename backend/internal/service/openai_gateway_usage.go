@@ -114,7 +114,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	apiKey := input.APIKey
 	user := input.User
 	account := input.Account
-	subscription := input.Subscription
+	// 用户订阅配额模式已退役。保留输入字段只为兼容现有调用方；
+	// 新用量统一余额扣费且不再写入 subscription_id。
+	var subscription *UserSubscription
 	ApplyOpenAIImageBillingResolution(result)
 	normalizeOpenAIUsageForBilling(&result.Usage)
 
@@ -200,12 +202,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		cost = &CostBreakdown{BillingMode: string(BillingModeToken)}
 	}
 
-	// Determine billing type
-	isSubscriptionBilling := subscription != nil && apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
+	// All user traffic is balance billed.
+	isSubscriptionBilling := false
 	billingType := BillingTypeBalance
-	if isSubscriptionBilling {
-		billingType = BillingTypeSubscription
-	}
 
 	// Create usage log
 	durationMs := int(result.Duration.Milliseconds())
@@ -442,15 +441,15 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageTokenCost(
 	if s.resolver != nil && apiKey.Group != nil {
 		gid := apiKey.Group.ID
 		return s.billingService.CalculateCostUnified(CostInput{
-			Ctx:                         ctx,
-			Model:                       billingModel,
-			GroupID:                     &gid,
-			Tokens:                      tokens,
-			RequestCount:                1,
-			RateMultiplier:              multiplier,
-			ServiceTier:                 serviceTier,
-			Resolver:                    s.resolver,
-			LongContextBillingEnabled:   &longContextBillingEnabled,
+			Ctx:                       ctx,
+			Model:                     billingModel,
+			GroupID:                   &gid,
+			Tokens:                    tokens,
+			RequestCount:              1,
+			RateMultiplier:            multiplier,
+			ServiceTier:               serviceTier,
+			Resolver:                  s.resolver,
+			LongContextBillingEnabled: &longContextBillingEnabled,
 		})
 	}
 	return s.billingService.calculateCostWithServiceTierPolicy(billingModel, tokens, multiplier, serviceTier, longContextBillingEnabled)

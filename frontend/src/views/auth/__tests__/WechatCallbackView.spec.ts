@@ -515,7 +515,7 @@ describe('WechatCallbackView', () => {
       adoptAvatar: true,
     })
     expect(setTokenMock).toHaveBeenCalledWith('wechat-invite-token')
-    expect(replaceMock).toHaveBeenCalledWith('/subscriptions')
+    expect(replaceMock).toHaveBeenCalledWith('/dashboard')
   })
 
   it('keeps the oauth flow active when complete-registration returns another pending step', async () => {

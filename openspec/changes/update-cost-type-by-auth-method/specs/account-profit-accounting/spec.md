@@ -27,6 +27,20 @@ The system SHALL record each subscription recharge as a discrete billing cycle w
 - **THEN** the system SHALL attribute no subscription cost from 2026-07-31 through 2026-08-15
 - **AND THEN** it SHALL not merge the two cycles or assume renewal on 2026-07-31
 
+#### Scenario: Grok quota resets inside one payment cycle
+
+- **WHEN** a Grok subscription is paid on 2026-07-17 and expires on 2026-08-17
+- **AND WHEN** its included monthly quota resets on 2026-08-01
+- **THEN** the system SHALL keep one financial cycle covering 2026-07-17 through 2026-08-17
+- **AND THEN** it SHALL not create a second purchase cost or split the financial cycle on 2026-08-01
+- **AND THEN** the quota reset MAY increase available capacity and supply forecasts without changing profit cost
+
+#### Scenario: Grok monthly reset is not a subscription expiry
+
+- **WHEN** the Grok quota snapshot contains `billing_period_end`
+- **THEN** the system SHALL use it only for quota display and capacity planning
+- **AND THEN** it SHALL NOT use it to infer, create, or alter a financial recharge cycle
+
 #### Scenario: Confirmed subscription cycle has zero purchase cost
 
 - **WHEN** an administrator records an active subscription cycle with a purchase fee of `$0`
@@ -179,3 +193,39 @@ The system SHALL calculate global profit summary, daily trend, and per-account d
 - **THEN** the backend SHALL persist the eligible records using one batch repository operation
 - **AND THEN** the operation SHALL not overwrite previously configured accounts
 - **AND THEN** the response SHALL list only the accounts that were actually updated
+
+### Requirement: Global profit overview uses a bounded-staleness snapshot
+
+The system SHALL cache global profit overview responses for five minutes using the normalized date range and timezone as the cache key. A cache hit SHALL NOT execute profit database queries. Concurrent cache misses for the same key SHALL be collapsed into one load, and the cache SHALL retain only a bounded number of keys.
+
+#### Scenario: Administrator reopens the same profit range
+
+- **WHEN** an administrator requests the same profit date range and timezone within five minutes of a completed overview load
+- **THEN** the system SHALL return the cached snapshot
+- **AND THEN** it SHALL expose the snapshot generation time and cache-hit status
+- **AND THEN** it SHALL not query the profit repositories again
+
+#### Scenario: Multiple administrators request an uncached range concurrently
+
+- **WHEN** concurrent overview requests use the same date range and timezone while no valid snapshot exists
+- **THEN** the system SHALL execute one underlying overview load
+- **AND THEN** all waiting requests SHALL receive that completed snapshot
+
+#### Scenario: Financial accounting configuration changes
+
+- **WHEN** an administrator creates, updates, batch-updates, or deletes a cost configuration or subscription cycle
+- **THEN** the system SHALL invalidate cached global profit overviews after the write succeeds
+- **AND THEN** the next overview request SHALL recompute the affected financial result
+
+#### Scenario: Administrator explicitly refreshes the snapshot
+
+- **WHEN** an administrator requests a manual refresh for the selected profit range
+- **THEN** the system SHALL bypass the existing cached value
+- **AND THEN** it SHALL replace that key with a newly generated snapshot
+
+#### Scenario: Global overview omits drawer-only enrichment
+
+- **WHEN** the backend builds a global profit overview
+- **THEN** it SHALL calculate range revenue, metered cost, subscription amortization, profit, margin, requests, and trend
+- **AND THEN** it SHALL not query the historical best 5-hour window or current-cycle revenue used only by the account drawer
+- **AND THEN** the account drawer SHALL continue to return those account-specific operational metrics

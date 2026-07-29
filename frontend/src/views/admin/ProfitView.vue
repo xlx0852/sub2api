@@ -2,7 +2,29 @@
   <AppLayout>
     <TablePageLayout transparent>
       <template #filters>
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="space-y-3">
+          <div class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
+            <button
+              data-testid="profit-review-tab"
+              type="button"
+              class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+              :class="activeView === 'review' ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-dark-300 dark:hover:text-white'"
+              @click="activeView = 'review'"
+            >
+              {{ t('admin.profit.reviewTab') }}
+            </button>
+            <button
+              data-testid="profit-forecast-tab"
+              type="button"
+              class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+              :class="activeView === 'forecast' ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-dark-300 dark:hover:text-white'"
+              @click="activeView = 'forecast'"
+            >
+              {{ t('admin.profit.supplyForecastTab') }}
+            </button>
+          </div>
+
+          <div v-if="activeView === 'review'" class="flex flex-wrap items-center gap-3">
           <div class="flex flex-wrap items-center gap-2">
             <button
               v-for="preset in presets"
@@ -17,19 +39,38 @@
             </button>
           </div>
           <div class="flex items-center gap-2">
-            <input v-model="startDate" type="date" class="input-sm" @change="loadAll" />
+            <input v-model="startDate" type="date" class="input-sm" @change="loadAll()" />
             <span class="text-gray-400">-</span>
-            <input v-model="endDate" type="date" class="input-sm" @change="loadAll" />
+            <input v-model="endDate" type="date" class="input-sm" @change="loadAll()" />
           </div>
-          <div class="ml-auto flex items-center gap-1.5 text-xs text-gray-400 dark:text-dark-400">
-            <Icon name="infoCircle" size="xs" />
-            <span>{{ t('admin.profit.globalOnlyHint') }}</span>
+          <div class="ml-auto flex flex-wrap items-center justify-end gap-2 text-xs text-gray-400 dark:text-dark-400">
+            <span v-if="snapshotGeneratedAt" data-testid="profit-snapshot-time">
+              {{ t('admin.profit.snapshotGeneratedAt', { time: snapshotTimeLabel }) }}
+            </span>
+            <button
+              data-testid="profit-refresh"
+              type="button"
+              class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-600 dark:bg-dark-700 dark:text-dark-200 dark:hover:bg-dark-600"
+              :disabled="loading"
+              :title="t('admin.profit.refreshSnapshot')"
+              @click="loadAll(true)"
+            >
+              <Icon name="refresh" size="xs" :class="loading ? 'animate-spin' : ''" />
+              <span>{{ t('admin.profit.refreshSnapshot') }}</span>
+            </button>
+            <span class="inline-flex items-center gap-1.5">
+              <Icon name="infoCircle" size="xs" />
+              <span>{{ t('admin.profit.globalOnlyHint') }}</span>
+            </span>
           </div>
+          </div>
+          <p v-else class="text-xs text-gray-500 dark:text-dark-400">{{ t('admin.profit.supplyForecastHint') }}</p>
         </div>
       </template>
 
       <template #table>
-        <div class="space-y-5">
+        <SupplyForecastPanel v-if="activeView === 'forecast'" />
+        <div v-else class="space-y-5">
           <section class="grid grid-cols-1 gap-4 sm:grid-cols-3" :class="loading ? 'opacity-60' : ''">
             <div class="rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-700 dark:bg-dark-800">
               <div class="text-sm text-gray-500 dark:text-dark-400">{{ t('admin.profit.totalRevenue') }}</div>
@@ -144,6 +185,7 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Icon from '@/components/icons/Icon.vue'
+import SupplyForecastPanel from '@/components/admin/profit/SupplyForecastPanel.vue'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -162,8 +204,10 @@ const { t } = useI18n()
 const appStore = useAppStore()
 const loading = ref(false)
 const trendLoading = ref(false)
+const activeView = ref<'review' | 'forecast'>('review')
 const data = ref<ProfitSummaryResponse | null>(null)
 const trendPoints = ref<ProfitTrendPoint[]>([])
+const snapshotGeneratedAt = ref('')
 const accountRows = computed(() => [...(data.value?.accounts || [])].sort((a, b) => b.profit - a.profit))
 const profitableCount = computed(() => accountRows.value.filter((account) => account.profit > 0).length)
 const lossCount = computed(() => accountRows.value.filter((account) => account.profit < 0).length)
@@ -216,19 +260,26 @@ const chartOptions = computed(() => ({
 const fmt = (value?: number) => (value ?? 0).toFixed(2)
 const fmtNumber = (value?: number) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value ?? 0)
 const fmtPercent = (value?: number) => `${(value ?? 0).toFixed(1)}%`
+const snapshotTimeLabel = computed(() => {
+  if (!snapshotGeneratedAt.value) return ''
+  const generatedAt = new Date(snapshotGeneratedAt.value)
+  if (Number.isNaN(generatedAt.getTime())) return snapshotGeneratedAt.value
+  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(generatedAt)
+})
 const comparisonBarWidth = (value: number, account: AccountProfitSummary) => {
   const maximum = Math.max(Math.abs(account.revenue), Math.abs(account.cost))
   if (maximum <= 0 || value === 0) return '0%'
   return `${Math.max(2, Math.min(100, Math.abs(value) / maximum * 100))}%`
 }
 
-async function loadAll() {
+async function loadAll(forceRefresh = false) {
   loading.value = true
   trendLoading.value = true
   try {
-    const overview = await adminAPI.profit.overview(startDate.value, endDate.value)
+    const overview = await adminAPI.profit.overview(startDate.value, endDate.value, forceRefresh)
     data.value = overview.summary
     trendPoints.value = overview.points || []
+    snapshotGeneratedAt.value = overview.generated_at || ''
   } catch (error) {
     appStore.showError(extractApiErrorMessage(error, t('admin.profit.loadFailed')))
   } finally {

@@ -81,8 +81,55 @@ export interface ProfitTrendPoint {
 }
 
 export interface ProfitOverviewResponse {
+  generated_at: string
   summary: ProfitSummaryResponse
   points: ProfitTrendPoint[]
+}
+
+export type SupplyForecastConfidence = 'high' | 'medium' | 'low'
+
+export interface PlatformSupplyForecast {
+  platform: string
+  demand_share: number
+  projected_consumption: number
+  planning_consumption: number
+  subscription_share: number
+  subscription_planning_daily: number
+  account_daily_capacity_p75?: number
+  required_subscription_accounts?: number
+  current_subscription_accounts: number
+  subscription_account_gap?: number
+  subscription_account_surplus?: number
+  sample_accounts: number
+  sample_account_days: number
+  confidence: SupplyForecastConfidence
+  subscription_unavailable_reason?: string
+  metered_share: number
+  metered_cost_ratio?: number
+  metered_procurement_budget?: number
+  metered_unavailable_reason?: string
+}
+
+export interface SupplyForecastResponse {
+  generated_at: string
+  history_start: string
+  history_end: string
+  timezone: string
+  horizon_days: number
+  safety_margin: number
+  spendable_balance: number
+  frozen_balance: number
+  eligible_users: number
+  daily_burn_7: number
+  daily_burn_30: number
+  base_daily_demand: number
+  planning_daily_demand: number
+  projected_consumption: number
+  planning_consumption: number
+  runway_days?: number
+  available: boolean
+  unavailable_reason?: string
+  platforms: PlatformSupplyForecast[]
 }
 
 export interface UpsertCostConfigRequest {
@@ -104,9 +151,21 @@ function rangeParams(startDate: string, endDate: string) {
 }
 
 /** GET /api/v1/admin/profit/overview */
-export async function overview(startDate: string, endDate: string): Promise<ProfitOverviewResponse> {
+export async function overview(startDate: string, endDate: string, refresh = false): Promise<ProfitOverviewResponse> {
   const { data } = await apiClient.get<ProfitOverviewResponse>('/admin/profit/overview', {
-    params: rangeParams(startDate, endDate)
+    params: { ...rangeParams(startDate, endDate), ...(refresh ? { refresh: true } : {}) }
+  })
+  return data
+}
+
+export async function supplyForecast(horizonDays = 30, safetyMargin = 0.2, refresh = false): Promise<SupplyForecastResponse> {
+  const { data } = await apiClient.get<SupplyForecastResponse>('/admin/profit/supply-forecast', {
+    params: {
+      horizon_days: horizonDays,
+      safety_margin: safetyMargin,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      ...(refresh ? { refresh: true } : {})
+    }
   })
   return data
 }
@@ -175,4 +234,4 @@ export async function batchConfigureSubscription(req: BatchSubscriptionConfigReq
   return data
 }
 
-export default { overview, summary, trend, listConfigs, upsertConfig, deleteConfig, listSubscriptionCycles, createSubscriptionCycle, deleteSubscriptionCycle, batchConfigureSubscription }
+export default { overview, supplyForecast, summary, trend, listConfigs, upsertConfig, deleteConfig, listSubscriptionCycles, createSubscriptionCycle, deleteSubscriptionCycle, batchConfigureSubscription }

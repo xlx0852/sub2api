@@ -119,6 +119,12 @@
           "created_at": "2026-05-29T00:00:00Z"
         },
         {
+          "id": "claude-opus-5",
+          "display_name": "Claude Opus 5",
+          "type": "model",
+          "created_at": "2026-07-25T00:00:00Z"
+        },
+        {
           "id": "claude-sonnet-5",
           "display_name": "Claude Sonnet 5",
           "type": "model",
@@ -501,6 +507,7 @@
     "bedrock": {
       "default_mapping": {
         "claude-fable-5": "anthropic.claude-fable-5",
+        "claude-opus-5": "us.anthropic.claude-opus-5-v1",
         "claude-opus-4-8": "us.anthropic.claude-opus-4-8-v1",
         "claude-opus-4-7": "us.anthropic.claude-opus-4-7-v1",
         "claude-opus-4-6-thinking": "us.anthropic.claude-opus-4-6-v1",
@@ -563,6 +570,12 @@
     },
     "claude-opus-4.7": {
       "alias_of": "claude-opus-4.6"
+    },
+    "claude-opus-4.8": {
+      "alias_of": "claude-opus-4.7"
+    },
+    "claude-opus-5": {
+      "alias_of": "claude-opus-4.8"
     },
     "gemini-3.1-pro": {
       "input_cost_per_token": 2e-06,
@@ -870,6 +883,11 @@
         "to": "claude-opus-4-8"
       },
       {
+        "label": "Opus 5",
+        "from": "claude-opus-5",
+        "to": "claude-opus-5"
+      },
+      {
         "label": "Haiku 4.5",
         "from": "claude-haiku-4-5-20251001",
         "to": "claude-haiku-4-5-20251001"
@@ -933,6 +951,11 @@
       }
     ],
     "bedrock": [
+      {
+        "label": "Opus 5",
+        "from": "claude-opus-5",
+        "to": "us.anthropic.claude-opus-5-v1"
+      },
       {
         "label": "Opus 4.8",
         "from": "claude-opus-4-8",

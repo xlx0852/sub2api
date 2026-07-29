@@ -53,3 +53,19 @@ describe('AppSidebar header styles', () => {
     expect(sidebarBrandBlockMatch?.[0]).not.toContain('overflow: hidden;')
   })
 })
+
+describe('AppSidebar retired user subscription mode', () => {
+  it('does not expose user or admin subscription management links', () => {
+    expect(componentSource).not.toContain("'/subscriptions'")
+    expect(componentSource).not.toContain("'/admin/subscriptions'")
+    expect(componentSource).not.toContain("'/admin/orders/plans'")
+    expect(componentSource).toContain("'/admin/profit'")
+    expect(componentSource).toContain("'/admin/accounts'")
+  })
+
+  it('keeps the balance recharge entry without the retired subscription icon name', () => {
+    expect(componentSource).toContain("path: '/purchase'")
+    expect(componentSource).toContain('icon: RechargeIcon')
+    expect(componentSource).not.toContain('RechargeSubscriptionIcon')
+  })
+})

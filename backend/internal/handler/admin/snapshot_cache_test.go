@@ -152,6 +152,70 @@ func TestSnapshotCache_GetOrLoad_ConcurrentSingleflight(t *testing.T) {
 	require.Equal(t, int32(1), loads.Load())
 }
 
+func TestSnapshotCache_BoundsEntriesAndClears(t *testing.T) {
+	c := newSnapshotCache(5 * time.Second).WithMaxEntries(2)
+	c.Set("one", 1)
+	c.Set("two", 2)
+	c.Set("three", 3)
+	require.Equal(t, 2, c.Len())
+
+	c.Clear()
+	require.Equal(t, 0, c.Len())
+}
+
+func TestSnapshotCache_RefreshBypassesAndCollapses(t *testing.T) {
+	c := newSnapshotCache(5 * time.Second)
+	c.Set("shared", "old")
+	var loads atomic.Int32
+	start := make(chan struct{})
+	const callers = 6
+	errCh := make(chan error, callers)
+	var wg sync.WaitGroup
+	wg.Add(callers)
+	for range callers {
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := c.Refresh("shared", func() (any, error) {
+				loads.Add(1)
+				time.Sleep(20 * time.Millisecond)
+				return "new", nil
+			})
+			errCh <- err
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
+	require.Equal(t, int32(1), loads.Load())
+	entry, ok := c.Get("shared")
+	require.True(t, ok)
+	require.Equal(t, "new", entry.Payload)
+}
+
+func TestSnapshotCache_ClearPreventsInflightLoadFromRepopulating(t *testing.T) {
+	c := newSnapshotCache(5 * time.Second)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _, _ = c.GetOrLoad("stale", func() (any, error) {
+			close(started)
+			<-release
+			return "old-result", nil
+		})
+	}()
+	<-started
+	c.Clear()
+	close(release)
+	<-done
+	require.Equal(t, 0, c.Len())
+}
+
 func TestParseBoolQueryWithDefault(t *testing.T) {
 	tests := []struct {
 		name string

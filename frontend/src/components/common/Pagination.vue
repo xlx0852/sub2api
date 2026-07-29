@@ -1,6 +1,6 @@
 <template>
   <div
-    class="flex items-center justify-between border-t border-gray-100 bg-white px-4 py-3.5 dark:border-dark-700 dark:bg-dark-800 sm:px-6"
+    class="flex items-center justify-between rounded-xl border border-black/[0.08] bg-white px-4 py-3.5 dark:border-white/[0.09] dark:bg-dark-800 sm:px-6"
   >
     <div class="flex min-w-0 flex-1 items-center justify-between gap-2 sm:hidden">
       <!-- Mobile pagination -->
@@ -91,7 +91,7 @@
           :class="[
             'pagination-button min-w-9 px-2.5 tabular-nums',
             pageNum === page
-              ? 'border-primary-600 bg-primary-600 font-semibold text-white shadow-sm dark:border-primary-500 dark:bg-primary-500'
+              ? 'border-primary-200 bg-primary-50 font-semibold text-primary-700 shadow-sm dark:border-primary-700/70 dark:bg-primary-900/30 dark:text-primary-300'
               : 'text-gray-600 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:border-dark-500 dark:hover:bg-dark-700 dark:hover:text-white',
             typeof pageNum !== 'number' && 'cursor-default border-transparent bg-transparent hover:border-transparent hover:bg-transparent'
           ]"

@@ -475,13 +475,11 @@ func TestAdminService_AdminUpdateAPIKeyGroupID_SubscriptionGroup_Blocked(t *test
 	userSubRepo := &userSubRepoStubForGroupUpdate{getActiveErr: ErrSubscriptionNotFound}
 	svc := &adminServiceImpl{apiKeyRepo: apiKeyRepo, groupRepo: groupRepo, userRepo: userRepo, userSubRepo: userSubRepo}
 
-	// 无有效订阅时应拒绝绑定
+	// 历史订阅分组始终拒绝绑定。
 	_, err := svc.AdminUpdateAPIKeyGroupID(context.Background(), 1, int64Ptr(10))
 	require.Error(t, err)
-	require.Equal(t, "SUBSCRIPTION_REQUIRED", infraerrors.Reason(err))
-	require.True(t, userSubRepo.called)
-	require.Equal(t, int64(42), userSubRepo.calledUserID)
-	require.Equal(t, int64(10), userSubRepo.calledGroupID)
+	require.Equal(t, "SUBSCRIPTION_MODE_RETIRED", infraerrors.Reason(err))
+	require.False(t, userSubRepo.called)
 	require.False(t, userRepo.addGroupCalled)
 }
 
@@ -494,11 +492,11 @@ func TestAdminService_AdminUpdateAPIKeyGroupID_SubscriptionGroup_RequiresRepo(t 
 
 	_, err := svc.AdminUpdateAPIKeyGroupID(context.Background(), 1, int64Ptr(10))
 	require.Error(t, err)
-	require.Equal(t, "SUBSCRIPTION_REPOSITORY_UNAVAILABLE", infraerrors.Reason(err))
+	require.Equal(t, "SUBSCRIPTION_MODE_RETIRED", infraerrors.Reason(err))
 	require.False(t, userRepo.addGroupCalled)
 }
 
-func TestAdminService_AdminUpdateAPIKeyGroupID_SubscriptionGroup_AllowsActiveSubscription(t *testing.T) {
+func TestAdminService_AdminUpdateAPIKeyGroupID_SubscriptionGroup_RejectsActiveHistoricalSubscription(t *testing.T) {
 	existing := &APIKey{ID: 1, UserID: 42, Key: "sk-test", GroupID: nil}
 	apiKeyRepo := &apiKeyRepoStubForGroupUpdate{key: existing}
 	groupRepo := &groupRepoStubForGroupUpdate{group: &Group{ID: 10, Name: "Sub", Status: StatusActive, IsExclusive: true, SubscriptionType: SubscriptionTypeSubscription}}
@@ -508,11 +506,10 @@ func TestAdminService_AdminUpdateAPIKeyGroupID_SubscriptionGroup_AllowsActiveSub
 	}
 	svc := &adminServiceImpl{apiKeyRepo: apiKeyRepo, groupRepo: groupRepo, userRepo: userRepo, userSubRepo: userSubRepo}
 
-	got, err := svc.AdminUpdateAPIKeyGroupID(context.Background(), 1, int64Ptr(10))
-	require.NoError(t, err)
-	require.True(t, userSubRepo.called)
-	require.NotNil(t, got.APIKey.GroupID)
-	require.Equal(t, int64(10), *got.APIKey.GroupID)
+	_, err := svc.AdminUpdateAPIKeyGroupID(context.Background(), 1, int64Ptr(10))
+	require.Error(t, err)
+	require.Equal(t, "SUBSCRIPTION_MODE_RETIRED", infraerrors.Reason(err))
+	require.False(t, userSubRepo.called)
 	require.False(t, userRepo.addGroupCalled)
 }
 

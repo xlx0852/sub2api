@@ -207,10 +207,7 @@
           </div>
         </div>
 
-        <AnnouncementTargetingEditor
-          v-model="form.targeting"
-          :groups="subscriptionGroups"
-        />
+        <AnnouncementTargetingEditor v-model="form.targeting" :groups="[]" />
       </form>
 
       <template #footer>
@@ -253,7 +250,7 @@ import { useAppStore } from '@/stores/app'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { adminAPI } from '@/api/admin'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
-import type { AdminGroup, Announcement, AnnouncementTargeting } from '@/types'
+import type { Announcement, AnnouncementTargeting } from '@/types'
 import type { Column } from '@/components/common/types'
 
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -429,17 +426,6 @@ const form = reactive({
   targeting: { any_of: [] } as AnnouncementTargeting
 })
 
-const subscriptionGroups = ref<AdminGroup[]>([])
-
-async function loadSubscriptionGroups() {
-  try {
-    const all = await adminAPI.groups.getAll()
-    subscriptionGroups.value = (all || []).filter((g) => g.subscription_type === 'subscription')
-  } catch (error: any) {
-    console.error('Error loading groups:', error)
-    // not fatal
-  }
-}
 
 function resetForm() {
   form.title = ''
@@ -601,7 +587,6 @@ function openReadStatus(row: Announcement) {
 }
 
 onMounted(async () => {
-  await loadSubscriptionGroups()
   await loadAnnouncements()
 })
 

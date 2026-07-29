@@ -92,16 +92,18 @@ type ProfitTrendResponse struct {
 
 // ProfitOverviewResponse 为利润页一次返回汇总与趋势，避免重复扫描相同时间范围。
 type ProfitOverviewResponse struct {
-	Summary *ProfitSummaryResponse `json:"summary"`
-	Points  []*ProfitTrendPoint    `json:"points"`
+	GeneratedAt time.Time              `json:"generated_at"`
+	Summary     *ProfitSummaryResponse `json:"summary"`
+	Points      []*ProfitTrendPoint    `json:"points"`
 }
 
 type profitAccountingData struct {
-	configsByAccount     map[int64]*AccountCostConfig
-	cyclesByAccount      map[int64][]*AccountSubscriptionCycle
-	bestWindowByAccount  map[int64]float64
-	windowStatsByAccount map[int64]*ProfitUsageStats
-	now                  time.Time
+	configsByAccount          map[int64]*AccountCostConfig
+	cyclesByAccount           map[int64][]*AccountSubscriptionCycle
+	bestWindowByAccount       map[int64]float64
+	windowStatsByAccount      map[int64]*ProfitUsageStats
+	now                       time.Time
+	includeOperationalMetrics bool
 }
 
 // GetSummary 计算 [start,end) 内所有账号的利润汇总。
@@ -142,7 +144,7 @@ func (s *ProfitService) summarizeAccounts(ctx context.Context, accounts []Accoun
 	if err != nil {
 		return nil, err
 	}
-	accounting, err := s.loadProfitAccountingData(ctx, accounts)
+	accounting, err := s.loadProfitAccountingData(ctx, accounts, true)
 	if err != nil {
 		return nil, err
 	}
@@ -184,16 +186,20 @@ func (s *ProfitService) summarizeAccountsWithData(accounts []Account, start, end
 			} else {
 				summary.Configured = true
 				cost = subscriptionCyclesCostForRange(cycles, start, end)
-				if activeCycle := activeSubscriptionCycle(cycles, accounting.now); activeCycle != nil {
-					summary.Currency = activeCycle.Currency
-					windowRevenue := 0.0
-					if windowStats := accounting.windowStatsByAccount[acc.ID]; windowStats != nil {
-						windowRevenue = windowStats.Revenue
+				if accounting.includeOperationalMetrics {
+					if activeCycle := activeSubscriptionCycle(cycles, accounting.now); activeCycle != nil {
+						summary.Currency = activeCycle.Currency
+						windowRevenue := 0.0
+						if windowStats := accounting.windowStatsByAccount[acc.ID]; windowStats != nil {
+							windowRevenue = windowStats.Revenue
+						}
+						fillBillingWindowFromRevenue(activeCycle, summary, windowRevenue, accounting.now)
 					}
-					fillBillingWindowFromRevenue(activeCycle, summary, windowRevenue, accounting.now)
 				}
 			}
-			summary.WindowEfficiency, summary.WindowBaselineSource = windowEfficiencyFromBaseline(stats.Revenue, periodDays, accounting.bestWindowByAccount[acc.ID])
+			if accounting.includeOperationalMetrics {
+				summary.WindowEfficiency, summary.WindowBaselineSource = windowEfficiencyFromBaseline(stats.Revenue, periodDays, accounting.bestWindowByAccount[acc.ID])
+			}
 		} else if cfg != nil {
 			// API Key 账号即使遗留了订阅配置，也必须按历史账号侧成本结算。
 			summary.Configured = true
@@ -215,13 +221,14 @@ func (s *ProfitService) summarizeAccountsWithData(accounts []Account, start, end
 	return resp
 }
 
-func (s *ProfitService) loadProfitAccountingData(ctx context.Context, accounts []Account) (*profitAccountingData, error) {
+func (s *ProfitService) loadProfitAccountingData(ctx context.Context, accounts []Account, includeOperationalMetrics bool) (*profitAccountingData, error) {
 	data := &profitAccountingData{
-		configsByAccount:     make(map[int64]*AccountCostConfig),
-		cyclesByAccount:      make(map[int64][]*AccountSubscriptionCycle),
-		bestWindowByAccount:  make(map[int64]float64),
-		windowStatsByAccount: make(map[int64]*ProfitUsageStats),
-		now:                  time.Now(),
+		configsByAccount:          make(map[int64]*AccountCostConfig),
+		cyclesByAccount:           make(map[int64][]*AccountSubscriptionCycle),
+		bestWindowByAccount:       make(map[int64]float64),
+		windowStatsByAccount:      make(map[int64]*ProfitUsageStats),
+		now:                       time.Now(),
+		includeOperationalMetrics: includeOperationalMetrics,
 	}
 	if len(accounts) == 1 {
 		cfg, err := s.profitRepo.GetCostConfig(ctx, accounts[0].ID)
@@ -253,6 +260,9 @@ func (s *ProfitService) loadProfitAccountingData(ctx context.Context, accounts [
 	}
 	for _, cycle := range cycles {
 		data.cyclesByAccount[cycle.AccountID] = append(data.cyclesByAccount[cycle.AccountID], cycle)
+	}
+	if !includeOperationalMetrics {
+		return data, nil
 	}
 	data.bestWindowByAccount, err = s.profitRepo.GetBestWindowRevenueBatch(ctx, subscriptionIDs, data.now.Add(-30*24*time.Hour), 5*3600)
 	if err != nil {
@@ -505,7 +515,8 @@ func (s *ProfitService) GetOverview(ctx context.Context, start, end time.Time, t
 	for _, date := range dateOrder {
 		dailyPoints = append(dailyPoints, dailyByDate[date])
 	}
-	accounting, err := s.loadProfitAccountingData(ctx, accounts)
+	// 全局页只需要区间财务数据；最佳 5h 窗口和当前周期收入仅供账号抽屉展示。
+	accounting, err := s.loadProfitAccountingData(ctx, accounts, false)
 	if err != nil {
 		return nil, err
 	}
@@ -515,7 +526,7 @@ func (s *ProfitService) GetOverview(ctx context.Context, start, end time.Time, t
 		cycles = append(cycles, accountCycles...)
 	}
 	trend := buildProfitTrend(dailyPoints, cycles, tzName)
-	return &ProfitOverviewResponse{Summary: summary, Points: trend.Points}, nil
+	return &ProfitOverviewResponse{GeneratedAt: time.Now().UTC(), Summary: summary, Points: trend.Points}, nil
 }
 
 // --- 配置 CRUD ---

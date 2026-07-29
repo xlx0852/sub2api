@@ -3130,7 +3130,7 @@
                 </div>
               </div>
 
-              <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+              <div v-if="false" class="border-t border-gray-100 pt-4 dark:border-dark-700">
                 <div class="mb-3 flex items-center justify-between">
                   <div>
                     <label class="font-medium text-gray-900 dark:text-white">
@@ -3452,7 +3452,7 @@
                       />
                     </div>
 
-                    <div class="mb-3 flex items-center justify-between">
+                    <div v-if="false" class="mb-3 flex items-center justify-between">
                       <div>
                         <label
                           class="font-medium text-gray-900 dark:text-white"
@@ -3478,16 +3478,13 @@
                     </div>
 
                     <div
-                      v-if="
-                        authSourceDefaults[authSource.source].subscriptions
-                          .length === 0
-                      "
+                      v-if="false"
                       class="rounded border border-dashed border-gray-300 px-4 py-3 text-sm text-gray-500 dark:border-dark-600 dark:text-gray-400"
                     >
                       {{ t("admin.settings.authSourceDefaults.noSourceSubscriptions") }}
                     </div>
 
-                    <div v-else class="space-y-3">
+                    <div v-if="false" class="space-y-3">
                       <div
                         v-for="(item, index) in authSourceDefaults[
                           authSource.source
@@ -6485,7 +6482,7 @@
                       }}
                     </p>
                   </div>
-                  <div>
+                  <div v-if="false">
                     <label class="input-label">{{
                       t("admin.settings.payment.subscriptionUsdToCnyRate")
                     }}</label>
@@ -7074,7 +7071,7 @@
           </div>
 
           <!-- 订阅到期提醒 -->
-          <div class="card">
+          <div v-if="false" class="card">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
             >

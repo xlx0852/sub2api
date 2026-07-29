@@ -65,9 +65,8 @@ func NewSubscriptionService(groupRepo GroupRepository, userSubRepo UserSubscript
 		billingCacheService: billingCacheService,
 		entClient:           entClient,
 	}
-	svc.initSubCache(cfg)
-	svc.initMaintenanceQueue(cfg)
-	svc.StartSubCacheInvalidationSubscriber(context.Background())
+	// 用户订阅配额模式已退役。服务对象仅用于读取历史数据和保持依赖图兼容，
+	// 不再启动 L1 缓存、窗口维护队列或失效订阅器。
 	return svc
 }
 

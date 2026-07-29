@@ -601,6 +601,7 @@
       :account-id="costConfigAcc?.id ?? null"
       :account-name="costConfigAcc?.name"
       :account-type="costConfigAcc?.type"
+      :account-platform="costConfigAcc?.platform"
       @close="showCostConfig = false"
     />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
@@ -1323,6 +1324,9 @@ const refreshAccountsIncrementally = async () => {
       hasPendingListSync.value = false
     }
 
+    // Refresh usage cells alongside the account list. The backend throttles
+    // active Grok billing probes to one request per account per 10 minutes.
+    usageManualRefreshToken.value += 1
     await refreshAccountListStats()
   } catch (error) {
     console.error('Auto refresh failed:', error)

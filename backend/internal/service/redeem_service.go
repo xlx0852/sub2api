@@ -421,9 +421,7 @@ func (s *RedeemService) Redeem(ctx context.Context, userID int64, code string) (
 	switch redeemCode.Type {
 	case RedeemTypeBalance, RedeemTypeConcurrency:
 	case RedeemTypeSubscription:
-		if redeemCode.GroupID == nil {
-			return nil, infraerrors.BadRequest("REDEEM_CODE_INVALID", "invalid subscription redeem code: missing group_id")
-		}
+		return nil, infraerrors.BadRequest("SUBSCRIPTION_MODE_RETIRED", "user subscription redeem codes are no longer supported")
 	default:
 		return nil, unsupportedRedeemTypeError(redeemCode.Type)
 	}

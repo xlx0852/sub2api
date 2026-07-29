@@ -406,12 +406,21 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	if req.SMTPPort <= 0 {
 		req.SMTPPort = 587
 	}
-	req.DefaultSubscriptions = normalizeDefaultSubscriptions(req.DefaultSubscriptions)
-	req.AuthSourceDefaultEmailSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultEmailSubscriptions)
-	req.AuthSourceDefaultLinuxDoSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultLinuxDoSubscriptions)
-	req.AuthSourceDefaultOIDCSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultOIDCSubscriptions)
-	req.AuthSourceDefaultWeChatSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultWeChatSubscriptions)
-	req.AuthSourceDefaultDingTalkSubscriptions = normalizeOptionalDefaultSubscriptions(req.AuthSourceDefaultDingTalkSubscriptions)
+	// 用户订阅模式已退役：即使旧版管理端仍提交这些字段，
+	// 也强制清空创建来源并关闭订阅专属通知/换算配置。
+	req.DefaultSubscriptions = nil
+	emptySubscriptions := []dto.DefaultSubscriptionSetting{}
+	req.AuthSourceDefaultEmailSubscriptions = &emptySubscriptions
+	req.AuthSourceDefaultLinuxDoSubscriptions = &emptySubscriptions
+	req.AuthSourceDefaultOIDCSubscriptions = &emptySubscriptions
+	req.AuthSourceDefaultWeChatSubscriptions = &emptySubscriptions
+	req.AuthSourceDefaultGitHubSubscriptions = &emptySubscriptions
+	req.AuthSourceDefaultGoogleSubscriptions = &emptySubscriptions
+	req.AuthSourceDefaultDingTalkSubscriptions = &emptySubscriptions
+	retiredSubscriptionNotifications := false
+	retiredSubscriptionRate := 0.0
+	req.SubscriptionExpiryNotifyEnabled = &retiredSubscriptionNotifications
+	req.PaymentSubscriptionUSDToCNYRate = &retiredSubscriptionRate
 
 	// SMTP 配置保护：如果请求中 smtp_host 为空但数据库中已有配置，则保留已有 SMTP 配置
 	// 防止前端加载设置失败时空表单覆盖已保存的 SMTP 配置

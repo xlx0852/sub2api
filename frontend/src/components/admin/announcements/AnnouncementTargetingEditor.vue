@@ -197,7 +197,6 @@ type Mode = 'all' | 'custom'
 const mode = computed<Mode>(() => (anyOf.value.length === 0 ? 'all' : 'custom'))
 
 const conditionTypeOptions = computed(() => [
-  { value: 'subscription', label: t('admin.announcements.form.conditionSubscription') },
   { value: 'balance', label: t('admin.announcements.form.conditionBalance') }
 ])
 

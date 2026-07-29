@@ -327,22 +327,6 @@
                   </div>
                 </section>
 
-                <section v-if="isColumnVisible('subscriptions')" class="min-w-0">
-                  <p class="mb-2 text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.users.columns.subscriptions') }}</p>
-                  <div v-if="row.subscriptions?.length" class="flex flex-wrap gap-1.5">
-                    <GroupBadge
-                      v-for="sub in row.subscriptions"
-                      :key="sub.id"
-                      :name="sub.group?.name || ''"
-                      :platform="sub.group?.platform"
-                      :subscription-type="sub.group?.subscription_type"
-                      :rate-multiplier="sub.group?.rate_multiplier"
-                      :days-remaining="sub.expires_at ? getDaysRemaining(sub.expires_at) : null"
-                    />
-                  </div>
-                  <p v-else class="text-xs text-gray-400 dark:text-dark-500">{{ t('admin.users.noSubscription') }}</p>
-                </section>
-
                 <section v-if="isColumnVisible('usage') || isColumnVisible('concurrency')" class="grid grid-cols-2 gap-2">
                   <div v-if="isColumnVisible('usage')" class="rounded-md border border-black/[0.06] p-3 dark:border-white/[0.07]">
                     <p class="mb-2 text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.users.columns.usage') }}</p>
@@ -526,31 +510,6 @@
               >-</span>
             </div>
             <span v-else class="text-xs text-gray-400 dark:text-dark-500">-</span>
-          </template>
-
-          <template #cell-subscriptions="{ row }">
-            <div
-              v-if="row.subscriptions && row.subscriptions.length > 0"
-              class="flex flex-wrap gap-1.5"
-            >
-              <GroupBadge
-                v-for="sub in row.subscriptions"
-                :key="sub.id"
-                :name="sub.group?.name || ''"
-                :platform="sub.group?.platform"
-                :subscription-type="sub.group?.subscription_type"
-                :rate-multiplier="sub.group?.rate_multiplier"
-                :days-remaining="sub.expires_at ? getDaysRemaining(sub.expires_at) : null"
-                :title="sub.expires_at ? formatDateTime(sub.expires_at) : ''"
-              />
-            </div>
-            <span
-              v-else
-              class="inline-flex items-center gap-1.5 rounded-md bg-gray-50 px-2 py-1 text-xs text-gray-400 dark:bg-dark-700/50 dark:text-dark-500"
-            >
-              <Icon name="ban" size="xs" class="h-3.5 w-3.5" />
-              <span>{{ t('admin.users.noSubscription') }}</span>
-            </span>
           </template>
 
           <template #cell-balance="{ value, row }">
@@ -918,7 +877,6 @@ import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
-import GroupBadge from '@/components/common/GroupBadge.vue'
 import Select from '@/components/common/Select.vue'
 import { buildApiKeyGroupFilterOptions } from './apiKeyGroupFilterOptions'
 import UserAttributesConfigModal from '@/components/user/UserAttributesConfigModal.vue'
@@ -993,7 +951,6 @@ const allColumns = computed<Column[]>(() => [
   ...attributeColumns.value,
   { key: 'role', label: t('admin.users.columns.role'), sortable: true },
   { key: 'groups', label: t('admin.users.columns.groups'), sortable: false },
-  { key: 'subscriptions', label: t('admin.users.columns.subscriptions'), sortable: false },
   { key: 'balance', label: t('admin.users.columns.balance'), sortable: true },
   { key: 'balance_platform_quota', label: t('admin.users.columns.balancePlatformQuota'), sortable: false },
   { key: 'usage', label: t('admin.users.columns.usage'), sortable: false },
@@ -1020,7 +977,7 @@ const hiddenColumns = reactive<Set<string>>(new Set())
 
 // Default hidden columns (columns hidden by default on first load)
 const DEFAULT_HIDDEN_COLUMNS = [
-  'notes', 'groups', 'subscriptions', 'usage', 'concurrency',
+  'notes', 'groups', 'usage', 'concurrency',
   'usage_anthropic', 'usage_openai', 'usage_gemini', 'usage_antigravity',
   'balance_platform_quota'
 ]
@@ -1103,9 +1060,6 @@ const toggleColumn = (key: string) => {
   saveColumnsToStorage()
   if (wasHidden && (key === 'usage' || key.startsWith('usage_') || key.startsWith('attr_') || key === 'balance_platform_quota')) {
     refreshCurrentPageSecondaryData()
-  }
-  if (key === 'subscriptions') {
-    loadUsers()
   }
   if (wasHidden && key === 'groups') {
     loadAllGroups()
@@ -1224,7 +1178,6 @@ const apiKeyGroupFilterOptions = computed(() =>
     all: t('admin.users.allApiKeyGroups'),
     exclusive: t('admin.users.apiKeyGroupExclusive'),
     public: t('admin.users.apiKeyGroupPublic'),
-    subscription: t('admin.users.apiKeyGroupSubscription'),
     disabled: t('admin.users.apiKeyGroupDisabled'),
   }) as SelectOption[]
 )
@@ -1642,14 +1595,6 @@ const balanceOperation = ref<'add' | 'subtract'>('add')
 const showBalanceHistoryModal = ref(false)
 const balanceHistoryUser = ref<AdminUser | null>(null)
 
-// 计算剩余天数
-const getDaysRemaining = (expiresAt: string): number => {
-  const now = new Date()
-  const expires = new Date(expiresAt)
-  const diffMs = expires.getTime() - now.getTime()
-  return Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-}
-
 const loadAttributeDefinitions = async () => {
   try {
     attributeDefinitions.value = await adminAPI.userAttributes.listEnabledDefinitions()
@@ -1690,8 +1635,7 @@ const loadUsers = async () => {
         group_name: filters.group || undefined,
         api_key_group_id: filters.apiKeyGroup ?? undefined,
         attributes: Object.keys(attrFilters).length > 0 ? attrFilters : undefined,
-        // 始终请求 subscriptions：列隐藏时仍需用于 UserPlatformQuotaModal 的 active-subscription 警示 banner
-        include_subscriptions: true,
+        include_subscriptions: false,
         sort_by: sortState.sort_by,
         sort_order: sortState.sort_order
       },

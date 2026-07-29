@@ -79,6 +79,23 @@ type ProfitAccountUsageRange struct {
 	End       time.Time
 }
 
+// StoredValueSnapshot is the current customer balance pool used by the supply forecast.
+type StoredValueSnapshot struct {
+	SpendableBalance float64
+	FrozenBalance    float64
+	EligibleUsers    int64
+}
+
+// SupplyForecastUsageSample is one platform/account/day balance-billed aggregate.
+type SupplyForecastUsageSample struct {
+	Date        string
+	Platform    string
+	AccountID   int64
+	AccountType string
+	Revenue     float64
+	MeteredCost float64
+}
+
 // ProfitRepository 利润分析数据访问端口。
 type ProfitRepository interface {
 	UpsertCostConfig(ctx context.Context, cfg *AccountCostConfig) (*AccountCostConfig, error)
@@ -103,4 +120,8 @@ type ProfitRepository interface {
 	// GetBestWindowRevenue 返回账号自 since 以来最佳固定长度窗口的收入（用于自动学习窗口基准）。
 	GetBestWindowRevenue(ctx context.Context, accountID int64, since time.Time, windowSeconds int64) (float64, error)
 	GetBestWindowRevenueBatch(ctx context.Context, accountIDs []int64, since time.Time, windowSeconds int64) (map[int64]float64, error)
+
+	GetStoredValueSnapshot(ctx context.Context) (*StoredValueSnapshot, error)
+	GetSupplyForecastUsageSamples(ctx context.Context, start, end time.Time, tzName string) ([]*SupplyForecastUsageSample, error)
+	GetSchedulableSubscriptionSupply(ctx context.Context) (map[string]int, error)
 }

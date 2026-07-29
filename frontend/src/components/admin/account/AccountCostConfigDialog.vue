@@ -10,6 +10,11 @@
         <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">{{ isSubscription ? t('admin.profit.costTypeAutoSubscription') : t('admin.profit.costTypeAutoMetered') }}</p>
       </div>
 
+      <div v-if="isGrokSubscription" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-900/60 dark:bg-amber-900/10 dark:text-amber-300">
+        <div class="font-semibold">{{ t('admin.profit.grokCycleTitle') }}</div>
+        <p>{{ t('admin.profit.grokCycleHint') }}</p>
+      </div>
+
       <template v-if="isSubscription">
         <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
           <div class="mb-3 flex items-center justify-between">
@@ -62,7 +67,7 @@ import { adminAPI } from '@/api/admin'
 import type { AccountSubscriptionCycle, SubscriptionCycleListResponse } from '@/api/admin/profit'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 
-const props = defineProps<{ show: boolean; accountId: number | null; accountName?: string; accountType?: string }>()
+const props = defineProps<{ show: boolean; accountId: number | null; accountName?: string; accountType?: string; accountPlatform?: string }>()
 const emit = defineEmits(['close', 'saved'])
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -72,6 +77,7 @@ const hints = ref<SubscriptionCycleListResponse | null>(null)
 const inferenceNote = ref('')
 const inferenceRisky = ref(false)
 const isSubscription = computed(() => props.accountType === 'oauth' || props.accountType === 'setup-token')
+const isGrokSubscription = computed(() => isSubscription.value && props.accountPlatform === 'grok')
 const form = ref({ period_fee: 0, period_days: 30, starts_at: '', notes: '' })
 
 async function loadCycles() {
@@ -81,7 +87,7 @@ async function loadCycles() {
   hints.value = result
 }
 
-watch(() => [props.show, props.accountId, props.accountType], async ([visible]) => {
+watch(() => [props.show, props.accountId, props.accountType, props.accountPlatform], async ([visible]) => {
   if (!visible) return
   cycles.value = []
   hints.value = null

@@ -153,6 +153,7 @@ func ProvideAccountUsageService(
 	geminiQuotaService *GeminiQuotaService,
 	antigravityQuotaFetcher *AntigravityQuotaFetcher,
 	grokQuotaFetcher *GrokQuotaFetcher,
+	grokQuotaService *GrokQuotaService,
 	openAIQuotaService *OpenAIQuotaService,
 	kimiQuotaService *KimiQuotaService,
 	cache *UsageCache,
@@ -173,6 +174,7 @@ func ProvideAccountUsageService(
 		tlsFPProfileService,
 	)
 	service.SetKimiQuotaService(kimiQuotaService)
+	service.SetGrokQuotaService(grokQuotaService)
 	service.agentIdentityWS = openAIGatewayService
 	return service
 }
@@ -299,13 +301,13 @@ func ProvideProxyExpiryService(proxyRepo ProxyRepository) *ProxyExpiryService {
 	return svc
 }
 
-// ProvideSubscriptionExpiryService creates and starts SubscriptionExpiryService.
+// ProvideSubscriptionExpiryService preserves the dependency graph for historical
+// subscription reads. The user subscription runtime is retired, so no worker starts.
 func ProvideSubscriptionExpiryService(userSubRepo UserSubscriptionRepository, settingRepo SettingRepository, notificationEmailService *NotificationEmailService, lockCache LeaderLockCache, db *sql.DB) *SubscriptionExpiryService {
 	svc := NewSubscriptionExpiryService(userSubRepo, time.Minute)
 	svc.SetSettingRepository(settingRepo)
 	svc.SetNotificationEmailService(notificationEmailService)
 	svc.SetLeaderLock(lockCache, db)
-	svc.Start()
 	return svc
 }
 
