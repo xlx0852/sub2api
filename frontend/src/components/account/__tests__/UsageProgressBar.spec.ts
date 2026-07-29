@@ -119,8 +119,44 @@ describe('UsageProgressBar', () => {
     expect(wrapper.get('[data-testid="usage-stat-billing"]').text()).toContain('A $20.66')
     expect(wrapper.get('[data-testid="usage-stat-billing"]').text()).toContain('U $20.66')
     expect(wrapper.get('[data-testid="usage-progress-fill"]').classes()).toContain('bg-emerald-500')
-    expect(wrapper.findAll('.usage-metric')).toHaveLength(4)
+    expect(wrapper.findAll('.usage-metric')).toHaveLength(8)
     expect(wrapper.html()).not.toContain('shadow')
+  })
+
+  it('根据当前消耗和已用比例展示满额线性预估', () => {
+    const wrapper = mount(UsageProgressBar, {
+      props: {
+        label: '7d',
+        utilization: 20,
+        color: 'emerald',
+        windowStats: {
+          requests: 6_000,
+          tokens: 760_000_000,
+          cost: 600,
+          user_cost: 72
+        }
+      }
+    })
+
+    const estimate = wrapper.get('[data-testid="usage-full-estimate"]')
+    expect(estimate.text()).toContain('usage.fullUtilizationEstimate')
+    expect(estimate.text()).toContain('30.0K req')
+    expect(estimate.text()).toContain('3.8B')
+    expect(estimate.text()).toContain('A $3000.00')
+    expect(estimate.text()).toContain('U $360.00')
+  })
+
+  it.each([0, 120])('利用率为 %s 时不展示满额预估', (utilization) => {
+    const wrapper = mount(UsageProgressBar, {
+      props: {
+        label: '5h',
+        utilization,
+        color: 'indigo',
+        windowStats: { requests: 100, tokens: 1_000, cost: 1 }
+      }
+    })
+
+    expect(wrapper.find('[data-testid="usage-full-estimate"]').exists()).toBe(false)
   })
 
   it.each([
