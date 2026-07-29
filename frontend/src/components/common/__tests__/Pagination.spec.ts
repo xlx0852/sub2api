@@ -26,9 +26,18 @@ describe('Pagination', () => {
     const current = wrapper.get('[aria-current="page"]')
 
     expect(current.text()).toBe('1')
-    expect(current.classes()).toContain('bg-primary-600')
+    expect(current.classes()).toContain('bg-primary-50')
+    expect(current.classes()).toContain('text-primary-700')
     expect(wrapper.text()).toContain('...')
     expect(wrapper.text()).toContain('12')
+  })
+
+  it('分页底板使用完整边框和圆角', () => {
+    const wrapper = mountPagination()
+
+    expect(wrapper.classes()).toContain('rounded-xl')
+    expect(wrapper.classes()).toContain('border')
+    expect(wrapper.classes()).not.toContain('border-t')
   })
 
   it('页码按钮使用独立间距而不是相邻边框重叠', () => {

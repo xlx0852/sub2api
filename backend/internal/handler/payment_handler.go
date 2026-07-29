@@ -88,8 +88,7 @@ func (h *PaymentHandler) GetPlans(c *gin.Context) {
 	response.Success(c, result)
 }
 
-// GetCheckoutInfo returns all data the payment page needs in a single call:
-// payment methods with limits, subscription plans, and configuration.
+// GetCheckoutInfo returns balance-recharge methods and configuration.
 // GET /api/v1/payment/checkout-info
 func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -108,32 +107,11 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 		return
 	}
 
-	// Fetch plans with group info
-	plans, _ := h.configService.ListPlansForSale(ctx)
-	groupInfo := h.configService.GetGroupInfoMap(ctx, plans)
-	planList := make([]checkoutPlan, 0, len(plans))
-	for _, p := range plans {
-		gi := groupInfo[p.GroupID]
-		planList = append(planList, checkoutPlan{
-			ID: int64(p.ID), GroupID: p.GroupID,
-			GroupPlatform: gi.Platform, GroupName: gi.Name,
-			RateMultiplier:  gi.RateMultiplier,
-			PeakRateEnabled: gi.PeakRateEnabled, PeakStart: gi.PeakStart,
-			PeakEnd: gi.PeakEnd, PeakRateMultiplier: gi.PeakRateMultiplier,
-			DailyLimitUSD:  gi.DailyLimitUSD,
-			WeeklyLimitUSD: gi.WeeklyLimitUSD, MonthlyLimitUSD: gi.MonthlyLimitUSD,
-			ModelScopes: gi.ModelScopes,
-			Name:        p.Name, Description: p.Description, Price: p.Price, OriginalPrice: p.OriginalPrice,
-			ValidityDays: p.ValidityDays, ValidityUnit: p.ValidityUnit, Features: parseFeatures(p.Features),
-			ProductName: p.ProductName,
-		})
-	}
-
 	response.Success(c, checkoutInfoResponse{
 		Methods:                   limitsResp.Methods,
 		GlobalMin:                 limitsResp.GlobalMin,
 		GlobalMax:                 limitsResp.GlobalMax,
-		Plans:                     planList,
+		Plans:                     []checkoutPlan{},
 		BalanceDisabled:           cfg.BalanceDisabled,
 		BalanceRechargeMultiplier: cfg.BalanceRechargeMultiplier,
 		SubscriptionUSDToCNYRate:  cfg.SubscriptionUSDToCNYRate,

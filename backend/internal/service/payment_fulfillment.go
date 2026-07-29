@@ -219,7 +219,7 @@ func (s *PaymentService) executeFulfillment(ctx context.Context, oid int64) erro
 		return fmt.Errorf("get order: %w", err)
 	}
 	if o.OrderType == payment.OrderTypeSubscription {
-		return s.ExecuteSubscriptionFulfillment(ctx, oid)
+		return infraerrors.BadRequest("SUBSCRIPTION_MODE_RETIRED", "user subscription fulfillment is no longer supported")
 	}
 	return s.ExecuteBalanceFulfillment(ctx, oid)
 }
@@ -465,34 +465,7 @@ func (s *PaymentService) sendSubscriptionPurchaseSuccessNotification(ctx context
 }
 
 func (s *PaymentService) ExecuteSubscriptionFulfillment(ctx context.Context, oid int64) error {
-	o, err := s.entClient.PaymentOrder.Get(ctx, oid)
-	if err != nil {
-		return infraerrors.NotFound("NOT_FOUND", "order not found")
-	}
-	if o.Status == OrderStatusCompleted {
-		return nil
-	}
-	if psIsRefundStatus(o.Status) {
-		return infraerrors.BadRequest("INVALID_STATUS", "refund-related order cannot fulfill")
-	}
-	if o.Status != OrderStatusPaid && o.Status != OrderStatusFailed && o.Status != OrderStatusRecharging {
-		return infraerrors.BadRequest("INVALID_STATUS", "order cannot fulfill in status "+o.Status)
-	}
-	if o.SubscriptionGroupID == nil || o.SubscriptionDays == nil {
-		return infraerrors.BadRequest("INVALID_STATUS", "missing subscription info")
-	}
-	lease, err := s.acquirePaymentFulfillmentLease(ctx, o)
-	if err != nil {
-		return err
-	}
-	if lease == nil {
-		return nil
-	}
-	if err := s.doSub(ctx, o, lease); err != nil {
-		s.markFailed(ctx, oid, lease, err)
-		return err
-	}
-	return nil
+	return infraerrors.BadRequest("SUBSCRIPTION_MODE_RETIRED", "user subscription fulfillment is no longer supported")
 }
 
 func (s *PaymentService) doSub(ctx context.Context, o *dbent.PaymentOrder, lease *paymentFulfillmentLease) error {

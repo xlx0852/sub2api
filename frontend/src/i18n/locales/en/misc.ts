@@ -41,16 +41,15 @@ export default {
     retry: 'Retry'
   },
 
-  // Recharge / Subscription Page
+  // Recharge Page
   purchase: {
-    title: 'Recharge / Subscription',
-    description: 'Recharge balance or purchase subscription via the embedded page',
+    title: 'Recharge',
+    description: 'Recharge your account balance',
     openInNewTab: 'Open in new tab',
     notEnabledTitle: 'Feature not enabled',
-    notEnabledDesc: 'The administrator has not enabled the recharge/subscription entry. Please contact admin.',
-    notConfiguredTitle: 'Recharge / Subscription URL not configured',
-    notConfiguredDesc:
-      'The administrator enabled the entry but has not configured a recharge/subscription URL. Please contact admin.'
+    notEnabledDesc: 'Recharge is not enabled. Please contact the administrator.',
+    notConfiguredTitle: 'Payment method not configured',
+    notConfiguredDesc: 'Recharge is enabled, but no payment method has been configured.'
   },
 
   // Custom Page (iframe embed)
@@ -267,7 +266,7 @@ export default {
 
   // Payment System
   payment: {
-    title: 'Recharge / Subscription',
+    title: 'Recharge',
     amountLabel: 'Amount',
     paymentAmount: 'Payment Amount',
     creditedBalance: 'Credited Balance',
@@ -359,6 +358,7 @@ export default {
     tabSubscribe: 'Subscribe',
     noPlans: 'No subscription plans available',
     notAvailable: 'Top-up is currently unavailable',
+    notAvailableHint: 'No payment method is available. Please contact the administrator to complete the configuration.',
     confirmSubscription: 'Confirm Subscription',
     confirmCancel: 'Are you sure you want to cancel this order?',
     amountTooLow: 'Minimum amount is {min}',

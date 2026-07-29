@@ -159,7 +159,7 @@ func TestSettingHandler_GetSettings_InjectsAuthSourceDefaults(t *testing.T) {
 	require.Len(t, subscriptions, 1)
 }
 
-func TestSettingHandler_UpdateSettings_PreservesOmittedAuthSourceDefaults(t *testing.T) {
+func TestSettingHandler_UpdateSettings_ClearsRetiredSubscriptionDefaults(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &settingHandlerRepoStub{
 		values: map[string]string{
@@ -194,7 +194,7 @@ func TestSettingHandler_UpdateSettings_PreservesOmittedAuthSourceDefaults(t *tes
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "12.75000000", repo.values[service.SettingKeyAuthSourceDefaultEmailBalance])
 	require.Equal(t, "8", repo.values[service.SettingKeyAuthSourceDefaultEmailConcurrency])
-	require.Equal(t, `[{"group_id":31,"validity_days":15}]`, repo.values[service.SettingKeyAuthSourceDefaultEmailSubscriptions])
+	require.Equal(t, `[]`, repo.values[service.SettingKeyAuthSourceDefaultEmailSubscriptions])
 	require.Equal(t, "true", repo.values[service.SettingKeyForceEmailOnThirdPartySignup])
 
 	var resp response.Response

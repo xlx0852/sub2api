@@ -99,4 +99,41 @@ describe('AccountCostConfigDialog', () => {
     expect(wrapper.text()).toContain('admin.profit.metered')
     expect(wrapper.find('[data-testid="save-cost-config"]').exists()).toBe(false)
   })
+
+  it('Grok 账号明确区分真实付款周期和自然月额度重置', async () => {
+    createSubscriptionCycle.mockResolvedValue({})
+    const wrapper = mount(AccountCostConfigDialog, {
+      props: {
+        show: true,
+        accountId: 104,
+        accountName: 'GROK-aihh206887277@gmail.com',
+        accountType: 'oauth',
+        accountPlatform: 'grok',
+      },
+      global: {
+        stubs: {
+          BaseDialog: {
+            props: ['show', 'title'],
+            emits: ['close'],
+            template: '<div v-if="show" role="dialog"><slot /><slot name="footer" /></div>',
+          },
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('admin.profit.grokCycleHint')
+    await wrapper.get('input[type="number"][min="1"]').setValue(31)
+    await wrapper.get('input[type="date"]').setValue('2026-07-17')
+    await wrapper.get('[data-testid="save-cost-config"]').trigger('click')
+    await flushPromises()
+
+    expect(createSubscriptionCycle).toHaveBeenCalledWith(104, {
+      starts_at: '2026-07-17',
+      period_fee: 0,
+      period_days: 31,
+      currency: 'USD',
+      notes: '',
+    })
+  })
 })

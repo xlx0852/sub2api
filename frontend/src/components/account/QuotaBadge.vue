@@ -33,6 +33,7 @@ const fmt = (v: number) => v.toFixed(2)
 
 <template>
   <CapacityBadge
+    compact
     :color-class="badgeClass"
     :tooltip="tooltip"
     :current="`$${fmt(used)}`"

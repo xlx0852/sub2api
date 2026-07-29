@@ -41,15 +41,15 @@ export default {
     retry: '重试'
   },
 
-  // Recharge / Subscription Page
+  // Recharge Page
   purchase: {
-    title: '充值/订阅',
-    description: '通过内嵌页面完成充值/订阅',
+    title: '充值',
+    description: '为账户余额充值',
     openInNewTab: '新窗口打开',
     notEnabledTitle: '该功能未开启',
-    notEnabledDesc: '管理员暂未开启充值/订阅入口，请联系管理员。',
-    notConfiguredTitle: '充值/订阅链接未配置',
-    notConfiguredDesc: '管理员已开启入口，但尚未配置充值/订阅链接，请联系管理员。'
+    notEnabledDesc: '管理员暂未开启充值入口，请联系管理员。',
+    notConfiguredTitle: '充值方式未配置',
+    notConfiguredDesc: '管理员已开启充值入口，但尚未配置可用支付方式。'
   },
 
   // Custom Page (iframe embed)
@@ -292,7 +292,7 @@ export default {
 
   // Payment System
   payment: {
-    title: '充值/订阅',
+    title: '充值',
     amountLabel: '充值金额',
     paymentAmount: '支付金额',
     creditedBalance: '到账余额',
@@ -384,6 +384,7 @@ export default {
     tabSubscribe: '订阅',
     noPlans: '暂无可用订阅套餐',
     notAvailable: '充值功能暂未开放',
+    notAvailableHint: '暂无可用支付方式，请联系管理员完成配置。',
     confirmSubscription: '确认订阅',
     confirmCancel: '确定要取消此订单吗？',
     amountTooLow: '最低金额为 {min}',

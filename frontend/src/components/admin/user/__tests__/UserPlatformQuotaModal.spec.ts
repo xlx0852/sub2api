@@ -190,28 +190,7 @@ describe('UserPlatformQuotaModal', () => {
     confirmSpy.mockRestore()
   })
 
-  describe('subscription warning banner', () => {
-    it('displays subscription warning when user has active subscription', async () => {
-      const w = mount(UserPlatformQuotaModal, {
-        props: {
-          show: true,
-          user: makeUser({
-            subscriptions: [
-              {
-                id: 1, user_id: 99, group_id: 1, status: 'active',
-                starts_at: '2026-01-01T00:00:00Z', expires_at: null,
-                daily_usage_usd: 0, weekly_usage_usd: 0, monthly_usage_usd: 0,
-                daily_window_start: null, weekly_window_start: null, monthly_window_start: null,
-                created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
-              } as UserSubscription,
-            ],
-          }),
-        },
-      })
-      await flushPromises()
-      expect(w.html()).toContain('admin.users.platformQuota.subscriptionWarning')
-    })
-
+  describe('retired subscription warning banner', () => {
     it('hides subscription warning when user has only expired subscriptions', async () => {
       const w = mount(UserPlatformQuotaModal, {
         props: {

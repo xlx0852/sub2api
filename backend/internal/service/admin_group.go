@@ -141,15 +141,13 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		platform = PlatformAnthropic
 	}
 
-	subscriptionType := input.SubscriptionType
-	if subscriptionType == "" {
-		subscriptionType = SubscriptionTypeStandard
+	if input.SubscriptionType == SubscriptionTypeSubscription {
+		return nil, errors.New("user subscription groups are no longer supported")
 	}
+	subscriptionType := SubscriptionTypeStandard
 
 	// 限额字段：nil/负数 表示"无限制"，0 表示"不允许用量"，正数表示具体限额
-	dailyLimit := normalizeLimit(input.DailyLimitUSD)
-	weeklyLimit := normalizeLimit(input.WeeklyLimitUSD)
-	monthlyLimit := normalizeLimit(input.MonthlyLimitUSD)
+	var dailyLimit, weeklyLimit, monthlyLimit *float64
 
 	// 图片价格：负数表示清除（使用默认价格），0 保留（表示免费）
 	imagePrice1K := normalizePrice(input.ImagePrice1K)
@@ -453,15 +451,13 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		group.Status = input.Status
 	}
 
-	// 订阅相关字段
-	if input.SubscriptionType != "" {
-		group.SubscriptionType = input.SubscriptionType
+	if input.SubscriptionType == SubscriptionTypeSubscription {
+		return nil, errors.New("user subscription groups are no longer supported")
 	}
-	// 限额字段：nil/负数 表示"无限制"，0 表示"不允许用量"，正数表示具体限额
-	// 前端始终发送这三个字段，无需 nil 守卫
-	group.DailyLimitUSD = normalizeLimit(input.DailyLimitUSD)
-	group.WeeklyLimitUSD = normalizeLimit(input.WeeklyLimitUSD)
-	group.MonthlyLimitUSD = normalizeLimit(input.MonthlyLimitUSD)
+	group.SubscriptionType = SubscriptionTypeStandard
+	group.DailyLimitUSD = nil
+	group.WeeklyLimitUSD = nil
+	group.MonthlyLimitUSD = nil
 	// 图片生成计费配置：负数表示清除（使用默认价格）
 	if input.AllowImageGeneration != nil {
 		group.AllowImageGeneration = *input.AllowImageGeneration
@@ -845,17 +841,8 @@ func (s *adminServiceImpl) AdminUpdateAPIKeyGroupID(ctx context.Context, keyID i
 		if group.Status != StatusActive {
 			return nil, infraerrors.BadRequest("GROUP_NOT_ACTIVE", "target group is not active")
 		}
-		// 订阅类型分组：用户须持有该分组的有效订阅才可绑定
 		if group.IsSubscriptionType() {
-			if s.userSubRepo == nil {
-				return nil, infraerrors.InternalServer("SUBSCRIPTION_REPOSITORY_UNAVAILABLE", "subscription repository is not configured")
-			}
-			if _, err := s.userSubRepo.GetActiveByUserIDAndGroupID(ctx, apiKey.UserID, *groupID); err != nil {
-				if errors.Is(err, ErrSubscriptionNotFound) {
-					return nil, infraerrors.BadRequest("SUBSCRIPTION_REQUIRED", "user does not have an active subscription for this group")
-				}
-				return nil, err
-			}
+			return nil, infraerrors.BadRequest("SUBSCRIPTION_MODE_RETIRED", "user subscription groups are no longer supported")
 		}
 
 		gid := *groupID
@@ -863,7 +850,7 @@ func (s *adminServiceImpl) AdminUpdateAPIKeyGroupID(ctx context.Context, keyID i
 		apiKey.Group = group
 
 		// 专属标准分组：使用事务保证「添加分组权限」与「更新 API Key」的原子性
-		if group.IsExclusive && !group.IsSubscriptionType() {
+		if group.IsExclusive {
 			opCtx := ctx
 			var tx *dbent.Tx
 			if s.entClient == nil {

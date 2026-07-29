@@ -189,7 +189,7 @@ export default {
     logout: 'Logout',
     github: 'GitHub',
     mySubscriptions: 'My Subscriptions',
-    buySubscription: 'Recharge / Subscription',
+    buySubscription: 'Recharge',
     docs: 'Docs',
     myOrders: 'My Orders',
     orderManagement: 'Orders',

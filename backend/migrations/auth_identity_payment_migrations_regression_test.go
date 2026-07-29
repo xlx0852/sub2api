@@ -180,6 +180,30 @@ func TestMigration158BackfillsGrokMediaGenerationGroups(t *testing.T) {
 	require.Contains(t, sql, "AND allow_image_generation = false")
 }
 
+func TestMigration178RetiresOnlyUserSubscriptionModeAndPreservesHistory(t *testing.T) {
+	content, err := FS.ReadFile("178_retire_user_subscription_mode.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "CREATE TABLE IF NOT EXISTS user_subscription_retirement_audit")
+	require.Contains(t, sql, "UPDATE groups")
+	require.Contains(t, sql, "subscription_type = 'standard'")
+	require.Contains(t, sql, "UPDATE user_subscriptions")
+	require.Contains(t, sql, "status = 'expired'")
+	require.Contains(t, sql, "UPDATE subscription_plans")
+	require.Contains(t, sql, "UPDATE redeem_codes")
+	require.Contains(t, sql, "UPDATE payment_orders")
+	require.Contains(t, sql, "auth_source_default_%_subscriptions")
+	require.Contains(t, sql, "subscription_expiry_notify_enabled")
+	require.Contains(t, sql, "payment_subscription_usd_to_cny_rate")
+
+	// Historical billing evidence and account procurement cycles remain intact.
+	require.NotContains(t, sql, "DROP TABLE")
+	require.NotContains(t, sql, "DELETE FROM user_subscriptions")
+	require.NotContains(t, sql, "UPDATE account_subscription_cycles")
+	require.NotContains(t, sql, "DELETE FROM account_subscription_cycles")
+}
+
 func TestMigration154AddsSparkShadowColumnsAndConstraintsWithoutHotIndexes(t *testing.T) {
 	content, err := FS.ReadFile("154_account_spark_shadow.sql")
 	require.NoError(t, err)

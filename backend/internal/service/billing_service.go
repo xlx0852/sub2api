@@ -243,6 +243,13 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 
 	// 按模型系列匹配
 	if strings.Contains(modelLower, "opus") {
+		// 必须先判断 opus-5；使用裸 "5" 会误伤 claude-opus-4-5。
+		if strings.Contains(modelLower, "opus-5") || strings.Contains(modelLower, "opus5") {
+			return s.fallbackPrice("claude-opus-5")
+		}
+		if strings.Contains(modelLower, "4.8") || strings.Contains(modelLower, "4-8") {
+			return s.fallbackPrice("claude-opus-4.8")
+		}
 		if strings.Contains(modelLower, "4.7") || strings.Contains(modelLower, "4-7") {
 			return s.fallbackPrice("claude-opus-4.7")
 		}

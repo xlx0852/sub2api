@@ -18,11 +18,12 @@ func APIKeyAuthGoogle(apiKeyService *service.APIKeyService, cfg *config.Config) 
 	return APIKeyAuthWithSubscriptionGoogle(apiKeyService, nil, cfg)
 }
 
-// APIKeyAuthWithSubscriptionGoogle behaves like ApiKeyAuthWithSubscription but returns Google-style errors:
+// APIKeyAuthWithSubscriptionGoogle keeps its historical name/signature for route compatibility,
+// but user subscription quota billing has retired and all requests use balance enforcement.
 // {"error":{"code":401,"message":"...","status":"UNAUTHENTICATED"}}
 //
 // It is intended for Gemini native endpoints (/v1beta) to match Gemini SDK expectations.
-func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) gin.HandlerFunc {
+func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, _ *service.SubscriptionService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if v := strings.TrimSpace(c.Query("api_key")); v != "" {
 			abortWithGoogleError(c, 400, "Query parameter api_key is deprecated. Use Authorization header or key instead.")
@@ -94,7 +95,7 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			return
 		}
 
-		// 简易模式：跳过余额和订阅检查
+		// 简易模式：跳过余额检查
 		if cfg.RunMode == config.RunModeSimple {
 			c.Set(string(ContextKeyAPIKey), apiKey)
 			c.Set(string(ContextKeyUser), AuthSubject{
@@ -128,45 +129,9 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			return
 		}
 
-		isSubscriptionType := apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
-		if isSubscriptionType && subscriptionService != nil {
-			subscription, err := subscriptionService.GetActiveSubscription(
-				c.Request.Context(),
-				apiKey.User.ID,
-				apiKey.Group.ID,
-			)
-			if err != nil {
-				abortWithGoogleError(c, 403, "No active subscription found for this group")
-				return
-			}
-
-			needsMaintenance, err := subscriptionService.ValidateAndCheckLimits(subscription, apiKey.Group)
-			if needsMaintenance {
-				refreshed, maintenanceErr := subscriptionService.EnsureWindowMaintenance(c.Request.Context(), subscription)
-				if maintenanceErr != nil {
-					abortWithGoogleError(c, 500, "Failed to maintain subscription usage windows")
-					return
-				}
-				subscription = refreshed
-				_, err = subscriptionService.ValidateAndCheckLimits(subscription, apiKey.Group)
-			}
-			if err != nil {
-				status := 403
-				if errors.Is(err, service.ErrDailyLimitExceeded) ||
-					errors.Is(err, service.ErrWeeklyLimitExceeded) ||
-					errors.Is(err, service.ErrMonthlyLimitExceeded) {
-					status = 429
-				}
-				abortWithGoogleError(c, status, err.Error())
-				return
-			}
-
-			c.Set(string(ContextKeySubscription), subscription)
-		} else {
-			if apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
-				abortWithGoogleError(c, 403, "Insufficient account balance")
-				return
-			}
+		if apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
+			abortWithGoogleError(c, 403, "Insufficient account balance")
+			return
 		}
 
 		c.Set(string(ContextKeyAPIKey), apiKey)

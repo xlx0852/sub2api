@@ -315,7 +315,10 @@
                             :key="result.id"
                             class="rounded-md border border-gray-200 bg-white px-2 py-1.5 dark:border-dark-600 dark:bg-dark-900"
                           >
-                            <template v-for="detail in [parseScheduledDiagnosticsDetail(result)]" :key="`diag-${result.id}`">
+                            <template
+                              v-for="detail in [parseScheduledDiagnosticsDetail(result)]"
+                              :key="`diag-${result.id}-${detail.statusCode || 'none'}-${detail.upgraded ? 'upgraded' : 'plain'}`"
+                            >
                               <div class="flex flex-wrap items-center justify-between gap-2">
                                 <div class="flex min-w-0 flex-wrap items-center gap-1.5">
                                   <span :class="['inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded px-1.5 text-[11px] font-medium', scheduledStatusClass(result.status)]">

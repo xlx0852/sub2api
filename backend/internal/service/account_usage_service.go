@@ -147,6 +147,7 @@ type UsageCache struct {
 	apiFlight         singleflight.Group // 防止同一账号的并发请求击穿缓存（Anthropic）
 	antigravityFlight singleflight.Group // 防止同一 Antigravity 账号的并发请求击穿缓存
 	openAIProbeCache  sync.Map           // accountID -> time.Time
+	grokProbeCache    sync.Map           // accountID -> time.Time
 	kimiQuotaCache    sync.Map           // accountID -> *kimiUsageCache
 	kimiQuotaFlight   singleflight.Group // 防止同一 Kimi 账号的并发额度查询
 	kimiWindowStats   sync.Map           // accountID -> *kimiWindowStatsCache
@@ -351,6 +352,7 @@ type AccountUsageService struct {
 	antigravityQuotaFetcher *AntigravityQuotaFetcher
 	grokQuotaFetcher        *GrokQuotaFetcher
 	openAIQuotaService      *OpenAIQuotaService
+	grokQuotaService        *GrokQuotaService
 	kimiQuotaService        KimiQuotaQuerier
 	cache                   *UsageCache
 	identityCache           IdentityCache
@@ -391,6 +393,14 @@ func NewAccountUsageService(
 func (s *AccountUsageService) SetKimiQuotaService(service KimiQuotaQuerier) {
 	if s != nil {
 		s.kimiQuotaService = service
+	}
+}
+
+// SetGrokQuotaService injects the active Grok billing probe without changing
+// the constructor signature used by service tests and integrations.
+func (s *AccountUsageService) SetGrokQuotaService(service *GrokQuotaService) {
+	if s != nil {
+		s.grokQuotaService = service
 	}
 }
 
@@ -1026,6 +1036,14 @@ func (s *AccountUsageService) getGrokUsage(ctx context.Context, account *Account
 		now := time.Now()
 		return &UsageInfo{UpdatedAt: &now}, nil
 	}
+	if s.grokQuotaService != nil && account.Type == AccountTypeOAuth && s.shouldProbeGrokQuota(account.ID) {
+		if result, err := s.grokQuotaService.ProbeUsage(ctx, account.ID); err == nil && result != nil && result.Billing != nil {
+			if account.Extra == nil {
+				account.Extra = make(map[string]any)
+			}
+			account.Extra[grokBillingSnapshotKey] = result.Billing
+		}
+	}
 	usage := s.grokQuotaFetcher.BuildUsageInfo(account)
 	if usage.GrokQuotaSnapshotState == "" {
 		switch {
@@ -1046,6 +1064,20 @@ func (s *AccountUsageService) getGrokUsage(ctx context.Context, account *Account
 
 	enrichUsageWithAccountError(usage, account)
 	return usage, nil
+}
+
+func (s *AccountUsageService) shouldProbeGrokQuota(accountID int64) bool {
+	if s == nil || s.cache == nil || accountID <= 0 {
+		return true
+	}
+	now := time.Now()
+	if cached, ok := s.cache.grokProbeCache.Load(accountID); ok {
+		if ts, ok := cached.(time.Time); ok && now.Sub(ts) < openAIProbeCacheTTL {
+			return false
+		}
+	}
+	s.cache.grokProbeCache.Store(accountID, now)
+	return true
 }
 
 func (s *AccountUsageService) getKimiUsage(ctx context.Context, account *Account, force bool) (*UsageInfo, error) {

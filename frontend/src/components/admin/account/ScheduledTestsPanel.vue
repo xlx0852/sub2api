@@ -563,21 +563,21 @@ const loadModelOptions = async () => {
 }
 
 // State
-const loading = ref(false)
+const internalLoading = ref(false)
 const creating = ref(false)
 const loadingResults = ref(false)
-const plans = ref<ScheduledTestPlan[]>([])
+const internalPlans = ref<ScheduledTestPlan[]>([])
 const isPlansControlled = computed(() => Array.isArray(props.plans))
 const displayPlans = computed<ScheduledTestPlan[]>(() => {
   if (isPlansControlled.value) return props.plans as ScheduledTestPlan[]
-  return plans.value
+  return internalPlans.value
 })
 const displayLoading = computed(() => {
   // Embedded + controlled by parent: trust parent loading flag exclusively.
   if (props.embedded && isPlansControlled.value) return Boolean(props.loading)
   // Embedded without plans yet: show loading while parent may still be fetching.
   if (props.embedded && props.loading) return true
-  return loading.value
+  return internalLoading.value
 })
 const results = ref<ScheduledTestResult[]>([])
 const expandedPlanId = ref<number | null>(null)
@@ -626,7 +626,7 @@ watch(
     }
     if (!visible) {
       if (!props.embedded) {
-        plans.value = []
+        internalPlans.value = []
         localModelOptions.value = []
       }
       results.value = []
@@ -642,13 +642,13 @@ watch(
 
 const loadPlans = async () => {
   if (!props.accountId) return
-  loading.value = true
+  internalLoading.value = true
   try {
-    plans.value = await adminAPI.scheduledTests.listByAccount(props.accountId)
+    internalPlans.value = await adminAPI.scheduledTests.listByAccount(props.accountId)
   } catch (error: any) {
     appStore.showError(error?.message || 'Failed to load plans')
   } finally {
-    loading.value = false
+    internalLoading.value = false
   }
 }
 
@@ -680,9 +680,9 @@ const handleCreate = async () => {
 const handleToggleEnabled = async (plan: ScheduledTestPlan, enabled: boolean) => {
   try {
     const updated = await adminAPI.scheduledTests.update(plan.id, { enabled })
-    const index = plans.value.findIndex((p) => p.id === plan.id)
+    const index = internalPlans.value.findIndex((p) => p.id === plan.id)
     if (index !== -1) {
-      plans.value[index] = updated
+      internalPlans.value[index] = updated
     }
     appStore.showSuccess(t('admin.scheduledTests.updateSuccess'))
     emit('changed')
@@ -715,9 +715,9 @@ const handleEdit = async () => {
       enabled: editForm.enabled,
       auto_recover: editForm.auto_recover
     })
-    const index = plans.value.findIndex((p) => p.id === editingPlanId.value)
+    const index = internalPlans.value.findIndex((p) => p.id === editingPlanId.value)
     if (index !== -1) {
-      plans.value[index] = updated
+      internalPlans.value[index] = updated
     }
     appStore.showSuccess(t('admin.scheduledTests.updateSuccess'))
     editingPlanId.value = null
@@ -739,7 +739,7 @@ const handleDelete = async () => {
   try {
     await adminAPI.scheduledTests.delete(deletingPlan.value.id)
     appStore.showSuccess(t('admin.scheduledTests.deleteSuccess'))
-    plans.value = plans.value.filter((p) => p.id !== deletingPlan.value!.id)
+    internalPlans.value = internalPlans.value.filter((p) => p.id !== deletingPlan.value!.id)
     emit('changed')
     if (expandedPlanId.value === deletingPlan.value.id) {
       expandedPlanId.value = null

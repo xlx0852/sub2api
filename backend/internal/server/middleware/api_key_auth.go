@@ -14,19 +14,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// NewAPIKeyAuthMiddleware 创建 API Key 认证中间件
-func NewAPIKeyAuthMiddleware(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) APIKeyAuthMiddleware {
-	return APIKeyAuthMiddleware(apiKeyAuthWithSubscription(apiKeyService, subscriptionService, cfg))
+// NewAPIKeyAuthMiddleware 创建 API Key 认证中间件。
+// subscriptionService 参数仅为兼容现有依赖注入签名保留；用户订阅配额模式已退役。
+func NewAPIKeyAuthMiddleware(apiKeyService *service.APIKeyService, _ *service.SubscriptionService, cfg *config.Config) APIKeyAuthMiddleware {
+	return APIKeyAuthMiddleware(apiKeyAuthWithBalance(apiKeyService, cfg))
 }
 
-// apiKeyAuthWithSubscription API Key认证中间件（支持订阅验证）
+// apiKeyAuthWithBalance API Key 认证中间件（统一余额计费）。
 //
 // 中间件职责分为两层：
 //   - 鉴权（Authentication）：验证 Key 有效性、用户状态、IP 限制 —— 始终执行
-//   - 计费执行（Billing Enforcement）：过期/配额/订阅/余额检查 —— skipBilling 时整块跳过
+//   - 计费执行（Billing Enforcement）：过期/配额/余额检查 —— skipBilling 时整块跳过
 //
 // /v1/usage 端点只需鉴权，不需要计费执行（允许过期/配额耗尽的 Key 查询自身用量）。
-func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) gin.HandlerFunc {
+func apiKeyAuthWithBalance(apiKeyService *service.APIKeyService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// ── 1. 提取 API Key ──────────────────────────────────────────
 
@@ -142,32 +143,10 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			return
 		}
 
-		// ── 5. 加载订阅（订阅模式时始终加载） ───────────────────────
-
 		// skipBilling: /v1/usage 只需鉴权，跳过所有计费执行
 		skipBilling := c.Request.URL.Path == "/v1/usage"
 
-		var subscription *service.UserSubscription
-		isSubscriptionType := apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
-
-		if isSubscriptionType && subscriptionService != nil {
-			sub, subErr := subscriptionService.GetActiveSubscription(
-				c.Request.Context(),
-				apiKey.User.ID,
-				apiKey.Group.ID,
-			)
-			if subErr != nil {
-				if !skipBilling {
-					AbortWithError(c, 403, "SUBSCRIPTION_NOT_FOUND", "No active subscription found for this group")
-					return
-				}
-				// skipBilling: 订阅不存在也放行，handler 会返回可用的数据
-			} else {
-				subscription = sub
-			}
-		}
-
-		// ── 6. 计费执行（skipBilling 时整块跳过） ────────────────────
+		// ── 5. 计费执行（skipBilling 时整块跳过） ────────────────────
 
 		if !skipBilling {
 			// Key 状态检查
@@ -190,44 +169,13 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 				return
 			}
 
-			// 订阅模式：验证订阅限额
-			if subscription != nil {
-				needsMaintenance, validateErr := subscriptionService.ValidateAndCheckLimits(subscription, apiKey.Group)
-				if needsMaintenance {
-					refreshed, maintenanceErr := subscriptionService.EnsureWindowMaintenance(c.Request.Context(), subscription)
-					if maintenanceErr != nil {
-						AbortWithError(c, 500, "SUBSCRIPTION_MAINTENANCE_FAILED", "Failed to maintain subscription usage windows")
-						return
-					}
-					subscription = refreshed
-					_, validateErr = subscriptionService.ValidateAndCheckLimits(subscription, apiKey.Group)
-				}
-				if validateErr != nil {
-					code := "SUBSCRIPTION_INVALID"
-					status := 403
-					if errors.Is(validateErr, service.ErrDailyLimitExceeded) ||
-						errors.Is(validateErr, service.ErrWeeklyLimitExceeded) ||
-						errors.Is(validateErr, service.ErrMonthlyLimitExceeded) {
-						code = "USAGE_LIMIT_EXCEEDED"
-						status = 429
-					}
-					AbortWithError(c, status, code, validateErr.Error())
-					return
-				}
-			} else {
-				// 非订阅模式 或 订阅模式但 subscriptionService 未注入：回退到余额检查
-				if apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
-					AbortWithError(c, 403, "INSUFFICIENT_BALANCE", "Insufficient account balance")
-					return
-				}
+			if apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
+				AbortWithError(c, 403, "INSUFFICIENT_BALANCE", "Insufficient account balance")
+				return
 			}
 		}
 
-		// ── 7. 设置上下文 → Next ─────────────────────────────────────
-
-		if subscription != nil {
-			c.Set(string(ContextKeySubscription), subscription)
-		}
+		// ── 6. 设置上下文 → Next ─────────────────────────────────────
 		c.Set(string(ContextKeyAPIKey), apiKey)
 		c.Set(string(ContextKeyUser), AuthSubject{
 			UserID:      apiKey.User.ID,
@@ -323,9 +271,6 @@ func validateAPIKeyGroupAllowed(apiKey *service.APIKey) bool {
 		return true
 	}
 	group := apiKey.Group
-	if group.IsSubscriptionType() {
-		return true
-	}
 	return apiKey.User.CanBindGroup(group.ID, group.IsExclusive)
 }
 

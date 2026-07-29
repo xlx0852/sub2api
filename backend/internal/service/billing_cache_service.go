@@ -728,11 +728,10 @@ func (s *BillingCacheService) IncrementUserPlatformQuotaUsage(userID int64, plat
 // 统一检查方法
 // ============================================
 
-// CheckBillingEligibility 检查用户是否有资格发起请求
-// 余额模式：检查缓存余额 > 0
-// 订阅模式：检查缓存用量未超过限额（Group限额从参数传入）
+// CheckBillingEligibility 检查用户是否有资格发起请求。
+// 用户订阅配额模式已退役，所有流量都使用余额与 user×platform 配额预检。
 // platform 为请求的目标平台（如 "anthropic"），传空串 "" 时跳过 user × platform quota 检查。
-func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user *User, apiKey *APIKey, group *Group, subscription *UserSubscription, platform string) error {
+func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user *User, apiKey *APIKey, group *Group, _ *UserSubscription, platform string) error {
 	// 简易模式：跳过所有计费检查
 	if s.cfg.RunMode == config.RunModeSimple {
 		return nil
@@ -741,24 +740,12 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 		return ErrBillingServiceUnavailable
 	}
 
-	// 判断计费模式
-	isSubscriptionMode := group != nil && group.IsSubscriptionType() && subscription != nil
-
-	if isSubscriptionMode {
-		if err := s.checkSubscriptionEligibility(ctx, user.ID, group, subscription); err != nil {
-			return err
-		}
-	} else {
-		if err := s.checkBalanceEligibility(ctx, user.ID); err != nil {
-			return err
-		}
+	if err := s.checkBalanceEligibility(ctx, user.ID); err != nil {
+		return err
 	}
 
-	// user × platform quota 仅在 standard（余额）模式生效；订阅模式豁免
-	if !isSubscriptionMode {
-		if err := s.checkUserPlatformQuotaEligibility(ctx, user.ID, platform); err != nil {
-			return err
-		}
+	if err := s.checkUserPlatformQuotaEligibility(ctx, user.ID, platform); err != nil {
+		return err
 	}
 
 	// Check API Key rate limits (applies to both billing modes)

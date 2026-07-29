@@ -635,7 +635,9 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	apiKey := input.APIKey
 	user := input.User
 	account := input.Account
-	subscription := input.Subscription
+	// 用户订阅配额模式已退役。保留输入字段只为兼容现有 handler/测试调用，
+	// 新用量统一余额扣费且不再写入 subscription_id。
+	var subscription *UserSubscription
 	ApplyForwardImageBillingResolution(result)
 	normalizeClaudeUsageForBilling(&result.Usage)
 
@@ -687,12 +689,9 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	// 计算费用
 	cost := s.calculateRecordUsageCost(ctx, result, apiKey, billingModel, multiplier, imageMultiplier, opts)
 
-	// 判断计费方式：订阅模式 vs 余额模式
-	isSubscriptionBilling := subscription != nil && apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
+	// 用户流量统一使用余额计费。
+	isSubscriptionBilling := false
 	billingType := BillingTypeBalance
-	if isSubscriptionBilling {
-		billingType = BillingTypeSubscription
-	}
 
 	// 创建使用日志
 	accountRateMultiplier := account.BillingRateMultiplier()

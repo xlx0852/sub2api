@@ -257,7 +257,6 @@ describe('admin GroupsView column settings', () => {
     expect(columnKeys(wrapper)).toEqual([
       'name',
       'platform',
-      'billing_type',
       'rate_multiplier',
       'is_exclusive',
       'account_count',
@@ -279,7 +278,6 @@ describe('admin GroupsView column settings', () => {
     expect(columnKeys(wrapper)).toEqual([
       'name',
       'platform',
-      'billing_type',
       'rate_multiplier',
       'is_exclusive',
       'account_count',
@@ -297,7 +295,6 @@ describe('admin GroupsView column settings', () => {
     expect(columnKeys(wrapper)).toEqual([
       'name',
       'platform',
-      'billing_type',
       'rate_multiplier',
       'is_exclusive',
       'account_count',

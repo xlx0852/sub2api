@@ -290,25 +290,13 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/subscriptions',
-    name: 'Subscriptions',
-    component: () => import('@/views/user/SubscriptionsView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: false,
-      title: 'My Subscriptions',
-      titleKey: 'userSubscriptions.title',
-      descriptionKey: 'userSubscriptions.description'
-    }
-  },
-  {
     path: '/purchase',
-    name: 'PurchaseSubscription',
+    name: 'Recharge',
     component: () => import('@/views/user/PaymentView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
-      title: 'Purchase Subscription',
+      title: 'Recharge',
       titleKey: 'nav.buySubscription',
       descriptionKey: 'purchase.description',
       requiresPayment: true
@@ -490,18 +478,6 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/admin/subscriptions',
-    name: 'AdminSubscriptions',
-    component: () => import('@/views/admin/SubscriptionsView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Subscription Management',
-      titleKey: 'admin.subscriptions.title',
-      descriptionKey: 'admin.subscriptions.description'
-    }
-  },
-  {
     path: '/admin/accounts',
     name: 'AdminAccounts',
     component: () => import('@/views/admin/AccountsView.vue'),
@@ -677,19 +653,6 @@ const routes: RouteRecordRaw[] = [
       requiresPayment: true
     }
   },
-  {
-    path: '/admin/orders/plans',
-    name: 'AdminPaymentPlans',
-    component: () => import('@/views/admin/orders/AdminPaymentPlansView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Subscription Plans',
-      titleKey: 'nav.paymentPlans',
-      requiresPayment: true
-    }
-  },
-
   // ==================== 404 Not Found ====================
   {
     path: '/:pathMatch(.*)*',
@@ -886,9 +849,7 @@ router.beforeEach(async (to, _from, next) => {
   if (authStore.isSimpleMode) {
     const restrictedPaths = [
       '/admin/groups',
-      '/admin/subscriptions',
       '/admin/redeem',
-      '/subscriptions',
       '/redeem'
     ]
 

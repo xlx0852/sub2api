@@ -27,7 +27,6 @@ func RegisterPaymentRoutes(
 	{
 		authenticated.GET("/config", paymentHandler.GetPaymentConfig)
 		authenticated.GET("/checkout-info", paymentHandler.GetCheckoutInfo)
-		authenticated.GET("/plans", paymentHandler.GetPlans)
 		authenticated.GET("/limits", paymentHandler.GetLimits)
 
 		orders := authenticated.Group("/orders")
@@ -85,15 +84,6 @@ func RegisterPaymentRoutes(
 			adminOrders.POST("/:id/retry", adminPaymentHandler.RetryFulfillment)
 			adminOrders.POST("/:id/refund", adminPaymentHandler.ProcessRefund)
 			adminOrders.POST("/:id/refund/query", adminPaymentHandler.QueryAndFinalizeRefund)
-		}
-
-		// Subscription Plans
-		plans := adminGroup.Group("/plans")
-		{
-			plans.GET("", adminPaymentHandler.ListPlans)
-			plans.POST("", adminPaymentHandler.CreatePlan)
-			plans.PUT("/:id", adminPaymentHandler.UpdatePlan)
-			plans.DELETE("/:id", adminPaymentHandler.DeletePlan)
 		}
 
 		// Provider Instances

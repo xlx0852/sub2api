@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, shallowMount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import PaymentView from '../PaymentView.vue'
 import { PAYMENT_RECOVERY_STORAGE_KEY } from '@/components/payment/paymentFlow'
-import { formatPaymentAmount } from '@/components/payment/currency'
-import type { CheckoutInfoResponse, MethodLimit, SubscriptionPlan } from '@/types/payment'
+import type { CheckoutInfoResponse, MethodLimit } from '@/types/payment'
 
 const routeState = vi.hoisted(() => ({
   path: '/purchase',
@@ -15,12 +16,13 @@ const routerPush = vi.hoisted(() => vi.fn())
 const routerResolve = vi.hoisted(() => vi.fn(() => ({ href: '/payment/stripe?mock=1' })))
 const createOrder = vi.hoisted(() => vi.fn())
 const refreshUser = vi.hoisted(() => vi.fn())
-const fetchActiveSubscriptions = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const showError = vi.hoisted(() => vi.fn())
 const showInfo = vi.hoisted(() => vi.fn())
 const showWarning = vi.hoisted(() => vi.fn())
 const getCheckoutInfo = vi.hoisted(() => vi.fn())
 const bridgeInvoke = vi.hoisted(() => vi.fn())
+
+const paymentViewSource = readFileSync(resolve(process.cwd(), 'src/views/user/PaymentView.vue'), 'utf8')
 
 vi.mock('vue-router', async () => {
   const actual = await vi.importActual<typeof import('vue-router')>('vue-router')
@@ -58,13 +60,6 @@ vi.mock('@/stores/auth', () => ({
 vi.mock('@/stores/payment', () => ({
   usePaymentStore: () => ({
     createOrder,
-  }),
-}))
-
-vi.mock('@/stores/subscriptions', () => ({
-  useSubscriptionStore: () => ({
-    activeSubscriptions: [],
-    fetchActiveSubscriptions,
   }),
 }))
 
@@ -117,48 +112,6 @@ function checkoutInfoFixture(overrides: Partial<CheckoutInfoResponse> = {}) {
   }
 }
 
-function checkoutInfoWithPlansFixture(options: {
-  checkout?: Partial<CheckoutInfoResponse>
-  method?: Partial<MethodLimit>
-  plan?: Partial<SubscriptionPlan>
-} = {}) {
-  const base = checkoutInfoFixture(options.checkout).data
-  const plan: SubscriptionPlan = {
-    id: 7,
-    group_id: 3,
-    name: 'Starter',
-    description: '',
-    price: 128,
-    original_price: 0,
-    validity_days: 30,
-    validity_unit: 'day',
-    rate_multiplier: 1,
-    daily_limit_usd: null,
-    weekly_limit_usd: null,
-    monthly_limit_usd: null,
-    features: [],
-    group_platform: 'openai',
-    sort_order: 1,
-    for_sale: true,
-    group_name: 'OpenAI',
-    ...options.plan,
-  }
-
-  return {
-    data: {
-      ...base,
-      methods: {
-        ...base.methods,
-        wxpay: {
-          ...base.methods.wxpay,
-          ...options.method,
-        },
-      },
-      plans: [plan],
-    },
-  }
-}
-
 function jsapiOrderFixture(resumeToken: string) {
   return {
     order_id: 123,
@@ -181,148 +134,62 @@ function jsapiOrderFixture(resumeToken: string) {
   }
 }
 
-function oauthOrderFixture() {
-  return {
-    order_id: 456,
-    amount: 128,
-    pay_amount: 128,
-    fee_rate: 0,
-    expires_at: '2099-01-01T00:10:00.000Z',
-    payment_type: 'wxpay',
-    result_type: 'oauth_required' as const,
-    oauth: {
-      authorize_url: '/api/v1/auth/oauth/wechat/payment/start?payment_type=wxpay&redirect=%2Fpurchase%3Ffrom%3Dwechat',
-      appid: 'wx123',
-      scope: 'snsapi_base',
-      redirect_url: '/auth/wechat/payment/callback',
-    },
-  }
-}
+describe('PaymentView recharge-only screen', () => {
+  beforeEach(() => {
+    routeState.path = '/purchase'
+    routeState.query = {}
+    routerReplace.mockReset().mockResolvedValue(undefined)
+    routerPush.mockReset().mockResolvedValue(undefined)
+    getCheckoutInfo.mockReset()
+    window.localStorage.clear()
+  })
 
-async function mountSubscriptionConfirm(options: Parameters<typeof checkoutInfoWithPlansFixture>[0] = {}) {
-  vi.useRealTimers()
-  routeState.path = '/purchase'
-  routeState.query = {
-    tab: 'subscription',
-    group: '3',
-  }
-  routerReplace.mockReset().mockResolvedValue(undefined)
-  routerPush.mockReset().mockResolvedValue(undefined)
-  routerResolve.mockClear()
-  createOrder.mockReset()
-  refreshUser.mockReset()
-  fetchActiveSubscriptions.mockReset().mockResolvedValue(undefined)
-  showError.mockReset()
-  showInfo.mockReset()
-  showWarning.mockReset()
-  getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoWithPlansFixture(options))
-  bridgeInvoke.mockReset()
-  window.localStorage.clear()
-  ;(window as Window & { WeixinJSBridge?: { invoke: typeof bridgeInvoke } }).WeixinJSBridge = undefined
+  it('keeps the recharge amount input visible when no payment method is configured', async () => {
+    getCheckoutInfo.mockResolvedValue(checkoutInfoFixture({
+      methods: {},
+      help_text: '添加二维码售后',
+      help_image_url: '/help.png',
+    }))
 
-  const wrapper = shallowMount(PaymentView, {
-    global: {
-      stubs: {
-        AppLayout: {
-          template: '<div><slot /></div>',
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          Teleport: true,
+          Transition: false,
         },
-        Teleport: true,
-        Transition: false,
-      },
-    },
-  })
-  await flushPromises()
-  await flushPromises()
-  return wrapper
-}
-
-describe('PaymentView subscription confirmation amounts', () => {
-  it('shows converted CNY pay amount using the subscription rate, not the balance multiplier', async () => {
-    const wrapper = await mountSubscriptionConfirm({
-      checkout: {
-        balance_recharge_multiplier: 0.14,
-        subscription_usd_to_cny_rate: 7.15,
-      },
-      method: {
-        currency: 'CNY',
-      },
-      plan: {
-        price: 9.99,
-        original_price: 12.99,
       },
     })
+    await flushPromises()
 
-    const text = wrapper.text()
-    const convertedPrice = formatPaymentAmount(71.43, 'CNY')
-    const convertedOriginalPrice = formatPaymentAmount(92.88, 'CNY')
-
-    expect(text).toContain(convertedPrice)
-    expect(text).toContain(convertedOriginalPrice)
-    expect(text).not.toContain(formatPaymentAmount(9.99, 'CNY'))
-    // 换算必须使用订阅汇率（×7.15），而不是余额倍率（÷0.14 = 71.36）
-    expect(text).not.toContain(formatPaymentAmount(71.36, 'CNY'))
-    expect(wrapper.findAll('button').some(button => button.text().includes(convertedPrice))).toBe(true)
+    expect(wrapper.find('[data-test="recharge-amount-card"]').exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'AmountInput' }).exists()).toBe(true)
+    expect(wrapper.find('[data-test="recharge-unavailable"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('payment.rechargeAccount')
+    expect(wrapper.text()).not.toContain('payment.tabSubscribe')
   })
 
-  it('keeps plan price when the subscription rate is not configured or payment currency is not CNY', async () => {
-    // opt-in 回归锁：即使余额倍率已配置，未配置订阅汇率时 CNY 订阅仍按 price 直付
-    const cnyWrapper = await mountSubscriptionConfirm({
-      checkout: {
-        balance_recharge_multiplier: 0.14,
-        subscription_usd_to_cny_rate: 0,
-      },
-      method: {
-        currency: 'CNY',
-      },
-      plan: {
-        price: 7.99,
-      },
-    })
-
-    expect(cnyWrapper.text()).toContain(formatPaymentAmount(7.99, 'CNY'))
-    expect(cnyWrapper.text()).not.toContain(formatPaymentAmount(57.07, 'CNY'))
-    expect(cnyWrapper.text()).not.toContain(formatPaymentAmount(57.13, 'CNY'))
-
-    const usdWrapper = await mountSubscriptionConfirm({
-      checkout: {
-        subscription_usd_to_cny_rate: 7.15,
-      },
-      method: {
-        currency: 'USD',
-      },
-      plan: {
-        price: 7.99,
-        original_price: 9.99,
-      },
-    })
-
-    expect(usdWrapper.text()).toContain(formatPaymentAmount(7.99, 'USD'))
-    expect(usdWrapper.text()).toContain(formatPaymentAmount(9.99, 'USD'))
+  it('does not wrap the rendered recharge controls in a native template element', () => {
+    expect(paymentViewSource).not.toMatch(/<!-- Balance recharge -->\s*<template>/)
   })
 
-  it('adds fee rate after CNY rate conversion to match backend pay_amount', async () => {
-    const wrapper = await mountSubscriptionConfirm({
-      checkout: {
-        subscription_usd_to_cny_rate: 7.15,
-        recharge_fee_rate: 2.5,
-      },
-      method: {
-        currency: 'CNY',
-      },
-      plan: {
-        price: 9.99,
+  it('shows the payment method selector when a recharge provider is available', async () => {
+    getCheckoutInfo.mockResolvedValue(checkoutInfoFixture())
+
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          Teleport: true,
+          Transition: false,
+        },
       },
     })
+    await flushPromises()
 
-    const text = wrapper.text()
-    const convertedPrice = formatPaymentAmount(71.43, 'CNY')
-    const fee = formatPaymentAmount(1.79, 'CNY')
-    const total = formatPaymentAmount(73.22, 'CNY')
-
-    expect(text).toContain(convertedPrice)
-    expect(text).toContain(fee)
-    expect(text).toContain(total)
-    expect(wrapper.findAll('button').some(button => button.text().includes(total))).toBe(true)
+    expect(wrapper.findComponent({ name: 'AmountInput' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'PaymentMethodSelector' }).exists()).toBe(true)
+    expect(wrapper.find('[data-test="recharge-unavailable"]').exists()).toBe(false)
   })
 })
 
@@ -336,7 +203,6 @@ describe('PaymentView payment recovery', () => {
     routerResolve.mockClear()
     createOrder.mockReset()
     refreshUser.mockReset()
-    fetchActiveSubscriptions.mockReset().mockResolvedValue(undefined)
     showError.mockReset()
     showInfo.mockReset()
     showWarning.mockReset()
@@ -420,7 +286,6 @@ describe('PaymentView WeChat JSAPI flow', () => {
     routerResolve.mockClear()
     createOrder.mockReset()
     refreshUser.mockReset()
-    fetchActiveSubscriptions.mockReset().mockResolvedValue(undefined)
     showError.mockReset()
     showInfo.mockReset()
     showWarning.mockReset()
@@ -547,56 +412,6 @@ describe('PaymentView WeChat JSAPI flow', () => {
       wechat_resume_token: 'resume-token-123',
     }))
     expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toBeNull()
-  })
-
-  it('keeps subscription resume context for token-only WeChat callbacks', async () => {
-    routeState.query = {
-      wechat_resume: '1',
-      wechat_resume_token: 'resume-subscription-7',
-      payment_type: 'wxpay_direct',
-      order_type: 'subscription',
-      plan_id: '7',
-    }
-    getCheckoutInfo.mockResolvedValue(checkoutInfoWithPlansFixture())
-    createOrder.mockResolvedValue(oauthOrderFixture())
-
-    const originalLocation = window.location
-    const locationState = {
-      href: 'http://localhost/purchase',
-      origin: 'http://localhost',
-    }
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: locationState,
-    })
-
-    shallowMount(PaymentView, {
-      global: {
-        stubs: {
-          Teleport: true,
-          Transition: false,
-        },
-      },
-    })
-    await flushPromises()
-    await flushPromises()
-
-    expect(routerReplace).toHaveBeenCalledWith({ path: '/purchase', query: {} })
-    expect(createOrder).toHaveBeenCalledWith(expect.objectContaining({
-      payment_type: 'wxpay',
-      order_type: 'subscription',
-      plan_id: 7,
-      wechat_resume_token: 'resume-subscription-7',
-    }))
-    expect(locationState.href).toContain('/api/v1/auth/oauth/wechat/payment/start?')
-    expect(new URL(locationState.href, 'http://localhost').searchParams.get('redirect')).toBe(
-      '/purchase?from=wechat&payment_type=wxpay&order_type=subscription&plan_id=7',
-    )
-
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: originalLocation,
-    })
   })
 
   it('falls back to QR flow when mobile WeChat payment is unavailable', async () => {

@@ -44,6 +44,9 @@ type profitRepoStub struct {
 	dailyBatchCalls  int
 	bestBatchCalls   int
 	statsBatchCalls  int
+	storedValue      *StoredValueSnapshot
+	forecastSamples  []*SupplyForecastUsageSample
+	forecastSupply   map[string]int
 }
 
 func (s *profitRepoStub) UpsertCostConfig(_ context.Context, cfg *AccountCostConfig) (*AccountCostConfig, error) {
@@ -126,6 +129,15 @@ func (s *profitRepoStub) GetBestWindowRevenueBatch(_ context.Context, accountIDs
 	}
 	return result, nil
 }
+func (s *profitRepoStub) GetStoredValueSnapshot(context.Context) (*StoredValueSnapshot, error) {
+	return s.storedValue, nil
+}
+func (s *profitRepoStub) GetSupplyForecastUsageSamples(context.Context, time.Time, time.Time, string) ([]*SupplyForecastUsageSample, error) {
+	return s.forecastSamples, nil
+}
+func (s *profitRepoStub) GetSchedulableSubscriptionSupply(context.Context) (map[string]int, error) {
+	return s.forecastSupply, nil
+}
 
 func TestProfitService_AmortizedSubscriptionCost(t *testing.T) {
 	cycle := &AccountSubscriptionCycle{PeriodFee: 200, PeriodDays: 30}
@@ -158,6 +170,23 @@ func TestSubscriptionCyclesDoNotChargeIdleGap(t *testing.T) {
 	activeStart := time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC)
 	if got := subscriptionCyclesCostForRange([]*AccountSubscriptionCycle{first, second}, activeStart, activeStart.AddDate(0, 0, 10)); got != 100 {
 		t.Fatalf("active cycle cost = %v, want 100", got)
+	}
+}
+
+func TestGrokMonthlyQuotaResetDoesNotSplitPaymentCycle(t *testing.T) {
+	start := time.Date(2026, 7, 17, 0, 0, 0, 0, time.UTC)
+	reset := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC)
+	cycle := &AccountSubscriptionCycle{StartsAt: start, PeriodFee: 310, PeriodDays: 31}
+
+	beforeReset := subscriptionCycleCostForRange(cycle, start, reset)
+	afterReset := subscriptionCycleCostForRange(cycle, reset, end)
+	fullCycle := subscriptionCycleCostForRange(cycle, start, end)
+	if beforeReset != 150 || afterReset != 160 || fullCycle != 310 {
+		t.Fatalf("Grok cycle costs before=%v after=%v full=%v, want 150/160/310", beforeReset, afterReset, fullCycle)
+	}
+	if beforeReset+afterReset != fullCycle {
+		t.Fatalf("quota reset duplicated or dropped cost: split=%v full=%v", beforeReset+afterReset, fullCycle)
 	}
 }
 
@@ -284,11 +313,20 @@ func TestProfitService_GetOverviewUsesBoundedBatchQueries(t *testing.T) {
 	if len(overview.Points) != 1 || overview.Points[0].Cost != 35 || overview.Points[0].Profit != 185 {
 		t.Fatalf("points = %+v, want cost/profit 35/185", overview.Points)
 	}
-	if repo.dailyBatchCalls != 1 || repo.listConfigsCalls != 1 || repo.cycleBatchCalls != 1 || repo.bestBatchCalls != 1 || repo.rangeStatsCalls != 1 {
-		t.Fatalf("batch calls daily/config/cycle/best/range = %d/%d/%d/%d/%d, want all 1", repo.dailyBatchCalls, repo.listConfigsCalls, repo.cycleBatchCalls, repo.bestBatchCalls, repo.rangeStatsCalls)
+	if repo.dailyBatchCalls != 1 || repo.listConfigsCalls != 1 || repo.cycleBatchCalls != 1 {
+		t.Fatalf("batch calls daily/config/cycle = %d/%d/%d, want all 1", repo.dailyBatchCalls, repo.listConfigsCalls, repo.cycleBatchCalls)
+	}
+	if repo.bestBatchCalls != 0 || repo.rangeStatsCalls != 0 {
+		t.Fatalf("overview loaded drawer-only best/range stats: %d/%d", repo.bestBatchCalls, repo.rangeStatsCalls)
 	}
 	if repo.statsBatchCalls != 0 {
 		t.Fatalf("overview performed duplicate account stats query: %d", repo.statsBatchCalls)
+	}
+	if overview.GeneratedAt.IsZero() {
+		t.Fatal("overview generated_at must be set")
+	}
+	if overview.Summary.Accounts[0].WindowEfficiency != nil || overview.Summary.Accounts[0].BillingWindowRevenue != nil {
+		t.Fatalf("overview returned drawer-only metrics: %+v", overview.Summary.Accounts[0])
 	}
 }
 
