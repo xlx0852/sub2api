@@ -168,7 +168,7 @@ import { reactive, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import type { PaymentOrder } from '@/types/payment'
-import { formatOrderDateTime } from '@/components/payment/orderUtils'
+import { formatOrderDateTime as formatDateTime } from '@/components/payment/orderUtils'
 import { currencySymbol } from '@/components/payment/currency'
 
 const { t } = useI18n()
@@ -230,10 +230,6 @@ watch(() => props.show, (val) => {
     form.force = false
   }
 })
-
-function formatDateTime(dateStr: string): string {
-  return formatOrderDateTime(dateStr)
-}
 
 function handleSubmit() {
   if (form.amount <= 0 || form.amount > maxRefundable.value) return

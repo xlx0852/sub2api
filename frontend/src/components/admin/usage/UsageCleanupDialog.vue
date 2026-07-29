@@ -39,9 +39,9 @@
             >
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div class="flex items-center gap-2">
-                  <span :class="statusClass(task.status)" class="rounded-full px-2 py-0.5 text-xs font-semibold">
+                  <SemanticBadge :tone="statusTone(task.status)">
                     {{ statusLabel(task.status) }}
-                  </span>
+                  </SemanticBadge>
                   <span class="text-xs text-gray-400">#{{ task.id }}</span>
                   <button
                     v-if="canCancel(task)"
@@ -122,10 +122,12 @@ import { useAppStore } from '@/stores/app'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Pagination from '@/components/common/Pagination.vue'
+import SemanticBadge from '@/components/common/SemanticBadge.vue'
 import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
 import { adminUsageAPI } from '@/api/admin/usage'
 import type { AdminUsageQueryParams, UsageCleanupTask, CreateUsageCleanupTaskRequest } from '@/api/admin/usage'
 import { requestTypeToLegacyStream } from '@/utils/usageRequestType'
+import { formatDateTime as formatSharedDateTime } from '@/utils/format'
 
 interface Props {
   show: boolean
@@ -203,22 +205,19 @@ const statusLabel = (status: string) => {
   return map[status] || status
 }
 
-const statusClass = (status: string) => {
-  const map: Record<string, string> = {
-    pending: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200',
-    running: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200',
-    succeeded: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200',
-    failed: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-200',
-    canceled: 'bg-gray-200 text-gray-600 dark:bg-dark-600 dark:text-gray-300'
-  }
-  return map[status] || 'bg-gray-100 text-gray-600'
-}
+type BadgeTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
+
+const statusTone = (status: string): BadgeTone => ({
+  pending: 'warning',
+  running: 'info',
+  succeeded: 'success',
+  failed: 'danger',
+  canceled: 'neutral'
+}[status] as BadgeTone | undefined) ?? 'neutral'
 
 const formatDateTime = (value?: string | null) => {
   if (!value) return '--'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString()
+  return formatSharedDateTime(value) || value
 }
 
 const formatRange = (task: UsageCleanupTask) => {

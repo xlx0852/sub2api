@@ -6,9 +6,11 @@
     <input
       :value="modelValue"
       type="text"
+      :autocomplete="autocomplete"
       class="input pl-10"
       :placeholder="placeholder"
       @input="handleInput"
+      @focus="emit('focus')"
     />
   </div>
 </template>
@@ -21,14 +23,17 @@ const props = withDefaults(defineProps<{
   modelValue: string
   placeholder?: string
   debounceMs?: number
+  autocomplete?: string
 }>(), {
   placeholder: 'Search...',
-  debounceMs: 300
+  debounceMs: 300,
+  autocomplete: 'off'
 })
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
   (e: 'search', value: string): void
+  (e: 'focus'): void
 }>()
 
 const debouncedEmitSearch = useDebounceFn((value: string) => {
