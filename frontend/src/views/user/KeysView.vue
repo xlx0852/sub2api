@@ -3,22 +3,22 @@
     <TablePageLayout>
       <template #filters>
         <div class="flex flex-col gap-3">
-          <div class="flex flex-wrap items-center gap-3">
+          <div class="grid grid-cols-2 items-center gap-3 sm:flex sm:flex-wrap">
             <SearchInput
               v-model="filterSearch"
               :placeholder="t('keys.searchPlaceholder')"
-              class="w-full sm:w-64"
+              class="col-span-2 w-full sm:col-auto sm:w-64"
               @search="onFilterChange"
             />
             <Select
               :model-value="filterGroupId"
-              class="w-40"
+              class="min-w-0 w-full sm:w-40"
               :options="groupFilterOptions"
               @update:model-value="onGroupFilterChange"
             />
             <Select
               :model-value="filterStatus"
-              class="w-40"
+              class="min-w-0 w-full sm:w-40"
               :options="statusFilterOptions"
               @update:model-value="onStatusFilterChange"
             />
@@ -134,7 +134,7 @@
               <button
                 :ref="(el) => setGroupButtonRef(row.id, el)"
                 @click="openGroupSelector(row)"
-                class="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:bg-gray-100 dark:hover:bg-dark-700"
+                class="-mx-2 -my-1 flex min-w-0 cursor-pointer items-center justify-end gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:bg-gray-100 dark:hover:bg-dark-700"
                 :title="t('keys.clickToChangeGroup')"
               >
                 <GroupBadge
@@ -152,9 +152,9 @@
                 <span v-else class="text-sm text-gray-400 dark:text-dark-500">{{
                   t('keys.noGroup')
                 }}</span>
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('keys.selectGroup') }}</span>
+                <span class="hidden text-xs text-gray-500 md:inline dark:text-gray-400">{{ t('keys.selectGroup') }}</span>
                 <svg
-                  class="h-3.5 w-3.5 text-gray-400 opacity-60 transition-opacity group-hover/dropdown:opacity-100"
+                  class="h-3.5 w-3.5 shrink-0 text-gray-400 opacity-60 transition-opacity group-hover/dropdown:opacity-100"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -359,29 +359,29 @@
           </template>
 
           <template #cell-actions="{ row }">
-            <div class="flex items-center gap-1">
+            <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:flex md:items-center md:gap-1">
               <!-- Use Key Button -->
               <button
                 @click="openUseKeyModal(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-green-50 hover:text-green-600 dark:hover:bg-green-900/20 dark:hover:text-green-400"
+                class="flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-500 transition-colors hover:bg-green-50 hover:text-green-600 md:min-h-0 md:flex-col md:gap-0.5 md:border-transparent md:bg-transparent md:p-1.5 md:dark:border-transparent md:dark:bg-transparent dark:border-dark-700 dark:bg-dark-800 dark:hover:bg-green-900/20 dark:hover:text-green-400"
               >
                 <Icon name="terminal" size="sm" />
-                <span class="text-xs">{{ t('keys.useKey') }}</span>
+                <span class="whitespace-nowrap text-xs">{{ t('keys.useKey') }}</span>
               </button>
               <!-- Import to CC Switch Button -->
               <button
                 v-if="!publicSettings?.hide_ccs_import_button"
                 @click="importToCcswitch(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
+                class="flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 md:min-h-0 md:flex-col md:gap-0.5 md:border-transparent md:bg-transparent md:p-1.5 md:dark:border-transparent md:dark:bg-transparent dark:border-dark-700 dark:bg-dark-800 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
               >
                 <Icon name="upload" size="sm" />
-                <span class="text-xs">{{ t('keys.importToCcSwitch') }}</span>
+                <span class="whitespace-nowrap text-xs">{{ t('keys.importToCcSwitch') }}</span>
               </button>
               <!-- Toggle Status Button -->
               <button
                 @click="toggleKeyStatus(row)"
                 :class="[
-                  'flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors',
+                  'flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 transition-colors md:min-h-0 md:flex-col md:gap-0.5 md:border-transparent md:bg-transparent md:p-1.5 md:dark:border-transparent md:dark:bg-transparent dark:border-dark-700 dark:bg-dark-800',
                   row.status === 'active'
                     ? 'text-gray-500 hover:bg-yellow-50 hover:text-yellow-600 dark:hover:bg-yellow-900/20 dark:hover:text-yellow-400'
                     : 'text-gray-500 hover:bg-green-50 hover:text-green-600 dark:hover:bg-green-900/20 dark:hover:text-green-400'
@@ -389,23 +389,23 @@
               >
                 <Icon v-if="row.status === 'active'" name="ban" size="sm" />
                 <Icon v-else name="checkCircle" size="sm" />
-                <span class="text-xs">{{ row.status === 'active' ? t('keys.disable') : t('keys.enable') }}</span>
+                <span class="whitespace-nowrap text-xs">{{ row.status === 'active' ? t('keys.disable') : t('keys.enable') }}</span>
               </button>
               <!-- Edit Button -->
               <button
                 @click="editKey(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+                class="flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 md:min-h-0 md:flex-col md:gap-0.5 md:border-transparent md:bg-transparent md:p-1.5 md:dark:border-transparent md:dark:bg-transparent dark:border-dark-700 dark:bg-dark-800 dark:hover:bg-dark-700 dark:hover:text-primary-400"
               >
                 <Icon name="edit" size="sm" />
-                <span class="text-xs">{{ t('common.edit') }}</span>
+                <span class="whitespace-nowrap text-xs">{{ t('common.edit') }}</span>
               </button>
               <!-- Delete Button -->
               <button
                 @click="confirmDelete(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                class="flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 md:min-h-0 md:flex-col md:gap-0.5 md:border-transparent md:bg-transparent md:p-1.5 md:dark:border-transparent md:dark:bg-transparent dark:border-dark-700 dark:bg-dark-800 dark:hover:bg-red-900/20 dark:hover:text-red-400"
               >
                 <Icon name="trash" size="sm" />
-                <span class="text-xs">{{ t('common.delete') }}</span>
+                <span class="whitespace-nowrap text-xs">{{ t('common.delete') }}</span>
               </button>
             </div>
           </template>

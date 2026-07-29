@@ -965,6 +965,10 @@ func (r *contentModerationHandlerTestRepo) CountFlaggedByUserSince(ctx context.C
 	return 0, nil
 }
 
+func (r *contentModerationHandlerTestRepo) ListLatestFlaggedLogsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*service.ContentModerationLog, error) {
+	return map[int64]*service.ContentModerationLog{}, nil
+}
+
 func (r *contentModerationHandlerTestRepo) CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time) (*service.ContentModerationCleanupResult, error) {
 	return &service.ContentModerationCleanupResult{}, nil
 }
@@ -1497,6 +1501,7 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
 		&service.DeferredService{},
 		nil,
 		nil,
+		nil, // kimiTokenProvider
 		nil,
 		nil,
 		nil,
@@ -1684,6 +1689,7 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		&service.DeferredService{},
 		nil,
 		nil,
+		nil, // kimiTokenProvider
 		nil,
 		channelSvc,
 		nil,

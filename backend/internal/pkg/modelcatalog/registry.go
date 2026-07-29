@@ -99,15 +99,16 @@ func Load(opts *LoadOptions) error {
 func Get() *Catalog {
 	globalMu.RLock()
 	defer globalMu.RUnlock()
-	return global
+	return cloneCatalog(global)
 }
 
 func platform(name string) PlatformConfig {
-	c := Get()
-	if c == nil {
+	globalMu.RLock()
+	defer globalMu.RUnlock()
+	if global == nil {
 		return PlatformConfig{}
 	}
-	return c.Platforms[name]
+	return clonePlatform(global.Platforms[name])
 }
 
 // --- OpenAI ---
@@ -279,8 +280,66 @@ func PublicView() *Catalog {
 	if c == nil {
 		return &Catalog{Version: 0, Platforms: map[string]PlatformConfig{}}
 	}
-	// Shallow copy of structure (maps shared is OK for read-only response after encode).
 	return c
+}
+
+func cloneCatalog(in *Catalog) *Catalog {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	out.Platforms = make(map[string]PlatformConfig, len(in.Platforms))
+	for key, value := range in.Platforms {
+		out.Platforms[key] = clonePlatform(value)
+	}
+	out.FallbackPricing = make(map[string]PriceEntry, len(in.FallbackPricing))
+	for key, value := range in.FallbackPricing {
+		out.FallbackPricing[key] = value
+	}
+	out.ImageDefaults.SizeMultipliers = copyFloatMap(in.ImageDefaults.SizeMultipliers)
+	out.UIPresets = make(map[string][]UIPreset, len(in.UIPresets))
+	for key, value := range in.UIPresets {
+		out.UIPresets[key] = append([]UIPreset(nil), value...)
+	}
+	return &out
+}
+
+func clonePlatform(in PlatformConfig) PlatformConfig {
+	out := in
+	out.Models = append([]ModelEntry(nil), in.Models...)
+	for i := range out.Models {
+		out.Models[i].SupportedGenerationMethods = append([]string(nil), in.Models[i].SupportedGenerationMethods...)
+		out.Models[i].Media = copyBoolMap(in.Models[i].Media)
+		out.Models[i].Flags = copyBoolMap(in.Models[i].Flags)
+	}
+	out.Aliases = copyStringMap(in.Aliases)
+	out.RetiredIDs = append([]string(nil), in.RetiredIDs...)
+	out.DefaultMapping = copyStringMap(in.DefaultMapping)
+	out.IDOverrides = copyStringMap(in.IDOverrides)
+	out.IDReverseOverrides = copyStringMap(in.IDReverseOverrides)
+	return out
+}
+
+func copyBoolMap(in map[string]bool) map[string]bool {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]bool, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func copyFloatMap(in map[string]float64) map[string]float64 {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]float64, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
 
 func copyStringMap(in map[string]string) map[string]string {

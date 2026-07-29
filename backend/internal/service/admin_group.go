@@ -100,8 +100,8 @@ func defaultModelsListCandidateIDs(platform string) []string {
 	case PlatformOpenAI:
 		return openai.DefaultModelIDs()
 	case PlatformGemini:
-		ids := make([]string, 0, len(geminicli.DefaultModels))
-		for _, model := range geminicli.DefaultModels {
+		ids := make([]string, 0, len(geminicli.CurrentDefaultModels()))
+		for _, model := range geminicli.CurrentDefaultModels() {
 			ids = append(ids, model.ID)
 		}
 		return ids
@@ -114,9 +114,11 @@ func defaultModelsListCandidateIDs(platform string) []string {
 		return ids
 	case PlatformGrok:
 		return xai.DefaultModelIDs()
+	case PlatformKimi:
+		return []string{"kimi-k3", "kimi-k3-highspeed", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6", "kimi-k2.5"}
 	default:
-		ids := make([]string, 0, len(claude.DefaultModels))
-		for _, model := range claude.DefaultModels {
+		ids := make([]string, 0, len(claude.CurrentDefaultModels()))
+		for _, model := range claude.CurrentDefaultModels() {
 			ids = append(ids, model.ID)
 		}
 		return ids
@@ -307,7 +309,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	}
 
 	// require_oauth_only: 过滤掉 apikey 类型账号
-	if group.RequireOAuthOnly && (group.Platform == PlatformOpenAI || group.Platform == PlatformAntigravity || group.Platform == PlatformAnthropic || group.Platform == PlatformGemini || group.Platform == PlatformGrok) && len(accountIDsToCopy) > 0 {
+	if group.RequireOAuthOnly && (group.Platform == PlatformOpenAI || group.Platform == PlatformAntigravity || group.Platform == PlatformAnthropic || group.Platform == PlatformGemini || group.Platform == PlatformGrok || group.Platform == PlatformKimi) && len(accountIDsToCopy) > 0 {
 		accounts, err := s.accountRepo.GetByIDs(ctx, accountIDsToCopy)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch accounts for oauth filter: %w", err)
@@ -663,7 +665,7 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		}
 
 		// require_oauth_only: 过滤掉 apikey 类型账号
-		if group.RequireOAuthOnly && (group.Platform == PlatformOpenAI || group.Platform == PlatformAntigravity || group.Platform == PlatformAnthropic || group.Platform == PlatformGemini || group.Platform == PlatformGrok) && len(accountIDsToCopy) > 0 {
+		if group.RequireOAuthOnly && (group.Platform == PlatformOpenAI || group.Platform == PlatformAntigravity || group.Platform == PlatformAnthropic || group.Platform == PlatformGemini || group.Platform == PlatformGrok || group.Platform == PlatformKimi) && len(accountIDsToCopy) > 0 {
 			accounts, err := s.accountRepo.GetByIDs(ctx, accountIDsToCopy)
 			if err != nil {
 				return nil, fmt.Errorf("failed to fetch accounts for oauth filter: %w", err)
@@ -751,7 +753,11 @@ func (s *adminServiceImpl) ClearGroupRateMultipliers(ctx context.Context, groupI
 	if s.userGroupRateRepo == nil {
 		return nil
 	}
-	return s.userGroupRateRepo.DeleteByGroupID(ctx, groupID)
+	if err := s.userGroupRateRepo.DeleteByGroupID(ctx, groupID); err != nil {
+		return err
+	}
+	invalidateSharedUserGroupRateCacheForGroup(groupID)
+	return nil
 }
 
 func (s *adminServiceImpl) BatchSetGroupRateMultipliers(ctx context.Context, groupID int64, entries []GroupRateMultiplierInput) error {
@@ -763,7 +769,11 @@ func (s *adminServiceImpl) BatchSetGroupRateMultipliers(ctx context.Context, gro
 			return fmt.Errorf("rate_multiplier must be > 0 (user_id=%d)", e.UserID)
 		}
 	}
-	return s.userGroupRateRepo.SyncGroupRateMultipliers(ctx, groupID, entries)
+	if err := s.userGroupRateRepo.SyncGroupRateMultipliers(ctx, groupID, entries); err != nil {
+		return err
+	}
+	invalidateSharedUserGroupRateCacheForGroup(groupID)
+	return nil
 }
 
 func (s *adminServiceImpl) ClearGroupRPMOverrides(ctx context.Context, groupID int64) error {

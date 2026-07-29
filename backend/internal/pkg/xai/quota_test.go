@@ -21,6 +21,9 @@ func TestParseQuotaHeaders(t *testing.T) {
 	headers.Set("retry-after", "60")
 	headers.Set("xai-subscription-tier", "supergrok")
 	headers.Set("xai-entitlement-status", "active")
+	headers.Set("x-grok-context-window", "131072")
+	headers.Set("x-grok-max-completion-tokens", "32768")
+	headers.Set("x-models-etag", `W/"models-42"`)
 	headers.Set("authorization", "should-not-be-copied")
 
 	snapshot := ParseQuotaHeaders(headers, http.StatusTooManyRequests)
@@ -37,6 +40,9 @@ func TestParseQuotaHeaders(t *testing.T) {
 	require.Equal(t, 60, *snapshot.RetryAfterSeconds)
 	require.Equal(t, "supergrok", snapshot.SubscriptionTier)
 	require.Equal(t, "active", snapshot.EntitlementStatus)
+	require.Equal(t, int64(131072), *snapshot.ContextWindow)
+	require.Equal(t, int64(32768), *snapshot.MaxCompletion)
+	require.Equal(t, `W/"models-42"`, snapshot.ModelsETag)
 	require.Contains(t, snapshot.Headers, "x-ratelimit-limit-requests")
 	require.NotContains(t, snapshot.Headers, "authorization")
 }

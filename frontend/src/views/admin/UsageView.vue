@@ -5,18 +5,19 @@
       <!-- Charts Section -->
       <div class="space-y-4">
         <div class="card p-4">
-          <div class="flex flex-wrap items-center gap-4">
-            <div class="flex items-center gap-2">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-end">
+            <div class="flex min-w-0 flex-col gap-2">
               <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.dashboard.timeRange') }}:</span>
               <DateRangePicker
+                class="w-full"
                 v-model:start-date="startDate"
                 v-model:end-date="endDate"
                 @change="onDateRangeChange"
               />
             </div>
-            <div class="ml-auto flex items-center gap-2">
+            <div class="flex min-w-0 flex-col gap-2 sm:ml-auto sm:w-40">
               <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.dashboard.granularity') }}:</span>
-              <div class="w-28">
+              <div class="w-full">
                 <Select v-model="granularity" :options="granularityOptions" @change="loadChartData" />
               </div>
             </div>
@@ -502,7 +503,16 @@ const getRequestTypeLabel = (log: AdminUsageLog): string => {
   return t('usage.unknown')
 }
 
+const formatExportOutputRate = (log: AdminUsageLog): string => {
+  if (log.duration_ms == null || log.duration_ms <= 0 || log.output_tokens == null || log.output_tokens <= 0) {
+    return ''
+  }
+  const rate = (log.output_tokens * 1000) / log.duration_ms
+  return rate >= 100 ? String(Math.round(rate)) : rate.toFixed(1)
+}
+
 const exportToExcel = async () => {
+
   if (exporting.value) return; exporting.value = true; exportProgress.show = true
   const c = new AbortController(); exportAbortController = c
   try {
@@ -518,7 +528,7 @@ const exportToExcel = async () => {
       t('admin.usage.inputCost'), t('admin.usage.outputCost'),
       t('admin.usage.cacheReadCost'), t('admin.usage.cacheCreationCost'),
       t('usage.rate'), t('usage.accountMultiplier'), t('usage.original'), t('usage.userBilled'), t('usage.accountBilled'),
-      t('usage.firstToken'), t('usage.duration'),
+      t('usage.firstToken'), t('usage.duration'), t('usage.outputRate'),
       t('admin.usage.requestId'), t('usage.userAgent'), t('admin.usage.ipAddress')
     ]
     const ws = XLSX.utils.aoa_to_sheet([headers])
@@ -538,6 +548,7 @@ const exportToExcel = async () => {
         log.rate_multiplier?.toPrecision(4) || '1.00', (log.account_rate_multiplier ?? 1).toPrecision(4),
         log.total_cost?.toFixed(6) || '0.000000', log.actual_cost?.toFixed(6) || '0.000000',
         ((log.account_stats_cost ?? log.total_cost) * (log.account_rate_multiplier ?? 1)).toFixed(6), log.first_token_ms ?? '', log.duration_ms,
+        formatExportOutputRate(log),
         log.request_id || '', log.user_agent || '', log.ip_address || ''
       ])
       if (rows.length) {
@@ -565,9 +576,9 @@ const HIDDEN_COLUMNS_KEY = 'usage-hidden-columns'
 
 const allColumns = computed(() => [
   { key: 'user', label: t('admin.usage.user'), sortable: false },
-  { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
+  { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false, class: 'min-w-36' },
   { key: 'account', label: t('admin.usage.account'), sortable: false },
-  { key: 'model', label: t('usage.model'), sortable: true },
+  { key: 'model', label: t('usage.model'), sortable: true, class: 'min-w-44' },
   { key: 'reasoning_effort', label: t('usage.reasoningEffort'), sortable: false },
   { key: 'service_tier', label: t('usage.serviceTier'), sortable: false },
   { key: 'endpoint', label: t('usage.endpoint'), sortable: false },
@@ -577,6 +588,7 @@ const allColumns = computed(() => [
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
   { key: 'cost', label: t('usage.cost'), sortable: false },
   { key: 'latency', label: t('usage.latency'), sortable: false },
+  { key: 'output_rate', label: t('usage.outputRate'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },
   { key: 'ip_address', label: t('admin.usage.ipAddress'), sortable: false }

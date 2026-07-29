@@ -40,3 +40,33 @@ func TestDefaultScheduledDiagnosticsModel_PrefersCheap(t *testing.T) {
 	require.NotEmpty(t, model)
 	require.True(t, strings.Contains(strings.ToLower(model), "mini") || model != "")
 }
+
+
+func TestResolveScheduledDiagnosticsModels_ModelMappingUsesValuesAndDropsWildcards(t *testing.T) {
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{
+				"*":            "should-not-use",
+				"client-alias": "gpt-5.4-mini",
+			},
+		},
+	}
+	got := ResolveScheduledDiagnosticsModels(account, "")
+	require.NotEmpty(t, got)
+	for _, m := range got {
+		require.NotContains(t, m, "*")
+		require.NotEqual(t, "should-not-use", m)
+	}
+	require.Contains(t, got, "gpt-5.4-mini")
+}
+
+func TestShouldDemoteAfterDiagnosticsFailure(t *testing.T) {
+	require.False(t, shouldDemoteAfterDiagnosticsFailure("context deadline exceeded"))
+	require.False(t, shouldDemoteAfterDiagnosticsFailure("model_not_found"))
+	require.False(t, shouldDemoteAfterDiagnosticsFailure("429 rate limit"))
+	require.True(t, shouldDemoteAfterDiagnosticsFailure("401 unauthorized invalid api key"))
+	require.True(t, shouldDemoteAfterDiagnosticsFailure("account disabled"))
+	require.False(t, shouldDemoteAfterDiagnosticsFailure("random unknown failure"))
+}

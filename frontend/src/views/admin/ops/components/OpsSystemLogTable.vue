@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { opsAPI, type OpsRuntimeLogConfig, type OpsSystemLog, type OpsSystemLogSinkHealth } from '@/api/admin/ops'
 import Pagination from '@/components/common/Pagination.vue'
 import Select from '@/components/common/Select.vue'
+import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores'
 
 const appStore = useAppStore()
@@ -34,6 +35,8 @@ const health = ref<OpsSystemLogSinkHealth>({
 
 const runtimeLoading = ref(false)
 const runtimeSaving = ref(false)
+const showRuntimeConfig = ref(false)
+const showAdvancedFilters = ref(false)
 const runtimeConfig = reactive<OpsRuntimeLogConfig>({
   level: 'info',
   enable_sampling: false,
@@ -367,13 +370,13 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="rounded-2xl border border-gray-200 bg-white p-4  dark:border-dark-700 dark:bg-dark-900/60">
+  <section class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-900/60 sm:p-6">
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div>
         <h3 class="text-sm font-bold text-gray-900 dark:text-white">{{ t('admin.ops.systemLogs.title') }}</h3>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.systemLogs.description') }}</p>
       </div>
-      <div class="flex flex-wrap items-center gap-2 text-xs">
+      <div class="grid w-full grid-cols-2 gap-2 text-xs sm:flex sm:w-auto sm:flex-wrap sm:items-center">
         <span class="rounded-md bg-gray-100 px-2 py-1 text-gray-700 dark:bg-dark-700 dark:text-gray-200">{{ t('admin.ops.systemLogs.queue') }} {{ health.queue_depth }}/{{ health.queue_capacity }}</span>
         <span class="rounded-md bg-gray-100 px-2 py-1 text-gray-700 dark:bg-dark-700 dark:text-gray-200">{{ t('admin.ops.systemLogs.written') }} {{ health.written_count }}</span>
         <span class="rounded-md bg-amber-100 px-2 py-1 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">{{ t('admin.ops.systemLogs.dropped') }} {{ health.dropped_count }}</span>
@@ -381,12 +384,21 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div class="mb-4 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-dark-700 dark:bg-dark-800/70">
-      <div class="mb-2 flex items-center justify-between">
-        <div class="text-xs font-semibold text-gray-700 dark:text-gray-200">{{ t('admin.ops.systemLogs.runtimeConfig') }}</div>
-        <span v-if="runtimeLoading" class="text-xs text-gray-500">{{ t('common.loading') }}</span>
-      </div>
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+    <div class="mb-4 rounded-xl border border-gray-200 bg-gray-50 dark:border-dark-700 dark:bg-dark-800/70">
+      <button
+        type="button"
+        class="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left"
+        :aria-expanded="showRuntimeConfig"
+        @click="showRuntimeConfig = !showRuntimeConfig"
+      >
+        <span class="text-xs font-semibold text-gray-700 dark:text-gray-200">{{ t('admin.ops.systemLogs.runtimeConfig') }}</span>
+        <span class="flex items-center gap-2 text-xs text-gray-500">
+          <span v-if="runtimeLoading">{{ t('common.loading') }}</span>
+          <span>{{ showRuntimeConfig ? t('common.collapse') : t('common.expand') }}</span>
+          <Icon name="chevronDown" size="xs" class="transition-transform" :class="{ 'rotate-180': showRuntimeConfig }" />
+        </span>
+      </button>
+      <div v-if="showRuntimeConfig" class="grid grid-cols-1 gap-3 border-t border-gray-200 px-3 py-3 md:grid-cols-2 xl:grid-cols-6 dark:border-dark-700">
         <label class="text-xs text-gray-600 dark:text-gray-300">
           {{ t('admin.ops.systemLogs.level') }}
           <Select v-model="runtimeConfig.level" class="mt-1" :options="runtimeLevelOptions" />
@@ -430,21 +442,13 @@ onMounted(async () => {
           </div>
         </div>
       </div>
-      <p v-if="health.last_error" class="mt-2 text-xs text-red-600 dark:text-red-400">{{ t('admin.ops.systemLogs.latestWriteError') }} {{ health.last_error }}</p>
+      <p v-if="showRuntimeConfig && health.last_error" class="px-3 pb-3 text-xs text-red-600 dark:text-red-400">{{ t('admin.ops.systemLogs.latestWriteError') }} {{ health.last_error }}</p>
     </div>
 
-    <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-5">
+    <div class="mb-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
       <label class="text-xs text-gray-600 dark:text-gray-300">
         {{ t('admin.ops.systemLogs.timeRange') }}
         <Select v-model="filters.time_range" class="mt-1" :options="timeRangeOptions" />
-      </label>
-      <label class="text-xs text-gray-600 dark:text-gray-300">
-        {{ t('admin.ops.systemLogs.startTime') }}
-        <input v-model="filters.start_time" type="datetime-local" class="input mt-1" />
-      </label>
-      <label class="text-xs text-gray-600 dark:text-gray-300">
-        {{ t('admin.ops.systemLogs.endTime') }}
-        <input v-model="filters.end_time" type="datetime-local" class="input mt-1" />
       </label>
       <label class="text-xs text-gray-600 dark:text-gray-300">
         {{ t('admin.ops.systemLogs.level') }}
@@ -453,6 +457,32 @@ onMounted(async () => {
       <label class="text-xs text-gray-600 dark:text-gray-300">
         {{ t('admin.ops.systemLogs.component') }}
         <input v-model="filters.component" type="text" class="input mt-1" :placeholder="t('admin.ops.systemLogs.componentPlaceholder')" />
+      </label>
+      <label class="text-xs text-gray-600 dark:text-gray-300">
+        {{ t('admin.ops.systemLogs.keyword') }}
+        <input v-model="filters.q" type="text" class="input mt-1" :placeholder="t('admin.ops.systemLogs.keywordPlaceholder')" />
+      </label>
+    </div>
+
+    <button
+      type="button"
+      class="mb-3 inline-flex min-h-9 items-center gap-2 text-xs font-semibold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+      :aria-expanded="showAdvancedFilters"
+      @click="showAdvancedFilters = !showAdvancedFilters"
+    >
+      <Icon name="filter" size="sm" />
+      {{ t('admin.ops.systemLogs.advancedFilters') }}
+      <Icon name="chevronDown" size="xs" class="transition-transform" :class="{ 'rotate-180': showAdvancedFilters }" />
+    </button>
+
+    <div v-if="showAdvancedFilters" class="mb-4 grid grid-cols-1 gap-3 rounded-xl bg-gray-50 p-3 md:grid-cols-3 xl:grid-cols-5 dark:bg-dark-800/60">
+      <label class="text-xs text-gray-600 dark:text-gray-300">
+        {{ t('admin.ops.systemLogs.startTime') }}
+        <input v-model="filters.start_time" type="datetime-local" class="input mt-1" />
+      </label>
+      <label class="text-xs text-gray-600 dark:text-gray-300">
+        {{ t('admin.ops.systemLogs.endTime') }}
+        <input v-model="filters.end_time" type="datetime-local" class="input mt-1" />
       </label>
       <label class="text-xs text-gray-600 dark:text-gray-300">
         request_id
@@ -482,10 +512,6 @@ onMounted(async () => {
         {{ t('admin.ops.systemLogs.model') }}
         <input v-model="filters.model" type="text" class="input mt-1" />
       </label>
-      <label class="text-xs text-gray-600 dark:text-gray-300">
-        {{ t('admin.ops.systemLogs.keyword') }}
-        <input v-model="filters.q" type="text" class="input mt-1" :placeholder="t('admin.ops.systemLogs.keywordPlaceholder')" />
-      </label>
     </div>
 
     <div class="mb-3 flex flex-wrap gap-2">
@@ -498,29 +524,52 @@ onMounted(async () => {
     <div class="overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
       <div v-if="loading" class="px-4 py-8 text-center text-sm text-gray-500">{{ t('common.loading') }}</div>
       <div v-else-if="!hasData" class="px-4 py-8 text-center text-sm text-gray-500">{{ t('admin.ops.systemLogs.empty') }}</div>
-      <div v-else class="overflow-auto">
-        <table class="min-w-full table-fixed divide-y divide-gray-200 dark:divide-dark-700">
-          <thead class="bg-gray-50 dark:bg-dark-900">
-            <tr>
-              <th class="w-[170px] px-3 py-2 text-left text-[11px] font-semibold text-gray-500">{{ t('admin.ops.systemLogs.time') }}</th>
-              <th class="w-[80px] px-3 py-2 text-left text-[11px] font-semibold text-gray-500">{{ t('admin.ops.systemLogs.level') }}</th>
-              <th class="px-3 py-2 text-left text-[11px] font-semibold text-gray-500">{{ t('admin.ops.systemLogs.logDetails') }}</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100 dark:divide-dark-800">
-            <tr v-for="row in logs" :key="row.id" class="align-top">
-              <td class="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">{{ formatTime(row.created_at) }}</td>
-              <td class="px-3 py-2 text-xs">
-                <span class="inline-flex rounded-full px-2 py-0.5 font-semibold" :class="levelBadgeClass(row.level)">
-                  {{ row.level }}
-                </span>
-              </td>
-              <td class="px-3 py-2 text-xs text-gray-700 dark:text-gray-300 whitespace-normal break-all">
-                {{ formatSystemLogDetail(row) }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-else>
+        <div class="max-h-[32rem] divide-y divide-gray-100 overflow-y-auto md:hidden dark:divide-dark-800">
+          <article v-for="row in logs" :key="row.id" class="space-y-3 p-3">
+            <div class="flex min-w-0 items-center justify-between gap-3">
+              <time class="min-w-0 text-xs text-gray-500 dark:text-gray-400">
+                {{ formatTime(row.created_at) }}
+              </time>
+              <span
+                class="inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold"
+                :class="levelBadgeClass(row.level)"
+              >
+                {{ row.level }}
+              </span>
+            </div>
+            <p
+              class="whitespace-pre-wrap break-words text-xs leading-5 text-gray-700 [overflow-wrap:anywhere] dark:text-gray-300"
+            >
+              {{ formatSystemLogDetail(row) }}
+            </p>
+          </article>
+        </div>
+
+        <div class="hidden overflow-auto md:block">
+          <table class="min-w-full table-fixed divide-y divide-gray-200 dark:divide-dark-700">
+            <thead class="bg-gray-50 dark:bg-dark-900">
+              <tr>
+                <th class="w-[170px] px-3 py-2 text-left text-[11px] font-semibold text-gray-500">{{ t('admin.ops.systemLogs.time') }}</th>
+                <th class="w-[80px] px-3 py-2 text-left text-[11px] font-semibold text-gray-500">{{ t('admin.ops.systemLogs.level') }}</th>
+                <th class="px-3 py-2 text-left text-[11px] font-semibold text-gray-500">{{ t('admin.ops.systemLogs.logDetails') }}</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-dark-800">
+              <tr v-for="row in logs" :key="row.id" class="align-top">
+                <td class="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">{{ formatTime(row.created_at) }}</td>
+                <td class="px-3 py-2 text-xs">
+                  <span class="inline-flex rounded-full px-2 py-0.5 font-semibold" :class="levelBadgeClass(row.level)">
+                    {{ row.level }}
+                  </span>
+                </td>
+                <td class="whitespace-normal break-all px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
+                  {{ formatSystemLogDetail(row) }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
       <Pagination
         :total="total"

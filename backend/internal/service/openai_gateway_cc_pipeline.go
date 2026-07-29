@@ -122,6 +122,12 @@ func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
 // openAIChatCompletionsTargetURL 解析账号的（非 Grok）Chat Completions 上游端点。
 func (s *OpenAIGatewayService) openAIChatCompletionsTargetURL(account *Account) (string, error) {
 	baseURL := account.GetOpenAIBaseURL()
+	if account != nil && account.Platform == PlatformKimi {
+		baseURL = strings.TrimSpace(account.GetCredential("base_url"))
+		if baseURL == "" {
+			baseURL = "https://api.kimi.com/coding"
+		}
+	}
 	if baseURL == "" {
 		baseURL = "https://api.openai.com"
 	}
@@ -134,8 +140,12 @@ func (s *OpenAIGatewayService) openAIChatCompletionsTargetURL(account *Account) 
 
 // resolveCCFallbackTarget 解析两条 CC 回退路径共用的账号凭证与上游端点
 // （回退路径仅面向 APIKey 账号，凭证恒为 openai api_key）。
-func (s *OpenAIGatewayService) resolveCCFallbackTarget(account *Account) (apiKey string, targetURL string, err error) {
-	apiKey = account.GetOpenAIApiKey()
+func (s *OpenAIGatewayService) resolveCCFallbackTarget(ctx context.Context, account *Account) (apiKey string, targetURL string, err error) {
+	if account != nil && account.Platform == PlatformKimi {
+		apiKey, _, err = s.GetAccessToken(ctx, account)
+	} else {
+		apiKey = account.GetOpenAIApiKey()
+	}
 	if apiKey == "" {
 		return "", "", fmt.Errorf("account %d missing api_key", account.ID)
 	}
@@ -169,7 +179,11 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	if err != nil {
 		return nil, fmt.Errorf("build upstream request: %w", err)
 	}
-	upstreamReq = upstreamReq.WithContext(WithHTTPUpstreamProfile(upstreamReq.Context(), HTTPUpstreamProfileOpenAI))
+	profile := HTTPUpstreamProfileOpenAI
+	if account.Platform == PlatformGrok {
+		profile = HTTPUpstreamProfileGrok
+	}
+	upstreamReq = upstreamReq.WithContext(WithHTTPUpstreamProfile(upstreamReq.Context(), profile))
 	upstreamReq.Header.Set("Content-Type", "application/json")
 	upstreamReq.Header.Set("Authorization", "Bearer "+bearerToken)
 	if stream {
@@ -193,6 +207,9 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	if account.Platform == PlatformGrok && xai.IsCLIChatProxyBaseURL(account.GetGrokChatBaseURL()) {
 		xai.ApplyGrokCLIChatHeaders(upstreamReq)
 	}
+	if account.Platform == PlatformKimi {
+		applyKimiCodingHeaders(upstreamReq.Header, account)
+	}
 
 	// 账号级请求头覆写（OpenAI/Anthropic api_key + Grok api_key/oauth）
 	account.ApplyHeaderOverrides(upstreamReq.Header)
@@ -210,6 +227,29 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
 	}
 	return resp, nil
+}
+
+func (s *OpenAIGatewayService) sendCCUpstreamRequestWithKimiRefresh(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	targetURL string,
+	body []byte,
+	stream bool,
+	bearerToken string,
+	userAgent string,
+	grokCacheIdentity string,
+) (*http.Response, error) {
+	resp, err := s.sendCCUpstreamRequest(ctx, c, account, targetURL, body, stream, bearerToken, userAgent, grokCacheIdentity)
+	if err != nil || account == nil || account.Platform != PlatformKimi || resp == nil || resp.StatusCode != http.StatusUnauthorized || s.kimiTokenProvider == nil {
+		return resp, err
+	}
+	_ = resp.Body.Close()
+	refreshedToken, refreshErr := s.kimiTokenProvider.ForceRefresh(ctx, account)
+	if refreshErr != nil {
+		return nil, fmt.Errorf("refresh Kimi token after 401: %w", refreshErr)
+	}
+	return s.sendCCUpstreamRequest(ctx, c, account, targetURL, body, stream, refreshedToken, userAgent, grokCacheIdentity)
 }
 
 // ccStreamScanState 是 scanCCStream 返回的读取状态快照。

@@ -18,10 +18,18 @@ type OpenAIOAuthClient interface {
 	RefreshTokenWithClientID(ctx context.Context, refreshToken, proxyURL string, clientID string) (*openai.TokenResponse, error)
 }
 
+type OpenAIDeviceOAuthClient interface {
+	RequestDeviceCode(ctx context.Context, proxyURL, clientID string) (*openai.DeviceCodeResponse, error)
+	PollDeviceAuthorization(ctx context.Context, deviceAuthID, userCode, proxyURL string) (*openai.DeviceAuthorizationResponse, error)
+}
+
 // GrokOAuthClient interface for xAI/Grok OAuth operations.
 type GrokOAuthClient interface {
 	ExchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string) (*xai.TokenResponse, error)
 	RefreshToken(ctx context.Context, refreshToken, proxyURL, clientID string) (*xai.TokenResponse, error)
+	RefreshTokenAtEndpoint(ctx context.Context, refreshToken, tokenEndpoint, proxyURL, clientID string) (*xai.TokenResponse, error)
+	StartDeviceFlow(ctx context.Context, proxyURL, clientID, scope string) (*xai.DeviceCodeResponse, error)
+	PollDeviceToken(ctx context.Context, deviceCode, tokenEndpoint, proxyURL, clientID string) (*xai.DeviceTokenResponse, error)
 }
 
 // GrokOAuthTokenService is the narrow refresh port used by Grok token providers.

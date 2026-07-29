@@ -199,6 +199,172 @@
           :overscan="5"
           :virtualize-threshold="50"
         >
+          <template #mobile-card="{ row }">
+            <article class="min-w-0">
+              <header class="flex items-start gap-3 border-b border-black/[0.07] p-4 dark:border-white/[0.08]">
+                <input
+                  type="checkbox"
+                  :checked="isSelected(row.id)"
+                  class="mt-1 h-4 w-4 flex-none cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  :aria-label="`${t('admin.accounts.columns.name')}: ${row.name}`"
+                  @click.stop
+                  @change="toggleSel(row.id)"
+                />
+                <div class="min-w-0 flex-1">
+                  <div class="flex min-w-0 items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <h3 class="truncate text-base font-semibold text-gray-950 dark:text-white" :title="row.name">
+                        {{ row.name }}
+                      </h3>
+                      <p
+                        v-if="accountDisplayEmail(row)"
+                        class="mt-0.5 truncate text-xs text-gray-500 dark:text-dark-400"
+                        :title="accountDisplayEmail(row)"
+                      >
+                        {{ accountDisplayEmail(row) }}
+                      </p>
+                    </div>
+                    <div class="flex flex-none flex-col items-end gap-3">
+                      <button
+                        type="button"
+                        class="inline-flex h-7 items-center gap-1 rounded-md bg-black/[0.04] px-2 font-mono text-[11px] text-gray-500 transition-colors hover:bg-black/[0.07] dark:bg-white/[0.06] dark:text-dark-300 dark:hover:bg-white/[0.1]"
+                        :title="row.diagnostics_enabled ? t('admin.accounts.usageDetails.diagnosticsOn') : t('admin.accounts.usageDetails.diagnosticsOff')"
+                        @click.stop="openUsageDetails(row, 'diagnostics')"
+                      >
+                        #{{ row.id }}
+                        <Icon name="bolt" size="xs" />
+                      </button>
+                      <div v-if="isColumnVisible('schedulable')" class="flex items-center gap-2">
+                        <span class="text-[11px] font-medium text-gray-400 dark:text-dark-500">
+                          {{ t('admin.accounts.columns.schedulable') }}
+                        </span>
+                        <button
+                          class="relative inline-flex h-5 w-9 flex-none cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-dark-800"
+                          :class="row.schedulable ? 'bg-primary-500 hover:bg-primary-600' : 'bg-gray-200 hover:bg-gray-300 dark:bg-dark-600'"
+                          :disabled="togglingSchedulable === row.id"
+                          :aria-label="t('admin.accounts.columns.schedulable')"
+                          @click.stop="handleToggleSchedulable(row)"
+                        >
+                          <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition" :class="row.schedulable ? 'translate-x-4' : 'translate-x-0'" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="isColumnVisible('platform_type')" class="mt-3 flex flex-wrap items-center gap-1.5">
+                    <PlatformTypeBadge
+                      :platform="row.platform"
+                      :type="row.type"
+                      :plan-type="getPlatformPlanType(row)"
+                      :privacy-mode="row.extra?.privacy_mode || row.parent_privacy_mode"
+                      :subscription-expires-at="row.credentials?.subscription_expires_at || row.parent_subscription_expires_at"
+                    />
+                    <span
+                      v-if="getAntigravityTierLabel(row)"
+                      :class="['inline-block rounded px-1.5 py-0.5 text-[10px] font-medium', getAntigravityTierClass(row)]"
+                    >
+                      {{ getAntigravityTierLabel(row) }}
+                    </span>
+                  </div>
+                </div>
+              </header>
+
+              <div class="space-y-4 p-4">
+                <div class="grid grid-cols-2 gap-2">
+                  <div
+                    v-if="isColumnVisible('status')"
+                    class="rounded-md bg-black/[0.025] px-3 py-2.5 dark:bg-white/[0.04]"
+                  >
+                    <p class="mb-1 text-[11px] font-medium text-gray-400 dark:text-dark-500">
+                      {{ t('admin.accounts.columns.status') }}
+                    </p>
+                    <AccountStatusIndicator :account="row" @show-temp-unsched="handleShowTempUnsched" />
+                  </div>
+                  <div
+                    v-if="isColumnVisible('capacity')"
+                    class="rounded-md bg-black/[0.025] px-3 py-2.5 dark:bg-white/[0.04]"
+                  >
+                    <p class="mb-1 text-[11px] font-medium text-gray-400 dark:text-dark-500">
+                      {{ t('admin.accounts.columns.capacity') }}
+                    </p>
+                    <AccountCapacityCell :account="row" />
+                  </div>
+                </div>
+
+                <div v-if="isColumnVisible('groups')" class="flex min-w-0 items-center gap-3">
+                  <span class="w-14 flex-none text-[11px] font-medium text-gray-400 dark:text-dark-500">
+                    {{ t('admin.accounts.columns.groups') }}
+                  </span>
+                  <div class="min-w-0 flex-1">
+                    <AccountGroupsCell :groups="row.groups" :max-display="3" />
+                  </div>
+                </div>
+
+                <section v-if="isColumnVisible('usage')" class="rounded-md bg-black/[0.025] p-3 dark:bg-white/[0.04]">
+                  <div class="mb-2 flex items-center gap-2">
+                    <span class="text-[11px] font-medium text-gray-400 dark:text-dark-500">
+                      {{ t('admin.accounts.columns.usageWindows') }}
+                    </span>
+                  </div>
+                  <AccountUsageCell
+                    :account="row"
+                    :today-stats="todayStatsByAccountId[String(row.id)] ?? null"
+                    :today-stats-loading="todayStatsLoading"
+                    :manual-refresh-token="usageManualRefreshToken"
+                    variant="summary"
+                    full-width
+                    :show-status="false"
+                    @open-details="openUsageDetails(row)"
+                  />
+                </section>
+
+                <div class="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-black/[0.07] pt-3 dark:border-white/[0.08]">
+                  <div v-if="isColumnVisible('last_used_at')" class="min-w-0">
+                    <p class="text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.accounts.columns.lastUsed') }}</p>
+                    <p class="mt-1 truncate text-xs text-gray-700 dark:text-dark-200">{{ formatRelativeTime(row.last_used_at) }}</p>
+                  </div>
+                  <div v-if="isColumnVisible('expires_at')" class="min-w-0 text-right">
+                    <p class="text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.accounts.columns.expiresAt') }}</p>
+                    <p class="mt-1 truncate text-xs text-gray-700 dark:text-dark-200">{{ formatExpiresAt(row.expires_at) }}</p>
+                  </div>
+                  <div v-if="isColumnVisible('created_at')" class="col-span-2 flex min-w-0 items-center justify-between gap-3">
+                    <p class="flex-none text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.accounts.columns.createdAt') }}</p>
+                    <p class="truncate text-right text-xs text-gray-600 dark:text-dark-300">{{ formatDateTime(row.created_at) }}</p>
+                  </div>
+                  <div v-if="isColumnVisible('proxy')" class="col-span-2 flex min-w-0 items-center justify-between gap-3">
+                    <p class="flex-none text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.accounts.columns.proxy') }}</p>
+                    <p class="truncate text-right text-xs text-gray-600 dark:text-dark-300">{{ row.proxy?.name || '-' }}</p>
+                  </div>
+                  <div v-if="isColumnVisible('priority')" class="min-w-0">
+                    <p class="text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.accounts.columns.priority') }}</p>
+                    <p class="mt-1 text-xs text-gray-700 dark:text-dark-200">{{ row.priority }}</p>
+                  </div>
+                  <div v-if="isColumnVisible('rate_multiplier')" class="min-w-0 text-right">
+                    <p class="text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.accounts.columns.billingRateMultiplier') }}</p>
+                    <p class="mt-1 font-mono text-xs text-gray-700 dark:text-dark-200">{{ (row.rate_multiplier ?? 1).toFixed(2) }}x</p>
+                  </div>
+                  <div v-if="isColumnVisible('notes') && row.notes" class="col-span-2 min-w-0">
+                    <p class="text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.accounts.columns.notes') }}</p>
+                    <p class="mt-1 line-clamp-2 text-xs text-gray-700 dark:text-dark-200">{{ row.notes }}</p>
+                  </div>
+                </div>
+              </div>
+
+              <footer class="grid grid-cols-3 border-t border-black/[0.07] dark:border-white/[0.08]">
+                <button class="flex h-11 items-center justify-center gap-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-black/[0.035] hover:text-gray-950 dark:text-dark-400 dark:hover:bg-white/[0.05] dark:hover:text-white" @click.stop="handleEdit(row)">
+                  <Icon name="edit" size="sm" />
+                  {{ t('common.edit') }}
+                </button>
+                <button class="flex h-11 items-center justify-center gap-1.5 border-x border-black/[0.07] text-xs font-medium text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:border-white/[0.08] dark:text-dark-400 dark:hover:bg-red-950/20 dark:hover:text-red-400" @click.stop="handleDelete(row)">
+                  <Icon name="trash" size="sm" />
+                  {{ t('common.delete') }}
+                </button>
+                <button class="flex h-11 items-center justify-center gap-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-black/[0.035] hover:text-gray-950 dark:text-dark-400 dark:hover:bg-white/[0.05] dark:hover:text-white" @click.stop="openMenu(row, $event)">
+                  <Icon name="more" size="sm" />
+                  {{ t('common.more') }}
+                </button>
+              </footer>
+            </article>
+          </template>
           <template #header-select>
             <input
               type="checkbox"
@@ -228,7 +394,7 @@
                   : t('admin.accounts.usageDetails.diagnosticsOff')"
                 @click.stop="openUsageDetails(row, 'diagnostics')"
               >
-                <Icon name="beaker" size="xs" />
+                <Icon name="bolt" size="xs" />
               </button>
             </div>
           </template>
@@ -249,12 +415,13 @@
             <span v-else class="text-sm text-gray-400 dark:text-dark-500">-</span>
           </template>
           <template #cell-platform_type="{ row }">
-            <div class="flex min-w-0 flex-col gap-1">
-              <div class="flex flex-wrap items-center gap-1">
+            <div class="flex min-w-0 items-center gap-1.5">
+              <div class="flex min-w-0 items-center gap-1">
                 <PlatformTypeBadge :platform="row.platform" :type="row.type"
                   :plan-type="getPlatformPlanType(row)"
                   :privacy-mode="row.extra?.privacy_mode || row.parent_privacy_mode"
-                  :subscription-expires-at="row.credentials?.subscription_expires_at || row.parent_subscription_expires_at" />
+                  :subscription-expires-at="row.credentials?.subscription_expires_at || row.parent_subscription_expires_at"
+                  compact />
                 <span
                   v-if="getAntigravityTierLabel(row)"
                   :class="['inline-block rounded px-1.5 py-0.5 text-[10px] font-medium', getAntigravityTierClass(row)]"
@@ -265,13 +432,12 @@
               <div
                 v-if="getOpenAICompactMeta(row)"
                 :class="[
-                  'inline-flex items-center gap-1.5 pl-0.5 text-[11px] font-medium leading-4',
+                  'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-gray-100 dark:bg-dark-700',
                   getOpenAICompactMeta(row)?.className
                 ]"
                 :title="getOpenAICompactTitle(row)"
               >
                 <span :class="['h-1.5 w-1.5 rounded-full', getOpenAICompactMeta(row)?.dotClass]" />
-                <span>{{ getOpenAICompactMeta(row)?.label }}</span>
               </div>
             </div>
           </template>
@@ -311,6 +477,7 @@
               :today-stats-loading="todayStatsLoading"
               :manual-refresh-token="usageManualRefreshToken"
               variant="summary"
+              :show-status="false"
               @open-details="openUsageDetails(row)"
             />
           </template>
@@ -428,7 +595,14 @@
       @close="closeUsageDetails"
       @reauthorize="handleReAuth"
     />
-    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
+    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" @cost-config="handleCostConfig" />
+    <AccountCostConfigDialog
+      :show="showCostConfig"
+      :account-id="costConfigAcc?.id ?? null"
+      :account-name="costConfigAcc?.name"
+      :account-type="costConfigAcc?.type"
+      @close="showCostConfig = false"
+    />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />
     <BulkEditAccountModal
@@ -477,6 +651,7 @@ import AccountTableActions from '@/components/admin/account/AccountTableActions.
 import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
 import AccountBulkActionsBar from '@/components/admin/account/AccountBulkActionsBar.vue'
 import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
+import AccountCostConfigDialog from '@/components/admin/account/AccountCostConfigDialog.vue'
 import ImportDataModal from '@/components/admin/account/ImportDataModal.vue'
 import ReAuthAccountModal from '@/components/admin/account/ReAuthAccountModal.vue'
 import AccountTestModal from '@/components/admin/account/AccountTestModal.vue'
@@ -1389,6 +1564,10 @@ const cols = computed(() =>
 )
 
 const handleEdit = (a: Account) => { edAcc.value = a; showEdit.value = true }
+// 成本配置（利润分析）
+const showCostConfig = ref(false)
+const costConfigAcc = ref<Account | null>(null)
+const handleCostConfig = (a: Account) => { costConfigAcc.value = a; showCostConfig.value = true }
 const openMenu = (a: Account, e: MouseEvent) => {
   menu.acc = a
 
@@ -1793,7 +1972,9 @@ const closeUsageDetails = () => { usageDetailsAcc.value = null }
 const handleReAuth = (a: Account) => { reAuthAcc.value = a; showReAuth.value = true }
 const handleRefresh = async (a: Account) => {
   try {
-    const updated = await adminAPI.accounts.refreshCredentials(a.id)
+    const updated = a.platform === 'kimi'
+      ? await adminAPI.kimi.refreshAccountToken(a.id)
+      : await adminAPI.accounts.refreshCredentials(a.id)
     patchAccountInList(updated)
     enterAutoRefreshSilentWindow()
   } catch (error) {

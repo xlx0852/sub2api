@@ -322,7 +322,7 @@ onUnmounted(() => {
 
 <style scoped>
 .date-picker-trigger {
-  @apply flex items-center gap-2;
+  @apply flex w-full items-center justify-between gap-2;
   @apply rounded-lg px-3 py-2 text-sm;
   @apply bg-white dark:bg-dark-800;
   @apply border border-gray-200 dark:border-dark-600;
@@ -356,7 +356,7 @@ onUnmounted(() => {
   @apply border border-gray-200 dark:border-dark-700;
   @apply shadow-lg shadow-black/10 dark:shadow-black/30;
   @apply overflow-hidden;
-  @apply min-w-[320px];
+  width: min(320px, calc(100vw - 2rem));
 }
 
 .date-picker-presets {

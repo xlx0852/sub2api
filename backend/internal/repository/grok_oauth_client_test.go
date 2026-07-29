@@ -15,6 +15,7 @@ import (
 )
 
 func TestGrokOAuthClientExchangeAndRefreshUseFormFields(t *testing.T) {
+	t.Setenv(xai.EnvAllowUnsafeURLOverrides, "true")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodPost, r.Method)
 		require.NoError(t, r.ParseForm())
@@ -73,6 +74,7 @@ func TestGrokOAuthClientExchangeAndRefreshUseFormFields(t *testing.T) {
 }
 
 func TestGrokOAuthClientRefreshForbiddenClassifiesEntitlement(t *testing.T) {
+	t.Setenv(xai.EnvAllowUnsafeURLOverrides, "true")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = w.Write([]byte(`{"error":"subscription required"}`))
@@ -87,6 +89,7 @@ func TestGrokOAuthClientRefreshForbiddenClassifiesEntitlement(t *testing.T) {
 }
 
 func TestGrokOAuthClientStatusErrorRedactsSensitiveResponseBody(t *testing.T) {
+	t.Setenv(xai.EnvAllowUnsafeURLOverrides, "true")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"error":"invalid_grant","access_token":"access-secret","refresh_token":"refresh-secret","code_verifier":"verifier-secret"}`))
@@ -104,4 +107,52 @@ func TestGrokOAuthClientStatusErrorRedactsSensitiveResponseBody(t *testing.T) {
 	require.NotContains(t, errText, "access-secret")
 	require.NotContains(t, errText, "refresh-secret")
 	require.NotContains(t, errText, "verifier-secret")
+}
+
+func TestGrokOAuthClientDeviceFlowUsesDiscoveryAndHandlesPending(t *testing.T) {
+	t.Setenv(xai.EnvAllowUnsafeURLOverrides, "true")
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/openid-configuration":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"device_authorization_endpoint": server.URL + "/device",
+				"token_endpoint":                server.URL + "/token",
+			})
+		case "/device":
+			require.NoError(t, r.ParseForm())
+			require.Equal(t, "client-id", r.Form.Get("client_id"))
+			require.Equal(t, "openid offline_access", r.Form.Get("scope"))
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"device_code":               "device-code",
+				"user_code":                 "USER-CODE",
+				"verification_uri":          "https://x.ai/device",
+				"verification_uri_complete": "https://x.ai/device?code=USER-CODE",
+				"expires_in":                900,
+				"interval":                  5,
+			})
+		case "/token":
+			require.NoError(t, r.ParseForm())
+			require.Equal(t, xai.DeviceCodeGrantType, r.Form.Get("grant_type"))
+			require.Equal(t, "device-code", r.Form.Get("device_code"))
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "authorization_pending"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	t.Setenv(xai.EnvDiscoveryURL, server.URL+"/.well-known/openid-configuration")
+
+	client := NewGrokOAuthClient()
+	device, err := client.StartDeviceFlow(context.Background(), "", "client-id", "openid offline_access")
+	require.NoError(t, err)
+	require.Equal(t, "device-code", device.DeviceCode)
+	require.Equal(t, "USER-CODE", device.UserCode)
+	require.Equal(t, server.URL+"/token", device.TokenEndpoint)
+
+	token, err := client.PollDeviceToken(context.Background(), device.DeviceCode, device.TokenEndpoint, "", "client-id")
+	require.NoError(t, err)
+	require.Equal(t, "authorization_pending", token.Error)
 }

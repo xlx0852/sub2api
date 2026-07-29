@@ -4,8 +4,8 @@
       <template #filters>
         <div class="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
           <!-- Left: Search + Filters -->
-          <div class="flex flex-1 flex-wrap items-center gap-3">
-            <div class="relative w-full sm:w-64">
+          <div class="grid w-full grid-cols-2 items-center gap-3 sm:flex sm:flex-1 sm:flex-wrap">
+            <div class="relative min-w-0 sm:flex-1 sm:max-w-64">
               <Icon
                 name="search"
                 size="md"
@@ -24,7 +24,7 @@
               v-model="filters.status"
               :options="statusFilterOptions"
               :placeholder="t('admin.channels.allStatus', 'All Status')"
-              class="w-40"
+              class="min-w-0 w-full sm:w-40"
               @change="loadChannels"
             />
           </div>

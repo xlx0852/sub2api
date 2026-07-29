@@ -195,6 +195,12 @@ func DeriveUpstreamEndpoint(inbound, rawRequestPath, platform string) string {
 		}
 		return EndpointResponses
 
+	case service.PlatformKimi:
+		if inbound == EndpointMessages || inbound == EndpointChatCompletions || inbound == EndpointResponses {
+			return inbound
+		}
+		return inbound
+
 	case service.PlatformAnthropic:
 		return EndpointMessages
 

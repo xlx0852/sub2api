@@ -8,9 +8,8 @@ import './style.css'
 
 function initThemeClass() {
   const savedTheme = localStorage.getItem('theme')
-  const shouldUseDark =
-    savedTheme === 'dark' ||
-    (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  // Zen paper theme defaults to light. Dark mode is opt-in and remains persisted.
+  const shouldUseDark = savedTheme === 'dark'
   document.documentElement.classList.toggle('dark', shouldUseDark)
 }
 

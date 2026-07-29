@@ -9,6 +9,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/account"
+	"github.com/Wei-Shaw/sub2api/ent/accountcostconfig"
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
@@ -157,6 +158,33 @@ func (f TraverseAccount) Traverse(ctx context.Context, q ent.Query) error {
 		return f(ctx, q)
 	}
 	return fmt.Errorf("unexpected query type %T. expect *ent.AccountQuery", q)
+}
+
+// The AccountCostConfigFunc type is an adapter to allow the use of ordinary function as a Querier.
+type AccountCostConfigFunc func(context.Context, *ent.AccountCostConfigQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f AccountCostConfigFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.AccountCostConfigQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.AccountCostConfigQuery", q)
+}
+
+// The TraverseAccountCostConfig type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseAccountCostConfig func(context.Context, *ent.AccountCostConfigQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseAccountCostConfig) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseAccountCostConfig) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.AccountCostConfigQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.AccountCostConfigQuery", q)
 }
 
 // The AccountGroupFunc type is an adapter to allow the use of ordinary function as a Querier.
@@ -1138,6 +1166,8 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.APIKeyQuery, predicate.APIKey, apikey.OrderOption]{typ: ent.TypeAPIKey, tq: q}, nil
 	case *ent.AccountQuery:
 		return &query[*ent.AccountQuery, predicate.Account, account.OrderOption]{typ: ent.TypeAccount, tq: q}, nil
+	case *ent.AccountCostConfigQuery:
+		return &query[*ent.AccountCostConfigQuery, predicate.AccountCostConfig, accountcostconfig.OrderOption]{typ: ent.TypeAccountCostConfig, tq: q}, nil
 	case *ent.AccountGroupQuery:
 		return &query[*ent.AccountGroupQuery, predicate.AccountGroup, accountgroup.OrderOption]{typ: ent.TypeAccountGroup, tq: q}, nil
 	case *ent.AnnouncementQuery:

@@ -1,9 +1,14 @@
 <template>
-  <div ref="rootRef" v-if="variant === 'summary'" class="w-[304px] max-w-full">
+  <div
+    ref="rootRef"
+    v-if="variant === 'summary'"
+    :class="fullWidth ? 'w-full max-w-none' : 'w-[304px] max-w-full'"
+  >
     <AccountUsageSummary
       :presentation="presentation"
       :loading="loading || todayStatsLoading"
       :error="error"
+      :show-status="showStatus"
       @open="emit('open-details')"
     />
   </div>
@@ -348,6 +353,10 @@
             :resets-at="grokWeeklyBar.resetsAt"
             color="indigo"
           />
+          <GrokProductUsageBreakdown
+            v-if="variant === 'detail'"
+            :products="effectiveGrokBilling.product_usage"
+          />
           <UsageProgressBar
             v-if="grokMonthlyCreditsBar"
             :label="t('admin.accounts.usageWindow.grokMonthly')"
@@ -558,9 +567,11 @@ import UsageStatLine from './UsageStatLine.vue'
 import AccountQuotaInfo from './AccountQuotaInfo.vue'
 import OpenAIQuotaResetCell from './OpenAIQuotaResetCell.vue'
 import GrokQuotaProbeCell from './GrokQuotaProbeCell.vue'
+import GrokProductUsageBreakdown from './GrokProductUsageBreakdown.vue'
 import QuotaActionButton from './QuotaActionButton.vue'
 import AccountUsageSummary from './AccountUsageSummary.vue'
 import type { GrokBillingSnapshot } from '@/api/admin/grok'
+import { resolveGrokMonthlyQuota } from '@/utils/grokBillingPresentation'
 import {
   buildAccountUsagePresentation,
   type AccountUsagePresentation
@@ -577,12 +588,16 @@ const props = withDefaults(
     todayStatsLoading?: boolean
     manualRefreshToken?: number
     variant?: 'summary' | 'detail'
+    fullWidth?: boolean
+    showStatus?: boolean
   }>(),
   {
     todayStats: null,
     todayStatsLoading: false,
     manualRefreshToken: 0,
-    variant: 'detail'
+    variant: 'detail',
+    fullWidth: false,
+    showStatus: true
   }
 )
 
@@ -1044,25 +1059,22 @@ const grokWeeklyBar = computed((): GrokQuotaBarInfo | null => {
 })
 
 const grokMonthlyCreditsBar = computed((): GrokQuotaBarInfo | null => {
-  const b = effectiveGrokBilling.value
-  if (!b || b.used_percent == null) return null
-  return {
-    utilization: Math.max(0, Math.min(100, b.used_percent)),
-    resetsAt: b.billing_period_end || b.period_end || null
-  }
+	const quota = resolveGrokMonthlyQuota(effectiveGrokBilling.value)
+	if (!quota) return null
+	return {
+		utilization: quota.utilization,
+		resetsAt: quota.resetsAt
+	}
 })
 
 const grokMonthlyCreditsText = computed(() => {
-  const b = effectiveGrokBilling.value
-  if (!b || b.monthly_limit_cents == null) return null
-  const remaining =
-    b.included_used_cents != null
-      ? Math.max(0, b.monthly_limit_cents - b.included_used_cents)
-      : b.used_cents != null
-        ? Math.max(0, b.monthly_limit_cents - Math.min(b.used_cents, b.monthly_limit_cents))
-        : null
-  if (remaining == null) return null
-  return `${formatUsdFromCents(remaining)} / ${formatUsdFromCents(b.monthly_limit_cents)}`
+	const quota = resolveGrokMonthlyQuota(effectiveGrokBilling.value)
+	if (!quota) return null
+	return t('admin.accounts.usageWindow.grokMonthlyAmount', {
+		used: formatUsdFromCents(quota.usedCents),
+		limit: formatUsdFromCents(quota.limitCents),
+		remaining: formatUsdFromCents(quota.remainingCents)
+	})
 })
 
 const grokRequestQuotaBar = computed(() => makeGrokQuotaBar(usageInfo.value?.grok_request_quota))

@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,18 +17,25 @@ import (
 // OpenAIOAuthService handles OpenAI OAuth authentication flows
 type OpenAIOAuthService struct {
 	sessionStore         *openai.SessionStore
+	deviceSessionStore   ProviderOAuthSessionStore
 	proxyRepo            ProxyRepository
 	oauthClient          OpenAIOAuthClient
 	privacyClientFactory PrivacyClientFactory // 用于调用 chatgpt.com/backend-api（ImpersonateChrome）
+	now                  func() time.Time
 }
 
 // NewOpenAIOAuthService creates a new OpenAI OAuth service
-func NewOpenAIOAuthService(proxyRepo ProxyRepository, oauthClient OpenAIOAuthClient) *OpenAIOAuthService {
-	return &OpenAIOAuthService{
+func NewOpenAIOAuthService(proxyRepo ProxyRepository, oauthClient OpenAIOAuthClient, deviceStores ...ProviderOAuthSessionStore) *OpenAIOAuthService {
+	service := &OpenAIOAuthService{
 		sessionStore: openai.NewSessionStore(),
 		proxyRepo:    proxyRepo,
 		oauthClient:  oauthClient,
+		now:          time.Now,
 	}
+	if len(deviceStores) > 0 {
+		service.deviceSessionStore = deviceStores[0]
+	}
+	return service
 }
 
 // SetPrivacyClientFactory 注入 ImpersonateChrome 客户端工厂，
@@ -129,6 +138,203 @@ type OpenAITokenInfo struct {
 	PrivacyMode           string `json:"privacy_mode,omitempty"`
 }
 
+type OpenAIDeviceAuthorizationResult struct {
+	SessionID       string `json:"session_id"`
+	Status          string `json:"status"`
+	VerificationURI string `json:"verification_uri"`
+	UserCode        string `json:"user_code"`
+	ExpiresIn       int64  `json:"expires_in"`
+	Interval        int64  `json:"interval"`
+	RetryAfter      int64  `json:"retry_after,omitempty"`
+	Error           string `json:"error,omitempty"`
+}
+
+type openAIDeviceSessionPayload struct {
+	DeviceAuthID    string           `json:"device_auth_id"`
+	UserCode        string           `json:"user_code"`
+	ProxyURL        string           `json:"proxy_url,omitempty"`
+	ProxyID         *int64           `json:"proxy_id,omitempty"`
+	ClientID        string           `json:"client_id"`
+	IntervalSeconds int64            `json:"interval_seconds"`
+	Token           *OpenAITokenInfo `json:"token,omitempty"`
+}
+
+type OpenAIDeviceAuthorizationCredential struct {
+	Token   *OpenAITokenInfo
+	ProxyID *int64
+}
+
+const (
+	openAIDeviceDefaultInterval = 5 * time.Second
+	openAIDeviceSessionTTL      = 15 * time.Minute
+)
+
+func (s *OpenAIOAuthService) StartDeviceAuthorization(ctx context.Context, proxyID *int64) (*OpenAIDeviceAuthorizationResult, error) {
+	deviceClient, ok := s.oauthClient.(OpenAIDeviceOAuthClient)
+	if !ok || s.deviceSessionStore == nil {
+		return nil, infraerrors.New(http.StatusServiceUnavailable, "OPENAI_DEVICE_OAUTH_NOT_CONFIGURED", "OpenAI device authorization is not configured")
+	}
+	proxyURL, err := s.deviceProxyURL(ctx, proxyID)
+	if err != nil {
+		return nil, err
+	}
+	clientID := openai.ClientID
+	device, err := deviceClient.RequestDeviceCode(ctx, proxyURL, clientID)
+	if err != nil {
+		return nil, err
+	}
+	if device == nil || strings.TrimSpace(device.DeviceAuthID) == "" {
+		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_INVALID_RESPONSE", "OpenAI returned an incomplete device code response")
+	}
+	userCode := strings.TrimSpace(device.UserCode)
+	if userCode == "" {
+		userCode = strings.TrimSpace(device.UserCodeAlt)
+	}
+	interval := parseOpenAIDevicePollInterval(device.Interval)
+	sessionID, err := openai.GenerateSessionID()
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_DEVICE_OAUTH_SESSION_FAILED", "generate session: %v", err)
+	}
+	payload := &openAIDeviceSessionPayload{
+		DeviceAuthID: device.DeviceAuthID, UserCode: userCode, ProxyURL: proxyURL,
+		ProxyID: proxyID, ClientID: clientID, IntervalSeconds: int64(interval.Seconds()),
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_DEVICE_OAUTH_SESSION_FAILED", "encode session: %v", err)
+	}
+	now := s.now()
+	session := &ProviderOAuthSession{
+		ID: sessionID, Provider: PlatformOpenAI, Flow: ProviderOAuthFlowDeviceCode,
+		Status: ProviderOAuthSessionPending, NextPollAtUnixMilli: now.UnixMilli(),
+		ExpiresAtUnixMilli: now.Add(openAIDeviceSessionTTL).UnixMilli(), Payload: encoded,
+	}
+	if err := s.deviceSessionStore.Create(ctx, session, openAIDeviceSessionTTL); err != nil {
+		return nil, infraerrors.Newf(http.StatusServiceUnavailable, "OPENAI_DEVICE_OAUTH_SESSION_STORE_FAILED", "store session: %v", err)
+	}
+	return openAIDeviceAuthorizationResult(session, payload, now), nil
+}
+
+func (s *OpenAIOAuthService) GetDeviceAuthorizationStatus(ctx context.Context, sessionID string) (*OpenAIDeviceAuthorizationResult, error) {
+	if strings.TrimSpace(sessionID) == "" {
+		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_DEVICE_OAUTH_SESSION_REQUIRED", "session_id is required")
+	}
+	if s == nil || s.deviceSessionStore == nil {
+		return nil, infraerrors.New(http.StatusServiceUnavailable, "OPENAI_DEVICE_OAUTH_NOT_CONFIGURED", "OpenAI device authorization is not configured")
+	}
+	deviceClient, ok := s.oauthClient.(OpenAIDeviceOAuthClient)
+	if !ok {
+		return nil, infraerrors.New(http.StatusServiceUnavailable, "OPENAI_DEVICE_OAUTH_NOT_CONFIGURED", "OpenAI device authorization is not configured")
+	}
+	now := s.now()
+	lease, err := s.deviceSessionStore.AcquirePollLease(ctx, sessionID, now, 30*time.Second)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusServiceUnavailable, "OPENAI_DEVICE_OAUTH_SESSION_STORE_FAILED", "acquire poll lease: %v", err)
+	}
+	if lease == nil || lease.Session == nil || lease.Session.Provider != PlatformOpenAI || lease.Session.Flow != ProviderOAuthFlowDeviceCode {
+		return nil, infraerrors.New(http.StatusNotFound, "OPENAI_DEVICE_OAUTH_SESSION_NOT_FOUND", "OpenAI device authorization session not found or expired")
+	}
+	session := lease.Session
+	if session.Status == ProviderOAuthSessionCancelled {
+		return nil, infraerrors.New(http.StatusGone, "OPENAI_DEVICE_OAUTH_SESSION_CANCELLED", "OpenAI device authorization was cancelled")
+	}
+	payload, err := decodeOpenAIDeviceSessionPayload(session)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_SESSION_INVALID", "decode session: %v", err)
+	}
+	if now.UnixMilli() >= session.ExpiresAtUnixMilli {
+		_, _ = s.deviceSessionStore.Cancel(ctx, session.ID, 5*time.Minute)
+		return nil, infraerrors.New(http.StatusGone, "OPENAI_DEVICE_OAUTH_SESSION_EXPIRED", "OpenAI device authorization expired")
+	}
+	if session.Status != ProviderOAuthSessionPending {
+		return openAIDeviceAuthorizationResult(session, payload, now), nil
+	}
+	if !lease.Held {
+		if session.NextPollAtUnixMilli <= now.UnixMilli() {
+			session.NextPollAtUnixMilli = now.Add(time.Second).UnixMilli()
+		}
+		return openAIDeviceAuthorizationResult(session, payload, now), nil
+	}
+
+	authorization, err := deviceClient.PollDeviceAuthorization(ctx, payload.DeviceAuthID, payload.UserCode, payload.ProxyURL)
+	if err != nil {
+		session.NextPollAtUnixMilli = now.Add(time.Duration(payload.IntervalSeconds) * time.Second).UnixMilli()
+		_, _ = s.deviceSessionStore.CommitPoll(ctx, lease, session)
+		return nil, err
+	}
+	if authorization == nil {
+		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_INVALID_RESPONSE", "OpenAI returned an empty device authorization response")
+	}
+	session.NextPollAtUnixMilli = now.Add(time.Duration(payload.IntervalSeconds) * time.Second).UnixMilli()
+	if authorization.Pending {
+		committed, commitErr := s.deviceSessionStore.CommitPoll(ctx, lease, session)
+		if commitErr != nil {
+			return nil, infraerrors.Newf(http.StatusServiceUnavailable, "OPENAI_DEVICE_OAUTH_SESSION_STORE_FAILED", "update session: %v", commitErr)
+		}
+		if !committed {
+			return nil, infraerrors.New(http.StatusGone, "OPENAI_DEVICE_OAUTH_SESSION_CHANGED", "OpenAI device authorization was cancelled or superseded")
+		}
+		return openAIDeviceAuthorizationResult(session, payload, now), nil
+	}
+
+	tokenResponse, err := s.oauthClient.ExchangeCode(ctx, authorization.AuthorizationCode, authorization.CodeVerifier, openai.DeviceExchangeRedirect, payload.ProxyURL, payload.ClientID)
+	if err != nil {
+		_, _ = s.deviceSessionStore.CommitPoll(ctx, lease, session)
+		return nil, err
+	}
+	payload.Token = s.tokenInfoFromResponse(ctx, tokenResponse, payload.ClientID, payload.ProxyURL)
+	if payload.Token == nil || strings.TrimSpace(payload.Token.AccessToken) == "" {
+		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_INVALID_TOKEN", "OpenAI returned an empty access token")
+	}
+	session.Status = ProviderOAuthSessionAuthorized
+	session.Payload, err = json.Marshal(payload)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_DEVICE_OAUTH_SESSION_FAILED", "encode session: %v", err)
+	}
+	committed, err := s.deviceSessionStore.CommitPoll(ctx, lease, session)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusServiceUnavailable, "OPENAI_DEVICE_OAUTH_SESSION_STORE_FAILED", "update session: %v", err)
+	}
+	if !committed {
+		return nil, infraerrors.New(http.StatusGone, "OPENAI_DEVICE_OAUTH_SESSION_CHANGED", "OpenAI device authorization was cancelled or superseded")
+	}
+	return openAIDeviceAuthorizationResult(session, payload, now), nil
+}
+
+func (s *OpenAIOAuthService) CancelDeviceAuthorization(ctx context.Context, sessionID string) error {
+	if strings.TrimSpace(sessionID) == "" {
+		return infraerrors.New(http.StatusBadRequest, "OPENAI_DEVICE_OAUTH_SESSION_REQUIRED", "session_id is required")
+	}
+	if s == nil || s.deviceSessionStore == nil {
+		return infraerrors.New(http.StatusServiceUnavailable, "OPENAI_DEVICE_OAUTH_NOT_CONFIGURED", "OpenAI device authorization is not configured")
+	}
+	if _, err := s.deviceSessionStore.Cancel(ctx, sessionID, 5*time.Minute); err != nil {
+		return infraerrors.Newf(http.StatusServiceUnavailable, "OPENAI_DEVICE_OAUTH_SESSION_STORE_FAILED", "cancel device session: %v", err)
+	}
+	return nil
+}
+
+func (s *OpenAIOAuthService) ConsumeDeviceAuthorization(ctx context.Context, sessionID string) (*OpenAIDeviceAuthorizationCredential, error) {
+	if strings.TrimSpace(sessionID) == "" {
+		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_DEVICE_OAUTH_SESSION_REQUIRED", "session_id is required")
+	}
+	if s == nil || s.deviceSessionStore == nil {
+		return nil, infraerrors.New(http.StatusServiceUnavailable, "OPENAI_DEVICE_OAUTH_NOT_CONFIGURED", "OpenAI device authorization is not configured")
+	}
+	session, err := s.deviceSessionStore.ConsumeAuthorized(ctx, sessionID)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusServiceUnavailable, "OPENAI_DEVICE_OAUTH_SESSION_STORE_FAILED", "consume device session: %v", err)
+	}
+	if session == nil {
+		return nil, infraerrors.New(http.StatusBadRequest, "OPENAI_DEVICE_OAUTH_SESSION_NOT_FOUND", "OpenAI authorization session not found, incomplete, expired, or already consumed")
+	}
+	payload, err := decodeOpenAIDeviceSessionPayload(session)
+	if err != nil || payload.Token == nil || strings.TrimSpace(payload.Token.AccessToken) == "" {
+		return nil, infraerrors.New(http.StatusConflict, "OPENAI_DEVICE_OAUTH_NOT_AUTHORIZED", "OpenAI device authorization is not complete")
+	}
+	return &OpenAIDeviceAuthorizationCredential{Token: payload.Token, ProxyID: payload.ProxyID}, nil
+}
+
 // ExchangeCode exchanges authorization code for tokens
 func (s *OpenAIOAuthService) ExchangeCode(ctx context.Context, input *OpenAIExchangeCodeInput) (*OpenAITokenInfo, error) {
 	// Get session
@@ -171,39 +377,13 @@ func (s *OpenAIOAuthService) ExchangeCode(ctx context.Context, input *OpenAIExch
 		return nil, err
 	}
 
-	// Parse ID token to get user info
-	var userInfo *openai.UserInfo
-	if tokenResp.IDToken != "" {
-		claims, parseErr := openai.ParseIDToken(tokenResp.IDToken)
-		if parseErr != nil {
-			slog.Warn("openai_oauth_id_token_parse_failed", "error", parseErr)
-		} else {
-			userInfo = claims.GetUserInfo()
-		}
-	}
-
 	// Delete session after successful exchange
 	s.sessionStore.Delete(input.SessionID)
 
-	tokenInfo := &OpenAITokenInfo{
-		AccessToken:  tokenResp.AccessToken,
-		RefreshToken: tokenResp.RefreshToken,
-		IDToken:      tokenResp.IDToken,
-		ExpiresIn:    int64(tokenResp.ExpiresIn),
-		ExpiresAt:    time.Now().Unix() + int64(tokenResp.ExpiresIn),
-		ClientID:     clientID,
+	tokenInfo := s.tokenInfoFromResponse(ctx, tokenResp, clientID, proxyURL)
+	if tokenInfo == nil || strings.TrimSpace(tokenInfo.AccessToken) == "" {
+		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_OAUTH_INVALID_TOKEN_RESPONSE", "OpenAI returned an empty access token")
 	}
-
-	if userInfo != nil {
-		tokenInfo.Email = userInfo.Email
-		tokenInfo.ChatGPTAccountID = userInfo.ChatGPTAccountID
-		tokenInfo.ChatGPTUserID = userInfo.ChatGPTUserID
-		tokenInfo.OrganizationID = userInfo.OrganizationID
-		tokenInfo.PlanType = userInfo.PlanType
-	}
-
-	s.enrichTokenInfo(ctx, tokenInfo, proxyURL)
-
 	return tokenInfo, nil
 }
 
@@ -219,7 +399,17 @@ func (s *OpenAIOAuthService) RefreshTokenWithClientID(ctx context.Context, refre
 		return nil, err
 	}
 
-	// Parse ID token to get user info
+	tokenInfo := s.tokenInfoFromResponse(ctx, tokenResp, clientID, proxyURL)
+	if tokenInfo == nil || strings.TrimSpace(tokenInfo.AccessToken) == "" {
+		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_OAUTH_INVALID_TOKEN_RESPONSE", "OpenAI returned an empty access token")
+	}
+	return tokenInfo, nil
+}
+
+func (s *OpenAIOAuthService) tokenInfoFromResponse(ctx context.Context, tokenResp *openai.TokenResponse, clientID, proxyURL string) *OpenAITokenInfo {
+	if tokenResp == nil {
+		return nil
+	}
 	var userInfo *openai.UserInfo
 	if tokenResp.IDToken != "" {
 		claims, parseErr := openai.ParseIDToken(tokenResp.IDToken)
@@ -229,18 +419,12 @@ func (s *OpenAIOAuthService) RefreshTokenWithClientID(ctx context.Context, refre
 			userInfo = claims.GetUserInfo()
 		}
 	}
-
+	now := s.now()
 	tokenInfo := &OpenAITokenInfo{
-		AccessToken:  tokenResp.AccessToken,
-		RefreshToken: tokenResp.RefreshToken,
-		IDToken:      tokenResp.IDToken,
-		ExpiresIn:    int64(tokenResp.ExpiresIn),
-		ExpiresAt:    time.Now().Unix() + int64(tokenResp.ExpiresIn),
+		AccessToken: tokenResp.AccessToken, RefreshToken: tokenResp.RefreshToken,
+		IDToken: tokenResp.IDToken, ExpiresIn: tokenResp.ExpiresIn,
+		ExpiresAt: now.Unix() + tokenResp.ExpiresIn, ClientID: strings.TrimSpace(clientID),
 	}
-	if trimmed := strings.TrimSpace(clientID); trimmed != "" {
-		tokenInfo.ClientID = trimmed
-	}
-
 	if userInfo != nil {
 		tokenInfo.Email = userInfo.Email
 		tokenInfo.ChatGPTAccountID = userInfo.ChatGPTAccountID
@@ -248,10 +432,8 @@ func (s *OpenAIOAuthService) RefreshTokenWithClientID(ctx context.Context, refre
 		tokenInfo.OrganizationID = userInfo.OrganizationID
 		tokenInfo.PlanType = userInfo.PlanType
 	}
-
 	s.enrichTokenInfo(ctx, tokenInfo, proxyURL)
-
-	return tokenInfo, nil
+	return tokenInfo
 }
 
 // enrichTokenInfo 通过 ChatGPT backend-api 补全 tokenInfo 并设置隐私（best-effort）。
@@ -367,6 +549,9 @@ func (s *OpenAIOAuthService) RefreshAccountToken(ctx context.Context, account *A
 
 // BuildAccountCredentials builds credentials map from token info
 func (s *OpenAIOAuthService) BuildAccountCredentials(tokenInfo *OpenAITokenInfo) map[string]any {
+	if tokenInfo == nil {
+		return nil
+	}
 	creds := map[string]any{
 		"access_token": tokenInfo.AccessToken,
 	}
@@ -417,6 +602,68 @@ func (s *OpenAIOAuthService) BuildAccountCredentials(tokenInfo *OpenAITokenInfo)
 // Stop stops the session store cleanup goroutine
 func (s *OpenAIOAuthService) Stop() {
 	s.sessionStore.Stop()
+}
+
+func (s *OpenAIOAuthService) deviceProxyURL(ctx context.Context, proxyID *int64) (string, error) {
+	if proxyID == nil {
+		return "", nil
+	}
+	if s.proxyRepo == nil {
+		return "", infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_PROXY_NOT_AVAILABLE", "proxy repository is not available")
+	}
+	proxy, err := s.proxyRepo.GetByID(ctx, *proxyID)
+	if err != nil {
+		return "", infraerrors.Newf(http.StatusBadRequest, "OPENAI_OAUTH_PROXY_NOT_FOUND", "proxy not found: %v", err)
+	}
+	if proxy == nil {
+		return "", infraerrors.New(http.StatusBadRequest, "OPENAI_OAUTH_PROXY_NOT_FOUND", "proxy not found")
+	}
+	return proxy.URL(), nil
+}
+
+func parseOpenAIDevicePollInterval(raw json.RawMessage) time.Duration {
+	if len(raw) == 0 {
+		return openAIDeviceDefaultInterval
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		if seconds, parseErr := strconv.ParseInt(strings.TrimSpace(text), 10, 64); parseErr == nil && seconds > 0 {
+			return time.Duration(seconds) * time.Second
+		}
+	}
+	var seconds int64
+	if err := json.Unmarshal(raw, &seconds); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	return openAIDeviceDefaultInterval
+}
+
+func decodeOpenAIDeviceSessionPayload(session *ProviderOAuthSession) (*openAIDeviceSessionPayload, error) {
+	if session == nil || len(session.Payload) == 0 {
+		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_SESSION_INVALID", "OpenAI device session payload is missing")
+	}
+	var payload openAIDeviceSessionPayload
+	if err := json.Unmarshal(session.Payload, &payload); err != nil {
+		return nil, err
+	}
+	return &payload, nil
+}
+
+func openAIDeviceAuthorizationResult(session *ProviderOAuthSession, payload *openAIDeviceSessionPayload, now time.Time) *OpenAIDeviceAuthorizationResult {
+	if session == nil || payload == nil {
+		return nil
+	}
+	result := &OpenAIDeviceAuthorizationResult{
+		SessionID: session.ID, Status: session.Status, VerificationURI: openai.DeviceVerificationURL,
+		UserCode: payload.UserCode, Interval: payload.IntervalSeconds, Error: session.Error,
+	}
+	if remaining := session.ExpiresAtUnixMilli - now.UnixMilli(); remaining > 0 {
+		result.ExpiresIn = (remaining + int64(time.Second) - 1) / int64(time.Second)
+	}
+	if retry := session.NextPollAtUnixMilli - now.UnixMilli(); retry > 0 && session.Status == ProviderOAuthSessionPending {
+		result.RetryAfter = (retry + int64(time.Second) - 1) / int64(time.Second)
+	}
+	return result
 }
 
 func normalizeOpenAIOAuthPlatform(platform string) string {

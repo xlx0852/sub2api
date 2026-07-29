@@ -14,6 +14,7 @@ const show = ref(false)
 const triggerRef = useTemplateRef<HTMLElement>('trigger')
 const tooltipRef = useTemplateRef<HTMLElement>('tooltip')
 const tooltipStyle = ref({ top: '0px', left: '0px' })
+const tooltipBelow = ref(false)
 
 function openTooltip() {
   show.value = true
@@ -68,9 +69,23 @@ function updatePosition() {
   const el = triggerRef.value
   if (!el) return
   const rect = el.getBoundingClientRect()
+  const tooltipRect = tooltipRef.value?.getBoundingClientRect()
+  const tooltipWidth = Math.min(
+    tooltipRect?.width || 256,
+    Math.max(window.innerWidth - 24, 0),
+  )
+  const tooltipHeight = tooltipRect?.height || 80
+  const halfWidth = tooltipWidth / 2
+  const desiredLeft = rect.left + rect.width / 2
+  const left = Math.min(
+    Math.max(desiredLeft, 12 + halfWidth),
+    window.innerWidth - 12 - halfWidth,
+  )
+
+  tooltipBelow.value = rect.top < tooltipHeight + 20
   tooltipStyle.value = {
-    top: `${rect.top + window.scrollY}px`,
-    left: `${rect.left + rect.width / 2 + window.scrollX}px`,
+    top: `${tooltipBelow.value ? rect.bottom + 8 : rect.top - 8}px`,
+    left: `${left}px`,
   }
 }
 
@@ -121,10 +136,11 @@ onBeforeUnmount(() => {
         v-show="show"
         role="tooltip"
         :class="[
-          'fixed z-[99999] -translate-x-1/2 -translate-y-full rounded-lg bg-gray-900 p-3 text-xs leading-relaxed text-white shadow-lg ring-1 ring-white/10 dark:bg-gray-800',
+          'fixed z-[99999] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 rounded-lg bg-gray-900 p-3 text-xs leading-relaxed text-white shadow-lg ring-1 ring-white/10 dark:bg-gray-800',
+          tooltipBelow ? 'translate-y-0' : '-translate-y-full',
           props.widthClass,
         ]"
-        :style="{ top: `calc(${tooltipStyle.top} - 8px)`, left: tooltipStyle.left }"
+        :style="tooltipStyle"
       >
         <button
           v-if="props.trigger === 'click'"
@@ -138,7 +154,12 @@ onBeforeUnmount(() => {
           </svg>
         </button>
         <slot>{{ content }}</slot>
-        <div class="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 dark:bg-gray-800"></div>
+        <div
+          :class="[
+            'absolute left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-gray-900 dark:bg-gray-800',
+            tooltipBelow ? '-top-1' : '-bottom-1',
+          ]"
+        ></div>
       </div>
     </Teleport>
   </div>

@@ -153,7 +153,8 @@ const yiModels = [
 // Moonshot/Kimi
 const moonshotModels = [
   'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k',
-  'kimi-latest'
+  'kimi-latest', 'kimi-k2.5', 'kimi-k2.6', 'kimi-k2.7-code',
+  'kimi-k2.7-code-highspeed', 'kimi-k3', 'kimi-k3-highspeed'
 ]
 
 // 字节跳动 豆包
@@ -384,7 +385,8 @@ export function getModelsByPlatform(platform: string): string[] {
     case 'grok': return xaiModels
     case 'cohere': return cohereModels
     case 'yi': return yiModels
-    case 'moonshot': return moonshotModels
+    case 'moonshot':
+    case 'kimi': return moonshotModels
     case 'doubao': return doubaoModels
     case 'minimax': return minimaxModels
     case 'baidu': return baiduModels

@@ -59,13 +59,48 @@ func TestUserGroupRateResolverResolve_InvalidCacheEntryLoadsRepoAndCaches(t *tes
 
 	cached, ok := cache.Get("101:202")
 	require.True(t, ok)
-	require.Equal(t, rate, cached)
+	entry, ok := cached.(userGroupRateCacheEntry)
+	require.True(t, ok)
+	require.True(t, entry.hasOverride)
+	require.Equal(t, rate, entry.override)
 
 	hit, miss, load, _, fallback := GatewayUserGroupRateCacheStats()
 	require.Equal(t, int64(0), hit)
 	require.Equal(t, int64(1), miss)
 	require.Equal(t, int64(1), load)
 	require.Equal(t, int64(0), fallback)
+}
+
+func TestUserGroupRateResolverResolve_NoOverrideUsesLatestGroupDefault(t *testing.T) {
+	resetGatewayHotpathStatsForTest()
+
+	repo := &userGroupRateResolverRepoStub{rate: nil}
+	cache := gocache.New(time.Minute, time.Minute)
+	resolver := newUserGroupRateResolver(repo, cache, time.Minute, nil, "service.test")
+
+	require.Equal(t, 0.10, resolver.Resolve(context.Background(), 1, 4, 0.10))
+	require.Equal(t, 1, repo.calls)
+	// 命中“无专属覆盖”缓存后，分组默认从 0.10 改为 0.12 应立即生效。
+	require.Equal(t, 0.12, resolver.Resolve(context.Background(), 1, 4, 0.12))
+	require.Equal(t, 1, repo.calls)
+
+	hit, miss, load, _, fallback := GatewayUserGroupRateCacheStats()
+	require.Equal(t, int64(1), hit)
+	require.Equal(t, int64(1), miss)
+	require.Equal(t, int64(1), load)
+	require.Equal(t, int64(0), fallback)
+}
+
+func TestUserGroupRateResolverResolve_LegacyFloatCacheIsIgnored(t *testing.T) {
+	resetGatewayHotpathStatsForTest()
+
+	repo := &userGroupRateResolverRepoStub{rate: nil}
+	cache := gocache.New(time.Minute, time.Minute)
+	cache.Set("1:4", 0.10, time.Minute) // 旧形态：直接缓存最终倍率
+	resolver := newUserGroupRateResolver(repo, cache, time.Minute, nil, "service.test")
+
+	require.Equal(t, 0.12, resolver.Resolve(context.Background(), 1, 4, 0.12))
+	require.Equal(t, 1, repo.calls)
 }
 
 func TestGatewayServiceGetUserGroupRateMultiplier_FallbacksAndUsesExistingResolver(t *testing.T) {

@@ -795,6 +795,9 @@ export default {
         batchSuccess: 'Successfully created {count} account(s)',
         batchPartialSuccess: 'Partial success: {success} succeeded, {failed} failed',
         batchFailed: 'Batch creation failed',
+        deviceModeTitle: 'Authorization method',
+        browserMode: 'Browser OAuth (PKCE)',
+        deviceMode: 'Device code login (Recommended)',
         // OpenAI specific
         openai: {
           title: 'OpenAI Account Authorization',
@@ -860,7 +863,21 @@ export default {
           validating: 'Validating...',
           validateAndCreate: 'Validate & Create Account',
           pleaseEnterRefreshToken: 'Please enter Refresh Token',
-          pleaseEnterSessionToken: 'Please enter Session Token'
+          pleaseEnterSessionToken: 'Please enter Session Token',
+          device: {
+            title: 'OpenAI Device Authorization',
+            description: 'Open the OpenAI authorization page and enter the device code. Completion is detected automatically.',
+            start: 'Start Device Authorization',
+            starting: 'Generating device code...',
+            userCode: 'Device Code',
+            openAuthorization: 'Open OpenAI Authorization',
+            waiting: 'Waiting for OpenAI authorization',
+            authorized: 'Authorized and ready to create',
+            denied: 'Authorization denied',
+            expiresIn: 'Expires in {seconds}s',
+            retry: 'Retry Authorization',
+            createAccount: 'Create OpenAI Account'
+          }
         },
         grok: {
           title: 'Grok Account Authorization',
@@ -901,7 +918,35 @@ export default {
             GROK_OAUTH_PROXY_NOT_FOUND:
               'The selected proxy could not be found. Choose an available proxy and retry.'
           },
-          oauthOnlyHint: 'Initial Grok support is OAuth subscription-backed Responses API text and reasoning traffic only.'
+          oauthOnlyHint: 'Initial Grok support is OAuth subscription-backed Responses API text and reasoning traffic only.',
+          device: {
+            title: 'Grok Device Authorization',
+            description: 'Open the xAI/Grok authorization page and enter the device code. Completion is detected automatically.',
+            start: 'Start Device Authorization',
+            starting: 'Generating device code...',
+            userCode: 'Device Code',
+            openAuthorization: 'Open Grok Authorization',
+            waiting: 'Waiting for Grok authorization',
+            authorized: 'Authorized and ready to create',
+            denied: 'Authorization denied',
+            expiresIn: 'Expires in {seconds}s',
+            retry: 'Retry Authorization',
+            createAccount: 'Create Grok Account'
+          }
+        },
+        kimi: {
+          title: 'Kimi Device Authorization',
+          description: 'Open the Kimi authorization page and enter the device code. Sub2API will detect completion automatically.',
+          start: 'Start Device Authorization',
+          starting: 'Generating device code...',
+          userCode: 'Device Code',
+          openAuthorization: 'Open Kimi Authorization',
+          waiting: 'Waiting for Kimi authorization',
+          authorized: 'Authorized and ready to create',
+          denied: 'Authorization denied',
+          expiresIn: 'Expires in {seconds}s',
+          retry: 'Retry Authorization',
+          createAccount: 'Create Kimi Account'
         },
         // Gemini specific
 	        gemini: {
@@ -1212,6 +1257,12 @@ export default {
         grokTokens: 'Tok',
         grokWeekly: '7d',
         grokMonthly: '30d',
+        grokMonthlyAmount: 'Used {used} / {limit} · {remaining} remaining',
+        grokProductBreakdown: 'Usage by channel',
+        grokProductUsed: 'Used {value}',
+        grokProductApi: 'API usage',
+        grokProductBuild: 'GrokBuild usage',
+        grokProductChat: 'GrokChat usage',
         grokUnknown: 'Grok quota unknown — click Refresh quota to load official billing, or wait for rate-limit headers.',
         grokRetryAfter: 'Retry after {time}',
         grokProbe: 'Refresh quota',
@@ -1230,6 +1281,12 @@ export default {
         officialQuotaHint: 'Upstream account quota windows, shown separately from local billing statistics.',
         localConsumption: 'Local consumption',
         localConsumptionHint: 'Requests, tokens, account cost, and user charges recorded by Sub2API.',
+        financialSummary: 'Financial summary',
+        profitMargin: 'Margin',
+        profitRequests: 'Requests',
+        currentCycleRange: 'Current cycle {start} to {end}',
+        noActiveCycle: 'No confirmed active subscription cycle',
+        missingCycleHint: 'Last 30 days revenue remains available. Add the active subscription cycle to calculate purchase cost and profit.',
         performance24h: 'Last 24 hours performance',
         performanceHint: 'Generation latency, first token, and connection quality by request type.',
         diagnostics: 'Diagnostics',

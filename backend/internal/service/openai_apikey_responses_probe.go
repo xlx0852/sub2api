@@ -34,7 +34,7 @@ const responsesProbeMaxBodyBytes = 256 * 1024
 // Stream=false 便于一次性读取 output 数组判定;不带 instructions 以免干扰。
 func openaiResponsesProbePayload(modelID string) []byte {
 	if strings.TrimSpace(modelID) == "" {
-		modelID = openai.DefaultTestModel
+		modelID = openai.CurrentDefaultTestModel()
 	}
 	body, _ := json.Marshal(map[string]any{
 		"model": modelID,
@@ -84,7 +84,7 @@ func selectResponsesProbeModel(account *Account) string {
 		candidates = append(candidates, upstream)
 	}
 	if len(candidates) == 0 {
-		return openai.DefaultTestModel
+		return openai.CurrentDefaultTestModel()
 	}
 	sort.Strings(candidates)
 	return candidates[0]

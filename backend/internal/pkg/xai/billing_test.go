@@ -143,8 +143,17 @@ func TestApplyGrokCLIChatHeaders(t *testing.T) {
 
 	require.Equal(t, GrokCLITokenAuthValue, req.Header.Get(GrokCLITokenAuthHeader))
 	require.Equal(t, GrokCLIVersionValue, req.Header.Get(GrokCLIVersionHeader))
+	require.Equal(t, GrokCLIClientIdentifierValue, req.Header.Get(GrokCLIClientIdentifierHeader))
+	require.Equal(t, GrokCLIAuthenticateValue, req.Header.Get(GrokCLIAuthenticateHeader))
+	require.Equal(t, GrokCLIClientModeHeadless, req.Header.Get(GrokCLIClientModeHeader))
+	require.Equal(t, GrokCLIUserAgent, req.UserAgent())
 	require.True(t, IsCLIChatProxyBaseURL(DefaultCLIBaseURL+"/"))
 	require.False(t, IsCLIChatProxyBaseURL(DefaultBaseURL))
+}
+
+func TestBuildGrokCLIUserAgentUsesOfficialPlatformNames(t *testing.T) {
+	require.Equal(t, "grok-pager/0.2.112 grok-shell/0.2.112 (macos; aarch64)", buildGrokCLIUserAgent("darwin", "arm64"))
+	require.Equal(t, "grok-pager/0.2.112 grok-shell/0.2.112 (linux; x86_64)", buildGrokCLIUserAgent("linux", "amd64"))
 }
 
 func floatPtr(v float64) *float64 { return &v }

@@ -6,8 +6,8 @@
           class="flex flex-col justify-between gap-4 lg:flex-row lg:items-start"
         >
           <!-- Left: fuzzy search + filters (can wrap to multiple lines) -->
-          <div class="flex flex-1 flex-wrap items-center gap-3">
-            <div class="relative w-full sm:w-64">
+          <div class="grid w-full min-w-0 grid-cols-2 items-center gap-3 sm:flex sm:flex-1 sm:flex-wrap">
+            <div class="relative col-span-2 w-full sm:col-auto sm:w-64">
               <Icon
                 name="search"
                 size="md"
@@ -25,33 +25,33 @@
               v-model="filters.platform"
               :options="platformFilterOptions"
               :placeholder="t('admin.groups.allPlatforms')"
-              class="w-44"
+              class="min-w-0 w-full sm:w-44"
               @change="loadGroups"
             />
             <Select
               v-model="filters.status"
               :options="statusOptions"
               :placeholder="t('admin.groups.allStatus')"
-              class="w-40"
+              class="min-w-0 w-full sm:w-40"
               @change="loadGroups"
             />
             <Select
               v-model="filters.is_exclusive"
               :options="exclusiveOptions"
               :placeholder="t('admin.groups.allGroups')"
-              class="w-44"
+              class="col-span-2 min-w-0 w-full sm:col-auto sm:w-44"
               @change="loadGroups"
             />
           </div>
 
           <!-- Right: actions -->
           <div
-            class="flex w-full flex-shrink-0 flex-wrap items-center justify-end gap-3 lg:w-auto"
+            class="grid w-full flex-shrink-0 grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap sm:justify-end sm:gap-3 lg:w-auto"
           >
             <button
               @click="loadGroups"
               :disabled="loading"
-              class="btn btn-secondary"
+              class="btn btn-secondary w-full sm:w-auto"
               :title="t('common.refresh')"
             >
               <Icon
@@ -60,10 +60,10 @@
                 :class="loading ? 'animate-spin' : ''"
               />
             </button>
-            <div class="relative" ref="columnDropdownRef">
+            <div class="relative w-full sm:w-auto" ref="columnDropdownRef">
               <button
                 @click="showColumnDropdown = !showColumnDropdown"
-                class="btn btn-secondary"
+                class="btn btn-secondary w-full"
                 :title="t('admin.groups.columnSettings')"
               >
                 <Icon name="grid" size="md" class="mr-2" />
@@ -94,7 +94,7 @@
             </div>
             <button
               @click="openSortModal"
-              class="btn btn-secondary"
+              class="btn btn-secondary w-full sm:w-auto"
               :title="t('admin.groups.sortOrder')"
             >
               <Icon name="arrowsUpDown" size="md" class="mr-2" />
@@ -102,7 +102,7 @@
             </button>
             <button
               @click="openCreateModal"
-              class="btn btn-primary"
+              class="btn btn-primary w-full sm:w-auto"
               data-tour="groups-create-btn"
             >
               <Icon name="plus" size="md" class="mr-2" />
@@ -122,6 +122,112 @@
           default-sort-order="asc"
           @sort="handleSort"
         >
+          <template #mobile-card="{ row }">
+            <article class="min-w-0">
+              <header class="border-b border-black/[0.07] p-4 dark:border-white/[0.08]">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <h3 class="truncate text-base font-semibold text-gray-950 dark:text-white" :title="row.name">{{ row.name }}</h3>
+                    <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                      <span
+                        v-if="isColumnVisible('platform')"
+                        :class="[
+                          'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium',
+                          row.platform === 'anthropic' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                          row.platform === 'openai' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                          row.platform === 'antigravity' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' :
+                          row.platform === 'grok' ? 'bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100' :
+                          'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                        ]"
+                      >
+                        <PlatformIcon :platform="row.platform" size="xs" />
+                        {{ t('admin.groups.platforms.' + row.platform) }}
+                      </span>
+                      <span v-if="isColumnVisible('is_exclusive')" :class="['badge', row.is_exclusive ? 'badge-primary' : 'badge-gray']">
+                        {{ row.is_exclusive ? t('admin.groups.exclusive') : t('admin.groups.public') }}
+                      </span>
+                    </div>
+                  </div>
+                  <span v-if="isColumnVisible('status')" :class="['badge flex-none', row.status === 'active' ? 'badge-success' : 'badge-danger']">
+                    {{ t('admin.accounts.status.' + row.status) }}
+                  </span>
+                </div>
+              </header>
+
+              <div class="space-y-4 p-4">
+                <section class="grid grid-cols-2 gap-2">
+                  <div v-if="isColumnVisible('rate_multiplier')" class="rounded-md bg-black/[0.025] p-3 dark:bg-white/[0.04]">
+                    <p class="text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.groups.columns.rateMultiplier') }}</p>
+                    <p class="mt-1 text-base font-semibold text-gray-900 dark:text-white">{{ row.rate_multiplier }}x</p>
+                  </div>
+                  <div v-if="isColumnVisible('account_count')" class="rounded-md bg-black/[0.025] p-3 dark:bg-white/[0.04]">
+                    <p class="text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.groups.columns.accounts') }}</p>
+                    <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
+                      <span class="text-emerald-600 dark:text-emerald-400">{{ row.active_account_count || 0 }}</span>
+                      <span class="mx-1 text-gray-300 dark:text-dark-600">/</span>{{ row.account_count || 0 }}
+                    </p>
+                  </div>
+                </section>
+
+                <section v-if="isColumnVisible('billing_type')" class="rounded-md border border-black/[0.06] p-3 dark:border-white/[0.07]">
+                  <div class="flex items-center justify-between gap-2">
+                    <p class="text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.groups.columns.billingType') }}</p>
+                    <span :class="['rounded-md px-2 py-1 text-xs font-medium', row.subscription_type === 'subscription' ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300']">
+                      {{ row.subscription_type === 'subscription' ? t('admin.groups.subscription.subscription') : t('admin.groups.subscription.standard') }}
+                    </span>
+                  </div>
+                  <p v-if="row.subscription_type === 'subscription'" class="mt-2 text-xs text-gray-500 dark:text-dark-400">
+                    <template v-if="row.daily_limit_usd || row.weekly_limit_usd || row.monthly_limit_usd">
+                      <span v-if="row.daily_limit_usd">${{ row.daily_limit_usd }}/{{ t('admin.groups.limitDay') }}</span>
+                      <span v-if="row.weekly_limit_usd" class="ml-2">${{ row.weekly_limit_usd }}/{{ t('admin.groups.limitWeek') }}</span>
+                      <span v-if="row.monthly_limit_usd" class="ml-2">${{ row.monthly_limit_usd }}/{{ t('admin.groups.limitMonth') }}</span>
+                    </template>
+                    <span v-else>{{ t('admin.groups.subscription.noLimit') }}</span>
+                  </p>
+                </section>
+
+                <section v-if="isColumnVisible('capacity')" class="rounded-md border border-black/[0.06] p-3 dark:border-white/[0.07]">
+                  <p class="mb-2 text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.groups.columns.capacity') }}</p>
+                  <GroupCapacityBadge
+                    v-if="capacityMap.get(row.id)"
+                    :concurrency-used="capacityMap.get(row.id)!.concurrencyUsed"
+                    :concurrency-max="capacityMap.get(row.id)!.concurrencyMax"
+                    :sessions-used="capacityMap.get(row.id)!.sessionsUsed"
+                    :sessions-max="capacityMap.get(row.id)!.sessionsMax"
+                    :rpm-used="capacityMap.get(row.id)!.rpmUsed"
+                    :rpm-max="capacityMap.get(row.id)!.rpmMax"
+                  />
+                  <span v-else class="text-xs text-gray-400">—</span>
+                </section>
+
+                <section v-if="isColumnVisible('usage')" class="grid grid-cols-2 gap-2">
+                  <div class="rounded-md bg-black/[0.025] p-3 dark:bg-white/[0.04]">
+                    <p class="text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.groups.usageToday') }}</p>
+                    <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">${{ formatCost(usageMap.get(row.id)?.today_cost ?? 0) }}</p>
+                  </div>
+                  <div class="rounded-md bg-black/[0.025] p-3 text-right dark:bg-white/[0.04]">
+                    <p class="text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.groups.usageTotal') }}</p>
+                    <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">${{ formatCost(usageMap.get(row.id)?.total_cost ?? 0) }}</p>
+                  </div>
+                </section>
+              </div>
+
+              <footer class="grid grid-cols-2 border-t border-black/[0.07] dark:border-white/[0.08]">
+                <button class="flex h-11 items-center justify-center gap-1.5 text-xs font-medium text-gray-500 hover:bg-black/[0.035] hover:text-gray-950 dark:text-dark-400 dark:hover:bg-white/[0.05] dark:hover:text-white" @click.stop="handleEdit(row)">
+                  <Icon name="edit" size="sm" />{{ t('common.edit') }}
+                </button>
+                <button class="flex h-11 items-center justify-center gap-1.5 border-l border-black/[0.07] text-xs font-medium text-gray-500 hover:bg-black/[0.035] hover:text-gray-950 dark:border-white/[0.08] dark:text-dark-400 dark:hover:bg-white/[0.05] dark:hover:text-white" @click.stop="handleRateMultipliers(row)">
+                  <Icon name="dollar" size="sm" />{{ t('admin.groups.rateMultipliers') }}
+                </button>
+                <button class="flex h-11 items-center justify-center gap-1.5 border-t border-black/[0.07] text-xs font-medium text-gray-500 hover:bg-black/[0.035] hover:text-gray-950 dark:border-white/[0.08] dark:text-dark-400 dark:hover:bg-white/[0.05] dark:hover:text-white" @click.stop="handleRPMOverrides(row)">
+                  <Icon name="bolt" size="sm" />{{ t('admin.groups.rpmOverrides') }}
+                </button>
+                <button class="flex h-11 items-center justify-center gap-1.5 border-l border-t border-black/[0.07] text-xs font-medium text-gray-500 hover:bg-red-50 hover:text-red-600 dark:border-white/[0.08] dark:text-dark-400 dark:hover:bg-red-950/20 dark:hover:text-red-400" @click.stop="handleDelete(row)">
+                  <Icon name="trash" size="sm" />{{ t('common.delete') }}
+                </button>
+              </footer>
+            </article>
+          </template>
           <template #cell-name="{ value }">
             <span class="font-medium text-gray-900 dark:text-white">{{
               value
@@ -3636,6 +3742,7 @@ const platformOptions = computed(() => [
   { value: "gemini", label: "Gemini" },
   { value: "antigravity", label: "Antigravity" },
   { value: "grok", label: "Grok" },
+  { value: "kimi", label: "Kimi" },
 ]);
 
 const platformFilterOptions = computed(() => [
@@ -3645,6 +3752,7 @@ const platformFilterOptions = computed(() => [
   { value: "gemini", label: "Gemini" },
   { value: "antigravity", label: "Antigravity" },
   { value: "grok", label: "Grok" },
+  { value: "kimi", label: "Kimi" },
 ]);
 
 const editStatusOptions = computed(() => [

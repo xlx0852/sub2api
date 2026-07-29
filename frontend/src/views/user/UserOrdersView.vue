@@ -3,13 +3,13 @@
     <div class="space-y-4">
       <!-- Filters -->
       <div class="card p-4">
-        <div class="flex flex-wrap items-center gap-3">
-          <Select v-model="currentFilter" :options="statusFilters" class="w-36" @change="fetchOrders" />
-          <div class="flex flex-1 items-center justify-end gap-2">
-            <button @click="fetchOrders" :disabled="loading" class="btn btn-secondary" :title="t('common.refresh')">
+        <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <Select v-model="currentFilter" :options="statusFilters" class="w-full sm:w-36" @change="fetchOrders" />
+          <div class="grid w-full grid-cols-[3rem_minmax(0,1fr)] items-center gap-2 sm:ml-auto sm:flex sm:w-auto sm:flex-1 sm:justify-end">
+            <button @click="fetchOrders" :disabled="loading" class="btn btn-secondary h-11 w-12 px-0 sm:w-auto sm:px-4" :title="t('common.refresh')">
               <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
             </button>
-            <button class="btn btn-primary" @click="router.push('/purchase')">{{ t('payment.result.backToRecharge') }}</button>
+            <button class="btn btn-primary min-w-0" @click="router.push('/purchase')">{{ t('payment.result.backToRecharge') }}</button>
           </div>
         </div>
       </div>

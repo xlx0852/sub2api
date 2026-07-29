@@ -27,6 +27,7 @@ interface Props {
   fullscreen?: boolean
   customStartTime?: string | null
   customEndTime?: string | null
+  controlsOnly?: boolean
 }
 
 interface Emits {
@@ -437,15 +438,6 @@ const healthScoreValue = computed<number | null>(() => {
   return typeof v === 'number' && Number.isFinite(v) ? v : null
 })
 
-const healthScoreColor = computed(() => {
-  if (isSystemIdle.value) return '#9ca3af' // gray-400
-  const score = healthScoreValue.value
-  if (score == null) return '#9ca3af'
-  if (score >= 90) return '#10b981' // green
-  if (score >= 60) return '#f59e0b' // yellow
-  return '#ef4444' // red
-})
-
 const healthScoreClass = computed(() => {
   if (isSystemIdle.value) return 'text-gray-400'
   const score = healthScoreValue.value
@@ -455,15 +447,19 @@ const healthScoreClass = computed(() => {
   return 'text-red-500'
 })
 
-const circleSize = computed(() => props.fullscreen ? 140 : 100)
-const strokeWidth = computed(() => props.fullscreen ? 10 : 8)
-const radius = computed(() => (circleSize.value - strokeWidth.value) / 2)
-const circumference = computed(() => 2 * Math.PI * radius.value)
-const dashOffset = computed(() => {
-  if (isSystemIdle.value) return 0
-  if (healthScoreValue.value == null) return 0
-  const score = Math.max(0, Math.min(100, healthScoreValue.value))
-  return circumference.value - (score / 100) * circumference.value
+const healthDotClass = computed(() => {
+  if (isSystemIdle.value || healthScoreValue.value == null) return 'bg-gray-400'
+  if (healthScoreValue.value >= 90) return 'bg-green-500'
+  if (healthScoreValue.value >= 60) return 'bg-yellow-500'
+  return 'bg-red-500'
+})
+
+const healthStatusLabel = computed(() => {
+  if (isSystemIdle.value) return t('admin.ops.idleStatus')
+  if (healthScoreValue.value == null) return t('common.unknown')
+  return healthScoreValue.value >= 90
+    ? t('admin.ops.healthyStatus')
+    : t('admin.ops.riskyStatus')
 })
 
 interface DiagnosisItem {
@@ -860,19 +856,12 @@ function handleToolbarRefresh() {
 </script>
 
 <template>
-  <div :class="['flex flex-col gap-4 rounded-3xl bg-white ring-1 ring-gray-900/5 dark:bg-dark-800 dark:ring-dark-700', props.fullscreen ? 'p-8' : 'p-6']">
+  <div :class="['flex flex-col gap-4 rounded-2xl bg-white ring-1 ring-gray-900/5 sm:rounded-3xl dark:bg-dark-800 dark:ring-dark-700', props.fullscreen ? 'p-8' : 'p-4 sm:p-6']">
     <!-- Top Toolbar -->
     <div class="flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 pb-4 dark:border-dark-700">
       <div>
         <h1 class="flex items-center gap-2 text-xl font-black text-gray-900 dark:text-white">
-          <svg class="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-            />
-          </svg>
+          <Icon name="chartBar" size="lg" class="text-blue-500" />
           {{ t('admin.ops.title') }}
         </h1>
 
@@ -894,19 +883,19 @@ function handleToolbarRefresh() {
         </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-3">
+      <div class="grid w-full grid-cols-4 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:gap-3">
         <template v-if="!props.fullscreen">
           <Select
             :model-value="platform"
             :options="platformOptions"
-            class="w-full sm:w-[140px]"
+            class="col-span-2 w-full sm:w-[140px]"
             @update:model-value="handlePlatformChange"
           />
 
           <Select
             :model-value="groupId"
             :options="groupOptions"
-            class="w-full sm:w-[160px]"
+            class="col-span-2 w-full sm:w-[160px]"
             @update:model-value="handleGroupChange"
           />
 
@@ -915,7 +904,7 @@ function handleToolbarRefresh() {
           <Select
             :model-value="timeRange"
             :options="timeRangeOptions"
-            class="relative w-full sm:w-[150px]"
+            class="relative col-span-3 w-full sm:w-[150px]"
             @update:model-value="handleTimeRangeChange"
           />
         </template>
@@ -931,19 +920,12 @@ function handleToolbarRefresh() {
         <button
           v-if="!props.fullscreen"
           type="button"
-          class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200 dark:bg-dark-700 dark:text-gray-400 dark:hover:bg-dark-600"
+          class="header-tool-button bg-gray-100 dark:bg-dark-700"
           :disabled="loading"
           :title="t('common.refresh')"
           @click="handleToolbarRefresh"
         >
-          <svg class="h-4 w-4" :class="{ 'animate-spin': loading }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
+          <Icon name="refresh" size="md" :class="{ 'animate-spin': loading }" />
         </button>
 
         <div v-if="!props.fullscreen" class="mx-1 hidden h-4 w-[1px] bg-gray-200 dark:bg-dark-700 sm:block"></div>
@@ -952,13 +934,11 @@ function handleToolbarRefresh() {
         <button
           v-if="!props.fullscreen"
           type="button"
-          class="flex h-8 items-center gap-1.5 rounded-lg bg-blue-100 px-3 text-xs font-bold text-blue-700 transition-colors hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50"
+          class="flex h-9 items-center gap-2 rounded-lg bg-blue-100 px-3 text-xs font-bold text-blue-700 transition-colors hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50"
           :title="t('admin.ops.alertRules.title')"
           @click="emit('openAlertRules')"
         >
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-          </svg>
+          <Icon name="bell" size="sm" />
           <span class="hidden sm:inline">{{ t('admin.ops.alertRules.manage') }}</span>
         </button>
 
@@ -966,14 +946,11 @@ function handleToolbarRefresh() {
         <button
           v-if="!props.fullscreen"
           type="button"
-          class="flex h-8 items-center gap-1.5 rounded-lg bg-gray-100 px-3 text-xs font-bold text-gray-700 transition-colors hover:bg-gray-200 dark:bg-dark-700 dark:text-gray-300 dark:hover:bg-dark-600"
+          class="flex h-9 items-center gap-2 rounded-lg bg-gray-100 px-3 text-xs font-bold text-gray-700 transition-colors hover:bg-gray-200 dark:bg-dark-700 dark:text-gray-300 dark:hover:bg-dark-600"
           :title="t('admin.ops.settings.title')"
           @click="emit('openSettings')"
         >
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
+          <Icon name="cog" size="sm" />
           <span class="hidden sm:inline">{{ t('common.settings') }}</span>
         </button>
 
@@ -981,236 +958,110 @@ function handleToolbarRefresh() {
         <button
           v-if="!props.fullscreen"
           type="button"
-          class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200 dark:bg-dark-700 dark:text-gray-300 dark:hover:bg-dark-600"
+          class="header-tool-button bg-gray-100 dark:bg-dark-700"
           :title="t('admin.ops.fullscreen.enter')"
           @click="emit('enterFullscreen')"
         >
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-          </svg>
+          <Icon name="expand" size="md" />
         </button>
       </div>
     </div>
 
-    <div v-if="overview" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
-      <!-- Left: Health + Realtime -->
-      <div :class="['rounded-2xl bg-gray-50 dark:bg-dark-900 lg:col-span-5', props.fullscreen ? 'p-6' : 'p-4']">
-        <div class="grid h-full grid-cols-1 gap-6 md:grid-cols-[200px_1fr] md:items-center">
-          <!-- 1) Health Score -->
-          <div
-            class="group relative flex cursor-pointer flex-col items-center justify-center rounded-xl py-2 transition-all hover:bg-white/60 dark:hover:bg-dark-800/60 md:border-r md:border-gray-200 md:pr-6 dark:md:border-dark-700"
-          >
-            <!-- Diagnosis Popover (hover) -->
-            <div
-              class="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-72 -translate-x-1/2 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 md:left-full md:top-0 md:ml-2 md:mt-0 md:translate-x-0"
-            >
-              <div class="rounded-xl bg-white p-4 shadow-lg ring-1 ring-black/5 dark:bg-gray-800 dark:ring-white/10">
-                <h4 class="mb-3 border-b border-gray-100 pb-2 text-sm font-bold text-gray-900 dark:border-gray-700 dark:text-white flex items-center gap-2">
-                  <Icon name="brain" size="sm" class="text-blue-500" />
-                  {{ t('admin.ops.diagnosis.title') }}
-                </h4>
-
-                <div class="space-y-3">
-                  <div v-for="(item, idx) in diagnosisReport" :key="idx" class="flex gap-3">
-                    <div class="mt-0.5 shrink-0">
-                      <svg v-if="item.type === 'critical'" class="h-4 w-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                          fill-rule="evenodd"
-                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                          clip-rule="evenodd"
-                        />
-                      </svg>
-                      <svg v-else-if="item.type === 'warning'" class="h-4 w-4 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                          fill-rule="evenodd"
-                          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                          clip-rule="evenodd"
-                        />
-                      </svg>
-                      <svg v-else class="h-4 w-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                          fill-rule="evenodd"
-                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 100 2 1 1 0 000-2zm-1 3a1 1 0 012 0v4a1 1 0 11-2 0v-4z"
-                          clip-rule="evenodd"
-                        />
-                      </svg>
-                    </div>
-                    <div class="flex-1">
-                      <div class="text-xs font-semibold text-gray-900 dark:text-white">{{ item.message }}</div>
-                      <div class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{{ item.impact }}</div>
-                      <div v-if="item.action" class="mt-1 text-[11px] text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                        <Icon name="lightbulb" size="xs" />
-                        {{ item.action }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="mt-3 border-t border-gray-100 pt-2 text-[10px] text-gray-400 dark:border-gray-700">
-                  {{ t('admin.ops.diagnosis.footer') }}
-                </div>
-              </div>
+    <div v-if="overview && !props.controlsOnly" class="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-6">
+      <!-- Left: status + realtime traffic -->
+      <div :class="['rounded-2xl border border-black/[0.07] bg-gray-50 dark:border-white/[0.08] dark:bg-dark-900 lg:col-span-5', props.fullscreen ? 'p-6' : 'p-4']">
+        <div class="group relative flex cursor-help items-start justify-between gap-4 border-b border-gray-200 pb-4 dark:border-dark-700">
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+              <span class="h-2 w-2 shrink-0 rounded-full" :class="healthDotClass"></span>
+              {{ t('admin.ops.healthCondition') }}
+              <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.healthHelp')" />
             </div>
-
-            <div class="relative flex items-center justify-center">
-              <svg :width="circleSize" :height="circleSize" class="-rotate-90 transform">
-                <circle
-                  :cx="circleSize / 2"
-                  :cy="circleSize / 2"
-                  :r="radius"
-                  :stroke-width="strokeWidth"
-                  fill="transparent"
-                  class="text-gray-200 dark:text-dark-700"
-                  stroke="currentColor"
-                />
-                <circle
-                  :cx="circleSize / 2"
-                  :cy="circleSize / 2"
-                  :r="radius"
-                  :stroke-width="strokeWidth"
-                  fill="transparent"
-                  :stroke="healthScoreColor"
-                  stroke-linecap="round"
-                  :stroke-dasharray="circumference"
-                  :stroke-dashoffset="dashOffset"
-                  class="transition-all duration-1000 ease-out"
-                />
-              </svg>
-
-              <div class="absolute flex flex-col items-center">
-                <span :class="[props.fullscreen ? 'text-5xl' : 'text-3xl', 'font-black', healthScoreClass]">
-                  {{ isSystemIdle ? t('admin.ops.idleStatus') : (overview.health_score ?? '--') }}
-                </span>
-                <span :class="[props.fullscreen ? 'text-xs' : 'text-[10px]', 'font-bold uppercase tracking-wider text-gray-400']">{{ t('admin.ops.health') }}</span>
-              </div>
-            </div>
-
-            <div class="mt-4 text-center" v-if="!props.fullscreen">
-              <div class="flex items-center justify-center gap-1 text-xs font-medium text-gray-500">
-                {{ t('admin.ops.healthCondition') }}
-                <HelpTooltip :content="t('admin.ops.healthHelp')" />
-              </div>
-              <div class="mt-1 text-xs font-bold" :class="healthScoreClass">
-                {{
-                  isSystemIdle
-                    ? t('admin.ops.idleStatus')
-                    : typeof overview.health_score === 'number' && overview.health_score >= 90
-                      ? t('admin.ops.healthyStatus')
-                      : t('admin.ops.riskyStatus')
-                }}
-              </div>
+            <div class="mt-2 text-2xl font-black text-gray-900 dark:text-white">{{ healthStatusLabel }}</div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.diagnosis.footer') }}</div>
+          </div>
+          <div class="shrink-0 text-right">
+            <div class="text-[10px] font-bold uppercase text-gray-400">{{ t('admin.ops.health') }}</div>
+            <div class="mt-1 text-xl font-black tabular-nums" :class="healthScoreClass">
+              {{ isSystemIdle ? '-' : (healthScoreValue ?? '-') }}
             </div>
           </div>
 
-          <!-- 2) Realtime Traffic -->
-          <div class="flex h-full flex-col justify-center py-2">
-            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div class="flex items-center gap-2">
-                <div class="relative flex h-3 w-3 shrink-0">
-                  <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"></span>
-                  <span class="relative inline-flex h-3 w-3 rounded-full bg-blue-500"></span>
+          <div class="pointer-events-none absolute left-0 top-full z-50 mt-2 w-72 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
+            <div class="rounded-xl bg-white p-4 shadow-lg ring-1 ring-black/5 dark:bg-gray-800 dark:ring-white/10">
+              <h4 class="mb-3 flex items-center gap-2 border-b border-gray-100 pb-2 text-sm font-bold text-gray-900 dark:border-gray-700 dark:text-white">
+                <Icon name="brain" size="sm" />
+                {{ t('admin.ops.diagnosis.title') }}
+              </h4>
+              <div class="space-y-3">
+                <div v-for="(item, idx) in diagnosisReport" :key="idx">
+                  <div class="text-xs font-semibold text-gray-900 dark:text-white">{{ item.message }}</div>
+                  <div class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{{ item.impact }}</div>
+                  <div v-if="item.action" class="mt-1 flex items-center gap-1 text-[11px] text-gray-700 dark:text-gray-300">
+                    <Icon name="lightbulb" size="xs" />
+                    {{ item.action }}
+                  </div>
                 </div>
-                <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.realtime.title') }}</h3>
-                <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.qps')" />
-              </div>
-
-              <!-- Time Window Selector -->
-              <div class="flex flex-wrap gap-1">
-                <button
-                  v-for="window in availableRealtimeWindows"
-                  :key="window"
-                  type="button"
-                  class="rounded px-1.5 py-0.5 text-[9px] font-bold transition-colors sm:px-2 sm:text-[10px]"
-                  :class="realtimeWindow === window
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-200 text-gray-600 hover:bg-gray-300 dark:bg-dark-700 dark:text-gray-400 dark:hover:bg-dark-600'"
-                  @click="realtimeWindow = window"
-                >
-                  {{ window }}
-                </button>
               </div>
             </div>
+          </div>
+        </div>
 
-            <div :class="props.fullscreen ? 'space-y-4' : 'space-y-3'">
-              <!-- Row 1: Current -->
-              <div>
-                <div :class="[props.fullscreen ? 'text-xs' : 'text-[10px]', 'font-bold uppercase text-gray-400']">{{ t('admin.ops.current') }}</div>
-                <div class="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-2">
-                  <div class="flex items-baseline gap-1.5">
-                    <span :class="[props.fullscreen ? 'text-4xl' : 'text-xl sm:text-2xl', 'font-black text-gray-900 dark:text-white']">{{ displayRealTimeQps.toFixed(1) }}</span>
-                    <span :class="[props.fullscreen ? 'text-sm' : 'text-xs', 'font-bold text-gray-500']">QPS</span>
-                  </div>
-                  <div class="flex items-baseline gap-1.5">
-                    <span :class="[props.fullscreen ? 'text-4xl' : 'text-xl sm:text-2xl', 'font-black text-gray-900 dark:text-white']">{{ displayRealTimeTps.toFixed(1) }}</span>
-                    <span :class="[props.fullscreen ? 'text-sm' : 'text-xs', 'font-bold text-gray-500']">{{ t('admin.ops.tps') }}</span>
-                  </div>
-                </div>
-              </div>
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="h-2 w-2 rounded-full bg-gray-900 dark:bg-white"></span>
+            <h3 class="text-xs font-bold text-gray-700 dark:text-gray-200">{{ t('admin.ops.realtime.title') }}</h3>
+            <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.qps')" />
+          </div>
+          <div class="flex rounded-lg bg-black/[0.05] p-0.5 dark:bg-white/[0.07]">
+            <button
+              v-for="window in availableRealtimeWindows"
+              :key="window"
+              type="button"
+              class="min-h-7 rounded-md px-2 text-[10px] font-semibold transition-colors"
+              :class="realtimeWindow === window
+                ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-black'
+                : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'"
+              @click="realtimeWindow = window"
+            >
+              {{ window }}
+            </button>
+          </div>
+        </div>
 
-              <!-- Row 2: Peak + Average -->
-              <div class="grid grid-cols-2 gap-3">
-                <!-- Peak -->
-                <div>
-                  <div :class="[props.fullscreen ? 'text-xs' : 'text-[10px]', 'font-bold uppercase text-gray-400']">{{ t('admin.ops.peak') }}</div>
-                  <div :class="[props.fullscreen ? 'text-base' : 'text-sm', 'mt-1 space-y-0.5 font-medium text-gray-600 dark:text-gray-400']">
-                    <div class="flex items-baseline gap-1.5">
-                      <span class="font-black text-gray-900 dark:text-white">{{ realtimeQpsPeakLabel }}</span>
-                      <span class="text-xs">QPS</span>
-                    </div>
-                    <div class="flex items-baseline gap-1.5">
-                      <span class="font-black text-gray-900 dark:text-white">{{ realtimeTpsPeakLabel }}</span>
-                      <span class="text-xs">{{ t('admin.ops.tps') }}</span>
-                    </div>
-                  </div>
-                </div>
+        <div class="mt-4 grid grid-cols-2 divide-x divide-gray-200 border-y border-gray-200 dark:divide-dark-700 dark:border-dark-700">
+          <div class="py-4 pr-4">
+            <div class="text-[10px] font-bold uppercase text-gray-400">{{ t('admin.ops.current') }} QPS</div>
+            <div class="mt-1 text-3xl font-black tabular-nums text-gray-900 dark:text-white">{{ displayRealTimeQps.toFixed(1) }}</div>
+          </div>
+          <div class="py-4 pl-4">
+            <div class="text-[10px] font-bold uppercase text-gray-400">{{ t('admin.ops.current') }} {{ t('admin.ops.tps') }}</div>
+            <div class="mt-1 text-3xl font-black tabular-nums text-gray-900 dark:text-white">{{ displayRealTimeTps.toFixed(1) }}</div>
+          </div>
+        </div>
 
-                <!-- Average -->
-                <div>
-                  <div :class="[props.fullscreen ? 'text-xs' : 'text-[10px]', 'font-bold uppercase text-gray-400']">{{ t('admin.ops.average') }}</div>
-                  <div :class="[props.fullscreen ? 'text-base' : 'text-sm', 'mt-1 space-y-0.5 font-medium text-gray-600 dark:text-gray-400']">
-                    <div class="flex items-baseline gap-1.5">
-                      <span class="font-black text-gray-900 dark:text-white">{{ realtimeQpsAvgLabel }}</span>
-                      <span class="text-xs">QPS</span>
-                    </div>
-                    <div class="flex items-baseline gap-1.5">
-                      <span class="font-black text-gray-900 dark:text-white">{{ realtimeTpsAvgLabel }}</span>
-                      <span class="text-xs">{{ t('admin.ops.tps') }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Animated Pulse Line (Heart Beat Animation) -->
-              <div class="h-8 w-full overflow-hidden opacity-50">
-                <svg class="h-full w-full" viewBox="0 0 280 32" preserveAspectRatio="none">
-                  <path
-                    d="M0 16 Q 20 16, 40 16 T 80 16 T 120 10 T 160 22 T 200 16 T 240 16 T 280 16"
-                    fill="none"
-                    stroke="#3b82f6"
-                    stroke-width="2"
-                    vector-effect="non-scaling-stroke"
-                  >
-                    <animate
-                      attributeName="d"
-                      dur="2s"
-                      repeatCount="indefinite"
-                      values="M0 16 Q 20 16, 40 16 T 80 16 T 120 10 T 160 22 T 200 16 T 240 16 T 280 16;
-                              M0 16 Q 20 16, 40 16 T 80 16 T 120 16 T 160 16 T 200 10 T 240 22 T 280 16;
-                              M0 16 Q 20 16, 40 16 T 80 16 T 120 16 T 160 16 T 200 16 T 240 16 T 280 16"
-                      keyTimes="0;0.5;1"
-                    />
-                  </path>
-                </svg>
-              </div>
+        <div class="mt-4 grid grid-cols-2 gap-6 text-xs">
+          <div>
+            <div class="font-semibold text-gray-400">{{ t('admin.ops.peak') }}</div>
+            <div class="mt-2 space-y-1 text-gray-500 dark:text-gray-400">
+              <div class="flex items-baseline justify-between gap-2"><span>QPS</span><strong class="font-semibold tabular-nums text-gray-900 dark:text-white">{{ realtimeQpsPeakLabel }}</strong></div>
+              <div class="flex items-baseline justify-between gap-2"><span>{{ t('admin.ops.tps') }}</span><strong class="font-semibold tabular-nums text-gray-900 dark:text-white">{{ realtimeTpsPeakLabel }}</strong></div>
+            </div>
+          </div>
+          <div>
+            <div class="font-semibold text-gray-400">{{ t('admin.ops.average') }}</div>
+            <div class="mt-2 space-y-1 text-gray-500 dark:text-gray-400">
+              <div class="flex items-baseline justify-between gap-2"><span>QPS</span><strong class="font-semibold tabular-nums text-gray-900 dark:text-white">{{ realtimeQpsAvgLabel }}</strong></div>
+              <div class="flex items-baseline justify-between gap-2"><span>{{ t('admin.ops.tps') }}</span><strong class="font-semibold tabular-nums text-gray-900 dark:text-white">{{ realtimeTpsAvgLabel }}</strong></div>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Right: 6 cards (3 cols x 2 rows) -->
-      <div class="grid h-full grid-cols-1 content-center gap-4 sm:grid-cols-2 lg:col-span-7 lg:grid-cols-3">
+      <div class="grid h-full grid-cols-2 content-center gap-2 sm:gap-3 lg:col-span-7 lg:grid-cols-3 lg:gap-4">
         <!-- Card 1: Requests -->
-        <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-900" style="order: 1;">
+        <div class="rounded-xl bg-gray-50 p-3 sm:rounded-2xl sm:p-4 dark:bg-dark-900" style="order: 1;">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-1">
               <span class="text-[10px] font-bold uppercase text-gray-400">{{ t('admin.ops.requestsTitle') }}</span>
@@ -1246,7 +1097,7 @@ function handleToolbarRefresh() {
         </div>
 
         <!-- Card 2: SLA -->
-        <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-900" style="order: 2;">
+        <div class="rounded-xl bg-gray-50 p-3 sm:rounded-2xl sm:p-4 dark:bg-dark-900" style="order: 2;">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
               <span class="text-[10px] font-bold uppercase text-gray-400">{{ t('admin.ops.sla') }}</span>
@@ -1277,7 +1128,7 @@ function handleToolbarRefresh() {
         </div>
 
         <!-- Card 4: Request Duration -->
-        <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-900" style="order: 4;">
+        <div class="rounded-xl bg-gray-50 p-3 sm:rounded-2xl sm:p-4 dark:bg-dark-900" style="order: 4;">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-1">
               <span class="text-[10px] font-bold uppercase text-gray-400">{{ t('admin.ops.latencyDuration') }}</span>
@@ -1328,7 +1179,7 @@ function handleToolbarRefresh() {
         </div>
 
         <!-- Card 5: TTFT -->
-        <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-900" style="order: 5;">
+        <div class="rounded-xl bg-gray-50 p-3 sm:rounded-2xl sm:p-4 dark:bg-dark-900" style="order: 5;">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-1">
               <span class="text-[10px] font-bold uppercase text-gray-400">TTFT</span>
@@ -1379,7 +1230,7 @@ function handleToolbarRefresh() {
         </div>
 
         <!-- Card 3: Request Errors -->
-        <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-900" style="order: 3;">
+        <div class="rounded-xl bg-gray-50 p-3 sm:rounded-2xl sm:p-4 dark:bg-dark-900" style="order: 3;">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-1">
               <span class="text-[10px] font-bold uppercase text-gray-400">{{ t('admin.ops.requestErrors') }}</span>
@@ -1405,7 +1256,7 @@ function handleToolbarRefresh() {
         </div>
 
         <!-- Card 6: Upstream Errors -->
-        <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-900" style="order: 6;">
+        <div class="rounded-xl bg-gray-50 p-3 sm:rounded-2xl sm:p-4 dark:bg-dark-900" style="order: 6;">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-1">
               <span class="text-[10px] font-bold uppercase text-gray-400">{{ t('admin.ops.upstreamErrors') }}</span>
@@ -1433,7 +1284,7 @@ function handleToolbarRefresh() {
     </div>
 
     <!-- Integrated: System health (cards) -->
-    <div v-if="overview" class="mt-2 border-t border-gray-100 pt-4 dark:border-dark-700">
+    <div v-if="overview && !props.controlsOnly" class="mt-2 border-t border-gray-100 pt-4 dark:border-dark-700">
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <!-- CPU -->
         <div class="rounded-xl bg-gray-50 p-3 dark:bg-dark-900">

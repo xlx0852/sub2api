@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -16,17 +17,28 @@ import (
 const grokDefaultAccessTokenTTL = 6 * time.Hour
 
 type GrokOAuthService struct {
-	sessionStore *xai.SessionStore
-	proxyRepo    ProxyRepository
-	oauthClient  GrokOAuthClient
+	sessionStore       *xai.SessionStore
+	deviceSessionStore ProviderOAuthSessionStore
+	proxyRepo          ProxyRepository
+	oauthClient        GrokOAuthClient
+	now                func() time.Time
 }
 
-func NewGrokOAuthService(proxyRepo ProxyRepository, oauthClient GrokOAuthClient) *GrokOAuthService {
-	return &GrokOAuthService{
+func NewGrokOAuthService(proxyRepo ProxyRepository, oauthClient GrokOAuthClient, deviceStores ...ProviderOAuthSessionStore) *GrokOAuthService {
+	service := &GrokOAuthService{
 		sessionStore: xai.NewSessionStore(),
 		proxyRepo:    proxyRepo,
 		oauthClient:  oauthClient,
+		now:          time.Now,
 	}
+	if len(deviceStores) > 0 {
+		service.deviceSessionStore = deviceStores[0]
+	}
+	return service
+}
+
+func ProvideGrokOAuthService(proxyRepo ProxyRepository, oauthClient GrokOAuthClient, deviceStore ProviderOAuthSessionStore) *GrokOAuthService {
+	return NewGrokOAuthService(proxyRepo, oauthClient, deviceStore)
 }
 
 type GrokAuthURLResult struct {
@@ -103,6 +115,213 @@ type GrokTokenInfo struct {
 	Email             string `json:"email,omitempty"`
 	SubscriptionTier  string `json:"subscription_tier,omitempty"`
 	EntitlementStatus string `json:"entitlement_status,omitempty"`
+	TokenEndpoint     string `json:"token_endpoint,omitempty"`
+}
+
+type GrokDeviceAuthorizationResult struct {
+	SessionID               string `json:"session_id"`
+	Status                  string `json:"status"`
+	VerificationURI         string `json:"verification_uri"`
+	VerificationURIComplete string `json:"verification_uri_complete,omitempty"`
+	UserCode                string `json:"user_code"`
+	ExpiresIn               int64  `json:"expires_in"`
+	Interval                int64  `json:"interval"`
+	RetryAfter              int64  `json:"retry_after,omitempty"`
+	Error                   string `json:"error,omitempty"`
+}
+
+type grokDeviceSessionPayload struct {
+	DeviceCode              string         `json:"device_code"`
+	UserCode                string         `json:"user_code"`
+	VerificationURI         string         `json:"verification_uri"`
+	VerificationURIComplete string         `json:"verification_uri_complete"`
+	ProxyURL                string         `json:"proxy_url,omitempty"`
+	ProxyID                 *int64         `json:"proxy_id,omitempty"`
+	ClientID                string         `json:"client_id"`
+	Scope                   string         `json:"scope"`
+	TokenEndpoint           string         `json:"token_endpoint"`
+	IntervalSeconds         int64          `json:"interval_seconds"`
+	Token                   *GrokTokenInfo `json:"token,omitempty"`
+}
+
+type GrokDeviceAuthorizationCredential struct {
+	Token   *GrokTokenInfo
+	ProxyID *int64
+}
+
+const (
+	grokDeviceDefaultInterval = 5 * time.Second
+	grokDeviceDefaultExpiry   = 30 * time.Minute
+)
+
+func (s *GrokOAuthService) StartDeviceAuthorization(ctx context.Context, proxyID *int64) (*GrokDeviceAuthorizationResult, error) {
+	if s == nil || s.oauthClient == nil || s.deviceSessionStore == nil {
+		return nil, infraerrors.New(http.StatusServiceUnavailable, "GROK_DEVICE_OAUTH_NOT_CONFIGURED", "Grok device authorization is not configured")
+	}
+	proxyURL, err := s.proxyURL(ctx, proxyID)
+	if err != nil {
+		return nil, err
+	}
+	clientID := xai.EffectiveClientID()
+	scope := xai.EffectiveScope()
+	device, err := s.oauthClient.StartDeviceFlow(ctx, proxyURL, clientID, scope)
+	if err != nil {
+		return nil, err
+	}
+	if device == nil || strings.TrimSpace(device.DeviceCode) == "" {
+		return nil, infraerrors.New(http.StatusBadGateway, "GROK_DEVICE_OAUTH_INVALID_DEVICE", "xAI returned an incomplete device authorization response")
+	}
+	interval := time.Duration(device.Interval) * time.Second
+	if interval < grokDeviceDefaultInterval {
+		interval = grokDeviceDefaultInterval
+	}
+	expiresIn := time.Duration(device.ExpiresIn) * time.Second
+	if expiresIn <= 0 || expiresIn > grokDeviceDefaultExpiry {
+		expiresIn = grokDeviceDefaultExpiry
+	}
+	sessionID, err := xai.GenerateSessionID()
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_DEVICE_OAUTH_SESSION_FAILED", "generate session: %v", err)
+	}
+	payload := &grokDeviceSessionPayload{
+		DeviceCode: device.DeviceCode, UserCode: device.UserCode,
+		VerificationURI: device.VerificationURI, VerificationURIComplete: device.VerificationURIComplete,
+		ProxyURL: proxyURL, ProxyID: proxyID, ClientID: clientID, Scope: scope,
+		TokenEndpoint: device.TokenEndpoint, IntervalSeconds: int64(interval.Seconds()),
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_DEVICE_OAUTH_SESSION_FAILED", "encode session: %v", err)
+	}
+	now := s.now()
+	session := &ProviderOAuthSession{
+		ID: sessionID, Provider: PlatformGrok, Flow: ProviderOAuthFlowDeviceCode,
+		Status: ProviderOAuthSessionPending, NextPollAtUnixMilli: now.UnixMilli(),
+		ExpiresAtUnixMilli: now.Add(expiresIn).UnixMilli(), Payload: encoded,
+	}
+	if err := s.deviceSessionStore.Create(ctx, session, expiresIn); err != nil {
+		return nil, infraerrors.Newf(http.StatusServiceUnavailable, "GROK_DEVICE_OAUTH_SESSION_STORE_FAILED", "store session: %v", err)
+	}
+	return grokDeviceAuthorizationResult(session, payload, now), nil
+}
+
+func (s *GrokOAuthService) GetDeviceAuthorizationStatus(ctx context.Context, sessionID string) (*GrokDeviceAuthorizationResult, error) {
+	if strings.TrimSpace(sessionID) == "" {
+		return nil, infraerrors.New(http.StatusBadRequest, "GROK_DEVICE_OAUTH_SESSION_REQUIRED", "session_id is required")
+	}
+	if s == nil || s.deviceSessionStore == nil {
+		return nil, infraerrors.New(http.StatusServiceUnavailable, "GROK_DEVICE_OAUTH_NOT_CONFIGURED", "Grok device authorization is not configured")
+	}
+	now := s.now()
+	lease, err := s.deviceSessionStore.AcquirePollLease(ctx, sessionID, now, 30*time.Second)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusServiceUnavailable, "GROK_DEVICE_OAUTH_SESSION_STORE_FAILED", "acquire poll lease: %v", err)
+	}
+	if lease == nil || lease.Session == nil || lease.Session.Provider != PlatformGrok || lease.Session.Flow != ProviderOAuthFlowDeviceCode {
+		return nil, infraerrors.New(http.StatusNotFound, "GROK_DEVICE_OAUTH_SESSION_NOT_FOUND", "Grok device authorization session not found or expired")
+	}
+	session := lease.Session
+	if session.Status == ProviderOAuthSessionCancelled {
+		return nil, infraerrors.New(http.StatusGone, "GROK_DEVICE_OAUTH_SESSION_CANCELLED", "Grok device authorization was cancelled")
+	}
+	payload, err := decodeGrokDeviceSessionPayload(session)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_DEVICE_OAUTH_SESSION_INVALID", "decode session: %v", err)
+	}
+	if now.UnixMilli() >= session.ExpiresAtUnixMilli {
+		_, _ = s.deviceSessionStore.Cancel(ctx, session.ID, 5*time.Minute)
+		return nil, infraerrors.New(http.StatusGone, "GROK_DEVICE_OAUTH_SESSION_EXPIRED", "Grok device authorization expired")
+	}
+	if session.Status != ProviderOAuthSessionPending {
+		return grokDeviceAuthorizationResult(session, payload, now), nil
+	}
+	if !lease.Held {
+		if session.NextPollAtUnixMilli <= now.UnixMilli() {
+			session.NextPollAtUnixMilli = now.Add(time.Second).UnixMilli()
+		}
+		return grokDeviceAuthorizationResult(session, payload, now), nil
+	}
+
+	token, err := s.oauthClient.PollDeviceToken(ctx, payload.DeviceCode, payload.TokenEndpoint, payload.ProxyURL, payload.ClientID)
+	if err != nil {
+		session.NextPollAtUnixMilli = now.Add(time.Duration(payload.IntervalSeconds) * time.Second).UnixMilli()
+		_, _ = s.deviceSessionStore.CommitPoll(ctx, lease, session)
+		return nil, err
+	}
+	if token == nil {
+		return nil, infraerrors.New(http.StatusBadGateway, "GROK_DEVICE_OAUTH_INVALID_TOKEN", "xAI returned an empty device token response")
+	}
+	session.NextPollAtUnixMilli = now.Add(time.Duration(payload.IntervalSeconds) * time.Second).UnixMilli()
+	switch strings.TrimSpace(token.Error) {
+	case "authorization_pending":
+	case "slow_down":
+		payload.IntervalSeconds += int64(grokDeviceDefaultInterval.Seconds())
+		session.NextPollAtUnixMilli = now.Add(time.Duration(payload.IntervalSeconds) * time.Second).UnixMilli()
+	case "expired_token":
+		_, _ = s.deviceSessionStore.Cancel(ctx, session.ID, 5*time.Minute)
+		return nil, infraerrors.New(http.StatusGone, "GROK_DEVICE_OAUTH_DEVICE_EXPIRED", "Grok device code expired")
+	case "access_denied":
+		session.Status = ProviderOAuthSessionDenied
+		session.Error = "authorization denied"
+	case "":
+		info := s.tokenInfoFromResponse(&token.TokenResponse, payload.ClientID, nil)
+		if info == nil || strings.TrimSpace(info.AccessToken) == "" {
+			return nil, infraerrors.New(http.StatusBadGateway, "GROK_DEVICE_OAUTH_INVALID_TOKEN", "xAI returned an empty access token")
+		}
+		info.TokenEndpoint = payload.TokenEndpoint
+		payload.Token = info
+		session.Status = ProviderOAuthSessionAuthorized
+	default:
+		session.NextPollAtUnixMilli = now.Add(time.Duration(payload.IntervalSeconds) * time.Second).UnixMilli()
+		_, _ = s.deviceSessionStore.CommitPoll(ctx, lease, session)
+		return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_DEVICE_OAUTH_UPSTREAM_ERROR", "Grok authorization failed: %s", token.Error)
+	}
+	session.Payload, err = json.Marshal(payload)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_DEVICE_OAUTH_SESSION_FAILED", "encode session: %v", err)
+	}
+	committed, err := s.deviceSessionStore.CommitPoll(ctx, lease, session)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusServiceUnavailable, "GROK_DEVICE_OAUTH_SESSION_STORE_FAILED", "update session: %v", err)
+	}
+	if !committed {
+		return nil, infraerrors.New(http.StatusGone, "GROK_DEVICE_OAUTH_SESSION_CHANGED", "Grok device authorization was cancelled or superseded")
+	}
+	return grokDeviceAuthorizationResult(session, payload, now), nil
+}
+
+func (s *GrokOAuthService) CancelDeviceAuthorization(ctx context.Context, sessionID string) error {
+	if strings.TrimSpace(sessionID) == "" {
+		return infraerrors.New(http.StatusBadRequest, "GROK_DEVICE_OAUTH_SESSION_REQUIRED", "session_id is required")
+	}
+	if s == nil || s.deviceSessionStore == nil {
+		return infraerrors.New(http.StatusServiceUnavailable, "GROK_DEVICE_OAUTH_NOT_CONFIGURED", "Grok device authorization is not configured")
+	}
+	if _, err := s.deviceSessionStore.Cancel(ctx, sessionID, 5*time.Minute); err != nil {
+		return infraerrors.Newf(http.StatusServiceUnavailable, "GROK_DEVICE_OAUTH_SESSION_STORE_FAILED", "cancel device session: %v", err)
+	}
+	return nil
+}
+
+func (s *GrokOAuthService) ConsumeDeviceAuthorization(ctx context.Context, sessionID string) (*GrokDeviceAuthorizationCredential, error) {
+	if strings.TrimSpace(sessionID) == "" {
+		return nil, infraerrors.New(http.StatusBadRequest, "GROK_DEVICE_OAUTH_SESSION_REQUIRED", "session_id is required")
+	}
+	if s == nil || s.deviceSessionStore == nil {
+		return nil, infraerrors.New(http.StatusServiceUnavailable, "GROK_DEVICE_OAUTH_NOT_CONFIGURED", "Grok device authorization is not configured")
+	}
+	session, err := s.deviceSessionStore.ConsumeAuthorized(ctx, sessionID)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusServiceUnavailable, "GROK_DEVICE_OAUTH_SESSION_STORE_FAILED", "consume device session: %v", err)
+	}
+	if session == nil {
+		return nil, infraerrors.New(http.StatusBadRequest, "GROK_DEVICE_OAUTH_SESSION_NOT_FOUND", "Grok authorization session not found, incomplete, expired, or already consumed")
+	}
+	payload, err := decodeGrokDeviceSessionPayload(session)
+	if err != nil || payload.Token == nil || strings.TrimSpace(payload.Token.AccessToken) == "" {
+		return nil, infraerrors.New(http.StatusConflict, "GROK_DEVICE_OAUTH_NOT_AUTHORIZED", "Grok device authorization is not complete")
+	}
+	return &GrokDeviceAuthorizationCredential{Token: payload.Token, ProxyID: payload.ProxyID}, nil
 }
 
 func (s *GrokOAuthService) ExchangeCode(ctx context.Context, input *GrokExchangeCodeInput) (*GrokTokenInfo, error) {
@@ -148,19 +367,37 @@ func (s *GrokOAuthService) ExchangeCode(ctx context.Context, input *GrokExchange
 	if err != nil {
 		return nil, err
 	}
-	return s.tokenInfoFromResponse(tokenResp, session.ClientID, nil), nil
+	tokenInfo := s.tokenInfoFromResponse(tokenResp, session.ClientID, nil)
+	if tokenInfo == nil || strings.TrimSpace(tokenInfo.AccessToken) == "" {
+		return nil, infraerrors.New(http.StatusBadGateway, "GROK_OAUTH_INVALID_TOKEN_RESPONSE", "xAI returned an empty access token")
+	}
+	return tokenInfo, nil
 }
 
-func (s *GrokOAuthService) RefreshToken(ctx context.Context, refreshToken, proxyURL, clientID string) (*GrokTokenInfo, error) {
+func (s *GrokOAuthService) RefreshToken(ctx context.Context, refreshToken, proxyURL, clientID string, tokenEndpoints ...string) (*GrokTokenInfo, error) {
 	refreshToken = strings.TrimSpace(refreshToken)
 	if refreshToken == "" {
 		return nil, infraerrors.New(http.StatusBadRequest, "GROK_OAUTH_NO_REFRESH_TOKEN", "refresh_token is required")
 	}
-	tokenResp, err := s.oauthClient.RefreshToken(ctx, refreshToken, proxyURL, clientID)
+	tokenEndpoint := ""
+	if len(tokenEndpoints) > 0 {
+		tokenEndpoint = strings.TrimSpace(tokenEndpoints[0])
+	}
+	var tokenResp *xai.TokenResponse
+	var err error
+	if tokenEndpoint != "" {
+		tokenResp, err = s.oauthClient.RefreshTokenAtEndpoint(ctx, refreshToken, tokenEndpoint, proxyURL, clientID)
+	} else {
+		tokenResp, err = s.oauthClient.RefreshToken(ctx, refreshToken, proxyURL, clientID)
+	}
 	if err != nil {
 		return nil, err
 	}
 	tokenInfo := s.tokenInfoFromResponse(tokenResp, clientID, nil)
+	if tokenInfo == nil || strings.TrimSpace(tokenInfo.AccessToken) == "" {
+		return nil, infraerrors.New(http.StatusBadGateway, "GROK_OAUTH_INVALID_TOKEN_RESPONSE", "xAI returned an empty access token")
+	}
+	tokenInfo.TokenEndpoint = tokenEndpoint
 	if tokenInfo.RefreshToken == "" {
 		tokenInfo.RefreshToken = refreshToken
 	}
@@ -193,7 +430,7 @@ func (s *GrokOAuthService) RefreshAccountToken(ctx context.Context, account *Acc
 	}
 
 	clientID := account.GetCredential("client_id")
-	tokenInfo, err := s.RefreshToken(ctx, refreshToken, proxyURL, clientID)
+	tokenInfo, err := s.RefreshToken(ctx, refreshToken, proxyURL, clientID, account.GetCredential("token_endpoint"))
 	if err != nil {
 		return nil, err
 	}
@@ -235,6 +472,9 @@ func (s *GrokOAuthService) BuildAccountCredentials(tokenInfo *GrokTokenInfo) map
 	if tokenInfo.EntitlementStatus != "" {
 		creds["entitlement_status"] = tokenInfo.EntitlementStatus
 	}
+	if tokenInfo.TokenEndpoint != "" {
+		creds["token_endpoint"] = tokenInfo.TokenEndpoint
+	}
 	creds["base_url"] = xai.DefaultBaseURL
 	return creds
 }
@@ -244,6 +484,9 @@ func (s *GrokOAuthService) Stop() {
 }
 
 func (s *GrokOAuthService) tokenInfoFromResponse(tokenResp *xai.TokenResponse, clientID string, existing map[string]any) *GrokTokenInfo {
+	if tokenResp == nil {
+		return nil
+	}
 	now := time.Now()
 	expiresIn := tokenResp.ExpiresIn
 	if expiresIn <= 0 {
@@ -309,4 +552,33 @@ func parseJWTEmailClaim(token string) string {
 		return ""
 	}
 	return strings.TrimSpace(claims.Email)
+}
+
+func decodeGrokDeviceSessionPayload(session *ProviderOAuthSession) (*grokDeviceSessionPayload, error) {
+	if session == nil || len(session.Payload) == 0 {
+		return nil, errors.New("Grok device session payload is missing")
+	}
+	var payload grokDeviceSessionPayload
+	if err := json.Unmarshal(session.Payload, &payload); err != nil {
+		return nil, err
+	}
+	return &payload, nil
+}
+
+func grokDeviceAuthorizationResult(session *ProviderOAuthSession, payload *grokDeviceSessionPayload, now time.Time) *GrokDeviceAuthorizationResult {
+	if session == nil || payload == nil {
+		return nil
+	}
+	result := &GrokDeviceAuthorizationResult{
+		SessionID: session.ID, Status: session.Status,
+		VerificationURI: payload.VerificationURI, VerificationURIComplete: payload.VerificationURIComplete,
+		UserCode: payload.UserCode, Interval: payload.IntervalSeconds, Error: session.Error,
+	}
+	if remaining := session.ExpiresAtUnixMilli - now.UnixMilli(); remaining > 0 {
+		result.ExpiresIn = (remaining + int64(time.Second) - 1) / int64(time.Second)
+	}
+	if retry := session.NextPollAtUnixMilli - now.UnixMilli(); retry > 0 && session.Status == ProviderOAuthSessionPending {
+		result.RetryAfter = (retry + int64(time.Second) - 1) / int64(time.Second)
+	}
+	return result
 }

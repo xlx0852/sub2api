@@ -1,7 +1,29 @@
 <template>
-  <div class="inline-flex flex-col gap-0.5 text-xs font-medium">
-    <!-- Row 1: Platform + Type -->
-    <div class="inline-flex items-center overflow-hidden rounded-md">
+  <div v-if="compact" class="inline-flex max-w-full items-center gap-1 text-[10px] font-medium leading-4">
+    <div class="inline-flex shrink-0 items-center overflow-hidden rounded">
+      <span :class="['inline-flex items-center gap-0.5 px-1.5 py-0.5', platformClass]">
+        <PlatformIcon :platform="platform" size="xs" />
+        <span>{{ platformLabel }}</span>
+      </span>
+      <span :class="['inline-flex items-center gap-0.5 px-1 py-0.5', typeClass]">
+        <Icon v-if="type === 'setup-token'" name="shield" size="xs" />
+        <Icon v-else-if="type === 'service_account'" name="cloud" size="xs" />
+        <Icon v-else name="key" size="xs" />
+        <span>{{ typeLabel }}</span>
+      </span>
+    </div>
+    <span
+      v-if="compactDetails.length"
+      class="inline-flex h-5 shrink-0 items-center rounded bg-gray-100 px-1.5 text-[10px] text-gray-500 dark:bg-dark-700 dark:text-dark-300"
+      :title="compactDetails.join(' · ')"
+    >
+      +{{ compactDetails.length }}
+    </span>
+  </div>
+
+  <div v-else class="inline-flex max-w-full flex-wrap items-center gap-1 text-xs font-medium">
+    <!-- Keep related badges together while allowing each group to wrap as a unit. -->
+    <div class="inline-flex shrink-0 items-center overflow-hidden rounded-md">
       <span :class="['inline-flex items-center gap-1 px-2 py-1', platformClass]">
         <PlatformIcon :platform="platform" size="xs" />
         <span>{{ platformLabel }}</span>
@@ -30,8 +52,7 @@
         <span>{{ typeLabel }}</span>
       </span>
     </div>
-    <!-- Row 2: Plan type + Privacy mode (only if either exists) -->
-    <div v-if="planLabel || privacyBadge" class="inline-flex items-center overflow-hidden rounded-md">
+    <div v-if="planLabel || privacyBadge" class="inline-flex shrink-0 items-center overflow-hidden rounded-md">
       <span v-if="planLabel" :class="['inline-flex items-center gap-1 px-1.5 py-1', planBadgeClass]">
         <span>{{ planLabel }}</span>
       </span>
@@ -46,8 +67,11 @@
         <span>{{ privacyBadge.label }}</span>
       </span>
     </div>
-    <!-- Row 3: Subscription expiration (non-free paid accounts only) -->
-    <div v-if="expiresLabel" class="text-[10px] leading-tight text-gray-400 dark:text-gray-500 pl-0.5" :title="subscriptionExpiresAt">
+    <div
+      v-if="expiresLabel"
+      class="inline-flex h-6 shrink-0 items-center whitespace-nowrap px-0.5 text-[10px] leading-tight text-gray-400 dark:text-gray-500"
+      :title="subscriptionExpiresAt"
+    >
       {{ expiresLabel }}
     </div>
   </div>
@@ -68,6 +92,7 @@ interface Props {
   planType?: string
   privacyMode?: string
   subscriptionExpiresAt?: string
+  compact?: boolean
 }
 
 const props = defineProps<Props>()
@@ -77,6 +102,7 @@ const platformLabel = computed(() => {
   if (props.platform === 'openai') return 'OpenAI'
   if (props.platform === 'antigravity') return 'Antigravity'
   if (props.platform === 'grok') return 'Grok'
+  if (props.platform === 'kimi') return 'Kimi'
   return 'Gemini'
 })
 
@@ -196,5 +222,13 @@ const privacyBadge = computed(() => {
     default:
       return null
   }
+})
+
+const compactDetails = computed(() => {
+  const details: string[] = []
+  if (planLabel.value) details.push(planLabel.value)
+  if (privacyBadge.value) details.push(privacyBadge.value.label)
+  if (expiresLabel.value) details.push(expiresLabel.value)
+  return details
 })
 </script>

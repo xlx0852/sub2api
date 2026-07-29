@@ -2,6 +2,12 @@ export default {
     ops: {
       title: '运维监控',
       description: '运维监控与排障',
+      sections: {
+        label: '运维监控视图',
+        overview: '概览',
+        analysis: '趋势分析',
+        records: '运维记录'
+      },
       // Dashboard
       systemHealth: '系统健康',
       overview: '概览',
@@ -36,6 +42,7 @@ export default {
         dropped: '已丢弃',
         failed: '写入失败',
         runtimeConfig: '运行时日志配置（立即生效）',
+        advancedFilters: '高级筛选',
         all: '全部',
         level: '级别',
         stacktraceThreshold: '堆栈阈值',

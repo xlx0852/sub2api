@@ -167,6 +167,7 @@ func (s *GrokQuotaService) fetchBilling(
 	if err != nil {
 		return nil, 0, infraerrors.Newf(http.StatusInternalServerError, "GROK_BILLING_REQUEST_BUILD_FAILED", "failed to build billing request: %v", err)
 	}
+	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileGrok))
 	xai.ApplyGrokCLIBillingHeaders(req, token, userID)
 	// Custom upstream relays may require extra admission headers; apply after defaults.
 	if account != nil {

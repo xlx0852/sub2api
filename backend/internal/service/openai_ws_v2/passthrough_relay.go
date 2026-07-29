@@ -891,11 +891,16 @@ func shouldParseUsage(eventType string) bool {
 }
 
 func isTokenEvent(eventType string) bool {
+	eventType = strings.TrimSpace(eventType)
 	if eventType == "" {
 		return false
 	}
 	switch eventType {
 	case "response.created", "response.in_progress", "response.output_item.added", "response.output_item.done":
+		return false
+	// 终止事件不能当作 token event：上游若没有可识别 delta（或仅有 reasoning/非文本事件），
+	// 会把 firstTokenMs 记到 completed 时刻，等于把总耗时误报为首字延迟。
+	case "response.completed", "response.done", "response.failed", "response.incomplete", "response.cancelled", "response.canceled":
 		return false
 	}
 	if strings.Contains(eventType, ".delta") {
@@ -907,7 +912,7 @@ func isTokenEvent(eventType string) bool {
 	if strings.HasPrefix(eventType, "response.output") {
 		return true
 	}
-	return eventType == "response.completed" || eventType == "response.done"
+	return false
 }
 
 func minDuration(a, b time.Duration) time.Duration {

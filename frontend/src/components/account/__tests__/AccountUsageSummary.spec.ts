@@ -42,4 +42,14 @@ describe('AccountUsageSummary', () => {
     await wrapper.get('button').trigger('click')
     expect(wrapper.emitted('open')).toHaveLength(1)
   })
+
+  it('列表合并状态列时可隐藏摘要状态但保留套餐', () => {
+    const wrapper = mount(AccountUsageSummary, {
+      props: { presentation, showStatus: false }
+    })
+
+    expect(wrapper.text()).not.toContain('admin.accounts.usageDetails.statusNearLimit')
+    expect(wrapper.text()).toContain('Pro')
+    expect(wrapper.text()).toContain('admin.accounts.usageDetails.viewDetails')
+  })
 })

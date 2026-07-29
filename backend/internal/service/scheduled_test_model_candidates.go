@@ -11,7 +11,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 )
 
-const scheduledDiagnosticsMaxModels = 4
+const scheduledDiagnosticsMaxModels = 2
 
 // ResolveScheduledDiagnosticsModels returns ordered candidate models for connectivity diagnostics.
 // Primary model is tried first; remaining models are cheaper/fallback candidates.
@@ -70,8 +70,21 @@ func modelIDsFromMapping(mapping map[string]string) []string {
 		return nil
 	}
 	out := make([]string, 0, len(mapping))
-	for k := range mapping {
-		out = append(out, k)
+	for k, v := range mapping {
+		key := strings.TrimSpace(k)
+		// Skip wildcard keys entirely; they are client-side aliases, not probe targets.
+		if key == "" || strings.Contains(key, "*") {
+			continue
+		}
+		// Prefer upstream model IDs (values).
+		candidate := strings.TrimSpace(v)
+		if candidate == "" || strings.Contains(candidate, "*") {
+			candidate = key
+		}
+		if candidate == "" || strings.Contains(candidate, "*") {
+			continue
+		}
+		out = append(out, candidate)
 	}
 	sort.Strings(out)
 	return out
@@ -83,29 +96,27 @@ func platformDefaultDiagnosticModels(account *Account) []string {
 	}
 	switch {
 	case account.IsOpenAI():
-		// Prefer cheaper first for fallback chain after primary.
+		// Prefer cheaper connectivity probes only.
 		return []string{
-			openai.DefaultTestModel,
+			openai.CurrentDefaultTestModel(),
 			"gpt-5.4-mini",
-			"gpt-5.4",
-			"gpt-5.5",
 		}
 	case account.IsAnthropic():
 		return []string{
-			claude.DefaultTestModel,
+			claude.CurrentDefaultTestModel(),
 			"claude-haiku-4-5-20251001",
 			"claude-sonnet-4-5-20250929",
 		}
 	case account.Platform == PlatformGrok:
 		return []string{
-			xai.DefaultChatModel,
+			xai.CurrentDefaultChatModel(),
 			"grok-composer-2.5-fast",
-			"grok-4.20-0309-non-reasoning",
-			"grok-4.5",
 		}
+	case account.Platform == PlatformKimi:
+		return []string{"kimi-k3", "kimi-k2.7-code", "kimi-k2.6"}
 	case account.IsGemini():
 		return []string{
-			geminicli.DefaultTestModel,
+			geminicli.CurrentDefaultTestModel(),
 		}
 	case account.Platform == PlatformAntigravity:
 		models := antigravity.DefaultModels()

@@ -19,6 +19,7 @@ import (
 const (
 	OAuthIssuer         = "https://auth.x.ai"
 	DiscoveryURL        = OAuthIssuer + "/.well-known/openid-configuration"
+	DeviceCodeGrantType = "urn:ietf:params:oauth:grant-type:device_code"
 	DefaultAuthorizeURL = OAuthIssuer + "/oauth2/authorize"
 	DefaultTokenURL     = OAuthIssuer + "/oauth2/token"
 	DefaultBaseURL      = "https://api.x.ai/v1"
@@ -30,6 +31,7 @@ const (
 
 	EnvAuthorizeURL               = "XAI_OAUTH_AUTHORIZE_URL"
 	EnvTokenURL                   = "XAI_OAUTH_TOKEN_URL"
+	EnvDiscoveryURL               = "XAI_OAUTH_DISCOVERY_URL"
 	EnvClientID                   = "XAI_OAUTH_CLIENT_ID"
 	EnvScope                      = "XAI_OAUTH_SCOPE"
 	EnvRedirectURI                = "XAI_OAUTH_REDIRECT_URI"
@@ -126,6 +128,14 @@ func (s *SessionStore) cleanup() {
 
 func EffectiveAuthorizeURL() string {
 	return envOrDefault(EnvAuthorizeURL, DefaultAuthorizeURL)
+}
+
+func EffectiveDiscoveryURL() string {
+	return envOrDefault(EnvDiscoveryURL, DiscoveryURL)
+}
+
+func ValidatedDiscoveryURL() (string, error) {
+	return ValidateOAuthEndpointURL(EffectiveDiscoveryURL())
 }
 
 func ValidatedAuthorizeURL() (string, error) {
@@ -575,4 +585,25 @@ type TokenResponse struct {
 	TokenType    string `json:"token_type,omitempty"`
 	ExpiresIn    int64  `json:"expires_in,omitempty"`
 	Scope        string `json:"scope,omitempty"`
+}
+
+type OIDCDiscoveryDocument struct {
+	DeviceAuthorizationEndpoint string `json:"device_authorization_endpoint"`
+	TokenEndpoint               string `json:"token_endpoint"`
+}
+
+type DeviceCodeResponse struct {
+	DeviceCode              string `json:"device_code"`
+	UserCode                string `json:"user_code"`
+	VerificationURI         string `json:"verification_uri"`
+	VerificationURIComplete string `json:"verification_uri_complete"`
+	ExpiresIn               int64  `json:"expires_in"`
+	Interval                int64  `json:"interval"`
+	TokenEndpoint           string `json:"-"`
+}
+
+type DeviceTokenResponse struct {
+	TokenResponse
+	Error            string `json:"error,omitempty"`
+	ErrorDescription string `json:"error_description,omitempty"`
 }

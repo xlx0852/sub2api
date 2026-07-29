@@ -22,22 +22,37 @@
             aria-modal="false"
             :aria-labelledby="drawerTitleId"
           >
-            <header class="flex min-w-0 shrink-0 items-start justify-between gap-4 border-b border-gray-200 px-4 py-4 sm:px-5 dark:border-dark-600">
+            <header class="min-w-0 shrink-0 border-b border-gray-200 px-4 py-4 sm:px-5 dark:border-dark-600">
               <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-2">
-                  <h2 :id="drawerTitleId" class="text-base font-semibold text-gray-900 dark:text-white">
-                    {{ t('admin.accounts.usageDetails.title') }}
-                  </h2>
-                  <span :class="['inline-flex h-6 items-center rounded px-2 text-xs font-medium', statusClasses]">
-                    {{ usageState.presentation.statusLabel }}
-                  </span>
+                <div class="flex items-center justify-between gap-3">
+                  <div class="flex min-w-0 flex-wrap items-center gap-2">
+                    <h2 :id="drawerTitleId" class="text-base font-semibold text-gray-900 dark:text-white">
+                      {{ t('admin.accounts.usageDetails.title') }}
+                    </h2>
+                    <span :class="['inline-flex h-6 items-center rounded px-2 text-xs font-medium', statusClasses]">
+                      {{ usageState.presentation.statusLabel }}
+                    </span>
+                  </div>
+                  <button
+                    ref="closeButtonRef"
+                    type="button"
+                    class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/40 dark:text-gray-400 dark:hover:bg-dark-700 dark:hover:text-white"
+                    :aria-label="t('common.close')"
+                    @click="emit('close')"
+                  >
+                    <Icon name="x" size="sm" />
+                  </button>
                 </div>
-                <div class="mt-3 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
-                  <span class="min-w-0 truncate text-sm font-medium text-gray-800 dark:text-gray-100" :title="account.name">
-                    {{ account.name }}
-                  </span>
-                  <span class="shrink-0 font-mono text-xs text-gray-400">#{{ account.id }}</span>
-                  <div class="min-w-0 overflow-hidden">
+                <div class="mt-3 grid min-w-0 grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] items-start gap-4">
+                  <div class="min-w-0 py-1">
+                    <div class="flex min-w-0 items-center gap-2">
+                      <span class="min-w-0 truncate text-sm font-semibold text-gray-900 dark:text-white" :title="account.name">
+                        {{ account.name }}
+                      </span>
+                      <span class="shrink-0 font-mono text-xs text-gray-400">#{{ account.id }}</span>
+                    </div>
+                  </div>
+                  <div class="min-w-0 border-l border-gray-200 pl-4 dark:border-dark-600">
                     <PlatformTypeBadge
                       :platform="account.platform"
                       :type="account.type"
@@ -48,15 +63,6 @@
                   </div>
                 </div>
               </div>
-              <button
-                ref="closeButtonRef"
-                type="button"
-                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500/40 dark:text-gray-400 dark:hover:bg-dark-700 dark:hover:text-white"
-                :aria-label="t('common.close')"
-                @click="emit('close')"
-              >
-                <Icon name="x" size="sm" />
-              </button>
             </header>
 
             <nav class="grid shrink-0 grid-cols-4 gap-1 border-b border-gray-200 px-4 py-2 dark:border-dark-600" role="tablist">

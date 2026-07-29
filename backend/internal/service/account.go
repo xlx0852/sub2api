@@ -241,8 +241,12 @@ func (a *Account) IsGrokOAuth() bool {
 	return a.IsGrok() && a.Type == AccountTypeOAuth
 }
 
+func (a *Account) IsKimi() bool { return a != nil && a.Platform == PlatformKimi }
+
+func (a *Account) IsKimiOAuth() bool { return a.IsKimi() && a.Type == AccountTypeOAuth }
+
 func (a *Account) IsOpenAICompatible() bool {
-	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok)
+	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok || a.Platform == PlatformKimi)
 }
 
 func (a *Account) GeminiOAuthType() string {
@@ -561,7 +565,7 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 	if a.Credentials == nil {
 		// Antigravity 平台使用默认映射
 		if a.Platform == domain.PlatformAntigravity {
-			return domain.DefaultAntigravityModelMapping
+			return domain.CurrentDefaultAntigravityModelMapping()
 		}
 		if a.Platform == domain.PlatformGrok {
 			return xai.DefaultModelMapping()
@@ -572,7 +576,7 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 	if len(rawMapping) == 0 {
 		// Antigravity 平台使用默认映射
 		if a.Platform == domain.PlatformAntigravity {
-			return domain.DefaultAntigravityModelMapping
+			return domain.CurrentDefaultAntigravityModelMapping()
 		}
 		if a.Platform == domain.PlatformGrok {
 			return xai.DefaultModelMapping()
@@ -600,7 +604,7 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 
 	// Antigravity 平台使用默认映射
 	if a.Platform == domain.PlatformAntigravity {
-		return domain.DefaultAntigravityModelMapping
+		return domain.CurrentDefaultAntigravityModelMapping()
 	}
 	if a.Platform == domain.PlatformGrok {
 		return xai.DefaultModelMapping()

@@ -78,6 +78,9 @@ func RegisterUserRoutes(
 			channels.GET("/available", h.AvailableChannel.List)
 		}
 
+		// 模型广场元信息（与 available-channels 共用开关）
+		authenticated.GET("/model-catalog", h.AvailableChannel.GetModelCatalog)
+
 		// 使用记录
 		usage := authenticated.Group("/usage")
 		{

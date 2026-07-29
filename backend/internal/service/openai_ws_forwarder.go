@@ -129,9 +129,13 @@ func isOpenAIWSIngressTurnRetryable(err error) bool {
 	if !errors.As(err, &turnErr) || turnErr == nil {
 		return false
 	}
-	if errors.Is(turnErr.cause, context.Canceled) || errors.Is(turnErr.cause, context.DeadlineExceeded) {
+	if errors.Is(turnErr.cause, context.Canceled) {
 		return false
 	}
+	// 注意：这里不再一刀切排除 context.DeadlineExceeded。
+	// 父请求 ctx 已结束的情况由重试入口（retryIngressTurn）通过 ctx.Err() 拦截；
+	// 父 ctx 仍存活时的 DeadlineExceeded 来自内部写/读超时，说明上游连接疑似僵死，
+	// 换一条新连接重试是安全的（wroteDownstream=false 保证未向下游写过任何字节）。
 	if turnErr.wroteDownstream {
 		return false
 	}

@@ -37,12 +37,30 @@ func TestEnableOpenAIHTTP2KeepAlive_EnablesPingHealthCheck(t *testing.T) {
 	require.NotNil(t, tr.TLSNextProto["h2"], "http2 必须已挂到底层 http.Transport 上")
 }
 
+func TestEnableGrokHTTP2KeepAlive_UsesOfficialTimeouts(t *testing.T) {
+	tr := &http.Transport{}
+
+	h2, err := enableHTTP2KeepAlive(tr, grokHTTP2ReadIdleTimeout, grokHTTP2PingTimeout)
+	require.NoError(t, err)
+	require.NotNil(t, h2)
+	require.Equal(t, 15*time.Second, h2.ReadIdleTimeout)
+	require.Equal(t, 5*time.Second, h2.PingTimeout)
+	require.NotNil(t, tr.TLSNextProto["h2"])
+}
+
 // openai_h2 模式构建的 Transport 必须带上 H2 PING 健康探测，从源头剔除死连接。
 func TestBuildUpstreamTransport_OpenAIH2_EnablesPingHealthCheck(t *testing.T) {
 	tr, err := buildUpstreamTransport(http2KeepAliveTestPoolSettings(), nil, upstreamProtocolModeOpenAIH2)
 	require.NoError(t, err)
 	require.True(t, tr.ForceAttemptHTTP2, "openai_h2 必须启用 HTTP/2")
 	require.NotNil(t, tr.TLSNextProto["h2"], "openai_h2 必须显式配置 http2 以启用 ReadIdleTimeout")
+}
+
+func TestBuildUpstreamTransport_GrokH2_EnablesPingHealthCheck(t *testing.T) {
+	tr, err := buildUpstreamTransport(http2KeepAliveTestPoolSettings(), nil, upstreamProtocolModeGrokH2)
+	require.NoError(t, err)
+	require.True(t, tr.ForceAttemptHTTP2)
+	require.NotNil(t, tr.TLSNextProto["h2"], "grok_h2 必须显式配置 HTTP/2 keepalive")
 }
 
 // 非 H2 模式（default/h1）不应因本次改动被误配置：default 走 Go 自动 H2（惰性配置，

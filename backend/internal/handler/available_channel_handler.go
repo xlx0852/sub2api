@@ -3,6 +3,7 @@ package handler
 import (
 	"sort"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -288,4 +289,22 @@ func toUserPricing(p *service.ChannelModelPricing) *userSupportedModelPricing {
 		PerRequestPrice:  p.PerRequestPrice,
 		Intervals:        intervals,
 	}
+}
+
+// GetModelCatalog 返回用户侧模型元信息（display_name/family/reasoning 等）。
+// GET /api/v1/model-catalog
+// 与 available-channels 共用开关：未启用时返回空 platforms，避免信息泄漏。
+func (h *AvailableChannelHandler) GetModelCatalog(c *gin.Context) {
+	if _, ok := middleware.GetAuthSubjectFromContext(c); !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	if !h.featureEnabled(c) {
+		response.Success(c, &modelcatalog.Catalog{
+			Version:   0,
+			Platforms: map[string]modelcatalog.PlatformConfig{},
+		})
+		return
+	}
+	response.Success(c, modelcatalog.PublicView())
 }

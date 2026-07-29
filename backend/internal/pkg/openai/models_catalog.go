@@ -36,6 +36,12 @@ func refreshDefaultModelsFromCatalog() {
 	DefaultModels = modelsFromCatalog()
 }
 
+// CurrentDefaultModels resolves the active catalog snapshot.
+func CurrentDefaultModels() []Model { return modelsFromCatalog() }
+
+// CurrentDefaultTestModel resolves the active catalog snapshot.
+func CurrentDefaultTestModel() string { return modelcatalog.OpenAIDefaultTestModel() }
+
 func init() {
 	refreshDefaultModelsFromCatalog()
 }
@@ -47,7 +53,7 @@ func IsRetiredModelID(id string) bool {
 
 // DefaultModelIDs returns the default model ID list
 func DefaultModelIDs() []string {
-	models := DefaultModels
+	models := CurrentDefaultModels()
 	ids := make([]string, len(models))
 	for i, m := range models {
 		ids[i] = m.ID

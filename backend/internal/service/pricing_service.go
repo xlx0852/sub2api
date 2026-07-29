@@ -963,7 +963,7 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 	}
 
 	// 最终回退到 DefaultTestModel
-	defaultModel := strings.ToLower(openai.DefaultTestModel)
+	defaultModel := strings.ToLower(openai.CurrentDefaultTestModel())
 	if pricing, ok := s.pricingData[defaultModel]; ok {
 		logger.LegacyPrintf("service.pricing", "[Pricing] OpenAI fallback to default model %s -> %s", model, defaultModel)
 		return pricing

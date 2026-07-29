@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/sysutil"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
@@ -34,6 +35,20 @@ func (h *SystemHandler) GetVersion(c *gin.Context) {
 	response.Success(c, gin.H{
 		"version": h.version,
 	})
+}
+
+// GetModelCatalogStatus returns the active catalog and refresh state.
+func (h *SystemHandler) GetModelCatalogStatus(c *gin.Context) {
+	response.Success(c, modelcatalog.Status())
+}
+
+// RefreshModelCatalog requests an immediate remote catalog refresh.
+func (h *SystemHandler) RefreshModelCatalog(c *gin.Context) {
+	if err := modelcatalog.Refresh(c.Request.Context()); err != nil {
+		response.Error(c, 502, "Failed to refresh remote model catalog")
+		return
+	}
+	response.Success(c, modelcatalog.Status())
 }
 
 // RestartService restarts the systemd service

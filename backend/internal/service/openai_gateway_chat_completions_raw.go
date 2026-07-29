@@ -158,6 +158,12 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 			return nil, fmt.Errorf("enable stream usage: %w", usageErr)
 		}
 	}
+	if account.Platform == PlatformKimi {
+		upstreamBody, err = normalizeKimiToolMessageLinks(upstreamBody)
+		if err != nil {
+			return nil, fmt.Errorf("normalize Kimi tool messages: %w", err)
+		}
+	}
 	if account.Platform == PlatformGrok {
 		upstreamBody, err = stripGrokChatPromptCacheKey(upstreamBody)
 		if err != nil {
@@ -196,7 +202,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	if customUA == "" && account.Platform == PlatformGrok {
 		customUA = "sub2api-grok/1.0"
 	}
-	resp, err := s.sendCCUpstreamRequest(ctx, c, account, targetURL, upstreamBody, clientStream, token, customUA, grokCacheIdentity)
+	resp, err := s.sendCCUpstreamRequestWithKimiRefresh(ctx, c, account, targetURL, upstreamBody, clientStream, token, customUA, grokCacheIdentity)
 	if err != nil {
 		return nil, err
 	}
@@ -273,6 +279,9 @@ func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account) (string, 
 			return "", fmt.Errorf("invalid grok base_url: %w", err)
 		}
 		return targetURL, nil
+	}
+	if account.Platform == PlatformKimi {
+		return s.openAIChatCompletionsTargetURL(account)
 	}
 
 	return s.openAIChatCompletionsTargetURL(account)

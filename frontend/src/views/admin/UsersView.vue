@@ -264,6 +264,153 @@
           :sort-storage-key="USER_SORT_STORAGE_KEY"
           @sort="handleSort"
         >
+          <template #mobile-card="{ row }">
+            <article class="min-w-0">
+              <header class="border-b border-black/[0.07] p-4 dark:border-white/[0.08]">
+                <div class="flex items-start gap-3">
+                  <div class="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-black/[0.05] text-sm font-semibold text-gray-700 dark:bg-white/[0.08] dark:text-dark-200">
+                    {{ row.email.charAt(0).toUpperCase() }}
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex min-w-0 items-start justify-between gap-2">
+                      <div class="min-w-0">
+                        <h3 class="truncate text-sm font-semibold text-gray-950 dark:text-white" :title="row.email">
+                          {{ row.email }}
+                        </h3>
+                        <p class="mt-1 truncate text-xs text-gray-500 dark:text-dark-400">
+                          {{ row.username || '-' }}
+                        </p>
+                      </div>
+                      <span class="flex-none rounded-md bg-black/[0.04] px-2 py-1 font-mono text-[11px] text-gray-500 dark:bg-white/[0.06] dark:text-dark-300">
+                        #{{ row.id }}
+                      </span>
+                    </div>
+                    <div class="mt-3 flex flex-wrap items-center gap-2">
+                      <span :class="['badge', row.role === 'admin' ? 'badge-purple' : 'badge-gray']">
+                        {{ t('admin.users.roles.' + row.role) }}
+                      </span>
+                      <span class="inline-flex items-center gap-1.5 text-xs text-gray-600 dark:text-dark-300">
+                        <span :class="['h-2 w-2 rounded-full', row.status === 'active' ? 'bg-green-500' : 'bg-red-500']"></span>
+                        {{ row.status === 'active' ? t('common.active') : t('admin.users.disabled') }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </header>
+
+              <div class="space-y-4 p-4">
+                <section v-if="isColumnVisible('balance')" class="flex items-center justify-between gap-3 rounded-md bg-black/[0.025] px-3 py-3 dark:bg-white/[0.04]">
+                  <div>
+                    <p class="text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.users.columns.balance') }}</p>
+                    <button class="mt-1 text-lg font-semibold text-gray-950 underline decoration-dashed decoration-gray-300 underline-offset-4 dark:text-white dark:decoration-dark-500" @click.stop="handleBalanceHistory(row)">
+                      ${{ row.balance.toFixed(2) }}
+                    </button>
+                  </div>
+                  <button class="inline-flex items-center justify-center whitespace-nowrap rounded-md border border-black/[0.08] px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-black/[0.04] dark:border-white/[0.1] dark:text-dark-200 dark:hover:bg-white/[0.06]" @click.stop="handleDeposit(row)">
+                    <Icon name="plus" size="xs" class="mr-1" />
+                    {{ t('admin.users.deposit') }}
+                  </button>
+                </section>
+
+                <section v-if="isColumnVisible('groups')" class="min-w-0">
+                  <p class="mb-2 text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.users.columns.groups') }}</p>
+                  <div class="flex flex-wrap gap-2 text-xs">
+                    <span v-if="getUserGroups(row).exclusive.length" class="inline-flex items-center gap-1 rounded-md bg-purple-50 px-2 py-1 text-purple-700 dark:bg-purple-950/30 dark:text-purple-300">
+                      <Icon name="shield" size="xs" />
+                      {{ getUserGroups(row).exclusive.length }} {{ t('admin.users.exclusiveLabel') }}
+                    </span>
+                    <span v-if="getUserGroups(row).publicGroups.length" class="inline-flex items-center gap-1 rounded-md bg-black/[0.04] px-2 py-1 text-gray-600 dark:bg-white/[0.06] dark:text-dark-300">
+                      <Icon name="globe" size="xs" />
+                      {{ getUserGroups(row).publicGroups.length }} {{ t('admin.users.publicLabel') }}
+                    </span>
+                    <span v-if="!getUserGroups(row).exclusive.length && !getUserGroups(row).publicGroups.length" class="text-gray-400">-</span>
+                  </div>
+                </section>
+
+                <section v-if="isColumnVisible('subscriptions')" class="min-w-0">
+                  <p class="mb-2 text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.users.columns.subscriptions') }}</p>
+                  <div v-if="row.subscriptions?.length" class="flex flex-wrap gap-1.5">
+                    <GroupBadge
+                      v-for="sub in row.subscriptions"
+                      :key="sub.id"
+                      :name="sub.group?.name || ''"
+                      :platform="sub.group?.platform"
+                      :subscription-type="sub.group?.subscription_type"
+                      :rate-multiplier="sub.group?.rate_multiplier"
+                      :days-remaining="sub.expires_at ? getDaysRemaining(sub.expires_at) : null"
+                    />
+                  </div>
+                  <p v-else class="text-xs text-gray-400 dark:text-dark-500">{{ t('admin.users.noSubscription') }}</p>
+                </section>
+
+                <section v-if="isColumnVisible('usage') || isColumnVisible('concurrency')" class="grid grid-cols-2 gap-2">
+                  <div v-if="isColumnVisible('usage')" class="rounded-md border border-black/[0.06] p-3 dark:border-white/[0.07]">
+                    <p class="mb-2 text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.users.columns.usage') }}</p>
+                    <PlatformUsageBreakdown
+                      :today="usageStats[row.id]?.today_actual_cost ?? 0"
+                      :total="usageStats[row.id]?.total_actual_cost ?? 0"
+                      :by-platform="usageStats[row.id]?.by_platform"
+                    />
+                  </div>
+                  <div v-if="isColumnVisible('concurrency')" class="rounded-md border border-black/[0.06] p-3 dark:border-white/[0.07]">
+                    <p class="mb-2 text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.users.columns.concurrency') }}</p>
+                    <UserConcurrencyCell :current="row.current_concurrency ?? 0" :max="row.concurrency" />
+                  </div>
+                </section>
+
+                <section v-if="isColumnVisible('balance_platform_quota')" class="rounded-md border border-black/[0.06] p-3 dark:border-white/[0.07]">
+                  <p class="mb-2 text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.users.columns.balancePlatformQuota') }}</p>
+                  <button class="w-full text-left" @click.stop="handlePlatformQuota(row)">
+                    <UserPlatformQuotaCell :quotas="platformQuotaStats[row.id]" />
+                  </button>
+                </section>
+
+                <div class="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-black/[0.07] pt-3 dark:border-white/[0.08]">
+                  <div v-if="isColumnVisible('last_active_at')" class="min-w-0">
+                    <p class="text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.users.columns.lastActive') }}</p>
+                    <p class="mt-1 truncate text-xs text-gray-700 dark:text-dark-200">{{ row.last_active_at ? formatDateTime(row.last_active_at) : '-' }}</p>
+                  </div>
+                  <div v-if="isColumnVisible('last_used_at')" class="min-w-0 text-right">
+                    <p class="text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.users.columns.lastUsed') }}</p>
+                    <p class="mt-1 truncate text-xs text-gray-700 dark:text-dark-200">{{ row.last_used_at ? formatDateTime(row.last_used_at) : '-' }}</p>
+                  </div>
+                  <div v-if="isColumnVisible('created_at')" class="col-span-2 flex min-w-0 items-center justify-between gap-3">
+                    <p class="flex-none text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.users.columns.created') }}</p>
+                    <p class="truncate text-right text-xs text-gray-600 dark:text-dark-300">{{ formatDateTime(row.created_at) }}</p>
+                  </div>
+                  <div v-if="isColumnVisible('notes') && row.notes" class="col-span-2 min-w-0">
+                    <p class="text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.users.columns.notes') }}</p>
+                    <p class="mt-1 line-clamp-2 text-xs text-gray-700 dark:text-dark-200">{{ row.notes }}</p>
+                  </div>
+                  <div
+                    v-for="def in attributeDefinitions.filter(definition => definition.enabled && isColumnVisible(`attr_${definition.id}`))"
+                    :key="def.id"
+                    class="min-w-0"
+                  >
+                    <p class="text-[11px] text-gray-400 dark:text-dark-500">{{ def.name }}</p>
+                    <p class="mt-1 truncate text-xs text-gray-700 dark:text-dark-200">{{ getAttributeValue(row.id, def.id) }}</p>
+                  </div>
+                </div>
+              </div>
+
+              <footer :class="['grid border-t border-black/[0.07] dark:border-white/[0.08]', row.role === 'admin' ? 'grid-cols-2' : 'grid-cols-3']">
+                <button class="flex h-11 items-center justify-center gap-1.5 text-xs font-medium text-gray-500 hover:bg-black/[0.035] hover:text-gray-950 dark:text-dark-400 dark:hover:bg-white/[0.05] dark:hover:text-white" @click.stop="handleEdit(row)">
+                  <Icon name="edit" size="sm" />{{ t('common.edit') }}
+                </button>
+                <button
+                  v-if="row.role !== 'admin'"
+                  class="flex h-11 items-center justify-center gap-1.5 border-x border-black/[0.07] text-xs font-medium text-gray-500 hover:bg-black/[0.035] hover:text-gray-950 dark:border-white/[0.08] dark:text-dark-400 dark:hover:bg-white/[0.05] dark:hover:text-white"
+                  @click.stop="handleToggleStatus(row)"
+                >
+                  <Icon :name="row.status === 'active' ? 'ban' : 'checkCircle'" size="sm" />
+                  {{ row.status === 'active' ? t('admin.users.disable') : t('admin.users.enable') }}
+                </button>
+                <button class="action-menu-trigger flex h-11 items-center justify-center gap-1.5 text-xs font-medium text-gray-500 hover:bg-black/[0.035] hover:text-gray-950 dark:text-dark-400 dark:hover:bg-white/[0.05] dark:hover:text-white" @click.stop="openActionMenu(row, $event)">
+                  <Icon name="more" size="sm" />{{ t('common.more') }}
+                </button>
+              </footer>
+            </article>
+          </template>
           <template #cell-email="{ value }">
             <div class="flex items-center gap-2">
               <div

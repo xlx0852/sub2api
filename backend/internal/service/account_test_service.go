@@ -69,6 +69,7 @@ type AccountTestService struct {
 	geminiTokenProvider       *GeminiTokenProvider
 	claudeTokenProvider       *ClaudeTokenProvider
 	grokTokenProvider         *GrokTokenProvider
+	kimiTokenProvider         *KimiTokenProvider
 	antigravityGatewayService *AntigravityGatewayService
 	httpUpstream              HTTPUpstream
 	cfg                       *config.Config
@@ -83,6 +84,7 @@ func NewAccountTestService(
 	geminiTokenProvider *GeminiTokenProvider,
 	claudeTokenProvider *ClaudeTokenProvider,
 	grokTokenProvider *GrokTokenProvider,
+	kimiTokenProvider *KimiTokenProvider,
 	antigravityGatewayService *AntigravityGatewayService,
 	httpUpstream HTTPUpstream,
 	cfg *config.Config,
@@ -93,6 +95,7 @@ func NewAccountTestService(
 		geminiTokenProvider:       geminiTokenProvider,
 		claudeTokenProvider:       claudeTokenProvider,
 		grokTokenProvider:         grokTokenProvider,
+		kimiTokenProvider:         kimiTokenProvider,
 		antigravityGatewayService: antigravityGatewayService,
 		httpUpstream:              httpUpstream,
 		cfg:                       cfg,
@@ -175,7 +178,7 @@ func createTestPayload(modelID string) (map[string]any, error) {
 
 // TestAccountConnection tests an account's connection by sending a test request
 // All account types use full Claude Code client characteristics, only auth header differs
-// modelID is optional - if empty, defaults to claude.DefaultTestModel
+// modelID is optional - if empty, defaults to claude.CurrentDefaultTestModel()
 // mode is optional - "compact" routes OpenAI accounts to the /responses/compact probe path
 func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int64, modelID string, prompt string, mode string) error {
 	ctx := c.Request.Context()
@@ -198,6 +201,24 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	if account.Platform == PlatformGrok {
 		return s.testGrokAccountConnection(c, account, modelID)
 	}
+	if account.Platform == PlatformKimi {
+		if s.kimiTokenProvider == nil {
+			return s.sendErrorAndEnd(c, "Kimi token provider not configured")
+		}
+		token, err := s.kimiTokenProvider.GetAccessToken(ctx, account)
+		if err != nil {
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Failed to get Kimi access token: %s", err.Error()))
+		}
+		if strings.TrimSpace(modelID) == "" {
+			modelID = "kimi-k3"
+		}
+		modelID = normalizeKimiUpstreamModel(account.GetMappedModel(modelID))
+		baseURL := strings.TrimSpace(account.GetCredential("base_url"))
+		if baseURL == "" {
+			baseURL = "https://api.kimi.com/coding"
+		}
+		return s.testOpenAIChatCompletionsConnection(c, account, modelID, prompt, baseURL, token)
+	}
 
 	if account.Platform == PlatformAntigravity {
 		return s.routeAntigravityTest(c, account, modelID, prompt)
@@ -213,7 +234,7 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
 	// Determine the model to use
 	testModelID := modelID
 	if testModelID == "" {
-		testModelID = claude.DefaultTestModel
+		testModelID = claude.CurrentDefaultTestModel()
 	}
 
 	// API Key 账号测试连接时也需要应用通配符模型映射。
@@ -505,10 +526,10 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	ctx := c.Request.Context()
 	mode = normalizeAccountTestMode(mode)
 
-	// Default to openai.DefaultTestModel for OpenAI testing
+	// Default to openai.CurrentDefaultTestModel() for OpenAI testing
 	testModelID := modelID
 	if testModelID == "" {
-		testModelID = openai.DefaultTestModel
+		testModelID = openai.CurrentDefaultTestModel()
 	}
 
 	// Align test routing with gateway behavior: OpenAI accounts apply normal
@@ -691,7 +712,7 @@ func (s *AccountTestService) testGrokAccountConnection(c *gin.Context, account *
 
 	testModelID := strings.TrimSpace(modelID)
 	if testModelID == "" {
-		testModelID = xai.DefaultChatModel
+		testModelID = xai.CurrentDefaultChatModel()
 	}
 	if mapped := strings.TrimSpace(account.GetMappedModel(testModelID)); mapped != "" {
 		testModelID = mapped
@@ -747,6 +768,7 @@ func (s *AccountTestService) testGrokAccountConnection(c *gin.Context, account *
 	if err != nil {
 		return s.sendErrorAndEnd(c, "Failed to create Grok request")
 	}
+	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileGrok))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Authorization", "Bearer "+authToken)
@@ -813,6 +835,9 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Authorization", "Bearer "+authToken)
+	if account.Platform == PlatformKimi {
+		applyKimiCodingHeaders(req.Header, account)
+	}
 
 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
 	account.ApplyHeaderOverrides(req.Header)
@@ -1075,7 +1100,7 @@ func (s *AccountTestService) testGeminiAccountConnection(c *gin.Context, account
 	// Determine the model to use
 	testModelID := modelID
 	if testModelID == "" {
-		testModelID = geminicli.DefaultTestModel
+		testModelID = geminicli.CurrentDefaultTestModel()
 	}
 
 	// For static upstream credentials with model mapping, map the model
@@ -1861,7 +1886,7 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 	} else {
 		req.Header.Set("User-Agent", codexCLIUserAgent)
 	}
-setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
+	setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
 	// 与真实转发一致：originator 与最终 User-Agent 首段配套（原 opencode 与 Codex UA 错配会 404，issue #3901）。
 	enforceCodexIdentityHeaders(req.Header)
 

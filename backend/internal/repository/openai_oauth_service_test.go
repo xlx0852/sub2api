@@ -2,10 +2,12 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -331,6 +333,56 @@ func TestNewOpenAIOAuthClient_DefaultTokenURL(t *testing.T) {
 	svc, ok := client.(*openaiOAuthService)
 	require.True(t, ok)
 	require.Equal(t, openai.TokenURL, svc.tokenURL)
+}
+
+func TestOpenAIOAuthServiceDeviceAuthorizationProtocol(t *testing.T) {
+	var pollCalls atomic.Int32
+	var server *httptest.Server
+	server = newLocalTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/device/usercode":
+			var body map[string]string
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			require.Equal(t, openai.ClientID, body["client_id"])
+			_, _ = io.WriteString(w, `{"device_auth_id":"device-auth","user_code":"ABCD-EFGH","interval":"7"}`)
+		case "/device/token":
+			var body map[string]string
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			require.Equal(t, "device-auth", body["device_auth_id"])
+			require.Equal(t, "ABCD-EFGH", body["user_code"])
+			if pollCalls.Add(1) == 1 {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = io.WriteString(w, `{"error":"authorization_pending"}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{"authorization_code":"authorization-code","code_verifier":"verifier","code_challenge":"challenge"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	svc := &openaiOAuthService{
+		tokenURL:               server.URL + "/oauth/token",
+		deviceUserCodeURL:      server.URL + "/device/usercode",
+		deviceAuthorizationURL: server.URL + "/device/token",
+	}
+	device, err := svc.RequestDeviceCode(context.Background(), "", "")
+	require.NoError(t, err)
+	require.Equal(t, "device-auth", device.DeviceAuthID)
+	require.JSONEq(t, `"7"`, string(device.Interval))
+
+	pending, err := svc.PollDeviceAuthorization(context.Background(), device.DeviceAuthID, device.UserCode, "")
+	require.NoError(t, err)
+	require.True(t, pending.Pending)
+
+	authorized, err := svc.PollDeviceAuthorization(context.Background(), device.DeviceAuthID, device.UserCode, "")
+	require.NoError(t, err)
+	require.False(t, authorized.Pending)
+	require.Equal(t, "authorization-code", authorized.AuthorizationCode)
+	require.Equal(t, "verifier", authorized.CodeVerifier)
+	require.Equal(t, "challenge", authorized.CodeChallenge)
 }
 
 func TestOpenAIOAuthServiceSuite(t *testing.T) {

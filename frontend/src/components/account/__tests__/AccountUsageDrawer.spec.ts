@@ -45,6 +45,7 @@ describe('AccountUsageDrawer', () => {
         teleport: true,
         AccountUsageCell: { template: '<div data-testid="quota-content">quota</div>' },
         PlatformTypeBadge: true,
+        ScheduledTestsPanel: true,
         MetricItem: { props: ['label', 'value'], template: '<div class="metric-stub">{{ label }}:{{ value }}</div>' }
       }
     }

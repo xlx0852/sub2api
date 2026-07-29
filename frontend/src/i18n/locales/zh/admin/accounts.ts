@@ -323,6 +323,12 @@ export default {
         grokTokens: 'Token',
         grokWeekly: '7d',
         grokMonthly: '30d',
+        grokMonthlyAmount: '已用 {used} / {limit} · 剩余 {remaining}',
+        grokProductBreakdown: '渠道使用明细',
+        grokProductUsed: '已用 {value}',
+        grokProductApi: 'API 使用',
+        grokProductBuild: 'GrokBuild 使用',
+        grokProductChat: 'GrokChat 使用',
         grokUnknown: 'Grok 额度未知：请点击「刷新额度」读取官方 billing，或等待上游 rate-limit 响应头。',
         grokRetryAfter: '{time} 后重试',
         grokProbe: '刷新额度',
@@ -341,6 +347,12 @@ export default {
         officialQuotaHint: '来自上游账号的额度窗口，与本地扣费统计分开展示。',
         localConsumption: '本地消耗',
         localConsumptionHint: 'Sub2API 记录的请求、Token、账号成本与用户扣费。',
+        financialSummary: '经营汇总',
+        profitMargin: '利润率',
+        profitRequests: '请求数',
+        currentCycleRange: '当前周期 {start} 至 {end}',
+        noActiveCycle: '暂无进行中的已确认订阅周期',
+        missingCycleHint: '近 30 天收入仍可查看；采购成本和利润需先录入当前订阅周期。',
         performance24h: '近 24 小时性能',
         performanceHint: '按请求类型区分生成耗时、首 Token 和连接质量。',
         diagnostics: '数据诊断',
@@ -977,6 +989,9 @@ export default {
         batchSuccess: '成功创建 {count} 个账号',
         batchPartialSuccess: '部分成功：{success} 个成功，{failed} 个失败',
         batchFailed: '批量创建失败',
+        deviceModeTitle: '授权方式',
+        browserMode: '浏览器 OAuth（PKCE）',
+        deviceMode: '设备码登录（推荐）',
         // OpenAI specific
         openai: {
           title: 'OpenAI 账户授权',
@@ -1040,7 +1055,21 @@ export default {
           validating: '验证中...',
           validateAndCreate: '验证并创建账号',
           pleaseEnterRefreshToken: '请输入 Refresh Token',
-          pleaseEnterSessionToken: '请输入 Session Token'
+          pleaseEnterSessionToken: '请输入 Session Token',
+          device: {
+            title: 'OpenAI 设备授权',
+            description: '打开 OpenAI 授权页面并输入设备码，完成后系统会自动检测。',
+            start: '开始设备授权',
+            starting: '正在生成设备码...',
+            userCode: '设备授权码',
+            openAuthorization: '打开 OpenAI 授权页',
+            waiting: '等待 OpenAI 授权',
+            authorized: '授权成功，可以创建账号',
+            denied: '授权已被拒绝',
+            expiresIn: '{seconds} 秒后过期',
+            retry: '重新授权',
+            createAccount: '创建 OpenAI 账号'
+          }
         },
         grok: {
           title: 'Grok 账号授权',
@@ -1081,7 +1110,35 @@ export default {
             GROK_OAUTH_PROXY_NOT_FOUND:
               '找不到所选代理。请选择可用代理后重试。'
           },
-          oauthOnlyHint: '首版 Grok 支持仅包含 OAuth 订阅的 Responses API 文本/推理转发。'
+          oauthOnlyHint: '首版 Grok 支持仅包含 OAuth 订阅的 Responses API 文本/推理转发。',
+          device: {
+            title: 'Grok 设备授权',
+            description: '打开 xAI/Grok 授权页面并输入设备码，完成后系统会自动检测。',
+            start: '开始设备授权',
+            starting: '正在生成设备码...',
+            userCode: '设备授权码',
+            openAuthorization: '打开 Grok 授权页',
+            waiting: '等待 Grok 授权',
+            authorized: '授权成功，可以创建账号',
+            denied: '授权已被拒绝',
+            expiresIn: '{seconds} 秒后过期',
+            retry: '重新授权',
+            createAccount: '创建 Grok 账号'
+          }
+        },
+        kimi: {
+          title: 'Kimi 设备授权',
+          description: '打开 Kimi 授权页面并输入设备码，完成后系统会自动检测。',
+          start: '开始设备授权',
+          starting: '正在生成设备码...',
+          userCode: '设备授权码',
+          openAuthorization: '打开 Kimi 授权页',
+          waiting: '等待 Kimi 授权',
+          authorized: '授权成功，可以创建账号',
+          denied: '授权已被拒绝',
+          expiresIn: '{seconds} 秒后过期',
+          retry: '重新授权',
+          createAccount: '创建 Kimi 账号'
         },
         // Gemini specific
         gemini: {

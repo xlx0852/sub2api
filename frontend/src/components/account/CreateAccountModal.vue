@@ -160,6 +160,19 @@
             <PlatformIcon platform="grok" size="sm" />
             Grok
           </button>
+          <button
+            type="button"
+            @click="form.platform = 'kimi'"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'kimi'
+                ? 'bg-white text-amber-700 dark:bg-dark-600 dark:text-amber-300'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <PlatformIcon platform="kimi" size="sm" />
+            Kimi
+          </button>
         </div>
       </div>
 
@@ -413,6 +426,21 @@
       </div>
 
       <!-- Account Type Selection (Gemini) -->
+      <div v-if="form.platform === 'kimi'">
+        <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
+        <div class="mt-2 rounded-lg border-2 border-amber-400 bg-amber-50 p-3 dark:bg-amber-950/20">
+          <div class="flex items-center gap-3">
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-white">
+              <PlatformIcon platform="kimi" size="sm" />
+            </div>
+            <div>
+              <span class="block text-sm font-medium text-gray-900 dark:text-white">OAuth Device Code</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">Kimi Coding Subscription</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div v-if="form.platform === 'gemini'">
         <div class="flex items-center justify-between">
           <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
@@ -3068,9 +3096,72 @@
 
     </form>
 
-    <!-- Step 2: OAuth Authorization -->
+      <!-- Step 2: OAuth Authorization -->
     <div v-else class="space-y-5">
+      <div
+        v-if="form.platform === 'openai' || form.platform === 'grok'"
+        class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-dark-600 dark:bg-dark-700"
+      >
+        <p class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+          {{ t('admin.accounts.oauth.deviceModeTitle') }}
+        </p>
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="rounded-md border px-3 py-2 text-sm transition-colors"
+            :class="deviceAuthMode === 'browser'
+              ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+              : 'border-gray-300 bg-white text-gray-600 hover:border-primary-300 dark:border-dark-500 dark:bg-dark-800 dark:text-gray-300'"
+            @click="deviceAuthMode = 'browser'"
+          >
+            {{ t('admin.accounts.oauth.browserMode') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-md border px-3 py-2 text-sm transition-colors"
+            :class="deviceAuthMode === 'device'
+              ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+              : 'border-gray-300 bg-white text-gray-600 hover:border-primary-300 dark:border-dark-500 dark:bg-dark-800 dark:text-gray-300'"
+            @click="deviceAuthMode = 'device'"
+          >
+            {{ t('admin.accounts.oauth.deviceMode') }}
+          </button>
+        </div>
+      </div>
+      <DeviceAuthorizationFlow
+        v-if="form.platform === 'kimi'"
+        :session="kimiOAuth.session.value"
+        :loading="kimiOAuth.loading.value || submitting"
+        :error="kimiOAuth.error.value"
+        :remaining-seconds="kimiOAuth.remainingSeconds.value"
+        @start="handleStartKimiAuthorization"
+        @cancel="handleCancelKimiAuthorization"
+        @complete="handleCreateKimiAccount"
+      />
+      <DeviceAuthorizationFlow
+        v-else-if="form.platform === 'openai' && deviceAuthMode === 'device'"
+        provider="openai"
+        :session="openaiDeviceOAuth.session.value"
+        :loading="openaiDeviceOAuth.loading.value || submitting"
+        :error="openaiDeviceOAuth.error.value"
+        :remaining-seconds="openaiDeviceOAuth.remainingSeconds.value"
+        @start="handleStartOpenAIDeviceAuthorization"
+        @cancel="handleCancelOpenAIDeviceAuthorization"
+        @complete="handleCreateOpenAIDeviceAccount"
+      />
+      <DeviceAuthorizationFlow
+        v-else-if="form.platform === 'grok' && deviceAuthMode === 'device'"
+        provider="grok"
+        :session="grokDeviceOAuth.session.value"
+        :loading="grokDeviceOAuth.loading.value || submitting"
+        :error="grokDeviceOAuth.error.value"
+        :remaining-seconds="grokDeviceOAuth.remainingSeconds.value"
+        @start="handleStartGrokDeviceAuthorization"
+        @cancel="handleCancelGrokDeviceAuthorization"
+        @complete="handleCreateGrokDeviceAccount"
+      />
       <OAuthAuthorizationFlow
+        v-else
         ref="oauthFlowRef"
         :add-method="form.platform === 'anthropic' ? addMethod : 'oauth'"
         :auth-url="currentAuthUrl"
@@ -3146,7 +3237,7 @@
           {{ t('common.back') }}
         </button>
         <button
-          v-if="isManualInputMethod"
+          v-if="isManualInputMethod && form.platform !== 'kimi' && !isDeviceAuthMode"
           type="button"
           :disabled="!canExchangeCode"
           class="btn btn-primary"
@@ -3437,6 +3528,9 @@ import { useOpenAIOAuth } from '@/composables/useOpenAIOAuth'
 import { useGeminiOAuth } from '@/composables/useGeminiOAuth'
 import { useAntigravityOAuth } from '@/composables/useAntigravityOAuth'
 import { useGrokOAuth } from '@/composables/useGrokOAuth'
+import { useKimiOAuth } from '@/composables/useKimiOAuth'
+import { useOpenAIDeviceOAuth } from '@/composables/useOpenAIDeviceOAuth'
+import { useGrokDeviceOAuth } from '@/composables/useGrokDeviceOAuth'
 import type {
   Proxy,
   AdminGroup,
@@ -3482,6 +3576,7 @@ import {
   type OpenAIWSMode
 } from '@/utils/openaiWsMode'
 import OAuthAuthorizationFlow from './OAuthAuthorizationFlow.vue'
+import DeviceAuthorizationFlow from './DeviceAuthorizationFlow.vue'
 
 // Type for exposed OAuthAuthorizationFlow component
 // Note: defineExpose automatically unwraps refs, so we use the unwrapped types
@@ -3506,6 +3601,7 @@ const oauthStepTitle = computed(() => {
   if (form.platform === 'gemini') return t('admin.accounts.oauth.gemini.title')
   if (form.platform === 'antigravity') return t('admin.accounts.oauth.antigravity.title')
   if (form.platform === 'grok') return t('admin.accounts.oauth.grok.title')
+  if (form.platform === 'kimi') return t('admin.accounts.oauth.kimi.title')
   return t('admin.accounts.oauth.title')
 })
 
@@ -3544,6 +3640,21 @@ const openaiOAuth = useOpenAIOAuth() // For OpenAI OAuth
 const geminiOAuth = useGeminiOAuth() // For Gemini OAuth
 const antigravityOAuth = useAntigravityOAuth() // For Antigravity OAuth
 const grokOAuth = useGrokOAuth() // For Grok OAuth
+const kimiOAuth = useKimiOAuth()
+const openaiDeviceOAuth = useOpenAIDeviceOAuth()
+const grokDeviceOAuth = useGrokDeviceOAuth()
+
+type DeviceAuthMode = 'browser' | 'device'
+const deviceAuthMode = ref<DeviceAuthMode>('browser')
+const isDeviceAuthMode = computed(
+  () => (form.platform === 'openai' || form.platform === 'grok') && deviceAuthMode.value === 'device'
+)
+
+watch(deviceAuthMode, (mode, previousMode) => {
+  if (mode === previousMode || mode === 'device') return
+  if (openaiDeviceOAuth.session.value) void openaiDeviceOAuth.cancel()
+  if (grokDeviceOAuth.session.value) void grokDeviceOAuth.cancel()
+})
 
 // Computed: current OAuth state for template binding
 const currentAuthUrl = computed(() => {
@@ -3979,6 +4090,7 @@ const isOAuthFlow = computed(() => {
 })
 
 const isManualInputMethod = computed(() => {
+  if (form.platform === 'kimi') return false
   return oauthFlowRef.value?.inputMethod === 'manual'
 })
 
@@ -4099,6 +4211,13 @@ watch(
       form.concurrency = 1
       form.load_factor = null
     }
+    if (newPlatform === 'kimi') {
+      accountCategory.value = 'oauth-based'
+      addMethod.value = 'oauth'
+      modelRestrictionMode.value = 'mapping'
+      form.concurrency = 1
+      form.load_factor = null
+    }
     if (newPlatform !== 'gemini' && newPlatform !== 'anthropic' && accountCategory.value === 'service_account') {
       accountCategory.value = 'oauth-based'
     }
@@ -4145,6 +4264,10 @@ watch(
     geminiOAuth.resetState()
     antigravityOAuth.resetState()
     grokOAuth.resetState()
+    kimiOAuth.resetState()
+    openaiDeviceOAuth.resetState()
+    grokDeviceOAuth.resetState()
+    deviceAuthMode.value = newPlatform === 'openai' || newPlatform === 'grok' ? 'device' : 'browser'
   }
 )
 
@@ -4581,12 +4704,18 @@ const resetForm = () => {
   geminiOAuth.resetState()
   antigravityOAuth.resetState()
   grokOAuth.resetState()
+  kimiOAuth.resetState()
+  openaiDeviceOAuth.resetState()
+  grokDeviceOAuth.resetState()
   oauthFlowRef.value?.reset()
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
 }
 
 const handleClose = () => {
+  if (openaiDeviceOAuth.session.value) void openaiDeviceOAuth.cancel()
+  if (grokDeviceOAuth.session.value) void grokDeviceOAuth.cancel()
+  if (kimiOAuth.session.value) void kimiOAuth.cancel()
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
   emit('close')
@@ -4779,6 +4908,9 @@ const handleSubmit = async () => {
       return
     }
     step.value = 2
+    if (form.platform === 'kimi') {
+      await kimiOAuth.start(form.proxy_id)
+    }
     return
   }
 
@@ -4997,6 +5129,10 @@ const goBackToBasicInfo = () => {
   geminiOAuth.resetState()
   antigravityOAuth.resetState()
   grokOAuth.resetState()
+  kimiOAuth.resetState()
+  openaiDeviceOAuth.resetState()
+  grokDeviceOAuth.resetState()
+  deviceAuthMode.value = 'browser'
   oauthFlowRef.value?.reset()
 }
 
@@ -5016,6 +5152,110 @@ const handleGenerateUrl = async () => {
     await grokOAuth.generateAuthUrl(form.proxy_id)
   } else {
     await oauth.generateAuthUrl(addMethod.value, form.proxy_id)
+  }
+}
+
+const handleStartKimiAuthorization = async () => {
+  await kimiOAuth.cancel()
+  await kimiOAuth.start(form.proxy_id)
+}
+
+const handleCancelKimiAuthorization = async () => {
+  await kimiOAuth.cancel()
+}
+
+const handleStartOpenAIDeviceAuthorization = async () => {
+  await openaiDeviceOAuth.cancel()
+  await openaiDeviceOAuth.start(form.proxy_id)
+}
+
+const handleCancelOpenAIDeviceAuthorization = async () => {
+  await openaiDeviceOAuth.cancel()
+}
+
+const handleCreateOpenAIDeviceAccount = async () => {
+  submitting.value = true
+  try {
+    await openaiDeviceOAuth.createAccount({
+      name: form.name,
+      notes: form.notes || undefined,
+      proxy_id: form.proxy_id,
+      concurrency: form.concurrency,
+      priority: form.priority,
+      group_ids: form.group_ids
+    })
+    appStore.showSuccess(t('admin.accounts.accountCreated'))
+    emit('created')
+    handleClose()
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.message ||
+      error?.response?.data?.detail ||
+      error?.message ||
+      t('admin.accounts.failedToCreate')
+    openaiDeviceOAuth.error.value = message
+    appStore.showError(message)
+  } finally {
+    submitting.value = false
+  }
+}
+
+const handleStartGrokDeviceAuthorization = async () => {
+  await grokDeviceOAuth.cancel()
+  await grokDeviceOAuth.start(form.proxy_id)
+}
+
+const handleCancelGrokDeviceAuthorization = async () => {
+  await grokDeviceOAuth.cancel()
+}
+
+const handleCreateGrokDeviceAccount = async () => {
+  submitting.value = true
+  try {
+    await grokDeviceOAuth.createAccount({
+      name: form.name,
+      notes: form.notes || undefined,
+      proxy_id: form.proxy_id,
+      concurrency: form.concurrency,
+      priority: form.priority,
+      group_ids: form.group_ids
+    })
+    appStore.showSuccess(t('admin.accounts.accountCreated'))
+    emit('created')
+    handleClose()
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.message ||
+      error?.response?.data?.detail ||
+      error?.message ||
+      t('admin.accounts.failedToCreate')
+    grokDeviceOAuth.error.value = message
+    appStore.showError(message)
+  } finally {
+    submitting.value = false
+  }
+}
+
+const handleCreateKimiAccount = async () => {
+  submitting.value = true
+  try {
+    await kimiOAuth.createAccount({
+      name: form.name,
+      notes: form.notes || undefined,
+      proxy_id: form.proxy_id,
+      concurrency: form.concurrency,
+      priority: form.priority,
+      group_ids: form.group_ids
+    })
+    appStore.showSuccess(t('admin.accounts.accountCreated'))
+    emit('created')
+    handleClose()
+  } catch (error: any) {
+    const message = error.response?.data?.message || error.response?.data?.detail || error.message || t('admin.accounts.failedToCreate')
+    kimiOAuth.error.value = message
+    appStore.showError(message)
+  } finally {
+    submitting.value = false
   }
 }
 

@@ -22,6 +22,11 @@ const (
 	AuthorizeURL = "https://auth.openai.com/oauth/authorize"
 	TokenURL     = "https://auth.openai.com/oauth/token"
 
+	DeviceUserCodeURL      = "https://auth.openai.com/api/accounts/deviceauth/usercode"
+	DeviceAuthorizationURL = "https://auth.openai.com/api/accounts/deviceauth/token"
+	DeviceVerificationURL  = "https://auth.openai.com/codex/device"
+	DeviceExchangeRedirect = "https://auth.openai.com/deviceauth/callback"
+
 	// Default redirect URI (can be customized)
 	DefaultRedirectURI = "http://localhost:1455/auth/callback"
 
@@ -198,6 +203,10 @@ func BuildAuthorizationURLForPlatform(state, codeChallenge, redirectURI, platfor
 	params.Set("code_challenge", codeChallenge)
 	params.Set("code_challenge_method", "S256")
 	// OpenAI specific parameters
+	// Match the Codex CLI flow used by CPA: always start a fresh login instead
+	// of silently reusing an existing browser session. This is especially
+	// important when an operator is switching between multiple OpenAI accounts.
+	params.Set("prompt", "login")
 	params.Set("id_token_add_organizations", "true")
 	if codexFlow {
 		params.Set("codex_cli_simplified_flow", "true")
@@ -236,6 +245,20 @@ type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token"`
 	ClientID     string `json:"client_id"`
 	Scope        string `json:"scope"`
+}
+
+type DeviceCodeResponse struct {
+	DeviceAuthID string          `json:"device_auth_id"`
+	UserCode     string          `json:"user_code"`
+	UserCodeAlt  string          `json:"usercode"`
+	Interval     json.RawMessage `json:"interval"`
+}
+
+type DeviceAuthorizationResponse struct {
+	AuthorizationCode string `json:"authorization_code"`
+	CodeVerifier      string `json:"code_verifier"`
+	CodeChallenge     string `json:"code_challenge"`
+	Pending           bool   `json:"-"`
 }
 
 // IDTokenClaims represents the claims from OpenAI ID Token

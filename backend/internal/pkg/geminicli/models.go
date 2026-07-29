@@ -27,6 +27,10 @@ func init() {
 	DefaultTestModel = modelcatalog.GeminiDefaultTestModel()
 }
 
+func CurrentDefaultModels() []Model { return modelsFromCatalog() }
+
+func CurrentDefaultTestModel() string { return modelcatalog.GeminiDefaultTestModel() }
+
 func modelsFromCatalog() []Model {
 	entries := modelcatalog.GeminiModels()
 	out := make([]Model, 0, len(entries))

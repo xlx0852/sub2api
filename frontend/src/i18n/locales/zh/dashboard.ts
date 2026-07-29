@@ -303,6 +303,8 @@ export default {
     latency: '延迟',
     latencyFirstToken: '首字',
     latencyTotal: '总耗时',
+    outputRate: '速率',
+    outputRateHint: '输出 Token 速率 = output_tokens / 总耗时',
     firstToken: '首 Token',
     duration: '耗时',
     time: '时间',
@@ -474,22 +476,45 @@ export default {
 
   // Available Channels (user-facing)
   availableChannels: {
-    title: '可用渠道',
-    description: '查看您可访问的渠道与其支持的模型、定价',
-    searchPlaceholder: '搜索渠道或模型...',
-    empty: '暂无可用渠道',
+    title: '模型广场',
+    description: '浏览可访问模型、官方定价与分组折扣',
+    searchPlaceholder: '搜索模型、渠道或分组...',
+    empty: '暂无可用模型',
     noModels: '未配置模型',
     noPricing: '未配置定价',
     exclusive: '专属',
     public: '公开',
     exclusiveTooltip: '管理员授权给你的专属分组',
     publicTooltip: '对所有用户公开的分组',
+    stats: {
+      models: '模型数',
+      platforms: '平台数',
+      channels: '渠道数',
+      groups: '可用分组'
+    },
+    filters: {
+      allPlatforms: '全部平台',
+      allChannels: '全部渠道'
+    },
+    tags: {
+      reasoning: '推理',
+      image: '图像',
+      video: '视频',
+      audio: '音频',
+      code: '代码',
+      per_request: '按次'
+    },
     columns: {
       name: '渠道名',
       description: '描述',
       platform: '平台',
       groups: '我可访问的分组',
-      supportedModels: '支持模型'
+      supportedModels: '支持模型',
+      model: '模型',
+      provider: '厂商',
+      billingMode: '计费',
+      discount: '折扣',
+      channels: '可用渠道'
     },
     pricing: {
       billingMode: '计费模式',

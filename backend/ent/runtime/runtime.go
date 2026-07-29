@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/ent/account"
+	"github.com/Wei-Shaw/sub2api/ent/accountcostconfig"
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
@@ -255,6 +256,45 @@ func init() {
 	accountDescSessionWindowStatus := accountFields[25].Descriptor()
 	// account.SessionWindowStatusValidator is a validator for the "session_window_status" field. It is called by the builders before save.
 	account.SessionWindowStatusValidator = accountDescSessionWindowStatus.Validators[0].(func(string) error)
+	accountcostconfigMixin := schema.AccountCostConfig{}.Mixin()
+	accountcostconfigMixinFields0 := accountcostconfigMixin[0].Fields()
+	_ = accountcostconfigMixinFields0
+	accountcostconfigFields := schema.AccountCostConfig{}.Fields()
+	_ = accountcostconfigFields
+	// accountcostconfigDescCreatedAt is the schema descriptor for created_at field.
+	accountcostconfigDescCreatedAt := accountcostconfigMixinFields0[0].Descriptor()
+	// accountcostconfig.DefaultCreatedAt holds the default value on creation for the created_at field.
+	accountcostconfig.DefaultCreatedAt = accountcostconfigDescCreatedAt.Default.(func() time.Time)
+	// accountcostconfigDescUpdatedAt is the schema descriptor for updated_at field.
+	accountcostconfigDescUpdatedAt := accountcostconfigMixinFields0[1].Descriptor()
+	// accountcostconfig.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	accountcostconfig.DefaultUpdatedAt = accountcostconfigDescUpdatedAt.Default.(func() time.Time)
+	// accountcostconfig.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	accountcostconfig.UpdateDefaultUpdatedAt = accountcostconfigDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// accountcostconfigDescCostType is the schema descriptor for cost_type field.
+	accountcostconfigDescCostType := accountcostconfigFields[1].Descriptor()
+	// accountcostconfig.DefaultCostType holds the default value on creation for the cost_type field.
+	accountcostconfig.DefaultCostType = accountcostconfigDescCostType.Default.(string)
+	// accountcostconfig.CostTypeValidator is a validator for the "cost_type" field. It is called by the builders before save.
+	accountcostconfig.CostTypeValidator = accountcostconfigDescCostType.Validators[0].(func(string) error)
+	// accountcostconfigDescPeriodFee is the schema descriptor for period_fee field.
+	accountcostconfigDescPeriodFee := accountcostconfigFields[2].Descriptor()
+	// accountcostconfig.DefaultPeriodFee holds the default value on creation for the period_fee field.
+	accountcostconfig.DefaultPeriodFee = accountcostconfigDescPeriodFee.Default.(float64)
+	// accountcostconfigDescPeriodDays is the schema descriptor for period_days field.
+	accountcostconfigDescPeriodDays := accountcostconfigFields[3].Descriptor()
+	// accountcostconfig.DefaultPeriodDays holds the default value on creation for the period_days field.
+	accountcostconfig.DefaultPeriodDays = accountcostconfigDescPeriodDays.Default.(int)
+	// accountcostconfigDescCurrency is the schema descriptor for currency field.
+	accountcostconfigDescCurrency := accountcostconfigFields[4].Descriptor()
+	// accountcostconfig.DefaultCurrency holds the default value on creation for the currency field.
+	accountcostconfig.DefaultCurrency = accountcostconfigDescCurrency.Default.(string)
+	// accountcostconfig.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	accountcostconfig.CurrencyValidator = accountcostconfigDescCurrency.Validators[0].(func(string) error)
+	// accountcostconfigDescNotes is the schema descriptor for notes field.
+	accountcostconfigDescNotes := accountcostconfigFields[6].Descriptor()
+	// accountcostconfig.DefaultNotes holds the default value on creation for the notes field.
+	accountcostconfig.DefaultNotes = accountcostconfigDescNotes.Default.(string)
 	accountgroupFields := schema.AccountGroup{}.Fields()
 	_ = accountgroupFields
 	// accountgroupDescPriority is the schema descriptor for priority field.

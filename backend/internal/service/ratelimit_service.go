@@ -49,6 +49,12 @@ type SuccessfulTestRecoveryResult struct {
 // AccountRecoveryOptions 控制账号恢复时的附加行为。
 type AccountRecoveryOptions struct {
 	InvalidateToken bool
+	// RestoreSchedulable 为 true 时，才把管理员手动关闭的 schedulable 改回 true。
+	// 定时诊断自动恢复应保持 false，避免绕过人工隔离。
+	RestoreSchedulable bool
+	// ClearFullRateLimit 为 true 时清空账号级限流/模型限流/配额。
+	// 定时诊断默认 false，仅清理 temp-unsched，避免兜底模型测通误清主模型限流。
+	ClearFullRateLimit bool
 }
 
 type geminiUsageCacheEntry struct {
@@ -1908,15 +1914,27 @@ func (s *RateLimitService) RecoverAccountState(ctx context.Context, accountID in
 	}
 
 	if hasRecoverableRuntimeState(account) {
-		if err := s.ClearRateLimit(ctx, accountID); err != nil {
-			return nil, err
+		if options.ClearFullRateLimit {
+			if err := s.ClearRateLimit(ctx, accountID); err != nil {
+				return nil, err
+			}
+			result.ClearedRateLimit = true
+		} else if account.TempUnschedulableUntil != nil {
+			// 定时诊断路径：仅解除临时不可调度，不抹掉真实限流/配额。
+			if err := s.accountRepo.ClearTempUnschedulable(ctx, accountID); err != nil {
+				return nil, err
+			}
+			if s.tempUnschedCache != nil {
+				if err := s.tempUnschedCache.DeleteTempUnsched(ctx, accountID); err != nil {
+					slog.Warn("temp_unsched_cache_delete_failed", "account_id", accountID, "error", err)
+				}
+			}
+			result.ClearedRateLimit = true
 		}
-		result.ClearedRateLimit = true
 	}
 
-	// Manual/admin unschedulable is also recoverable after a successful connectivity probe.
-	// Without this, accounts can stay active but never selected by the scheduler.
-	if !account.Schedulable {
+	// 仅显式允许时恢复管理员关闭的 schedulable。
+	if options.RestoreSchedulable && !account.Schedulable {
 		if err := s.accountRepo.SetSchedulable(ctx, accountID, true); err != nil {
 			return nil, err
 		}
@@ -1974,10 +1992,41 @@ func (s *RateLimitService) DemoteAccountAfterFailedDiagnostics(ctx context.Conte
 	return nil
 }
 
+// RateLimitAccountAfterDiagnostics applies a rate-limit state derived from a scheduled-diagnostics
+// result that contains an explicit quota reset timestamp (e.g. usage_limit_reached with resets_at).
+func (s *RateLimitService) RateLimitAccountAfterDiagnostics(ctx context.Context, accountID int64, resetAt time.Time, reason string) error {
+	if s == nil || s.accountRepo == nil {
+		return nil
+	}
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return err
+	}
+	s.notifyAccountSchedulingBlocked(account, resetAt, "diagnostics_usage_limit")
+	if err := s.accountRepo.SetRateLimited(ctx, accountID, resetAt); err != nil {
+		return err
+	}
+	slog.Info("account_rate_limited_after_diagnostics", "account_id", accountID, "reset_at", resetAt, "reason", reason)
+	return nil
+}
+
 // RecoverAccountAfterSuccessfulTest 将一次成功测试视为正常请求，
 // 按需恢复 error / rate-limit / overload / temp-unsched / model-rate-limit / unschedulable 等运行时状态。
+// 默认用于手动连通性测试：可恢复 schedulable 并全量清限流。
 func (s *RateLimitService) RecoverAccountAfterSuccessfulTest(ctx context.Context, accountID int64) (*SuccessfulTestRecoveryResult, error) {
-	return s.RecoverAccountState(ctx, accountID, AccountRecoveryOptions{})
+	return s.RecoverAccountState(ctx, accountID, AccountRecoveryOptions{
+		RestoreSchedulable: true,
+		ClearFullRateLimit: true,
+	})
+}
+
+// RecoverAccountAfterScheduledDiagnostics 用于定时诊断成功后的自动恢复：
+// 不恢复管理员手动 schedulable=false，也不全量清空模型限流/配额。
+func (s *RateLimitService) RecoverAccountAfterScheduledDiagnostics(ctx context.Context, accountID int64) (*SuccessfulTestRecoveryResult, error) {
+	return s.RecoverAccountState(ctx, accountID, AccountRecoveryOptions{
+		RestoreSchedulable: false,
+		ClearFullRateLimit: false,
+	})
 }
 
 func (s *RateLimitService) ClearTempUnschedulable(ctx context.Context, accountID int64) error {

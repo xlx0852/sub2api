@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,40 @@ type OpenAIOAuthHandler struct {
 	openaiOAuthService *service.OpenAIOAuthService
 	adminService       service.AdminService
 	quotaService       *service.OpenAIQuotaService
+	tokenInvalidator   service.TokenCacheInvalidator
+}
+
+func (h *OpenAIOAuthHandler) StartDeviceAuthorization(c *gin.Context) {
+	var req struct {
+		ProxyID *int64 `json:"proxy_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil && err.Error() != "EOF" {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	result, err := h.openaiOAuthService.StartDeviceAuthorization(c.Request.Context(), req.ProxyID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *OpenAIOAuthHandler) DeviceAuthorizationStatus(c *gin.Context) {
+	result, err := h.openaiOAuthService.GetDeviceAuthorizationStatus(c.Request.Context(), c.Query("session_id"))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *OpenAIOAuthHandler) CancelDeviceAuthorization(c *gin.Context) {
+	if err := h.openaiOAuthService.CancelDeviceAuthorization(c.Request.Context(), c.Query("session_id")); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func oauthPlatformFromPath(c *gin.Context) string {
@@ -35,6 +70,12 @@ func NewOpenAIOAuthHandler(
 		adminService:       adminService,
 		quotaService:       quotaService,
 	}
+}
+
+// SetTokenCacheInvalidator wires the shared OAuth token cache invalidator after
+// construction while keeping the existing constructor contract intact.
+func (h *OpenAIOAuthHandler) SetTokenCacheInvalidator(invalidator service.TokenCacheInvalidator) {
+	h.tokenInvalidator = invalidator
 }
 
 // OpenAIGenerateAuthURLRequest represents the request for generating OpenAI auth URL
@@ -294,6 +335,100 @@ func (h *OpenAIOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 	}
 
 	response.Success(c, dto.AccountFromService(account))
+}
+
+func (h *OpenAIOAuthHandler) CreateAccountFromDevice(c *gin.Context) {
+	var req struct {
+		SessionID   string  `json:"session_id" binding:"required"`
+		Name        string  `json:"name"`
+		Notes       *string `json:"notes"`
+		ProxyID     *int64  `json:"proxy_id"`
+		Concurrency int     `json:"concurrency"`
+		Priority    int     `json:"priority"`
+		GroupIDs    []int64 `json:"group_ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	credential, err := h.openaiOAuthService.ConsumeDeviceAuthorization(c.Request.Context(), req.SessionID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if !sameOptionalInt64(req.ProxyID, credential.ProxyID) {
+		response.BadRequest(c, "proxy_id must match the proxy used for device authorization")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		name = strings.TrimSpace(credential.Token.Email)
+	}
+	if name == "" {
+		name = "OpenAI OAuth Account"
+	}
+	account, err := h.adminService.CreateAccount(c.Request.Context(), &service.CreateAccountInput{
+		Name: name, Notes: req.Notes, Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth,
+		Credentials: h.openaiOAuthService.BuildAccountCredentials(credential.Token), ProxyID: credential.ProxyID,
+		Concurrency: req.Concurrency, Priority: req.Priority, GroupIDs: req.GroupIDs,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.AccountFromService(account))
+}
+
+// ReauthorizeAccountFromDevice replaces credentials for an existing OpenAI
+// OAuth account using a completed device authorization session.
+func (h *OpenAIOAuthHandler) ReauthorizeAccountFromDevice(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	var req struct {
+		SessionID string `json:"session_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if account.Platform != service.PlatformOpenAI || account.Type != service.AccountTypeOAuth {
+		response.BadRequest(c, "Account is not an OpenAI OAuth account")
+		return
+	}
+	credential, err := h.openaiOAuthService.ConsumeDeviceAuthorization(c.Request.Context(), req.SessionID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if !sameOptionalInt64(account.ProxyID, credential.ProxyID) {
+		response.BadRequest(c, "proxy_id must match the proxy used for device authorization")
+		return
+	}
+	credentials := service.MergeCredentials(account.Credentials, h.openaiOAuthService.BuildAccountCredentials(credential.Token))
+	updated, err := h.adminService.UpdateAccount(c.Request.Context(), accountID, &service.UpdateAccountInput{
+		Type: service.AccountTypeOAuth, Credentials: credentials, ProxyID: credential.ProxyID,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if h.tokenInvalidator != nil {
+		_ = h.tokenInvalidator.InvalidateToken(c.Request.Context(), updated)
+	}
+	updated, err = h.adminService.ClearAccountError(c.Request.Context(), updated.ID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.AccountFromService(updated))
 }
 
 // CreateAccountFromCodexPAT creates an OpenAI OAuth account from a Codex at-* personal access token.

@@ -10,8 +10,28 @@
 
       <OpsDashboardSkeleton v-if="loading && !hasLoadedOnce" :fullscreen="isFullscreen" />
 
+      <nav
+        v-if="opsEnabled && !isFullscreen && !(loading && !hasLoadedOnce)"
+        class="grid grid-cols-3 gap-1 rounded-xl border border-black/[0.08] bg-black/[0.035] p-1 dark:border-white/[0.09] dark:bg-white/[0.05]"
+        :aria-label="t('admin.ops.sections.label')"
+      >
+        <button
+          v-for="section in dashboardSections"
+          :key="section.value"
+          type="button"
+          class="min-h-10 rounded-lg px-3 text-sm font-semibold transition-colors"
+          :class="activeSection === section.value
+            ? 'bg-black text-white shadow-sm dark:bg-white dark:text-black'
+            : 'text-gray-500 hover:bg-white/70 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.07] dark:hover:text-white'"
+          :aria-pressed="activeSection === section.value"
+          @click="activeSection = section.value"
+        >
+          {{ section.label }}
+        </button>
+      </nav>
+
       <OpsDashboardHeader
-        v-else-if="opsEnabled"
+        v-if="opsEnabled && !(loading && !hasLoadedOnce)"
         :overview="overview"
         :platform="platform"
         :group-id="groupId"
@@ -24,6 +44,7 @@
         :auto-refresh-enabled="autoRefreshEnabled"
         :auto-refresh-countdown="autoRefreshCountdown"
         :fullscreen="isFullscreen"
+        :controls-only="!isFullscreen && activeSection !== 'overview'"
         :custom-start-time="customStartTime"
         :custom-end-time="customEndTime"
         @update:time-range="onTimeRangeChange"
@@ -41,20 +62,15 @@
         @exit-fullscreen="exitFullscreen"
       />
 
-      <!-- Row: Concurrency + Throughput -->
-      <div v-if="opsEnabled && !(loading && !hasLoadedOnce)" class="grid grid-cols-1 gap-6 lg:grid-cols-4">
-        <div class="lg:col-span-1 min-h-[360px]">
+      <!-- Overview: capacity + primary traffic -->
+      <div
+        v-if="opsEnabled && !(loading && !hasLoadedOnce) && (isFullscreen || activeSection === 'overview')"
+        class="grid grid-cols-1 gap-4 lg:grid-cols-4 lg:gap-6"
+      >
+        <div class="min-h-[320px] lg:col-span-1 lg:min-h-[360px]">
           <OpsConcurrencyCard :platform-filter="platform" :group-id-filter="groupId" :refresh-token="dashboardRefreshToken" />
         </div>
-        <div class="lg:col-span-1 h-[360px]">
-          <OpsSwitchRateTrendChart
-            :points="switchTrend?.points ?? []"
-            :loading="loadingSwitchTrend"
-            :time-range="switchTrendTimeRange"
-            :fullscreen="isFullscreen"
-          />
-        </div>
-        <div class="lg:col-span-2 h-[360px]">
+        <div class="h-[280px] lg:col-span-3 lg:h-[360px]">
           <OpsThroughputTrendChart
             :points="throughputTrend?.points ?? []"
             :by-platform="throughputTrend?.by_platform ?? []"
@@ -69,8 +85,19 @@
         </div>
       </div>
 
-      <!-- Row: Visual Analysis (baseline 3-up grid) -->
-      <div v-if="opsEnabled && !(loading && !hasLoadedOnce)" class="grid grid-cols-1 gap-6 md:grid-cols-3">
+      <!-- Analysis: secondary trends and error breakdowns -->
+      <div
+        v-if="opsEnabled && !(loading && !hasLoadedOnce) && (isFullscreen || activeSection === 'analysis')"
+        class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-6"
+      >
+        <div class="h-[260px] sm:h-[300px] lg:h-[340px]">
+          <OpsSwitchRateTrendChart
+            :points="switchTrend?.points ?? []"
+            :loading="loadingSwitchTrend"
+            :time-range="switchTrendTimeRange"
+            :fullscreen="isFullscreen"
+          />
+        </div>
         <OpsLatencyChart :latency-data="latencyHistogram" :loading="loadingLatency" />
         <OpsErrorDistributionChart
           :data="errorDistribution"
@@ -87,7 +114,7 @@
       </div>
 
       <!-- Row: OpenAI Token Stats -->
-      <div v-if="opsEnabled && showOpenAITokenStats && !(loading && !hasLoadedOnce)" class="grid grid-cols-1 gap-6">
+      <div v-if="opsEnabled && showOpenAITokenStats && !(loading && !hasLoadedOnce) && (isFullscreen || activeSection === 'overview')" class="grid grid-cols-1 gap-6">
         <OpsOpenAITokenStatsCard
           :platform-filter="platform"
           :group-id-filter="groupId"
@@ -96,11 +123,13 @@
       </div>
 
       <!-- Alert Events -->
-      <OpsAlertEventsCard v-if="opsEnabled && showAlertEvents && !(loading && !hasLoadedOnce)" />
+      <OpsAlertEventsCard
+        v-if="opsEnabled && showAlertEvents && !(loading && !hasLoadedOnce) && (isFullscreen || activeSection === 'records')"
+      />
 
       <!-- System Logs -->
       <OpsSystemLogTable
-        v-if="opsEnabled && !(loading && !hasLoadedOnce)"
+        v-if="opsEnabled && !(loading && !hasLoadedOnce) && (isFullscreen || activeSection === 'records')"
         :platform-filter="platform"
         :refresh-token="dashboardRefreshToken"
       />
@@ -182,6 +211,14 @@ const adminSettingsStore = useAdminSettingsStore()
 const { t } = useI18n()
 
 const opsEnabled = computed(() => adminSettingsStore.opsMonitoringEnabled)
+
+type DashboardSection = 'overview' | 'analysis' | 'records'
+const activeSection = ref<DashboardSection>('overview')
+const dashboardSections = computed<Array<{ value: DashboardSection; label: string }>>(() => [
+  { value: 'overview', label: t('admin.ops.sections.overview') },
+  { value: 'analysis', label: t('admin.ops.sections.analysis') },
+  { value: 'records', label: t('admin.ops.sections.records') }
+])
 
 type TimeRange = '5m' | '30m' | '1h' | '6h' | '24h' | 'custom'
 const allowedTimeRanges = new Set<TimeRange>(['5m', '30m', '1h', '6h', '24h', 'custom'])

@@ -59,4 +59,7 @@ func TestBuildAuthorizationURLForPlatform_OpenAI(t *testing.T) {
 	if got := q.Get("id_token_add_organizations"); got != "true" {
 		t.Fatalf("id_token_add_organizations mismatch: got=%q want=true", got)
 	}
+	if got := q.Get("prompt"); got != "login" {
+		t.Fatalf("prompt mismatch: got=%q want=login", got)
+	}
 }

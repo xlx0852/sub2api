@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -16,11 +17,88 @@ import (
 
 // NewOpenAIOAuthClient creates a new OpenAI OAuth client
 func NewOpenAIOAuthClient() service.OpenAIOAuthClient {
-	return &openaiOAuthService{tokenURL: openai.TokenURL}
+	return &openaiOAuthService{
+		tokenURL:               openai.TokenURL,
+		deviceUserCodeURL:      openai.DeviceUserCodeURL,
+		deviceAuthorizationURL: openai.DeviceAuthorizationURL,
+	}
 }
 
 type openaiOAuthService struct {
-	tokenURL string
+	tokenURL               string
+	deviceUserCodeURL      string
+	deviceAuthorizationURL string
+}
+
+func (s *openaiOAuthService) RequestDeviceCode(ctx context.Context, proxyURL, clientID string) (*openai.DeviceCodeResponse, error) {
+	client, err := createOpenAIReqClient(proxyURL)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
+	}
+	clientID = strings.TrimSpace(clientID)
+	if clientID == "" {
+		clientID = openai.ClientID
+	}
+	var result openai.DeviceCodeResponse
+	resp, err := client.R().
+		SetContext(ctx).
+		SetHeader("Accept", "application/json").
+		SetHeader("Content-Type", "application/json").
+		SetHeader("User-Agent", "codex-cli/0.91.0").
+		SetBody(map[string]string{"client_id": clientID}).
+		SetSuccessResult(&result).
+		Post(s.deviceUserCodeURL)
+	if err != nil {
+		if shouldReturnOpenAINoProxyHint(ctx, proxyURL, err) {
+			return nil, newOpenAINoProxyHintError(err)
+		}
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_REQUEST_FAILED", "request failed: %v", err)
+	}
+	if !resp.IsSuccessState() {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_REQUEST_FAILED", "device code request failed: status %d, body: %s", resp.StatusCode, resp.String())
+	}
+	if strings.TrimSpace(result.DeviceAuthID) == "" || (strings.TrimSpace(result.UserCode) == "" && strings.TrimSpace(result.UserCodeAlt) == "") {
+		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_INVALID_RESPONSE", "OpenAI returned an incomplete device code response")
+	}
+	return &result, nil
+}
+
+func (s *openaiOAuthService) PollDeviceAuthorization(ctx context.Context, deviceAuthID, userCode, proxyURL string) (*openai.DeviceAuthorizationResponse, error) {
+	client, err := createOpenAIReqClient(proxyURL)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
+	}
+	requestBody := map[string]string{
+		"device_auth_id": strings.TrimSpace(deviceAuthID),
+		"user_code":      strings.TrimSpace(userCode),
+	}
+	resp, err := client.R().
+		SetContext(ctx).
+		SetHeader("Accept", "application/json").
+		SetHeader("Content-Type", "application/json").
+		SetHeader("User-Agent", "codex-cli/0.91.0").
+		SetBody(requestBody).
+		Post(s.deviceAuthorizationURL)
+	if err != nil {
+		if shouldReturnOpenAINoProxyHint(ctx, proxyURL, err) {
+			return nil, newOpenAINoProxyHintError(err)
+		}
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_POLL_FAILED", "request failed: %v", err)
+	}
+	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusNotFound {
+		return &openai.DeviceAuthorizationResponse{Pending: true}, nil
+	}
+	if !resp.IsSuccessState() {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_POLL_FAILED", "device authorization polling failed: status %d, body: %s", resp.StatusCode, resp.String())
+	}
+	var result openai.DeviceAuthorizationResponse
+	if err := json.Unmarshal(resp.Bytes(), &result); err != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_INVALID_RESPONSE", "decode device authorization response: %v", err)
+	}
+	if strings.TrimSpace(result.AuthorizationCode) == "" || strings.TrimSpace(result.CodeVerifier) == "" || strings.TrimSpace(result.CodeChallenge) == "" {
+		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_INVALID_RESPONSE", "OpenAI returned an incomplete device authorization response")
+	}
+	return &result, nil
 }
 
 func (s *openaiOAuthService) ExchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string) (*openai.TokenResponse, error) {

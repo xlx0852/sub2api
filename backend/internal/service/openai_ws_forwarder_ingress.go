@@ -641,13 +641,17 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	}
 
 	agentTaskRecoveryTried := false
+	// 重试（retryIngressTurn）时下一次 acquire 强制拨新连接，
+	// 避免从池里再捞到同样僵死的连接。
+	forceNewConnOnRetry := false
 	var acquireTurnLease func(int, string, bool) (*openAIWSConnLease, error)
 	acquireTurnLease = func(turn int, preferred string, forcePreferredConn bool) (*openAIWSConnLease, error) {
 		req := cloneOpenAIWSAcquireRequest(baseAcquireReq)
 		req.PreferredConnID = strings.TrimSpace(preferred)
 		req.ForcePreferredConn = forcePreferredConn
 		// dedicated 模式下每次获取均新建连接，避免跨会话复用残留上下文。
-		req.ForceNewConn = dedicatedMode
+		req.ForceNewConn = dedicatedMode || forceNewConnOnRetry
+		forceNewConnOnRetry = false
 		acquireCtx, acquireCancel := context.WithTimeout(ctx, acquireTimeout)
 		lease, acquireErr := pool.Acquire(acquireCtx, req)
 		acquireCancel()
@@ -962,6 +966,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					)
 				}
 				imageCount := imageCounter.Count()
+				reused := lease.Reused()
+				connPickMs := int(lease.ConnPickDuration().Milliseconds())
+				queueWaitMs := int(lease.QueueWaitDuration().Milliseconds())
+				payloadBytesValue := int64(payloadBytes)
+				eventCountValue := eventCount
 				result := &OpenAIForwardResult{
 					RequestID:       responseID,
 					Usage:           usage,
@@ -974,6 +983,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					ResponseHeaders: lease.HandshakeHeaders(),
 					Duration:        time.Since(turnStart),
 					FirstTokenMs:    firstTokenMs,
+					WSPayloadBytes:  &payloadBytesValue,
+					WSEventCount:    &eventCountValue,
+					WSConnReused:    &reused,
+					WSConnPickMs:    &connPickMs,
+					WSQueueWaitMs:   &queueWaitMs,
 				}
 				if replayInput := replayCollector.Items(); len(replayInput) > 0 {
 					result.wsReplayInput = replayInput
@@ -1151,7 +1165,12 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		return true
 	}
 	retryIngressTurn := func(relayErr error, turn int, connID string) bool {
-		if !isOpenAIWSIngressTurnRetryable(relayErr) || turnRetry >= 1 {
+		if !isOpenAIWSIngressTurnRetryable(relayErr) || turnRetry >= 2 {
+			return false
+		}
+		// 客户端/上游请求级 ctx 已结束时，DeadlineExceeded 不可重试；
+		// 只有父 ctx 存活时的内部写/读超时（连接疑似僵死）才换连接重试。
+		if ctx.Err() != nil {
 			return false
 		}
 		if isStrictAffinityTurn(currentPayload) {
@@ -1173,6 +1192,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			truncateOpenAIWSLogValue(connID, openAIWSIDValueMaxLen),
 		)
 		resetSessionLease(true)
+		// 重试强制拨新连接，避免从池里再捞到同样僵死的连接。
+		forceNewConnOnRetry = true
 		skipBeforeTurn = true
 		return true
 	}

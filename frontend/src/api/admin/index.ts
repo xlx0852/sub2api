@@ -18,6 +18,7 @@ import usageAPI from './usage'
 import geminiAPI from './gemini'
 import antigravityAPI from './antigravity'
 import grokAPI from './grok'
+import kimiAPI from './kimi'
 import userAttributesAPI from './userAttributes'
 import opsAPI from './ops'
 import errorPassthroughAPI from './errorPassthrough'
@@ -33,6 +34,8 @@ import adminPaymentAPI from './payment'
 import affiliatesAPI from './affiliates'
 import riskControlAPI from './riskControl'
 import adminComplianceAPI from './compliance'
+import profitAPI from './profit'
+import deviceOAuthAPI from './deviceOAuth'
 
 /**
  * Unified admin API object for convenient access
@@ -53,6 +56,7 @@ export const adminAPI = {
   gemini: geminiAPI,
   antigravity: antigravityAPI,
   grok: grokAPI,
+  kimi: kimiAPI,
   userAttributes: userAttributesAPI,
   ops: opsAPI,
   errorPassthrough: errorPassthroughAPI,
@@ -67,7 +71,9 @@ export const adminAPI = {
   payment: adminPaymentAPI,
   affiliates: affiliatesAPI,
   riskControl: riskControlAPI,
-  compliance: adminComplianceAPI
+  compliance: adminComplianceAPI,
+  profit: profitAPI,
+  deviceOAuth: deviceOAuthAPI
 }
 
 export {
@@ -86,6 +92,7 @@ export {
   geminiAPI,
   antigravityAPI,
   grokAPI,
+  kimiAPI,
   userAttributesAPI,
   opsAPI,
   errorPassthroughAPI,
@@ -100,7 +107,9 @@ export {
   adminPaymentAPI,
   affiliatesAPI,
   riskControlAPI,
-  adminComplianceAPI
+  adminComplianceAPI,
+  profitAPI,
+  deviceOAuthAPI
 }
 
 export default adminAPI
@@ -111,3 +120,9 @@ export type { ErrorPassthroughRule, CreateRuleRequest, UpdateRuleRequest } from 
 export type { BackupAgentHealth, DataManagementConfig } from './dataManagement'
 export type { TLSFingerprintProfile, CreateProfileRequest, UpdateProfileRequest } from './tlsFingerprintProfile'
 export type { ContentModerationConfig, ContentModerationLog, ModerationMode } from './riskControl'
+export type {
+  DeviceAuthorization,
+  DeviceAuthorizationStatus,
+  DeviceCreateAccountRequest,
+  DeviceOAuthProvider
+} from './deviceOAuth'

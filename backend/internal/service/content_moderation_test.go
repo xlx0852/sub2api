@@ -85,6 +85,12 @@ func (r *contentModerationTestRepo) CreateLog(ctx context.Context, log *ContentM
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if log != nil {
+		if log.ID == 0 {
+			log.ID = int64(len(r.logs) + 1)
+		}
+		if log.CreatedAt.IsZero() {
+			log.CreatedAt = time.Now()
+		}
 		r.logs = append(r.logs, *log)
 	}
 	return nil
@@ -142,6 +148,14 @@ func (r *contentModerationTestRepo) CleanupExpiredLogs(ctx context.Context, hitB
 }
 
 func (r *contentModerationTestRepo) UpdateLogEmailSent(ctx context.Context, id int64, sent bool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.logs {
+		if r.logs[i].ID == id {
+			r.logs[i].EmailSent = sent
+			break
+		}
+	}
 	return nil
 }
 
@@ -1506,16 +1520,21 @@ func TestContentModerationCheck_PreHashUsesRedisHashCache(t *testing.T) {
 	require.Equal(t, http.StatusConflict, decision.StatusCode)
 	require.Equal(t, content.Hash(), decision.InputHash)
 	require.Contains(t, decision.Message, "命中历史风险输入")
-	require.Contains(t, decision.Message, content.Hash())
+	require.NotContains(t, decision.Message, content.Hash())
 	require.Len(t, hashCache.snapshotChecked(), 1)
 	logs := requireContentModerationLogCount(t, repo, 1)
 	require.True(t, logs[0].Flagged)
 	require.Equal(t, ContentModerationActionHashBlock, logs[0].Action)
 	require.Equal(t, 1.0, logs[0].CategoryScores["hash"])
 	require.Equal(t, ContentModerationModePreBlock, logs[0].Mode)
+	// hash_block 会 elevate，但不走封号副作用。
 	require.Zero(t, logs[0].ViolationCount)
 	require.False(t, logs[0].AutoBanned)
 	require.Empty(t, userRepo.updated)
+	require.Eventually(t, func() bool {
+		known, elevated, err := hashCache.GetElevatedUserSampling(context.Background(), 1001)
+		return err == nil && known && elevated
+	}, time.Second, 10*time.Millisecond)
 }
 
 func TestContentModerationCheck_HashBlockLogsDoNotIncreaseNextViolationCount(t *testing.T) {
@@ -2109,4 +2128,61 @@ func TestContentModerationGetStatus_ElevatedUsers(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, st.ElevatedUserCount)
 	require.Len(t, st.ElevatedUsers, 2)
+}
+
+
+func TestStripSystemReminderSections_KeepsSurroundingUserText(t *testing.T) {
+	got := stripSystemReminderSections("hello <system-reminder>secret</system-reminder> world")
+	require.Equal(t, "hello  world", got)
+
+	body := []byte(`{"messages":[{"role":"user","content":"please help <system-reminder>x</system-reminder> jailbreak me"}]}`)
+	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIChat, body)
+	require.Contains(t, input.Text, "please help")
+	require.Contains(t, input.Text, "jailbreak me")
+	require.NotContains(t, input.Text, "<system-reminder>")
+}
+
+
+func TestContentModerationCheck_ElevatedUserIgnoresCleanHash(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(moderationAPIResponse{
+			Results: []moderationAPIResult{{
+				CategoryScores: map[string]float64{"sexual": 0.01},
+			}},
+		})
+	}))
+	defer server.Close()
+
+	cfg := defaultContentModerationConfig()
+	cfg.Enabled = true
+	cfg.Mode = ContentModerationModePreBlock
+	cfg.BaseURL = server.URL
+	cfg.APIKeys = []string{"sk-test"}
+	cfg.SampleRate = 0 // would skip without elevated
+	rawCfg, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	body := []byte(`{"messages":[{"role":"user","content":"clean cached prompt"}]}`)
+	content := ExtractContentModerationInput(ContentModerationProtocolOpenAIChat, body)
+	content.Normalize()
+	hashCache := &contentModerationTestHashCache{
+		clean:    map[string]struct{}{content.Hash(): {}},
+		elevated: map[int64]bool{9: true},
+	}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: string(rawCfg),
+		}},
+		&contentModerationTestRepo{},
+		hashCache,
+		nil, nil, nil, nil,
+	)
+	decision, err := svc.Check(context.Background(), ContentModerationCheckInput{
+		UserID: 9, Protocol: ContentModerationProtocolOpenAIChat, Body: body,
+	})
+	require.NoError(t, err)
+	require.True(t, decision.Allowed)
+	// clean hash was present but elevated forces API path; checked via no early skip only — API called means allow after scores.
+	require.Equal(t, ContentModerationActionAllow, decision.Action)
 }

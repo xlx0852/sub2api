@@ -183,7 +183,8 @@ func TestRelay_BasicRelayAndUsage(t *testing.T) {
 	require.Equal(t, 7, result.Usage.InputTokens)
 	require.Equal(t, 3, result.Usage.OutputTokens)
 	require.Equal(t, 2, result.Usage.CacheReadInputTokens)
-	require.NotNil(t, result.FirstTokenMs)
+	// 仅 completed、无 delta 时不应伪造 firstTokenMs（否则会把总耗时误记为首字）。
+	require.Nil(t, result.FirstTokenMs)
 	require.Equal(t, int64(1), result.ClientToUpstreamFrames)
 	require.Equal(t, int64(1), result.UpstreamToClientFrames)
 	require.Equal(t, int64(0), result.DroppedDownstreamFrames)

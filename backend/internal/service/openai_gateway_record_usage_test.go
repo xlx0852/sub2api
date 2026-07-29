@@ -235,6 +235,7 @@ func newOpenAIRecordUsageServiceForTest(usageRepo UsageLogRepository, userRepo U
 		&DeferredService{},
 		nil,
 		nil,
+		nil, // kimiTokenProvider
 		nil,
 		nil,
 		nil,

@@ -25,6 +25,7 @@ const (
 	PlatformGemini      = "gemini"
 	PlatformAntigravity = "antigravity"
 	PlatformGrok        = "grok"
+	PlatformKimi        = "kimi"
 )
 
 // Account type constants
@@ -86,4 +87,12 @@ var DefaultBedrockModelMapping map[string]string
 func init() {
 	DefaultAntigravityModelMapping = modelcatalog.AntigravityDefaultMapping()
 	DefaultBedrockModelMapping = modelcatalog.BedrockDefaultMapping()
+}
+
+func CurrentDefaultAntigravityModelMapping() map[string]string {
+	return modelcatalog.AntigravityDefaultMapping()
+}
+
+func CurrentDefaultBedrockModelMapping() map[string]string {
+	return modelcatalog.BedrockDefaultMapping()
 }

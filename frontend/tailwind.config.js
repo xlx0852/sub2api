@@ -5,47 +5,47 @@ export default {
   theme: {
     extend: {
       colors: {
-        // 主色调 - Teal/Cyan 青色系
+        // 主色调 - 墨色灰阶。业务状态色仍保留，用于成功、警告和错误反馈。
         primary: {
-          50: '#f0fdfa',
-          100: '#ccfbf1',
-          200: '#99f6e4',
-          300: '#5eead4',
-          400: '#2dd4bf',
-          500: '#14b8a6',
-          600: '#0d9488',
-          700: '#0f766e',
-          800: '#115e59',
-          900: '#134e4a',
-          950: '#042f2e'
+          50: '#f7f7f5',
+          100: '#ebebe7',
+          200: '#d4d4ce',
+          300: '#b4b4ac',
+          400: '#8b8b82',
+          500: '#65655e',
+          600: '#484844',
+          700: '#343431',
+          800: '#242422',
+          900: '#181817',
+          950: '#0b0b0a'
         },
         // 辅助色 - 深蓝灰
         accent: {
-          50: '#f8fafc',
-          100: '#f1f5f9',
-          200: '#e2e8f0',
-          300: '#cbd5e1',
-          400: '#94a3b8',
-          500: '#64748b',
-          600: '#475569',
-          700: '#334155',
-          800: '#1e293b',
-          900: '#0f172a',
-          950: '#020617'
+          50: '#fafaf8',
+          100: '#f2f2ef',
+          200: '#e3e3de',
+          300: '#cdcdc6',
+          400: '#a8a8a0',
+          500: '#7b7b73',
+          600: '#5b5b55',
+          700: '#41413d',
+          800: '#292927',
+          900: '#171716',
+          950: '#090909'
         },
         // 深色模式背景
         dark: {
-          50: '#f8fafc',
-          100: '#f1f5f9',
-          200: '#e2e8f0',
-          300: '#cbd5e1',
-          400: '#94a3b8',
-          500: '#64748b',
-          600: '#475569',
-          700: '#334155',
-          800: '#1e293b',
-          900: '#0f172a',
-          950: '#020617'
+          50: '#f7f7f5',
+          100: '#e8e8e4',
+          200: '#d0d0ca',
+          300: '#abab9f',
+          400: '#85857c',
+          500: '#62625c',
+          600: '#484844',
+          700: '#30302e',
+          800: '#20201f',
+          900: '#141413',
+          950: '#090909'
         }
       },
       fontFamily: {
@@ -53,6 +53,9 @@ export default {
           'system-ui',
           '-apple-system',
           'BlinkMacSystemFont',
+          'Avenir Next',
+          'Noto Sans SC',
+          'Source Han Sans SC',
           'Segoe UI',
           'Roboto',
           'Helvetica Neue',
@@ -67,20 +70,20 @@ export default {
       boxShadow: {
         glass: 'none',
         'glass-sm': 'none',
-        glow: '0 0 20px rgba(20, 184, 166, 0.25)',
-        'glow-lg': '0 0 40px rgba(20, 184, 166, 0.35)',
+        glow: '0 10px 30px rgba(12, 12, 11, 0.10)',
+        'glow-lg': '0 16px 48px rgba(12, 12, 11, 0.14)',
         card: 'none',
         'card-hover': 'none',
         'inner-glow': 'inset 0 1px 0 rgba(255, 255, 255, 0.1)'
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'gradient-primary': 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
-        'gradient-dark': 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+        'gradient-primary': 'linear-gradient(135deg, #343431 0%, #0b0b0a 100%)',
+        'gradient-dark': 'linear-gradient(135deg, #242422 0%, #090909 100%)',
         'gradient-glass':
           'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
         'mesh-gradient':
-          'radial-gradient(at 40% 20%, rgba(20, 184, 166, 0.12) 0px, transparent 50%), radial-gradient(at 80% 0%, rgba(6, 182, 212, 0.08) 0px, transparent 50%), radial-gradient(at 0% 50%, rgba(20, 184, 166, 0.08) 0px, transparent 50%)'
+          'radial-gradient(at 18% 8%, rgba(28, 28, 26, 0.045) 0px, transparent 32%), radial-gradient(at 88% 90%, rgba(28, 28, 26, 0.035) 0px, transparent 30%)'
       },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-out',
@@ -118,8 +121,8 @@ export default {
           '100%': { backgroundPosition: '200% 0' }
         },
         glow: {
-          '0%': { boxShadow: '0 0 20px rgba(20, 184, 166, 0.25)' },
-          '100%': { boxShadow: '0 0 30px rgba(20, 184, 166, 0.4)' }
+          '0%': { boxShadow: '0 8px 24px rgba(12, 12, 11, 0.08)' },
+          '100%': { boxShadow: '0 12px 34px rgba(12, 12, 11, 0.14)' }
         }
       },
       backdropBlur: {
