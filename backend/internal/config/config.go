@@ -80,6 +80,7 @@ type Config struct {
 	Default                 DefaultConfig                 `mapstructure:"default"`
 	RateLimit               RateLimitConfig               `mapstructure:"rate_limit"`
 	Pricing                 PricingConfig                 `mapstructure:"pricing"`
+	ModelCatalog            ModelCatalogConfig            `mapstructure:"model_catalog"`
 	Gateway                 GatewayConfig                 `mapstructure:"gateway"`
 	APIKeyAuth              APIKeyAuthCacheConfig         `mapstructure:"api_key_auth_cache"`
 	SubscriptionCache       SubscriptionCacheConfig       `mapstructure:"subscription_cache"`
@@ -596,6 +597,19 @@ type PricingConfig struct {
 	UpdateIntervalHours int `mapstructure:"update_interval_hours"`
 	// 哈希校验间隔（分钟）
 	HashCheckIntervalMinutes int `mapstructure:"hash_check_interval_minutes"`
+}
+
+// ModelCatalogConfig controls the optional remote first-party model catalog.
+type ModelCatalogConfig struct {
+	RemoteEnabled            bool   `mapstructure:"remote_enabled"`
+	RemoteURL                string `mapstructure:"remote_url"`
+	HashURL                  string `mapstructure:"hash_url"`
+	DataDir                  string `mapstructure:"data_dir"`
+	FallbackFile             string `mapstructure:"fallback_file"`
+	UpdateIntervalHours      int    `mapstructure:"update_interval_hours"`
+	HashCheckIntervalMinutes int    `mapstructure:"hash_check_interval_minutes"`
+	RequestTimeoutSeconds    int    `mapstructure:"request_timeout_seconds"`
+	MaxBodyBytes             int64  `mapstructure:"max_body_bytes"`
 }
 
 type ServerConfig struct {
@@ -1932,6 +1946,17 @@ func setDefaults() {
 	viper.SetDefault("pricing.fallback_file", "./resources/model-pricing/model_prices_and_context_window.json")
 	viper.SetDefault("pricing.update_interval_hours", 24)
 	viper.SetDefault("pricing.hash_check_interval_minutes", 10)
+
+	// First-party model catalog. Startup never depends on this remote source.
+	viper.SetDefault("model_catalog.remote_enabled", true)
+	viper.SetDefault("model_catalog.remote_url", "https://raw.githubusercontent.com/xlx0852/model-catalog/main/catalog.json")
+	viper.SetDefault("model_catalog.hash_url", "https://raw.githubusercontent.com/xlx0852/model-catalog/main/catalog.sha256")
+	viper.SetDefault("model_catalog.data_dir", "./data/model-catalog")
+	viper.SetDefault("model_catalog.fallback_file", "./resources/model-catalog/catalog.json")
+	viper.SetDefault("model_catalog.update_interval_hours", 3)
+	viper.SetDefault("model_catalog.hash_check_interval_minutes", 10)
+	viper.SetDefault("model_catalog.request_timeout_seconds", 30)
+	viper.SetDefault("model_catalog.max_body_bytes", int64(8<<20))
 
 	// Timezone (default to Asia/Shanghai for Chinese users)
 	viper.SetDefault("timezone", "Asia/Shanghai")

@@ -2,8 +2,11 @@
   <aside
     class="sidebar"
     :class="[
-      sidebarCollapsed ? 'w-[72px]' : 'w-64',
-      { '-translate-x-full lg:translate-x-0': !mobileOpen }
+      sidebarCollapsed ? 'w-[72px]' : 'w-[200px]',
+      {
+        'sidebar-expanded': !sidebarCollapsed,
+        '-translate-x-full lg:translate-x-0': !mobileOpen
+      }
     ]"
   >
     <!-- Logo/Brand -->
@@ -11,20 +14,20 @@
       <!-- Custom Logo or Default Logo -->
       <router-link
         :to="homePath"
-        class="sidebar-logo flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-transparent shadow-none transition-opacity hover:opacity-80"
+        class="sidebar-logo flex h-11 w-11 items-center justify-center overflow-hidden rounded-lg border border-black/10 bg-white p-1 shadow-sm transition-colors hover:border-black/25 dark:border-white/15 dark:bg-white dark:hover:border-white/30"
         @click="handleMenuItemClick(homePath)"
       >
         <img
           v-if="settingsLoaded"
           :src="siteLogo || '/logo.png'"
           alt="Logo"
-          class="h-full w-full object-contain [filter:none] [box-shadow:none]"
+          class="brand-logo-monochrome h-full w-full object-contain [box-shadow:none]"
         />
       </router-link>
       <div class="sidebar-brand" :class="{ 'sidebar-brand-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
         <router-link
           :to="homePath"
-          class="sidebar-brand-title text-lg font-bold text-gray-900 transition-colors hover:text-primary-600 dark:text-white dark:hover:text-primary-400"
+          class="sidebar-brand-title text-base font-semibold leading-none text-gray-950 transition-colors hover:text-gray-600 dark:text-white dark:hover:text-gray-300"
           @click="handleMenuItemClick(homePath)"
         >
           {{ siteName }}
@@ -666,6 +669,21 @@ const PriceTagIcon = {
     )
 }
 
+const ProfitIcon = {
+  render: () =>
+    h(
+      'svg',
+      { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', 'stroke-width': '1.5' },
+      [
+        h('path', {
+          'stroke-linecap': 'round',
+          'stroke-linejoin': 'round',
+          d: 'M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+        })
+      ]
+    )
+}
+
 const ChevronDownIcon = {
   render: () =>
     h(
@@ -773,6 +791,7 @@ const adminNavItems = computed((): NavItem[] => {
     },
     { path: '/admin/subscriptions', label: t('nav.subscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },
     { path: '/admin/accounts', label: t('nav.accounts'), icon: GlobeIcon },
+    { path: '/admin/profit', label: t('nav.profit'), icon: ProfitIcon, hideInSimpleMode: true },
     { path: '/admin/announcements', label: t('nav.announcements'), icon: BellIcon },
     { path: '/admin/proxies', label: t('nav.proxies'), icon: ServerIcon },
     { path: '/admin/risk-control', label: t('nav.riskControl'), icon: ShieldIcon, hideInSimpleMode: true, featureFlag: flagRiskControl },
@@ -949,9 +968,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .sidebar-logo {
-  flex: 0 0 2.25rem;
-  min-width: 2.25rem;
-  box-shadow: none !important;
+  flex: 0 0 2.75rem;
+  min-width: 2.75rem;
   filter: none !important;
 }
 
@@ -964,8 +982,8 @@ onBeforeUnmount(() => {
 
 .sidebar-header-collapsed {
   gap: 0;
-  padding-left: 1.125rem;
-  padding-right: 1.125rem;
+  padding-left: 0.875rem;
+  padding-right: 0.875rem;
 }
 
 .sidebar-brand {

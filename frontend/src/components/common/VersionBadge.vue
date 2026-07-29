@@ -4,13 +4,14 @@
       <button
         ref="triggerRef"
         @click="toggleDropdown"
-        class="flex items-center gap-1.5 rounded-lg bg-gray-100 px-2 py-1 text-xs text-gray-600 transition-colors hover:bg-gray-200 dark:bg-dark-800 dark:text-dark-400 dark:hover:bg-dark-700"
+        class="group mt-1 inline-flex h-4 items-center gap-1.5 text-[10px] font-medium text-gray-500 transition-colors hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
         :title="buttonTitle"
       >
-        <span v-if="currentVersion" class="font-medium">v{{ currentVersion }}</span>
+        <span class="h-1 w-1 shrink-0 rounded-full bg-gray-400 transition-colors group-hover:bg-gray-900 dark:bg-gray-500 dark:group-hover:bg-white"></span>
+        <span v-if="currentVersion" class="font-mono tabular-nums">v{{ currentVersion }}</span>
         <span
           v-else
-          class="h-3 w-12 animate-pulse rounded bg-gray-200 font-medium dark:bg-dark-600"
+          class="h-2.5 w-10 animate-pulse rounded bg-gray-200 dark:bg-dark-600"
         ></span>
       </button>
 
@@ -35,6 +36,25 @@
               <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
                 {{ t('version.currentVersion') }}
               </p>
+            </div>
+
+            <div v-if="catalogStatus" class="rounded-lg bg-gray-50 p-3 text-xs dark:bg-dark-700/60">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-gray-500 dark:text-dark-400">Model catalog</span>
+                <span class="font-mono text-gray-800 dark:text-dark-200">
+                  v{{ catalogStatus.version }} · {{ catalogStatus.source }}
+                </span>
+              </div>
+              <p v-if="catalogStatus.last_error" class="mt-2 break-words text-red-500">
+                {{ catalogStatus.last_error }}
+              </p>
+              <button
+                class="mt-2 w-full rounded-md border border-gray-200 px-2 py-1.5 font-medium text-gray-700 hover:bg-white disabled:opacity-50 dark:border-dark-600 dark:text-dark-200 dark:hover:bg-dark-700"
+                :disabled="catalogRefreshing || !catalogStatus.remote_enabled"
+                @click="handleCatalogRefresh"
+              >
+                {{ catalogRefreshing ? 'Refreshing…' : 'Refresh model catalog' }}
+              </button>
             </div>
 
             <button
@@ -86,7 +106,12 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores'
-import { restartService } from '@/api/admin/system'
+import {
+  getModelCatalogStatus,
+  refreshModelCatalog,
+  restartService,
+  type ModelCatalogStatus,
+} from '@/api/admin/system'
 import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()
@@ -110,11 +135,32 @@ const dropdownRef = ref<HTMLElement | null>(null)
 const triggerRef = ref<HTMLElement | null>(null)
 
 const restarting = ref(false)
+const catalogRefreshing = ref(false)
+const catalogStatus = ref<ModelCatalogStatus | null>(null)
 const restartCountdown = ref(0)
 
 function toggleDropdown() {
   if (!isAdmin.value) return
   dropdownOpen.value = !dropdownOpen.value
+	if (dropdownOpen.value && !catalogStatus.value) void loadCatalogStatus()
+}
+
+async function loadCatalogStatus() {
+  try {
+    catalogStatus.value = await getModelCatalogStatus()
+  } catch {
+    // Version controls remain usable if catalog status is unavailable.
+  }
+}
+
+async function handleCatalogRefresh() {
+  if (catalogRefreshing.value) return
+  catalogRefreshing.value = true
+  try {
+    catalogStatus.value = await refreshModelCatalog()
+  } finally {
+    catalogRefreshing.value = false
+  }
 }
 
 function closeDropdown() {

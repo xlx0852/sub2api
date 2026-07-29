@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/Wei-Shaw/sub2api/ent/account"
+	"github.com/Wei-Shaw/sub2api/ent/accountcostconfig"
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
@@ -65,6 +66,7 @@ const (
 	// Node types.
 	TypeAPIKey                        = "APIKey"
 	TypeAccount                       = "Account"
+	TypeAccountCostConfig             = "AccountCostConfig"
 	TypeAccountGroup                  = "AccountGroup"
 	TypeAnnouncement                  = "Announcement"
 	TypeAnnouncementRead              = "AnnouncementRead"
@@ -5081,6 +5083,941 @@ func (m *AccountMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown Account edge %s", name)
+}
+
+// AccountCostConfigMutation represents an operation that mutates the AccountCostConfig nodes in the graph.
+type AccountCostConfigMutation struct {
+	config
+	op                         Op
+	typ                        string
+	id                         *int64
+	created_at                 *time.Time
+	updated_at                 *time.Time
+	account_id                 *int64
+	addaccount_id              *int64
+	cost_type                  *string
+	period_fee                 *float64
+	addperiod_fee              *float64
+	period_days                *int
+	addperiod_days             *int
+	currency                   *string
+	window_baseline_revenue    *float64
+	addwindow_baseline_revenue *float64
+	notes                      *string
+	clearedFields              map[string]struct{}
+	done                       bool
+	oldValue                   func(context.Context) (*AccountCostConfig, error)
+	predicates                 []predicate.AccountCostConfig
+}
+
+var _ ent.Mutation = (*AccountCostConfigMutation)(nil)
+
+// accountcostconfigOption allows management of the mutation configuration using functional options.
+type accountcostconfigOption func(*AccountCostConfigMutation)
+
+// newAccountCostConfigMutation creates new mutation for the AccountCostConfig entity.
+func newAccountCostConfigMutation(c config, op Op, opts ...accountcostconfigOption) *AccountCostConfigMutation {
+	m := &AccountCostConfigMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeAccountCostConfig,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withAccountCostConfigID sets the ID field of the mutation.
+func withAccountCostConfigID(id int64) accountcostconfigOption {
+	return func(m *AccountCostConfigMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *AccountCostConfig
+		)
+		m.oldValue = func(ctx context.Context) (*AccountCostConfig, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().AccountCostConfig.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withAccountCostConfig sets the old AccountCostConfig of the mutation.
+func withAccountCostConfig(node *AccountCostConfig) accountcostconfigOption {
+	return func(m *AccountCostConfigMutation) {
+		m.oldValue = func(context.Context) (*AccountCostConfig, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m AccountCostConfigMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m AccountCostConfigMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *AccountCostConfigMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *AccountCostConfigMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().AccountCostConfig.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *AccountCostConfigMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *AccountCostConfigMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the AccountCostConfig entity.
+// If the AccountCostConfig object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountCostConfigMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *AccountCostConfigMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *AccountCostConfigMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *AccountCostConfigMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the AccountCostConfig entity.
+// If the AccountCostConfig object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountCostConfigMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *AccountCostConfigMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetAccountID sets the "account_id" field.
+func (m *AccountCostConfigMutation) SetAccountID(i int64) {
+	m.account_id = &i
+	m.addaccount_id = nil
+}
+
+// AccountID returns the value of the "account_id" field in the mutation.
+func (m *AccountCostConfigMutation) AccountID() (r int64, exists bool) {
+	v := m.account_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountID returns the old "account_id" field's value of the AccountCostConfig entity.
+// If the AccountCostConfig object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountCostConfigMutation) OldAccountID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountID: %w", err)
+	}
+	return oldValue.AccountID, nil
+}
+
+// AddAccountID adds i to the "account_id" field.
+func (m *AccountCostConfigMutation) AddAccountID(i int64) {
+	if m.addaccount_id != nil {
+		*m.addaccount_id += i
+	} else {
+		m.addaccount_id = &i
+	}
+}
+
+// AddedAccountID returns the value that was added to the "account_id" field in this mutation.
+func (m *AccountCostConfigMutation) AddedAccountID() (r int64, exists bool) {
+	v := m.addaccount_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAccountID resets all changes to the "account_id" field.
+func (m *AccountCostConfigMutation) ResetAccountID() {
+	m.account_id = nil
+	m.addaccount_id = nil
+}
+
+// SetCostType sets the "cost_type" field.
+func (m *AccountCostConfigMutation) SetCostType(s string) {
+	m.cost_type = &s
+}
+
+// CostType returns the value of the "cost_type" field in the mutation.
+func (m *AccountCostConfigMutation) CostType() (r string, exists bool) {
+	v := m.cost_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCostType returns the old "cost_type" field's value of the AccountCostConfig entity.
+// If the AccountCostConfig object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountCostConfigMutation) OldCostType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCostType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCostType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCostType: %w", err)
+	}
+	return oldValue.CostType, nil
+}
+
+// ResetCostType resets all changes to the "cost_type" field.
+func (m *AccountCostConfigMutation) ResetCostType() {
+	m.cost_type = nil
+}
+
+// SetPeriodFee sets the "period_fee" field.
+func (m *AccountCostConfigMutation) SetPeriodFee(f float64) {
+	m.period_fee = &f
+	m.addperiod_fee = nil
+}
+
+// PeriodFee returns the value of the "period_fee" field in the mutation.
+func (m *AccountCostConfigMutation) PeriodFee() (r float64, exists bool) {
+	v := m.period_fee
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPeriodFee returns the old "period_fee" field's value of the AccountCostConfig entity.
+// If the AccountCostConfig object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountCostConfigMutation) OldPeriodFee(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPeriodFee is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPeriodFee requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPeriodFee: %w", err)
+	}
+	return oldValue.PeriodFee, nil
+}
+
+// AddPeriodFee adds f to the "period_fee" field.
+func (m *AccountCostConfigMutation) AddPeriodFee(f float64) {
+	if m.addperiod_fee != nil {
+		*m.addperiod_fee += f
+	} else {
+		m.addperiod_fee = &f
+	}
+}
+
+// AddedPeriodFee returns the value that was added to the "period_fee" field in this mutation.
+func (m *AccountCostConfigMutation) AddedPeriodFee() (r float64, exists bool) {
+	v := m.addperiod_fee
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPeriodFee resets all changes to the "period_fee" field.
+func (m *AccountCostConfigMutation) ResetPeriodFee() {
+	m.period_fee = nil
+	m.addperiod_fee = nil
+}
+
+// SetPeriodDays sets the "period_days" field.
+func (m *AccountCostConfigMutation) SetPeriodDays(i int) {
+	m.period_days = &i
+	m.addperiod_days = nil
+}
+
+// PeriodDays returns the value of the "period_days" field in the mutation.
+func (m *AccountCostConfigMutation) PeriodDays() (r int, exists bool) {
+	v := m.period_days
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPeriodDays returns the old "period_days" field's value of the AccountCostConfig entity.
+// If the AccountCostConfig object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountCostConfigMutation) OldPeriodDays(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPeriodDays is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPeriodDays requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPeriodDays: %w", err)
+	}
+	return oldValue.PeriodDays, nil
+}
+
+// AddPeriodDays adds i to the "period_days" field.
+func (m *AccountCostConfigMutation) AddPeriodDays(i int) {
+	if m.addperiod_days != nil {
+		*m.addperiod_days += i
+	} else {
+		m.addperiod_days = &i
+	}
+}
+
+// AddedPeriodDays returns the value that was added to the "period_days" field in this mutation.
+func (m *AccountCostConfigMutation) AddedPeriodDays() (r int, exists bool) {
+	v := m.addperiod_days
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPeriodDays resets all changes to the "period_days" field.
+func (m *AccountCostConfigMutation) ResetPeriodDays() {
+	m.period_days = nil
+	m.addperiod_days = nil
+}
+
+// SetCurrency sets the "currency" field.
+func (m *AccountCostConfigMutation) SetCurrency(s string) {
+	m.currency = &s
+}
+
+// Currency returns the value of the "currency" field in the mutation.
+func (m *AccountCostConfigMutation) Currency() (r string, exists bool) {
+	v := m.currency
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCurrency returns the old "currency" field's value of the AccountCostConfig entity.
+// If the AccountCostConfig object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountCostConfigMutation) OldCurrency(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCurrency is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCurrency requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCurrency: %w", err)
+	}
+	return oldValue.Currency, nil
+}
+
+// ResetCurrency resets all changes to the "currency" field.
+func (m *AccountCostConfigMutation) ResetCurrency() {
+	m.currency = nil
+}
+
+// SetWindowBaselineRevenue sets the "window_baseline_revenue" field.
+func (m *AccountCostConfigMutation) SetWindowBaselineRevenue(f float64) {
+	m.window_baseline_revenue = &f
+	m.addwindow_baseline_revenue = nil
+}
+
+// WindowBaselineRevenue returns the value of the "window_baseline_revenue" field in the mutation.
+func (m *AccountCostConfigMutation) WindowBaselineRevenue() (r float64, exists bool) {
+	v := m.window_baseline_revenue
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWindowBaselineRevenue returns the old "window_baseline_revenue" field's value of the AccountCostConfig entity.
+// If the AccountCostConfig object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountCostConfigMutation) OldWindowBaselineRevenue(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWindowBaselineRevenue is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWindowBaselineRevenue requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWindowBaselineRevenue: %w", err)
+	}
+	return oldValue.WindowBaselineRevenue, nil
+}
+
+// AddWindowBaselineRevenue adds f to the "window_baseline_revenue" field.
+func (m *AccountCostConfigMutation) AddWindowBaselineRevenue(f float64) {
+	if m.addwindow_baseline_revenue != nil {
+		*m.addwindow_baseline_revenue += f
+	} else {
+		m.addwindow_baseline_revenue = &f
+	}
+}
+
+// AddedWindowBaselineRevenue returns the value that was added to the "window_baseline_revenue" field in this mutation.
+func (m *AccountCostConfigMutation) AddedWindowBaselineRevenue() (r float64, exists bool) {
+	v := m.addwindow_baseline_revenue
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearWindowBaselineRevenue clears the value of the "window_baseline_revenue" field.
+func (m *AccountCostConfigMutation) ClearWindowBaselineRevenue() {
+	m.window_baseline_revenue = nil
+	m.addwindow_baseline_revenue = nil
+	m.clearedFields[accountcostconfig.FieldWindowBaselineRevenue] = struct{}{}
+}
+
+// WindowBaselineRevenueCleared returns if the "window_baseline_revenue" field was cleared in this mutation.
+func (m *AccountCostConfigMutation) WindowBaselineRevenueCleared() bool {
+	_, ok := m.clearedFields[accountcostconfig.FieldWindowBaselineRevenue]
+	return ok
+}
+
+// ResetWindowBaselineRevenue resets all changes to the "window_baseline_revenue" field.
+func (m *AccountCostConfigMutation) ResetWindowBaselineRevenue() {
+	m.window_baseline_revenue = nil
+	m.addwindow_baseline_revenue = nil
+	delete(m.clearedFields, accountcostconfig.FieldWindowBaselineRevenue)
+}
+
+// SetNotes sets the "notes" field.
+func (m *AccountCostConfigMutation) SetNotes(s string) {
+	m.notes = &s
+}
+
+// Notes returns the value of the "notes" field in the mutation.
+func (m *AccountCostConfigMutation) Notes() (r string, exists bool) {
+	v := m.notes
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNotes returns the old "notes" field's value of the AccountCostConfig entity.
+// If the AccountCostConfig object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountCostConfigMutation) OldNotes(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNotes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNotes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNotes: %w", err)
+	}
+	return oldValue.Notes, nil
+}
+
+// ClearNotes clears the value of the "notes" field.
+func (m *AccountCostConfigMutation) ClearNotes() {
+	m.notes = nil
+	m.clearedFields[accountcostconfig.FieldNotes] = struct{}{}
+}
+
+// NotesCleared returns if the "notes" field was cleared in this mutation.
+func (m *AccountCostConfigMutation) NotesCleared() bool {
+	_, ok := m.clearedFields[accountcostconfig.FieldNotes]
+	return ok
+}
+
+// ResetNotes resets all changes to the "notes" field.
+func (m *AccountCostConfigMutation) ResetNotes() {
+	m.notes = nil
+	delete(m.clearedFields, accountcostconfig.FieldNotes)
+}
+
+// Where appends a list predicates to the AccountCostConfigMutation builder.
+func (m *AccountCostConfigMutation) Where(ps ...predicate.AccountCostConfig) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the AccountCostConfigMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *AccountCostConfigMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.AccountCostConfig, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *AccountCostConfigMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *AccountCostConfigMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (AccountCostConfig).
+func (m *AccountCostConfigMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *AccountCostConfigMutation) Fields() []string {
+	fields := make([]string, 0, 9)
+	if m.created_at != nil {
+		fields = append(fields, accountcostconfig.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, accountcostconfig.FieldUpdatedAt)
+	}
+	if m.account_id != nil {
+		fields = append(fields, accountcostconfig.FieldAccountID)
+	}
+	if m.cost_type != nil {
+		fields = append(fields, accountcostconfig.FieldCostType)
+	}
+	if m.period_fee != nil {
+		fields = append(fields, accountcostconfig.FieldPeriodFee)
+	}
+	if m.period_days != nil {
+		fields = append(fields, accountcostconfig.FieldPeriodDays)
+	}
+	if m.currency != nil {
+		fields = append(fields, accountcostconfig.FieldCurrency)
+	}
+	if m.window_baseline_revenue != nil {
+		fields = append(fields, accountcostconfig.FieldWindowBaselineRevenue)
+	}
+	if m.notes != nil {
+		fields = append(fields, accountcostconfig.FieldNotes)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *AccountCostConfigMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case accountcostconfig.FieldCreatedAt:
+		return m.CreatedAt()
+	case accountcostconfig.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case accountcostconfig.FieldAccountID:
+		return m.AccountID()
+	case accountcostconfig.FieldCostType:
+		return m.CostType()
+	case accountcostconfig.FieldPeriodFee:
+		return m.PeriodFee()
+	case accountcostconfig.FieldPeriodDays:
+		return m.PeriodDays()
+	case accountcostconfig.FieldCurrency:
+		return m.Currency()
+	case accountcostconfig.FieldWindowBaselineRevenue:
+		return m.WindowBaselineRevenue()
+	case accountcostconfig.FieldNotes:
+		return m.Notes()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *AccountCostConfigMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case accountcostconfig.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case accountcostconfig.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case accountcostconfig.FieldAccountID:
+		return m.OldAccountID(ctx)
+	case accountcostconfig.FieldCostType:
+		return m.OldCostType(ctx)
+	case accountcostconfig.FieldPeriodFee:
+		return m.OldPeriodFee(ctx)
+	case accountcostconfig.FieldPeriodDays:
+		return m.OldPeriodDays(ctx)
+	case accountcostconfig.FieldCurrency:
+		return m.OldCurrency(ctx)
+	case accountcostconfig.FieldWindowBaselineRevenue:
+		return m.OldWindowBaselineRevenue(ctx)
+	case accountcostconfig.FieldNotes:
+		return m.OldNotes(ctx)
+	}
+	return nil, fmt.Errorf("unknown AccountCostConfig field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *AccountCostConfigMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case accountcostconfig.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case accountcostconfig.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case accountcostconfig.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountID(v)
+		return nil
+	case accountcostconfig.FieldCostType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCostType(v)
+		return nil
+	case accountcostconfig.FieldPeriodFee:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPeriodFee(v)
+		return nil
+	case accountcostconfig.FieldPeriodDays:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPeriodDays(v)
+		return nil
+	case accountcostconfig.FieldCurrency:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCurrency(v)
+		return nil
+	case accountcostconfig.FieldWindowBaselineRevenue:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWindowBaselineRevenue(v)
+		return nil
+	case accountcostconfig.FieldNotes:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNotes(v)
+		return nil
+	}
+	return fmt.Errorf("unknown AccountCostConfig field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *AccountCostConfigMutation) AddedFields() []string {
+	var fields []string
+	if m.addaccount_id != nil {
+		fields = append(fields, accountcostconfig.FieldAccountID)
+	}
+	if m.addperiod_fee != nil {
+		fields = append(fields, accountcostconfig.FieldPeriodFee)
+	}
+	if m.addperiod_days != nil {
+		fields = append(fields, accountcostconfig.FieldPeriodDays)
+	}
+	if m.addwindow_baseline_revenue != nil {
+		fields = append(fields, accountcostconfig.FieldWindowBaselineRevenue)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *AccountCostConfigMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case accountcostconfig.FieldAccountID:
+		return m.AddedAccountID()
+	case accountcostconfig.FieldPeriodFee:
+		return m.AddedPeriodFee()
+	case accountcostconfig.FieldPeriodDays:
+		return m.AddedPeriodDays()
+	case accountcostconfig.FieldWindowBaselineRevenue:
+		return m.AddedWindowBaselineRevenue()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *AccountCostConfigMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case accountcostconfig.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAccountID(v)
+		return nil
+	case accountcostconfig.FieldPeriodFee:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPeriodFee(v)
+		return nil
+	case accountcostconfig.FieldPeriodDays:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPeriodDays(v)
+		return nil
+	case accountcostconfig.FieldWindowBaselineRevenue:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWindowBaselineRevenue(v)
+		return nil
+	}
+	return fmt.Errorf("unknown AccountCostConfig numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *AccountCostConfigMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(accountcostconfig.FieldWindowBaselineRevenue) {
+		fields = append(fields, accountcostconfig.FieldWindowBaselineRevenue)
+	}
+	if m.FieldCleared(accountcostconfig.FieldNotes) {
+		fields = append(fields, accountcostconfig.FieldNotes)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *AccountCostConfigMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *AccountCostConfigMutation) ClearField(name string) error {
+	switch name {
+	case accountcostconfig.FieldWindowBaselineRevenue:
+		m.ClearWindowBaselineRevenue()
+		return nil
+	case accountcostconfig.FieldNotes:
+		m.ClearNotes()
+		return nil
+	}
+	return fmt.Errorf("unknown AccountCostConfig nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *AccountCostConfigMutation) ResetField(name string) error {
+	switch name {
+	case accountcostconfig.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case accountcostconfig.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case accountcostconfig.FieldAccountID:
+		m.ResetAccountID()
+		return nil
+	case accountcostconfig.FieldCostType:
+		m.ResetCostType()
+		return nil
+	case accountcostconfig.FieldPeriodFee:
+		m.ResetPeriodFee()
+		return nil
+	case accountcostconfig.FieldPeriodDays:
+		m.ResetPeriodDays()
+		return nil
+	case accountcostconfig.FieldCurrency:
+		m.ResetCurrency()
+		return nil
+	case accountcostconfig.FieldWindowBaselineRevenue:
+		m.ResetWindowBaselineRevenue()
+		return nil
+	case accountcostconfig.FieldNotes:
+		m.ResetNotes()
+		return nil
+	}
+	return fmt.Errorf("unknown AccountCostConfig field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *AccountCostConfigMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *AccountCostConfigMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *AccountCostConfigMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *AccountCostConfigMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *AccountCostConfigMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *AccountCostConfigMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *AccountCostConfigMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown AccountCostConfig unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *AccountCostConfigMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown AccountCostConfig edge %s", name)
 }
 
 // AccountGroupMutation represents an operation that mutates the AccountGroup nodes in the graph.

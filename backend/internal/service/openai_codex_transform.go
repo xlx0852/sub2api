@@ -1043,10 +1043,30 @@ func normalizeOpenAIResponsesImageOnlyModel(reqBody map[string]any) bool {
 }
 
 func normalizeOpenAIModelForUpstream(account *Account, model string) string {
+	if account != nil && account.Platform == PlatformKimi {
+		return normalizeKimiUpstreamModel(model)
+	}
 	if account == nil || account.Type == AccountTypeOAuth {
 		return normalizeCodexModel(model)
 	}
 	return strings.TrimSpace(model)
+}
+
+func normalizeKimiUpstreamModel(model string) string {
+	model = strings.TrimSpace(model)
+	suffix := ""
+	if open := strings.LastIndex(model, "("); open > 0 && strings.HasSuffix(model, ")") {
+		suffix = model[open:]
+		model = model[:open]
+	}
+	if strings.HasSuffix(strings.ToLower(model), "[1m]") {
+		model = model[:len(model)-4]
+	}
+	model = strings.TrimSpace(model)
+	if strings.HasPrefix(strings.ToLower(model), "kimi-") {
+		model = model[len("kimi-"):]
+	}
+	return strings.ToLower(strings.TrimSpace(model)) + suffix
 }
 
 func SupportsVerbosity(model string) bool {

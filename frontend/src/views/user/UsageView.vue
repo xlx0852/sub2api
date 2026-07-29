@@ -619,7 +619,16 @@ const escapeCSVValue = (value: unknown): string => {
   return str
 }
 
+const formatCsvOutputRate = (log: UsageLog): string => {
+  if (log.duration_ms == null || log.duration_ms <= 0 || log.output_tokens == null || log.output_tokens <= 0) {
+    return ''
+  }
+  const rate = (log.output_tokens * 1000) / log.duration_ms
+  return rate >= 100 ? String(Math.round(rate)) : rate.toFixed(1)
+}
+
 const exportToCSV = async () => {
+
   if (pagination.total === 0) {
     appStore.showWarning(t('usage.noDataToExport'))
     return
@@ -656,6 +665,7 @@ const exportToCSV = async () => {
       'Original Cost',
       'First Token (ms)',
       'Duration (ms)',
+      'Output Rate (tok/s)',
     ]
     const rows = allLogs.map((log) => [
       log.created_at,
@@ -675,6 +685,7 @@ const exportToCSV = async () => {
       log.total_cost.toFixed(8),
       log.first_token_ms ?? '',
       log.duration_ms ?? '',
+      formatCsvOutputRate(log),
     ].map(escapeCSVValue))
     const csvContent = [
       headers.map(escapeCSVValue).join(','),
@@ -712,6 +723,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
   { key: 'cost', label: t('usage.cost'), sortable: false },
   { key: 'latency', label: t('usage.latency'), sortable: false },
+  { key: 'output_rate', label: t('usage.outputRate'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },
 ])

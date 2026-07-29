@@ -83,6 +83,12 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 		}
 		return nil, err
 	}
+	if account.Platform == PlatformKimi {
+		chatBody, err = normalizeKimiToolMessageLinks(chatBody)
+		if err != nil {
+			return nil, fmt.Errorf("normalize Kimi tool messages: %w", err)
+		}
+	}
 	if serviceTier == nil {
 		serviceTier = extractOpenAIServiceTierFromBody(chatBody)
 	}
@@ -96,11 +102,11 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 	)
 
 	// Build and send upstream request via the shared CC pipeline
-	apiKey, targetURL, err := s.resolveCCFallbackTarget(account)
+	apiKey, targetURL, err := s.resolveCCFallbackTarget(ctx, account)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := s.sendCCUpstreamRequest(ctx, c, account, targetURL, chatBody, clientStream, apiKey, account.GetOpenAIUserAgent(), "")
+	resp, err := s.sendCCUpstreamRequestWithKimiRefresh(ctx, c, account, targetURL, chatBody, clientStream, apiKey, account.GetOpenAIUserAgent(), "")
 	if err != nil {
 		return nil, err
 	}

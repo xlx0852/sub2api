@@ -25,6 +25,22 @@ const stubDesktopMatchMedia = () => {
   })
 }
 
+const stubMobileMatchMedia = () => {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn()
+    }))
+  })
+}
+
 describe('DataTable', () => {
   beforeEach(() => {
     stubDesktopMatchMedia()
@@ -80,6 +96,63 @@ describe('DataTable', () => {
     expect(wrapper.findAll('tbody tr[data-index]')).toHaveLength(data.length)
     // …and there are no aria-hidden virtual padding spacer rows.
     expect(wrapper.findAll('tbody tr[aria-hidden="true"]')).toHaveLength(0)
+  })
+
+  it('keeps edge columns in the normal table flow by default', async () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        columns: [
+          { key: 'name', label: 'Name' },
+          { key: 'status', label: 'Status' },
+          { key: 'actions', label: 'Actions' }
+        ],
+        data: [{ id: 1, name: 'Alpha', status: 'active' }]
+      }
+    })
+
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('.sticky-col')).toHaveLength(0)
+  })
+
+  it('uses a dedicated mobile card slot without duplicating generic field rows', async () => {
+    stubMobileMatchMedia()
+    const wrapper = mount(DataTable, {
+      props: {
+        columns: [
+          { key: 'name', label: 'Name' },
+          { key: 'status', label: 'Status' }
+        ],
+        data: [{ id: 1, name: 'Alpha', status: 'active' }]
+      },
+      slots: {
+        'mobile-card': '<section data-test="custom-mobile-card">Account summary</section>'
+      }
+    })
+
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('[data-test="custom-mobile-card"]').text()).toBe('Account summary')
+    expect(wrapper.text()).not.toContain('Name')
+    expect(wrapper.text()).not.toContain('Status')
+  })
+
+  it('still supports explicitly pinned edge columns for exceptional tables', async () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        columns: [
+          { key: 'name', label: 'Name' },
+          { key: 'actions', label: 'Actions' }
+        ],
+        data: [{ id: 1, name: 'Alpha' }],
+        stickyFirstColumn: true,
+        stickyActionsColumn: true
+      }
+    })
+
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('.sticky-col')).toHaveLength(4)
   })
 
   it('switches to windowed rendering once row count exceeds virtualizeThreshold', async () => {

@@ -119,6 +119,7 @@ func TestOpenAIGatewayHandlerImages_ServerErrorFailsOverAndReturnsClearErrorWhen
 		nil,
 		nil,
 		nil,
+		nil, // kimiTokenProvider
 		nil,
 		nil,
 		nil,

@@ -220,6 +220,32 @@ var (
 			},
 		},
 	}
+	// AccountCostConfigsColumns holds the columns for the "account_cost_configs" table.
+	AccountCostConfigsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "account_id", Type: field.TypeInt64, Unique: true},
+		{Name: "cost_type", Type: field.TypeString, Size: 20, Default: "metered"},
+		{Name: "period_fee", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "period_days", Type: field.TypeInt, Default: 30},
+		{Name: "currency", Type: field.TypeString, Size: 10, Default: "USD"},
+		{Name: "window_baseline_revenue", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "notes", Type: field.TypeString, Nullable: true, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+	}
+	// AccountCostConfigsTable holds the schema information for the "account_cost_configs" table.
+	AccountCostConfigsTable = &schema.Table{
+		Name:       "account_cost_configs",
+		Columns:    AccountCostConfigsColumns,
+		PrimaryKey: []*schema.Column{AccountCostConfigsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "accountcostconfig_cost_type",
+				Unique:  false,
+				Columns: []*schema.Column{AccountCostConfigsColumns[4]},
+			},
+		},
+	}
 	// AccountGroupsColumns holds the columns for the "account_groups" table.
 	AccountGroupsColumns = []*schema.Column{
 		{Name: "priority", Type: field.TypeInt, Default: 50},
@@ -1994,6 +2020,7 @@ var (
 	Tables = []*schema.Table{
 		APIKeysTable,
 		AccountsTable,
+		AccountCostConfigsTable,
 		AccountGroupsTable,
 		AnnouncementsTable,
 		AnnouncementReadsTable,
@@ -2043,6 +2070,9 @@ func init() {
 	AccountsTable.ForeignKeys[1].RefTable = AccountsTable
 	AccountsTable.Annotation = &entsql.Annotation{
 		Table: "accounts",
+	}
+	AccountCostConfigsTable.Annotation = &entsql.Annotation{
+		Table: "account_cost_configs",
 	}
 	AccountGroupsTable.ForeignKeys[0].RefTable = AccountsTable
 	AccountGroupsTable.ForeignKeys[1].RefTable = GroupsTable

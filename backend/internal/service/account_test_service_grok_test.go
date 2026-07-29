@@ -28,8 +28,9 @@ func TestAccountTestService_TestAccountConnection_GrokUsesXAIResponses(t *testin
 		Schedulable: true,
 		Concurrency: 1,
 		Credentials: map[string]any{
-			"access_token": "grok-access-token",
-			"expires_at":   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+			"access_token":  "grok-access-token",
+			"refresh_token": "grok-refresh-token",
+			"expires_at":    time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
 			"model_mapping": map[string]any{
 				"grok": "grok-4.3",
 			},
@@ -63,6 +64,7 @@ func TestAccountTestService_TestAccountConnection_GrokUsesXAIResponses(t *testin
 	require.Equal(t, "Bearer grok-access-token", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, xai.GrokCLITokenAuthValue, upstream.lastReq.Header.Get(xai.GrokCLITokenAuthHeader))
 	require.Equal(t, xai.GrokCLIVersionValue, upstream.lastReq.Header.Get(xai.GrokCLIVersionHeader))
+	require.Equal(t, HTTPUpstreamProfileGrok, HTTPUpstreamProfileFromContext(upstream.lastReq.Context()))
 	require.Empty(t, upstream.lastReq.Header.Get(grokConversationIDHeader))
 	require.Equal(t, "grok-4.3", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.NotContains(t, rec.Body.String(), "claude")

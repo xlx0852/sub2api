@@ -985,7 +985,15 @@ func TestBindGrokMediaVideoRequestAccountUsesRequestIDStickyHash(t *testing.T) {
 	ctx := context.Background()
 	groupID := int64(7)
 	cache := &stubGatewayCache{}
-	svc := &OpenAIGatewayService{cache: cache}
+	svc := &OpenAIGatewayService{
+		cache: cache,
+		accountRepo: stubOpenAIAccountRepo{accounts: []Account{{
+			ID:          63,
+			Platform:    PlatformGrok,
+			Status:      StatusActive,
+			Schedulable: true,
+		}}},
+	}
 
 	hash := GrokMediaVideoRequestSessionHash("video-request-123")
 	require.NotEmpty(t, hash)
@@ -1090,6 +1098,7 @@ func TestForwardAsChatCompletionsForGrokStopFallsBackToXAIChatCompletions(t *tes
 	require.Equal(t, "Bearer access-token", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, xai.GrokCLITokenAuthValue, upstream.lastReq.Header.Get(xai.GrokCLITokenAuthHeader))
 	require.Equal(t, xai.GrokCLIVersionValue, upstream.lastReq.Header.Get(xai.GrokCLIVersionHeader))
+	require.Equal(t, HTTPUpstreamProfileGrok, HTTPUpstreamProfileFromContext(upstream.lastReq.Context()))
 	require.Equal(t, "grok-4.3", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.Equal(t, "grok", result.Model)
 	require.Equal(t, "grok-4.3", result.UpstreamModel)
@@ -1293,7 +1302,7 @@ func TestForwardAsChatCompletionsForGrokStreamingStopFallsBackToRawXAIChatComple
 	require.Equal(t, xai.DefaultCLIBaseURL+"/chat/completions", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer access-token", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, "text/event-stream", upstream.lastReq.Header.Get("Accept"))
-	require.Equal(t, "sub2api-grok/1.0", upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, xai.GrokCLIUserAgent, upstream.lastReq.Header.Get("User-Agent"))
 	require.Equal(t, xai.DefaultChatModel, gjson.GetBytes(upstream.lastBody, "model").String())
 	require.True(t, gjson.GetBytes(upstream.lastBody, "stream_options.include_usage").Bool())
 	require.True(t, result.Stream)
@@ -1415,7 +1424,7 @@ func TestForwardAsAnthropicForGrokUsesXAIResponses(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, xai.DefaultCLIBaseURL+"/responses", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer access-token", upstream.lastReq.Header.Get("Authorization"))
-	require.Equal(t, "sub2api-grok/1.0", upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, xai.GrokCLIUserAgent, upstream.lastReq.Header.Get("User-Agent"))
 	require.Equal(t, "grok-experimental", upstream.lastReq.Header.Get("OpenAI-Beta"))
 	require.Empty(t, upstream.lastReq.Header.Get("originator"))
 	require.Empty(t, upstream.lastReq.Header.Get("version"))

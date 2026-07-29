@@ -308,10 +308,40 @@ func addModerationText(parts *[]string, text string) {
 	if text == "" {
 		return
 	}
-	if strings.Contains(text, "<system-reminder>") {
+	text = stripSystemReminderSections(text)
+	text = strings.TrimSpace(text)
+	if text == "" {
 		return
 	}
 	*parts = append(*parts, text)
+}
+
+// stripSystemReminderSections removes Claude Code system-reminder blocks but keeps surrounding user text.
+func stripSystemReminderSections(text string) string {
+	if text == "" || !strings.Contains(text, "<system-reminder>") {
+		return text
+	}
+	var b strings.Builder
+	rest := text
+	for {
+		start := strings.Index(rest, "<system-reminder>")
+		if start < 0 {
+			b.WriteString(rest)
+			break
+		}
+		b.WriteString(rest[:start])
+		end := strings.Index(rest[start:], "</system-reminder>")
+		if end < 0 {
+			// Unclosed tag: drop the reminder marker and keep trailing text after first line break if any.
+			after := rest[start+len("<system-reminder>"):]
+			if nl := strings.IndexByte(after, '\n'); nl >= 0 {
+				b.WriteString(after[nl+1:])
+			}
+			break
+		}
+		rest = rest[start+end+len("</system-reminder>"):]
+	}
+	return b.String()
 }
 
 func normalizeContentModerationText(text string) string {

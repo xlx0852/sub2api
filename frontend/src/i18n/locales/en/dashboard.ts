@@ -299,6 +299,8 @@ export default {
     latency: 'Latency',
     latencyFirstToken: 'First',
     latencyTotal: 'Total',
+    outputRate: 'Rate',
+    outputRateHint: 'Output token rate = output_tokens / total duration',
     firstToken: 'First Token',
     duration: 'Duration',
     time: 'Time',
@@ -470,22 +472,45 @@ export default {
 
   // Available Channels (user-facing)
   availableChannels: {
-    title: 'Available Channels',
-    description: 'Channels you can access, along with their supported models and pricing',
-    searchPlaceholder: 'Search channels or models...',
-    empty: 'No available channels',
+    title: 'Model Plaza',
+    description: 'Browse accessible models, list prices, and group discounts',
+    searchPlaceholder: 'Search models, channels, or groups...',
+    empty: 'No models available',
     noModels: 'No models configured',
     noPricing: 'Pricing not configured',
     exclusive: 'Exclusive',
     public: 'Public',
     exclusiveTooltip: 'Exclusive groups granted to you by an admin',
     publicTooltip: 'Groups open to all users',
+    stats: {
+      models: 'Models',
+      platforms: 'Platforms',
+      channels: 'Channels',
+      groups: 'Groups'
+    },
+    filters: {
+      allPlatforms: 'All Platforms',
+      allChannels: 'All Channels'
+    },
+    tags: {
+      reasoning: 'Reasoning',
+      image: 'Image',
+      video: 'Video',
+      audio: 'Audio',
+      code: 'Code',
+      per_request: 'Per Request'
+    },
     columns: {
       name: 'Channel',
       description: 'Description',
       platform: 'Platform',
       groups: 'Your Accessible Groups',
-      supportedModels: 'Supported Models'
+      supportedModels: 'Supported Models',
+      model: 'Model',
+      provider: 'Provider',
+      billingMode: 'Billing',
+      discount: 'Discount',
+      channels: 'Channels'
     },
     pricing: {
       billingMode: 'Billing Mode',

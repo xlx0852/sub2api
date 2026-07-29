@@ -103,6 +103,55 @@ func (s *HTTPUpstreamSuite) TestOpenAIProfileDefaultsToHTTP2AndNoHeaderTimeout()
 	require.Equal(s.T(), upstreamProtocolModeOpenAIH2, entry.protocolMode)
 }
 
+func (s *HTTPUpstreamSuite) TestGrokProfileUsesDedicatedHTTP2Transport() {
+	svc := s.newService()
+	entry, err := svc.getClientEntry("", 1, 1, service.HTTPUpstreamProfileGrok, false, false)
+	require.NoError(s.T(), err)
+	transport, ok := entry.client.Transport.(*http.Transport)
+	require.True(s.T(), ok, "expected *http.Transport")
+	require.True(s.T(), transport.ForceAttemptHTTP2)
+	require.Equal(s.T(), upstreamProtocolModeGrokH2, entry.protocolMode)
+}
+
+func (s *HTTPUpstreamSuite) TestGrokHTTP1FallbackUsesFreshNonPooledTransport() {
+	svc := s.newService()
+	client, err := svc.newGrokHTTP1FallbackClient("", 1)
+	require.NoError(s.T(), err)
+	transport, ok := client.Transport.(*http.Transport)
+	require.True(s.T(), ok)
+	require.True(s.T(), transport.DisableKeepAlives)
+	require.False(s.T(), transport.ForceAttemptHTTP2)
+	require.NotNil(s.T(), transport.TLSNextProto)
+}
+
+func (s *HTTPUpstreamSuite) TestDoGrokRetriesTransportFailureOnceOverHTTP1() {
+	var calls atomic.Int32
+	server := newLocalTestServer(s.T(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if calls.Add(1) == 1 {
+			hijacker, ok := w.(http.Hijacker)
+			require.True(s.T(), ok)
+			conn, _, err := hijacker.Hijack()
+			require.NoError(s.T(), err)
+			_ = conn.Close()
+			return
+		}
+		_, _ = io.WriteString(w, "fallback-ok")
+	}))
+
+	req, err := http.NewRequest(http.MethodPost, server.URL, bytes.NewReader([]byte(`{"input":"hi"}`)))
+	require.NoError(s.T(), err)
+	req = req.WithContext(service.WithHTTPUpstreamProfile(req.Context(), service.HTTPUpstreamProfileGrok))
+
+	svc := s.newService()
+	resp, err := svc.Do(req, "", 1, 1)
+	require.NoError(s.T(), err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "fallback-ok", string(body))
+	require.Equal(s.T(), int32(2), calls.Load())
+}
+
 func (s *HTTPUpstreamSuite) TestOpenAIProfileCustomHeaderTimeout() {
 	s.cfg.Gateway = config.GatewayConfig{
 		ResponseHeaderTimeout:       600,

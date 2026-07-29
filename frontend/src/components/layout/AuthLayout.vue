@@ -2,25 +2,25 @@
   <div class="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
     <!-- Background -->
     <div
-      class="absolute inset-0 bg-gradient-to-br from-gray-50 via-primary-50/30 to-gray-100 dark:from-dark-950 dark:via-dark-900 dark:to-dark-950"
+      class="absolute inset-0 bg-[#f4f4f0] dark:bg-dark-950"
     ></div>
 
     <!-- Decorative Elements -->
     <div class="pointer-events-none absolute inset-0 overflow-hidden">
-      <!-- Gradient Orbs -->
+      <!-- Ink wash -->
       <div
-        class="absolute -right-40 -top-40 h-80 w-80 rounded-full bg-primary-400/20 blur-3xl"
+        class="absolute -right-40 -top-40 h-80 w-80 rounded-full bg-black/[0.06] blur-3xl dark:bg-white/[0.04]"
       ></div>
       <div
-        class="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-primary-500/15 blur-3xl"
+        class="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-black/[0.05] blur-3xl dark:bg-white/[0.03]"
       ></div>
       <div
-        class="absolute left-1/2 top-1/2 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-300/10 blur-3xl"
+        class="absolute left-1/2 top-1/2 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/60 blur-3xl dark:bg-black/20"
       ></div>
 
       <!-- Grid Pattern -->
       <div
-        class="absolute inset-0 bg-[linear-gradient(rgba(20,184,166,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(20,184,166,0.03)_1px,transparent_1px)] bg-[size:64px_64px]"
+        class="absolute inset-0 bg-[linear-gradient(rgba(24,24,23,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(24,24,23,0.025)_1px,transparent_1px)] bg-[size:72px_72px] dark:opacity-30"
       ></div>
     </div>
 
@@ -33,7 +33,7 @@
           <div
             class="mb-4 inline-flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-transparent shadow-none"
           >
-            <img :src="siteLogo || '/logo.png'" alt="Logo" class="h-full w-full object-contain" />
+            <img :src="siteLogo || '/logo.png'" alt="Logo" class="brand-logo-monochrome h-full w-full object-contain" />
           </div>
           <h1 class="text-gradient mb-2 text-3xl font-bold">
             {{ siteName }}
@@ -45,7 +45,7 @@
       </div>
 
       <!-- Card Container -->
-      <div class="card-glass rounded-2xl p-8">
+      <div class="card-glass rounded-xl border-black/10 bg-[#fbfbf8]/90 p-8 dark:border-white/10 dark:bg-dark-900/90">
         <slot />
       </div>
 
@@ -83,6 +83,6 @@ onMounted(() => {
 
 <style scoped>
 .text-gradient {
-  @apply bg-gradient-to-r from-primary-600 to-primary-500 bg-clip-text text-transparent;
+  @apply text-primary-950 dark:text-primary-100;
 }
 </style>

@@ -74,6 +74,12 @@ func (g *Group) ResolveMessagesDispatchModel(requestedModel string) string {
 		}
 		return ""
 	}
+	if g.Platform == PlatformKimi {
+		if claudeMessagesDispatchFamily(requestedModel) != "" {
+			return "kimi-k3"
+		}
+		return ""
+	}
 
 	cfg := normalizeOpenAIMessagesDispatchModelConfig(g.MessagesDispatchModelConfig)
 	if mappedModel := strings.TrimSpace(cfg.ExactModelMappings[requestedModel]); mappedModel != "" {

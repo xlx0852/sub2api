@@ -119,16 +119,16 @@ func TestAntigravityGatewayService_GetMappedModel(t *testing.T) {
 			expected:       "claude-sonnet-4-5-thinking",
 		},
 		{
-			name:           "默认映射透传 - gemini-2.5-flash",
+			name:           "过期 Gemini 2.5 Flash 升级到当前 Flash",
 			requestedModel: "gemini-2.5-flash",
 			accountMapping: nil,
-			expected:       "gemini-2.5-flash",
+			expected:       "gemini-3-flash",
 		},
 		{
-			name:           "默认映射透传 - gemini-2.5-pro",
+			name:           "过期 Gemini 2.5 Pro 升级到当前 Pro Agent",
 			requestedModel: "gemini-2.5-pro",
 			accountMapping: nil,
-			expected:       "gemini-2.5-pro",
+			expected:       "gemini-pro-agent",
 		},
 		{
 			name:           "默认映射透传 - gemini-3-flash",

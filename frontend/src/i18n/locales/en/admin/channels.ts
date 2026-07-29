@@ -330,6 +330,7 @@ export default {
       emailSent: 'Email sent',
       emailNotSent: 'No email',
       autoBanned: 'Banned',
+      banEvent: 'Ban event',
       unbanUser: 'Unban',
       unbanSuccess: 'User has been unbanned',
       unbanFailed: 'Failed to unban user',
@@ -466,6 +467,7 @@ export default {
       },
       action: {
         block: 'Blocked',
+        hashBlock: 'Hash Block',
         keywordBlock: 'Keyword Blocked',
         cyberPolicy: 'Cyber policy',
         error: 'Error',

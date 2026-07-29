@@ -344,3 +344,22 @@ func TestRateLimitService_RecoverAccountState_InvalidatesOAuthTokenOnErrorRecove
 	require.Len(t, invalidator.accounts, 1)
 	require.Equal(t, int64(21), invalidator.accounts[0].ID)
 }
+
+
+func TestRateLimitService_RecoverAccountAfterScheduledDiagnostics_DoesNotRestoreSchedulable(t *testing.T) {
+	repo := &rateLimitClearRepoStub{
+		getByIDAccount: &Account{
+			ID:          74,
+			Status:      StatusActive,
+			Schedulable: false,
+			Extra:       map[string]any{},
+		},
+	}
+	svc := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+
+	result, err := svc.RecoverAccountAfterScheduledDiagnostics(context.Background(), 74)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.False(t, result.ClearedSchedulable)
+	require.Equal(t, 0, repo.setSchedulableCalls)
+}

@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -15,6 +16,40 @@ type GrokOAuthHandler struct {
 	grokOAuthService *service.GrokOAuthService
 	adminService     service.AdminService
 	quotaService     *service.GrokQuotaService
+	tokenInvalidator service.TokenCacheInvalidator
+}
+
+func (h *GrokOAuthHandler) StartDeviceAuthorization(c *gin.Context) {
+	var req struct {
+		ProxyID *int64 `json:"proxy_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil && err.Error() != "EOF" {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	result, err := h.grokOAuthService.StartDeviceAuthorization(c.Request.Context(), req.ProxyID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *GrokOAuthHandler) DeviceAuthorizationStatus(c *gin.Context) {
+	result, err := h.grokOAuthService.GetDeviceAuthorizationStatus(c.Request.Context(), c.Query("session_id"))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *GrokOAuthHandler) CancelDeviceAuthorization(c *gin.Context) {
+	if err := h.grokOAuthService.CancelDeviceAuthorization(c.Request.Context(), c.Query("session_id")); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func NewGrokOAuthHandler(
@@ -27,6 +62,12 @@ func NewGrokOAuthHandler(
 		adminService:     adminService,
 		quotaService:     quotaService,
 	}
+}
+
+// SetTokenCacheInvalidator wires the shared OAuth token cache invalidator after
+// construction while keeping the existing constructor contract intact.
+func (h *GrokOAuthHandler) SetTokenCacheInvalidator(invalidator service.TokenCacheInvalidator) {
+	h.tokenInvalidator = invalidator
 }
 
 type GrokGenerateAuthURLRequest struct {
@@ -203,6 +244,107 @@ func (h *GrokOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 		return
 	}
 	response.Success(c, dto.AccountFromService(account))
+}
+
+func (h *GrokOAuthHandler) CreateAccountFromDevice(c *gin.Context) {
+	var req struct {
+		SessionID   string  `json:"session_id" binding:"required"`
+		Name        string  `json:"name"`
+		Notes       *string `json:"notes"`
+		ProxyID     *int64  `json:"proxy_id"`
+		Concurrency int     `json:"concurrency"`
+		Priority    int     `json:"priority"`
+		GroupIDs    []int64 `json:"group_ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	credential, err := h.grokOAuthService.ConsumeDeviceAuthorization(c.Request.Context(), req.SessionID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if !sameOptionalInt64(req.ProxyID, credential.ProxyID) {
+		response.BadRequest(c, "proxy_id must match the proxy used for device authorization")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		name = strings.TrimSpace(credential.Token.Email)
+	}
+	if name == "" {
+		name = "Grok OAuth Account"
+	}
+	account, err := h.adminService.CreateAccount(c.Request.Context(), &service.CreateAccountInput{
+		Name: name, Notes: req.Notes, Platform: service.PlatformGrok, Type: service.AccountTypeOAuth,
+		Credentials: h.grokOAuthService.BuildAccountCredentials(credential.Token), ProxyID: credential.ProxyID,
+		Concurrency: req.Concurrency, Priority: req.Priority, GroupIDs: req.GroupIDs,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.AccountFromService(account))
+}
+
+// ReauthorizeAccountFromDevice replaces credentials for an existing Grok
+// OAuth account using a completed device authorization session.
+func (h *GrokOAuthHandler) ReauthorizeAccountFromDevice(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	var req struct {
+		SessionID string `json:"session_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if account.Platform != service.PlatformGrok || account.Type != service.AccountTypeOAuth {
+		response.BadRequest(c, "Account is not a Grok OAuth account")
+		return
+	}
+	credential, err := h.grokOAuthService.ConsumeDeviceAuthorization(c.Request.Context(), req.SessionID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if !sameOptionalInt64(account.ProxyID, credential.ProxyID) {
+		response.BadRequest(c, "proxy_id must match the proxy used for device authorization")
+		return
+	}
+	credentials := service.MergeCredentials(account.Credentials, h.grokOAuthService.BuildAccountCredentials(credential.Token))
+	updated, err := h.adminService.UpdateAccount(c.Request.Context(), accountID, &service.UpdateAccountInput{
+		Type: service.AccountTypeOAuth, Credentials: credentials, ProxyID: credential.ProxyID,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if h.tokenInvalidator != nil {
+		_ = h.tokenInvalidator.InvalidateToken(c.Request.Context(), updated)
+	}
+	updated, err = h.adminService.ClearAccountError(c.Request.Context(), updated.ID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.AccountFromService(updated))
+}
+
+func sameOptionalInt64(left, right *int64) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }
 
 func (h *GrokOAuthHandler) QueryQuota(c *gin.Context) {

@@ -10,6 +10,7 @@ import { formatHistoryLabel, sumNumbers } from '../utils/opsFormatters'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import { formatNumber } from '@/utils/format'
+import Icon from '@/components/icons/Icon.vue'
 
 ChartJS.register(Title, Tooltip, Legend, LineElement, LinearScale, PointElement, CategoryScale, Filler)
 
@@ -173,22 +174,22 @@ function downloadChart() {
 </script>
 
 <template>
-  <div class="flex h-full flex-col rounded-3xl bg-white p-6 ring-1 ring-gray-900/5 dark:bg-dark-800 dark:ring-dark-700">
-    <div class="mb-4 flex shrink-0 items-center justify-between">
-      <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
-        <svg class="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-        </svg>
+  <div class="flex h-full flex-col rounded-2xl bg-white p-4 ring-1 ring-gray-900/5 sm:rounded-3xl sm:p-6 dark:bg-dark-800 dark:ring-dark-700">
+    <div class="mb-4 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <h3 class="flex min-w-0 items-center gap-2 text-sm font-bold text-gray-900 dark:text-white">
+        <Icon name="trendingUp" size="sm" class="text-blue-500" />
         {{ t('admin.ops.throughputTrend') }}
         <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.throughputTrend')" />
       </h3>
-      <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-        <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-blue-500"></span>QPS</span>
-        <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-green-500"></span>{{ t('admin.ops.tpsK') }}</span>
-        <template v-if="!props.fullscreen">
+      <div class="flex w-full flex-col gap-2 text-xs text-gray-500 sm:w-auto sm:flex-row sm:items-center dark:text-gray-400">
+        <div class="flex items-center gap-3">
+          <span class="flex items-center gap-1 whitespace-nowrap"><span class="h-2 w-2 rounded-full bg-blue-500"></span>QPS</span>
+          <span class="flex items-center gap-1 whitespace-nowrap"><span class="h-2 w-2 rounded-full bg-green-500"></span>{{ t('admin.ops.tpsK') }}</span>
+        </div>
+        <div v-if="!props.fullscreen" class="grid w-full grid-cols-3 gap-2 sm:ml-2 sm:flex sm:w-auto">
           <button
             type="button"
-            class="ml-2 inline-flex items-center rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-dark-700 dark:bg-dark-900 dark:text-gray-300 dark:hover:bg-dark-800"
+            class="inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-dark-700 dark:bg-dark-900 dark:text-gray-300 dark:hover:bg-dark-800"
             :disabled="state !== 'ready'"
             :title="t('admin.ops.requestDetails.title')"
             @click="emit('openDetails')"
@@ -197,7 +198,7 @@ function downloadChart() {
           </button>
           <button
             type="button"
-            class="ml-2 inline-flex items-center rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-dark-700 dark:bg-dark-900 dark:text-gray-300 dark:hover:bg-dark-800"
+            class="inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-dark-700 dark:bg-dark-900 dark:text-gray-300 dark:hover:bg-dark-800"
             :disabled="state !== 'ready'"
             :title="t('admin.ops.charts.resetZoomHint')"
             @click="resetZoom"
@@ -206,14 +207,14 @@ function downloadChart() {
           </button>
           <button
             type="button"
-            class="inline-flex items-center rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-dark-700 dark:bg-dark-900 dark:text-gray-300 dark:hover:bg-dark-800"
+            class="inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-dark-700 dark:bg-dark-900 dark:text-gray-300 dark:hover:bg-dark-800"
             :disabled="state !== 'ready'"
             :title="t('admin.ops.charts.downloadChartHint')"
             @click="downloadChart"
           >
             {{ t('admin.ops.charts.downloadChart') }}
           </button>
-        </template>
+        </div>
       </div>
     </div>
 

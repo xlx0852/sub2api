@@ -1,7 +1,7 @@
 <template>
   <button
     type="button"
-    class="group w-[304px] max-w-full rounded-md border border-transparent px-2 py-1.5 text-left transition-colors hover:border-gray-200 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500/40 dark:hover:border-dark-600 dark:hover:bg-white/[0.03]"
+    class="group w-full max-w-full rounded-md border border-transparent px-2 py-1.5 text-left transition-colors hover:border-gray-200 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500/40 dark:hover:border-dark-600 dark:hover:bg-white/[0.03]"
     :aria-label="t('admin.accounts.usageDetails.viewDetails')"
     @click="emit('open')"
   >
@@ -13,7 +13,7 @@
 
     <div v-else class="grid min-h-[58px] gap-1.5">
       <div class="flex min-w-0 items-center gap-2">
-        <span :class="['inline-flex h-5 shrink-0 items-center rounded px-1.5 text-[10px] font-semibold', statusClasses]">
+        <span v-if="showStatus" :class="['inline-flex h-5 shrink-0 items-center rounded px-1.5 text-[10px] font-semibold', statusClasses]">
           {{ presentation.statusLabel }}
         </span>
         <span v-if="presentation.plan" class="min-w-0 truncate text-[10px] text-gray-500 dark:text-gray-400" :title="presentation.plan">
@@ -78,9 +78,11 @@ const props = withDefaults(defineProps<{
   presentation: AccountUsagePresentation
   loading?: boolean
   error?: string | null
+  showStatus?: boolean
 }>(), {
   loading: false,
-  error: null
+  error: null,
+  showStatus: true
 })
 
 const emit = defineEmits<{

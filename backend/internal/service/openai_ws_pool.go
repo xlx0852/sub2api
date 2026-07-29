@@ -19,12 +19,13 @@ import (
 
 const (
 	openAIWSConnMaxAge             = 60 * time.Minute
-	openAIWSConnHealthCheckIdle    = 90 * time.Second
+	openAIWSConnHealthCheckIdle    = 15 * time.Second
 	openAIWSConnHealthCheckTO      = time.Second
 	openAIWSConnPrewarmExtraDelay  = 2 * time.Second
 	openAIWSAcquireCleanupInterval = 3 * time.Second
 	openAIWSBackgroundPingInterval = 30 * time.Second
 	openAIWSBackgroundSweepTicker  = 30 * time.Second
+	openAIWSReadPumpBufferSize     = 64
 
 	openAIWSPrewarmFailureWindow   = 30 * time.Second
 	openAIWSPrewarmFailureSuppress = 2
@@ -250,10 +251,21 @@ type openAIWSConn struct {
 	readMu  sync.Mutex
 	writeMu sync.Mutex
 
+	pumpCh   chan openAIWSPumpMessage
+	pumpDone chan struct{}
+	pumpErr  atomic.Value
+
 	waiters       atomic.Int32
 	createdAtNano atomic.Int64
 	lastUsedNano  atomic.Int64
 	prewarmed     atomic.Bool
+}
+
+// openAIWSPumpMessage 是常驻读泵交付的一条上游消息。
+// err != nil 表示读泵因该错误终止，连接不可再用。
+type openAIWSPumpMessage struct {
+	payload []byte
+	err     error
 }
 
 func newOpenAIWSConn(id string, _ int64, ws openAIWSClientConn, handshakeHeaders http.Header) *openAIWSConn {
@@ -268,7 +280,61 @@ func newOpenAIWSConn(id string, _ int64, ws openAIWSClientConn, handshakeHeaders
 	conn.leaseCh <- struct{}{}
 	conn.createdAtNano.Store(now.UnixNano())
 	conn.lastUsedNano.Store(now.UnixNano())
+	conn.startReadPump()
 	return conn
+}
+
+// startReadPump 为 coder/websocket 实现启动常驻读协程：
+// 该实现下任何 Read 的 ctx 取消都会关闭整个连接（nhooyr#242），
+// 且 Ping 必须有并发 Reader 才能收到 pong。
+// 常驻读泵让空闲/租出连接始终有 reader：自动应答服务端 ping、
+// 秒级发现死连接，并使 Ping 探活真正可用。
+// 测试 fake 等其他实现不走读泵，保持旧的按需读取语义。
+func (c *openAIWSConn) startReadPump() {
+	if c == nil || c.ws == nil {
+		return
+	}
+	if _, ok := c.ws.(*coderOpenAIWSClientConn); !ok {
+		return
+	}
+	c.pumpCh = make(chan openAIWSPumpMessage, openAIWSReadPumpBufferSize)
+	c.pumpDone = make(chan struct{})
+	go c.readPump()
+}
+
+func (c *openAIWSConn) readPump() {
+	defer close(c.pumpDone)
+	for {
+		payload, err := c.ws.ReadMessage(context.Background())
+		if err != nil {
+			c.pumpErr.Store(err)
+			select {
+			case c.pumpCh <- openAIWSPumpMessage{err: err}:
+			default:
+			}
+			c.close()
+			return
+		}
+		c.touch()
+		select {
+		case c.pumpCh <- openAIWSPumpMessage{payload: payload}:
+		case <-c.closedCh:
+			return
+		}
+	}
+}
+
+// pumpActive 报告常驻读泵是否在运行。
+func (c *openAIWSConn) pumpActive() bool {
+	if c == nil || c.pumpCh == nil {
+		return false
+	}
+	select {
+	case <-c.pumpDone:
+		return false
+	default:
+		return true
+	}
 }
 
 func (c *openAIWSConn) tryAcquire() bool {
@@ -390,10 +456,14 @@ func (c *openAIWSConn) readMessageWithContextTimeout(parent context.Context, tim
 	if c == nil {
 		return nil, errOpenAIWSConnClosed
 	}
-	select {
-	case <-c.closedCh:
-		return nil, errOpenAIWSConnClosed
-	default:
+	// 泵路径的连接关闭语义由 readMessage 的泵缓冲排空逻辑处理：
+	// 上游发完消息立即关连接时，缓冲消息仍应交付，不能在此被 closedCh 抢先。
+	if c.pumpCh == nil {
+		select {
+		case <-c.closedCh:
+			return nil, errOpenAIWSConnClosed
+		default:
+		}
 	}
 
 	if parent == nil {
@@ -408,6 +478,48 @@ func (c *openAIWSConn) readMessageWithContextTimeout(parent context.Context, tim
 }
 
 func (c *openAIWSConn) readMessage(readCtx context.Context) ([]byte, error) {
+	if c == nil {
+		return nil, errOpenAIWSConnClosed
+	}
+	// 常驻读泵路径：从读泵通道取消息，readCtx 超时/取消不会毁掉底层连接。
+	if c.pumpCh != nil {
+		if readCtx == nil {
+			readCtx = context.Background()
+		}
+		// 优先排空泵缓冲：上游发完消息立即关闭连接时，
+		// 缓冲中已收到的消息必须先交付，不能被 closedCh 抢先判定。
+		select {
+		case msg := <-c.pumpCh:
+			if msg.err != nil {
+				return nil, msg.err
+			}
+			return msg.payload, nil
+		default:
+		}
+		select {
+		case msg := <-c.pumpCh:
+			if msg.err != nil {
+				return nil, msg.err
+			}
+			return msg.payload, nil
+		case <-c.pumpDone:
+			// 读泵已退出：先排空可能残留的缓冲消息，再上报泵错误。
+			select {
+			case msg := <-c.pumpCh:
+				if msg.err != nil {
+					return nil, msg.err
+				}
+				return msg.payload, nil
+			default:
+			}
+			if err, ok := c.pumpErr.Load().(error); ok && err != nil {
+				return nil, err
+			}
+			return nil, errOpenAIWSConnClosed
+		case <-readCtx.Done():
+			return nil, readCtx.Err()
+		}
+	}
 	c.readMu.Lock()
 	defer c.readMu.Unlock()
 	if c.ws == nil {
@@ -453,6 +565,10 @@ func (c *openAIWSConn) pingWithTimeout(timeout time.Duration) error {
 func (c *openAIWSConn) supportsIdlePingWithoutReader() bool {
 	if c == nil || c.ws == nil {
 		return false
+	}
+	// 常驻读泵即为并发 reader，Ping 的 pong 由读泵消费，探活安全。
+	if c.pumpActive() {
+		return true
 	}
 	capable, ok := c.ws.(openAIWSIdlePingCapable)
 	// Test and alternate implementations keep the historical probe behavior

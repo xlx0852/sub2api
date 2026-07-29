@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -22,10 +23,33 @@ const (
 	GrokCLITokenAuthHeader = "x-xai-token-auth"
 	GrokCLITokenAuthValue  = "xai-grok-cli"
 	GrokCLIVersionHeader   = "x-grok-client-version"
-	GrokCLIVersionValue    = "0.2.93"
-	GrokCLIUserAgent       = "grok-pager/0.2.93 grok-shell/0.2.93 (macos; aarch64)"
+	GrokCLIVersionValue    = "0.2.112"
 	GrokCLIUserIDHeader    = "x-userid"
+
+	GrokCLIClientIdentifierHeader = "x-grok-client-identifier"
+	GrokCLIClientIdentifierValue  = "grok-shell"
+	GrokCLIAuthenticateHeader     = "x-authenticateresponse"
+	GrokCLIAuthenticateValue      = "authenticate-response"
+	GrokCLIClientModeHeader       = "x-grok-client-mode"
+	GrokCLIClientModeHeadless     = "headless"
 )
+
+var GrokCLIUserAgent = buildGrokCLIUserAgent(runtime.GOOS, runtime.GOARCH)
+
+func buildGrokCLIUserAgent(goos, goarch string) string {
+	arch := strings.TrimSpace(goarch)
+	switch arch {
+	case "amd64":
+		arch = "x86_64"
+	case "arm64":
+		arch = "aarch64"
+	}
+	osName := strings.TrimSpace(goos)
+	if osName == "darwin" {
+		osName = "macos"
+	}
+	return fmt.Sprintf("grok-pager/%s grok-shell/%s (%s; %s)", GrokCLIVersionValue, GrokCLIVersionValue, osName, arch)
+}
 
 func IsCLIChatProxyBaseURL(baseURL string) bool {
 	return strings.TrimRight(strings.TrimSpace(baseURL), "/") == DefaultCLIBaseURL
@@ -37,6 +61,10 @@ func ApplyGrokCLIChatHeaders(req *http.Request) {
 	}
 	req.Header.Set(GrokCLITokenAuthHeader, GrokCLITokenAuthValue)
 	req.Header.Set(GrokCLIVersionHeader, GrokCLIVersionValue)
+	req.Header.Set(GrokCLIClientIdentifierHeader, GrokCLIClientIdentifierValue)
+	req.Header.Set(GrokCLIAuthenticateHeader, GrokCLIAuthenticateValue)
+	req.Header.Set(GrokCLIClientModeHeader, GrokCLIClientModeHeadless)
+	req.Header.Set("User-Agent", GrokCLIUserAgent)
 }
 
 // BillingProductUsage is one product row from xAI billing (e.g. GrokBuild / Api / GrokChat).
@@ -105,6 +133,7 @@ func ApplyGrokCLIBillingHeaders(req *http.Request, accessToken, userID string) {
 	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(accessToken))
 	req.Header.Set(GrokCLITokenAuthHeader, GrokCLITokenAuthValue)
 	req.Header.Set(GrokCLIVersionHeader, GrokCLIVersionValue)
+	req.Header.Set(GrokCLIClientIdentifierHeader, GrokCLIClientIdentifierValue)
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("User-Agent", GrokCLIUserAgent)
 	if id := strings.TrimSpace(userID); id != "" {

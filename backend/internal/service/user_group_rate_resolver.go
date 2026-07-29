@@ -10,6 +10,15 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+// userGroupRateCacheEntry 只缓存“用户专属覆盖”查询结果，不缓存最终计费倍率。
+// 这样分组默认倍率变更后无需等待 TTL，也不会被旧默认值污染。
+type userGroupRateCacheEntry struct {
+	// hasOverride=true 表示 user_group_rate_multipliers 有专属值；false 表示无专属覆盖。
+	hasOverride bool
+	// override 仅在 hasOverride=true 时有效。
+	override float64
+}
+
 type userGroupRateResolver struct {
 	repo         UserGroupRateRepository
 	cache        *gocache.Cache
@@ -47,13 +56,12 @@ func (r *userGroupRateResolver) Resolve(ctx context.Context, userID, groupID int
 	}
 
 	key := fmt.Sprintf("%d:%d", userID, groupID)
-	if r.cache != nil {
-		if cached, ok := r.cache.Get(key); ok {
-			if multiplier, castOK := cached.(float64); castOK {
-				userGroupRateCacheHitTotal.Add(1)
-				return multiplier
-			}
+	if entry, ok := r.getCachedEntry(key); ok {
+		userGroupRateCacheHitTotal.Add(1)
+		if entry.hasOverride {
+			return entry.override
 		}
+		return groupDefaultMultiplier
 	}
 	if r.repo == nil {
 		return groupDefaultMultiplier
@@ -61,13 +69,9 @@ func (r *userGroupRateResolver) Resolve(ctx context.Context, userID, groupID int
 	userGroupRateCacheMissTotal.Add(1)
 
 	value, err, shared := r.sf.Do(key, func() (any, error) {
-		if r.cache != nil {
-			if cached, ok := r.cache.Get(key); ok {
-				if multiplier, castOK := cached.(float64); castOK {
-					userGroupRateCacheHitTotal.Add(1)
-					return multiplier, nil
-				}
-			}
+		if entry, ok := r.getCachedEntry(key); ok {
+			userGroupRateCacheHitTotal.Add(1)
+			return entry, nil
 		}
 
 		userGroupRateCacheLoadTotal.Add(1)
@@ -76,14 +80,15 @@ func (r *userGroupRateResolver) Resolve(ctx context.Context, userID, groupID int
 			return nil, repoErr
 		}
 
-		multiplier := groupDefaultMultiplier
+		entry := userGroupRateCacheEntry{}
 		if userRate != nil {
-			multiplier = *userRate
+			entry.hasOverride = true
+			entry.override = *userRate
 		}
 		if r.cache != nil {
-			r.cache.Set(key, multiplier, r.cacheTTL)
+			r.cache.Set(key, entry, r.cacheTTL)
 		}
-		return multiplier, nil
+		return entry, nil
 	})
 	if shared {
 		userGroupRateCacheSFSharedTotal.Add(1)
@@ -94,10 +99,70 @@ func (r *userGroupRateResolver) Resolve(ctx context.Context, userID, groupID int
 		return groupDefaultMultiplier
 	}
 
-	multiplier, ok := value.(float64)
+	entry, ok := value.(userGroupRateCacheEntry)
 	if !ok {
 		userGroupRateCacheFallbackTotal.Add(1)
 		return groupDefaultMultiplier
 	}
-	return multiplier
+	if entry.hasOverride {
+		return entry.override
+	}
+	return groupDefaultMultiplier
+}
+
+func (r *userGroupRateResolver) getCachedEntry(key string) (userGroupRateCacheEntry, bool) {
+	if r == nil || r.cache == nil {
+		return userGroupRateCacheEntry{}, false
+	}
+	cached, ok := r.cache.Get(key)
+	if !ok {
+		return userGroupRateCacheEntry{}, false
+	}
+	switch entry := cached.(type) {
+	case userGroupRateCacheEntry:
+		return entry, true
+	case *userGroupRateCacheEntry:
+		if entry == nil {
+			return userGroupRateCacheEntry{}, false
+		}
+		return *entry, true
+	default:
+		// 兼容旧缓存形态（直接缓存最终 float64）：视为失效，强制回源。
+		r.cache.Delete(key)
+		return userGroupRateCacheEntry{}, false
+	}
+}
+
+// InvalidateUser 清除某用户在所有分组上的专属倍率缓存。
+func (r *userGroupRateResolver) InvalidateUser(userID int64) {
+	if r == nil || r.cache == nil || userID <= 0 {
+		return
+	}
+	prefix := fmt.Sprintf("%d:", userID)
+	for key := range r.cache.Items() {
+		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
+			r.cache.Delete(key)
+		}
+	}
+}
+
+// InvalidateGroup 清除某分组下所有用户的专属倍率缓存。
+func (r *userGroupRateResolver) InvalidateGroup(groupID int64) {
+	if r == nil || r.cache == nil || groupID <= 0 {
+		return
+	}
+	suffix := fmt.Sprintf(":%d", groupID)
+	for key := range r.cache.Items() {
+		if len(key) >= len(suffix) && key[len(key)-len(suffix):] == suffix {
+			r.cache.Delete(key)
+		}
+	}
+}
+
+// InvalidateUserGroup 清除单个 user+group 的专属倍率缓存。
+func (r *userGroupRateResolver) InvalidateUserGroup(userID, groupID int64) {
+	if r == nil || r.cache == nil || userID <= 0 || groupID <= 0 {
+		return
+	}
+	r.cache.Delete(fmt.Sprintf("%d:%d", userID, groupID))
 }

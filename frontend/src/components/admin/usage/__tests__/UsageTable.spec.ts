@@ -33,6 +33,8 @@ const messages: Record<string, string> = {
   'usage.accountBilled': 'Account billed',
   'usage.latencyFirstToken': 'First',
   'usage.latencyTotal': 'Total',
+  'usage.outputRate': 'Rate',
+  'usage.outputRateHint': 'Output token rate = output_tokens / total duration',
   'usage.imageUnit': ' images',
   'usage.imageCount': 'Image count',
   'usage.imageBillingSize': 'Billing size',
@@ -75,6 +77,7 @@ const DataTableStub = {
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cost" :row="row" />
         <slot name="cell-latency" :row="row" />
+        <slot name="cell-output_rate" :row="row" />
       </div>
     </div>
   `,
@@ -364,6 +367,35 @@ describe('admin UsageTable latency', () => {
     expect(wrapper.find('.bg-emerald-500').exists()).toBe(true)
     expect(wrapper.find('.bg-amber-400').exists()).toBe(true)
     expect(wrapper.find('[title="First / Total"]').exists()).toBe(false)
+  })
+
+  it('shows output token rate as tok/s from output_tokens and duration_ms', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{
+          ...baseImageRow,
+          request_id: 'req-rate',
+          billing_mode: 'token',
+          image_count: 0,
+          image_size: null,
+          output_tokens: 17136,
+          duration_ms: 310073,
+          first_token_ms: 310073,
+        }],
+        loading: false,
+        columns: [],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('55.3 tok/s')
   })
 })
 

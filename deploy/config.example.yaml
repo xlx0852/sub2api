@@ -1037,6 +1037,23 @@ pricing:
   hash_check_interval_minutes: 10
 
 # =============================================================================
+# First-party Model Catalog (Optional)
+# 第一方模型目录（可选）
+# =============================================================================
+model_catalog:
+  # Remote refresh never blocks startup; disable to use local/embedded catalog only.
+  # 远端刷新不会阻塞启动；关闭后仅使用本地/内嵌目录。
+  remote_enabled: true
+  remote_url: "https://raw.githubusercontent.com/xlx0852/model-catalog/main/catalog.json"
+  hash_url: "https://raw.githubusercontent.com/xlx0852/model-catalog/main/catalog.sha256"
+  data_dir: "./data/model-catalog"
+  fallback_file: "./resources/model-catalog/catalog.json"
+  update_interval_hours: 3
+  hash_check_interval_minutes: 10
+  request_timeout_seconds: 30
+  max_body_bytes: 8388608
+
+# =============================================================================
 # Billing Configuration
 # 计费配置
 # =============================================================================

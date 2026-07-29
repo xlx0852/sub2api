@@ -1,401 +1,253 @@
 <template>
-  <div class="space-y-6">
-      <!-- Loading State -->
-      <div v-if="loading" class="flex items-center justify-center py-12">
-        <LoadingSpinner />
-      </div>
+  <div class="account-stats-panel space-y-4">
+    <div v-if="loading" class="flex items-center justify-center py-16">
+      <LoadingSpinner />
+    </div>
 
-      <template v-else-if="stats">
-        <!-- Row 1: Main Stats Cards -->
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <!-- 30-Day Total Cost -->
-          <div
-            class="card border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-4 dark:border-emerald-800/30 dark:from-emerald-900/10 dark:to-dark-700"
-          >
-            <div class="mb-2 flex items-center justify-between">
-              <span class="text-xs font-medium text-gray-500 dark:text-gray-400">{{
-                t('admin.accounts.stats.totalCost')
-              }}</span>
-              <div class="rounded-lg bg-emerald-100 p-1.5 dark:bg-emerald-900/30">
-                <Icon name="dollar" size="sm" class="text-emerald-600 dark:text-emerald-400" />
+    <template v-else-if="stats">
+      <section class="overflow-hidden rounded-2xl border border-gray-200 bg-gray-200 dark:border-dark-600 dark:bg-dark-600">
+        <div class="bg-white p-4 dark:bg-dark-800">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300">
+                <Icon name="dollar" size="sm" />
+              </span>
+              <div class="min-w-0">
+                <h3 class="text-sm font-semibold text-gray-950 dark:text-white">{{ t('admin.accounts.usageDetails.financialSummary') }}</h3>
+                <p class="text-[11px] text-gray-400 dark:text-dark-400">{{ financialScopeLabel }}</p>
               </div>
             </div>
-            <p class="text-2xl font-bold text-gray-900 dark:text-white">
+            <span v-if="profitSummary" class="shrink-0 rounded px-2 py-1 text-[11px] font-medium" :class="profitSummary.cost_type === 'subscription' ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300' : 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300'">
+              {{ profitSummary.cost_type === 'subscription' ? t('admin.profit.subscription') : t('admin.profit.metered') }}
+            </span>
+          </div>
+
+          <div v-if="profitLoading" class="grid grid-cols-3 gap-3" aria-busy="true">
+            <div v-for="index in 3" :key="index" class="h-16 animate-pulse rounded-lg bg-gray-100 dark:bg-dark-700" />
+          </div>
+          <template v-else-if="financialMetrics">
+            <div v-if="financialMetrics.missingCycle" class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+              {{ t('admin.accounts.usageDetails.missingCycleHint') }}
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+              <div class="min-w-0">
+                <p class="text-[11px] text-gray-400 dark:text-dark-400">{{ financialMetrics.revenueLabel }}</p>
+                <p class="mt-1 truncate text-lg font-semibold text-gray-950 dark:text-white">${{ formatCost(financialMetrics.revenue) }}</p>
+              </div>
+              <div class="min-w-0">
+                <p class="text-[11px] text-gray-400 dark:text-dark-400">{{ financialMetrics.costLabel }}</p>
+                <p class="mt-1 truncate text-lg font-semibold text-gray-950 dark:text-white">
+                  {{ financialMetrics.cost == null ? '-' : `$${formatCost(financialMetrics.cost)}` }}
+                </p>
+              </div>
+              <div class="min-w-0">
+                <p class="text-[11px] text-gray-400 dark:text-dark-400">{{ financialMetrics.profitLabel }}</p>
+                <p v-if="financialMetrics.profit != null" class="mt-1 truncate text-lg font-semibold" :class="financialMetrics.profit >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'">
+                  {{ financialMetrics.profit >= 0 ? '+' : '' }}${{ formatCost(financialMetrics.profit) }}
+                </p>
+                <p v-else class="mt-1 text-lg font-semibold text-gray-400 dark:text-dark-400">-</p>
+              </div>
+            </div>
+            <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-100 pt-3 text-[11px] text-gray-500 dark:border-dark-600 dark:text-dark-400">
+              <span>{{ t('admin.accounts.usageDetails.profitMargin') }} <strong class="ml-1 text-gray-800 dark:text-dark-100">{{ financialMetrics.margin == null ? '-' : `${financialMetrics.margin.toFixed(1)}%` }}</strong></span>
+              <span v-if="!financialMetrics.cycle">{{ t('admin.accounts.usageDetails.profitRequests') }} <strong class="ml-1 text-gray-800 dark:text-dark-100">{{ formatNumber(financialMetrics.requests) }}</strong></span>
+              <span v-if="financialMetrics.costType === 'metered'">{{ t('admin.profit.meteredCostSnapshotHint') }}</span>
+            </div>
+          </template>
+          <p v-else class="text-sm text-gray-400 dark:text-dark-400">{{ t('admin.profit.empty') }}</p>
+        </div>
+      </section>
+
+      <section class="overflow-hidden rounded-2xl border border-gray-200 bg-gray-200 dark:border-dark-600 dark:bg-dark-600">
+        <div class="summary-grid grid grid-cols-2 gap-px">
+          <div class="min-w-0 bg-white p-4 dark:bg-dark-800">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-xs font-medium text-gray-500 dark:text-dark-300">{{ t('admin.accounts.stats.totalCost') }}</span>
+              <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-600 dark:border-dark-500 dark:text-dark-200">
+                <Icon name="dollar" size="sm" />
+              </span>
+            </div>
+            <p class="mt-4 truncate text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">
               ${{ formatCost(stats.summary.total_cost) }}
             </p>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('admin.accounts.stats.accumulatedCost') }}
-              <span class="text-gray-400 dark:text-gray-500">
-                ({{ t('usage.userBilled') }}: ${{ formatCost(stats.summary.total_user_cost) }} ·
-                {{ t('admin.accounts.stats.standardCost') }}: ${{
-                  formatCost(stats.summary.total_standard_cost)
-                }})
-              </span>
+            <p class="mt-1 truncate text-[11px] text-gray-400 dark:text-dark-400">
+              {{ t('usage.userBilled') }} ${{ formatCost(stats.summary.total_user_cost) }}
             </p>
           </div>
 
-          <!-- 30-Day Total Requests -->
-          <div
-            class="card border-blue-200 bg-gradient-to-br from-blue-50 to-white p-4 dark:border-blue-800/30 dark:from-blue-900/10 dark:to-dark-700"
-          >
-            <div class="mb-2 flex items-center justify-between">
-              <span class="text-xs font-medium text-gray-500 dark:text-gray-400">{{
-                t('admin.accounts.stats.totalRequests')
-              }}</span>
-              <div class="rounded-lg bg-blue-100 p-1.5 dark:bg-blue-900/30">
-                <Icon name="bolt" size="sm" class="text-blue-600 dark:text-blue-400" />
-              </div>
+          <div class="min-w-0 bg-white p-4 dark:bg-dark-800">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-xs font-medium text-gray-500 dark:text-dark-300">{{ t('admin.accounts.stats.totalRequests') }}</span>
+              <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-600 dark:border-dark-500 dark:text-dark-200">
+                <Icon name="bolt" size="sm" />
+              </span>
             </div>
-            <p class="text-2xl font-bold text-gray-900 dark:text-white">
+            <p class="mt-4 truncate text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">
               {{ formatNumber(stats.summary.total_requests) }}
             </p>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('admin.accounts.stats.totalCalls') }}
-            </p>
+            <p class="mt-1 text-[11px] text-gray-400 dark:text-dark-400">{{ t('admin.accounts.stats.totalCalls') }}</p>
           </div>
 
-          <!-- Daily Average Cost -->
-          <div
-            class="card border-amber-200 bg-gradient-to-br from-amber-50 to-white p-4 dark:border-amber-800/30 dark:from-amber-900/10 dark:to-dark-700"
-          >
-            <div class="mb-2 flex items-center justify-between">
-              <span class="text-xs font-medium text-gray-500 dark:text-gray-400">{{
-                t('admin.accounts.stats.avgDailyCost')
-              }}</span>
-              <div class="rounded-lg bg-amber-100 p-1.5 dark:bg-amber-900/30">
-                <Icon
-                  name="calculator"
-                  size="sm"
-                  class="text-amber-600 dark:text-amber-400"
-                />
-              </div>
+          <div class="min-w-0 bg-white p-4 dark:bg-dark-800">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-xs font-medium text-gray-500 dark:text-dark-300">{{ t('admin.accounts.stats.avgDailyCost') }}</span>
+              <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-600 dark:border-dark-500 dark:text-dark-200">
+                <Icon name="calculator" size="sm" />
+              </span>
             </div>
-            <p class="text-2xl font-bold text-gray-900 dark:text-white">
+            <p class="mt-4 truncate text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">
               ${{ formatCost(stats.summary.avg_daily_cost) }}
             </p>
-             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {{
-                t('admin.accounts.stats.basedOnActualDays', {
-                  days: stats.summary.actual_days_used
-                })
-              }}
-              <span class="text-gray-400 dark:text-gray-500">
-                ({{ t('usage.userBilled') }}: ${{ formatCost(stats.summary.avg_daily_user_cost) }})
-              </span>
+            <p class="mt-1 truncate text-[11px] text-gray-400 dark:text-dark-400">
+              {{ t('usage.userBilled') }} ${{ formatCost(stats.summary.avg_daily_user_cost) }}
             </p>
           </div>
 
-          <!-- Daily Average Requests -->
-          <div
-            class="card border-purple-200 bg-gradient-to-br from-purple-50 to-white p-4 dark:border-purple-800/30 dark:from-purple-900/10 dark:to-dark-700"
-          >
-            <div class="mb-2 flex items-center justify-between">
-              <span class="text-xs font-medium text-gray-500 dark:text-gray-400">{{
-                t('admin.accounts.stats.avgDailyRequests')
-              }}</span>
-              <div class="rounded-lg bg-purple-100 p-1.5 dark:bg-purple-900/30">
-                <svg
-                  class="h-4 w-4 text-purple-600 dark:text-purple-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"
-                  />
-                </svg>
-              </div>
+          <div class="min-w-0 bg-white p-4 dark:bg-dark-800">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-xs font-medium text-gray-500 dark:text-dark-300">{{ t('admin.accounts.stats.avgDailyRequests') }}</span>
+              <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-600 dark:border-dark-500 dark:text-dark-200">
+                <Icon name="trendingUp" size="sm" />
+              </span>
             </div>
-            <p class="text-2xl font-bold text-gray-900 dark:text-white">
+            <p class="mt-4 truncate text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">
               {{ formatNumber(Math.round(stats.summary.avg_daily_requests)) }}
             </p>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('admin.accounts.stats.avgDailyUsage') }}
-            </p>
+            <p class="mt-1 text-[11px] text-gray-400 dark:text-dark-400">{{ t('admin.accounts.stats.avgDailyUsage') }}</p>
           </div>
         </div>
+      </section>
 
-        <!-- Row 2: Today, Highest Cost, Highest Requests -->
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <!-- Today Overview -->
-          <div class="card p-4">
-            <div class="mb-3 flex items-center gap-2">
-              <div class="rounded-lg bg-cyan-100 p-1.5 dark:bg-cyan-900/30">
-                <Icon name="clock" size="sm" class="text-cyan-600 dark:text-cyan-400" />
-              </div>
-              <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                t('admin.accounts.stats.todayOverview')
-              }}</span>
-            </div>
-            <div class="space-y-2">
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('usage.accountBilled') }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white"
-                  >${{ formatCost(stats.summary.today?.cost || 0) }}</span
-                >
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('usage.userBilled') }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white"
-                  >${{ formatCost(stats.summary.today?.user_cost || 0) }}</span
-                >
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                  t('admin.accounts.stats.requests')
-                }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                  formatNumber(stats.summary.today?.requests || 0)
-                }}</span>
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                  t('admin.accounts.stats.tokens')
-                }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                  formatTokens(stats.summary.today?.tokens || 0)
-                }}</span>
-              </div>
-            </div>
+      <div class="highlights-grid grid grid-cols-1 gap-4">
+        <section class="today-card rounded-2xl border border-gray-200 bg-white p-4 dark:border-dark-600 dark:bg-dark-800">
+          <div class="mb-4 flex items-center gap-2">
+            <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-dark-200">
+              <Icon name="clock" size="sm" />
+            </span>
+            <h3 class="text-sm font-semibold text-gray-950 dark:text-white">{{ t('admin.accounts.stats.todayOverview') }}</h3>
           </div>
+          <dl class="grid grid-cols-2 gap-x-4 gap-y-3">
+            <div>
+              <dt class="text-[11px] text-gray-400 dark:text-dark-400">{{ t('usage.accountBilled') }}</dt>
+              <dd class="mt-1 text-sm font-semibold text-gray-950 dark:text-white">${{ formatCost(stats.summary.today?.cost || 0) }}</dd>
+            </div>
+            <div>
+              <dt class="text-[11px] text-gray-400 dark:text-dark-400">{{ t('usage.userBilled') }}</dt>
+              <dd class="mt-1 text-sm font-semibold text-gray-950 dark:text-white">${{ formatCost(stats.summary.today?.user_cost || 0) }}</dd>
+            </div>
+            <div>
+              <dt class="text-[11px] text-gray-400 dark:text-dark-400">{{ t('admin.accounts.stats.requests') }}</dt>
+              <dd class="mt-1 text-sm font-semibold text-gray-950 dark:text-white">{{ formatNumber(stats.summary.today?.requests || 0) }}</dd>
+            </div>
+            <div>
+              <dt class="text-[11px] text-gray-400 dark:text-dark-400">{{ t('admin.accounts.stats.tokens') }}</dt>
+              <dd class="mt-1 text-sm font-semibold text-gray-950 dark:text-white">{{ formatTokens(stats.summary.today?.tokens || 0) }}</dd>
+            </div>
+          </dl>
+        </section>
 
-          <!-- Highest Cost Day -->
-          <div class="card p-4">
-            <div class="mb-3 flex items-center gap-2">
-              <div class="rounded-lg bg-orange-100 p-1.5 dark:bg-orange-900/30">
-                <Icon name="fire" size="sm" class="text-orange-600 dark:text-orange-400" />
-              </div>
-              <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                t('admin.accounts.stats.highestCostDay')
-              }}</span>
-            </div>
-            <div class="space-y-2">
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                  t('admin.accounts.stats.date')
-                }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                  stats.summary.highest_cost_day?.label || '-'
-                }}</span>
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('usage.accountBilled') }}</span>
-                <span class="text-sm font-semibold text-orange-600 dark:text-orange-400"
-                  >${{ formatCost(stats.summary.highest_cost_day?.cost || 0) }}</span
-                >
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('usage.userBilled') }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white"
-                  >${{ formatCost(stats.summary.highest_cost_day?.user_cost || 0) }}</span
-                >
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                  t('admin.accounts.stats.requests')
-                }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                  formatNumber(stats.summary.highest_cost_day?.requests || 0)
-                }}</span>
-              </div>
-            </div>
+        <section class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-dark-600 dark:bg-dark-800">
+          <div class="mb-4 flex items-center gap-2">
+            <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-dark-200">
+              <Icon name="fire" size="sm" />
+            </span>
+            <h3 class="text-sm font-semibold text-gray-950 dark:text-white">{{ t('admin.accounts.stats.highestCostDay') }}</h3>
           </div>
+          <dl class="space-y-2.5">
+            <div class="flex items-center justify-between gap-3">
+              <dt class="text-xs text-gray-400 dark:text-dark-400">{{ t('admin.accounts.stats.date') }}</dt>
+              <dd class="text-sm font-medium text-gray-950 dark:text-white">{{ stats.summary.highest_cost_day?.label || '-' }}</dd>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <dt class="text-xs text-gray-400 dark:text-dark-400">{{ t('usage.accountBilled') }}</dt>
+              <dd class="text-sm font-semibold text-gray-950 dark:text-white">${{ formatCost(stats.summary.highest_cost_day?.cost || 0) }}</dd>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <dt class="text-xs text-gray-400 dark:text-dark-400">{{ t('admin.accounts.stats.requests') }}</dt>
+              <dd class="text-sm font-medium text-gray-950 dark:text-white">{{ formatNumber(stats.summary.highest_cost_day?.requests || 0) }}</dd>
+            </div>
+          </dl>
+        </section>
 
-          <!-- Highest Request Day -->
-          <div class="card p-4">
-            <div class="mb-3 flex items-center gap-2">
-              <div class="rounded-lg bg-indigo-100 p-1.5 dark:bg-indigo-900/30">
-                <Icon
-                  name="trendingUp"
-                  size="sm"
-                  class="text-indigo-600 dark:text-indigo-400"
-                />
-              </div>
-              <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                t('admin.accounts.stats.highestRequestDay')
-              }}</span>
+        <section class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-dark-600 dark:bg-dark-800">
+          <div class="mb-4 flex items-center gap-2">
+            <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-dark-200">
+              <Icon name="trendingUp" size="sm" />
+            </span>
+            <h3 class="text-sm font-semibold text-gray-950 dark:text-white">{{ t('admin.accounts.stats.highestRequestDay') }}</h3>
+          </div>
+          <dl class="space-y-2.5">
+            <div class="flex items-center justify-between gap-3">
+              <dt class="text-xs text-gray-400 dark:text-dark-400">{{ t('admin.accounts.stats.date') }}</dt>
+              <dd class="text-sm font-medium text-gray-950 dark:text-white">{{ stats.summary.highest_request_day?.label || '-' }}</dd>
             </div>
-            <div class="space-y-2">
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                  t('admin.accounts.stats.date')
-                }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                  stats.summary.highest_request_day?.label || '-'
-                }}</span>
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                  t('admin.accounts.stats.requests')
-                }}</span>
-                <span class="text-sm font-semibold text-indigo-600 dark:text-indigo-400">{{
-                  formatNumber(stats.summary.highest_request_day?.requests || 0)
-                }}</span>
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('usage.accountBilled') }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white"
-                  >${{ formatCost(stats.summary.highest_request_day?.cost || 0) }}</span
-                >
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('usage.userBilled') }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white"
-                  >${{ formatCost(stats.summary.highest_request_day?.user_cost || 0) }}</span
-                >
-              </div>
+            <div class="flex items-center justify-between gap-3">
+              <dt class="text-xs text-gray-400 dark:text-dark-400">{{ t('admin.accounts.stats.requests') }}</dt>
+              <dd class="text-sm font-semibold text-gray-950 dark:text-white">{{ formatNumber(stats.summary.highest_request_day?.requests || 0) }}</dd>
             </div>
+            <div class="flex items-center justify-between gap-3">
+              <dt class="text-xs text-gray-400 dark:text-dark-400">{{ t('usage.accountBilled') }}</dt>
+              <dd class="text-sm font-medium text-gray-950 dark:text-white">${{ formatCost(stats.summary.highest_request_day?.cost || 0) }}</dd>
+            </div>
+          </dl>
+        </section>
+      </div>
+
+      <section class="overflow-hidden rounded-2xl border border-gray-200 bg-gray-200 dark:border-dark-600 dark:bg-dark-600">
+        <div class="efficiency-grid grid grid-cols-2 gap-px">
+          <div class="bg-white p-4 dark:bg-dark-800">
+            <p class="text-[11px] text-gray-400 dark:text-dark-400">{{ t('admin.accounts.stats.totalTokens') }}</p>
+            <p class="mt-1.5 text-lg font-semibold text-gray-950 dark:text-white">{{ formatTokens(stats.summary.total_tokens) }}</p>
+          </div>
+          <div class="bg-white p-4 dark:bg-dark-800">
+            <p class="text-[11px] text-gray-400 dark:text-dark-400">{{ t('admin.accounts.stats.dailyAvgTokens') }}</p>
+            <p class="mt-1.5 text-lg font-semibold text-gray-950 dark:text-white">{{ formatTokens(Math.round(stats.summary.avg_daily_tokens)) }}</p>
+          </div>
+          <div class="bg-white p-4 dark:bg-dark-800">
+            <p class="text-[11px] text-gray-400 dark:text-dark-400">{{ t('admin.accounts.stats.avgResponseTime') }}</p>
+            <p class="mt-1.5 text-lg font-semibold text-gray-950 dark:text-white">{{ formatDuration(stats.summary.avg_duration_ms) }}</p>
+          </div>
+          <div class="bg-white p-4 dark:bg-dark-800">
+            <p class="text-[11px] text-gray-400 dark:text-dark-400">{{ t('admin.accounts.stats.daysActive') }}</p>
+            <p class="mt-1.5 text-lg font-semibold text-gray-950 dark:text-white">{{ stats.summary.actual_days_used }} / {{ stats.summary.days }}</p>
           </div>
         </div>
+      </section>
 
-        <!-- Row 3: Token Stats -->
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <!-- Accumulated Tokens -->
-          <div class="card p-4">
-            <div class="mb-3 flex items-center gap-2">
-              <div class="rounded-lg bg-teal-100 p-1.5 dark:bg-teal-900/30">
-                <Icon name="cube" size="sm" class="text-teal-600 dark:text-teal-400" />
-              </div>
-              <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                t('admin.accounts.stats.accumulatedTokens')
-              }}</span>
-            </div>
-            <div class="space-y-2">
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                  t('admin.accounts.stats.totalTokens')
-                }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                  formatTokens(stats.summary.total_tokens)
-                }}</span>
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                  t('admin.accounts.stats.dailyAvgTokens')
-                }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                  formatTokens(Math.round(stats.summary.avg_daily_tokens))
-                }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Performance -->
-          <div class="card p-4">
-            <div class="mb-3 flex items-center gap-2">
-              <div class="rounded-lg bg-rose-100 p-1.5 dark:bg-rose-900/30">
-                <Icon name="bolt" size="sm" class="text-rose-600 dark:text-rose-400" />
-              </div>
-              <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                t('admin.accounts.stats.performance')
-              }}</span>
-            </div>
-            <div class="space-y-2">
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                  t('admin.accounts.stats.avgResponseTime')
-                }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                  formatDuration(stats.summary.avg_duration_ms)
-                }}</span>
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                  t('admin.accounts.stats.daysActive')
-                }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white"
-                  >{{ stats.summary.actual_days_used }} / {{ stats.summary.days }}</span
-                >
-              </div>
-            </div>
-          </div>
-
-          <!-- Recent Activity -->
-          <div class="card p-4">
-            <div class="mb-3 flex items-center gap-2">
-              <div class="rounded-lg bg-lime-100 p-1.5 dark:bg-lime-900/30">
-                <Icon
-                  name="clipboard"
-                  size="sm"
-                  class="text-lime-600 dark:text-lime-400"
-                />
-              </div>
-              <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                t('admin.accounts.stats.recentActivity')
-              }}</span>
-            </div>
-            <div class="space-y-2">
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                  t('admin.accounts.stats.todayRequests')
-                }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                  formatNumber(stats.summary.today?.requests || 0)
-                }}</span>
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                  t('admin.accounts.stats.todayTokens')
-                }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white">{{
-                  formatTokens(stats.summary.today?.tokens || 0)
-                }}</span>
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                  t('admin.accounts.stats.todayCost')
-                }}</span>
-                <span class="text-sm font-semibold text-gray-900 dark:text-white"
-                  >${{ formatCost(stats.summary.today?.cost || 0) }}</span
-                >
-              </div>
-            </div>
+      <section class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-dark-600 dark:bg-dark-800">
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <h3 class="text-sm font-semibold text-gray-950 dark:text-white">{{ t('admin.accounts.stats.usageTrend') }}</h3>
+          <span class="text-[11px] text-gray-400 dark:text-dark-400">30D</span>
+        </div>
+        <div class="h-64 min-w-0">
+          <Line v-if="trendChartData" :data="trendChartData" :options="lineChartOptions" />
+          <div v-else class="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+            {{ t('admin.dashboard.noDataAvailable') }}
           </div>
         </div>
+      </section>
 
-        <!-- Usage Trend Chart -->
-        <div class="card p-4">
-          <h3 class="mb-4 text-sm font-semibold text-gray-900 dark:text-white">
-            {{ t('admin.accounts.stats.usageTrend') }}
-          </h3>
-          <div class="h-64">
-            <Line v-if="trendChartData" :data="trendChartData" :options="lineChartOptions" />
-            <div
-              v-else
-              class="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400"
-            >
-              {{ t('admin.dashboard.noDataAvailable') }}
-            </div>
-          </div>
-        </div>
-
-        <!-- Model Distribution -->
+      <div class="space-y-4">
         <ModelDistributionChart :model-stats="stats.models" :loading="false" />
-
         <EndpointDistributionChart
           :endpoint-stats="stats.endpoints || []"
           :loading="false"
           :title="t('usage.inboundEndpoint')"
         />
-
         <EndpointDistributionChart
           :endpoint-stats="stats.upstream_endpoints || []"
           :loading="false"
           :title="t('usage.upstreamEndpoint')"
         />
-      </template>
-
-      <!-- No Data State -->
-      <div
-        v-else-if="!loading"
-        class="flex flex-col items-center justify-center py-12 text-gray-500 dark:text-gray-400"
-      >
-        <Icon name="chartBar" size="xl" class="mb-4 h-12 w-12" />
-        <p class="text-sm">{{ t('admin.accounts.stats.noData') }}</p>
       </div>
+    </template>
+
+    <div v-else-if="!loading" class="flex flex-col items-center justify-center py-16 text-gray-500 dark:text-gray-400">
+      <span class="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full border border-gray-200 dark:border-dark-600">
+        <Icon name="chartBar" size="lg" />
+      </span>
+      <p class="text-sm">{{ t('admin.accounts.stats.noData') }}</p>
+    </div>
   </div>
 </template>
 
@@ -420,6 +272,7 @@ import EndpointDistributionChart from '@/components/charts/EndpointDistributionC
 import Icon from '@/components/icons/Icon.vue'
 import { adminAPI } from '@/api/admin'
 import type { Account, AccountUsageStatsResponse } from '@/types'
+import type { AccountProfitSummary } from '@/api/admin/profit'
 
 ChartJS.register(
   CategoryScale,
@@ -440,7 +293,78 @@ const props = defineProps<{
 
 const loading = ref(false)
 const stats = ref<AccountUsageStatsResponse | null>(null)
+const profitLoading = ref(false)
+const profitSummary = ref<AccountProfitSummary | null>(null)
 let loadSequence = 0
+let profitLoadSequence = 0
+
+const financialMetrics = computed(() => {
+  const summary = profitSummary.value
+  if (!summary) return null
+
+  if (summary.cost_type === 'subscription') {
+    const hasActiveCycle =
+      summary.billing_window_start &&
+      summary.billing_window_end &&
+      summary.billing_window_revenue != null &&
+      summary.billing_window_cost != null &&
+      summary.billing_window_profit != null
+
+    if (hasActiveCycle) {
+      const revenue = summary.billing_window_revenue!
+      const profit = summary.billing_window_profit!
+      return {
+        cycle: true,
+        missingCycle: false,
+        costType: summary.cost_type,
+        requests: summary.requests,
+        scopeLabel: t('admin.accounts.usageDetails.currentCycleRange', {
+          start: summary.billing_window_start!.slice(0, 10),
+          end: summary.billing_window_end!.slice(0, 10)
+        }),
+        revenueLabel: t('admin.profit.currentCycleRevenue'),
+        costLabel: t('admin.profit.currentCyclePurchaseCost'),
+        profitLabel: t('admin.profit.currentCycleProfit'),
+        revenue,
+        cost: summary.billing_window_cost!,
+        profit,
+        margin: revenue > 0 ? profit / revenue * 100 : 0
+      }
+    }
+
+    return {
+      cycle: false,
+      missingCycle: true,
+      costType: summary.cost_type,
+      requests: summary.requests,
+      scopeLabel: t('admin.accounts.usageDetails.noActiveCycle'),
+      revenueLabel: t('admin.profit.periodRevenue'),
+      costLabel: t('admin.profit.currentCyclePurchaseCost'),
+      profitLabel: t('admin.profit.currentCycleProfit'),
+      revenue: summary.revenue,
+      cost: null,
+      profit: null,
+      margin: null
+    }
+  }
+
+  return {
+    cycle: false,
+    missingCycle: false,
+    costType: summary.cost_type,
+    requests: summary.requests,
+    scopeLabel: t('admin.accounts.usageDetails.last30Days'),
+    revenueLabel: t('admin.profit.periodRevenue'),
+    costLabel: t('admin.profit.periodUpstreamCost'),
+    profitLabel: t('admin.profit.periodProfit'),
+    revenue: summary.revenue,
+    cost: summary.cost,
+    profit: summary.profit,
+    margin: summary.margin
+  }
+})
+
+const financialScopeLabel = computed(() => financialMetrics.value?.scopeLabel || t('admin.accounts.usageDetails.last30Days'))
 
 // Dark mode detection
 const isDarkMode = computed(() => {
@@ -610,15 +534,45 @@ const loadStats = async () => {
   }
 }
 
+const loadProfitSummary = async () => {
+  if (!props.account) return
+
+  const accountID = props.account.id
+  const sequence = ++profitLoadSequence
+  const end = new Date()
+  const start = new Date(end.getTime() - 29 * 86_400_000)
+  profitLoading.value = true
+  try {
+    const response = await adminAPI.profit.summary(
+      start.toISOString().slice(0, 10),
+      end.toISOString().slice(0, 10),
+      accountID
+    )
+    if (sequence === profitLoadSequence && props.account?.id === accountID) {
+      profitSummary.value = response.accounts[0] || null
+    }
+  } catch (error) {
+    if (sequence === profitLoadSequence && props.account?.id === accountID) {
+      console.error('Failed to load account profit summary:', error)
+      profitSummary.value = null
+    }
+  } finally {
+    if (sequence === profitLoadSequence) profitLoading.value = false
+  }
+}
+
 watch(
   () => props.account?.id,
   async (accountID) => {
     if (accountID && props.account) {
-      await loadStats()
+      await Promise.all([loadStats(), loadProfitSummary()])
     } else {
       loadSequence += 1
+      profitLoadSequence += 1
       stats.value = null
+      profitSummary.value = null
       loading.value = false
+      profitLoading.value = false
     }
   },
   { immediate: true }
@@ -626,11 +580,12 @@ watch(
 
 // Format helpers
 const formatCost = (value: number): string => {
-  if (value >= 1000) {
+  const absolute = Math.abs(value)
+  if (absolute >= 1000) {
     return (value / 1000).toFixed(2) + 'K'
-  } else if (value >= 1) {
+  } else if (absolute >= 1) {
     return value.toFixed(2)
-  } else if (value >= 0.01) {
+  } else if (absolute >= 0.01) {
     return value.toFixed(3)
   }
   return value.toFixed(4)
@@ -663,3 +618,34 @@ const formatDuration = (ms: number): string => {
   return `${Math.round(ms)}ms`
 }
 </script>
+
+<style scoped>
+.account-stats-panel {
+  container-type: inline-size;
+}
+
+@container (min-width: 440px) {
+  .highlights-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .today-card {
+    grid-column: 1 / -1;
+  }
+}
+
+@container (min-width: 760px) {
+  .summary-grid,
+  .efficiency-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .highlights-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .today-card {
+    grid-column: auto;
+  }
+}
+</style>

@@ -189,7 +189,7 @@
         </div>
       </section>
 
-      <section id="providers" class="providers-section">
+      <section id="providers" class="providers-section reveal-on-scroll">
         <div class="home-container">
           <div class="providers-label">{{ t('home.providers.title') }}</div>
           <p class="providers-description">{{ t('home.providers.description') }}</p>
@@ -210,7 +210,7 @@
 
       <section id="features" class="features-section">
         <div class="home-container">
-          <div class="section-header">
+          <div class="section-header reveal-on-scroll">
             <div class="section-label">{{ t('home.featureSection.label') }}</div>
             <h2 class="section-title">
               {{ t('home.featureSection.titlePrefix') }}
@@ -225,7 +225,7 @@
             <article
               v-for="feature in features"
               :key="feature.index"
-              class="feature-card"
+              class="feature-card reveal-on-scroll"
             >
               <div class="feature-meta">
                 <span>{{ feature.index }}</span>
@@ -246,7 +246,7 @@
       <section id="stability" class="stability-section">
         <div class="home-container">
           <div class="stability-layout">
-            <div class="stability-copy">
+            <div class="stability-copy reveal-on-scroll">
               <div class="section-label">{{ stabilityCopy.label }}</div>
               <h2 class="section-title">
                 {{ stabilityCopy.titlePrefix }}
@@ -268,7 +268,7 @@
               </div>
             </div>
 
-            <div class="stability-panel" aria-label="SicTs stability monitor">
+            <div class="stability-panel reveal-on-scroll" aria-label="SicTs stability monitor">
               <div class="stability-panel-top">
                 <div>
                   <span class="stability-kicker">{{ stabilityCopy.panelKicker }}</span>
@@ -340,7 +340,7 @@
         </div>
       </section>
 
-      <section class="cta-section">
+      <section class="cta-section reveal-on-scroll">
         <div class="home-container">
           <h2>{{ t('home.cta.title') }}</h2>
           <p>{{ t('home.cta.description') }}</p>
@@ -412,7 +412,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
@@ -564,6 +564,7 @@ const stabilityStats = computed(() => isZhLocale.value
 
 // Current year for footer
 const currentYear = computed(() => new Date().getFullYear())
+let revealObserver: IntersectionObserver | null = null
 
 // Toggle theme
 function toggleTheme() {
@@ -575,17 +576,37 @@ function toggleTheme() {
 // Initialize theme
 function initTheme() {
   const savedTheme = localStorage.getItem('theme')
-  if (
-    savedTheme === 'dark' ||
-    (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  ) {
+  if (savedTheme === 'dark') {
     isDark.value = true
     document.documentElement.classList.add('dark')
+  } else {
+    isDark.value = false
+    document.documentElement.classList.remove('dark')
   }
 }
 
 onMounted(() => {
   initTheme()
+
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    revealObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return
+          entry.target.classList.add('is-revealed')
+          revealObserver?.unobserve(entry.target)
+        })
+      },
+      { rootMargin: '0px 0px -8% 0px', threshold: 0.12 }
+    )
+    document.querySelectorAll('.reveal-on-scroll').forEach((element) => {
+      revealObserver?.observe(element)
+    })
+  } else {
+    document.querySelectorAll('.reveal-on-scroll').forEach((element) => {
+      element.classList.add('is-revealed')
+    })
+  }
 
   // Check auth state
   authStore.checkAuth()
@@ -594,6 +615,11 @@ onMounted(() => {
   if (!appStore.publicSettingsLoaded) {
     appStore.fetchPublicSettings()
   }
+})
+
+onBeforeUnmount(() => {
+  revealObserver?.disconnect()
+  revealObserver = null
 })
 </script>
 
@@ -607,16 +633,17 @@ onMounted(() => {
   --home-text: #171915;
   --home-text-secondary: #52524c;
   --home-text-muted: #85857b;
-  --home-brand: #4f8a63;
-  --home-brand-dark: #3f754f;
-  --home-brand-wash: #edf7f0;
-  --home-brand-border: #b8d8c1;
+  --home-brand: #242422;
+  --home-brand-dark: #0b0b0a;
+  --home-brand-wash: #eeeeea;
+  --home-brand-border: #c9c9c2;
   --home-button-bg: #171915;
   --home-button-text: #ffffff;
   --home-button-hover: #0f120f;
-  --home-serif: Georgia, 'Songti SC', STSong, 'Times New Roman', serif;
-  --home-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-    'Microsoft YaHei', sans-serif;
+  --home-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, Georgia,
+    'Times New Roman', serif;
+  --home-sans: 'Avenir Next', Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'PingFang SC', 'Microsoft YaHei', sans-serif;
   --home-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   position: relative;
   min-height: 100vh;
@@ -627,20 +654,18 @@ onMounted(() => {
   line-height: 1.6;
 }
 
-:global(.dark) .home-page {
-  --home-bg: #080a08;
-  --home-bg-soft: #10130f;
-  --home-panel: #121712;
-  --home-line: #242b23;
-  --home-line-strong: #3a4438;
-  --home-text: #f6f7f1;
-  --home-text-secondary: #c7cabf;
-  --home-text-muted: #8d9688;
-  --home-brand-wash: rgba(79, 138, 99, 0.18);
-  --home-brand-border: rgba(115, 174, 132, 0.36);
-  --home-button-bg: #f6f7f1;
-  --home-button-text: #080a08;
-  --home-button-hover: #ffffff;
+.home-page::before {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 17% 23%, rgba(24, 24, 23, 0.035) 0 0.55px, transparent 0.75px),
+    radial-gradient(circle at 73% 61%, rgba(24, 24, 23, 0.025) 0 0.45px, transparent 0.7px);
+  background-position: 0 0, 7px 11px;
+  background-size: 13px 13px, 17px 17px;
+  opacity: 0.75;
+  content: '';
 }
 
 .home-grid {
@@ -652,7 +677,7 @@ onMounted(() => {
     linear-gradient(var(--home-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--home-line) 1px, transparent 1px);
   background-size: 64px 64px;
-  opacity: 0.7;
+  opacity: 0.38;
   mask-image: radial-gradient(80% 60% at 50% 28%, #000 0%, transparent 75%);
 }
 
@@ -717,6 +742,7 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  filter: brightness(0) contrast(1.15);
 }
 
 .home-logo-text {
@@ -811,7 +837,7 @@ onMounted(() => {
   height: 20px;
   border-radius: 50%;
   background: var(--home-brand);
-  color: #f8faf5;
+  color: var(--home-button-text);
   font-size: 10px;
   font-weight: 800;
 }
@@ -863,7 +889,7 @@ onMounted(() => {
   flex: 0 0 auto;
   border-radius: 50%;
   background: var(--home-brand);
-  box-shadow: 0 0 0 4px rgba(79, 138, 99, 0.16);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--home-brand) 16%, transparent);
 }
 
 .hero-title {
@@ -872,7 +898,7 @@ onMounted(() => {
   font-family: var(--home-serif);
   font-size: clamp(52px, 5.6vw, 76px);
   font-weight: 400;
-  letter-spacing: 0;
+  letter-spacing: -0.025em;
   line-height: 1.05;
 }
 
@@ -988,12 +1014,13 @@ onMounted(() => {
 .terminal-card {
   width: min(100%, 580px);
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 14px;
-  background: #101318;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: #0d0d0c;
   box-shadow:
-    0 46px 90px -34px rgba(17, 24, 17, 0.58),
-    0 34px 80px -44px rgba(79, 138, 99, 0.42);
+    0 32px 68px -34px rgba(0, 0, 0, 0.52),
+    0 16px 34px -26px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
   text-align: left;
   transform: rotate(-1.4deg) translateY(0);
   transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -1003,13 +1030,31 @@ onMounted(() => {
   transform: rotate(-0.8deg) translateY(-4px);
 }
 
+.reveal-on-scroll {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-on-scroll.is-revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.feature-card:nth-child(2),
+.feature-card:nth-child(4) {
+  transition-delay: 70ms;
+}
+
 .terminal-header {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 14px 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  background: #191f28;
+  background: #171716;
 }
 
 .terminal-dots {
@@ -1024,21 +1069,21 @@ onMounted(() => {
 }
 
 .terminal-dots span:nth-child(1) {
-  background: #ff5f56;
+  background: #4b4b47;
 }
 
 .terminal-dots span:nth-child(2) {
-  background: #ffbd2e;
+  background: #77776f;
 }
 
 .terminal-dots span:nth-child(3) {
-  background: #27c93f;
+  background: #b4b4ac;
 }
 
 .terminal-title {
   flex: 1;
   overflow: hidden;
-  color: #64748b;
+  color: #77776f;
   font-family: var(--home-mono);
   font-size: 13px;
   font-weight: 700;
@@ -1052,7 +1097,7 @@ onMounted(() => {
   min-height: 242px;
   overflow-x: auto;
   padding: 30px 32px 34px;
-  color: #e5e7eb;
+  color: #e8e8e4;
   font-family: var(--home-mono);
   font-size: 14px;
   line-height: 2.05;
@@ -1065,7 +1110,7 @@ onMounted(() => {
 }
 
 .term-muted {
-  color: #8d96a3;
+  color: #85857c;
 }
 
 .term-prompt,
@@ -1078,23 +1123,23 @@ onMounted(() => {
 }
 
 .term-path {
-  color: #7dd3fc;
+  color: #d4d4ce;
 }
 
 .term-cmd {
-  color: #c4b5fd;
+  color: #f4f4ef;
 }
 
 .term-flag {
-  color: #a78bfa;
+  color: #abab9f;
 }
 
 .term-url {
-  color: #48c78e;
+  color: #e8e8e4;
 }
 
 .term-string {
-  color: #fbbf24;
+  color: #b4b4ac;
 }
 
 .term-dot {
@@ -1103,12 +1148,12 @@ onMounted(() => {
   height: 8px;
   margin-right: 10px;
   border-radius: 50%;
-  background: #48c78e;
-  box-shadow: 0 0 0 4px rgba(72, 199, 142, 0.12);
+  background: #d4d4ce;
+  box-shadow: 0 0 0 4px rgba(212, 212, 206, 0.12);
 }
 
 .term-dot-muted {
-  background: #64748b;
+  background: #62625c;
   box-shadow: none;
 }
 
@@ -1308,6 +1353,14 @@ onMounted(() => {
   background: var(--home-panel);
 }
 
+.feature-card.reveal-on-scroll {
+  transition:
+    opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
 .feature-meta {
   display: flex;
   align-items: flex-start;
@@ -1455,7 +1508,7 @@ onMounted(() => {
   flex: 0 0 auto;
   padding: 7px 10px;
   border-radius: 999px;
-  background: #3fbd65;
+  background: var(--home-button-bg);
   color: #ffffff;
   font-family: var(--home-mono);
   font-size: 11px;
@@ -1531,24 +1584,24 @@ onMounted(() => {
 }
 
 .chart-recovery-fill {
-  fill: rgba(79, 138, 99, 0.08);
+  fill: rgba(72, 72, 68, 0.08);
 }
 
 .chart-line {
   fill: none;
-  stroke: #34985a;
+  stroke: var(--home-brand-dark);
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 3.2;
 }
 
 .chart-line-shadow {
-  stroke: rgba(52, 152, 90, 0.16);
+  stroke: rgba(72, 72, 68, 0.16);
   stroke-width: 9;
 }
 
 .chart-line-success {
-  stroke: rgba(52, 152, 90, 0.42);
+  stroke: rgba(72, 72, 68, 0.42);
   stroke-width: 1.6;
 }
 
@@ -1567,7 +1620,7 @@ onMounted(() => {
   width: 11px;
   height: 11px;
   border-radius: 3px;
-  background: #34985a;
+  background: var(--home-brand-dark);
 }
 
 .cta-section {
@@ -1720,6 +1773,12 @@ onMounted(() => {
     font-size: 12px;
   }
 
+  .terminal-card,
+  .terminal-card:hover {
+    border-radius: 9px;
+    transform: none;
+  }
+
   .providers-section {
     padding: 44px 0 62px;
   }
@@ -1771,6 +1830,23 @@ onMounted(() => {
   .footer-bottom {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-on-scroll,
+  .reveal-on-scroll.is-revealed {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .terminal-card,
+  .terminal-card:hover,
+  .home-btn,
+  .home-dashboard-btn {
+    transform: none;
+    transition-duration: 1ms;
   }
 }
 </style>

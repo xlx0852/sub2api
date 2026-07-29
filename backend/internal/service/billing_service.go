@@ -206,10 +206,10 @@ func (s *BillingService) initFallbackPricing() {
 		s.fallbackPrices[key] = priceEntryToModelPricing(entry)
 	}
 	// Ensure grok flagship key is always addressable via live DefaultChatModel string.
-	if p, ok := s.fallbackPrices[xai.DefaultChatModel]; ok {
-		s.fallbackPrices[xai.DefaultChatModel] = p
+	if p, ok := s.fallbackPrices[xai.CurrentDefaultChatModel()]; ok {
+		s.fallbackPrices[xai.CurrentDefaultChatModel()] = p
 	} else if p, ok := s.fallbackPrices["grok-4.5"]; ok {
-		s.fallbackPrices[xai.DefaultChatModel] = p
+		s.fallbackPrices[xai.CurrentDefaultChatModel()] = p
 	}
 }
 
@@ -230,6 +230,13 @@ func priceEntryToModelPricing(e modelcatalog.PriceEntry) *ModelPricing {
 	}
 }
 
+func (s *BillingService) fallbackPrice(key string) *ModelPricing {
+	if entry, ok := modelcatalog.ResolvePriceEntry(key); ok {
+		return priceEntryToModelPricing(entry)
+	}
+	return s.fallbackPrice(key)
+}
+
 // getFallbackPricing 根据模型系列获取回退价格
 func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	modelLower := strings.ToLower(model)
@@ -237,46 +244,46 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	// 按模型系列匹配
 	if strings.Contains(modelLower, "opus") {
 		if strings.Contains(modelLower, "4.7") || strings.Contains(modelLower, "4-7") {
-			return s.fallbackPrices["claude-opus-4.7"]
+			return s.fallbackPrice("claude-opus-4.7")
 		}
 		if strings.Contains(modelLower, "4.6") || strings.Contains(modelLower, "4-6") {
-			return s.fallbackPrices["claude-opus-4.6"]
+			return s.fallbackPrice("claude-opus-4.6")
 		}
 		if strings.Contains(modelLower, "4.5") || strings.Contains(modelLower, "4-5") {
-			return s.fallbackPrices["claude-opus-4.5"]
+			return s.fallbackPrice("claude-opus-4.5")
 		}
-		return s.fallbackPrices["claude-3-opus"]
+		return s.fallbackPrice("claude-3-opus")
 	}
 	if strings.Contains(modelLower, "sonnet") {
 		if strings.Contains(modelLower, "4") && !strings.Contains(modelLower, "3") {
-			return s.fallbackPrices["claude-sonnet-4"]
+			return s.fallbackPrice("claude-sonnet-4")
 		}
-		return s.fallbackPrices["claude-3-5-sonnet"]
+		return s.fallbackPrice("claude-3-5-sonnet")
 	}
 	if strings.Contains(modelLower, "haiku") {
 		if strings.Contains(modelLower, "3-5") || strings.Contains(modelLower, "3.5") {
-			return s.fallbackPrices["claude-3-5-haiku"]
+			return s.fallbackPrice("claude-3-5-haiku")
 		}
-		return s.fallbackPrices["claude-3-haiku"]
+		return s.fallbackPrice("claude-3-haiku")
 	}
 	// Claude 未知型号统一回退到 Sonnet，避免计费中断。
 	if strings.Contains(modelLower, "claude") {
-		return s.fallbackPrices["claude-sonnet-4"]
+		return s.fallbackPrice("claude-sonnet-4")
 	}
 	if strings.Contains(modelLower, "gemini-3.1-pro") || strings.Contains(modelLower, "gemini-3-1-pro") {
-		return s.fallbackPrices["gemini-3.1-pro"]
+		return s.fallbackPrice("gemini-3.1-pro")
 	}
 
 	// DeepSeek V4 系列：仅匹配已知 V4 Pro/Flash 与官方兼容别名
 	// （deepseek-chat / deepseek-reasoner → V4 Flash），未知 deepseek-* 型号不回退，避免误计价。
 	if strings.Contains(modelLower, "deepseek-v4-flash") {
-		return s.fallbackPrices["deepseek-v4-flash"]
+		return s.fallbackPrice("deepseek-v4-flash")
 	}
 	if strings.Contains(modelLower, "deepseek-v4-pro") {
-		return s.fallbackPrices["deepseek-v4-pro"]
+		return s.fallbackPrice("deepseek-v4-pro")
 	}
 	if strings.Contains(modelLower, "deepseek-chat") || strings.Contains(modelLower, "deepseek-reasoner") {
-		return s.fallbackPrices["deepseek-v4-flash"]
+		return s.fallbackPrice("deepseek-v4-flash")
 	}
 
 	// ---- 国产 LLM 兜底匹配 ----
@@ -286,136 +293,139 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	// 智谱 GLM（z.ai 公开 SKU：glm-5.1 / glm-5 / glm-5-turbo / glm-4.7 / glm-4.6 / glm-4.5 等）
 	// 匹配顺序：先判别最高 tier，再依次降级。
 	if strings.Contains(modelLower, "glm-5.1") {
-		return s.fallbackPrices["glm-5.1"]
+		return s.fallbackPrice("glm-5.1")
 	}
 	if strings.Contains(modelLower, "glm-5-turbo") || strings.Contains(modelLower, "glm-5turbo") {
-		return s.fallbackPrices["glm-5-turbo"]
+		return s.fallbackPrice("glm-5-turbo")
 	}
 	if strings.Contains(modelLower, "glm-5") {
-		return s.fallbackPrices["glm-5"]
+		return s.fallbackPrice("glm-5")
 	}
 	if strings.Contains(modelLower, "glm-4.7-flashx") {
-		return s.fallbackPrices["glm-4.7-flashx"]
+		return s.fallbackPrice("glm-4.7-flashx")
 	}
 	if strings.Contains(modelLower, "glm-4.7-flash") {
-		return s.fallbackPrices["glm-4.7-flash"]
+		return s.fallbackPrice("glm-4.7-flash")
 	}
 	if strings.Contains(modelLower, "glm-4.7") {
-		return s.fallbackPrices["glm-4.7"]
+		return s.fallbackPrice("glm-4.7")
 	}
 	if strings.Contains(modelLower, "glm-4.6") {
-		return s.fallbackPrices["glm-4.6"]
+		return s.fallbackPrice("glm-4.6")
 	}
 	if strings.Contains(modelLower, "glm-4.5-flash") {
-		return s.fallbackPrices["glm-4.5-flash"]
+		return s.fallbackPrice("glm-4.5-flash")
 	}
 	if strings.Contains(modelLower, "glm-4.5-x") || strings.Contains(modelLower, "glm-4.5x") {
-		return s.fallbackPrices["glm-4.5-x"]
+		return s.fallbackPrice("glm-4.5-x")
 	}
 	if strings.Contains(modelLower, "glm-4.5-airx") || strings.Contains(modelLower, "glm-4.5airx") {
-		return s.fallbackPrices["glm-4.5-airx"]
+		return s.fallbackPrice("glm-4.5-airx")
 	}
 	if strings.Contains(modelLower, "glm-4.5-air") || strings.Contains(modelLower, "glm-4.5air") {
-		return s.fallbackPrices["glm-4.5-air"]
+		return s.fallbackPrice("glm-4.5-air")
 	}
 	if strings.Contains(modelLower, "glm-4.5") {
-		return s.fallbackPrices["glm-4.5"]
+		return s.fallbackPrice("glm-4.5")
 	}
 	if strings.Contains(modelLower, "glm-4-32b") {
-		return s.fallbackPrices["glm-4-32b-0414-128k"]
+		return s.fallbackPrice("glm-4-32b-0414-128k")
 	}
 
 	// 月之暗面 Kimi（kimi-k3 / k3 / kimi-k2.6 / kimi-for-coding / kimi-k2.5 / kimi-k2-thinking / kimi-k2）
 	// K2-0905 / K2-0711 官方未保留定价，不进入 fallback。
 	// Kimi Coding 上游短名 "k3" / "kimi-k3"：优先专用价，否则回落 coding/k2.6 价。
 	if modelLower == "k3" || strings.Contains(modelLower, "kimi-k3") || strings.Contains(modelLower, "kimi/k3") {
-		if p := s.fallbackPrices["k3"]; p != nil {
+		if p := s.fallbackPrice("k3"); p != nil {
 			return p
 		}
-		if p := s.fallbackPrices["kimi-k3"]; p != nil {
+		if p := s.fallbackPrice("kimi-k3"); p != nil {
 			return p
 		}
-		if p := s.fallbackPrices["kimi-for-coding"]; p != nil {
+		if p := s.fallbackPrice("kimi-for-coding"); p != nil {
 			return p
 		}
-		return s.fallbackPrices["kimi-k2.6"]
+		return s.fallbackPrice("kimi-k2.6")
 	}
 	if strings.Contains(modelLower, "kimi-for-coding") {
-		return s.fallbackPrices["kimi-for-coding"]
+		return s.fallbackPrice("kimi-for-coding")
+	}
+	if strings.Contains(modelLower, "kimi-k2.7-code") || strings.Contains(modelLower, "kimi-k2-7-code") {
+		return s.fallbackPrice("kimi-for-coding")
 	}
 	if strings.Contains(modelLower, "kimi-k2.6") || strings.Contains(modelLower, "kimi-k2-6") {
-		return s.fallbackPrices["kimi-k2.6"]
+		return s.fallbackPrice("kimi-k2.6")
 	}
 	if strings.Contains(modelLower, "kimi-k2.5") || strings.Contains(modelLower, "kimi-k2-5") {
-		return s.fallbackPrices["kimi-k2.5"]
+		return s.fallbackPrice("kimi-k2.5")
 	}
 	if strings.Contains(modelLower, "kimi-k2-thinking") || strings.Contains(modelLower, "kimi-k2-thinking-") {
-		return s.fallbackPrices["kimi-k2-thinking"]
+		return s.fallbackPrice("kimi-k2-thinking")
 	}
 	if strings.Contains(modelLower, "kimi-k2") || strings.Contains(modelLower, "kimi/k2") {
-		return s.fallbackPrices["kimi-k2"]
+		return s.fallbackPrice("kimi-k2")
 	}
 
 	// MiniMax M 系列（M3 / M2.7 / M2.5 / M2.1 / M2；含 highspeed 变体）
 	if strings.Contains(modelLower, "minimax-m3") {
-		return s.fallbackPrices["minimax-m3"]
+		return s.fallbackPrice("minimax-m3")
 	}
 	if strings.Contains(modelLower, "minimax-m2.7-highspeed") || strings.Contains(modelLower, "minimax-m2-7-highspeed") {
-		return s.fallbackPrices["minimax-m2.7-highspeed"]
+		return s.fallbackPrice("minimax-m2.7-highspeed")
 	}
 	if strings.Contains(modelLower, "minimax-m2.7") || strings.Contains(modelLower, "minimax-m2-7") {
-		return s.fallbackPrices["minimax-m2.7"]
+		return s.fallbackPrice("minimax-m2.7")
 	}
 	if strings.Contains(modelLower, "minimax-m2.5") || strings.Contains(modelLower, "minimax-m2-5") {
-		return s.fallbackPrices["minimax-m2.5"]
+		return s.fallbackPrice("minimax-m2.5")
 	}
 	if strings.Contains(modelLower, "minimax-m2.1") || strings.Contains(modelLower, "minimax-m2-1") {
-		return s.fallbackPrices["minimax-m2.1"]
+		return s.fallbackPrice("minimax-m2.1")
 	}
 	if strings.Contains(modelLower, "minimax-m2") || strings.Contains(modelLower, "minimax-m-2") {
-		return s.fallbackPrices["minimax-m2"]
+		return s.fallbackPrice("minimax-m2")
 	}
 
 	// 火山方舟 豆包 Embedding（多模态向量化）。
 	// most-specific-first：放在未来任何 doubao-embedding / doubao 宽匹配之前。
 	// 覆盖带版本后缀的别名（如 doubao-embedding-vision-251215）。
 	if strings.Contains(modelLower, "doubao-embedding-vision") {
-		return s.fallbackPrices["doubao-embedding-vision"]
+		return s.fallbackPrice("doubao-embedding-vision")
 	}
 
 	// OpenAI（GPT-5 / Codex 族）：仅匹配已知型号，避免未知 OpenAI 型号误计价。
 	if normalized := normalizeKnownOpenAICodexModel(modelLower); normalized != "" {
 		switch normalized {
 		case "gpt-5.6-sol":
-			return s.fallbackPrices["gpt-5.6-sol"]
+			return s.fallbackPrice("gpt-5.6-sol")
 		case "gpt-5.6-terra":
-			return s.fallbackPrices["gpt-5.6-terra"]
+			return s.fallbackPrice("gpt-5.6-terra")
 		case "gpt-5.6-luna":
-			return s.fallbackPrices["gpt-5.6-luna"]
+			return s.fallbackPrice("gpt-5.6-luna")
 		case "gpt-5.5-pro":
-			return s.fallbackPrices["gpt-5.5-pro"]
+			return s.fallbackPrice("gpt-5.5-pro")
 		case "gpt-5.5":
-			return s.fallbackPrices["gpt-5.5"]
+			return s.fallbackPrice("gpt-5.5")
 		case "gpt-5.4-mini":
-			return s.fallbackPrices["gpt-5.4-mini"]
+			return s.fallbackPrice("gpt-5.4-mini")
 		case "gpt-5.4-nano":
-			return s.fallbackPrices["gpt-5.4-nano"]
+			return s.fallbackPrice("gpt-5.4-nano")
 		case "gpt-5.4":
-			return s.fallbackPrices["gpt-5.4"]
+			return s.fallbackPrice("gpt-5.4")
 		case "gpt-5.2":
-			return s.fallbackPrices["gpt-5.2"]
+			return s.fallbackPrice("gpt-5.2")
 		case "gpt-5.3-codex", "gpt-5.3-codex-spark":
-			return s.fallbackPrices["gpt-5.3-codex"]
+			return s.fallbackPrice("gpt-5.3-codex")
 		}
 	}
 
 	switch modelLower {
 	case "grok", "grok-latest", "grok-4.5", "grok-4.5-latest", "grok-build-latest":
-		return s.fallbackPrices[xai.DefaultChatModel]
+		return s.fallbackPrice(xai.CurrentDefaultChatModel())
 	case "grok-4.3":
-		return s.fallbackPrices["grok-4.3"]
+		return s.fallbackPrice("grok-4.3")
 	case "grok-build", "grok-build-0.1":
-		return s.fallbackPrices["grok-build-0.1"]
+		return s.fallbackPrice("grok-build-0.1")
 	}
 
 	return nil
@@ -801,13 +811,13 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 	}
 	cloned := *pricing
 	if isGPT56 {
-		if cloned.CacheCreationPricePerToken <= 0 {
+		if !cloned.CacheCreationPriceExplicit && cloned.CacheCreationPricePerToken <= 0 {
 			// OpenAI GPT-5.6 cache writes are billed at 1.25x the input rate.
 			// Keep an explicit upstream/cache catalog price untouched; this only
 			// supplies the official fallback for incomplete pricing payloads.
 			cloned.CacheCreationPricePerToken = cloned.InputPricePerToken * 1.25
 		}
-		if cloned.CacheCreationPricePerTokenPriority <= 0 {
+		if !cloned.CacheCreationPriceExplicit && cloned.CacheCreationPricePerTokenPriority <= 0 {
 			cloned.CacheCreationPricePerTokenPriority = cloned.InputPricePerTokenPriority * 1.25
 		}
 	}

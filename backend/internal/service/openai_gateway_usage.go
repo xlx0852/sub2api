@@ -291,6 +291,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	usageLog.OpenAIWSMode = result.OpenAIWSMode
 	usageLog.WSPayloadBytes = result.WSPayloadBytes
 	usageLog.WSEventCount = result.WSEventCount
+	usageLog.WSConnReused = result.WSConnReused
+	usageLog.WSConnPickMs = result.WSConnPickMs
+	usageLog.WSQueueWaitMs = result.WSQueueWaitMs
 	usageLog.DurationMs = &durationMs
 	usageLog.FirstTokenMs = result.FirstTokenMs
 	usageLog.CreatedAt = time.Now()

@@ -6,6 +6,8 @@ import "github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
 // Populated from modelcatalog; kept as a package var for call-site compatibility.
 var DefaultChatModel = modelcatalog.GrokDefaultChatModel()
 
+func CurrentDefaultChatModel() string { return modelcatalog.GrokDefaultChatModel() }
+
 // Model describes an xAI model in OpenAI-compatible /models shape.
 type Model struct {
 	ID          string `json:"id"`

@@ -2,6 +2,12 @@ export default {
     ops: {
       title: 'Ops Monitoring',
       description: 'Operational monitoring and troubleshooting',
+      sections: {
+        label: 'Ops monitoring views',
+        overview: 'Overview',
+        analysis: 'Analysis',
+        records: 'Ops records'
+      },
       // Dashboard
       systemHealth: 'System Health',
       overview: 'Overview',
@@ -35,6 +41,7 @@ export default {
         dropped: 'Dropped',
         failed: 'Failed',
         runtimeConfig: 'Runtime Log Configuration (applies immediately)',
+        advancedFilters: 'Advanced filters',
         all: 'All',
         level: 'Level',
         stacktraceThreshold: 'Stacktrace threshold',

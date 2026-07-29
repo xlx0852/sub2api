@@ -1037,7 +1037,7 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 	if platform == service.PlatformOpenAI {
 		c.JSON(http.StatusOK, gin.H{
 			"object": "list",
-			"data":   openai.DefaultModels,
+			"data":   openai.CurrentDefaultModels(),
 		})
 		return
 	}
@@ -1045,14 +1045,14 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 	if platform == service.PlatformGemini {
 		c.JSON(http.StatusOK, gin.H{
 			"object": "list",
-			"data":   geminicli.DefaultModels,
+			"data":   geminicli.CurrentDefaultModels(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"object": "list",
-		"data":   claude.DefaultModels,
+		"data":   claude.CurrentDefaultModels(),
 	})
 }
 
@@ -1088,8 +1088,8 @@ func writeCustomModelsList(c *gin.Context, platform string, modelIDs []string) {
 }
 
 func writeOpenAIModelsList(c *gin.Context, modelIDs []string) {
-	defaultsByID := make(map[string]openai.Model, len(openai.DefaultModels))
-	for _, model := range openai.DefaultModels {
+	defaultsByID := make(map[string]openai.Model, len(openai.CurrentDefaultModels()))
+	for _, model := range openai.CurrentDefaultModels() {
 		defaultsByID[model.ID] = model
 	}
 
@@ -1177,8 +1177,8 @@ func defaultModelIDsForPlatform(platform string) []string {
 	case service.PlatformOpenAI:
 		return openai.DefaultModelIDs()
 	case service.PlatformGemini:
-		ids := make([]string, 0, len(geminicli.DefaultModels))
-		for _, model := range geminicli.DefaultModels {
+		ids := make([]string, 0, len(geminicli.CurrentDefaultModels()))
+		for _, model := range geminicli.CurrentDefaultModels() {
 			ids = append(ids, model.ID)
 		}
 		return ids
@@ -1190,8 +1190,8 @@ func defaultModelIDsForPlatform(platform string) []string {
 		}
 		return ids
 	case service.PlatformAnthropic:
-		ids := make([]string, 0, len(claude.DefaultModels)+len(antigravity.DefaultModels()))
-		for _, model := range claude.DefaultModels {
+		ids := make([]string, 0, len(claude.CurrentDefaultModels())+len(antigravity.DefaultModels()))
+		for _, model := range claude.CurrentDefaultModels() {
 			ids = append(ids, model.ID)
 		}
 		for _, model := range antigravity.DefaultModels() {
@@ -1200,9 +1200,11 @@ func defaultModelIDsForPlatform(platform string) []string {
 		return mergeModelIDs(ids, nil)
 	case service.PlatformGrok:
 		return xai.DefaultModelIDs()
+	case service.PlatformKimi:
+		return []string{"kimi-k3", "kimi-k3-highspeed", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6", "kimi-k2.5"}
 	default:
-		ids := make([]string, 0, len(claude.DefaultModels))
-		for _, model := range claude.DefaultModels {
+		ids := make([]string, 0, len(claude.CurrentDefaultModels()))
+		for _, model := range claude.CurrentDefaultModels() {
 			ids = append(ids, model.ID)
 		}
 		return ids

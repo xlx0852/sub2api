@@ -973,26 +973,28 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 				"endpoint", input.Endpoint,
 				"protocol", input.Protocol,
 				"input_hash", hashText)
-			message := cfg.BlockMessage
-			if message != "" {
-				message = fmt.Sprintf("%s（hash: %s）", message, hashText)
-			}
 			scores := map[string]float64{"hash": 1.0}
 			log := s.buildLog(input, cfg, ContentModerationActionHashBlock, true, "hash", 1.0, scores, content.ExcerptText(), nil, nil, "")
+			// 客户端 message 不回显 hash；决策保留 InputHash 供内部/管理使用。
+			// hash 重复命中只 elevate，不计入封号阈值、不重复写 hash。
+			if input.UserID > 0 {
+				s.markElevatedUserSampling(ctx, cfg, input.UserID, true)
+			}
 			s.enqueueRecord(input, cfg, log, hashText, false, false)
 			return &ContentModerationDecision{
 				Allowed:    false,
 				Blocked:    true,
 				Flagged:    true,
-				Message:    message,
+				Message:    cfg.BlockMessage,
 				StatusCode: cfg.BlockStatus,
 				InputHash:  hashText,
 				Action:     ContentModerationActionHashBlock,
 			}, nil
 		}
 	}
-	// 干净 hash 短缓存：近期已放行的相同输入直接跳过 moderation API。
-	if s.hashCache != nil && hashText != "" {
+	elevatedUser := s.shouldForceSampleUser(ctx, cfg, input.UserID)
+	// 干净 hash 短缓存：高危用户强制全量审时不得短路。
+	if !elevatedUser && s.hashCache != nil && hashText != "" {
 		clean, err := s.hashCache.HasCleanInputHash(ctx, hashText)
 		if err != nil {
 			slog.Warn("content_moderation.clean_hash_check_failed", "user_id", input.UserID, "endpoint", input.Endpoint, "error", err)
@@ -1009,7 +1011,6 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			return allow, nil
 		}
 	}
-	elevatedUser := s.shouldForceSampleUser(ctx, cfg, input.UserID)
 	if !elevatedUser && !cfg.shouldSample(hashText) {
 		if cfg.Mode == ContentModerationModePreBlock {
 			s.recordPreBlockSyncMetric(0, ContentModerationActionAllow)
@@ -1215,7 +1216,23 @@ func (s *ContentModerationService) enqueueAsync(input ContentModerationCheckInpu
 }
 
 func (s *ContentModerationService) enqueueRecord(input ContentModerationCheckInput, cfg *ContentModerationConfig, log *ContentModerationLog, inputHash string, recordHash bool, applySideEffects bool) {
-	if s == nil || s.asyncQueue == nil || log == nil {
+	if s == nil || log == nil {
+		return
+	}
+	persistSync := func(reason string) {
+		slog.Warn("content_moderation.record_queue_full_sync_fallback",
+			"user_id", input.UserID,
+			"endpoint", input.Endpoint,
+			"action", log.Action,
+			"reason", reason)
+		s.asyncDropped.Add(1)
+		// 拦截类副作用不可丢：同步落库/封号/哈希。
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		s.persistContentModerationLog(ctx, cfg, log, inputHash, recordHash, applySideEffects)
+	}
+	if s.asyncQueue == nil {
+		persistSync("queue_unavailable")
 		return
 	}
 	queueSize := defaultContentModerationQueueSize
@@ -1223,12 +1240,7 @@ func (s *ContentModerationService) enqueueRecord(input ContentModerationCheckInp
 		queueSize = cfg.QueueSize
 	}
 	if len(s.asyncQueue) >= queueSize {
-		slog.Warn("content_moderation.record_queue_full",
-			"user_id", input.UserID,
-			"endpoint", input.Endpoint,
-			"action", log.Action,
-			"queue_size", queueSize)
-		s.asyncDropped.Add(1)
+		persistSync("queue_full")
 		return
 	}
 	task := contentModerationTask{
@@ -1244,11 +1256,7 @@ func (s *ContentModerationService) enqueueRecord(input ContentModerationCheckInp
 	case s.asyncQueue <- task:
 		s.asyncEnqueued.Add(1)
 	default:
-		slog.Warn("content_moderation.record_queue_full",
-			"user_id", input.UserID,
-			"endpoint", input.Endpoint,
-			"action", log.Action)
-		s.asyncDropped.Add(1)
+		persistSync("queue_full_race")
 	}
 }
 
@@ -1723,25 +1731,43 @@ func (s *ContentModerationService) persistContentModerationLog(ctx context.Conte
 			slog.Warn("content_moderation.record_hash_failed", "user_id", contentModerationEmailUserID(log), "endpoint", log.Endpoint, "error", err)
 		}
 	}
-	autoBanJustApplied := false
+
+	shouldAttemptBan := false
 	if applySideEffects {
-		autoBanJustApplied = s.applyFlaggedAccountSideEffects(ctx, cfg, log)
-		s.sendFlaggedNotificationSideEffects(ctx, cfg, log, autoBanJustApplied)
+		// 先准备写入审计行的计数/封禁标记，再 CreateLog，保证库中记录完整。
+		shouldAttemptBan = s.prepareFlaggedAccountSideEffects(ctx, cfg, log)
 	}
+
+	// F7: 先落库，再执行封号/邮件，避免“已封无审计”。
 	if s.repo != nil {
 		if err := s.repo.CreateLog(ctx, log); err != nil {
 			slog.Warn("content_moderation.create_log_failed", "user_id", contentModerationEmailUserID(log), "endpoint", log.Endpoint, "action", log.Action, "error", err)
 			return
 		}
 	}
+
+	autoBanJustApplied := false
+	if applySideEffects {
+		if shouldAttemptBan {
+			autoBanJustApplied = s.applyPreparedAccountBan(ctx, log)
+		}
+		s.sendFlaggedNotificationSideEffects(ctx, cfg, log, autoBanJustApplied)
+		if s.repo != nil && log.ID > 0 && log.EmailSent {
+			if err := s.repo.UpdateLogEmailSent(ctx, log.ID, true); err != nil {
+				slog.Warn("content_moderation.update_email_sent_failed", "user_id", contentModerationEmailUserID(log), "log_id", log.ID, "error", err)
+			}
+		}
+	}
 }
 
-func (s *ContentModerationService) applyFlaggedAccountSideEffects(ctx context.Context, cfg *ContentModerationConfig, log *ContentModerationLog) bool {
+// prepareFlaggedAccountSideEffects 写入审计字段（计数/封禁标记）并 elevate；返回是否应在落库后执行封号。
+func (s *ContentModerationService) prepareFlaggedAccountSideEffects(ctx context.Context, cfg *ContentModerationConfig, log *ContentModerationLog) bool {
 	if s == nil || cfg == nil || log == nil || !log.Flagged || log.UserID == nil || *log.UserID <= 0 {
 		return false
 	}
 	// 违规用户进入强制全量采样窗口（写穿缓存，避免热路径反复查库）。
 	s.markElevatedUserSampling(ctx, cfg, *log.UserID, true)
+	// CreateLog 尚未写入，窗口计数需 +1 计入当前命中。
 	count := 1
 	if s.repo != nil && cfg.ViolationWindowHours > 0 {
 		since := time.Now().Add(-time.Duration(cfg.ViolationWindowHours) * time.Hour)
@@ -1750,32 +1776,52 @@ func (s *ContentModerationService) applyFlaggedAccountSideEffects(ctx context.Co
 		}
 	}
 	log.ViolationCount = count
-	autoBanJustApplied := false
-	if cfg.AutoBanEnabled && cfg.BanThreshold > 0 && count >= cfg.BanThreshold && s.userRepo != nil {
-		user, err := s.userRepo.GetByID(ctx, *log.UserID)
-		if err != nil {
-			slog.Warn("content_moderation.ban_get_user_failed", "user_id", *log.UserID, "error", err)
-			return false
-		}
-		if user.IsAdmin() {
-			slog.Warn("content_moderation.autoban_skipped_admin", "user_id", *log.UserID, "role", user.Role, "count", count, "threshold", cfg.BanThreshold)
-			// TODO: Disable the triggering API key instead when API key mutation is available here.
-			return false
-		}
-		if user.Status != StatusDisabled {
-			user.Status = StatusDisabled
-			if err := s.userRepo.Update(ctx, user); err != nil {
-				slog.Warn("content_moderation.ban_update_user_failed", "user_id", *log.UserID, "error", err)
-				return false
-			}
-			if s.authCacheInvalidator != nil {
-				s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, *log.UserID)
-			}
-			autoBanJustApplied = true
-		}
-		log.AutoBanned = true
+	if !cfg.AutoBanEnabled || cfg.BanThreshold <= 0 || count < cfg.BanThreshold || s.userRepo == nil {
+		return false
 	}
-	return autoBanJustApplied
+	user, err := s.userRepo.GetByID(ctx, *log.UserID)
+	if err != nil {
+		slog.Warn("content_moderation.ban_get_user_failed", "user_id", *log.UserID, "error", err)
+		return false
+	}
+	if user.IsAdmin() {
+		slog.Warn("content_moderation.autoban_skipped_admin", "user_id", *log.UserID, "role", user.Role, "count", count, "threshold", cfg.BanThreshold)
+		return false
+	}
+	// 审计行标记本次触发了自动封禁策略（即使用户此前已禁用）。
+	log.AutoBanned = true
+	return user.Status != StatusDisabled
+}
+
+func (s *ContentModerationService) applyPreparedAccountBan(ctx context.Context, log *ContentModerationLog) bool {
+	if s == nil || log == nil || log.UserID == nil || *log.UserID <= 0 || s.userRepo == nil {
+		return false
+	}
+	user, err := s.userRepo.GetByID(ctx, *log.UserID)
+	if err != nil {
+		slog.Warn("content_moderation.ban_get_user_failed", "user_id", *log.UserID, "error", err)
+		return false
+	}
+	if user.IsAdmin() || user.Status == StatusDisabled {
+		return false
+	}
+	user.Status = StatusDisabled
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		slog.Warn("content_moderation.ban_update_user_failed", "user_id", *log.UserID, "error", err)
+		return false
+	}
+	if s.authCacheInvalidator != nil {
+		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, *log.UserID)
+	}
+	return true
+}
+
+// applyFlaggedAccountSideEffects 兼容旧调用：准备元数据并立即封号（用于无需先 CreateLog 的路径）。
+func (s *ContentModerationService) applyFlaggedAccountSideEffects(ctx context.Context, cfg *ContentModerationConfig, log *ContentModerationLog) bool {
+	if !s.prepareFlaggedAccountSideEffects(ctx, cfg, log) {
+		return false
+	}
+	return s.applyPreparedAccountBan(ctx, log)
 }
 
 func (s *ContentModerationService) sendFlaggedNotificationSideEffects(ctx context.Context, cfg *ContentModerationConfig, log *ContentModerationLog, autoBanJustApplied bool) {
@@ -1788,14 +1834,14 @@ func (s *ContentModerationService) sendFlaggedNotificationSideEffects(ctx contex
 	emailSent := false
 	if cfg.EmailOnHit {
 		if err := s.sendViolationEmail(ctx, cfg, log); err != nil {
-			slog.Warn("content_moderation.email_failed", "user_id", *log.UserID, "email", log.UserEmail, "error", err)
+			slog.Warn("content_moderation.email_failed", "user_id", contentModerationEmailUserID(log), "email", log.UserEmail, "error", err)
 		} else {
 			emailSent = true
 		}
 	}
 	if autoBanJustApplied {
 		if err := s.sendAccountDisabledEmail(ctx, cfg, log); err != nil {
-			slog.Warn("content_moderation.ban_email_failed", "user_id", *log.UserID, "email", log.UserEmail, "error", err)
+			slog.Warn("content_moderation.ban_email_failed", "user_id", contentModerationEmailUserID(log), "email", log.UserEmail, "error", err)
 		} else {
 			emailSent = true
 		}

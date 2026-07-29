@@ -1,10 +1,10 @@
 <template>
   <AppLayout>
-    <TablePageLayout>
+    <TablePageLayout compact>
       <template #filters>
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="grid grid-cols-2 items-center gap-3 sm:flex sm:flex-wrap">
           <!-- Left: Search + Filters -->
-          <div class="flex-1 sm:max-w-64">
+          <div class="min-w-0 sm:flex-1 sm:max-w-64">
             <input
               v-model="searchQuery"
               type="text"
@@ -16,23 +16,23 @@
           <Select
             v-model="filters.status"
             :options="filterStatusOptions"
-            class="w-36"
+            class="w-full sm:w-36"
             @change="loadCodes"
           />
 
           <!-- Right: Action buttons -->
-          <div class="flex flex-1 flex-wrap items-center justify-end gap-2">
+          <div class="col-span-2 grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-2 sm:ml-auto sm:flex sm:flex-1 sm:justify-end">
             <button
               @click="loadCodes"
               :disabled="loading"
-              class="btn btn-secondary"
+              class="btn btn-secondary h-12 w-12 px-0 sm:h-auto sm:w-auto sm:px-4"
               :title="t('common.refresh')"
             >
               <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
             </button>
-            <button @click="showCreateDialog = true" class="btn btn-primary">
-              <Icon name="plus" size="md" class="mr-1" />
-              {{ t('admin.promo.createCode') }}
+            <button @click="showCreateDialog = true" class="btn btn-primary h-12 min-w-0 whitespace-nowrap sm:h-auto">
+              <Icon name="plus" size="md" />
+              <span class="truncate">{{ t('admin.promo.createCode') }}</span>
             </button>
           </div>
         </div>
@@ -139,6 +139,18 @@
               >
                 <Icon name="trash" size="sm" />
               </button>
+            </div>
+          </template>
+
+          <template #empty>
+            <div class="promo-empty-wrap">
+              <EmptyState
+                :title="loadError ? t('admin.promo.failedToLoad') : t('empty.noData')"
+                :description="loadError ? t('common.retry') : t('admin.promo.emptyDescription', '还没有优惠码，创建后即可用于注册活动和余额奖励。')"
+                :action-text="loadError ? t('common.retry') : t('admin.promo.createCode')"
+                :action-icon="!loadError"
+                @action="loadError ? loadCodes() : (showCreateDialog = true)"
+              />
             </div>
           </template>
         </DataTable>
@@ -403,6 +415,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -411,6 +424,7 @@ const { copyToClipboard: clipboardCopy } = useClipboard()
 // State
 const codes = ref<PromoCode[]>([])
 const loading = ref(false)
+const loadError = ref(false)
 const creating = ref(false)
 const updating = ref(false)
 const searchQuery = ref('')
@@ -518,6 +532,7 @@ const loadCodes = async () => {
   const currentController = new AbortController()
   abortController = currentController
   loading.value = true
+  loadError.value = false
 
   try {
     const response = await adminAPI.promo.list(
@@ -545,6 +560,7 @@ const loadCodes = async () => {
       return
     }
     appStore.showError(t('admin.promo.failedToLoad'))
+    loadError.value = true
     console.error('Error loading promo codes:', error)
   } finally {
     if (abortController === currentController) {
@@ -743,3 +759,23 @@ onUnmounted(() => {
   abortController?.abort()
 })
 </script>
+
+<style scoped>
+.promo-empty-wrap {
+  display: flex;
+  min-height: 300px;
+  align-items: center;
+  justify-content: center;
+}
+
+.promo-empty-wrap :deep(.empty-state) {
+  padding-top: 2.5rem;
+  padding-bottom: 2.5rem;
+}
+
+@media (max-width: 640px) {
+  .promo-empty-wrap {
+    min-height: 320px;
+  }
+}
+</style>

@@ -355,20 +355,20 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
 </script>
 
 <template>
-  <div class="rounded-3xl bg-white p-6 ring-1 ring-gray-900/5 dark:bg-dark-800 dark:ring-dark-700">
-    <div class="mb-4 flex items-start justify-between gap-4">
-      <div>
-        <h3 class="text-sm font-bold text-gray-900 dark:text-white">{{ t('admin.ops.alertEvents.title') }}</h3>
-        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.alertEvents.description') }}</p>
+  <div class="rounded-2xl bg-white p-4 ring-1 ring-gray-900/5 sm:p-6 dark:bg-dark-800 dark:ring-dark-700">
+    <div class="mb-4 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+      <div class="min-w-0">
+        <h3 class="text-base font-bold text-gray-900 dark:text-white">{{ t('admin.ops.alertEvents.title') }}</h3>
+        <p class="mt-1 text-sm leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.ops.alertEvents.description') }}</p>
       </div>
 
-      <div class="flex items-center gap-2">
-        <Select :model-value="timeRange" :options="timeRangeOptions" class="w-[120px]" @change="timeRange = String($event || '24h')" />
-        <Select :model-value="severity" :options="severityOptions" class="w-[88px]" @change="severity = String($event || '')" />
-        <Select :model-value="status" :options="statusOptions" class="w-[110px]" @change="status = String($event || '')" />
-        <Select :model-value="emailSent" :options="emailSentOptions" class="w-[110px]" @change="emailSent = String($event || '')" />
+      <div class="grid w-full grid-cols-2 gap-2 sm:grid-cols-5 xl:flex xl:w-auto xl:items-center">
+        <Select :model-value="timeRange" :options="timeRangeOptions" class="min-w-0 w-full xl:w-[120px]" @change="timeRange = String($event || '24h')" />
+        <Select :model-value="severity" :options="severityOptions" class="min-w-0 w-full xl:w-[88px]" @change="severity = String($event || '')" />
+        <Select :model-value="status" :options="statusOptions" class="min-w-0 w-full xl:w-[110px]" @change="status = String($event || '')" />
+        <Select :model-value="emailSent" :options="emailSentOptions" class="min-w-0 w-full xl:w-[110px]" @change="emailSent = String($event || '')" />
         <button
-          class="flex items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-bold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-dark-700 dark:text-gray-300 dark:hover:bg-dark-600"
+          class="col-span-2 flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-gray-100 px-3 py-2 text-xs font-bold text-gray-700 transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-1 xl:min-h-0 xl:py-1.5 dark:bg-dark-700 dark:text-gray-300 dark:hover:bg-dark-600"
           :disabled="loading"
           @click="loadFirstPage"
         >
@@ -388,13 +388,13 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
       {{ t('admin.ops.alertEvents.loading') }}
     </div>
 
-    <div v-else-if="empty" class="rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400">
+    <div v-else-if="empty" class="flex min-h-24 items-center justify-center rounded-xl border border-dashed border-gray-200 p-4 text-center text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400 sm:min-h-32">
       {{ t('admin.ops.alertEvents.empty') }}
     </div>
 
     <div v-else class="overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
-      <div class="max-h-[600px] overflow-y-auto" @scroll="onScroll">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
+      <div class="max-h-[600px] overflow-auto" @scroll="onScroll">
+        <table class="min-w-[980px] divide-y divide-gray-200 dark:divide-dark-700">
           <thead class="sticky top-0 z-10 bg-gray-50 dark:bg-dark-900">
             <tr>
               <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -645,4 +645,3 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
     </BaseDialog>
   </div>
 </template>
-

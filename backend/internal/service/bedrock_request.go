@@ -125,7 +125,7 @@ func normalizeBedrockModelID(modelID string) (normalized string, shouldAdjustReg
 	if modelID == "" {
 		return "", false, false
 	}
-	if mapped, exists := domain.DefaultBedrockModelMapping[modelID]; exists {
+	if mapped, exists := domain.CurrentDefaultBedrockModelMapping()[modelID]; exists {
 		return mapped, true, true
 	}
 	if isRegionalBedrockModelID(modelID) {

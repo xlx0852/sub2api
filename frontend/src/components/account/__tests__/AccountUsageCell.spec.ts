@@ -72,6 +72,24 @@ describe('AccountUsageCell', () => {
     })
   })
 
+  it('摘要模式可按调用方要求横向填满容器', () => {
+    getUsage.mockResolvedValue({})
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id: 99 }),
+        variant: 'summary',
+        fullWidth: true
+      },
+      global: {
+        stubs: { AccountUsageSummary: true }
+      }
+    })
+
+    expect(wrapper.classes()).toContain('w-full')
+    expect(wrapper.classes()).toContain('max-w-none')
+    expect(wrapper.classes()).not.toContain('w-[304px]')
+  })
+
   it('Antigravity 图片用量会聚合新旧 image 模型', async () => {
     getUsage.mockResolvedValue({
       antigravity_quota: {

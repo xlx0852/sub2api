@@ -67,6 +67,8 @@ const (
 	// 内无响应即判定死连接并关闭，从源头避免请求挂在死连接上。
 	openAIHTTP2ReadIdleTimeout = 15 * time.Second
 	openAIHTTP2PingTimeout     = 15 * time.Second
+	grokHTTP2ReadIdleTimeout   = 15 * time.Second
+	grokHTTP2PingTimeout       = 5 * time.Second
 
 	// Grok CLI proxy may return a compatibility-only 403 that is still valid on
 	// api.x.ai with the same OAuth credential. Fallback only for that host.
@@ -80,6 +82,7 @@ const (
 	upstreamProtocolModeOpenAIH1         = "openai_h1"
 	upstreamProtocolModeOpenAIH2         = "openai_h2"
 	upstreamProtocolModeOpenAIH1Fallback = "openai_h1_fallback"
+	upstreamProtocolModeGrokH2           = "grok_h2"
 )
 
 var errUpstreamClientLimitReached = errors.New("upstream client cache limit reached")
@@ -194,6 +197,22 @@ func (s *httpUpstreamService) Do(req *http.Request, proxyURL string, accountID i
 	// 执行请求；Grok CLI 403 兼容拒绝时回退到官方 api.x.ai
 	client := httpClientWithGrokAccessDeniedFallback(entry.client)
 	resp, err := client.Do(req)
+	if err != nil && profile == service.HTTPUpstreamProfileGrok {
+		if retryReq, ok := cloneGrokRequestForHTTP1Retry(req); ok {
+			fallbackClient, buildErr := s.newGrokHTTP1FallbackClient(proxyURL, accountConcurrency)
+			if buildErr == nil {
+				fallbackResp, retryErr := httpClientWithGrokAccessDeniedFallback(fallbackClient).Do(retryReq)
+				if retryErr == nil {
+					resp = fallbackResp
+					err = nil
+				} else {
+					err = errors.Join(err, fmt.Errorf("grok HTTP/1.1 fallback: %w", retryErr))
+				}
+			} else {
+				err = errors.Join(err, fmt.Errorf("build grok HTTP/1.1 fallback: %w", buildErr))
+			}
+		}
+	}
 	if err != nil {
 		s.recordOpenAIHTTP2Failure(profile, entry.protocolMode, entry.proxyKey, err)
 		// 请求失败，立即减少计数
@@ -214,6 +233,44 @@ func (s *httpUpstreamService) Do(req *http.Request, proxyURL string, accountID i
 	})
 
 	return resp, nil
+}
+
+func cloneGrokRequestForHTTP1Retry(req *http.Request) (*http.Request, bool) {
+	if req == nil || req.Context() == nil || req.Context().Err() != nil {
+		return nil, false
+	}
+	retryReq := req.Clone(req.Context())
+	retryReq.Close = true
+	if req.Body == nil {
+		return retryReq, true
+	}
+	if req.GetBody == nil {
+		return nil, false
+	}
+	body, err := req.GetBody()
+	if err != nil {
+		return nil, false
+	}
+	retryReq.Body = body
+	return retryReq, true
+}
+
+func (s *httpUpstreamService) newGrokHTTP1FallbackClient(proxyURL string, accountConcurrency int) (*http.Client, error) {
+	_, parsedProxy, err := normalizeProxyURL(proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	settings := s.resolvePoolSettings(s.getIsolationMode(), accountConcurrency)
+	transport, err := buildUpstreamTransport(settings, parsedProxy, upstreamProtocolModeOpenAIH1)
+	if err != nil {
+		return nil, err
+	}
+	transport.DisableKeepAlives = true
+	client := &http.Client{Transport: transport}
+	if s.shouldValidateResolvedIP() {
+		client.CheckRedirect = s.redirectChecker
+	}
+	return client, nil
 }
 
 // DoWithTLS 执行带 TLS 指纹伪装的 HTTP 请求
@@ -787,6 +844,9 @@ func (s *httpUpstreamService) resolveOpenAIHTTP2Settings() openAIHTTP2Settings {
 }
 
 func (s *httpUpstreamService) resolveProtocolMode(profile service.HTTPUpstreamProfile, proxyKey string, parsedProxy *url.URL) string {
+	if profile == service.HTTPUpstreamProfileGrok {
+		return upstreamProtocolModeGrokH2
+	}
 	if profile != service.HTTPUpstreamProfileOpenAI {
 		return upstreamProtocolModeDefault
 	}
@@ -1101,6 +1161,11 @@ func buildUpstreamTransport(settings poolSettings, proxyURL *url.URL, protocolMo
 		if _, err := enableOpenAIHTTP2KeepAlive(transport); err != nil {
 			return nil, err
 		}
+	case upstreamProtocolModeGrokH2:
+		transport.ForceAttemptHTTP2 = true
+		if _, err := enableHTTP2KeepAlive(transport, grokHTTP2ReadIdleTimeout, grokHTTP2PingTimeout); err != nil {
+			return nil, err
+		}
 	case upstreamProtocolModeOpenAIH1:
 		transport.ForceAttemptHTTP2 = false
 		transport.TLSNextProto = make(map[string]func(string, *tls.Conn) http.RoundTripper)
@@ -1120,13 +1185,17 @@ func buildUpstreamTransport(settings poolSettings, proxyURL *url.URL, protocolMo
 // 静默掐断的死连接。此处主动设置 ReadIdleTimeout/PingTimeout，让死连接被提前 PING
 // 出并关闭，请求得以重建连接而非挂到 TCP 重传超时。返回底层 *http2.Transport 便于测试。
 func enableOpenAIHTTP2KeepAlive(transport *http.Transport) (*http2.Transport, error) {
+	return enableHTTP2KeepAlive(transport, openAIHTTP2ReadIdleTimeout, openAIHTTP2PingTimeout)
+}
+
+func enableHTTP2KeepAlive(transport *http.Transport, readIdleTimeout, pingTimeout time.Duration) (*http2.Transport, error) {
 	h2, err := http2.ConfigureTransports(transport)
 	if err != nil {
 		return nil, err
 	}
 	if h2 != nil {
-		h2.ReadIdleTimeout = openAIHTTP2ReadIdleTimeout
-		h2.PingTimeout = openAIHTTP2PingTimeout
+		h2.ReadIdleTimeout = readIdleTimeout
+		h2.PingTimeout = pingTimeout
 	}
 	return h2, nil
 }

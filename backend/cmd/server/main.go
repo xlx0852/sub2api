@@ -19,6 +19,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/setup"
 	"github.com/Wei-Shaw/sub2api/internal/web"
@@ -139,6 +140,16 @@ func runMainServer() {
 	if err := logger.Init(logger.OptionsFromConfig(cfg.Log)); err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
+	modelcatalog.Start(modelcatalog.RemoteOptions{
+		Enabled: cfg.ModelCatalog.RemoteEnabled, RemoteURL: cfg.ModelCatalog.RemoteURL,
+		HashURL: cfg.ModelCatalog.HashURL, DataDir: cfg.ModelCatalog.DataDir,
+		FallbackFile:      cfg.ModelCatalog.FallbackFile,
+		UpdateInterval:    time.Duration(cfg.ModelCatalog.UpdateIntervalHours) * time.Hour,
+		HashCheckInterval: time.Duration(cfg.ModelCatalog.HashCheckIntervalMinutes) * time.Minute,
+		RequestTimeout:    time.Duration(cfg.ModelCatalog.RequestTimeoutSeconds) * time.Second,
+		MaxBodyBytes:      cfg.ModelCatalog.MaxBodyBytes,
+	})
+	defer modelcatalog.Stop()
 	if cfg.RunMode == config.RunModeSimple {
 		log.Println("⚠️  WARNING: Running in SIMPLE mode - billing and quota checks are DISABLED")
 	}

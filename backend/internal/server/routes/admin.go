@@ -50,6 +50,9 @@ func RegisterAdminRoutes(
 		// Grok OAuth
 		registerGrokOAuthRoutes(admin, h)
 
+		// Kimi OAuth device authorization
+		registerKimiOAuthRoutes(admin, h)
+
 		// 代理管理
 		registerProxyRoutes(admin, h)
 
@@ -106,7 +109,25 @@ func RegisterAdminRoutes(
 
 		// 邀请返利（专属用户管理）
 		registerAffiliateRoutes(admin, h)
+
+		// 利润分析
+		registerProfitRoutes(admin, h)
 	}
+}
+
+// registerProfitRoutes 注册利润分析路由
+func registerProfitRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	profit := admin.Group("/profit")
+	profit.GET("/overview", h.Admin.Profit.GetOverview)
+	profit.GET("/summary", h.Admin.Profit.GetSummary)
+	profit.GET("/trend", h.Admin.Profit.GetTrend)
+	profit.GET("/configs", h.Admin.Profit.ListCostConfigs)
+	profit.GET("/configs/:account_id/cycles", h.Admin.Profit.ListSubscriptionCycles)
+	profit.POST("/configs/:account_id/cycles", h.Admin.Profit.CreateSubscriptionCycle)
+	profit.DELETE("/cycles/:id", h.Admin.Profit.DeleteSubscriptionCycle)
+	profit.POST("/configs/batch", h.Admin.Profit.BatchUpsertSubscriptionConfigs)
+	profit.PUT("/configs/:account_id", h.Admin.Profit.UpsertCostConfig)
+	profit.DELETE("/configs/:account_id", h.Admin.Profit.DeleteCostConfig)
 }
 
 func registerAdminComplianceRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
@@ -372,6 +393,11 @@ func registerOpenAIOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		openai.POST("/refresh-token", h.Admin.OpenAIOAuth.RefreshToken)
 		openai.POST("/accounts/:id/refresh", h.Admin.OpenAIOAuth.RefreshAccountToken)
 		openai.POST("/create-from-oauth", h.Admin.OpenAIOAuth.CreateAccountFromOAuth)
+		openai.POST("/oauth/device/start", h.Admin.OpenAIOAuth.StartDeviceAuthorization)
+		openai.GET("/oauth/device/status", h.Admin.OpenAIOAuth.DeviceAuthorizationStatus)
+		openai.DELETE("/oauth/device/session", h.Admin.OpenAIOAuth.CancelDeviceAuthorization)
+		openai.POST("/oauth/create-from-device", h.Admin.OpenAIOAuth.CreateAccountFromDevice)
+		openai.POST("/accounts/:id/reauth-from-device", h.Admin.OpenAIOAuth.ReauthorizeAccountFromDevice)
 		openai.POST("/create-from-codex-pat", h.Admin.OpenAIOAuth.CreateAccountFromCodexPAT)
 		openai.GET("/accounts/:id/quota", h.Admin.OpenAIOAuth.QueryQuota)
 		openai.POST("/accounts/:id/reset-quota", h.Admin.OpenAIOAuth.ResetQuota)
@@ -403,10 +429,27 @@ func registerGrokOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		grok.POST("/oauth/exchange-code", h.Admin.GrokOAuth.ExchangeCode)
 		grok.POST("/oauth/refresh-token", h.Admin.GrokOAuth.RefreshToken)
 		grok.POST("/oauth/create-from-oauth", h.Admin.GrokOAuth.CreateAccountFromOAuth)
+		grok.POST("/oauth/device/start", h.Admin.GrokOAuth.StartDeviceAuthorization)
+		grok.GET("/oauth/device/status", h.Admin.GrokOAuth.DeviceAuthorizationStatus)
+		grok.DELETE("/oauth/device/session", h.Admin.GrokOAuth.CancelDeviceAuthorization)
+		grok.POST("/oauth/create-from-device", h.Admin.GrokOAuth.CreateAccountFromDevice)
+		grok.POST("/accounts/:id/reauth-from-device", h.Admin.GrokOAuth.ReauthorizeAccountFromDevice)
 		grok.POST("/accounts/:id/refresh", h.Admin.GrokOAuth.RefreshAccountToken)
 		grok.GET("/accounts/:id/quota", h.Admin.GrokOAuth.QueryQuota)
 		grok.POST("/accounts/:id/reset-quota", h.Admin.GrokOAuth.ResetQuota)
 		grok.GET("/runtime-sanity", h.Admin.GrokOAuth.RuntimeSanity)
+	}
+}
+
+func registerKimiOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	kimi := admin.Group("/kimi")
+	{
+		kimi.POST("/oauth/device/start", h.Admin.KimiOAuth.StartDeviceAuthorization)
+		kimi.GET("/oauth/device/status", h.Admin.KimiOAuth.DeviceAuthorizationStatus)
+		kimi.DELETE("/oauth/device/session", h.Admin.KimiOAuth.CancelDeviceAuthorization)
+		kimi.POST("/oauth/create-from-device", h.Admin.KimiOAuth.CreateAccountFromDevice)
+		kimi.POST("/accounts/:id/reauth-from-device", h.Admin.KimiOAuth.ReauthorizeAccountFromDevice)
+		kimi.POST("/accounts/:id/refresh", h.Admin.KimiOAuth.RefreshAccountToken)
 	}
 }
 
@@ -548,6 +591,8 @@ func registerSystemRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	system := admin.Group("/system")
 	{
 		system.GET("/version", h.Admin.System.GetVersion)
+		system.GET("/model-catalog/status", h.Admin.System.GetModelCatalogStatus)
+		system.POST("/model-catalog/refresh", h.Admin.System.RefreshModelCatalog)
 		system.POST("/restart", h.Admin.System.RestartService)
 	}
 }

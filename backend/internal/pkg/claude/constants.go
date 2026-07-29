@@ -119,8 +119,9 @@ var DefaultModels []Model
 
 // DefaultModelIDs 返回默认模型的 ID 列表
 func DefaultModelIDs() []string {
-	ids := make([]string, len(DefaultModels))
-	for i, m := range DefaultModels {
+	models := CurrentDefaultModels()
+	ids := make([]string, len(models))
+	for i, m := range models {
 		ids[i] = m.ID
 	}
 	return ids
@@ -140,7 +141,7 @@ func NormalizeModelID(id string) string {
 	if id == "" {
 		return id
 	}
-	if mapped, ok := ModelIDOverrides[id]; ok {
+	if mapped, ok := CurrentModelIDOverrides()[id]; ok {
 		return mapped
 	}
 	return id
@@ -151,7 +152,7 @@ func DenormalizeModelID(id string) string {
 	if id == "" {
 		return id
 	}
-	if mapped, ok := ModelIDReverseOverrides[id]; ok {
+	if mapped, ok := CurrentModelIDReverseOverrides()[id]; ok {
 		return mapped
 	}
 	return id

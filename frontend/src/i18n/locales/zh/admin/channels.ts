@@ -330,6 +330,7 @@ export default {
       emailSent: '已发邮件',
       emailNotSent: '未发邮件',
       autoBanned: '已封禁',
+      banEvent: '当时封禁',
       unbanUser: '解封',
       unbanSuccess: '用户已解封',
       unbanFailed: '解封用户失败',
@@ -466,6 +467,7 @@ export default {
       },
       action: {
         block: '拦截',
+        hashBlock: '哈希拦截',
         keywordBlock: '关键词拦截',
         cyberPolicy: '网络安全策略',
         error: '异常',

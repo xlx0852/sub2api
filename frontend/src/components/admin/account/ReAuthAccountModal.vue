@@ -14,7 +14,7 @@
           <div
             :class="[
               'flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br',
-              isOpenAILike
+              isOpenAILike || isKimi
                 ? 'from-green-500 to-green-600'
                 : isGemini
                   ? 'from-blue-500 to-blue-600'
@@ -35,6 +35,8 @@
               {{
                 isOpenAI
                   ? t('admin.accounts.openaiAccount')
+                  : isKimi
+                    ? 'Kimi'
                   : isGemini
                     ? t('admin.accounts.geminiAccount')
                     : isAntigravity
@@ -120,7 +122,53 @@
         </div>
       </div>
 
+      <div
+        v-if="isOpenAI || isGrok"
+        class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-dark-600 dark:bg-dark-700"
+      >
+        <p class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+          {{ t('admin.accounts.oauth.deviceModeTitle') }}
+        </p>
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="rounded-md border px-3 py-2 text-sm transition-colors"
+            :class="deviceAuthMode === 'browser'
+              ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+              : 'border-gray-300 bg-white text-gray-600 hover:border-primary-300 dark:border-dark-500 dark:bg-dark-800 dark:text-gray-300'"
+            @click="deviceAuthMode = 'browser'"
+          >
+            {{ t('admin.accounts.oauth.browserMode') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-md border px-3 py-2 text-sm transition-colors"
+            :class="deviceAuthMode === 'device'
+              ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+              : 'border-gray-300 bg-white text-gray-600 hover:border-primary-300 dark:border-dark-500 dark:bg-dark-800 dark:text-gray-300'"
+            @click="deviceAuthMode = 'device'"
+          >
+            {{ t('admin.accounts.oauth.deviceMode') }}
+          </button>
+        </div>
+      </div>
+
+      <DeviceAuthorizationFlow
+        v-if="isKimi || (isOpenAI && deviceAuthMode === 'device') || (isGrok && deviceAuthMode === 'device')"
+        :provider="isOpenAI ? 'openai' : isGrok ? 'grok' : 'kimi'"
+        :session="isOpenAI ? openaiDeviceOAuth.session.value : isGrok ? grokDeviceOAuth.session.value : kimiOAuth.session.value"
+        :loading="isOpenAI ? openaiDeviceOAuth.loading.value : isGrok ? grokDeviceOAuth.loading.value : kimiOAuth.loading.value"
+        :error="isOpenAI ? openaiDeviceOAuth.error.value : isGrok ? grokDeviceOAuth.error.value : kimiOAuth.error.value"
+        :remaining-seconds="isOpenAI ? openaiDeviceOAuth.remainingSeconds.value : isGrok ? grokDeviceOAuth.remainingSeconds.value : kimiOAuth.remainingSeconds.value"
+        :complete-label="t('admin.accounts.reAuthorize')"
+        :loading-label="t('admin.accounts.oauth.verifying')"
+        @start="isOpenAI ? handleStartOpenAIDeviceAuthorization : isGrok ? handleStartGrokDeviceAuthorization : handleStartKimiAuthorization"
+        @cancel="isOpenAI ? handleCancelOpenAIDeviceAuthorization : isGrok ? handleCancelGrokDeviceAuthorization : handleCancelKimiAuthorization"
+        @complete="isOpenAI ? handleCompleteOpenAIDeviceAuthorization : isGrok ? handleCompleteGrokDeviceAuthorization : handleCompleteKimiAuthorization"
+      />
+
       <OAuthAuthorizationFlow
+        v-else-if="!isKimi"
         ref="oauthFlowRef"
         :add-method="addMethod"
         :auth-url="currentAuthUrl"
@@ -141,7 +189,7 @@
     </div>
 
     <template #footer>
-      <div v-if="account" class="flex justify-between gap-3">
+      <div v-if="account && !isKimi && !isDeviceAuthMode" class="flex justify-between gap-3">
         <button type="button" class="btn btn-secondary" @click="handleClose">
           {{ t('common.cancel') }}
         </button>
@@ -197,10 +245,14 @@ import { useOpenAIOAuth } from '@/composables/useOpenAIOAuth'
 import { useGeminiOAuth } from '@/composables/useGeminiOAuth'
 import { useAntigravityOAuth } from '@/composables/useAntigravityOAuth'
 import { useGrokOAuth } from '@/composables/useGrokOAuth'
+import { useKimiOAuth } from '@/composables/useKimiOAuth'
+import { useOpenAIDeviceOAuth } from '@/composables/useOpenAIDeviceOAuth'
+import { useGrokDeviceOAuth } from '@/composables/useGrokDeviceOAuth'
 import type { Account } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import OAuthAuthorizationFlow from '@/components/account/OAuthAuthorizationFlow.vue'
+import DeviceAuthorizationFlow from '@/components/account/DeviceAuthorizationFlow.vue'
 
 // Type for exposed OAuthAuthorizationFlow component
 // Note: defineExpose automatically unwraps refs, so we use the unwrapped types
@@ -233,6 +285,9 @@ const openaiOAuth = useOpenAIOAuth()
 const geminiOAuth = useGeminiOAuth()
 const antigravityOAuth = useAntigravityOAuth()
 const grokOAuth = useGrokOAuth()
+const kimiOAuth = useKimiOAuth()
+const openaiDeviceOAuth = useOpenAIDeviceOAuth()
+const grokDeviceOAuth = useGrokDeviceOAuth()
 
 // Refs
 const oauthFlowRef = ref<OAuthFlowExposed | null>(null)
@@ -240,6 +295,7 @@ const oauthFlowRef = ref<OAuthFlowExposed | null>(null)
 // State
 const addMethod = ref<AddMethod>('oauth')
 const geminiOAuthType = ref<'code_assist' | 'google_one' | 'ai_studio'>('code_assist')
+const deviceAuthMode = ref<'browser' | 'device'>('browser')
 
 // Computed - check platform
 const isOpenAI = computed(() => props.account?.platform === 'openai')
@@ -248,6 +304,16 @@ const isGemini = computed(() => props.account?.platform === 'gemini')
 const isAnthropic = computed(() => props.account?.platform === 'anthropic')
 const isAntigravity = computed(() => props.account?.platform === 'antigravity')
 const isGrok = computed(() => props.account?.platform === 'grok')
+const isKimi = computed(() => props.account?.platform === 'kimi')
+const isDeviceAuthMode = computed(
+  () => (isOpenAI.value || isGrok.value) && deviceAuthMode.value === 'device'
+)
+
+watch(deviceAuthMode, (mode, previousMode) => {
+  if (mode === previousMode || mode === 'device') return
+  if (openaiDeviceOAuth.session.value) void openaiDeviceOAuth.cancel()
+  if (grokDeviceOAuth.session.value) void grokDeviceOAuth.cancel()
+})
 
 // Computed - current OAuth state based on platform
 const currentAuthUrl = computed(() => {
@@ -313,6 +379,7 @@ watch(
               ? 'ai_studio'
               : 'code_assist'
       }
+      deviceAuthMode.value = isOpenAI.value || isGrok.value ? 'device' : 'browser'
     } else {
       resetState()
     }
@@ -328,11 +395,104 @@ const resetState = () => {
   geminiOAuth.resetState()
   antigravityOAuth.resetState()
   grokOAuth.resetState()
+  kimiOAuth.resetState()
+  openaiDeviceOAuth.resetState()
+  grokDeviceOAuth.resetState()
+  deviceAuthMode.value = 'browser'
   oauthFlowRef.value?.reset()
 }
 
 const handleClose = () => {
+  if (isKimi.value) void kimiOAuth.cancel()
+  if (isOpenAI.value && openaiDeviceOAuth.session.value) void openaiDeviceOAuth.cancel()
+  if (isGrok.value && grokDeviceOAuth.session.value) void grokDeviceOAuth.cancel()
   emit('close')
+}
+
+const handleStartKimiAuthorization = async () => {
+  if (!props.account) return
+  await kimiOAuth.cancel()
+  await kimiOAuth.start(props.account.proxy_id)
+}
+
+const handleCancelKimiAuthorization = async () => {
+  await kimiOAuth.cancel()
+}
+
+const handleStartOpenAIDeviceAuthorization = async () => {
+  if (!props.account) return
+  await openaiDeviceOAuth.cancel()
+  await openaiDeviceOAuth.start(props.account.proxy_id)
+}
+
+const handleCancelOpenAIDeviceAuthorization = async () => {
+  await openaiDeviceOAuth.cancel()
+}
+
+const handleCompleteOpenAIDeviceAuthorization = async () => {
+  if (!props.account) return
+  openaiDeviceOAuth.loading.value = true
+  openaiDeviceOAuth.error.value = ''
+  try {
+    const updatedAccount = await openaiDeviceOAuth.reauthorizeAccount(props.account.id)
+    appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
+    emit('reauthorized', updatedAccount as Account)
+    openaiDeviceOAuth.resetState()
+    emit('close')
+  } catch (error: any) {
+    const message = error?.response?.data?.detail || error?.response?.data?.message || t('admin.accounts.oauth.authFailed')
+    openaiDeviceOAuth.error.value = message
+    appStore.showError(message)
+  } finally {
+    openaiDeviceOAuth.loading.value = false
+  }
+}
+
+const handleStartGrokDeviceAuthorization = async () => {
+  if (!props.account) return
+  await grokDeviceOAuth.cancel()
+  await grokDeviceOAuth.start(props.account.proxy_id)
+}
+
+const handleCancelGrokDeviceAuthorization = async () => {
+  await grokDeviceOAuth.cancel()
+}
+
+const handleCompleteGrokDeviceAuthorization = async () => {
+  if (!props.account) return
+  grokDeviceOAuth.loading.value = true
+  grokDeviceOAuth.error.value = ''
+  try {
+    const updatedAccount = await grokDeviceOAuth.reauthorizeAccount(props.account.id)
+    appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
+    emit('reauthorized', updatedAccount as Account)
+    grokDeviceOAuth.resetState()
+    emit('close')
+  } catch (error: any) {
+    const message = error?.response?.data?.detail || error?.response?.data?.message || t('admin.accounts.oauth.authFailed')
+    grokDeviceOAuth.error.value = message
+    appStore.showError(message)
+  } finally {
+    grokDeviceOAuth.loading.value = false
+  }
+}
+
+const handleCompleteKimiAuthorization = async () => {
+  if (!props.account) return
+  kimiOAuth.loading.value = true
+  kimiOAuth.error.value = ''
+  try {
+    const updatedAccount = await kimiOAuth.reauthorizeAccount(props.account.id)
+    appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
+    emit('reauthorized', updatedAccount)
+    kimiOAuth.resetState()
+    emit('close')
+  } catch (error: any) {
+    kimiOAuth.error.value = error.response?.data?.detail || error.response?.data?.message || t('admin.accounts.oauth.authFailed')
+    appStore.showError(kimiOAuth.error.value)
+  } finally {
+    kimiOAuth.loading.value = false
+  }
 }
 
 const handleGenerateUrl = async () => {

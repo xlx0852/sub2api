@@ -110,6 +110,7 @@ func TestGrokQuotaServiceProbeUsageMergesBilling(t *testing.T) {
 	require.Equal(t, "Bearer access-token", upstream.requests[0].Header.Get("Authorization"))
 	require.Equal(t, "xai-grok-cli", upstream.requests[0].Header.Get("x-xai-token-auth"))
 	require.Equal(t, "user-xyz", upstream.requests[0].Header.Get("x-userid"))
+	require.Equal(t, HTTPUpstreamProfileGrok, HTTPUpstreamProfileFromContext(upstream.requests[0].Context()))
 
 	stored := repo.updates[42]
 	require.Contains(t, stored, grokBillingSnapshotKey)

@@ -1,4 +1,5 @@
 import type { Account, AccountUsageInfo, WindowStats } from '@/types'
+import { resolveGrokMonthlyQuota } from '@/utils/grokBillingPresentation'
 
 export type AccountUsageTone = 'neutral' | 'success' | 'warning' | 'danger'
 
@@ -166,14 +167,15 @@ export const buildAccountUsagePresentation = ({
         'indigo'
       ))
     }
-    if (billing?.used_percent != null) {
-      const total = formatUsdFromCents(billing.monthly_limit_cents)
-      const used = formatUsdFromCents(billing.included_used_cents ?? billing.used_cents)
-      windows.push(makeQuotaWindow(
-        'grok-monthly',
-        t('admin.accounts.usageWindow.grokMonthly'),
-        billing.used_percent,
-        billing.billing_period_end || billing.period_end,
+		const monthlyQuota = resolveGrokMonthlyQuota(billing)
+		if (monthlyQuota) {
+			const total = formatUsdFromCents(monthlyQuota.limitCents)
+			const used = formatUsdFromCents(monthlyQuota.usedCents)
+			windows.push(makeQuotaWindow(
+				'grok-monthly',
+				t('admin.accounts.usageWindow.grokMonthly'),
+				monthlyQuota.utilization,
+				monthlyQuota.resetsAt,
         'amber',
         null,
         used && total ? `${used} / ${total}` : null

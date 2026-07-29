@@ -37,7 +37,7 @@
             <div class="toc-header">
               <span class="toc-title">{{ t('customPage.tableOfContents') }}</span>
               <button class="toc-close-btn" @click="tocVisible = false">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                <Icon name="chevronLeft" size="sm" :stroke-width="2" />
               </button>
             </div>
             <nav class="toc-nav">
@@ -63,7 +63,7 @@
             class="toc-toggle-btn"
             @click="tocVisible = true"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+            <Icon name="menu" size="sm" :stroke-width="2" />
             <span class="ml-1 text-xs">{{ t('customPage.tableOfContents') }}</span>
           </button>
 

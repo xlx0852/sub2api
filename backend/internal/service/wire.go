@@ -55,8 +55,9 @@ func ProvideOpenAIOAuthService(
 	proxyRepo ProxyRepository,
 	oauthClient OpenAIOAuthClient,
 	privacyClientFactory PrivacyClientFactory,
+	deviceStore ProviderOAuthSessionStore,
 ) *OpenAIOAuthService {
-	svc := NewOpenAIOAuthService(proxyRepo, oauthClient)
+	svc := NewOpenAIOAuthService(proxyRepo, oauthClient, deviceStore)
 	svc.SetPrivacyClientFactory(privacyClientFactory)
 	return svc
 }
@@ -69,6 +70,7 @@ func ProvideTokenRefreshService(
 	geminiOAuthService *GeminiOAuthService,
 	antigravityOAuthService *AntigravityOAuthService,
 	grokOAuthService *GrokOAuthService,
+	kimiOAuthService *KimiOAuthService,
 	cacheInvalidator TokenCacheInvalidator,
 	schedulerCache SchedulerCache,
 	cfg *config.Config,
@@ -83,6 +85,7 @@ func ProvideTokenRefreshService(
 	svc.SetPrivacyDeps(privacyClientFactory, proxyRepo)
 	// 注入统一 OAuth 刷新 API（消除 TokenRefreshService 与 TokenProvider 之间的竞争条件）
 	svc.SetRefreshAPI(refreshAPI)
+	svc.RegisterKimiOAuthService(kimiOAuthService)
 	// 调用侧显式注入后台刷新策略，避免策略漂移
 	svc.SetRefreshPolicy(DefaultBackgroundRefreshPolicy())
 	svc.SetAccountRuntimeBlocker(runtimeBlocker)
@@ -167,6 +170,7 @@ func ProvideAccountTestService(
 	geminiTokenProvider *GeminiTokenProvider,
 	claudeTokenProvider *ClaudeTokenProvider,
 	grokTokenProvider *GrokTokenProvider,
+	kimiTokenProvider *KimiTokenProvider,
 	antigravityGatewayService *AntigravityGatewayService,
 	httpUpstream HTTPUpstream,
 	cfg *config.Config,
@@ -178,6 +182,7 @@ func ProvideAccountTestService(
 		geminiTokenProvider,
 		claudeTokenProvider,
 		grokTokenProvider,
+		kimiTokenProvider,
 		antigravityGatewayService,
 		httpUpstream,
 		cfg,
@@ -240,6 +245,17 @@ func ProvideGrokTokenProvider(
 	p.SetRefreshPolicy(AntigravityProviderRefreshPolicy())
 	p.SetTempUnschedCache(tempUnschedCache)
 	return p
+}
+
+func ProvideKimiTokenProvider(
+	accountRepo AccountRepository,
+	tokenCache GeminiTokenCache,
+	kimiOAuthService *KimiOAuthService,
+	refreshAPI *OAuthRefreshAPI,
+) *KimiTokenProvider {
+	provider := NewKimiTokenProvider(accountRepo, tokenCache)
+	provider.SetRefreshAPI(refreshAPI, NewKimiTokenRefresher(kimiOAuthService))
+	return provider
 }
 
 // ProvideDashboardAggregationService 创建并启动仪表盘聚合服务
@@ -649,7 +665,8 @@ var ProviderSet = wire.NewSet(
 	wire.Bind(new(AccountRuntimeBlocker), new(*OpenAIGatewayService)),
 	NewOAuthService,
 	ProvideOpenAIOAuthService,
-	NewGrokOAuthService,
+	ProvideGrokOAuthService,
+	NewKimiOAuthService,
 	NewGeminiOAuthService,
 	NewGeminiQuotaService,
 	NewCompositeTokenCacheInvalidator,
@@ -660,6 +677,7 @@ var ProviderSet = wire.NewSet(
 	NewGeminiMessagesCompatService,
 	ProvideAntigravityTokenProvider,
 	ProvideGrokTokenProvider,
+	ProvideKimiTokenProvider,
 	ProvideOpenAITokenProvider,
 	ProvideOpenAIQuotaService,
 	ProvideGrokQuotaService,
@@ -698,6 +716,7 @@ var ProviderSet = wire.NewSet(
 	ProvideDashboardAggregationService,
 	ProvideUsageCleanupService,
 	ProvideDeferredService,
+	NewProfitService,
 	NewAntigravityQuotaFetcher,
 	NewGrokQuotaFetcher,
 	NewUserAttributeService,

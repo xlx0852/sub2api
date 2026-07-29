@@ -20,9 +20,36 @@ export async function restartService(): Promise<{ message: string }> {
   return data
 }
 
+export interface ModelCatalogStatus {
+  version: number
+  updated_at?: string
+  source: 'embedded' | 'local' | 'remote'
+  hash: string
+  last_check?: string
+  last_success?: string
+  next_check?: string
+  refreshing: boolean
+  remote_enabled: boolean
+  last_error?: string
+  success_count: number
+  failure_count: number
+}
+
+export async function getModelCatalogStatus(): Promise<ModelCatalogStatus> {
+  const { data } = await apiClient.get<ModelCatalogStatus>('/admin/system/model-catalog/status')
+  return data
+}
+
+export async function refreshModelCatalog(): Promise<ModelCatalogStatus> {
+  const { data } = await apiClient.post<ModelCatalogStatus>('/admin/system/model-catalog/refresh')
+  return data
+}
+
 export const systemAPI = {
   getVersion,
-  restartService
+  restartService,
+  getModelCatalogStatus,
+  refreshModelCatalog
 }
 
 export default systemAPI

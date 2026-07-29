@@ -376,7 +376,8 @@
                       <div>{{ violationCountText(row) }}</div>
                       <div class="text-xs text-gray-400">
                         {{ row.email_sent ? t('admin.riskControl.emailSent') : t('admin.riskControl.emailNotSent') }}
-                        <span v-if="row.auto_banned"> / {{ t('admin.riskControl.autoBanned') }}</span>
+                        <span v-if="row.user_status === 'disabled'"> / {{ t('admin.riskControl.autoBanned') }}</span>
+                        <span v-else-if="row.auto_banned"> / {{ t('admin.riskControl.banEvent') }}</span>
                       </div>
                       <button
                         v-if="canUnbanRow(row)"
@@ -1964,6 +1965,7 @@ async function unbanUser(row: ContentModerationLog) {
       if (item.user_id !== row.user_id) return item
       return { ...item, user_status: result.status }
     })
+    void loadStatus(true)
     appStore.showSuccess(t('admin.riskControl.unbanSuccess'))
   } catch (err: unknown) {
     appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.unbanFailed')))
@@ -2194,6 +2196,7 @@ function modeDescription(mode: ModerationMode): string {
 function resultLabel(row: ContentModerationLog): string {
   if (row.action === 'cyber_policy') return t('admin.riskControl.action.cyberPolicy')
   if (row.action === 'keyword_block') return t('admin.riskControl.action.keywordBlock')
+  if (row.action === 'hash_block') return t('admin.riskControl.action.hashBlock')
   if (row.action === 'block') return t('admin.riskControl.action.block')
   if (row.action === 'error' || row.error) return t('admin.riskControl.action.error')
   if (row.flagged) return t('admin.riskControl.result.hit')
@@ -2201,7 +2204,7 @@ function resultLabel(row: ContentModerationLog): string {
 }
 
 function resultBadgeClass(row: ContentModerationLog): string {
-  if (row.action === 'block' || row.action === 'keyword_block' || row.action === 'cyber_policy') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+  if (row.action === 'block' || row.action === 'keyword_block' || row.action === 'hash_block' || row.action === 'cyber_policy') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
   if (row.action === 'error' || row.error) return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
   if (row.flagged) return 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300'
   return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'

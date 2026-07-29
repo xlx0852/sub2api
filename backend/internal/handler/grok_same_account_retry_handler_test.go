@@ -186,7 +186,7 @@ func TestOpenAIGatewayHandlerChatCompletions_GrokRetryPinsAccountThenFailsOver(t
 	concurrencyService := service.NewConcurrencyService(cache)
 	gatewayService := service.NewOpenAIGatewayService(
 		accountRepo, nil, nil, nil, nil, nil, nil, cfg, nil, concurrencyService, nil, nil, nil,
-		upstream, nil, nil, nil, nil, nil, nil, nil, nil,
+		upstream, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 	billingService := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
 	t.Cleanup(billingService.Stop)
@@ -213,7 +213,6 @@ func TestOpenAIGatewayHandlerChatCompletions_GrokRetryPinsAccountThenFailsOver(t
 	c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: apiKey.User.ID, Concurrency: 1})
 
 	handler.ChatCompletions(c)
-
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), `"content":"ok"`)
 	require.Equal(t, []int64{101, 101, 102}, upstream.accountIDs())

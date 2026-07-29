@@ -266,6 +266,9 @@ type OpenAIForwardResult struct {
 	ClientDisconnect      bool
 	WSPayloadBytes        *int64
 	WSEventCount          *int
+	WSConnReused          *bool
+	WSConnPickMs          *int
+	WSQueueWaitMs         *int
 	Compact               bool
 	CompactPayloadBytes   *int64
 	CompactRetryCount     int
@@ -405,6 +408,7 @@ type OpenAIGatewayService struct {
 	deferredService       *DeferredService
 	openAITokenProvider   *OpenAITokenProvider
 	grokTokenProvider     *GrokTokenProvider
+	kimiTokenProvider     *KimiTokenProvider
 	toolCorrector         *CodexToolCorrector
 	openaiWSResolver      OpenAIWSProtocolResolver
 	resolver              *ModelPricingResolver
@@ -454,6 +458,7 @@ func NewOpenAIGatewayService(
 	deferredService *DeferredService,
 	openAITokenProvider *OpenAITokenProvider,
 	grokTokenProvider *GrokTokenProvider,
+	kimiTokenProvider *KimiTokenProvider,
 	resolver *ModelPricingResolver,
 	channelService *ChannelService,
 	balanceNotifyService *BalanceNotifyService,
@@ -476,7 +481,7 @@ func NewOpenAIGatewayService(
 		billingCacheService: billingCacheService,
 		userGroupRateResolver: newUserGroupRateResolver(
 			userGroupRateRepo,
-			nil,
+			sharedUserGroupRateCacheInstance(resolveUserGroupRateCacheTTL(cfg)),
 			resolveUserGroupRateCacheTTL(cfg),
 			nil,
 			"service.openai_gateway",
@@ -485,6 +490,7 @@ func NewOpenAIGatewayService(
 		deferredService:       deferredService,
 		openAITokenProvider:   openAITokenProvider,
 		grokTokenProvider:     grokTokenProvider,
+		kimiTokenProvider:     kimiTokenProvider,
 		toolCorrector:         NewCodexToolCorrector(),
 		openaiWSResolver:      NewOpenAIWSProtocolResolver(cfg),
 		resolver:              resolver,
@@ -1167,6 +1173,20 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 			accessToken := account.GetGrokAccessToken()
 			if accessToken == "" {
 				return "", "", s.wrapGrokOAuthCredentialError(account, errors.New("access_token not found in credentials"))
+			}
+			return accessToken, "oauth", nil
+		}
+		if account.Platform == PlatformKimi {
+			if s.kimiTokenProvider != nil {
+				accessToken, err := s.kimiTokenProvider.GetAccessToken(ctx, account)
+				if err != nil {
+					return "", "", err
+				}
+				return accessToken, "oauth", nil
+			}
+			accessToken := strings.TrimSpace(account.GetCredential("access_token"))
+			if accessToken == "" {
+				return "", "", errors.New("Kimi access_token not found in credentials")
 			}
 			return accessToken, "oauth", nil
 		}

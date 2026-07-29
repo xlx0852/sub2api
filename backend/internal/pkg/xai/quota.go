@@ -32,6 +32,9 @@ type QuotaSnapshot struct {
 	Requests          *QuotaWindow      `json:"requests,omitempty"`
 	Tokens            *QuotaWindow      `json:"tokens,omitempty"`
 	RetryAfterSeconds *int              `json:"retry_after_seconds,omitempty"`
+	ContextWindow     *int64            `json:"context_window,omitempty"`
+	MaxCompletion     *int64            `json:"max_completion_tokens,omitempty"`
+	ModelsETag        string            `json:"models_etag,omitempty"`
 	SubscriptionTier  string            `json:"subscription_tier,omitempty"`
 	EntitlementStatus string            `json:"entitlement_status,omitempty"`
 	StatusCode        int               `json:"status_code,omitempty"`
@@ -51,6 +54,9 @@ func (s *QuotaSnapshot) HasObservedHeaders() bool {
 		s.Requests != nil ||
 		s.Tokens != nil ||
 		s.RetryAfterSeconds != nil ||
+		s.ContextWindow != nil ||
+		s.MaxCompletion != nil ||
+		s.ModelsETag != "" ||
 		s.SubscriptionTier != "" ||
 		s.EntitlementStatus != "" ||
 		len(s.Headers) > 0
@@ -64,6 +70,9 @@ var quotaHeaderAllowlist = []string{
 	"x-ratelimit-remaining-tokens",
 	"x-ratelimit-reset-tokens",
 	"retry-after",
+	"x-grok-context-window",
+	"x-grok-max-completion-tokens",
+	"x-models-etag",
 	"x-subscription-tier",
 	"xai-subscription-tier",
 	"x-entitlement-status",
@@ -97,6 +106,9 @@ func parseQuotaHeaders(headers http.Header, statusCode int, source string, keepE
 	if retryAfter := parseRetryAfter(headers.Get("retry-after")); retryAfter != nil {
 		snapshot.RetryAfterSeconds = retryAfter
 	}
+	snapshot.ContextWindow = parseInt64Ptr(headers.Get("x-grok-context-window"))
+	snapshot.MaxCompletion = parseInt64Ptr(headers.Get("x-grok-max-completion-tokens"))
+	snapshot.ModelsETag = strings.TrimSpace(headers.Get("x-models-etag"))
 	snapshot.SubscriptionTier = firstHeader(headers, "xai-subscription-tier", "x-subscription-tier")
 	snapshot.EntitlementStatus = firstHeader(headers, "xai-entitlement-status", "x-entitlement-status")
 
@@ -109,6 +121,9 @@ func parseQuotaHeaders(headers http.Header, statusCode int, source string, keepE
 	if snapshot.Requests == nil &&
 		snapshot.Tokens == nil &&
 		snapshot.RetryAfterSeconds == nil &&
+		snapshot.ContextWindow == nil &&
+		snapshot.MaxCompletion == nil &&
+		snapshot.ModelsETag == "" &&
 		snapshot.SubscriptionTier == "" &&
 		snapshot.EntitlementStatus == "" &&
 		len(snapshot.Headers) == 0 {

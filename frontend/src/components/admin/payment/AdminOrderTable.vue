@@ -1,8 +1,8 @@
 <template>
   <div class="space-y-4">
     <div class="card p-4">
-      <div class="flex flex-wrap items-center gap-3">
-        <div class="flex-1 sm:max-w-64">
+      <div class="grid grid-cols-2 items-center gap-3 sm:flex sm:flex-wrap">
+        <div class="col-span-2 min-w-0 sm:flex-1 sm:max-w-64">
           <input
             v-model="searchQuery"
             type="text"
@@ -14,22 +14,22 @@
         <Select
           v-model="filters.status"
           :options="statusFilterOptions"
-          class="w-36"
+          class="min-w-0 w-full sm:w-36"
           @change="emitFiltersChanged"
         />
         <Select
           v-model="filters.payment_type"
           :options="paymentTypeFilterOptions"
-          class="w-40"
+          class="min-w-0 w-full sm:w-40"
           @change="emitFiltersChanged"
         />
         <Select
           v-model="filters.order_type"
           :options="orderTypeFilterOptions"
-          class="w-36"
+          class="min-w-0 w-full sm:w-36"
           @change="emitFiltersChanged"
         />
-        <div class="flex flex-1 flex-wrap items-center justify-end gap-2">
+        <div class="flex min-w-0 items-center justify-end gap-2 sm:flex-1">
           <button
             @click="emit('refresh')"
             :disabled="loading"
@@ -142,7 +142,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
-import { statusBadgeClass, canRefund, formatOrderDateTime } from '@/components/payment/orderUtils'
+import { statusBadgeClass, canRefund, formatOrderDateTime as formatDateTime } from '@/components/payment/orderUtils'
 import { currencySymbol } from '@/components/payment/currency'
 
 const { t } = useI18n()
@@ -232,7 +232,4 @@ function canRefundRow(order: PaymentOrder): boolean {
   return canRefund(order.status)
 }
 
-function formatDateTime(dateStr: string): string {
-  return formatOrderDateTime(dateStr)
-}
 </script>

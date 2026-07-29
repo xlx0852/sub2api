@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -38,7 +39,6 @@ type ScheduledTestRunnerService struct {
 	stopOnce  sync.Once
 	running   atomic.Bool
 }
-
 // NewScheduledTestRunnerService creates a new runner.
 func NewScheduledTestRunnerService(
 	planRepo ScheduledTestPlanRepository,
@@ -355,7 +355,7 @@ func (s *ScheduledTestRunnerService) tryRecoverAccount(ctx context.Context, acco
 		return
 	}
 
-	recovery, err := s.rateLimitSvc.RecoverAccountAfterSuccessfulTest(ctx, accountID)
+	recovery, err := s.rateLimitSvc.RecoverAccountAfterScheduledDiagnostics(ctx, accountID)
 	if err != nil {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d auto-recover failed: %v", planID, err)
 		return
@@ -379,6 +379,21 @@ func (s *ScheduledTestRunnerService) tryDemoteAccount(ctx context.Context, accou
 	if s.rateLimitSvc == nil {
 		return
 	}
+	// When the diagnostics response carries an explicit quota reset timestamp, set a
+	// proper rate-limit state instead of a generic temp_unschedulable.
+	if resetAt, ok := parseUsageLimitResetAt(errMsg); ok {
+		reason := fmt.Sprintf("scheduled diagnostics: usage limit reached (plan=%d)", planID)
+		if err := s.rateLimitSvc.RateLimitAccountAfterDiagnostics(ctx, accountID, resetAt, reason); err != nil {
+			logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d rate-limit after diagnostics failed: %v", planID, err)
+		} else {
+			logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d rate-limited account=%d until %s", planID, accountID, resetAt.Format(time.RFC3339))
+		}
+		return
+	}
+	if !shouldDemoteAfterDiagnosticsFailure(errMsg) {
+		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d skip demote for soft failure: %s", planID, truncateDiagText(errMsg, 160))
+		return
+	}
 	reason := fmt.Sprintf("scheduled diagnostics failed (plan=%d): %s", planID, truncateDiagText(errMsg, 240))
 	if err := s.rateLimitSvc.DemoteAccountAfterFailedDiagnostics(ctx, accountID, scheduledDiagnosticsDemoteDuration, reason); err != nil {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d auto-demote failed: %v", planID, err)
@@ -391,4 +406,115 @@ func (s *ScheduledTestRunnerService) tryDemoteAccount(ctx context.Context, accou
 		accountID,
 		scheduledDiagnosticsDemoteDuration,
 	)
+}
+
+// parseUsageLimitResetAt extracts the resets_at unix timestamp from a usage_limit_reached
+// error message. Returns the reset time and true when a valid future timestamp is found.
+func parseUsageLimitResetAt(errMsg string) (time.Time, bool) {
+	if !strings.Contains(errMsg, "usage_limit_reached") {
+		return time.Time{}, false
+	}
+	idx := strings.Index(errMsg, `"resets_at":`)
+	if idx < 0 {
+		return time.Time{}, false
+	}
+	rest := errMsg[idx+len(`"resets_at":`):]
+	end := strings.IndexFunc(rest, func(r rune) bool { return r < '0' || r > '9' })
+	if end == 0 {
+		return time.Time{}, false
+	}
+	if end < 0 {
+		end = len(rest)
+	}
+	ts, err := strconv.ParseInt(rest[:end], 10, 64)
+	if err != nil || ts <= 0 {
+		return time.Time{}, false
+	}
+	t := time.Unix(ts, 0)
+	if t.Before(time.Now()) {
+		return time.Time{}, false
+	}
+	return t, true
+}
+
+func shouldDemoteAfterDiagnosticsFailure(errMsg string) bool {
+	msg := strings.ToLower(strings.TrimSpace(errMsg))
+	if msg == "" {
+		return false
+	}
+	allModelsFailed := strings.HasPrefix(msg, "all diagnostic models failed")
+
+	// Hard account/auth signals always demote.
+	hardMarkers := []string{
+		"unauthorized",
+		"forbidden",
+		"invalid_api_key",
+		"invalid api key",
+		"authentication",
+		"permission",
+		"account deactivated",
+		"account disabled",
+		"spending-limit",
+		"personal-team-blocked",
+		"401",
+		"403",
+	}
+	for _, m := range hardMarkers {
+		if strings.Contains(msg, m) {
+			return true
+		}
+	}
+
+	if !allModelsFailed {
+		// Single-model failure: skip demote for any transient/soft error.
+		softMarkers := []string{
+			"context deadline exceeded",
+			"context canceled",
+			"timeout",
+			"i/o timeout",
+			"connection reset",
+			"connection refused",
+			"temporary failure",
+			"tls handshake",
+			"model_not_found",
+			"model not found",
+			"invalid model",
+			"unknown model",
+			"does not exist",
+			"not available",
+			"overloaded",
+			"rate limit",
+			"too many requests",
+			"usage_limit_reached",
+			"concurrency limit exceeded",
+			"429",
+			"502",
+			"503",
+			"504",
+		}
+		for _, m := range softMarkers {
+			if strings.Contains(msg, m) {
+				return false
+			}
+		}
+		return false
+	}
+
+	// All candidate models failed. Only spare the account for quota/rate-limit errors —
+	// those already have dedicated state management via real-request handling.
+	quotaMarkers := []string{
+		"rate limit",
+		"too many requests",
+		"usage_limit_reached",
+		"concurrency limit exceeded",
+		"429",
+	}
+	for _, m := range quotaMarkers {
+		if strings.Contains(msg, m) {
+			return false
+		}
+	}
+	// Every other all-models-failed scenario (timeouts, 404/model_not_found, 502/503, etc.)
+	// indicates the account is currently unusable; apply a short temp_unschedulable cooldown.
+	return true
 }

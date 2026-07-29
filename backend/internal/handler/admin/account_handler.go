@@ -179,15 +179,14 @@ type AccountWithConcurrency struct {
 	SchedulerScore     *AccountSchedulerScore       `json:"scheduler_score,omitempty"`
 	SchedulerScores    []AccountSchedulerGroupScore `json:"scheduler_scores,omitempty"`
 	// 以下字段仅对 Anthropic OAuth/SetupToken 账号有效，且仅在启用相应功能时返回
-	CurrentWindowCost *float64 `json:"current_window_cost,omitempty"` // 当前窗口费用
-	ActiveSessions    *int     `json:"active_sessions,omitempty"`     // 当前活跃会话数
-	CurrentRPM        *int     `json:"current_rpm,omitempty"`         // 当前分钟 RPM 计数
+	CurrentWindowCost       *float64   `json:"current_window_cost,omitempty"` // 当前窗口费用
+	ActiveSessions          *int       `json:"active_sessions,omitempty"`     // 当前活跃会话数
+	CurrentRPM              *int       `json:"current_rpm,omitempty"`         // 当前分钟 RPM 计数
 	DiagnosticsEnabled      bool       `json:"diagnostics_enabled"`
 	DiagnosticsPlanCount    int        `json:"diagnostics_plan_count"`
 	DiagnosticsEnabledCount int        `json:"diagnostics_enabled_count"`
 	DiagnosticsNextRunAt    *time.Time `json:"diagnostics_next_run_at,omitempty"`
 }
-
 
 type AccountSchedulerScore struct {
 	BaseScore             float64 `json:"base_score"`
@@ -1052,7 +1051,9 @@ func (h *AccountHandler) RecoverState(c *gin.Context) {
 	}
 
 	if _, err := h.rateLimitService.RecoverAccountState(c.Request.Context(), accountID, service.AccountRecoveryOptions{
-		InvalidateToken: true,
+		InvalidateToken:    true,
+		RestoreSchedulable: true,
+		ClearFullRateLimit: true,
 	}); err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -2340,8 +2341,8 @@ func modelIDsFromMapping(mapping map[string]string) []string {
 
 func openAIModelsFromIDsWithRetired(ids []string, includeRetired bool) []openai.Model {
 	seen := make(map[string]struct{}, len(ids))
-	defaultByID := make(map[string]openai.Model, len(openai.DefaultModels))
-	for _, model := range openai.DefaultModels {
+	defaultByID := make(map[string]openai.Model, len(openai.CurrentDefaultModels()))
+	for _, model := range openai.CurrentDefaultModels() {
 		defaultByID[model.ID] = model
 	}
 
@@ -2389,13 +2390,13 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 	if account.IsOpenAI() {
 		// OpenAI 自动透传会绕过常规模型改写，测试/模型列表也应回落到默认模型集。
 		if account.IsOpenAIPassthroughEnabled() {
-			response.Success(c, openai.DefaultModels)
+			response.Success(c, openai.CurrentDefaultModels())
 			return
 		}
 
 		mapping := account.GetModelMapping()
 		if len(mapping) == 0 {
-			response.Success(c, openai.DefaultModels)
+			response.Success(c, openai.CurrentDefaultModels())
 			return
 		}
 
@@ -2408,21 +2409,21 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 	if account.IsGemini() {
 		// For OAuth accounts: return default Gemini models
 		if account.IsOAuth() {
-			response.Success(c, geminicli.DefaultModels)
+			response.Success(c, geminicli.CurrentDefaultModels())
 			return
 		}
 
 		// For API Key accounts: return models based on model_mapping
 		mapping := account.GetModelMapping()
 		if len(mapping) == 0 {
-			response.Success(c, geminicli.DefaultModels)
+			response.Success(c, geminicli.CurrentDefaultModels())
 			return
 		}
 
 		var models []geminicli.Model
 		for requestedModel := range mapping {
 			var found bool
-			for _, dm := range geminicli.DefaultModels {
+			for _, dm := range geminicli.CurrentDefaultModels() {
 				if dm.ID == requestedModel {
 					models = append(models, dm)
 					found = true
@@ -2499,10 +2500,20 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 		return
 	}
 
+	if account.Platform == service.PlatformKimi {
+		ids := []string{"kimi-k3", "kimi-k3-highspeed", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6", "kimi-k2.5"}
+		models := make([]xai.Model, 0, len(ids))
+		for _, id := range ids {
+			models = append(models, xai.Model{ID: id, Object: "model", OwnedBy: "moonshot", DisplayName: id})
+		}
+		response.Success(c, models)
+		return
+	}
+
 	// Handle Claude/Anthropic accounts
 	// For OAuth and Setup-Token accounts: return default models
 	if account.IsOAuth() {
-		response.Success(c, claude.DefaultModels)
+		response.Success(c, claude.CurrentDefaultModels())
 		return
 	}
 
@@ -2510,7 +2521,7 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 	mapping := account.GetModelMapping()
 	if len(mapping) == 0 {
 		// No mapping configured, return default models
-		response.Success(c, claude.DefaultModels)
+		response.Success(c, claude.CurrentDefaultModels())
 		return
 	}
 
@@ -2519,7 +2530,7 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 	for requestedModel := range mapping {
 		// Try to find display info from default models
 		var found bool
-		for _, dm := range claude.DefaultModels {
+		for _, dm := range claude.CurrentDefaultModels() {
 			if dm.ID == requestedModel {
 				models = append(models, dm)
 				found = true
@@ -2847,7 +2858,7 @@ func (h *AccountHandler) GetModelCatalog(c *gin.Context) {
 // GetAntigravityDefaultModelMapping 获取 Antigravity 平台的默认模型映射
 // GET /api/v1/admin/accounts/antigravity/default-model-mapping
 func (h *AccountHandler) GetAntigravityDefaultModelMapping(c *gin.Context) {
-	response.Success(c, domain.DefaultAntigravityModelMapping)
+	response.Success(c, domain.CurrentDefaultAntigravityModelMapping())
 }
 
 // sanitizeExtraBaseRPM 对 extra map 中的 base_rpm 值进行范围校验和归一化。

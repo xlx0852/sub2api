@@ -1,10 +1,10 @@
 <template>
   <AppLayout>
-    <TablePageLayout>
+    <TablePageLayout compact>
       <template #filters>
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="grid grid-cols-2 items-center gap-3 sm:flex sm:flex-wrap">
           <!-- Left: Search + Filters -->
-          <div class="flex-1 sm:max-w-64">
+          <div class="min-w-0 sm:flex-1 sm:max-w-64">
             <input
               v-model="searchQuery"
               type="text"
@@ -16,23 +16,23 @@
           <Select
             v-model="filters.status"
             :options="statusFilterOptions"
-            class="w-40"
+            class="w-full sm:w-40"
             @change="handleStatusChange"
           />
 
           <!-- Right: Action buttons -->
-          <div class="flex flex-1 flex-wrap items-center justify-end gap-2">
+          <div class="col-span-2 grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-2 sm:ml-auto sm:flex sm:flex-1 sm:justify-end">
             <button
               @click="loadAnnouncements"
               :disabled="loading"
-              class="btn btn-secondary"
+              class="btn btn-secondary h-12 w-12 px-0 sm:h-auto sm:w-auto sm:px-4"
               :title="t('common.refresh')"
             >
               <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
             </button>
-            <button @click="openCreateDialog" class="btn btn-primary">
-              <Icon name="plus" size="md" class="mr-1" />
-              {{ t('admin.announcements.createAnnouncement') }}
+            <button @click="openCreateDialog" class="btn btn-primary h-12 min-w-0 whitespace-nowrap sm:h-auto">
+              <Icon name="plus" size="md" />
+              <span class="truncate">{{ t('admin.announcements.createAnnouncement') }}</span>
             </button>
           </div>
         </div>
@@ -139,12 +139,15 @@
           </template>
 
           <template #empty>
-            <EmptyState
-              :title="t('empty.noData')"
-              :description="t('admin.announcements.failedToLoad')"
-              :action-text="t('admin.announcements.createAnnouncement')"
-              @action="openCreateDialog"
-            />
+            <div class="announcement-empty-wrap">
+              <EmptyState
+                :title="loadError ? t('admin.announcements.failedToLoad') : t('empty.noData')"
+                :description="loadError ? t('common.retry') : t('admin.announcements.emptyDescription', '还没有公告，创建后可向用户发布重要消息。')"
+                :action-text="loadError ? t('common.retry') : t('admin.announcements.createAnnouncement')"
+                :action-icon="!loadError"
+                @action="loadError ? loadAnnouncements() : openCreateDialog()"
+              />
+            </div>
           </template>
         </DataTable>
       </template>
@@ -271,6 +274,7 @@ const appStore = useAppStore()
 
 const announcements = ref<Announcement[]>([])
 const loading = ref(false)
+const loadError = ref(false)
 
 const filters = reactive({
   status: '',
@@ -341,6 +345,7 @@ async function loadAnnouncements() {
 
   try {
     loading.value = true
+    loadError.value = false
     const res = await adminAPI.announcements.list(pagination.page, pagination.page_size, {
       status: filters.status || undefined,
       search: searchQuery.value || undefined,
@@ -365,6 +370,7 @@ async function loadAnnouncements() {
       return
     }
     console.error('Error loading announcements:', error)
+    loadError.value = true
     appStore.showError(error.response?.data?.detail || t('admin.announcements.failedToLoad'))
   } finally {
     if (currentController === requestController) {
@@ -604,3 +610,23 @@ onUnmounted(() => {
   currentController?.abort()
 })
 </script>
+
+<style scoped>
+.announcement-empty-wrap {
+  display: flex;
+  min-height: 300px;
+  align-items: center;
+  justify-content: center;
+}
+
+.announcement-empty-wrap :deep(.empty-state) {
+  padding-top: 2.5rem;
+  padding-bottom: 2.5rem;
+}
+
+@media (max-width: 640px) {
+  .announcement-empty-wrap {
+    min-height: 320px;
+  }
+}
+</style>

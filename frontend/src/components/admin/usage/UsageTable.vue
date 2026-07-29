@@ -45,7 +45,9 @@
         </template>
 
         <template #cell-api_key="{ row }">
-          <span class="text-sm text-gray-900 dark:text-white">{{ row.api_key?.name || '-' }}</span>
+          <span class="block max-w-40 truncate text-sm font-medium text-gray-900 dark:text-white" :title="row.api_key?.name || '-'">
+            {{ row.api_key?.name || '-' }}
+          </span>
         </template>
 
         <template #cell-account="{ row }">
@@ -69,7 +71,13 @@
               <span class="mr-0.5">↳</span>{{ row.upstream_model }}
             </div>
           </div>
-          <span v-else class="font-medium text-gray-900 dark:text-white">{{ row.model }}</span>
+          <span
+            v-else
+            class="inline-flex max-w-52 truncate rounded border border-black/[0.08] bg-black/[0.035] px-2 py-1 font-mono text-xs font-medium text-gray-800 dark:border-white/[0.1] dark:bg-white/[0.06] dark:text-gray-100"
+            :title="row.model"
+          >
+            {{ row.model }}
+          </span>
         </template>
 
         <template #cell-reasoning_effort="{ row }">
@@ -214,6 +222,16 @@
               </div>
             </div>
           </div>
+        </template>
+
+        <template #cell-output_rate="{ row }">
+          <span
+            class="inline-flex min-w-[5.5rem] items-center justify-end rounded-md bg-gray-50/80 px-1.5 py-0.5 text-sm font-semibold tabular-nums dark:bg-gray-800/50"
+            :class="getOutputRateTextClass(row)"
+            :title="t('usage.outputRateHint')"
+          >
+            {{ formatOutputRate(row) }}
+          </span>
         </template>
 
         <template #cell-created_at="{ value }">
@@ -594,6 +612,34 @@ const formatDuration = (ms: number | null | undefined): string => {
     return `${minutes}m ${seconds}s`
   }
   return `${(ms / 1000).toFixed(2)}s`
+}
+
+/** output_tokens / duration_ms → tok/s；图片或无效数据返回 null */
+const calcOutputRate = (row: AdminUsageLog): number | null => {
+  if (isImageUsage(row)) return null
+  const durationMs = row.duration_ms
+  const outputTokens = row.output_tokens
+  if (durationMs == null || durationMs <= 0 || outputTokens == null || outputTokens <= 0) {
+    return null
+  }
+  return (outputTokens * 1000) / durationMs
+}
+
+const formatOutputRate = (row: AdminUsageLog): string => {
+  const rate = calcOutputRate(row)
+  if (rate == null) return '-'
+  if (rate >= 100) return `${Math.round(rate)} tok/s`
+  if (rate >= 10) return `${rate.toFixed(1)} tok/s`
+  return `${rate.toFixed(2)} tok/s`
+}
+
+const getOutputRateTextClass = (row: AdminUsageLog): string => {
+  const rate = calcOutputRate(row)
+  if (rate == null) return 'text-gray-400 dark:text-gray-500'
+  // 仅作可读性着色：越高越绿（不代表 SLA）
+  if (rate >= 40) return 'text-emerald-600 dark:text-emerald-400'
+  if (rate >= 15) return 'text-amber-600 dark:text-amber-400'
+  return 'text-rose-600 dark:text-rose-400'
 }
 
 type LatencyMetric = 'first_token' | 'duration'
