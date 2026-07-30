@@ -177,4 +177,29 @@ describe('AccountStatsModal', () => {
     expect(wrapper.text()).toContain('+$12.00')
     expect(wrapper.text()).not.toContain('admin.accounts.usageDetails.missingCycleHint')
   })
+
+  it('封禁账号展示冻结的回本进度和已确认亏损', async () => {
+    getStats.mockResolvedValue(stats)
+    profitSummary.mockResolvedValue({
+      accounts: [{
+        account_id: 72, account_name: 'OpenAI Account', cost_type: 'subscription', configured: true,
+        requests: 42, revenue: 300, cost: 865, profit: -565, margin: -188.33,
+        billing_window_start: '2026-07-01T00:00:00Z', billing_window_end: '2026-08-30T00:00:00Z',
+        billing_window_terminated_at: '2026-07-30T02:00:00Z', billing_window_revenue: 300,
+        billing_window_cost: 665, billing_window_profit: -365, billing_window_refund_total: 200,
+        billing_window_recovery_progress: 57.8, billing_window_loss: 365, currency: 'USD'
+      }]
+    })
+
+    const wrapper = mount(AccountStatsModal, {
+      props: { account },
+      global: { stubs: { LoadingSpinner: true, ModelDistributionChart: true, EndpointDistributionChart: true, Line: true, Icon: true } }
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('admin.profit.banSettled')
+    expect(wrapper.text()).toContain('57.8%')
+    expect(wrapper.text()).toContain('$365.00')
+    expect(wrapper.text()).toContain('admin.profit.netPurchaseCost')
+  })
 })

@@ -20,6 +20,22 @@ The system SHALL automatically synchronize official Grok billing usage for OAuth
 - **WHEN** an administrator requests usage for a Grok OAuth account whose billing snapshot is less than ten minutes old
 - **THEN** the system returns the persisted snapshot without probing the upstream billing endpoints
 
+### Requirement: Official Grok Build Credits Source Compatibility
+
+The system SHALL use the successful Grok CLI Proxy `billing?format=credits` response as the authoritative source for current Grok OAuth usage windows, using Grok Build-compatible OAuth identity headers. It SHALL call legacy billing only when the credits request fails.
+
+#### Scenario: Credits response reports a reset weekly window
+
+- **WHEN** `billing?format=credits` returns `creditUsagePercent` of zero and a weekly `currentPeriod`
+- **THEN** the system persists and returns zero utilization with that period's reset timestamp
+- **AND** it does not overlay a prior or legacy nonzero billing value
+
+#### Scenario: Credits source is unavailable
+
+- **WHEN** the credits request fails but legacy `/billing` returns a valid compatibility response
+- **THEN** the system returns and persists the legacy response
+- **AND** marks its timestamp from the successful fallback request
+
 ### Requirement: Bounded Automatic Probe Concurrency
 
 The system SHALL suppress duplicate in-process automatic Grok billing probes for the same account.
@@ -54,3 +70,22 @@ The system SHALL preserve an operator-triggered Grok quota refresh that bypasses
 - **WHEN** an administrator activates Refresh quota for a Grok OAuth account
 - **THEN** the system probes the official billing endpoints regardless of snapshot age
 - **AND** persists and returns the refreshed billing snapshot
+
+### Requirement: Grok Full-Utilization Projection
+
+The system SHALL attach local request, token, account-cost, and user-charge
+statistics from the official Grok weekly period start to the weekly quota
+window and SHALL project those values to full utilization using the same
+calculation and presentation as OpenAI.
+
+#### Scenario: Weekly quota has local usage
+
+- **WHEN** a Grok OAuth account has an official weekly utilization percentage between zero and one hundred and local usage exists after that period's start
+- **THEN** the usage view displays the local statistics beside the weekly quota
+- **AND** displays full-utilization request, token, account-cost, and user-charge estimates using the current consumption mix
+
+#### Scenario: Official period start is unavailable
+
+- **WHEN** the Grok weekly snapshot lacks a valid non-future period start
+- **THEN** the system falls back to the existing local today statistics
+- **AND** does not query a fabricated weekly start timestamp

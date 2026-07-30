@@ -147,7 +147,7 @@ type UsageCache struct {
 	apiFlight         singleflight.Group // 防止同一账号的并发请求击穿缓存（Anthropic）
 	antigravityFlight singleflight.Group // 防止同一 Antigravity 账号的并发请求击穿缓存
 	openAIProbeCache  sync.Map           // accountID -> time.Time
-	grokProbeCache    sync.Map           // accountID -> time.Time
+	grokProbeFlight   singleflight.Group // 防止同一 Grok 账号的并发 billing probe
 	kimiQuotaCache    sync.Map           // accountID -> *kimiUsageCache
 	kimiQuotaFlight   singleflight.Group // 防止同一 Kimi 账号的并发额度查询
 	kimiWindowStats   sync.Map           // accountID -> *kimiWindowStatsCache
@@ -358,6 +358,7 @@ type AccountUsageService struct {
 	identityCache           IdentityCache
 	tlsFPProfileService     *TLSFingerprintProfileService
 	agentIdentityTaskMu     sync.Mutex
+	grokSnapshotMu          sync.Mutex
 	agentIdentityWS         agentIdentityWSConnectionInvalidator
 }
 
@@ -450,7 +451,7 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 	}
 
 	if account.Platform == PlatformGrok {
-		usage, err := s.getGrokUsage(ctx, account)
+		usage, err := s.getGrokUsage(ctx, account, forceProbe)
 		if err == nil {
 			s.tryClearRecoverableAccountError(ctx, account)
 		}
@@ -1031,18 +1032,14 @@ func (s *AccountUsageService) getAntigravityUsage(ctx context.Context, account *
 	return usage, nil
 }
 
-func (s *AccountUsageService) getGrokUsage(ctx context.Context, account *Account) (*UsageInfo, error) {
+func (s *AccountUsageService) getGrokUsage(ctx context.Context, account *Account, force ...bool) (*UsageInfo, error) {
 	if s.grokQuotaFetcher == nil {
 		now := time.Now()
 		return &UsageInfo{UpdatedAt: &now}, nil
 	}
-	if s.grokQuotaService != nil && account.Type == AccountTypeOAuth && s.shouldProbeGrokQuota(account.ID) {
-		if result, err := s.grokQuotaService.ProbeUsage(ctx, account.ID); err == nil && result != nil && result.Billing != nil {
-			if account.Extra == nil {
-				account.Extra = make(map[string]any)
-			}
-			account.Extra[grokBillingSnapshotKey] = result.Billing
-		}
+	forceProbe := len(force) > 0 && force[0]
+	if s.grokQuotaService != nil && account.Type == AccountTypeOAuth && (forceProbe || isGrokBillingSnapshotStale(account, time.Now())) {
+		s.refreshGrokBillingSnapshot(ctx, account, forceProbe)
 	}
 	usage := s.grokQuotaFetcher.BuildUsageInfo(account)
 	if usage.GrokQuotaSnapshotState == "" {
@@ -1057,7 +1054,14 @@ func (s *AccountUsageService) getGrokUsage(ctx context.Context, account *Account
 	}
 
 	if s.usageLogRepo != nil && account != nil {
-		if stats, err := s.usageLogRepo.GetAccountTodayStats(ctx, account.ID); err == nil && stats != nil {
+		var stats *usagestats.AccountStats
+		var err error
+		if startTime, ok := grokBillingWindowStart(usage.GrokBilling, time.Now()); ok {
+			stats, err = s.usageLogRepo.GetAccountWindowStats(ctx, account.ID, startTime)
+		} else {
+			stats, err = s.usageLogRepo.GetAccountTodayStats(ctx, account.ID)
+		}
+		if err == nil && stats != nil {
 			usage.GrokLocalUsage = windowStatsFromAccountStats(stats)
 		}
 	}
@@ -1066,18 +1070,86 @@ func (s *AccountUsageService) getGrokUsage(ctx context.Context, account *Account
 	return usage, nil
 }
 
-func (s *AccountUsageService) shouldProbeGrokQuota(accountID int64) bool {
-	if s == nil || s.cache == nil || accountID <= 0 {
+// grokBillingWindowStart returns the start of the official weekly billing
+// window so local usage and the upstream utilization percentage describe the
+// same period. Invalid or future timestamps deliberately fall back to the
+// existing today-stat behavior instead of producing a misleading projection.
+func grokBillingWindowStart(billing *xai.BillingSnapshot, now time.Time) (time.Time, bool) {
+	if billing == nil || !strings.EqualFold(strings.TrimSpace(billing.PeriodType), "weekly") {
+		return time.Time{}, false
+	}
+	start, err := time.Parse(time.RFC3339, strings.TrimSpace(billing.PeriodStart))
+	if err != nil || start.After(now) {
+		return time.Time{}, false
+	}
+	return start, true
+}
+
+func isGrokBillingSnapshotStale(account *Account, now time.Time) bool {
+	if account == nil || account.Platform != PlatformGrok || account.Type != AccountTypeOAuth {
+		return false
+	}
+	billing, err := grokBillingSnapshotFromExtra(account.Extra)
+	if err != nil || billing == nil || billing.FetchedAt == "" {
 		return true
 	}
-	now := time.Now()
-	if cached, ok := s.cache.grokProbeCache.Load(accountID); ok {
-		if ts, ok := cached.(time.Time); ok && now.Sub(ts) < openAIProbeCacheTTL {
-			return false
-		}
+	fetchedAt, err := time.Parse(time.RFC3339, billing.FetchedAt)
+	if err != nil {
+		return true
 	}
-	s.cache.grokProbeCache.Store(accountID, now)
-	return true
+	return now.Sub(fetchedAt) >= openAIProbeCacheTTL
+}
+
+// refreshGrokBillingSnapshot deduplicates in-process probes while freshness is
+// carried by the persisted snapshot. Callers that join the flight receive the
+// same current billing result instead of independently serving stale data.
+func (s *AccountUsageService) refreshGrokBillingSnapshot(ctx context.Context, account *Account, force bool) {
+	if s == nil || s.grokQuotaService == nil || account == nil || account.ID <= 0 {
+		return
+	}
+	apply := func(result *GrokQuotaProbeResult) {
+		if result == nil || result.Billing == nil {
+			return
+		}
+		s.grokSnapshotMu.Lock()
+		defer s.grokSnapshotMu.Unlock()
+		if account.Extra == nil {
+			account.Extra = make(map[string]any)
+		}
+		account.Extra[grokBillingSnapshotKey] = result.Billing
+	}
+	probe := func() (*GrokQuotaProbeResult, error) {
+		// A shared refresh must not be cancelled because the first UI request
+		// leaves the page. ProbeUsage applies its own upstream deadline.
+		probeCtx := context.Background()
+		// A queued non-force caller rechecks the DB snapshot before probing, so a
+		// successful writer in another request/process suppresses duplicate work.
+		if !force && s.accountRepo != nil {
+			if current, err := s.accountRepo.GetByID(probeCtx, account.ID); err == nil && !isGrokBillingSnapshotStale(current, time.Now()) {
+				billing, decodeErr := grokBillingSnapshotFromExtra(current.Extra)
+				if decodeErr == nil && billing != nil {
+					return &GrokQuotaProbeResult{Billing: billing, StatusCode: billing.StatusCode}, nil
+				}
+			}
+		}
+		return s.grokQuotaService.ProbeUsage(probeCtx, account.ID)
+	}
+	if s.cache == nil {
+		result, err := probe()
+		if err == nil {
+			apply(result)
+		}
+		return
+	}
+	result, err, _ := s.cache.grokProbeFlight.Do(fmt.Sprintf("grok-billing:%d", account.ID), func() (any, error) {
+		return probe()
+	})
+	if err != nil || result == nil {
+		return
+	}
+	if probeResult, ok := result.(*GrokQuotaProbeResult); ok {
+		apply(probeResult)
+	}
 }
 
 func (s *AccountUsageService) getKimiUsage(ctx context.Context, account *Account, force bool) (*UsageInfo, error) {

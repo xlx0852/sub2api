@@ -17,6 +17,7 @@
 - 不上传源码到服务器。
 - 不重新初始化项目。
 - 不修改数据库连接配置。
+- 每次部署必须先本地递增版本号（默认 patch +1），禁止继续沿用上一次线上版本号构建发布。
 - 新容器验证通过前不停止旧容器。
 - 切流后停止旧容器，并将其作为唯一回滚版本保留。
 - 每次部署验证完成后删除更早的容器、二进制、资源目录和部署备份；线上始终只保留“当前版本 + 上一个版本”。
@@ -31,8 +32,35 @@
 export SSH_TARGET="root@89.208.254.77"
 export REMOTE_BASE="/opt/sub2api"
 export TS="$(date +%Y%m%d%H%M%S)"
-export VERSION="$(tr -d '\r\n' < backend/cmd/server/VERSION)"
+export VERSION_FILE="backend/cmd/server/VERSION"
+# 默认 patch +1；需要 minor/major 时把 BUMP_LEVEL 改成 minor 或 major
+export BUMP_LEVEL="${BUMP_LEVEL:-patch}"
+export OLD_VERSION="$(tr -d ' \t\r\n' < "$VERSION_FILE")"
+export VERSION="$(
+python3 - "$OLD_VERSION" "$BUMP_LEVEL" <<'PY'
+import re, sys
+raw, level = sys.argv[1], sys.argv[2]
+m = re.fullmatch(r'(\d+)\.(\d+)\.(\d+)', raw)
+if not m:
+    raise SystemExit(f'invalid version in VERSION file: {raw!r}')
+major, minor, patch = map(int, m.groups())
+if level == 'major':
+    major, minor, patch = major + 1, 0, 0
+elif level == 'minor':
+    minor, patch = minor + 1, 0
+elif level == 'patch':
+    patch += 1
+else:
+    raise SystemExit(f'unsupported BUMP_LEVEL: {level!r}')
+print(f'{major}.{minor}.{patch}')
+PY
+)"
+printf '%s\n' "$VERSION" > "$VERSION_FILE"
 export COMMIT="$(git rev-parse --short HEAD)"
+# 有未提交改动时在 commit 后追加 dirty，避免与纯提交构建混淆
+if [ -n "$(git status --porcelain)" ]; then
+  export COMMIT="${COMMIT}-dirty"
+fi
 export BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 export OUT="/tmp/sub2api-${VERSION}-${TS}-${COMMIT}-linux-amd64"
 export REMOTE_BIN="${REMOTE_BASE}/sub2api-${VERSION}-${TS}-${COMMIT}-linux-amd64"
@@ -42,7 +70,20 @@ export BACKUP_DIR="${REMOTE_BASE}/backups/deploy-${TS}"
 export IMAGE="sub2api:codex-ws-20260601044722"
 export NEW_PORT="18098"
 export NEW_NAME="sub2api-${VERSION//./-}-${COMMIT}-${TS}-blue"
+
+echo "version: ${OLD_VERSION} -> ${VERSION} (bump=${BUMP_LEVEL})"
+echo "commit:  ${COMMIT}"
+echo "out:     ${OUT}"
+echo "name:    ${NEW_NAME}"
 ```
+
+说明：
+
+- 版本源文件固定为 `backend/cmd/server/VERSION`（semver：`MAJOR.MINOR.PATCH`）。
+- 默认每次部署执行 **patch +1**（例如 `0.1.157` → `0.1.158`）。
+- 需要功能小版本或大版本时：`BUMP_LEVEL=minor` 或 `BUMP_LEVEL=major` 后再导出变量。
+- 版本写入 `VERSION` 文件后，后续 `go build -ldflags ... -X main.Version=${VERSION}` 才会把新版本打进二进制；公网 `/api/v1/settings/public` 的 `version` 也来自这里。
+- 部署成功后建议把 `VERSION` 变更单独提交，避免下次部署又从旧号开始撞车。若本次部署中止/失败且尚未对外切流，可把 `VERSION` 文件改回 `$OLD_VERSION`。
 
 `NEW_PORT` 每次部署需要选择一个未被占用的本机端口。可在服务器上查看当前使用情况：
 
@@ -54,9 +95,19 @@ ssh "$SSH_TARGET" "docker ps --format 'table {{.Names}}\t{{.Ports}}' | grep sub2
 
 ```bash
 git status --short --branch
+cat backend/cmd/server/VERSION
+echo "planned version: ${OLD_VERSION} -> ${VERSION}"
 ```
 
-确认当前分支和提交是要部署的版本。建议至少跑一次后端入口测试：
+确认当前分支、提交，以及 **VERSION 已递增且不等于线上当前版本**。可先对比线上：
+
+```bash
+curl -fsS https://code.sicts.shop/api/v1/settings/public \
+  | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("data",d).get("version"))'
+test "$(tr -d '\r\n' < backend/cmd/server/VERSION)" != "$(curl -fsS https://code.sicts.shop/api/v1/settings/public | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("data",d).get("version"))')"
+```
+
+建议至少跑一次后端入口测试：
 
 ```bash
 cd backend
@@ -368,9 +419,23 @@ curl -fsS https://code.sicts.shop/api/v1/settings/public
 
 如果 API 版本正确但页面没变，通常是浏览器缓存或前端资源缓存；如果 API 版本也没变，检查 Nginx 是否切到新端口。
 
+### 连续部署版本号一直不变
+
+说明构建前没有递增 `backend/cmd/server/VERSION`，或 `ldflags` 仍引用了旧的 `$VERSION` 环境变量。按本文“部署变量”段重新导出（会自动 patch +1 并写回文件），确认：
+
+```bash
+cat backend/cmd/server/VERSION
+echo "$VERSION"
+# 构建后可用 strings 抽查二进制内嵌版本
+strings "$OUT" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head
+```
+
+切流后公网 `version` 必须严格大于部署前线上版本；若相等，停止后续清理，先排查是否误切到旧实例。
+
 ## 最终检查清单
 
 - 本地构建完成，服务器没有源码构建动作。
+- `backend/cmd/server/VERSION` 已在本次部署前递增，公网 `version` 与 `$VERSION` 一致且已变化。
 - 服务器备份目录存在，`postgres.sql.gz` 已通过 `gzip -t`。
 - 新容器本机 `/health` 正常。
 - Nginx `nginx -t` 通过并已 reload。
@@ -380,3 +445,4 @@ curl -fsS https://code.sicts.shop/api/v1/settings/public
 - 更早的应用容器、二进制、资源目录及部署备份已清理。
 - 当前与回滚容器的挂载文件均存在，持久化 model catalog 未被清理。
 - `/opt/sub2api/.codex-current-*` 已更新。
+- 建议提交本次 `VERSION` 文件变更，作为下次升版基线。

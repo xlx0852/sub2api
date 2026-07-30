@@ -2,9 +2,15 @@ package service
 
 import (
 	"context"
+	"io"
 	"net/http"
+	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
+	"github.com/stretchr/testify/require"
 )
 
 type accountUsageCodexProbeRepo struct {
@@ -68,6 +74,125 @@ func TestShouldRefreshOpenAICodexSnapshot(t *testing.T) {
 	}, usage, now) {
 		t.Fatal("expected stale ws snapshot to trigger refresh")
 	}
+}
+
+func TestIsGrokBillingSnapshotStale(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	base := &Account{Platform: PlatformGrok, Type: AccountTypeOAuth}
+	if !isGrokBillingSnapshotStale(base, now) {
+		t.Fatal("missing Grok billing snapshot must be stale")
+	}
+
+	base.Extra = map[string]any{
+		grokBillingSnapshotKey: &xai.BillingSnapshot{FetchedAt: now.Add(-time.Minute).Format(time.RFC3339)},
+	}
+	if isGrokBillingSnapshotStale(base, now) {
+		t.Fatal("fresh Grok billing snapshot must not be stale")
+	}
+
+	base.Extra[grokBillingSnapshotKey] = &xai.BillingSnapshot{FetchedAt: now.Add(-(openAIProbeCacheTTL + time.Minute)).Format(time.RFC3339)}
+	if !isGrokBillingSnapshotStale(base, now) {
+		t.Fatal("expired Grok billing snapshot must be stale")
+	}
+}
+
+func TestGrokBillingWindowStart(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
+	start, ok := grokBillingWindowStart(&xai.BillingSnapshot{
+		PeriodType:  "weekly",
+		PeriodStart: "2026-07-27T02:33:56Z",
+	}, now)
+	require.True(t, ok)
+	require.Equal(t, time.Date(2026, 7, 27, 2, 33, 56, 0, time.UTC), start)
+
+	for _, snapshot := range []*xai.BillingSnapshot{
+		nil,
+		{PeriodType: "monthly", PeriodStart: "2026-07-01T00:00:00Z"},
+		{PeriodType: "weekly", PeriodStart: "invalid"},
+		{PeriodType: "weekly", PeriodStart: "2026-07-31T00:00:00Z"},
+	} {
+		_, valid := grokBillingWindowStart(snapshot, now)
+		require.False(t, valid)
+	}
+}
+
+func TestRefreshGrokBillingSnapshotCoalescesConcurrentUsageReads(t *testing.T) {
+	account := &Account{
+		ID:       771,
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "access-token",
+			"sub":          "user-771",
+			"expires_at":   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+		},
+	}
+	repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{accountsByID: map[int64]*Account{account.ID: account}}}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"config":{"creditUsagePercent":0,"currentPeriod":{"type":"weekly","end":"2026-08-06T02:33:56Z"}}}`)),
+	}}}
+	service := &AccountUsageService{
+		accountRepo:      repo,
+		grokQuotaFetcher: NewGrokQuotaFetcher(),
+		grokQuotaService: NewGrokQuotaService(repo, nil, NewGrokTokenProvider(repo, nil), upstream),
+		cache:            NewUsageCache(),
+	}
+
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			usage, err := service.getGrokUsage(context.Background(), account)
+			if err != nil || usage.GrokBilling == nil {
+				t.Errorf("getGrokUsage() = %#v, %v", usage, err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	require.Len(t, upstream.requests, 1, "concurrent stale reads must share one billing probe")
+}
+
+func TestGetGrokUsageForceRefreshBypassesFreshSnapshot(t *testing.T) {
+	account := &Account{
+		ID:       772,
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "access-token",
+			"sub":          "user-772",
+			"expires_at":   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+		},
+		Extra: map[string]any{
+			grokBillingSnapshotKey: &xai.BillingSnapshot{FetchedAt: time.Now().UTC().Format(time.RFC3339), UsagePercent: func() *float64 { value := 54.0; return &value }()},
+		},
+	}
+	repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{accountsByID: map[int64]*Account{account.ID: account}}}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"config":{"creditUsagePercent":0,"currentPeriod":{"type":"weekly","end":"2026-08-06T02:33:56Z"}}}`)),
+	}}}
+	service := &AccountUsageService{
+		accountRepo:      repo,
+		grokQuotaFetcher: NewGrokQuotaFetcher(),
+		grokQuotaService: NewGrokQuotaService(repo, nil, NewGrokTokenProvider(repo, nil), upstream),
+		cache:            NewUsageCache(),
+	}
+
+	usage, err := service.getGrokUsage(context.Background(), account, true)
+	require.NoError(t, err)
+	require.NotNil(t, usage.GrokBilling)
+	require.NotNil(t, usage.GrokBilling.UsagePercent)
+	require.InDelta(t, 0, *usage.GrokBilling.UsagePercent, 0.001)
+	require.Len(t, upstream.requests, 1, "force refresh must bypass a fresh persisted snapshot")
 }
 
 // TestShouldRefreshOpenAICodexSnapshot_SparkShadowIgnoresWSv2 外审第9轮 P1:spark 影子用量走

@@ -29,6 +29,15 @@
             <div v-if="financialMetrics.missingCycle" class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
               {{ t('admin.accounts.usageDetails.missingCycleHint') }}
             </div>
+            <div v-if="financialMetrics.terminated" class="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+              <div class="font-semibold">{{ t('admin.profit.banSettled') }}</div>
+              <div class="mt-0.5">{{ t('admin.profit.terminatedCycleScope', { time: new Date(financialMetrics.terminatedAt).toLocaleString() }) }}</div>
+              <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                <span>{{ t('admin.profit.receivedRefund') }} <strong>${{ formatCost(financialMetrics.refundTotal) }}</strong></span>
+                <span>{{ t('admin.profit.recoveryProgress') }} <strong>{{ financialMetrics.recoveryProgress.toFixed(1) }}%</strong></span>
+                <span>{{ t('admin.profit.confirmedLoss') }} <strong>${{ formatCost(financialMetrics.loss) }}</strong></span>
+              </div>
+            </div>
             <div class="grid grid-cols-3 gap-3">
               <div class="min-w-0">
                 <p class="text-[11px] text-gray-400 dark:text-dark-400">{{ financialMetrics.revenueLabel }}</p>
@@ -316,6 +325,11 @@ const financialMetrics = computed(() => {
       return {
         cycle: true,
         missingCycle: false,
+        terminated: Boolean(summary.billing_window_terminated_at),
+        terminatedAt: summary.billing_window_terminated_at || '',
+        refundTotal: summary.billing_window_refund_total || 0,
+        recoveryProgress: summary.billing_window_recovery_progress || 0,
+        loss: summary.billing_window_loss || 0,
         costType: summary.cost_type,
         requests: summary.requests,
         scopeLabel: t('admin.accounts.usageDetails.currentCycleRange', {
@@ -323,8 +337,8 @@ const financialMetrics = computed(() => {
           end: summary.billing_window_end!.slice(0, 10)
         }),
         revenueLabel: t('admin.profit.currentCycleRevenue'),
-        costLabel: t('admin.profit.currentCyclePurchaseCost'),
-        profitLabel: t('admin.profit.currentCycleProfit'),
+        costLabel: summary.billing_window_terminated_at || (summary.billing_window_refund_total || 0) > 0 ? t('admin.profit.netPurchaseCost') : t('admin.profit.currentCyclePurchaseCost'),
+        profitLabel: summary.billing_window_terminated_at ? t('admin.profit.terminatedCycleProfit') : t('admin.profit.currentCycleProfit'),
         revenue,
         cost: summary.billing_window_cost!,
         profit,
@@ -335,6 +349,11 @@ const financialMetrics = computed(() => {
     return {
       cycle: false,
       missingCycle: true,
+      terminated: false,
+      terminatedAt: '',
+      refundTotal: 0,
+      recoveryProgress: 0,
+      loss: 0,
       costType: summary.cost_type,
       requests: summary.requests,
       scopeLabel: t('admin.accounts.usageDetails.noActiveCycle'),
@@ -351,6 +370,11 @@ const financialMetrics = computed(() => {
   return {
     cycle: false,
     missingCycle: false,
+    terminated: false,
+    terminatedAt: '',
+    refundTotal: 0,
+    recoveryProgress: 0,
+    loss: 0,
     costType: summary.cost_type,
     requests: summary.requests,
     scopeLabel: t('admin.accounts.usageDetails.last30Days'),

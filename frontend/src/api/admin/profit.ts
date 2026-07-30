@@ -27,8 +27,55 @@ export interface AccountSubscriptionCycle {
   period_days: number
   currency: string
   notes: string
+  termination?: AccountSubscriptionTermination
+  refunds?: AccountSubscriptionRefund[]
+  loss_summary?: AccountSubscriptionLossSummary
   created_at: string
   updated_at: string
+}
+
+export interface AccountSubscriptionTermination {
+  id: number
+  cycle_id: number
+  account_id: number
+  effective_at: string
+  reason: string
+  notes: string
+  reversed_at?: string
+  reversal_reason?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AccountSubscriptionRefund {
+  id: number
+  termination_id: number
+  cycle_id: number
+  account_id: number
+  amount: number
+  currency: string
+  received_at: string
+  notes: string
+  voided_at?: string
+  void_reason?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AccountSubscriptionLossSummary {
+  purchase_cost: number
+  revenue_before_ban: number
+  refund_total: number
+  net_purchase_cost: number
+  recovered_amount: number
+  recovery_progress: number
+  realized_profit: number
+  realized_loss: number
+}
+
+export interface SubscriptionCycleSettlementResult {
+  cycle: AccountSubscriptionCycle
+  disabled_account_ids?: number[]
 }
 
 export interface SubscriptionCycleListResponse {
@@ -59,7 +106,14 @@ export interface AccountProfitSummary {
   billing_window_revenue?: number
   billing_window_cost?: number
   billing_window_profit?: number
-  billing_window_source?: 'manual' | 'subscription_expiry'
+  billing_window_source?: 'cycle' | 'manual' | 'subscription_expiry'
+  billing_window_terminated_at?: string
+  billing_window_termination_reason?: string
+  billing_window_original_cost?: number
+  billing_window_refund_total?: number
+  billing_window_recovered_amount?: number
+  billing_window_recovery_progress?: number
+  billing_window_loss?: number
   requires_cycle_start?: boolean
   currency: string
 }
@@ -217,6 +271,39 @@ export async function deleteSubscriptionCycle(id: number): Promise<void> {
   await apiClient.delete(`/admin/profit/cycles/${id}`)
 }
 
+export interface CreateSubscriptionTerminationRequest {
+  effective_at: string
+  reason: string
+  notes: string
+  initial_refund_amount?: number
+  initial_refund_received_at?: string
+}
+
+export async function terminateSubscriptionCycle(id: number, req: CreateSubscriptionTerminationRequest): Promise<SubscriptionCycleSettlementResult> {
+  const { data } = await apiClient.post<SubscriptionCycleSettlementResult>(`/admin/profit/cycles/${id}/termination`, req)
+  return data
+}
+
+export async function previewSubscriptionTermination(id: number, req: CreateSubscriptionTerminationRequest): Promise<AccountSubscriptionLossSummary> {
+  const { data } = await apiClient.post<AccountSubscriptionLossSummary>(`/admin/profit/cycles/${id}/termination-preview`, req)
+  return data
+}
+
+export async function addSubscriptionRefund(terminationID: number, req: { amount: number; received_at: string; notes: string }): Promise<SubscriptionCycleSettlementResult> {
+  const { data } = await apiClient.post<SubscriptionCycleSettlementResult>(`/admin/profit/terminations/${terminationID}/refunds`, req)
+  return data
+}
+
+export async function voidSubscriptionRefund(id: number, reason: string): Promise<SubscriptionCycleSettlementResult> {
+  const { data } = await apiClient.post<SubscriptionCycleSettlementResult>(`/admin/profit/refunds/${id}/void`, { reason })
+  return data
+}
+
+export async function reverseSubscriptionTermination(id: number, reason: string): Promise<SubscriptionCycleSettlementResult> {
+  const { data } = await apiClient.post<SubscriptionCycleSettlementResult>(`/admin/profit/terminations/${id}/reverse`, { reason })
+  return data
+}
+
 export interface BatchSubscriptionConfigRequest {
   period_fee: number
   period_days?: number
@@ -234,4 +321,9 @@ export async function batchConfigureSubscription(req: BatchSubscriptionConfigReq
   return data
 }
 
-export default { overview, supplyForecast, summary, trend, listConfigs, upsertConfig, deleteConfig, listSubscriptionCycles, createSubscriptionCycle, deleteSubscriptionCycle, batchConfigureSubscription }
+export default {
+  overview, supplyForecast, summary, trend, listConfigs, upsertConfig, deleteConfig,
+  listSubscriptionCycles, createSubscriptionCycle, deleteSubscriptionCycle,
+  previewSubscriptionTermination, terminateSubscriptionCycle, addSubscriptionRefund, voidSubscriptionRefund,
+  reverseSubscriptionTermination, batchConfigureSubscription
+}

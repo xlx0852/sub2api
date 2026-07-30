@@ -1,6 +1,21 @@
 <template>
   <AppLayout>
-    <div class="mx-auto max-w-6xl space-y-6">
+    <div class="settings-page mx-auto w-full max-w-[1440px] space-y-5 px-1 pb-8 sm:px-0">
+      <header class="settings-page-header">
+        <div class="min-w-0">
+          <h1 class="text-xl font-semibold tracking-tight text-gray-900 dark:text-white sm:text-2xl">
+            {{ t('admin.settings.title') }}
+          </h1>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {{ t('admin.settings.description') }}
+          </p>
+        </div>
+        <div class="settings-page-current-tab">
+          <Icon name="cog" size="sm" />
+          <span>{{ activeTabLabel }}</span>
+        </div>
+      </header>
+
       <!-- Loading State -->
       <div v-if="loading" class="flex items-center justify-center py-12">
         <div
@@ -9,7 +24,7 @@
       </div>
 
       <!-- Settings Form -->
-      <form v-else @submit.prevent="saveSettings" class="space-y-6" novalidate>
+      <form v-else @submit.prevent="saveSettings" class="settings-form space-y-5" novalidate>
         <!-- Tab Navigation -->
         <div class="settings-tabs-shell">
           <nav
@@ -7424,6 +7439,9 @@ const settingsTabs = [
   { key: "email" as SettingsTab, icon: "mail" as const },
   { key: "backup" as SettingsTab, icon: "database" as const },
 ];
+const activeTabLabel = computed(() =>
+  t(`admin.settings.tabs.${activeTab.value}`),
+);
 
 const settingsTabKeyboardActions = {
   ArrowLeft: -1,
@@ -10940,6 +10958,26 @@ watch(
 </script>
 
 <style scoped>
+.settings-page-header {
+  @apply flex flex-col gap-3 rounded-2xl border border-gray-200/80 bg-gradient-to-br from-white via-white to-primary-50/50 px-5 py-5 shadow-sm dark:border-dark-700 dark:from-dark-800 dark:via-dark-800 dark:to-primary-950/20 sm:flex-row sm:items-center sm:justify-between sm:px-6;
+}
+
+.settings-page-current-tab {
+  @apply inline-flex w-fit shrink-0 items-center gap-2 rounded-xl border border-primary-100 bg-white/80 px-3 py-2 text-sm font-medium text-primary-700 shadow-sm dark:border-primary-400/20 dark:bg-dark-700/80 dark:text-primary-200;
+}
+
+.settings-page :deep(.card) {
+  @apply overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-800;
+}
+
+.settings-page :deep(.card > :first-child) {
+  @apply px-5 sm:px-6;
+}
+
+.settings-page :deep(.card > :last-child) {
+  @apply p-5 sm:p-6;
+}
+
 .default-sub-group-select :deep(.select-trigger) {
   @apply h-[42px];
 }
@@ -10950,7 +10988,7 @@ watch(
 
 /* ============ 系统设置 Tab 导航 ============ */
 .settings-tabs-shell {
-  @apply sticky z-20 -mx-1 rounded-2xl border border-white/80 bg-white/90 p-1.5 backdrop-blur-xl;
+  @apply sticky z-20 rounded-2xl border border-white/80 bg-white/90 p-1.5 shadow-sm backdrop-blur-xl;
   top: 4.75rem;
 }
 

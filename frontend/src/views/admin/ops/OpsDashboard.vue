@@ -67,7 +67,7 @@
         v-if="opsEnabled && !(loading && !hasLoadedOnce) && (isFullscreen || activeSection === 'overview')"
         class="grid grid-cols-1 gap-4 lg:grid-cols-4 lg:gap-6"
       >
-        <div class="min-h-[320px] lg:col-span-1 lg:min-h-[360px]">
+        <div class="h-[320px] lg:col-span-1 lg:h-[360px]">
           <OpsConcurrencyCard :platform-filter="platform" :group-id-filter="groupId" :refresh-token="dashboardRefreshToken" />
         </div>
         <div class="h-[280px] lg:col-span-3 lg:h-[360px]">

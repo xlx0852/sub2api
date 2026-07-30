@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -27,16 +28,85 @@ type AccountCostConfig struct {
 // AccountSubscriptionCycle 表示一次实际充值形成的独立订阅周期。
 // 停用空档不应通过推断的连续续费填补。
 type AccountSubscriptionCycle struct {
-	ID         int64     `json:"id"`
-	AccountID  int64     `json:"account_id"`
-	StartsAt   time.Time `json:"starts_at"`
-	PeriodFee  float64   `json:"period_fee"`
-	PeriodDays int       `json:"period_days"`
-	Currency   string    `json:"currency"`
-	Notes      string    `json:"notes"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID          int64                           `json:"id"`
+	AccountID   int64                           `json:"account_id"`
+	StartsAt    time.Time                       `json:"starts_at"`
+	PeriodFee   float64                         `json:"period_fee"`
+	PeriodDays  int                             `json:"period_days"`
+	Currency    string                          `json:"currency"`
+	Notes       string                          `json:"notes"`
+	Termination *AccountSubscriptionTermination `json:"termination,omitempty"`
+	Refunds     []*AccountSubscriptionRefund    `json:"refunds,omitempty"`
+	LossSummary *AccountSubscriptionLossSummary `json:"loss_summary,omitempty"`
+	CreatedAt   time.Time                       `json:"created_at"`
+	UpdatedAt   time.Time                       `json:"updated_at"`
 }
+
+// AccountSubscriptionTermination 是管理员确认的订阅周期提前终止事件。
+type AccountSubscriptionTermination struct {
+	ID             int64      `json:"id"`
+	CycleID        int64      `json:"cycle_id"`
+	AccountID      int64      `json:"account_id"`
+	EffectiveAt    time.Time  `json:"effective_at"`
+	Reason         string     `json:"reason"`
+	Notes          string     `json:"notes"`
+	ReversedAt     *time.Time `json:"reversed_at,omitempty"`
+	ReversalReason string     `json:"reversal_reason,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+// AccountSubscriptionRefund 只记录已实际到账的上游退款。
+type AccountSubscriptionRefund struct {
+	ID            int64      `json:"id"`
+	TerminationID int64      `json:"termination_id"`
+	CycleID       int64      `json:"cycle_id"`
+	AccountID     int64      `json:"account_id"`
+	Amount        float64    `json:"amount"`
+	Currency      string     `json:"currency"`
+	ReceivedAt    time.Time  `json:"received_at"`
+	Notes         string     `json:"notes"`
+	VoidedAt      *time.Time `json:"voided_at,omitempty"`
+	VoidReason    string     `json:"void_reason,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+// AccountSubscriptionLossSummary 是由周期、封禁前收入和已到账退款派生的快照。
+type AccountSubscriptionLossSummary struct {
+	PurchaseCost     float64 `json:"purchase_cost"`
+	RevenueBeforeBan float64 `json:"revenue_before_ban"`
+	RefundTotal      float64 `json:"refund_total"`
+	NetPurchaseCost  float64 `json:"net_purchase_cost"`
+	RecoveredAmount  float64 `json:"recovered_amount"`
+	RecoveryProgress float64 `json:"recovery_progress"`
+	RealizedProfit   float64 `json:"realized_profit"`
+	RealizedLoss     float64 `json:"realized_loss"`
+}
+
+type SubscriptionTerminationWriteResult struct {
+	Termination        *AccountSubscriptionTermination `json:"termination"`
+	InitialRefund      *AccountSubscriptionRefund      `json:"initial_refund,omitempty"`
+	DisabledAccountIDs []int64                         `json:"disabled_account_ids"`
+}
+
+type SubscriptionCycleUsageRange struct {
+	CycleID   int64
+	AccountID int64
+	Start     time.Time
+	End       time.Time
+}
+
+var (
+	ErrSubscriptionCycleNotFound          = errors.New("subscription cycle not found")
+	ErrSubscriptionCycleAlreadyTerminated = errors.New("subscription cycle already terminated")
+	ErrSubscriptionTerminationNotFound    = errors.New("subscription termination not found")
+	ErrSubscriptionTerminationReversed    = errors.New("subscription termination already reversed")
+	ErrSubscriptionRefundNotFound         = errors.New("subscription refund not found")
+	ErrSubscriptionRefundVoided           = errors.New("subscription refund already voided")
+	ErrSubscriptionRefundExceedsFee       = errors.New("subscription refunds exceed cycle fee")
+	ErrSubscriptionCycleSettled           = errors.New("settled subscription cycle cannot be deleted")
+)
 
 const (
 	// AccountCostTypeSubscription 订阅制（固定周期费用）
@@ -105,8 +175,14 @@ type ProfitRepository interface {
 	DeleteCostConfig(ctx context.Context, accountID int64) error
 	ListSubscriptionCycles(ctx context.Context, accountID int64) ([]*AccountSubscriptionCycle, error)
 	ListSubscriptionCyclesBatch(ctx context.Context, accountIDs []int64) ([]*AccountSubscriptionCycle, error)
+	GetSubscriptionCycle(ctx context.Context, id int64) (*AccountSubscriptionCycle, error)
 	CreateSubscriptionCycle(ctx context.Context, cycle *AccountSubscriptionCycle) (*AccountSubscriptionCycle, error)
 	DeleteSubscriptionCycle(ctx context.Context, id int64) error
+	CreateSubscriptionTermination(ctx context.Context, termination *AccountSubscriptionTermination, initialRefund *AccountSubscriptionRefund) (*SubscriptionTerminationWriteResult, error)
+	CreateSubscriptionRefund(ctx context.Context, refund *AccountSubscriptionRefund) (*AccountSubscriptionRefund, error)
+	VoidSubscriptionRefund(ctx context.Context, id int64, reason string, voidedAt time.Time) (*AccountSubscriptionRefund, error)
+	ReverseSubscriptionTermination(ctx context.Context, id int64, reason string, reversedAt time.Time) (*AccountSubscriptionTermination, error)
+	GetSubscriptionCycleRevenueBatch(ctx context.Context, ranges []SubscriptionCycleUsageRange) (map[int64]float64, error)
 
 	// GetAccountUsageStatsBatch 批量聚合账号在 [start,end) 的收入与账号侧成本。
 	GetAccountUsageStatsBatch(ctx context.Context, accountIDs []int64, start, end time.Time) (map[int64]*ProfitUsageStats, error)

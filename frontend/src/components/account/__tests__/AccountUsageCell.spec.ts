@@ -240,7 +240,9 @@ describe('AccountUsageCell', () => {
     })
 
     await flushPromises()
-    expect(grok.findAll('[data-testid="usage-window-row"]').length).toBeGreaterThanOrEqual(2)
+    expect(grok.findAll('[data-testid="usage-window-row"]')).toHaveLength(1)
+    expect(grok.get('[data-testid="usage-full-estimate"]').text()).toContain('usage.fullUtilizationEstimate')
+    expect(grok.get('[data-testid="usage-full-estimate"]').text()).toContain('28.571428571428573 req')
     expect(grok.text()).not.toContain('admin.accounts.usageWindow.grokProducts')
     expect(
       grok.findAll('[data-testid="usage-progress-fill"]').every((bar) => bar.classes().includes('bg-emerald-500'))
@@ -823,7 +825,7 @@ describe('AccountUsageCell', () => {
 		expect(badges.some(node => node.attributes('title') === 'usage.userBilled')).toBe(true)
   })
 
-  it('Grok OAuth 会展示本地 user billed 用量并保留超限百分比', async () => {
+  it('Grok OAuth 只展示本地用量，不以请求限流头替代官方周额度', async () => {
     getUsage.mockResolvedValue({
       grok_local_usage: {
         requests: 4,
@@ -868,7 +870,8 @@ describe('AccountUsageCell', () => {
     expect(wrapper.text()).toContain('1.2K')
     expect(wrapper.text()).toContain('A $0.12')
     expect(wrapper.text()).toContain('U $0.34')
-    expect(wrapper.text()).toContain('admin.accounts.usageWindow.grokRequests|120|2026-07-09T16:00:00Z')
+    expect(wrapper.text()).not.toContain('admin.accounts.usageWindow.grokRequests')
+    expect(wrapper.text()).not.toContain('admin.accounts.usageWindow.grokTokens')
 
     const badges = wrapper.findAll('span[title]')
     expect(badges.some(node => node.attributes('title') === 'usage.accountBilled')).toBe(true)
@@ -918,7 +921,7 @@ describe('AccountUsageCell', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('admin.accounts.usageWindow.grokWeekly|100|2026-07-16T08:00:00Z')
-    expect(wrapper.text()).toContain('admin.accounts.usageWindow.grokMonthly|73.36666666666667')
+    expect(wrapper.text()).not.toContain('admin.accounts.usageWindow.grokMonthly')
     expect(wrapper.text()).not.toContain('personal-team-blocked:spending-limit')
   })
 

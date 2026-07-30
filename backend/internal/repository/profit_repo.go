@@ -132,7 +132,11 @@ func (r *profitRepository) ListSubscriptionCycles(ctx context.Context, accountID
 		}
 		cycles = append(cycles, cycle)
 	}
-	return cycles, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	_ = rows.Close()
+	return r.enrichSubscriptionCycles(ctx, cycles)
 }
 
 func (r *profitRepository) ListSubscriptionCyclesBatch(ctx context.Context, accountIDs []int64) ([]*service.AccountSubscriptionCycle, error) {
@@ -157,7 +161,30 @@ func (r *profitRepository) ListSubscriptionCyclesBatch(ctx context.Context, acco
 		}
 		cycles = append(cycles, cycle)
 	}
-	return cycles, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	_ = rows.Close()
+	return r.enrichSubscriptionCycles(ctx, cycles)
+}
+
+func (r *profitRepository) GetSubscriptionCycle(ctx context.Context, id int64) (*service.AccountSubscriptionCycle, error) {
+	cycle, err := scanSubscriptionCycle(r.db.QueryRowContext(ctx, `
+		SELECT id, account_id, starts_at, period_fee, period_days, currency, notes, created_at, updated_at
+		FROM account_subscription_cycles
+		WHERE id = $1
+	`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, service.ErrSubscriptionCycleNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	cycles, err := r.enrichSubscriptionCycles(ctx, []*service.AccountSubscriptionCycle{cycle})
+	if err != nil {
+		return nil, err
+	}
+	return cycles[0], nil
 }
 
 func (r *profitRepository) CreateSubscriptionCycle(ctx context.Context, cycle *service.AccountSubscriptionCycle) (*service.AccountSubscriptionCycle, error) {
@@ -170,8 +197,31 @@ func (r *profitRepository) CreateSubscriptionCycle(ctx context.Context, cycle *s
 }
 
 func (r *profitRepository) DeleteSubscriptionCycle(ctx context.Context, id int64) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM account_subscription_cycles WHERE id = $1`, id)
-	return err
+	result, err := r.db.ExecContext(ctx, `
+		DELETE FROM account_subscription_cycles c
+		WHERE c.id = $1
+		  AND NOT EXISTS (
+			SELECT 1 FROM account_subscription_terminations t WHERE t.cycle_id = c.id
+		  )
+	`, id)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows > 0 {
+		return nil
+	}
+	var settled bool
+	if err := r.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM account_subscription_terminations WHERE cycle_id = $1)`, id).Scan(&settled); err != nil {
+		return err
+	}
+	if settled {
+		return service.ErrSubscriptionCycleSettled
+	}
+	return service.ErrSubscriptionCycleNotFound
 }
 
 func (r *profitRepository) GetAccountUsageStatsBatch(ctx context.Context, accountIDs []int64, start, end time.Time) (map[int64]*service.ProfitUsageStats, error) {

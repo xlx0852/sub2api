@@ -107,6 +107,14 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 	requireColumn(t, tx, "scheduler_outbox", "dedup_key", "text", 0, true)
 	requireIndex(t, tx, "scheduler_outbox", "idx_scheduler_outbox_pending_dedup_key")
 
+	// subscription ban settlement and received-refund ledgers
+	requireColumn(t, tx, "account_subscription_terminations", "effective_at", "timestamp with time zone", 0, false)
+	requireColumn(t, tx, "account_subscription_terminations", "reversed_at", "timestamp with time zone", 0, true)
+	requireIndex(t, tx, "account_subscription_terminations", "account_subscription_terminations_active_cycle_idx")
+	requireColumn(t, tx, "account_subscription_refunds", "amount", "numeric", 0, false)
+	requireColumn(t, tx, "account_subscription_refunds", "voided_at", "timestamp with time zone", 0, true)
+	requireIndex(t, tx, "account_subscription_refunds", "account_subscription_refunds_termination_received_idx")
+
 	// ops_system_logs: API key id index for operational log triage
 	requireColumn(t, tx, "ops_system_logs", "api_key_id", "bigint", 0, true)
 	requireIndex(t, tx, "ops_system_logs", "idx_ops_system_logs_api_key_id_created_at")
