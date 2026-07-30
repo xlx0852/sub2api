@@ -397,7 +397,7 @@
       <div v-else class="text-xs text-gray-400">-</div>
     </template>
 
-    <!-- Grok OAuth: official billing (CPAMC-style) + optional rate-limit headers + local Sub2API usage -->
+    <!-- Grok OAuth: official weekly billing quota + local Sub2API usage -->
     <template v-else-if="account.platform === 'grok' && account.type === 'oauth'">
       <div v-if="loading" class="space-y-1.5">
         <div class="flex items-center gap-1">
@@ -420,58 +420,24 @@
         </span>
       </div>
       <div v-else class="space-y-0.5">
+        <!-- Grok's official weekly subscription quota is the only quota shown. -->
+        <UsageProgressBar
+          v-if="grokWeeklyBar"
+          :label="t('admin.accounts.usageWindow.grokWeekly')"
+          :utilization="grokWeeklyBar.utilization"
+          :resets-at="grokWeeklyBar.resetsAt"
+          :window-stats="grokLocalUsage"
+          color="indigo"
+        />
+
         <UsageStatLine
-          v-if="grokLocalUsage"
+          v-else-if="grokLocalUsage"
           class="mb-0.5"
           :requests="formatWindowRequests(grokLocalUsage)"
           :tokens="formatWindowTokens(grokLocalUsage)"
           :account-cost="formatWindowCost(grokLocalUsage)"
           :user-cost="grokLocalUsage.user_cost != null ? formatWindowUserCost(grokLocalUsage) : null"
         />
-
-        <!-- Official billing: weekly + monthly credits -->
-        <template v-if="effectiveGrokBilling">
-          <UsageProgressBar
-            v-if="grokWeeklyBar"
-            :label="t('admin.accounts.usageWindow.grokWeekly')"
-            :utilization="grokWeeklyBar.utilization"
-            :resets-at="grokWeeklyBar.resetsAt"
-            color="indigo"
-          />
-          <GrokProductUsageBreakdown
-            v-if="variant === 'detail'"
-            :products="effectiveGrokBilling.product_usage"
-          />
-          <UsageProgressBar
-            v-if="grokMonthlyCreditsBar"
-            :label="t('admin.accounts.usageWindow.grokMonthly')"
-            :utilization="grokMonthlyCreditsBar.utilization"
-            :resets-at="grokMonthlyCreditsBar.resetsAt"
-            :extra-stats="grokMonthlyCreditsText ? [{ label: grokMonthlyCreditsText, title: grokMonthlyCreditsText }] : []"
-            color="amber"
-          />
-        </template>
-
-        <!-- Fallback: passive rate-limit request/token windows -->
-        <template v-else>
-          <UsageProgressBar
-            v-if="grokRequestQuotaBar"
-            :label="t('admin.accounts.usageWindow.grokRequests')"
-            :utilization="grokRequestQuotaBar.utilization"
-            :resets-at="grokRequestQuotaBar.resetsAt"
-            color="indigo"
-          />
-          <UsageProgressBar
-            v-if="grokTokenQuotaBar"
-            :label="t('admin.accounts.usageWindow.grokTokens')"
-            :utilization="grokTokenQuotaBar.utilization"
-            :resets-at="grokTokenQuotaBar.resetsAt"
-            color="emerald"
-          />
-          <div v-if="grokQuotaUnknown" class="text-[10px] text-gray-500 dark:text-gray-400">
-            {{ grokQuotaUnknownLabel }}
-          </div>
-        </template>
 
         <div
           v-if="grokRetryAfterLabel"
@@ -652,11 +618,9 @@ import UsageStatLine from './UsageStatLine.vue'
 import AccountQuotaInfo from './AccountQuotaInfo.vue'
 import OpenAIQuotaResetCell from './OpenAIQuotaResetCell.vue'
 import GrokQuotaProbeCell from './GrokQuotaProbeCell.vue'
-import GrokProductUsageBreakdown from './GrokProductUsageBreakdown.vue'
 import QuotaActionButton from './QuotaActionButton.vue'
 import AccountUsageSummary from './AccountUsageSummary.vue'
 import type { GrokBillingSnapshot } from '@/api/admin/grok'
-import { resolveGrokMonthlyQuota } from '@/utils/grokBillingPresentation'
 import {
   buildAccountUsagePresentation,
   type AccountUsagePresentation
@@ -1086,15 +1050,6 @@ interface GrokQuotaBarInfo {
   resetsAt: string | null
 }
 
-const makeGrokQuotaBar = (quota?: { limit?: number | null; remaining?: number | null; reset_at?: string | null } | null): GrokQuotaBarInfo | null => {
-  if (!quota || quota.limit == null || quota.remaining == null || quota.limit <= 0) return null
-  const used = Math.max(0, quota.limit - quota.remaining)
-  return {
-    utilization: (used / quota.limit) * 100,
-    resetsAt: quota.reset_at || null
-  }
-}
-
 /** Live billing from probe override; falls back to usageInfo from account list. */
 const liveGrokBilling = ref<GrokBillingSnapshot | null>(null)
 
@@ -1128,11 +1083,6 @@ const onGrokBillingRefreshed = (billing: GrokBillingSnapshot | null) => {
   _usageCache.delete(props.account.id)
 }
 
-const formatUsdFromCents = (cents: number | null | undefined): string => {
-  if (cents == null || Number.isNaN(cents)) return '--'
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(cents / 100)
-}
-
 const grokWeeklyBar = computed((): GrokQuotaBarInfo | null => {
   const b = effectiveGrokBilling.value
   if (!b || b.usage_percent == null) return null
@@ -1146,38 +1096,6 @@ const grokWeeklyBar = computed((): GrokQuotaBarInfo | null => {
   }
 })
 
-const grokMonthlyCreditsBar = computed((): GrokQuotaBarInfo | null => {
-	const quota = resolveGrokMonthlyQuota(effectiveGrokBilling.value)
-	if (!quota) return null
-	return {
-		utilization: quota.utilization,
-		resetsAt: quota.resetsAt
-	}
-})
-
-const grokMonthlyCreditsText = computed(() => {
-	const quota = resolveGrokMonthlyQuota(effectiveGrokBilling.value)
-	if (!quota) return null
-	return t('admin.accounts.usageWindow.grokMonthlyAmount', {
-		used: formatUsdFromCents(quota.usedCents),
-		limit: formatUsdFromCents(quota.limitCents),
-		remaining: formatUsdFromCents(quota.remainingCents)
-	})
-})
-
-const grokRequestQuotaBar = computed(() => makeGrokQuotaBar(usageInfo.value?.grok_request_quota))
-const grokTokenQuotaBar = computed(() => makeGrokQuotaBar(usageInfo.value?.grok_token_quota))
-const grokQuotaUnknown = computed(() => {
-  if (props.account.platform !== 'grok') return false
-  if (effectiveGrokBilling.value) return false
-  if (grokRequestQuotaBar.value || grokTokenQuotaBar.value) return false
-  return usageInfo.value?.grok_quota_snapshot_state !== 'observed'
-})
-const grokQuotaUnknownLabel = computed(() => {
-  return usageInfo.value?.grok_quota_snapshot_state === 'no_headers'
-    ? t('admin.accounts.usageWindow.grokNoHeaders')
-    : t('admin.accounts.usageWindow.grokUnknown')
-})
 const grokLocalUsage = computed(() => usageInfo.value?.grok_local_usage || props.todayStats || null)
 const grokPlanOrEntitlementLabel = computed(() => {
   const plan = (effectiveGrokBilling.value?.plan || usageInfo.value?.subscription_tier || '').trim()

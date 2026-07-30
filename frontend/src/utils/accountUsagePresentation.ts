@@ -1,5 +1,4 @@
 import type { Account, AccountUsageInfo, WindowStats } from '@/types'
-import { resolveGrokMonthlyQuota } from '@/utils/grokBillingPresentation'
 
 export type AccountUsageTone = 'neutral' | 'success' | 'warning' | 'danger'
 
@@ -60,22 +59,6 @@ const makeQuotaWindow = (
   stats: stats || null,
   detail: detail || null
 })
-
-const makeRateLimitWindow = (
-  key: string,
-  label: string,
-  quota: { limit?: number | null; remaining?: number | null; reset_at?: string | null } | null | undefined,
-  color: AccountUsageWindowPresentation['color']
-): AccountUsageWindowPresentation | null => {
-  if (!quota || quota.limit == null || quota.remaining == null || quota.limit <= 0) return null
-  const used = Math.max(0, quota.limit - quota.remaining)
-  return makeQuotaWindow(key, label, (used / quota.limit) * 100, quota.reset_at, color)
-}
-
-const formatUsdFromCents = (value: number | null | undefined): string | null => {
-  if (value == null || !Number.isFinite(value)) return null
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(value / 100)
-}
 
 const quotaResetAt = (account: Account, kind: 'daily' | 'weekly'): string | null => {
   const extra = account.extra as Record<string, unknown> | undefined
@@ -172,38 +155,9 @@ export const buildAccountUsagePresentation = ({
         t('admin.accounts.usageWindow.grokWeekly'),
         billing.usage_percent,
         billing.period_end,
-        'indigo'
+        'indigo',
+        usageInfo?.grok_local_usage || todayStats
       ))
-    }
-		const monthlyQuota = resolveGrokMonthlyQuota(billing)
-		if (monthlyQuota) {
-			const total = formatUsdFromCents(monthlyQuota.limitCents)
-			const used = formatUsdFromCents(monthlyQuota.usedCents)
-			windows.push(makeQuotaWindow(
-				'grok-monthly',
-				t('admin.accounts.usageWindow.grokMonthly'),
-				monthlyQuota.utilization,
-				monthlyQuota.resetsAt,
-        'amber',
-        null,
-        used && total ? `${used} / ${total}` : null
-      ))
-    }
-    if (windows.length === 0) {
-      const requestWindow = makeRateLimitWindow(
-        'grok-requests',
-        t('admin.accounts.usageWindow.grokRequests'),
-        usageInfo?.grok_request_quota,
-        'indigo'
-      )
-      const tokenWindow = makeRateLimitWindow(
-        'grok-tokens',
-        t('admin.accounts.usageWindow.grokTokens'),
-        usageInfo?.grok_token_quota,
-        'emerald'
-      )
-      if (requestWindow) windows.push(requestWindow)
-      if (tokenWindow) windows.push(tokenWindow)
     }
   } else if (account.platform === 'gemini') {
     addUsageProgress(windows, 'gemini-shared', '1d', usageInfo?.gemini_shared_daily || null, 'indigo')

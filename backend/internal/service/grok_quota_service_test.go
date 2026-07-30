@@ -50,7 +50,7 @@ func (r *grokQuotaProxyRepo) GetByID(_ context.Context, id int64) (*Proxy, error
 	return r.proxies[id], nil
 }
 
-func TestGrokQuotaServiceProbeUsageMergesBilling(t *testing.T) {
+func TestGrokQuotaServiceProbeUsageUsesOfficialCreditsPath(t *testing.T) {
 	t.Parallel()
 
 	account := &Account{
@@ -70,19 +70,13 @@ func TestGrokQuotaServiceProbeUsageMergesBilling(t *testing.T) {
 		},
 	}
 
-	creditsBody := `{"config":{"creditUsagePercent":10,"currentPeriod":{"type":"weekly","start":"2026-07-05T14:38:00Z","end":"2026-07-12T14:38:00Z"},"productUsage":[{"product":"GrokBuild","usagePercent":10},{"product":"Api"},{"product":"GrokChat"}]}}`
-	monthlyBody := `{"config":{"monthlyLimit":{"val":15000},"used":{"val":7473},"onDemandCap":{"val":0},"billingPeriodEnd":"2026-08-01T00:00:00Z"}}`
+	creditsBody := `{"config":{"creditUsagePercent":10,"currentPeriod":{"type":"weekly","start":"2026-07-05T14:38:00Z","end":"2026-07-12T14:38:00Z"},"productUsage":[{"product":"GrokBuild","usagePercent":10},{"product":"Api"},{"product":"GrokChat"}],"monthlyLimit":{"val":15000},"used":{"val":7473},"onDemandCap":{"val":0},"billingPeriodEnd":"2026-08-01T00:00:00Z"}}`
 
 	upstream := &httpUpstreamRecorder{responses: []*http.Response{
 		{
 			StatusCode: http.StatusOK,
 			Header:     http.Header{"Content-Type": []string{"application/json"}},
 			Body:       io.NopCloser(strings.NewReader(creditsBody)),
-		},
-		{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body:       io.NopCloser(strings.NewReader(monthlyBody)),
 		},
 	}}
 	svc := NewGrokQuotaService(
@@ -104,16 +98,48 @@ func TestGrokQuotaServiceProbeUsageMergesBilling(t *testing.T) {
 	require.EqualValues(t, 15000, *result.Billing.MonthlyLimitCents)
 	require.Len(t, result.Billing.ProductUsage, 3)
 
-	require.Len(t, upstream.requests, 2)
+	require.Len(t, upstream.requests, 1)
 	require.Equal(t, "https://cli-chat-proxy.grok.com/v1/billing?format=credits", upstream.requests[0].URL.String())
-	require.Equal(t, "https://cli-chat-proxy.grok.com/v1/billing", upstream.requests[1].URL.String())
 	require.Equal(t, "Bearer access-token", upstream.requests[0].Header.Get("Authorization"))
 	require.Equal(t, "xai-grok-cli", upstream.requests[0].Header.Get("x-xai-token-auth"))
 	require.Equal(t, "user-xyz", upstream.requests[0].Header.Get("x-userid"))
+	require.Equal(t, "headless", upstream.requests[0].Header.Get("x-grok-client-mode"))
 	require.Equal(t, HTTPUpstreamProfileGrok, HTTPUpstreamProfileFromContext(upstream.requests[0].Context()))
 
 	stored := repo.updates[42]
 	require.Contains(t, stored, grokBillingSnapshotKey)
+}
+
+func TestGrokQuotaServiceProbeUsageKeepsFreshZeroCreditsWindow(t *testing.T) {
+	t.Parallel()
+
+	account := &Account{
+		ID:       43,
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "access-token",
+			"sub":          "user-xyz",
+			"expires_at":   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+		},
+	}
+	repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{accountsByID: map[int64]*Account{43: account}}}
+	creditsBody := `{"config":{"creditUsagePercent":0,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-07-30T02:33:56Z","end":"2026-08-06T02:33:56Z"}},"subscriptionTier":"SuperGrok Heavy"}`
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(creditsBody)),
+	}}}
+	svc := NewGrokQuotaService(repo, nil, NewGrokTokenProvider(repo, nil), upstream)
+
+	result, err := svc.ProbeUsage(context.Background(), account.ID)
+	require.NoError(t, err)
+	require.NotNil(t, result.Billing)
+	require.NotNil(t, result.Billing.UsagePercent)
+	require.InDelta(t, 0, *result.Billing.UsagePercent, 0.001)
+	require.Equal(t, "2026-08-06T02:33:56Z", result.Billing.PeriodEnd)
+	require.Equal(t, xai.PlanSuperGrokHeavy, result.Billing.Plan)
+	require.Len(t, upstream.requests, 1, "a successful credits response must not request legacy billing")
 }
 
 func TestGrokQuotaServiceProbeUsageUnauthorized(t *testing.T) {

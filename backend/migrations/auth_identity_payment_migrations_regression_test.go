@@ -204,6 +204,20 @@ func TestMigration178RetiresOnlyUserSubscriptionModeAndPreservesHistory(t *testi
 	require.NotContains(t, sql, "DELETE FROM account_subscription_cycles")
 }
 
+func TestMigration179AddsAuditableSubscriptionBanSettlementLedgers(t *testing.T) {
+	content, err := FS.ReadFile("179_add_subscription_ban_settlements.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "CREATE TABLE IF NOT EXISTS account_subscription_terminations")
+	require.Contains(t, sql, "CREATE TABLE IF NOT EXISTS account_subscription_refunds")
+	require.Contains(t, sql, "WHERE reversed_at IS NULL")
+	require.Contains(t, sql, "voided_at")
+	require.Contains(t, sql, "ON DELETE RESTRICT")
+	require.NotContains(t, sql, "UPDATE account_subscription_cycles")
+	require.NotContains(t, sql, "UPDATE accounts")
+}
+
 func TestMigration154AddsSparkShadowColumnsAndConstraintsWithoutHotIndexes(t *testing.T) {
 	content, err := FS.ReadFile("154_account_spark_shadow.sql")
 	require.NoError(t, err)

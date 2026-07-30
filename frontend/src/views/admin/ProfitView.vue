@@ -3,25 +3,34 @@
     <TablePageLayout transparent>
       <template #filters>
         <div class="space-y-3">
-          <div class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
-            <button
-              data-testid="profit-review-tab"
-              type="button"
-              class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-              :class="activeView === 'review' ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-dark-300 dark:hover:text-white'"
-              @click="activeView = 'review'"
+          <div class="flex items-center gap-2">
+            <div class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
+              <button
+                data-testid="profit-review-tab"
+                type="button"
+                class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+                :class="activeView === 'review' ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-dark-300 dark:hover:text-white'"
+                @click="activeView = 'review'"
+              >
+                {{ t('admin.profit.reviewTab') }}
+              </button>
+              <button
+                data-testid="profit-forecast-tab"
+                type="button"
+                class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+                :class="activeView === 'forecast' ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-dark-300 dark:hover:text-white'"
+                @click="activeView = 'forecast'"
+              >
+                {{ t('admin.profit.supplyForecastTab') }}
+              </button>
+            </div>
+            <HelpTooltip
+              v-if="activeView === 'forecast'"
+              :content="t('admin.profit.supplyForecastHint')"
+              width-class="w-72"
             >
-              {{ t('admin.profit.reviewTab') }}
-            </button>
-            <button
-              data-testid="profit-forecast-tab"
-              type="button"
-              class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-              :class="activeView === 'forecast' ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-dark-300 dark:hover:text-white'"
-              @click="activeView = 'forecast'"
-            >
-              {{ t('admin.profit.supplyForecastTab') }}
-            </button>
+              <Icon name="infoCircle" size="xs" class="text-gray-400 dark:text-dark-400" />
+            </HelpTooltip>
           </div>
 
           <div v-if="activeView === 'review'" class="flex flex-wrap items-center gap-3">
@@ -58,19 +67,21 @@
               <Icon name="refresh" size="xs" :class="loading ? 'animate-spin' : ''" />
               <span>{{ t('admin.profit.refreshSnapshot') }}</span>
             </button>
-            <span class="inline-flex items-center gap-1.5">
+            <span
+              class="inline-flex items-center"
+              :title="t('admin.profit.globalOnlyHint')"
+              :aria-label="t('admin.profit.globalOnlyHint')"
+            >
               <Icon name="infoCircle" size="xs" />
-              <span>{{ t('admin.profit.globalOnlyHint') }}</span>
             </span>
           </div>
           </div>
-          <p v-else class="text-xs text-gray-500 dark:text-dark-400">{{ t('admin.profit.supplyForecastHint') }}</p>
         </div>
       </template>
 
       <template #table>
         <SupplyForecastPanel v-if="activeView === 'forecast'" />
-        <div v-else class="space-y-5">
+        <div v-else class="flex min-h-full flex-col space-y-5">
           <section class="grid grid-cols-1 gap-4 sm:grid-cols-3" :class="loading ? 'opacity-60' : ''">
             <div class="rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-700 dark:bg-dark-800">
               <div class="text-sm text-gray-500 dark:text-dark-400">{{ t('admin.profit.totalRevenue') }}</div>
@@ -102,7 +113,7 @@
             </div>
           </section>
 
-          <section class="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800">
+          <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800">
             <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-dark-700">
               <div>
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.profit.accountDetails') }}</h3>
@@ -115,7 +126,7 @@
               </div>
             </div>
 
-            <div v-if="accountRows.length" class="max-h-[44rem] divide-y divide-gray-100 overflow-y-auto dark:divide-dark-700">
+            <div v-if="accountRows.length" class="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto dark:divide-dark-700">
               <article
                 v-for="account in accountRows"
                 :key="account.account_id"
@@ -184,6 +195,7 @@ import type { AccountProfitSummary, ProfitSummaryResponse, ProfitTrendPoint } fr
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Icon from '@/components/icons/Icon.vue'
 import SupplyForecastPanel from '@/components/admin/profit/SupplyForecastPanel.vue'
 import {

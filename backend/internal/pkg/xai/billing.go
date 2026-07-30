@@ -23,8 +23,10 @@ const (
 	GrokCLITokenAuthHeader = "x-xai-token-auth"
 	GrokCLITokenAuthValue  = "xai-grok-cli"
 	GrokCLIVersionHeader   = "x-grok-client-version"
-	GrokCLIVersionValue    = "0.2.112"
-	GrokCLIUserIDHeader    = "x-userid"
+	// Keep the billing probe aligned with the currently published Grok Build
+	// client. cli-chat-proxy uses this identity when selecting the credits path.
+	GrokCLIVersionValue = "0.2.114"
+	GrokCLIUserIDHeader = "x-userid"
 
 	GrokCLIClientIdentifierHeader = "x-grok-client-identifier"
 	GrokCLIClientIdentifierValue  = "grok-shell"
@@ -134,6 +136,10 @@ func ApplyGrokCLIBillingHeaders(req *http.Request, accessToken, userID string) {
 	req.Header.Set(GrokCLITokenAuthHeader, GrokCLITokenAuthValue)
 	req.Header.Set(GrokCLIVersionHeader, GrokCLIVersionValue)
 	req.Header.Set(GrokCLIClientIdentifierHeader, GrokCLIClientIdentifierValue)
+	// Grok Build sends client mode on its billing request. This is distinct from
+	// the browser-only cookies and lets cli-chat-proxy route the OAuth request
+	// through the current credits-config path.
+	req.Header.Set(GrokCLIClientModeHeader, GrokCLIClientModeHeadless)
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("User-Agent", GrokCLIUserAgent)
 	if id := strings.TrimSpace(userID); id != "" {
@@ -158,6 +164,16 @@ func ParseBillingResponse(body []byte) (*BillingSnapshot, error) {
 	snapshot := parseBillingConfig(config)
 	if snapshot == nil || !snapshot.HasData() {
 		return nil, fmt.Errorf("billing config empty")
+	}
+	// Grok Build enriches the credits response with the display tier from remote
+	// settings. Preserve that explicit value instead of inferring only from the
+	// deprecated monthly amount (which may be absent for unified billing).
+	if obj, ok := root.(map[string]any); ok {
+		if tier := firstString(obj, "subscriptionTier", "subscription_tier"); tier != "" {
+			snapshot.Plan = tier
+		} else if tier := firstString(config, "subscriptionTier", "subscription_tier"); tier != "" {
+			snapshot.Plan = tier
+		}
 	}
 	snapshot.FetchedAt = time.Now().UTC().Format(time.RFC3339)
 	return snapshot, nil
@@ -202,6 +218,14 @@ func parseBillingConfig(cfg map[string]any) *BillingSnapshot {
 	currentPeriod := asObject(firstAny(cfg, "currentPeriod", "current_period"))
 	periodType := classifyPeriodType(asObject(currentPeriod))
 	creditUsagePercent := parseFloatPtr(firstAny(cfg, "creditUsagePercent", "credit_usage_percent"))
+	// GetGrokCreditsConfig is proto3 JSON. A scalar zero is omitted from the
+	// response, so a just-reset weekly window has currentPeriod but no
+	// creditUsagePercent. Normalize that official zero instead of hiding the
+	// quota bar as if the window were unknown.
+	if creditUsagePercent == nil && periodType == "weekly" {
+		zero := float64(0)
+		creditUsagePercent = &zero
+	}
 	periodStart := firstString(currentPeriod, "start")
 	if periodStart == "" {
 		periodStart = firstString(cfg, "billingPeriodStart", "billing_period_start")
@@ -293,8 +317,10 @@ func parseBillingConfig(cfg map[string]any) *BillingSnapshot {
 	return out
 }
 
-// MergeBillingSnapshots prefers non-empty fields from a, filling gaps from b.
-// Call with format=credits first, plain billing second (CPAMC order).
+// MergeBillingSnapshots combines the detailed credits response with plain billing.
+// Call with format=credits first, plain billing second. Product breakdown stays
+// sourced from credits, while an explicit weekly window from plain billing wins:
+// the credits endpoint can lag behind a quota reset at the edge cache.
 func MergeBillingSnapshots(a, b *BillingSnapshot) *BillingSnapshot {
 	if a == nil {
 		return b
@@ -303,6 +329,17 @@ func MergeBillingSnapshots(a, b *BillingSnapshot) *BillingSnapshot {
 		return a
 	}
 	out := *a
+	plainWeekly := strings.EqualFold(strings.TrimSpace(b.PeriodType), "weekly") && b.UsagePercent != nil
+	if plainWeekly {
+		out.PeriodType = b.PeriodType
+		out.UsagePercent = b.UsagePercent
+		if b.PeriodStart != "" {
+			out.PeriodStart = b.PeriodStart
+		}
+		if b.PeriodEnd != "" {
+			out.PeriodEnd = b.PeriodEnd
+		}
+	}
 	if out.PeriodType == "" || out.PeriodType == "unknown" {
 		if b.PeriodType != "" {
 			out.PeriodType = b.PeriodType

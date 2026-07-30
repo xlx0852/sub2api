@@ -603,6 +603,7 @@
       :account-type="costConfigAcc?.type"
       :account-platform="costConfigAcc?.platform"
       @close="showCostConfig = false"
+      @saved="reload"
     />
     <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />

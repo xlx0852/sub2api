@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -293,11 +294,176 @@ func (h *ProfitHandler) DeleteSubscriptionCycle(c *gin.Context) {
 		return
 	}
 	if err := h.profitService.DeleteSubscriptionCycle(c.Request.Context(), id); err != nil {
-		response.Error(c, 500, "Failed to delete subscription cycle")
+		respondSubscriptionSettlementError(c, err)
 		return
 	}
 	h.invalidateOverviewCache()
 	response.Success(c, gin.H{"deleted": true})
+}
+
+type createSubscriptionTerminationRequest struct {
+	EffectiveAt             string  `json:"effective_at"`
+	Reason                  string  `json:"reason"`
+	Notes                   string  `json:"notes"`
+	InitialRefundAmount     float64 `json:"initial_refund_amount"`
+	InitialRefundReceivedAt string  `json:"initial_refund_received_at"`
+}
+
+func (h *ProfitHandler) PreviewSubscriptionTermination(c *gin.Context) {
+	cycleID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || cycleID <= 0 {
+		response.Error(c, 400, "Invalid cycle id")
+		return
+	}
+	var req createSubscriptionTerminationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "Invalid request body")
+		return
+	}
+	effectiveAt, err := time.Parse(time.RFC3339, req.EffectiveAt)
+	if err != nil {
+		response.Error(c, 400, "effective_at must be RFC3339")
+		return
+	}
+	preview, err := h.profitService.PreviewSubscriptionTermination(c.Request.Context(), cycleID, effectiveAt, req.InitialRefundAmount)
+	if err != nil {
+		respondSubscriptionSettlementError(c, err)
+		return
+	}
+	response.Success(c, preview)
+}
+
+func (h *ProfitHandler) CreateSubscriptionTermination(c *gin.Context) {
+	cycleID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || cycleID <= 0 {
+		response.Error(c, 400, "Invalid cycle id")
+		return
+	}
+	var req createSubscriptionTerminationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "Invalid request body")
+		return
+	}
+	effectiveAt, err := time.Parse(time.RFC3339, req.EffectiveAt)
+	if err != nil {
+		response.Error(c, 400, "effective_at must be RFC3339")
+		return
+	}
+	var initialRefund *service.AccountSubscriptionRefund
+	if req.InitialRefundAmount > 0 {
+		receivedAt := effectiveAt
+		if strings.TrimSpace(req.InitialRefundReceivedAt) != "" {
+			receivedAt, err = time.Parse(time.RFC3339, req.InitialRefundReceivedAt)
+			if err != nil {
+				response.Error(c, 400, "initial_refund_received_at must be RFC3339")
+				return
+			}
+		}
+		initialRefund = &service.AccountSubscriptionRefund{Amount: req.InitialRefundAmount, ReceivedAt: receivedAt, Notes: req.Notes}
+	}
+	result, err := h.profitService.CreateSubscriptionTermination(c.Request.Context(), &service.AccountSubscriptionTermination{
+		CycleID: cycleID, EffectiveAt: effectiveAt, Reason: strings.TrimSpace(req.Reason), Notes: strings.TrimSpace(req.Notes),
+	}, initialRefund)
+	if err != nil {
+		respondSubscriptionSettlementError(c, err)
+		return
+	}
+	h.invalidateOverviewCache()
+	response.Success(c, result)
+}
+
+type createSubscriptionRefundRequest struct {
+	Amount     float64 `json:"amount"`
+	ReceivedAt string  `json:"received_at"`
+	Notes      string  `json:"notes"`
+}
+
+func (h *ProfitHandler) CreateSubscriptionRefund(c *gin.Context) {
+	terminationID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || terminationID <= 0 {
+		response.Error(c, 400, "Invalid termination id")
+		return
+	}
+	var req createSubscriptionRefundRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "Invalid request body")
+		return
+	}
+	receivedAt, err := time.Parse(time.RFC3339, req.ReceivedAt)
+	if err != nil {
+		response.Error(c, 400, "received_at must be RFC3339")
+		return
+	}
+	result, err := h.profitService.CreateSubscriptionRefund(c.Request.Context(), &service.AccountSubscriptionRefund{
+		TerminationID: terminationID, Amount: req.Amount, ReceivedAt: receivedAt, Notes: strings.TrimSpace(req.Notes),
+	})
+	if err != nil {
+		respondSubscriptionSettlementError(c, err)
+		return
+	}
+	h.invalidateOverviewCache()
+	response.Success(c, result)
+}
+
+type settlementCorrectionRequest struct {
+	Reason string `json:"reason"`
+}
+
+func (h *ProfitHandler) VoidSubscriptionRefund(c *gin.Context) {
+	refundID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || refundID <= 0 {
+		response.Error(c, 400, "Invalid refund id")
+		return
+	}
+	var req settlementCorrectionRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Reason) == "" {
+		response.Error(c, 400, "void reason is required")
+		return
+	}
+	result, err := h.profitService.VoidSubscriptionRefund(c.Request.Context(), refundID, strings.TrimSpace(req.Reason))
+	if err != nil {
+		respondSubscriptionSettlementError(c, err)
+		return
+	}
+	h.invalidateOverviewCache()
+	response.Success(c, result)
+}
+
+func (h *ProfitHandler) ReverseSubscriptionTermination(c *gin.Context) {
+	terminationID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || terminationID <= 0 {
+		response.Error(c, 400, "Invalid termination id")
+		return
+	}
+	var req settlementCorrectionRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Reason) == "" {
+		response.Error(c, 400, "reversal reason is required")
+		return
+	}
+	result, err := h.profitService.ReverseSubscriptionTermination(c.Request.Context(), terminationID, strings.TrimSpace(req.Reason))
+	if err != nil {
+		respondSubscriptionSettlementError(c, err)
+		return
+	}
+	h.invalidateOverviewCache()
+	response.Success(c, result)
+}
+
+func respondSubscriptionSettlementError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrSubscriptionCycleNotFound),
+		errors.Is(err, service.ErrSubscriptionTerminationNotFound),
+		errors.Is(err, service.ErrSubscriptionRefundNotFound):
+		response.Error(c, http.StatusNotFound, err.Error())
+	case errors.Is(err, service.ErrSubscriptionCycleAlreadyTerminated),
+		errors.Is(err, service.ErrSubscriptionTerminationReversed),
+		errors.Is(err, service.ErrSubscriptionRefundVoided),
+		errors.Is(err, service.ErrSubscriptionRefundExceedsFee),
+		errors.Is(err, service.ErrSubscriptionCycleSettled):
+		response.Error(c, http.StatusConflict, err.Error())
+	default:
+		response.Error(c, http.StatusBadRequest, err.Error())
+	}
 }
 
 type upsertCostConfigRequest struct {

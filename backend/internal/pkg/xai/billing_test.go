@@ -43,6 +43,23 @@ func TestParseBillingResponseWeeklyAndProducts(t *testing.T) {
 	require.InDelta(t, 0, *snapshot.ProductUsage[2].UsagePercent, 0.001)
 }
 
+func TestParseBillingResponsePrefersExplicitSubscriptionTier(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{
+		"config": {
+			"currentPeriod": {"type": "USAGE_PERIOD_TYPE_WEEKLY", "end": "2026-08-06T02:33:56Z"}
+		},
+		"subscriptionTier": "SuperGrok Heavy"
+	}`)
+	snapshot, err := ParseBillingResponse(body)
+	require.NoError(t, err)
+	require.Equal(t, PlanSuperGrokHeavy, snapshot.Plan)
+	require.Equal(t, "weekly", snapshot.PeriodType)
+	require.NotNil(t, snapshot.UsagePercent)
+	require.InDelta(t, 0, *snapshot.UsagePercent, 0.001)
+}
+
 func TestParseBillingResponseMonthlyCreditsObjectVal(t *testing.T) {
 	t.Parallel()
 
@@ -112,6 +129,29 @@ func TestMergeBillingSnapshotsPrefersCreditsThenFillsMonthly(t *testing.T) {
 	require.Equal(t, PlanSuperGrok, merged.Plan)
 }
 
+func TestMergeBillingSnapshotsUsesPlainWeeklyWindowAfterCreditsReset(t *testing.T) {
+	t.Parallel()
+
+	credits := &BillingSnapshot{
+		PeriodType:   "weekly",
+		UsagePercent: floatPtr(54),
+		PeriodEnd:    "2026-08-06T10:33:00Z",
+		ProductUsage: []BillingProductUsage{{Product: "GrokBuild", UsagePercent: floatPtr(4)}},
+	}
+	plain := &BillingSnapshot{
+		PeriodType:   "weekly",
+		UsagePercent: floatPtr(0),
+		PeriodEnd:    "2026-08-06T10:33:00Z",
+	}
+
+	merged := MergeBillingSnapshots(credits, plain)
+	require.NotNil(t, merged.UsagePercent)
+	require.InDelta(t, 0, *merged.UsagePercent, 0.001)
+	require.Equal(t, "2026-08-06T10:33:00Z", merged.PeriodEnd)
+	require.Len(t, merged.ProductUsage, 1)
+	require.Equal(t, "GrokBuild", merged.ProductUsage[0].Product)
+}
+
 func TestBuildBillingURL(t *testing.T) {
 	t.Parallel()
 
@@ -152,8 +192,8 @@ func TestApplyGrokCLIChatHeaders(t *testing.T) {
 }
 
 func TestBuildGrokCLIUserAgentUsesOfficialPlatformNames(t *testing.T) {
-	require.Equal(t, "grok-pager/0.2.112 grok-shell/0.2.112 (macos; aarch64)", buildGrokCLIUserAgent("darwin", "arm64"))
-	require.Equal(t, "grok-pager/0.2.112 grok-shell/0.2.112 (linux; x86_64)", buildGrokCLIUserAgent("linux", "amd64"))
+	require.Equal(t, "grok-pager/0.2.114 grok-shell/0.2.114 (macos; aarch64)", buildGrokCLIUserAgent("darwin", "arm64"))
+	require.Equal(t, "grok-pager/0.2.114 grok-shell/0.2.114 (linux; x86_64)", buildGrokCLIUserAgent("linux", "amd64"))
 }
 
 func floatPtr(v float64) *float64 { return &v }

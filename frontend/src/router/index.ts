@@ -244,7 +244,10 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/redeem',
     name: 'Redeem',
-    component: () => import('@/views/user/RedeemView.vue'),
+    redirect: (to) => ({
+      path: '/purchase',
+      query: { ...to.query, tab: 'redeem' },
+    }),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -292,14 +295,13 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/purchase',
     name: 'Recharge',
-    component: () => import('@/views/user/PaymentView.vue'),
+    component: () => import('@/views/user/RechargeRedeemView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
-      title: 'Recharge',
-      titleKey: 'nav.buySubscription',
-      descriptionKey: 'purchase.description',
-      requiresPayment: true
+      title: 'Recharge / Redeem',
+      titleKey: 'nav.rechargeRedeem',
+      descriptionKey: 'purchase.description'
     }
   },
   {

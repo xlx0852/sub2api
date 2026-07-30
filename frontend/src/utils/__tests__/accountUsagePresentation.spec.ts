@@ -98,10 +98,17 @@ describe('buildAccountUsagePresentation', () => {
     expect(presentation.plan).not.toBe('TYPE_PURCHASE')
   })
 
-  it('将 Grok 周限和月度积分映射到同一窗口模型', () => {
+  it('Grok 只映射官方周额度到窗口模型', () => {
     const presentation = buildAccountUsagePresentation({
       account: makeAccount({ platform: 'grok' }),
       usageInfo: baseUsage({
+        grok_local_usage: {
+          requests: 28,
+          tokens: 2800,
+          cost: 2.8,
+          standard_cost: 2.8,
+          user_cost: 0.56
+        },
         grok_billing: {
           period_type: 'weekly',
           usage_percent: 28,
@@ -117,10 +124,11 @@ describe('buildAccountUsagePresentation', () => {
       t
     })
 
-    expect(presentation.windows).toHaveLength(2)
-    expect(presentation.windows[1]?.utilization).toBe(100)
-    expect(presentation.windows[1]?.detail).toContain('$1,500.00')
-    expect(presentation.statusTone).toBe('danger')
+    expect(presentation.windows).toHaveLength(1)
+    expect(presentation.windows[0]?.label).toBe('admin.accounts.usageWindow.grokWeekly')
+    expect(presentation.windows[0]?.utilization).toBe(28)
+    expect(presentation.windows[0]?.stats?.requests).toBe(28)
+    expect(presentation.statusTone).toBe('success')
     expect(presentation.plan).toBe('SuperGrok')
   })
 

@@ -47,6 +47,7 @@ type profitRepoStub struct {
 	storedValue      *StoredValueSnapshot
 	forecastSamples  []*SupplyForecastUsageSample
 	forecastSupply   map[string]int
+	cycleRevenues    map[int64]float64
 }
 
 func (s *profitRepoStub) UpsertCostConfig(_ context.Context, cfg *AccountCostConfig) (*AccountCostConfig, error) {
@@ -88,6 +89,16 @@ func (s *profitRepoStub) ListSubscriptionCyclesBatch(_ context.Context, accountI
 	}
 	return cycles, nil
 }
+func (s *profitRepoStub) GetSubscriptionCycle(_ context.Context, id int64) (*AccountSubscriptionCycle, error) {
+	for _, cycles := range s.cycles {
+		for _, cycle := range cycles {
+			if cycle.ID == id {
+				return cycle, nil
+			}
+		}
+	}
+	return nil, ErrSubscriptionCycleNotFound
+}
 func (s *profitRepoStub) CreateSubscriptionCycle(_ context.Context, cycle *AccountSubscriptionCycle) (*AccountSubscriptionCycle, error) {
 	if cycle.ID == 0 {
 		cycle.ID = int64(len(s.cycles[cycle.AccountID]) + 1)
@@ -96,6 +107,40 @@ func (s *profitRepoStub) CreateSubscriptionCycle(_ context.Context, cycle *Accou
 	return cycle, nil
 }
 func (s *profitRepoStub) DeleteSubscriptionCycle(_ context.Context, id int64) error { return nil }
+func (s *profitRepoStub) CreateSubscriptionTermination(_ context.Context, termination *AccountSubscriptionTermination, initialRefund *AccountSubscriptionRefund) (*SubscriptionTerminationWriteResult, error) {
+	termination.ID = 1
+	if cycles := s.cycles[termination.AccountID]; len(cycles) > 0 {
+		for _, cycle := range cycles {
+			if cycle.ID == termination.CycleID {
+				cycle.Termination = termination
+				if initialRefund != nil {
+					initialRefund.ID = 1
+					initialRefund.TerminationID = termination.ID
+					initialRefund.CycleID = cycle.ID
+					initialRefund.AccountID = cycle.AccountID
+					cycle.Refunds = append(cycle.Refunds, initialRefund)
+				}
+			}
+		}
+	}
+	return &SubscriptionTerminationWriteResult{Termination: termination, InitialRefund: initialRefund, DisabledAccountIDs: []int64{termination.AccountID}}, nil
+}
+func (s *profitRepoStub) CreateSubscriptionRefund(_ context.Context, refund *AccountSubscriptionRefund) (*AccountSubscriptionRefund, error) {
+	return refund, nil
+}
+func (s *profitRepoStub) VoidSubscriptionRefund(_ context.Context, id int64, reason string, voidedAt time.Time) (*AccountSubscriptionRefund, error) {
+	return &AccountSubscriptionRefund{ID: id, VoidReason: reason, VoidedAt: &voidedAt}, nil
+}
+func (s *profitRepoStub) ReverseSubscriptionTermination(_ context.Context, id int64, reason string, reversedAt time.Time) (*AccountSubscriptionTermination, error) {
+	return &AccountSubscriptionTermination{ID: id, ReversalReason: reason, ReversedAt: &reversedAt}, nil
+}
+func (s *profitRepoStub) GetSubscriptionCycleRevenueBatch(_ context.Context, ranges []SubscriptionCycleUsageRange) (map[int64]float64, error) {
+	result := make(map[int64]float64, len(ranges))
+	for _, item := range ranges {
+		result[item.CycleID] = s.cycleRevenues[item.CycleID]
+	}
+	return result, nil
+}
 func (s *profitRepoStub) GetAccountUsageStatsBatch(_ context.Context, _ []int64, _, _ time.Time) (map[int64]*ProfitUsageStats, error) {
 	s.statsBatchCalls++
 	return s.stats, nil
@@ -170,6 +215,73 @@ func TestSubscriptionCyclesDoNotChargeIdleGap(t *testing.T) {
 	activeStart := time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC)
 	if got := subscriptionCyclesCostForRange([]*AccountSubscriptionCycle{first, second}, activeStart, activeStart.AddDate(0, 0, 10)); got != 100 {
 		t.Fatalf("active cycle cost = %v, want 100", got)
+	}
+}
+
+func TestSubscriptionBanRecognizesRemainingCostAndLaterRefund(t *testing.T) {
+	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	bannedAt := start.AddDate(0, 0, 10)
+	refundedAt := bannedAt.AddDate(0, 0, 2)
+	cycle := &AccountSubscriptionCycle{
+		StartsAt: start, PeriodFee: 900, PeriodDays: 30,
+		Termination: &AccountSubscriptionTermination{EffectiveAt: bannedAt, Reason: "upstream_banned"},
+		Refunds:     []*AccountSubscriptionRefund{{Amount: 200, ReceivedAt: refundedAt}},
+	}
+	if got := subscriptionCycleCostForRange(cycle, start, bannedAt); got != 300 {
+		t.Fatalf("pre-ban amortization = %v, want 300", got)
+	}
+	if got := subscriptionCycleCostForRange(cycle, bannedAt, bannedAt.AddDate(0, 0, 1)); got != 600 {
+		t.Fatalf("ban impairment = %v, want 600", got)
+	}
+	if got := subscriptionCycleCostForRange(cycle, refundedAt, refundedAt.AddDate(0, 0, 1)); got != -200 {
+		t.Fatalf("refund adjustment = %v, want -200", got)
+	}
+	if got := subscriptionCycleCostForRange(cycle, start, start.AddDate(0, 0, 30)); got != 700 {
+		t.Fatalf("lifecycle cost = %v, want 700", got)
+	}
+}
+
+func TestSubscriptionBanLossSummaryIncludesRevenueAndRefund(t *testing.T) {
+	cycle := &AccountSubscriptionCycle{
+		PeriodFee: 865, PeriodDays: 30,
+		Termination: &AccountSubscriptionTermination{EffectiveAt: time.Now(), Reason: "upstream_banned"},
+		Refunds:     []*AccountSubscriptionRefund{{Amount: 200, ReceivedAt: time.Now()}},
+	}
+	summary := subscriptionLossSummary(cycle, 300)
+	if summary.NetPurchaseCost != 665 || summary.RealizedLoss != 365 || summary.RealizedProfit != -365 {
+		t.Fatalf("loss summary = %+v, want net/loss/profit 665/365/-365", summary)
+	}
+	if summary.RecoveredAmount != 500 || summary.RecoveryProgress != 57.8035 {
+		t.Fatalf("recovery = %+v, want amount/progress 500/57.8035", summary)
+	}
+
+	fullyRecovered := subscriptionLossSummary(cycle, 900)
+	if fullyRecovered.RealizedLoss != 0 || fullyRecovered.RecoveryProgress != 100 || fullyRecovered.RealizedProfit != 235 {
+		t.Fatalf("fully recovered summary = %+v", fullyRecovered)
+	}
+}
+
+func TestTerminatedBillingWindowFreezesAtBanAndUsesNetCost(t *testing.T) {
+	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	bannedAt := start.AddDate(0, 0, 10)
+	cycle := &AccountSubscriptionCycle{
+		StartsAt: start, PeriodFee: 865, PeriodDays: 30,
+		Termination: &AccountSubscriptionTermination{EffectiveAt: bannedAt, Reason: "upstream_banned"},
+		Refunds:     []*AccountSubscriptionRefund{{Amount: 200, ReceivedAt: bannedAt}},
+	}
+	summary := &AccountProfitSummary{CostType: AccountCostTypeSubscription}
+	fillBillingWindowFromRevenue(cycle, summary, 300, start.AddDate(0, 0, 20))
+	if summary.BillingWindowProgress == nil || *summary.BillingWindowProgress != 33.3333 {
+		t.Fatalf("elapsed progress = %v, want 33.3333", summary.BillingWindowProgress)
+	}
+	if summary.BillingWindowCost == nil || *summary.BillingWindowCost != 665 {
+		t.Fatalf("net cost = %v, want 665", summary.BillingWindowCost)
+	}
+	if summary.BillingWindowProfit == nil || *summary.BillingWindowProfit != -365 {
+		t.Fatalf("profit = %v, want -365", summary.BillingWindowProfit)
+	}
+	if summary.BillingWindowLoss == nil || *summary.BillingWindowLoss != 365 {
+		t.Fatalf("loss = %v, want 365", summary.BillingWindowLoss)
 	}
 }
 
@@ -365,6 +477,18 @@ func (m *profitAccountRepoStub) GetByID(_ context.Context, id int64) (*Account, 
 		}
 	}
 	return nil, nil
+}
+
+func (m *profitAccountRepoStub) SetSchedulable(_ context.Context, id int64, schedulable bool) error {
+	if account := m.byID[id]; account != nil {
+		account.Schedulable = schedulable
+	}
+	for i := range m.accounts {
+		if m.accounts[i].ID == id {
+			m.accounts[i].Schedulable = schedulable
+		}
+	}
+	return nil
 }
 
 func TestProfitService_OAuthAccountDefaultsToSubscription(t *testing.T) {

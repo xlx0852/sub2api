@@ -2,10 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import AccountCostConfigDialog from '../AccountCostConfigDialog.vue'
 
-const { listSubscriptionCycles, createSubscriptionCycle, deleteSubscriptionCycle, showSuccess, showError } = vi.hoisted(() => ({
+const { listSubscriptionCycles, createSubscriptionCycle, deleteSubscriptionCycle, previewSubscriptionTermination, terminateSubscriptionCycle, addSubscriptionRefund, voidSubscriptionRefund, reverseSubscriptionTermination, showSuccess, showError } = vi.hoisted(() => ({
   listSubscriptionCycles: vi.fn(),
   createSubscriptionCycle: vi.fn(),
   deleteSubscriptionCycle: vi.fn(),
+  previewSubscriptionTermination: vi.fn(),
+  terminateSubscriptionCycle: vi.fn(),
+  addSubscriptionRefund: vi.fn(),
+  voidSubscriptionRefund: vi.fn(),
+  reverseSubscriptionTermination: vi.fn(),
   showSuccess: vi.fn(),
   showError: vi.fn(),
 }))
@@ -24,7 +29,7 @@ vi.mock('@/stores/app', () => ({
 
 vi.mock('@/api/admin', () => ({
   adminAPI: {
-    profit: { listSubscriptionCycles, createSubscriptionCycle, deleteSubscriptionCycle },
+    profit: { listSubscriptionCycles, createSubscriptionCycle, deleteSubscriptionCycle, previewSubscriptionTermination, terminateSubscriptionCycle, addSubscriptionRefund, voidSubscriptionRefund, reverseSubscriptionTermination },
   },
 }))
 
@@ -51,6 +56,11 @@ describe('AccountCostConfigDialog', () => {
     listSubscriptionCycles.mockReset().mockResolvedValue({ cycles: [] })
     createSubscriptionCycle.mockReset()
     deleteSubscriptionCycle.mockReset()
+    previewSubscriptionTermination.mockReset()
+    terminateSubscriptionCycle.mockReset()
+    addSubscriptionRefund.mockReset()
+    voidSubscriptionRefund.mockReset()
+    reverseSubscriptionTermination.mockReset()
     showSuccess.mockReset()
     showError.mockReset()
   })
@@ -135,5 +145,55 @@ describe('AccountCostConfigDialog', () => {
       currency: 'USD',
       notes: '',
     })
+  })
+
+  it('封禁结算先预览亏损，二次确认后才停号', async () => {
+    listSubscriptionCycles.mockResolvedValue({
+      cycles: [{ id: 8, account_id: 91, starts_at: '2026-07-01T00:00:00Z', period_fee: 865, period_days: 60, currency: 'USD', notes: '', created_at: '', updated_at: '' }]
+    })
+    previewSubscriptionTermination.mockResolvedValue({
+      purchase_cost: 865, revenue_before_ban: 300, refund_total: 200, net_purchase_cost: 665,
+      recovered_amount: 500, recovery_progress: 57.8, realized_profit: -365, realized_loss: 365
+    })
+    terminateSubscriptionCycle.mockResolvedValue({ cycle: {} })
+    const wrapper = mountDialog()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="settle-ban"]').trigger('click')
+    await wrapper.get('[data-testid="termination-form"] input[type="number"]').setValue(200)
+    await wrapper.get('[data-testid="preview-ban-settlement"]').trigger('click')
+    await flushPromises()
+
+    expect(previewSubscriptionTermination).toHaveBeenCalledWith(8, expect.objectContaining({ initial_refund_amount: 200 }))
+    expect(wrapper.text()).toContain('$365.00')
+    const confirmButton = wrapper.findAll('button').find((button) => button.text() === 'admin.profit.confirmBanAndDisable')
+    expect(confirmButton).toBeTruthy()
+    await confirmButton!.trigger('click')
+    await flushPromises()
+
+    expect(terminateSubscriptionCycle).toHaveBeenCalledWith(8, expect.objectContaining({ reason: 'upstream_banned', initial_refund_amount: 200 }))
+    expect(showSuccess).toHaveBeenCalledWith('admin.profit.banSettlementSaved')
+  })
+
+  it('已封禁周期可追加实际到账退款', async () => {
+    listSubscriptionCycles.mockResolvedValue({
+      cycles: [{
+        id: 8, account_id: 91, starts_at: '2026-07-01T00:00:00Z', period_fee: 865, period_days: 60, currency: 'USD', notes: '', created_at: '', updated_at: '',
+        termination: { id: 19, cycle_id: 8, account_id: 91, effective_at: '2026-07-30T02:00:00Z', reason: 'upstream_banned', notes: '', created_at: '', updated_at: '' },
+        loss_summary: { purchase_cost: 865, revenue_before_ban: 300, refund_total: 0, net_purchase_cost: 865, recovered_amount: 300, recovery_progress: 34.68, realized_profit: -565, realized_loss: 565 }
+      }]
+    })
+    addSubscriptionRefund.mockResolvedValue({ cycle: {} })
+    const wrapper = mountDialog()
+    await flushPromises()
+
+    const addRefundButton = wrapper.findAll('button').find((button) => button.text() === 'admin.profit.addReceivedRefund')
+    await addRefundButton!.trigger('click')
+    await wrapper.get('[data-testid="refund-form"] input[type="number"]').setValue(200)
+    await wrapper.get('[data-testid="save-refund"]').trigger('click')
+    await flushPromises()
+
+    expect(addSubscriptionRefund).toHaveBeenCalledWith(19, expect.objectContaining({ amount: 200 }))
+    expect(showSuccess).toHaveBeenCalledWith('admin.profit.refundSaved')
   })
 })
