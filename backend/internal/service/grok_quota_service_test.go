@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,80 @@ type grokQuotaAccountRepo struct {
 	lastTempUnschedID     int64
 	lastTempUnschedUntil  time.Time
 	lastTempUnschedReason string
+	clearTempUnschedCalls int
+	rateLimitCalls        int
+	lastRateLimitUntil    time.Time
+	clearRateLimitCalls   int
+}
+
+func (r *grokQuotaAccountRepo) ClearTempUnschedulable(_ context.Context, _ int64) error {
+	r.clearTempUnschedCalls++
+	return nil
+}
+
+func TestSyncGrokBillingSchedulingStatePausesUntilWeeklyReset(t *testing.T) {
+	now := time.Date(2026, 7, 30, 2, 0, 0, 0, time.UTC)
+	reset := now.Add(20 * time.Hour)
+	percent := 100.0
+	account := &Account{
+		ID:                      83,
+		Platform:                PlatformGrok,
+		Type:                    AccountTypeOAuth,
+		TempUnschedulableReason: grokBillingPauseReasonPrefix + " official weekly reset",
+	}
+	repo := &grokQuotaAccountRepo{}
+
+	syncGrokBillingSchedulingState(context.Background(), repo, account, &xai.BillingSnapshot{
+		PeriodType: "weekly", UsagePercent: &percent, PeriodEnd: reset.Format(time.RFC3339Nano),
+	}, now)
+
+	// OpenAI-aligned: write rate_limit_reset_at, not temp-unsched.
+	require.Equal(t, 1, repo.rateLimitCalls)
+	require.WithinDuration(t, reset, repo.lastRateLimitUntil, time.Second)
+	require.Equal(t, 0, repo.tempUnschedCalls)
+	// Migrate legacy billing temp-unsched off.
+	require.Equal(t, 1, repo.clearTempUnschedCalls)
+	require.Contains(t, repo.updates[83], grokBillingRateLimitUntilKey)
+}
+
+func TestSyncGrokBillingSchedulingStateClearsRecoveredBillingPause(t *testing.T) {
+	percent := 42.0
+	account := &Account{
+		ID:                      83,
+		Platform:                PlatformGrok,
+		Type:                    AccountTypeOAuth,
+		TempUnschedulableReason: grokBillingPauseReasonPrefix + " official weekly reset",
+		Extra: map[string]any{
+			grokBillingRateLimitUntilKey: time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339),
+		},
+	}
+	repo := &grokQuotaAccountRepo{}
+
+	syncGrokBillingSchedulingState(context.Background(), repo, account, &xai.BillingSnapshot{
+		PeriodType: "weekly", UsagePercent: &percent,
+	}, time.Now())
+
+	require.Equal(t, 1, repo.clearTempUnschedCalls)
+	require.Equal(t, 1, repo.clearRateLimitCalls)
+	require.Nil(t, repo.updates[83][grokBillingRateLimitUntilKey])
+}
+
+func TestSyncGrokBillingSchedulingStateDoesNotClearUnrelatedRateLimit(t *testing.T) {
+	percent := 42.0
+	account := &Account{
+		ID:       83,
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+		// No billing marker → residual 429 cooldown must stay.
+		Extra: map[string]any{},
+	}
+	repo := &grokQuotaAccountRepo{}
+
+	syncGrokBillingSchedulingState(context.Background(), repo, account, &xai.BillingSnapshot{
+		PeriodType: "weekly", UsagePercent: &percent,
+	}, time.Now())
+
+	require.Equal(t, 0, repo.clearRateLimitCalls)
 }
 
 func (r *grokQuotaAccountRepo) UpdateExtra(_ context.Context, id int64, updates map[string]any) error {
@@ -36,6 +111,17 @@ func (r *grokQuotaAccountRepo) SetTempUnschedulable(_ context.Context, id int64,
 	r.lastTempUnschedID = id
 	r.lastTempUnschedUntil = until
 	r.lastTempUnschedReason = reason
+	return nil
+}
+
+func (r *grokQuotaAccountRepo) SetRateLimited(_ context.Context, _ int64, resetAt time.Time) error {
+	r.rateLimitCalls++
+	r.lastRateLimitUntil = resetAt
+	return nil
+}
+
+func (r *grokQuotaAccountRepo) ClearRateLimit(_ context.Context, _ int64) error {
+	r.clearRateLimitCalls++
 	return nil
 }
 
@@ -245,4 +331,79 @@ func TestGrokQuotaServiceResetQuotaUnsupported(t *testing.T) {
 	_, err := svc.ResetQuota(context.Background(), 1)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "reset")
+}
+
+func TestRefreshGrokBillingSnapshotCoalescesConcurrentUsageReads(t *testing.T) {
+	account := &Account{
+		ID:       771,
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "access-token",
+			"sub":          "user-771",
+			"expires_at":   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+		},
+	}
+	repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{accountsByID: map[int64]*Account{account.ID: account}}}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"config":{"creditUsagePercent":0,"currentPeriod":{"type":"weekly","end":"2026-08-06T02:33:56Z"}}}`)),
+	}}}
+	service := &AccountUsageService{
+		accountRepo:      repo,
+		grokQuotaFetcher: NewGrokQuotaFetcher(),
+		grokQuotaService: NewGrokQuotaService(repo, nil, NewGrokTokenProvider(repo, nil), upstream),
+		cache:            NewUsageCache(),
+	}
+
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			usage, err := service.getGrokUsage(context.Background(), account)
+			if err != nil || usage.GrokBilling == nil {
+				t.Errorf("getGrokUsage() = %#v, %v", usage, err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	require.Len(t, upstream.requests, 1, "concurrent stale reads must share one billing probe")
+}
+
+func TestGetGrokUsageForceRefreshBypassesFreshSnapshot(t *testing.T) {
+	account := &Account{
+		ID:       772,
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "access-token",
+			"sub":          "user-772",
+			"expires_at":   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+		},
+		Extra: map[string]any{
+			grokBillingSnapshotKey: &xai.BillingSnapshot{FetchedAt: time.Now().UTC().Format(time.RFC3339), UsagePercent: func() *float64 { value := 54.0; return &value }()},
+		},
+	}
+	repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{accountsByID: map[int64]*Account{account.ID: account}}}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"config":{"creditUsagePercent":0,"currentPeriod":{"type":"weekly","end":"2026-08-06T02:33:56Z"}}}`)),
+	}}}
+	service := &AccountUsageService{
+		accountRepo:      repo,
+		grokQuotaFetcher: NewGrokQuotaFetcher(),
+		grokQuotaService: NewGrokQuotaService(repo, nil, NewGrokTokenProvider(repo, nil), upstream),
+		cache:            NewUsageCache(),
+	}
+
+	usage, err := service.getGrokUsage(context.Background(), account, true)
+	require.NoError(t, err)
+	require.NotNil(t, usage.GrokBilling)
+	require.NotNil(t, usage.GrokBilling.UsagePercent)
+	require.InDelta(t, 0, *usage.GrokBilling.UsagePercent, 0.001)
+	require.Len(t, upstream.requests, 1, "force refresh must bypass a fresh persisted snapshot")
 }

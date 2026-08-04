@@ -13,9 +13,18 @@ import (
 )
 
 const (
-	grokQuotaUpstreamTimeout = 20 * time.Second
-	grokBillingSnapshotKey   = "grok_billing_snapshot"
+	grokQuotaUpstreamTimeout     = 20 * time.Second
+	grokBillingSnapshotKey       = "grok_billing_snapshot"
+	// Legacy temp-unsched reason prefix (pre rate-limit alignment). Still cleared on recovery.
+	grokBillingPauseReasonPrefix = "grok billing quota exhausted:"
+	// Marker written when weekly billing exhaustion is mirrored into rate_limit_reset_at,
+	// so recovery can clear it without wiping unrelated 429 cooldowns.
+	grokBillingRateLimitUntilKey = "grok_billing_rate_limit_until"
 )
+
+type GrokQuotaProber interface {
+	ProbeUsage(ctx context.Context, accountID int64) (*GrokQuotaProbeResult, error)
+}
 
 type GrokQuotaProbeResult struct {
 	Source          string               `json:"source"`
@@ -112,6 +121,7 @@ func (s *GrokQuotaService) ProbeUsage(ctx context.Context, accountID int64) (*Gr
 		)
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_BILLING_PERSIST_FAILED", "billing fetched but failed to persist: %v", err)
 	}
+	syncGrokBillingSchedulingState(ctx, s.accountRepo, account, billing, time.Now())
 
 	// Keep legacy rate-limit header snapshot if present (still useful for 429 UI).
 	legacy, _ := grokQuotaSnapshotFromExtra(account.Extra)
@@ -125,6 +135,126 @@ func (s *GrokQuotaService) ProbeUsage(ctx context.Context, accountID int64) (*Gr
 		ResetSupported:  false,
 		FetchedAt:       time.Now().Unix(),
 	}, nil
+}
+
+func syncGrokBillingSchedulingState(ctx context.Context, repo AccountRepository, account *Account, billing *xai.BillingSnapshot, now time.Time) {
+	if repo == nil || account == nil || billing == nil {
+		return
+	}
+
+	// Align with OpenAI UX: exhausted official weekly quota → rate_limit_reset_at + countdown UI.
+	// Keep clearing the legacy temp-unschedulable pause so existing Grok accounts migrate on next probe.
+	blockUntil := grokBillingExhaustionResetAt(billing, now)
+	if !blockUntil.IsZero() {
+		_ = repo.SetRateLimited(ctx, account.ID, blockUntil)
+		_ = repo.UpdateExtra(ctx, account.ID, map[string]any{
+			grokBillingRateLimitUntilKey: blockUntil.UTC().Format(time.RFC3339),
+		})
+		if isGrokBillingTempUnschedReason(account.TempUnschedulableReason) {
+			_ = repo.ClearTempUnschedulable(ctx, account.ID)
+		}
+		return
+	}
+
+	if isGrokBillingTempUnschedReason(account.TempUnschedulableReason) {
+		_ = repo.ClearTempUnschedulable(ctx, account.ID)
+	}
+	if hasGrokBillingRateLimitMarker(account.Extra) {
+		_ = repo.ClearRateLimit(ctx, account.ID)
+		_ = repo.UpdateExtra(ctx, account.ID, map[string]any{
+			grokBillingRateLimitUntilKey: nil,
+		})
+	}
+}
+
+func grokBillingExhaustionResetAt(billing *xai.BillingSnapshot, now time.Time) time.Time {
+	if billing == nil || !strings.EqualFold(strings.TrimSpace(billing.PeriodType), "weekly") {
+		return time.Time{}
+	}
+	if billing.UsagePercent == nil || *billing.UsagePercent < 100 {
+		// Also treat GrokBuild product 100% as exhausted when top-level percent is absent/partial.
+		if !grokBillingProductExhausted(billing, "grokbuild") && !grokBillingProductExhausted(billing, "build") {
+			return time.Time{}
+		}
+		// If only a product is exhausted but overall usage is known and <100, do not global-pause.
+		if billing.UsagePercent != nil && *billing.UsagePercent < 100 {
+			return time.Time{}
+		}
+		if billing.UsagePercent == nil && !grokBillingProductExhausted(billing, "grokbuild") && !grokBillingProductExhausted(billing, "build") {
+			return time.Time{}
+		}
+		// Require overall weekly usage >=100 for global pause (OpenAI-style account-level limit).
+		if billing.UsagePercent == nil || *billing.UsagePercent < 100 {
+			return time.Time{}
+		}
+	}
+	endRaw := strings.TrimSpace(billing.PeriodEnd)
+	if endRaw == "" {
+		endRaw = strings.TrimSpace(billing.BillingPeriodEnd)
+	}
+	if endRaw == "" {
+		return time.Time{}
+	}
+	parsed, ok := parseGrokBillingTime(endRaw)
+	if !ok || !parsed.After(now) {
+		return time.Time{}
+	}
+	return parsed
+}
+
+func grokBillingProductExhausted(billing *xai.BillingSnapshot, needle string) bool {
+	if billing == nil {
+		return false
+	}
+	needle = strings.ToLower(strings.TrimSpace(needle))
+	for _, item := range billing.ProductUsage {
+		product := strings.ToLower(strings.TrimSpace(item.Product))
+		if product == "" || item.UsagePercent == nil {
+			continue
+		}
+		if strings.Contains(product, needle) && *item.UsagePercent >= 100 {
+			return true
+		}
+	}
+	return false
+}
+
+func parseGrokBillingTime(raw string) (time.Time, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, false
+	}
+	layouts := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02T15:04:05.999999999Z07:00",
+	}
+	for _, layout := range layouts {
+		if ts, err := time.Parse(layout, raw); err == nil {
+			return ts.UTC(), true
+		}
+	}
+	return time.Time{}, false
+}
+
+func isGrokBillingTempUnschedReason(reason string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(reason)), grokBillingPauseReasonPrefix)
+}
+
+func hasGrokBillingRateLimitMarker(extra map[string]any) bool {
+	if extra == nil {
+		return false
+	}
+	v, ok := extra[grokBillingRateLimitUntilKey]
+	if !ok || v == nil {
+		return false
+	}
+	switch n := v.(type) {
+	case string:
+		return strings.TrimSpace(n) != ""
+	default:
+		return true
+	}
 }
 
 // pickSuccessfulBillingStatus returns the HTTP status from a successful snapshot.

@@ -237,7 +237,7 @@ const estimatedStats = computed<WindowStats | null>(() => {
 })
 
 const formatEstimatedRequests = computed(() =>
-  formatCompactNumber(estimatedStats.value?.requests ?? 0, { allowBillions: false })
+  formatCompactNumber(Math.round(estimatedStats.value?.requests ?? 0), { allowBillions: false })
 )
 const formatEstimatedTokens = computed(() => formatCompactNumber(estimatedStats.value?.tokens ?? 0))
 const formatEstimatedAccountCost = computed(() => (estimatedStats.value?.cost ?? 0).toFixed(2))

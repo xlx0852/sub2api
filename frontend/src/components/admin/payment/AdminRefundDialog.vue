@@ -102,7 +102,7 @@
             step="0.01"
             min="0.01"
             :max="maxRefundable"
-            class="input pl-7"
+            class="input w-full pl-7 sm:w-48"
             required
           />
         </div>

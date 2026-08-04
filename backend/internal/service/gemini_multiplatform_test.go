@@ -21,6 +21,10 @@ type mockAccountRepoForGemini struct {
 	listByPlatformFunc func(ctx context.Context, platforms []string) ([]Account, error)
 }
 
+func (m *mockAccountRepoForGemini) Restore(ctx context.Context, id int64) error {
+	return nil
+}
+
 func (m *mockAccountRepoForGemini) GetByID(ctx context.Context, id int64) (*Account, error) {
 	if acc, ok := m.accountsByID[id]; ok {
 		return acc, nil
@@ -71,11 +75,23 @@ func (m *mockAccountRepoForGemini) FindByExtraField(ctx context.Context, key str
 	return nil, nil
 }
 
+func (m *mockAccountRepoForGemini) FindOAuthByPlatformEmail(ctx context.Context, platform, email string, includeDeleted bool) ([]Account, error) {
+	return nil, nil
+}
+
+func (m *mockAccountRepoForGemini) ListOAuthIncludingDeleted(ctx context.Context) ([]Account, error) {
+	return nil, nil
+}
+
 func (m *mockAccountRepoForGemini) ListCRSAccountIDs(ctx context.Context) (map[string]int64, error) {
 	return nil, nil
 }
 func (m *mockAccountRepoForGemini) Update(ctx context.Context, account *Account) error { return nil }
 func (m *mockAccountRepoForGemini) Delete(ctx context.Context, id int64) error         { return nil }
+func (m *mockAccountRepoForGemini) HardDelete(ctx context.Context, id int64) error     { return nil }
+func (m *mockAccountRepoForGemini) ReassignAccountReferences(ctx context.Context, fromID, toID int64) error {
+	return nil
+}
 func (m *mockAccountRepoForGemini) List(ctx context.Context, params pagination.PaginationParams) ([]Account, *pagination.PaginationResult, error) {
 	return nil, nil, nil
 }
@@ -105,6 +121,9 @@ func (m *mockAccountRepoForGemini) ClearError(ctx context.Context, id int64) err
 	return nil
 }
 func (m *mockAccountRepoForGemini) SetSchedulable(ctx context.Context, id int64, schedulable bool) error {
+	return nil
+}
+func (m *mockAccountRepoForGemini) SetExpiresAt(ctx context.Context, id int64, expiresAt *time.Time) error {
 	return nil
 }
 func (m *mockAccountRepoForGemini) AutoPauseExpiredAccounts(ctx context.Context, now time.Time) (int64, error) {

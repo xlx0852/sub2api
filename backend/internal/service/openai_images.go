@@ -13,6 +13,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"net/textproto"
 	"strconv"
 	"strings"
@@ -1408,6 +1409,24 @@ func isLikelyOpenAIImageDownloadURL(raw string) bool {
 		strings.Contains(lower, ".webp")
 }
 
+func sanitizeOpenAIImagePointerID(id string) (string, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", fmt.Errorf("empty image pointer id")
+	}
+	if strings.ContainsAny(id, "/\\?#") || strings.Contains(id, "..") {
+		return "", fmt.Errorf("invalid image pointer id")
+	}
+	// Keep IDs conservative: alnum plus common separators used by OpenAI file ids.
+	for _, r := range id {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			continue
+		}
+		return "", fmt.Errorf("invalid image pointer id")
+	}
+	return id, nil
+}
+
 func fetchOpenAIImageDownloadURL(
 	ctx context.Context,
 	client *req.Client,
@@ -1416,15 +1435,29 @@ func fetchOpenAIImageDownloadURL(
 	pointer string,
 	errorBodyReadLimit int64,
 ) (string, error) {
-	url := ""
+	requestURL := ""
 	allowConversationRetry := false
 	switch {
 	case strings.HasPrefix(pointer, "file-service://"):
-		fileID := strings.TrimPrefix(pointer, "file-service://")
-		url = fmt.Sprintf("%s/%s/download", openAIChatGPTFilesURL, fileID)
+		fileID, err := sanitizeOpenAIImagePointerID(strings.TrimPrefix(pointer, "file-service://"))
+		if err != nil {
+			return "", err
+		}
+		requestURL = fmt.Sprintf("%s/%s/download", openAIChatGPTFilesURL, url.PathEscape(fileID))
 	case strings.HasPrefix(pointer, "sediment://"):
-		attachmentID := strings.TrimPrefix(pointer, "sediment://")
-		url = fmt.Sprintf("https://chatgpt.com/backend-api/conversation/%s/attachment/%s/download", conversationID, attachmentID)
+		attachmentID, err := sanitizeOpenAIImagePointerID(strings.TrimPrefix(pointer, "sediment://"))
+		if err != nil {
+			return "", err
+		}
+		safeConversationID, err := sanitizeOpenAIImagePointerID(conversationID)
+		if err != nil {
+			return "", err
+		}
+		requestURL = fmt.Sprintf(
+			"https://chatgpt.com/backend-api/conversation/%s/attachment/%s/download",
+			url.PathEscape(safeConversationID),
+			url.PathEscape(attachmentID),
+		)
 		allowConversationRetry = true
 	default:
 		return "", fmt.Errorf("unsupported image pointer: %s", pointer)
@@ -1439,7 +1472,7 @@ func fetchOpenAIImageDownloadURL(
 			SetContext(ctx).
 			SetHeaders(headerToMap(headers)).
 			SetSuccessResult(&result).
-			Get(url)
+			Get(requestURL)
 		if err != nil {
 			lastErr = err
 		} else if resp.IsSuccessState() && strings.TrimSpace(result.DownloadURL) != "" {

@@ -76,11 +76,23 @@ func (m *sessionWindowMockRepo) GetByCRSAccountID(context.Context, string) (*Acc
 func (m *sessionWindowMockRepo) FindByExtraField(context.Context, string, any) ([]Account, error) {
 	panic("unexpected")
 }
+func (m *sessionWindowMockRepo) FindOAuthByPlatformEmail(context.Context, string, string, bool) ([]Account, error) {
+	panic("unexpected")
+}
+
+func (m *sessionWindowMockRepo) ListOAuthIncludingDeleted(context.Context) ([]Account, error) {
+	panic("unexpected")
+}
 func (m *sessionWindowMockRepo) ListCRSAccountIDs(context.Context) (map[string]int64, error) {
 	panic("unexpected")
 }
 func (m *sessionWindowMockRepo) Update(context.Context, *Account) error { panic("unexpected") }
+func (m *sessionWindowMockRepo) Restore(context.Context, int64) error   { panic("unexpected") }
 func (m *sessionWindowMockRepo) Delete(context.Context, int64) error    { panic("unexpected") }
+func (m *sessionWindowMockRepo) HardDelete(context.Context, int64) error { panic("unexpected") }
+func (m *sessionWindowMockRepo) ReassignAccountReferences(context.Context, int64, int64) error {
+	panic("unexpected")
+}
 func (m *sessionWindowMockRepo) List(context.Context, pagination.PaginationParams) ([]Account, *pagination.PaginationResult, error) {
 	panic("unexpected")
 }
@@ -113,6 +125,7 @@ func (m *sessionWindowMockRepo) ClearError(context.Context, int64) error { panic
 func (m *sessionWindowMockRepo) SetSchedulable(context.Context, int64, bool) error {
 	panic("unexpected")
 }
+func (m *sessionWindowMockRepo) SetExpiresAt(context.Context, int64, *time.Time) error { return nil }
 func (m *sessionWindowMockRepo) AutoPauseExpiredAccounts(context.Context, time.Time) (int64, error) {
 	panic("unexpected")
 }

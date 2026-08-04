@@ -193,6 +193,7 @@ type Account struct {
 	AutoPauseOnExpired      bool            `json:"auto_pause_on_expired"`
 	CreatedAt               time.Time       `json:"created_at"`
 	UpdatedAt               time.Time       `json:"updated_at"`
+	DeletedAt               *time.Time      `json:"deleted_at,omitempty"`
 
 	Schedulable bool `json:"schedulable"`
 
@@ -272,6 +273,9 @@ type Account struct {
 	// 影子账号关系（spark 维度影子）
 	ParentAccountID *int64 `json:"parent_account_id,omitempty"`
 	QuotaDimension  string `json:"quota_dimension,omitempty"`
+
+	// 成本配置手动结算封号（未撤销）
+	SubscriptionBanned bool `json:"subscription_banned,omitempty"`
 
 	// 影子账号回填的母账号信息（仅影子非空，源自母账号 Credentials/Extra）
 	ParentEmail                 string `json:"parent_email,omitempty"`

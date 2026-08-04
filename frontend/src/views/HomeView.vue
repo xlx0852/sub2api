@@ -28,6 +28,7 @@
         <div class="home-nav-links">
           <a href="#features">{{ t('home.navigation.features') }}</a>
           <a href="#providers">{{ t('home.navigation.models') }}</a>
+          <a href="#pricing">{{ t('availableChannels.publicPricing.title') }}</a>
           <a
             v-if="isExternalDocUrl"
             :href="docUrl"
@@ -123,6 +124,9 @@
                   {{ isAuthenticated ? t('home.goToDashboard') : t('home.getStarted') }}
                   <Icon name="arrowRight" size="sm" :stroke-width="2" />
                 </router-link>
+                <a href="#pricing" class="home-btn home-btn-secondary">
+                  {{ t('availableChannels.publicPricing.title') }}
+                </a>
                 <a
                   v-if="isExternalDocUrl"
                   :href="docUrl"
@@ -207,6 +211,8 @@
           </div>
         </div>
       </section>
+
+      <HomePricingSection />
 
       <section id="features" class="features-section">
         <div class="home-container">
@@ -417,6 +423,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore, useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
+import HomePricingSection from '@/components/home/HomePricingSection.vue'
 import { sanitizeUrl } from '@/utils/url'
 
 const { t, locale } = useI18n()

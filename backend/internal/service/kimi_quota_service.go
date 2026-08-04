@@ -18,6 +18,11 @@ const (
 	kimiQuotaUpstreamTimeout    = 20 * time.Second
 	kimiUsageURL                = kimi.CodingBaseURL + "/v1/usages"
 	kimiQuotaDefaultConcurrency = 10
+	// Legacy temp-unsched reason prefix (pre rate-limit alignment). Still cleared on recovery.
+	kimiQuotaPauseReasonPrefix = "kimi quota exhausted:"
+	// Marker written when official window exhaustion is mirrored into rate_limit_reset_at,
+	// so recovery can clear it without wiping unrelated 429 cooldowns.
+	kimiQuotaRateLimitUntilKey = "kimi_quota_rate_limit_until"
 )
 
 // KimiAccessTokenProvider is the subset of the Kimi token provider needed by
@@ -117,7 +122,76 @@ func (s *KimiQuotaService) QueryUsage(ctx context.Context, accountID int64) (*Ki
 			return nil, infraerrors.Newf(http.StatusBadGateway, "KIMI_QUOTA_PARSE_FAILED", "failed to parse Kimi quota response: %v", parseErr)
 		}
 		usage.FetchedAt = time.Now().Unix()
+		syncKimiQuotaSchedulingState(ctx, s.accountRepo, account, usage, time.Now())
 		return usage, nil
+	}
+}
+
+func syncKimiQuotaSchedulingState(ctx context.Context, repo AccountRepository, account *Account, usage *KimiQuotaUsage, now time.Time) {
+	if repo == nil || account == nil || usage == nil {
+		return
+	}
+	updates := map[string]any{"kimi_quota_updated_at": now.UTC().Format(time.RFC3339)}
+	var blockUntil time.Time
+	for _, window := range []struct {
+		name     string
+		progress *UsageProgress
+	}{{"5h", usage.FiveHour}, {"7d", usage.SevenDay}} {
+		if window.progress == nil {
+			continue
+		}
+		updates["kimi_quota_"+window.name+"_utilization"] = window.progress.Utilization
+		if window.progress.ResetsAt == nil {
+			updates["kimi_quota_"+window.name+"_reset_at"] = nil
+			continue
+		}
+		updates["kimi_quota_"+window.name+"_reset_at"] = window.progress.ResetsAt.UTC().Format(time.RFC3339)
+		if window.progress.Utilization >= 100 && window.progress.ResetsAt.After(now) && window.progress.ResetsAt.After(blockUntil) {
+			blockUntil = *window.progress.ResetsAt
+		}
+	}
+
+	// Align with OpenAI UX: exhausted official windows → rate_limit_reset_at + countdown UI.
+	// Also migrate legacy temp-unschedulable pauses created by earlier builds.
+	if !blockUntil.IsZero() {
+		updates[kimiQuotaRateLimitUntilKey] = blockUntil.UTC().Format(time.RFC3339)
+		_ = repo.UpdateExtra(ctx, account.ID, updates)
+		_ = repo.SetRateLimited(ctx, account.ID, blockUntil)
+		if isKimiQuotaTempUnschedReason(account.TempUnschedulableReason) {
+			_ = repo.ClearTempUnschedulable(ctx, account.ID)
+		}
+		return
+	}
+
+	if hasKimiQuotaRateLimitMarker(account.Extra) || hasKimiQuotaRateLimitMarker(updates) {
+		updates[kimiQuotaRateLimitUntilKey] = nil
+	}
+	_ = repo.UpdateExtra(ctx, account.ID, updates)
+	if isKimiQuotaTempUnschedReason(account.TempUnschedulableReason) {
+		_ = repo.ClearTempUnschedulable(ctx, account.ID)
+	}
+	if hasKimiQuotaRateLimitMarker(account.Extra) {
+		_ = repo.ClearRateLimit(ctx, account.ID)
+	}
+}
+
+func isKimiQuotaTempUnschedReason(reason string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(reason)), kimiQuotaPauseReasonPrefix)
+}
+
+func hasKimiQuotaRateLimitMarker(extra map[string]any) bool {
+	if extra == nil {
+		return false
+	}
+	v, ok := extra[kimiQuotaRateLimitUntilKey]
+	if !ok || v == nil {
+		return false
+	}
+	switch n := v.(type) {
+	case string:
+		return strings.TrimSpace(n) != ""
+	default:
+		return true
 	}
 }
 

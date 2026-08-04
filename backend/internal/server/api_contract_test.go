@@ -1676,11 +1676,27 @@ func (s *stubAccountRepo) FindByExtraField(ctx context.Context, key string, valu
 	return nil, errors.New("not implemented")
 }
 
+func (s *stubAccountRepo) FindOAuthByPlatformEmail(ctx context.Context, platform, email string, includeDeleted bool) ([]service.Account, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *stubAccountRepo) ListOAuthIncludingDeleted(ctx context.Context) ([]service.Account, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (s *stubAccountRepo) Update(ctx context.Context, account *service.Account) error {
 	return errors.New("not implemented")
 }
 
 func (s *stubAccountRepo) Delete(ctx context.Context, id int64) error {
+	return errors.New("not implemented")
+}
+
+func (s *stubAccountRepo) HardDelete(ctx context.Context, id int64) error {
+	return errors.New("not implemented")
+}
+
+func (s *stubAccountRepo) ReassignAccountReferences(ctx context.Context, fromID, toID int64) error {
 	return errors.New("not implemented")
 }
 
@@ -1730,6 +1746,9 @@ func (s *stubAccountRepo) ClearError(ctx context.Context, id int64) error {
 
 func (s *stubAccountRepo) SetSchedulable(ctx context.Context, id int64, schedulable bool) error {
 	return errors.New("not implemented")
+}
+func (s *stubAccountRepo) SetExpiresAt(ctx context.Context, id int64, expiresAt *time.Time) error {
+	return nil
 }
 
 func (s *stubAccountRepo) AutoPauseExpiredAccounts(ctx context.Context, now time.Time) (int64, error) {

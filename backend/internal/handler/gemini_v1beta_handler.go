@@ -98,6 +98,14 @@ func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
 		googleError(c, http.StatusBadRequest, "Missing model in URL")
 		return
 	}
+	getModelPath, pathErr := service.BuildGeminiAIStudioGetModelPath(modelName)
+	if pathErr != nil {
+		googleError(c, http.StatusBadRequest, "Invalid model in URL")
+		return
+	}
+	if safeModel, err := service.SanitizeGeminiModelPathSegment(modelName); err == nil {
+		modelName = safeModel
+	}
 
 	// 强制 antigravity 模式：返回 antigravity 模型信息
 	if forcePlatform == service.PlatformAntigravity {
@@ -119,7 +127,7 @@ func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
 		return
 	}
 
-	res, err := h.geminiCompatService.ForwardAIStudioGET(c.Request.Context(), account, "/v1beta/models/"+modelName)
+	res, err := h.geminiCompatService.ForwardAIStudioGET(c.Request.Context(), account, getModelPath)
 	if err != nil {
 		googleError(c, http.StatusBadGateway, err.Error())
 		return

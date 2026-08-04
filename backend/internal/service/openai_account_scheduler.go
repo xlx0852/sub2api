@@ -64,7 +64,6 @@ var openAIAdvancedSchedulerSettingSF singleflight.Group
 
 var stickyReevalLastAt sync.Map // sessionHash -> int64 unix nano
 
-
 type OpenAIAccountScheduleRequest struct {
 	GroupID                 *int64
 	Platform                string
@@ -567,7 +566,6 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 	}
 	return nil, false, nil
 }
-
 
 func (s *defaultOpenAIAccountScheduler) shouldReevalStickyForUsage(ctx context.Context, req OpenAIAccountScheduleRequest, bound *Account) bool {
 	if s == nil || s.service == nil || bound == nil {

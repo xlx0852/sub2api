@@ -453,6 +453,21 @@ func (h *UsageHandler) DashboardStats(c *gin.Context) {
 	response.Success(c, stats)
 }
 
+// DashboardAvailability returns 24h real-request availability for the authenticated user.
+func (h *UsageHandler) DashboardAvailability(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	result, err := h.usageService.GetTrafficAvailability(c.Request.Context(), &subject.UserID, c.Query("platform"))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
 // DashboardTrend handles getting user usage trend data
 // GET /api/v1/usage/dashboard/trend
 func (h *UsageHandler) DashboardTrend(c *gin.Context) {

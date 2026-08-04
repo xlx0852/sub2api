@@ -428,22 +428,29 @@ func (s *adminServiceImpl) UpdateUserBalance(ctx context.Context, userID int64, 
 		code, err := GenerateRedeemCode()
 		if err != nil {
 			logger.LegacyPrintf("service.admin", "failed to generate adjustment redeem code: %v", err)
-			return user, nil
+		} else {
+			adjustmentRecord := &RedeemCode{
+				Code:   code,
+				Type:   AdjustmentTypeAdminBalance,
+				Value:  balanceDiff,
+				Status: StatusUsed,
+				UsedBy: &user.ID,
+				Notes:  notes,
+			}
+			now := time.Now()
+			adjustmentRecord.UsedAt = &now
+
+			if err := s.redeemCodeRepo.Create(ctx, adjustmentRecord); err != nil {
+				logger.LegacyPrintf("service.admin", "failed to create balance adjustment redeem code: %v", err)
+			}
 		}
 
-		adjustmentRecord := &RedeemCode{
-			Code:   code,
-			Type:   AdjustmentTypeAdminBalance,
-			Value:  balanceDiff,
-			Status: StatusUsed,
-			UsedBy: &user.ID,
-			Notes:  notes,
-		}
-		now := time.Now()
-		adjustmentRecord.UsedAt = &now
-
-		if err := s.redeemCodeRepo.Create(ctx, adjustmentRecord); err != nil {
-			logger.LegacyPrintf("service.admin", "failed to create balance adjustment redeem code: %v", err)
+		if balanceDiff > 0 && s.affiliateService != nil {
+			if rebate, rebateErr := s.affiliateService.AccrueInviteRebate(ctx, userID, balanceDiff); rebateErr != nil {
+				logger.LegacyPrintf("service.admin", "affiliate rebate failed for manual recharge: user_id=%d amount=%.8f err=%v", userID, balanceDiff, rebateErr)
+			} else if rebate > 0 {
+				logger.LegacyPrintf("service.admin", "affiliate rebate accrued for manual recharge: user_id=%d amount=%.8f rebate=%.8f", userID, balanceDiff, rebate)
+			}
 		}
 	}
 

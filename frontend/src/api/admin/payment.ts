@@ -7,8 +7,6 @@ import { apiClient } from '../client'
 import type {
   DashboardStats,
   PaymentOrder,
-  PaymentChannel,
-  SubscriptionPlan,
   ProviderInstance
 } from '@/types/payment'
 import type { BasePaginationResponse } from '@/types'
@@ -33,26 +31,6 @@ export interface AdminPaymentConfig {
   help_text: string
 }
 
-/** Fields accepted by PUT /admin/payment/config (all optional via pointer semantics) */
-export interface UpdatePaymentConfigRequest {
-  enabled?: boolean
-  min_amount?: number
-  max_amount?: number
-  daily_limit?: number
-  order_timeout_minutes?: number
-  max_pending_orders?: number
-  enabled_payment_types?: string[]
-  balance_disabled?: boolean
-  balance_recharge_multiplier?: number
-  subscription_usd_to_cny_rate?: number
-  recharge_fee_rate?: number
-  load_balance_strategy?: string
-  product_name_prefix?: string
-  product_name_suffix?: string
-  help_image_url?: string
-  help_text?: string
-}
-
 export interface RefundResult {
   success: boolean
   warning?: string
@@ -67,11 +45,6 @@ export const adminPaymentAPI = {
   /** Get payment configuration (admin view) */
   getConfig() {
     return apiClient.get<AdminPaymentConfig>('/admin/payment/config')
-  },
-
-  /** Update payment configuration */
-  updateConfig(data: UpdatePaymentConfigRequest) {
-    return apiClient.put('/admin/payment/config', data)
   },
 
   // ==================== Dashboard ====================
@@ -123,50 +96,6 @@ export const adminPaymentAPI = {
   /** Query and finalize a pending refund */
   queryRefund(id: number) {
     return apiClient.post<RefundResult>(`/admin/payment/orders/${id}/refund/query`)
-  },
-
-  // ==================== Channels ====================
-
-  /** Get all payment channels */
-  getChannels() {
-    return apiClient.get<PaymentChannel[]>('/admin/payment/channels')
-  },
-
-  /** Create a payment channel */
-  createChannel(data: Partial<PaymentChannel>) {
-    return apiClient.post<PaymentChannel>('/admin/payment/channels', data)
-  },
-
-  /** Update a payment channel */
-  updateChannel(id: number, data: Partial<PaymentChannel>) {
-    return apiClient.put<PaymentChannel>(`/admin/payment/channels/${id}`, data)
-  },
-
-  /** Delete a payment channel */
-  deleteChannel(id: number) {
-    return apiClient.delete(`/admin/payment/channels/${id}`)
-  },
-
-  // ==================== Subscription Plans ====================
-
-  /** Get all subscription plans */
-  getPlans() {
-    return apiClient.get<SubscriptionPlan[]>('/admin/payment/plans')
-  },
-
-  /** Create a subscription plan */
-  createPlan(data: Record<string, unknown>) {
-    return apiClient.post<SubscriptionPlan>('/admin/payment/plans', data)
-  },
-
-  /** Update a subscription plan */
-  updatePlan(id: number, data: Record<string, unknown>) {
-    return apiClient.put<SubscriptionPlan>(`/admin/payment/plans/${id}`, data)
-  },
-
-  /** Delete a subscription plan */
-  deletePlan(id: number) {
-    return apiClient.delete(`/admin/payment/plans/${id}`)
   },
 
   // ==================== Provider Instances ====================

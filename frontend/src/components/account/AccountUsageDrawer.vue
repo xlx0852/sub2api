@@ -149,26 +149,6 @@
               </section>
 
               <section v-show="activeTab === 'diagnostics'" role="tabpanel" class="flex min-h-0 flex-1 flex-col space-y-3">
-                <div>
-                  <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.accounts.usageDetails.diagnostics') }}</h3>
-                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.usageDetails.diagnosticsHint') }}</p>
-                </div>
-                <dl class="divide-y divide-gray-200 border-y border-gray-200 dark:divide-dark-600 dark:border-dark-600">
-                  <div class="grid grid-cols-[110px_minmax(0,1fr)] gap-3 py-2">
-                    <dt class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.usageDetails.accountStatus') }}</dt>
-                    <dd class="text-right text-xs font-medium text-gray-800 dark:text-gray-100">{{ account.status }}</dd>
-                  </div>
-                  <div
-                    v-for="item in usageState.presentation.diagnostics"
-                    :key="item.label"
-                    class="grid grid-cols-[110px_minmax(0,1fr)] gap-3 py-2"
-                  >
-                    <dt class="text-xs text-gray-500 dark:text-gray-400">{{ item.label }}</dt>
-                    <dd :class="['break-words text-right text-xs font-medium', diagnosticValueClass(item.tone)]">
-                      {{ formatDiagnosticValue(item.value) }}
-                    </dd>
-                  </div>
-                </dl>
                 <div v-if="usageState.error" class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
                   {{ usageState.error }}
                 </div>
@@ -224,6 +204,38 @@
                         <Icon name="refresh" size="xs" :class="scheduledTestsLoading ? 'animate-spin' : ''" />
                         {{ t('admin.accounts.usageDetails.scheduledTestsRefresh') }}
                       </button>
+                    </div>
+                  </div>
+
+                  <div
+                    v-if="scheduledAvailability.results.length > 0"
+                    class="rounded-md bg-gray-50 px-3 py-2.5 dark:bg-dark-800/70"
+                  >
+                    <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
+                      <span class="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                        {{ t('admin.accounts.usageDetails.scheduledTestsAvailability') }}
+                      </span>
+                      <div class="flex items-center gap-3 text-[11px] tabular-nums">
+                        <span class="text-emerald-600 dark:text-emerald-400">
+                          {{ t('admin.accounts.usageDetails.scheduledTestsSuccess') }} {{ scheduledAvailability.success }}
+                        </span>
+                        <span class="text-red-600 dark:text-red-400">
+                          {{ t('admin.accounts.usageDetails.scheduledTestsFailed') }} {{ scheduledAvailability.failed }}
+                        </span>
+                        <span class="font-semibold text-gray-900 dark:text-white">
+                          {{ scheduledAvailability.rateLabel }}
+                        </span>
+                      </div>
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-1" role="list" :aria-label="t('admin.accounts.usageDetails.scheduledTestsAvailability')">
+                      <span
+                        v-for="item in scheduledAvailability.results"
+                        :key="`${item.planId}-${item.result.id}`"
+                        role="listitem"
+                        class="h-3.5 w-3.5 shrink-0 rounded-[3px]"
+                        :class="scheduledAvailabilityCellClass(item.result.status)"
+                        :title="scheduledAvailabilityTitle(item)"
+                      />
                     </div>
                   </div>
 
@@ -474,7 +486,7 @@ import type { Account, AccountUsageInfo, ScheduledTestPlan, ScheduledTestResult,
 import type { AccountPerformanceStats } from '@/api/admin/accounts'
 import { scheduledTestsAPI } from '@/api/admin/scheduledTests'
 import ScheduledTestsPanel from '@/components/admin/account/ScheduledTestsPanel.vue'
-import type { AccountUsagePresentation, AccountUsageTone } from '@/utils/accountUsagePresentation'
+import type { AccountUsagePresentation } from '@/utils/accountUsagePresentation'
 import { buildAccountUsagePresentation } from '@/utils/accountUsagePresentation'
 import { formatRelativeTime } from '@/utils/format'
 import Icon from '@/components/icons/Icon.vue'
@@ -524,6 +536,21 @@ const drawerTitleId = `account-usage-drawer-title-${Math.random().toString(36).s
 
 const scheduledTestEntries = ref<ScheduledTestEntry[]>([])
 const scheduledTestPlans = computed(() => scheduledTestEntries.value.map((entry) => entry.plan))
+const scheduledAvailability = computed(() => {
+  const results = scheduledTestEntries.value
+    .flatMap((entry) => entry.results.map((result) => ({ planId: entry.plan.id, model: entry.plan.model_id, result })))
+    .sort((a, b) => new Date(a.result.started_at).getTime() - new Date(b.result.started_at).getTime())
+    .slice(-200)
+  const success = results.filter((item) => item.result.status.toLowerCase() === 'success').length
+  const failed = results.filter((item) => ['failed', 'error'].includes(item.result.status.toLowerCase())).length
+  const completed = success + failed
+  return {
+    results,
+    success,
+    failed,
+    rateLabel: completed > 0 ? `${Math.round(success * 1000 / completed) / 10}%` : '-'
+  }
+})
 const scheduledTestsLoading = ref(false)
 const scheduledTestsEnabling = ref(false)
 const scheduledTestsError = ref<string | null>(null)
@@ -569,8 +596,11 @@ const accountPrivacyMode = computed(() => {
 })
 
 const accountSubscriptionExpiresAt = computed(() => {
-  const value = props.account?.credentials?.subscription_expires_at
-  return typeof value === 'string' ? value : props.account?.parent_subscription_expires_at
+  if (props.account?.expires_at) {
+    return new Date(props.account.expires_at * 1000).toISOString()
+  }
+  if (props.account?.type !== 'oauth' && props.account?.type !== 'setup-token') return undefined
+  return undefined
 })
 
 const handleUsageState = (state: typeof usageState.value) => {
@@ -672,20 +702,6 @@ const requestTypeLabel = (requestType: string) => {
   if (requestType === 'stream') return t('admin.accounts.usageDetails.requestTypeStream')
   if (requestType === 'compact') return 'Compact'
   return requestType || '-'
-}
-
-const diagnosticValueClass = (tone?: AccountUsageTone) => ({
-  success: 'text-emerald-600 dark:text-emerald-300',
-  warning: 'text-amber-600 dark:text-amber-300',
-  danger: 'text-red-600 dark:text-red-300',
-  neutral: 'text-gray-800 dark:text-gray-100'
-}[tone || 'neutral'])
-
-const formatDiagnosticValue = (value: string) => {
-  if (!value || value === '-') return '-'
-  const timestamp = new Date(value).getTime()
-  if (!Number.isFinite(timestamp) || !value.includes('T')) return value
-  return formatRelativeTime(value)
 }
 
 const resetScheduledTests = () => {
@@ -792,6 +808,18 @@ const scheduledStatusClass = (status?: string | null) => {
   if (normalized === 'failed' || normalized === 'error') return 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300'
   if (normalized === 'running') return 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
   return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+}
+
+const scheduledAvailabilityCellClass = (status?: string | null) => {
+  const normalized = (status || '').toLowerCase()
+  if (normalized === 'success') return 'bg-emerald-500 dark:bg-emerald-400'
+  if (normalized === 'failed' || normalized === 'error') return 'bg-red-500 dark:bg-red-400'
+  return 'bg-gray-300 dark:bg-dark-500'
+}
+
+const scheduledAvailabilityTitle = (item: { model: string; result: ScheduledTestResult }) => {
+  const time = item.result.started_at ? new Date(item.result.started_at).toLocaleString() : '-'
+  return `${item.model} · ${scheduledStatusLabel(item.result.status)} · ${time}`
 }
 
 const formatScheduledTime = (value?: string | null) => {

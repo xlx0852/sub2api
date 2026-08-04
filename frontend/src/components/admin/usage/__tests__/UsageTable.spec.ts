@@ -34,7 +34,7 @@ const messages: Record<string, string> = {
   'usage.latencyFirstToken': 'First',
   'usage.latencyTotal': 'Total',
   'usage.outputRate': 'Rate',
-  'usage.outputRateHint': 'Output token rate = output_tokens / total duration',
+  'usage.outputRateHint': 'Output token rate = output_tokens / (total duration - first token latency), generation phase only',
   'usage.imageUnit': ' images',
   'usage.imageCount': 'Image count',
   'usage.imageBillingSize': 'Billing size',
@@ -72,6 +72,7 @@ const DataTableStub = {
   template: `
     <div>
       <div v-for="row in data" :key="row.request_id">
+        <slot name="mobile-card" :row="row" />
         <slot name="cell-model" :row="row" :value="row.model" />
         <slot name="cell-billing_mode" :row="row" />
         <slot name="cell-tokens" :row="row" />
@@ -369,7 +370,7 @@ describe('admin UsageTable latency', () => {
     expect(wrapper.find('[title="First / Total"]').exists()).toBe(false)
   })
 
-  it('shows output token rate as tok/s from output_tokens and duration_ms', () => {
+  it('shows output token rate as tok/s from generation duration only', () => {
     const wrapper = mount(UsageTable, {
       props: {
         data: [{
@@ -380,7 +381,7 @@ describe('admin UsageTable latency', () => {
           image_size: null,
           output_tokens: 17136,
           duration_ms: 310073,
-          first_token_ms: 310073,
+          first_token_ms: 10073,
         }],
         loading: false,
         columns: [],
@@ -395,7 +396,49 @@ describe('admin UsageTable latency', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('55.3 tok/s')
+    // 17136 / ((310073 - 10073) / 1000) ≈ 57.1 tok/s
+    expect(wrapper.text()).toContain('57.1 tok/s')
+  })
+
+  it('hides output rate when first_token_ms is missing or covers full duration', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [
+          {
+            ...baseImageRow,
+            request_id: 'req-rate-no-ft',
+            billing_mode: 'token',
+            image_count: 0,
+            image_size: null,
+            output_tokens: 17136,
+            duration_ms: 310073,
+            first_token_ms: null,
+          },
+          {
+            ...baseImageRow,
+            request_id: 'req-rate-full-ft',
+            billing_mode: 'token',
+            image_count: 0,
+            image_size: null,
+            output_tokens: 17136,
+            duration_ms: 310073,
+            first_token_ms: 310073,
+          },
+        ],
+        loading: false,
+        columns: [],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    expect(wrapper.text()).not.toMatch(/\d+(\.\d+)? tok\/s/)
   })
 })
 
@@ -584,3 +627,59 @@ describe('admin UsageTable deleted-user badge', () => {
     expect(wrapper.text()).toContain('active@test.com')
   })
 })
+
+describe('admin UsageTable mobile-card layout', () => {
+  it('renders compact mobile card with model cost tokens and latency', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{
+          request_id: 'req-mobile-1',
+          model: 'gpt-5.6-luna',
+          upstream_model: 'gpt-5.6-luna',
+          actual_cost: 0.001234,
+          total_cost: 0.001234,
+          input_tokens: 1200,
+          output_tokens: 340,
+          cache_read_tokens: 0,
+          cache_creation_tokens: 0,
+          first_token_ms: 800,
+          duration_ms: 2500,
+          stream: true,
+          billing_mode: 'token',
+          created_at: '2026-07-30T10:00:00Z',
+          api_key: { name: 'main-key' },
+          group: { name: 'default' },
+        }],
+        columns: [
+          { key: 'model', label: 'Model' },
+          { key: 'stream', label: 'Type' },
+          { key: 'billing_mode', label: 'Billing' },
+          { key: 'tokens', label: 'Tokens' },
+          { key: 'cost', label: 'Cost' },
+          { key: 'latency', label: 'Latency' },
+          { key: 'output_rate', label: 'Rate' },
+          { key: 'created_at', label: 'Time' },
+          { key: 'api_key', label: 'Key' },
+          { key: 'group', label: 'Group' },
+        ],
+        loading: false,
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          IpGeoCell: true,
+          Icon: true,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('gpt-5.6-luna')
+    expect(wrapper.text()).toContain('$0.001234')
+    expect(wrapper.text()).toContain('1,200')
+    expect(wrapper.text()).toContain('340')
+    expect(wrapper.text()).toContain('main-key')
+    expect(wrapper.text()).toContain('default')
+  })
+})
+

@@ -139,7 +139,13 @@ export default {
         configTomlHint: '请确保以下内容位于 config.toml 文件的开头部分',
         note: '请确保配置目录存在。macOS/Linux 用户可运行 mkdir -p ~/.codex 创建目录。',
         noteWindows:
-          '按 Win+R，输入 %userprofile%\\.codex 打开配置目录。如目录不存在，请先手动创建。'
+          '按 Win+R，输入 %userprofile%\\.codex 打开配置目录。如目录不存在，请先手动创建。',
+        authModeTitle: 'Codex 认证模式',
+        authModeHint: '兼容模式保留旧版 Codex 配置；API Key Mode 用于授权客户端端图片执行器。',
+        authModeLegacy: '兼容模式',
+        authModeApiKey: 'API Key Mode',
+        authModeApiKeyWarn:
+          '保存此配置后，必须完全退出并重启 Codex Desktop 或 CLI，然后新建 task，让客户端重新加载工具连接表。'
       },
       grok: {
         description:
@@ -147,9 +153,24 @@ export default {
         configTomlHint: '请确保以下内容位于 config.toml 文件的开头部分；默认模型为 grok-4.5',
         note: '请确保配置目录存在。macOS/Linux 用户可运行 mkdir -p ~/.codex 创建目录。auth.json 中的 OPENAI_API_KEY 填写本站 API 密钥。',
         noteWindows:
-          '按 Win+R，输入 %userprofile%\\.codex 打开配置目录。如目录不存在，请先手动创建。auth.json 中的 OPENAI_API_KEY 填写本站 API 密钥。'
+          '按 Win+R，输入 %userprofile%\\.codex 打开配置目录。如目录不存在，请先手动创建。auth.json 中的 OPENAI_API_KEY 填写本站 API 密钥。',
+        cliDescription:
+          '配置 Grok Build、Claude Code、Codex 或 OpenCode，让请求通过当前 Sub2API Grok 分组发送。',
+        cliConfigHint:
+          '如已有 config.toml，请先备份再合并此模型配置。保存后运行 grok inspect 验证生效配置。',
+        cliNote:
+          '保存为 ~/.grok/config.toml，然后运行 grok inspect，并在 /model 中选择 grok。',
+        cliNoteWindows:
+          '保存为 %userprofile%\\.grok\\config.toml，然后运行 grok inspect，并在 /model 中选择 grok。',
+        claudeDescription:
+          '配置 Claude Code，让 Messages API 请求通过当前 Sub2API Grok 分组发送。',
+        claudeSettingsHint:
+          '用户级持久配置。此文件包含 API 密钥，请勿提交到项目仓库。',
+        claudeNote:
+          '二选一即可：终端命令仅在当前会话生效；保存 settings.json 可作为用户级持久配置。'
       },
       cliTabs: {
+        grokCli: 'Grok CLI',
         claudeCode: 'Claude Code',
         geminiCli: 'Gemini CLI',
         codexCli: 'Codex CLI',
@@ -304,7 +325,7 @@ export default {
     latencyFirstToken: '首字',
     latencyTotal: '总耗时',
     outputRate: '速率',
-    outputRateHint: '输出 Token 速率 = output_tokens / 总耗时',
+    outputRateHint: '输出 Token 速率 = output_tokens / (总耗时 - 首字延迟)，仅统计生成阶段',
     firstToken: '首 Token',
     duration: '耗时',
     time: '时间',
@@ -433,6 +454,17 @@ export default {
 
   // Channel Status (user-facing read-only view)
   channelStatus: {
+    availabilityTitle: '服务可用性',
+    availabilitySubtitle: '查看近期渠道成功率和响应速度',
+    viewAll: '查看详情',
+    successRate: '成功率',
+    avgLatency: '响应',
+    samples: '样本',
+    healthy: '健康',
+    degraded: '轻微波动',
+    attention: '需要关注',
+    noSamples: '暂无样本',
+    allPlatforms: '全部',
     title: '渠道状态',
     description: '查看渠道可用性、延迟和近期状态',
     searchPlaceholder: '搜索渠道...',
@@ -486,6 +518,15 @@ export default {
     public: '公开',
     exclusiveTooltip: '管理员授权给你的专属分组',
     publicTooltip: '对所有用户公开的分组',
+    publicPricing: {
+      kicker: '公开价格清单',
+      title: '模型价格',
+      description: '无需登录即可查看当前公开模型和价格',
+      searchPlaceholder: '搜索模型或平台...',
+      updatedAt: '价格快照更新于 {time}',
+      publicRate: '公开价格',
+      loadFailed: '价格清单暂时不可用，请稍后重试'
+    },
     stats: {
       models: '模型数',
       platforms: '平台数',
@@ -513,7 +554,7 @@ export default {
       model: '模型',
       provider: '厂商',
       billingMode: '计费',
-      discount: '折扣',
+      discount: '节省',
       channels: '可用渠道'
     },
     pricing: {
@@ -526,10 +567,12 @@ export default {
       cacheWritePrice: '缓存写入',
       cacheReadPrice: '缓存读取',
       imageOutputPrice: '图片输出',
+      videoOutputPrice: '视频输出',
       perRequestPrice: '每次请求',
       intervals: '阶梯定价',
       unitPerMillion: '/ 1M token',
-      unitPerRequest: '/ 次'
+      unitPerRequest: '/ 次',
+      unitPerSecond: '/ 秒'
     }
   },
 

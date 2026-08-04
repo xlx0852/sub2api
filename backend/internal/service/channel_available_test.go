@@ -288,6 +288,32 @@ func TestFillGlobalPricingFallback_EmptyPricingFillsFromLiteLLM(t *testing.T) {
 	require.InDelta(t, 4e-5, *models[0].Pricing.ImageOutputPrice, 1e-12)
 }
 
+func TestFillGlobalPricingFallback_EmptyTokenTemplateUsesMediaMode(t *testing.T) {
+	pricingSvc := newStubPricingServiceFromMap(map[string]*LiteLLMModelPricing{
+		"gpt-image-1": {
+			Mode:                    "image_generation",
+			OutputCostPerImageToken: 4e-5,
+		},
+		"grok-imagine-video": {
+			Mode:               "video_generation",
+			OutputCostPerImage: 0.05,
+		},
+	})
+	svc := &ChannelService{pricingService: pricingSvc}
+	models := []SupportedModel{
+		{Name: "gpt-image-1", Platform: "openai", Pricing: &ChannelModelPricing{BillingMode: BillingModeToken}},
+		{Name: "grok-imagine-video", Platform: "grok", Pricing: &ChannelModelPricing{BillingMode: BillingModeToken}},
+	}
+
+	svc.fillGlobalPricingFallback(models)
+
+	require.Equal(t, BillingModeImage, models[0].Pricing.BillingMode)
+	require.NotNil(t, models[0].Pricing.ImageOutputPrice)
+	require.Equal(t, BillingModeVideo, models[1].Pricing.BillingMode)
+	require.NotNil(t, models[1].Pricing.PerRequestPrice)
+	require.InDelta(t, 0.05, *models[1].Pricing.PerRequestPrice, 1e-12)
+}
+
 func TestFillGlobalPricingFallback_KeepsExistingPrice(t *testing.T) {
 	// 渠道已经填了价格的条目不应被回落覆盖。
 	pricingSvc := newStubPricingServiceFromMap(map[string]*LiteLLMModelPricing{

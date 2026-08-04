@@ -68,7 +68,17 @@ describe('ProfitView', () => {
           cost: 50,
           profit: 70,
           margin: 58.3,
-          currency: 'USD'
+          currency: 'USD',
+          seven_day_utilization: 46,
+          quota_windows: [{
+            id: '7d',
+            label: '7d',
+            kind: '7d',
+            used_percent: 46,
+            start_at: '2026-07-30T10:33:00Z',
+            end_at: '2026-08-06T10:33:00Z',
+            window_minutes: 10080
+          }]
         },
         {
           account_id: 90,
@@ -82,6 +92,20 @@ describe('ProfitView', () => {
           cost: 25,
           profit: 35,
           margin: 58.3,
+          currency: 'USD'
+        },
+        {
+          account_id: 91,
+          account_name: '无活动账号',
+          platform: 'openai',
+          account_type: 'apikey',
+          cost_type: 'metered',
+          configured: true,
+          requests: 0,
+          revenue: 0,
+          cost: 0,
+          profit: 0,
+          margin: 0,
           currency: 'USD'
         }
         ]
@@ -118,7 +142,8 @@ describe('ProfitView', () => {
             template: '<div :data-transparent="String(transparent)"><slot name="filters" /><slot name="table" /></div>'
           },
           LoadingSpinner: true,
-          Icon: true
+          Icon: true,
+          QuotaWindowPanel: { template: '<div data-testid="profit-quota-window-panel" />' }
         }
       }
     })
@@ -132,9 +157,11 @@ describe('ProfitView', () => {
     expect(wrapper.find('[data-transparent="true"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('GPT-自有 1')
     expect(wrapper.text()).toContain('GROK-外接')
+    expect(wrapper.text()).not.toContain('无活动账号')
     expect(wrapper.text()).toContain('12,345')
     expect(wrapper.text()).toContain('$50.00')
     expect(wrapper.text()).toContain('+$70.00')
+    expect(wrapper.find('[data-testid="profit-quota-window-panel"]').exists()).toBe(true)
     expect(wrapper.findAll('[data-testid="account-profit-item"]')).toHaveLength(2)
     expect(wrapper.findAll('[data-testid="revenue-bar"]')).toHaveLength(2)
     expect(wrapper.findAll('[data-testid="cost-bar"]')).toHaveLength(2)

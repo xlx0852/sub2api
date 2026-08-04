@@ -42,7 +42,7 @@
           type="number"
           min="0"
           step="1"
-          class="input"
+          class="input w-full sm:w-40"
           :placeholder="t('admin.users.form.rpmLimitPlaceholder')"
         />
         <p class="input-hint">{{ t('admin.users.form.rpmLimitHint') }}</p>

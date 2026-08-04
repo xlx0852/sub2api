@@ -53,6 +53,16 @@ type DashboardService struct {
 	aggUsageDays   int
 }
 
+func (s *DashboardService) GetTrafficAvailability(ctx context.Context, platform string) (*TrafficAvailability, error) {
+	end := time.Now().UTC().Truncate(trafficAvailabilityBucketSize).Add(trafficAvailabilityBucketSize)
+	start := end.Add(-24 * time.Hour)
+	result, err := s.usageRepo.GetTrafficAvailability(ctx, start, end, trafficAvailabilityBucketSize, nil, platform)
+	if err != nil {
+		return nil, fmt.Errorf("get dashboard traffic availability: %w", err)
+	}
+	return result, nil
+}
+
 func NewDashboardService(usageRepo UsageLogRepository, aggRepo DashboardAggregationRepository, cache DashboardStatsCache, cfg *config.Config) *DashboardService {
 	freshTTL := defaultDashboardStatsFreshTTL
 	cacheTTL := defaultDashboardStatsCacheTTL

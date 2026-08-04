@@ -146,6 +146,26 @@ describe('UsageProgressBar', () => {
     expect(estimate.text()).toContain('U $360.00')
   })
 
+  it('满额预估请求数四舍五入为整数', () => {
+    const wrapper = mount(UsageProgressBar, {
+      props: {
+        label: '5h',
+        utilization: 13,
+        color: 'indigo',
+        windowStats: {
+          requests: 5,
+          tokens: 392_900,
+          cost: 1.18,
+          user_cost: 0.14
+        }
+      }
+    })
+
+    const estimate = wrapper.get('[data-testid="usage-full-estimate"]')
+    expect(estimate.text()).toContain('38 req')
+    expect(estimate.text()).not.toContain('38.461')
+  })
+
   it.each([0, 120])('利用率为 %s 时不展示满额预估', (utilization) => {
     const wrapper = mount(UsageProgressBar, {
       props: {

@@ -44,3 +44,24 @@ bypass the success cache.
 - **WHEN** an administrator explicitly refreshes the account quota
 - **THEN** the backend performs a new upstream query even if the ten-minute
   cache entry is still fresh.
+
+### Requirement: Kimi quota scheduling recovery
+
+The system SHALL remove a Kimi OAuth account from scheduling while any official
+quota window is full and SHALL automatically make it eligible again no later
+than the latest full window's official reset time.
+
+#### Scenario: Official window is full
+
+- **WHEN** a successful Kimi quota query reports a five-hour or weekly window at 100 percent with a future reset time
+- **THEN** the account is temporarily unschedulable until the latest full-window reset
+
+#### Scenario: Official window resets
+
+- **WHEN** the temporary block reaches its official reset time
+- **THEN** normal scheduling eligibility automatically resumes without an operator action
+
+#### Scenario: Gateway receives quota 429
+
+- **WHEN** a Kimi OAuth request receives HTTP 429
+- **THEN** the gateway refreshes official quota in the background and synchronizes the scheduling block with the returned reset time

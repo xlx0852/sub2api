@@ -536,7 +536,11 @@ func (c *GeminiBatchHTTPClient) CreateBatch(ctx context.Context, apiKey string, 
 		},
 	}
 	payload, _ := json.Marshal(body)
-	path := fmt.Sprintf("/v1beta/models/%s:batchGenerateContent", url.PathEscape(strings.TrimSpace(model)))
+	safeModel, err := sanitizeGeminiModelPathSegment(model)
+	if err != nil {
+		return nil, err
+	}
+	path := fmt.Sprintf("/v1beta/models/%s:batchGenerateContent", url.PathEscape(safeModel))
 	req, err := c.newRequest(ctx, http.MethodPost, path, apiKey, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err

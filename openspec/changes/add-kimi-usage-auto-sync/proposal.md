@@ -18,6 +18,8 @@ Kimi accounts look empty even though the upstream API provides the data.
   requests; a forced refresh bypasses the cache.
 - Render Kimi OAuth quota windows in the existing account usage cell/drawer and
   add service/UI regression coverage.
+- Synchronize full Kimi windows with temporary scheduling blocks that expire at
+  the official reset, and refresh quota automatically after gateway 429s.
 
 ## Impact
 

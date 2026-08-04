@@ -10,6 +10,8 @@
 - [x] 1.8 Keep the existing manual quota endpoint as the force-refresh path.
 - [x] 1.9 Query Grok local usage from the official weekly period start and attach it to the weekly quota window.
 - [x] 1.10 Render Grok full-utilization request, token, account-cost, and user-charge projections through the shared OpenAI usage component.
+- [x] 1.11 Pause Grok scheduling at full official weekly utilization until `period_end`, and clear the owned pause after recovery.
+- [x] 1.12 Trigger a background official Billing refresh after Grok gateway 429 responses.
 
 ## 2. Tests
 
@@ -22,6 +24,7 @@
 - [x] 2.7 Cover probe failure returning stale usage.
 - [x] 2.8 Cover manual refresh bypassing freshness suppression.
 - [x] 2.9 Cover Grok weekly-window alignment and full-utilization projection rendering.
+- [x] 2.10 Cover Billing-driven pause, recovery clearing, and 429-triggered refresh.
 
 ## 3. Verification
 

@@ -105,11 +105,11 @@ func TestDeriveUpstreamEndpoint(t *testing.T) {
 		// (or nested) suffix, which must be preserved on the upstream
 		// endpoint.
 		{"openai responses compact", EndpointResponsesCompact, "/openai/v1/responses/compact", service.PlatformOpenAI, "/v1/responses/compact"},
-		{"openai responses nested", EndpointResponsesCompact, "/openai/v1/responses/compact/detail", service.PlatformOpenAI, "/v1/responses/compact/detail"},
+		{"openai responses nested", EndpointResponsesCompact, "/openai/v1/responses/compact/detail", service.PlatformOpenAI, "/v1/responses/compact"},
 		{"openai bare responses compact", EndpointResponsesCompact, "/responses/compact", service.PlatformOpenAI, "/v1/responses/compact"},
-		{"openai bare responses compact detail", EndpointResponsesCompact, "/responses/compact/detail", service.PlatformOpenAI, "/v1/responses/compact/detail"},
+		{"openai bare responses compact detail", EndpointResponsesCompact, "/responses/compact/detail", service.PlatformOpenAI, "/v1/responses/compact"},
 		{"openai codex direct responses compact", EndpointResponsesCompact, "/backend-api/codex/responses/compact", service.PlatformOpenAI, "/v1/responses/compact"},
-		{"openai codex direct responses compact detail", EndpointResponsesCompact, "/backend-api/codex/responses/compact/detail", service.PlatformOpenAI, "/v1/responses/compact/detail"},
+		{"openai codex direct responses compact detail", EndpointResponsesCompact, "/backend-api/codex/responses/compact/detail", service.PlatformOpenAI, "/v1/responses/compact"},
 
 		// OpenAI — bare root alias routes normalize to root Responses.
 		{"openai bare responses", EndpointResponses, "/responses", service.PlatformOpenAI, EndpointResponses},
@@ -212,13 +212,16 @@ func TestResponsesSubpathSuffix(t *testing.T) {
 		{"/v1/responses", ""},
 		{"/v1/responses/", ""},
 		{"/v1/responses/compact", "/compact"},
-		{"/openai/v1/responses/compact/detail", "/compact/detail"},
+		{"/v1/responses/input_tokens", "/input_tokens"},
+		{"/v1/responses/evil", ""},
+		{"/v1/responses/../admin", ""},
+		{"/openai/v1/responses/compact/detail", ""},
 		{"/responses", ""},
 		{"/responses/compact", "/compact"},
-		{"/responses/compact/detail", "/compact/detail"},
+		{"/responses/compact/detail", ""},
 		{"/backend-api/codex/responses", ""},
 		{"/backend-api/codex/responses/compact", "/compact"},
-		{"/backend-api/codex/responses/compact/detail", "/compact/detail"},
+		{"/backend-api/codex/responses/compact/detail", ""},
 		{"/v1/messages", ""},
 		{"", ""},
 	}

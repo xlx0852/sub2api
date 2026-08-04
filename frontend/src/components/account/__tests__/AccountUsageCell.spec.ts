@@ -242,7 +242,7 @@ describe('AccountUsageCell', () => {
     await flushPromises()
     expect(grok.findAll('[data-testid="usage-window-row"]')).toHaveLength(1)
     expect(grok.get('[data-testid="usage-full-estimate"]').text()).toContain('usage.fullUtilizationEstimate')
-    expect(grok.get('[data-testid="usage-full-estimate"]').text()).toContain('28.571428571428573 req')
+    expect(grok.get('[data-testid="usage-full-estimate"]').text()).toContain('29 req')
     expect(grok.text()).not.toContain('admin.accounts.usageWindow.grokProducts')
     expect(
       grok.findAll('[data-testid="usage-progress-fill"]').every((bar) => bar.classes().includes('bg-emerald-500'))

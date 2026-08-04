@@ -29,6 +29,8 @@ const (
 	codexModelsClientBudget       = 4 * time.Second
 	codexModelsUpstreamTimeout    = 3500 * time.Millisecond
 	codexModelsMaxAccountsToProbe = 3
+	codexModelsFreshCacheTTL      = 10 * time.Minute
+	codexModelsStaleCacheTTL      = 7 * 24 * time.Hour
 )
 
 // CodexModelsManifest carries the raw upstream manifest payload plus caching
@@ -37,6 +39,55 @@ type CodexModelsManifest struct {
 	Body        []byte
 	ETag        string
 	NotModified bool
+}
+
+type codexManifestCacheEntry struct {
+	Manifest CodexModelsManifest
+	StoredAt time.Time
+}
+
+func cloneCodexModelsManifest(manifest *CodexModelsManifest) *CodexModelsManifest {
+	if manifest == nil {
+		return nil
+	}
+	cloned := *manifest
+	cloned.Body = append([]byte(nil), manifest.Body...)
+	return &cloned
+}
+
+func (s *OpenAIGatewayService) loadCodexManifestCache(groupID *int64, maxAge time.Duration) *CodexModelsManifest {
+	if s == nil || maxAge <= 0 {
+		return nil
+	}
+	value, ok := s.codexManifestCache.Load(derefGroupID(groupID))
+	if !ok {
+		return nil
+	}
+	entry, ok := value.(codexManifestCacheEntry)
+	if !ok || entry.StoredAt.IsZero() || time.Since(entry.StoredAt) > maxAge {
+		return nil
+	}
+	return cloneCodexModelsManifest(&entry.Manifest)
+}
+
+func (s *OpenAIGatewayService) storeCodexManifestCache(groupID *int64, manifest *CodexModelsManifest) {
+	if s == nil || manifest == nil || manifest.NotModified || len(manifest.Body) == 0 {
+		return
+	}
+	cloned := cloneCodexModelsManifest(manifest)
+	s.codexManifestCache.Store(derefGroupID(groupID), codexManifestCacheEntry{Manifest: *cloned, StoredAt: time.Now()})
+}
+
+func applyCodexManifestClientETag(manifest *CodexModelsManifest, ifNoneMatch string) *CodexModelsManifest {
+	manifest = cloneCodexModelsManifest(manifest)
+	if manifest == nil {
+		return nil
+	}
+	if strings.TrimSpace(ifNoneMatch) != "" && strings.TrimSpace(manifest.ETag) == strings.TrimSpace(ifNoneMatch) {
+		manifest.Body = nil
+		manifest.NotModified = true
+	}
+	return manifest
 }
 
 type codexManifestModelEntry struct {
@@ -217,16 +268,46 @@ func resolveCodexManifestProxyURL(account, credAccount *Account) string {
 // Important boundary: this is NOT a strict global "richest entitlement in the
 // entire group" guarantee. Accounts beyond the probe cap are not consulted.
 func (s *OpenAIGatewayService) FetchPreferredCodexModelsManifest(ctx context.Context, groupID *int64, clientVersion, ifNoneMatch string) (*CodexModelsManifest, error) {
+	if cached := s.loadCodexManifestCache(groupID, codexModelsFreshCacheTTL); cached != nil {
+		return applyCodexManifestClientETag(cached, ifNoneMatch), nil
+	}
+
 	budgetCtx, cancel := context.WithTimeout(ctx, codexModelsClientBudget)
 	defer cancel()
 
 	accounts, err := s.listSchedulableAccounts(budgetCtx, groupID, PlatformOpenAI)
 	if err != nil {
+		if cached := s.loadCodexManifestCache(groupID, codexModelsStaleCacheTTL); cached != nil {
+			return applyCodexManifestClientETag(cached, ifNoneMatch), nil
+		}
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_ACCOUNTS_FAILED", "list schedulable openai accounts: %v", err)
 	}
 
 	candidates := sortUniqueCodexManifestAccounts(budgetCtx, s.accountRepo, accounts)
 	if len(candidates) == 0 {
+		// Manifest reads do not consume inference quota. A rate-limited OAuth
+		// account can still serve the catalog, so broaden only this read path to
+		// active group accounts before falling back to a stale cache.
+		var fallbackAccounts []Account
+		if groupID != nil {
+			fallbackAccounts, err = s.accountRepo.ListByGroup(budgetCtx, *groupID)
+		} else {
+			fallbackAccounts, err = s.accountRepo.ListByPlatform(budgetCtx, PlatformOpenAI)
+		}
+		if err == nil {
+			active := fallbackAccounts[:0]
+			for i := range fallbackAccounts {
+				if fallbackAccounts[i].Platform == PlatformOpenAI && fallbackAccounts[i].Status == StatusActive {
+					active = append(active, fallbackAccounts[i])
+				}
+			}
+			candidates = sortUniqueCodexManifestAccounts(budgetCtx, s.accountRepo, active)
+		}
+	}
+	if len(candidates) == 0 {
+		if cached := s.loadCodexManifestCache(groupID, codexModelsStaleCacheTTL); cached != nil {
+			return applyCodexManifestClientETag(cached, ifNoneMatch), nil
+		}
 		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_CODEX_MODELS_ACCOUNT_REQUIRED", "no schedulable OpenAI OAuth accounts for Codex manifest")
 	}
 
@@ -237,16 +318,13 @@ func (s *OpenAIGatewayService) FetchPreferredCodexModelsManifest(ctx context.Con
 		return s.FetchCodexModelsManifest(fetchCtx, account, clientVersion, "")
 	})
 	if err != nil {
+		if cached := s.loadCodexManifestCache(groupID, codexModelsStaleCacheTTL); cached != nil {
+			return applyCodexManifestClientETag(cached, ifNoneMatch), nil
+		}
 		return nil, err
 	}
-
-	if ifNoneMatch = strings.TrimSpace(ifNoneMatch); ifNoneMatch != "" && strings.TrimSpace(manifest.ETag) == ifNoneMatch {
-		return &CodexModelsManifest{
-			ETag:        manifest.ETag,
-			NotModified: true,
-		}, nil
-	}
-	return manifest, nil
+	s.storeCodexManifestCache(groupID, manifest)
+	return applyCodexManifestClientETag(manifest, ifNoneMatch), nil
 }
 
 // FetchCodexModelsManifest fetches the live Codex models manifest from the

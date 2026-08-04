@@ -216,6 +216,14 @@
           </div>
         </div>
 
+        <UserDashboardAvailability
+          :data="availability"
+          :loading="availabilityLoading"
+          :platform="availabilityPlatform"
+          @update:platform="changeAvailabilityPlatform"
+          @refresh="loadAvailability"
+        />
+
         <!-- Quick Actions -->
         <div class="card p-4">
           <div class="mb-3 flex items-center justify-between">
@@ -364,6 +372,8 @@ import Select from '@/components/common/Select.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
+import UserDashboardAvailability from '@/components/user/dashboard/UserDashboardAvailability.vue'
+import type { TrafficAvailability } from '@/api/usage'
 
 import {
   Chart as ChartJS,
@@ -397,6 +407,9 @@ const chartsLoading = ref(false)
 const userTrendLoading = ref(false)
 const rankingLoading = ref(false)
 const rankingError = ref(false)
+const availability = ref<TrafficAvailability | null>(null)
+const availabilityPlatform = ref('')
+const availabilityLoading = ref(false)
 
 // Chart data
 const trendData = ref<TrendDataPoint[]>([])
@@ -741,6 +754,22 @@ const loadDashboardStats = async () => {
   ])
 }
 
+const loadAvailability = async () => {
+  availabilityLoading.value = true
+  try {
+    availability.value = await adminAPI.dashboard.getTrafficAvailability(availabilityPlatform.value)
+  } catch {
+    availability.value = null
+  } finally {
+    availabilityLoading.value = false
+  }
+}
+
+const changeAvailabilityPlatform = (platform: string) => {
+  availabilityPlatform.value = platform
+  void loadAvailability()
+}
+
 const loadChartData = async () => {
   await Promise.all([
     loadDashboardSnapshot(false),
@@ -752,6 +781,7 @@ const loadChartData = async () => {
 onMounted(() => {
   void refreshBatchImageAccess()
   loadDashboardStats()
+  loadAvailability()
 })
 </script>
 

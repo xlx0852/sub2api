@@ -94,7 +94,7 @@ func TestOpsRepositoryGetOpenAITokenStats_TopNMode(t *testing.T) {
 		"avg_duration_ms",
 		"requests_with_first_token",
 	}).
-		AddRow("gpt-4o", int64(5), nil, nil, int64(0), int64(0), int64(0))
+		AddRow("claude-opus-4-6", int64(5), nil, nil, int64(0), int64(0), int64(0))
 
 	mock.ExpectQuery(`ORDER BY request_count DESC, model ASC\s+LIMIT \$3`).
 		WithArgs(start, end, 5).
@@ -108,6 +108,7 @@ func TestOpsRepositoryGetOpenAITokenStats_TopNMode(t *testing.T) {
 	require.Equal(t, 0, resp.Page)
 	require.Equal(t, 0, resp.PageSize)
 	require.Len(t, resp.Items, 1)
+	require.Equal(t, "claude-opus-4-6", resp.Items[0].Model)
 	require.Nil(t, resp.Items[0].AvgTokensPerSec)
 	require.Nil(t, resp.Items[0].AvgFirstTokenMs)
 

@@ -408,16 +408,18 @@
   .modal-overlay {
     @apply fixed inset-0 z-50;
     @apply bg-black/50 backdrop-blur-sm;
-    @apply flex items-center justify-center p-2 sm:p-4;
+    @apply flex items-end justify-center p-0 sm:items-center sm:p-4;
   }
 
   .modal-content {
     @apply w-full;
-    @apply max-h-[95vh] sm:max-h-[90vh];
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px));
+    @apply sm:max-h-[90vh];
     @apply bg-white dark:bg-dark-800;
-    @apply rounded-xl shadow-lg;
-    @apply border border-gray-200 dark:border-dark-700;
+    @apply rounded-t-xl rounded-b-none shadow-lg sm:rounded-xl;
+    @apply border-x-0 border-b-0 border-t border-gray-200 dark:border-dark-700 sm:border;
     @apply flex flex-col;
+    overscroll-behavior: contain;
   }
 
   .modal-header {
@@ -425,6 +427,7 @@
     @apply sm:px-6 sm:py-4;
     @apply flex items-center justify-between;
     @apply flex-shrink-0;
+    padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
   }
 
   .modal-title {
@@ -434,7 +437,8 @@
   .modal-body {
     @apply px-4 py-3;
     @apply sm:px-6 sm:py-4;
-    @apply min-w-0 flex-1 overflow-auto;
+    @apply min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .modal-footer {
@@ -442,6 +446,20 @@
     @apply sm:px-6 sm:py-4;
     @apply flex flex-wrap items-center justify-end gap-2 sm:gap-3;
     @apply flex-shrink-0;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .modal-close-button {
+    @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg sm:h-9 sm:w-9;
+  }
+
+  @media (max-width: 639px) {
+    .modal-footer > button,
+    .modal-footer > a {
+      flex: 1 1 0%;
+      min-width: 0;
+      justify-content: center;
+    }
   }
 
   /* 防止body滚动的工具类 */
@@ -472,7 +490,7 @@
 
   .modal-enter-from .modal-content,
   .modal-leave-to .modal-content {
-    transform: scale(0.95);
+    transform: translateY(24px);
     opacity: 0;
   }
 
@@ -480,6 +498,13 @@
   .modal-leave-from .modal-content {
     transform: scale(1);
     opacity: 1;
+  }
+
+  @media (min-width: 640px) {
+    .modal-enter-from .modal-content,
+    .modal-leave-to .modal-content {
+      transform: scale(0.95);
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {

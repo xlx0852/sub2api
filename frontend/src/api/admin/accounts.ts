@@ -170,6 +170,14 @@ export async function deleteAccount(id: number): Promise<{ message: string }> {
 }
 
 /**
+ * Restore account from trash (soft-deleted or banned)
+ */
+export async function restoreAccount(id: number): Promise<Account> {
+  const { data } = await apiClient.post<Account>(`/admin/accounts/${id}/restore`)
+  return data
+}
+
+/**
  * Toggle account status
  * @param id - Account ID
  * @param status - New status
@@ -857,6 +865,7 @@ export const accountsAPI = {
   update,
   checkMixedChannelRisk,
   delete: deleteAccount,
+  restore: restoreAccount,
   toggleStatus,
   testAccount,
   refreshCredentials,

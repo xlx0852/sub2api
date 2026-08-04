@@ -41,6 +41,7 @@ type Account struct {
 	AutoPauseOnExpired bool
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+	DeletedAt          *time.Time
 
 	Schedulable bool
 
@@ -57,6 +58,9 @@ type Account struct {
 
 	ParentAccountID *int64 // non-nil → 影子账号（不持凭据，透传母账号凭据）
 	QuotaDimension  string // 用量维度："" / "global" / "spark"
+
+	// SubscriptionBanned 成本配置中「结算封号」未撤销（account_subscription_terminations.reversed_at IS NULL）
+	SubscriptionBanned bool
 
 	Proxy         *Proxy
 	AccountGroups []AccountGroup

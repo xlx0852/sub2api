@@ -409,6 +409,8 @@ type OpenAIGatewayService struct {
 	openAITokenProvider   *OpenAITokenProvider
 	grokTokenProvider     *GrokTokenProvider
 	kimiTokenProvider     *KimiTokenProvider
+	kimiQuotaService      KimiQuotaQuerier
+	grokQuotaService      GrokQuotaProber
 	toolCorrector         *CodexToolCorrector
 	openaiWSResolver      OpenAIWSProtocolResolver
 	resolver              *ModelPricingResolver
@@ -437,6 +439,19 @@ type OpenAIGatewayService struct {
 	codexSnapshotThrottle               *accountWriteThrottle
 	openaiCompatSessionResponses        sync.Map
 	openaiCompatAnthropicDigestSessions sync.Map
+	codexManifestCache                  sync.Map // key: int64(groupID), value: codexManifestCacheEntry
+}
+
+func (s *OpenAIGatewayService) SetKimiQuotaService(service KimiQuotaQuerier) {
+	if s != nil {
+		s.kimiQuotaService = service
+	}
+}
+
+func (s *OpenAIGatewayService) SetGrokQuotaService(service GrokQuotaProber) {
+	if s != nil {
+		s.grokQuotaService = service
+	}
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService

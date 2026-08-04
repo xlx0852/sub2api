@@ -2,6 +2,7 @@ package handler
 
 import (
 	"sort"
+	"sync"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -9,6 +10,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
+	"golang.org/x/sync/singleflight"
 )
 
 // AvailableChannelHandler 处理用户侧「可用渠道」查询。
@@ -25,6 +28,11 @@ type AvailableChannelHandler struct {
 	channelService *service.ChannelService
 	apiKeyService  *service.APIKeyService
 	settingService *service.SettingService
+	redisClient    *redis.Client
+
+	publicPricingMu    sync.RWMutex
+	publicPricingCache *publicPricingCacheEntry
+	publicPricingSF    singleflight.Group
 }
 
 // NewAvailableChannelHandler 创建用户侧可用渠道 handler。
@@ -32,11 +40,13 @@ func NewAvailableChannelHandler(
 	channelService *service.ChannelService,
 	apiKeyService *service.APIKeyService,
 	settingService *service.SettingService,
+	redisClient *redis.Client,
 ) *AvailableChannelHandler {
 	return &AvailableChannelHandler{
 		channelService: channelService,
 		apiKeyService:  apiKeyService,
 		settingService: settingService,
+		redisClient:    redisClient,
 	}
 }
 

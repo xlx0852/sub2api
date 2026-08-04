@@ -168,8 +168,11 @@ func NormalizeOpenAICompactRequestBodyForTest(body []byte) ([]byte, bool, error)
 }
 
 func isOpenAIResponsesCompactPath(c *gin.Context) bool {
-	suffix := strings.TrimSpace(openAIResponsesRequestPathSuffix(c))
-	return suffix == "/compact" || strings.HasPrefix(suffix, "/compact/")
+	suffix, err := openAIResponsesRequestPathSuffix(c)
+	if err != nil {
+		return false
+	}
+	return suffix == "/compact"
 }
 
 // isOpenAICompactUpstreamRequest is true when the upstream request should use
@@ -261,39 +264,66 @@ func resolveOpenAICompactSessionID(c *gin.Context) string {
 	return uuid.NewString()
 }
 
-func openAIResponsesRequestPathSuffix(c *gin.Context) string {
+// allowedOpenAIResponsesPathSuffixes is the closed allowlist of client-controlled
+// path fragments that may be appended under /responses when building upstream URLs.
+// Anything else is rejected at the gateway boundary (GHSA-vrxq-qm4h-6hgg).
+var allowedOpenAIResponsesPathSuffixes = map[string]struct{}{
+	"/compact":      {},
+	"/input_tokens": {},
+}
+
+func normalizeOpenAIResponsesPathSuffix(suffix string) (string, error) {
+	trimmed := strings.TrimRight(strings.TrimSpace(suffix), "/")
+	if trimmed == "" || trimmed == "/" {
+		return "", nil
+	}
+	if !strings.HasPrefix(trimmed, "/") {
+		return "", fmt.Errorf("invalid responses path suffix")
+	}
+	// Reject traversal / multi-segment injection early.
+	if strings.Contains(trimmed, "//") || strings.Contains(trimmed, "\\") || strings.Contains(trimmed, "..") {
+		return "", fmt.Errorf("invalid responses path suffix")
+	}
+	if strings.Count(trimmed, "/") != 1 {
+		// Only single-segment suffixes are allowed (e.g. /compact).
+		return "", fmt.Errorf("disallowed responses path suffix: %s", trimmed)
+	}
+	if _, ok := allowedOpenAIResponsesPathSuffixes[trimmed]; !ok {
+		return "", fmt.Errorf("disallowed responses path suffix: %s", trimmed)
+	}
+	return trimmed, nil
+}
+
+func openAIResponsesRequestPathSuffix(c *gin.Context) (string, error) {
 	// Body-signal v2 keeps the client path on /responses but forces upstream /compact.
 	if force := openAICompactForceUpstreamSuffix(c); force != "" {
-		return force
+		return normalizeOpenAIResponsesPathSuffix(force)
 	}
 	if c == nil || c.Request == nil || c.Request.URL == nil {
-		return ""
+		return "", nil
 	}
 	normalizedPath := strings.TrimRight(strings.TrimSpace(c.Request.URL.Path), "/")
 	if normalizedPath == "" {
-		return ""
+		return "", nil
 	}
 	idx := strings.LastIndex(normalizedPath, "/responses")
 	if idx < 0 {
-		return ""
+		return "", nil
 	}
 	suffix := normalizedPath[idx+len("/responses"):]
-	if suffix == "" || suffix == "/" {
-		return ""
-	}
-	if !strings.HasPrefix(suffix, "/") {
-		return ""
-	}
-	return suffix
+	return normalizeOpenAIResponsesPathSuffix(suffix)
 }
 
-func appendOpenAIResponsesRequestPathSuffix(baseURL, suffix string) string {
+func appendOpenAIResponsesRequestPathSuffix(baseURL, suffix string) (string, error) {
 	trimmedBase := strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	trimmedSuffix := strings.TrimSpace(suffix)
-	if trimmedBase == "" || trimmedSuffix == "" {
-		return trimmedBase
+	normalizedSuffix, err := normalizeOpenAIResponsesPathSuffix(suffix)
+	if err != nil {
+		return "", err
 	}
-	return trimmedBase + trimmedSuffix
+	if trimmedBase == "" || normalizedSuffix == "" {
+		return trimmedBase, nil
+	}
+	return trimmedBase + normalizedSuffix, nil
 }
 
 func (s *OpenAIGatewayService) replaceModelInResponseBody(body []byte, fromModel, toModel string) []byte {

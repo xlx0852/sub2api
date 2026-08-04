@@ -424,6 +424,14 @@ func (s *stubAdminService) UpdateAccountExtra(ctx context.Context, id int64, upd
 	return nil
 }
 
+func (s *stubAdminService) RestoreAccount(ctx context.Context, id int64) (*service.Account, error) {
+	panic("unexpected RestoreAccount call")
+}
+
+func (s *stubAdminService) CleanupOAuthEmailDuplicates(ctx context.Context) (kept int, deleted int, err error) {
+	panic("unexpected CleanupOAuthEmailDuplicates call")
+}
+
 func (s *stubAdminService) DeleteAccount(ctx context.Context, id int64) error {
 	return nil
 }

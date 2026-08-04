@@ -812,12 +812,7 @@ const adminNavItems = computed((): NavItem[] => {
       label: t('nav.orderManagement'),
       icon: OrderIcon,
       hideInSimpleMode: true,
-      expandOnly: true,
       featureFlag: flagAdminPayment,
-      children: [
-        { path: '/admin/orders/dashboard', label: t('nav.paymentDashboard'), icon: ChartIcon },
-        { path: '/admin/orders', label: t('nav.orderManagement'), icon: OrderIcon },
-      ],
     },
     { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon }
   ]

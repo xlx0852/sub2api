@@ -14,6 +14,18 @@ type codexModelsTokenCacheStub struct {
 	token string
 }
 
+type codexManifestFallbackRepo struct {
+	stubOpenAIAccountRepo
+}
+
+func (r codexManifestFallbackRepo) ListSchedulableByGroupIDAndPlatform(context.Context, int64, string) ([]Account, error) {
+	return nil, nil
+}
+
+func (r codexManifestFallbackRepo) ListByGroup(context.Context, int64) ([]Account, error) {
+	return append([]Account(nil), r.accounts...), nil
+}
+
 func (s *codexModelsTokenCacheStub) GetAccessToken(context.Context, string) (string, error) {
 	return s.token, nil
 }
@@ -204,6 +216,66 @@ func TestFetchCodexModelsManifestUsesTokenProvider(t *testing.T) {
 	}
 	if gotAuth != "Bearer provider-access-token" {
 		t.Fatalf("authorization header = %q, want provider token", gotAuth)
+	}
+}
+
+func TestFetchPreferredCodexModelsManifestUsesRateLimitedOAuthAndCachesSuccess(t *testing.T) {
+	manifestBody := `{"models":[{"slug":"gpt-5.6-sol"}]}`
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.Header().Set("ETag", `W/"cached"`)
+		_, _ = w.Write([]byte(manifestBody))
+	}))
+	defer server.Close()
+
+	original := chatgptCodexModelsURL
+	chatgptCodexModelsURL = server.URL
+	defer func() { chatgptCodexModelsURL = original }()
+
+	account := *newCodexModelsTestAccount()
+	account.Status = StatusActive
+	account.Schedulable = true
+	rateLimitResetAt := time.Now().Add(time.Hour)
+	account.RateLimitResetAt = &rateLimitResetAt
+	repo := codexManifestFallbackRepo{stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}}}
+	service := &OpenAIGatewayService{accountRepo: repo}
+	groupID := int64(4)
+
+	first, err := service.FetchPreferredCodexModelsManifest(context.Background(), &groupID, "0.137.0", "")
+	if err != nil {
+		t.Fatalf("first manifest fetch returned error: %v", err)
+	}
+	if string(first.Body) != manifestBody {
+		t.Fatalf("first manifest body = %s", string(first.Body))
+	}
+
+	second, err := service.FetchPreferredCodexModelsManifest(context.Background(), &groupID, "0.137.0", `W/"cached"`)
+	if err != nil {
+		t.Fatalf("cached manifest fetch returned error: %v", err)
+	}
+	if !second.NotModified {
+		t.Fatal("expected cached manifest to honor If-None-Match")
+	}
+	if requests.Load() != 1 {
+		t.Fatalf("upstream requests = %d, want 1", requests.Load())
+	}
+}
+
+func TestFetchPreferredCodexModelsManifestFallsBackToStaleCache(t *testing.T) {
+	groupID := int64(4)
+	service := &OpenAIGatewayService{accountRepo: codexManifestFallbackRepo{}}
+	service.codexManifestCache.Store(groupID, codexManifestCacheEntry{
+		Manifest: CodexModelsManifest{Body: []byte(`{"models":[{"slug":"gpt-5.6-sol"}]}`), ETag: `W/"stale"`},
+		StoredAt: time.Now().Add(-codexModelsFreshCacheTTL - time.Minute),
+	})
+
+	manifest, err := service.FetchPreferredCodexModelsManifest(context.Background(), &groupID, "0.137.0", "")
+	if err != nil {
+		t.Fatalf("stale cache fallback returned error: %v", err)
+	}
+	if !strings.Contains(string(manifest.Body), "gpt-5.6-sol") {
+		t.Fatalf("unexpected stale manifest body: %s", string(manifest.Body))
 	}
 }
 
