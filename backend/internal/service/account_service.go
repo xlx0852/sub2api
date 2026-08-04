@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,13 +11,22 @@ import (
 )
 
 var (
-	ErrAccountNotFound      = infraerrors.NotFound("ACCOUNT_NOT_FOUND", "account not found")
-	ErrAccountNilInput      = infraerrors.BadRequest("ACCOUNT_NIL_INPUT", "account input cannot be nil")
-	ErrAccountNotInFallback = infraerrors.BadRequest("ACCOUNT_NOT_IN_FALLBACK", "account is not in proxy fallback state")
+	ErrAccountNotFound         = infraerrors.NotFound("ACCOUNT_NOT_FOUND", "account not found")
+	ErrAccountNilInput         = infraerrors.BadRequest("ACCOUNT_NIL_INPUT", "account input cannot be nil")
+	ErrAccountNotInFallback    = infraerrors.BadRequest("ACCOUNT_NOT_IN_FALLBACK", "account is not in proxy fallback state")
+	// ErrAccountNotSchedulable 表示账号处于 error/disabled 等不可打开调度的状态。
+	ErrAccountNotSchedulable = errors.New("account cannot be enabled for scheduling in current status")
 )
 
 const AccountListGroupUngrouped int64 = -1
 const AccountPrivacyModeUnsetFilter = "__unset__"
+
+// 账号列表特殊 status 过滤值（前端回收站）
+const (
+	AccountListStatusTrash   = "trash"
+	AccountListStatusDeleted = "deleted"
+	AccountListStatusBanned  = "banned"
+)
 
 type AccountRepository interface {
 	Create(ctx context.Context, account *Account) error
@@ -31,11 +41,23 @@ type AccountRepository interface {
 	GetByCRSAccountID(ctx context.Context, crsAccountID string) (*Account, error)
 	// FindByExtraField 根据 extra 字段中的键值对查找账号
 	FindByExtraField(ctx context.Context, key string, value any) ([]Account, error)
+	// FindOAuthByPlatformEmail 按平台 + 邮箱查找 OAuth/setup-token 账号。
+	// includeDeleted=true 时包含软删除记录，用于同邮箱合并时恢复最近登录账号。
+	FindOAuthByPlatformEmail(ctx context.Context, platform, email string, includeDeleted bool) ([]Account, error)
+	// ListOAuthIncludingDeleted 返回全部 OAuth/setup-token 母账号（含软删除、error/封禁）。
+	ListOAuthIncludingDeleted(ctx context.Context) ([]Account, error)
 	// ListCRSAccountIDs returns a map of crs_account_id -> local account ID
 	// for all accounts that have been synced from CRS.
 	ListCRSAccountIDs(ctx context.Context) (map[string]int64, error)
 	Update(ctx context.Context, account *Account) error
 	Delete(ctx context.Context, id int64) error
+	// HardDelete 真正删除账号（含已软删除），用于回收站去重清理。
+	// 调用前应先 ReassignAccountReferences，避免 usage 等外键数据丢失。
+	HardDelete(ctx context.Context, id int64) error
+	// ReassignAccountReferences 将 fromID 上的业务引用迁移到 toID（usage/cost/logs 等）。
+	ReassignAccountReferences(ctx context.Context, fromID, toID int64) error
+	// Restore 恢复软删除账号，并清除 error/封禁运行态。
+	Restore(ctx context.Context, id int64) error
 
 	List(ctx context.Context, params pagination.PaginationParams) ([]Account, *pagination.PaginationResult, error)
 	ListWithFilters(ctx context.Context, params pagination.PaginationParams, platform, accountType, status, search string, groupID int64, privacyMode string) ([]Account, *pagination.PaginationResult, error)
@@ -52,6 +74,8 @@ type AccountRepository interface {
 	SetError(ctx context.Context, id int64, errorMsg string) error
 	ClearError(ctx context.Context, id int64) error
 	SetSchedulable(ctx context.Context, id int64, schedulable bool) error
+	// SetExpiresAt 更新账号调度过期时间；expiresAt 为 nil 时清空。
+	SetExpiresAt(ctx context.Context, id int64, expiresAt *time.Time) error
 	AutoPauseExpiredAccounts(ctx context.Context, now time.Time) (int64, error)
 	BindGroups(ctx context.Context, accountID int64, groupIDs []int64) error
 

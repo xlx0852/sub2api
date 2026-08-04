@@ -12,6 +12,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type kimi429QuotaQuerier struct{ calls chan int64 }
+
+func (q *kimi429QuotaQuerier) QueryUsage(_ context.Context, accountID int64) (*KimiQuotaUsage, error) {
+	q.calls <- accountID
+	return &KimiQuotaUsage{}, nil
+}
+
+func TestKimi429TriggersOfficialQuotaRefresh(t *testing.T) {
+	querier := &kimi429QuotaQuerier{calls: make(chan int64, 1)}
+	svc := &OpenAIGatewayService{kimiQuotaService: querier}
+	account := &Account{ID: 105, Platform: PlatformKimi, Type: AccountTypeOAuth}
+
+	require.False(t, svc.handleOpenAIAccountUpstreamError(context.Background(), account, http.StatusTooManyRequests, http.Header{}, nil))
+	select {
+	case accountID := <-querier.calls:
+		require.EqualValues(t, 105, accountID)
+	case <-time.After(time.Second):
+		t.Fatal("Kimi quota refresh was not triggered")
+	}
+}
+
 func TestOpenAI429FastPath_MarksOAuthAccountCoolingDown(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	account := &Account{ID: 42, Platform: PlatformOpenAI, Type: AccountTypeOAuth}

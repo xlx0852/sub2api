@@ -139,6 +139,12 @@ export default {
         configTomlHint: 'Make sure the following content is at the beginning of the config.toml file',
         note: 'Make sure the config directory exists. macOS/Linux users can run mkdir -p ~/.codex to create it.',
         noteWindows: 'Press Win+R and enter %userprofile%\\.codex to open the config directory. Create it manually if it does not exist.',
+        authModeTitle: 'Codex Auth Mode',
+        authModeHint: 'Legacy mode keeps the classic Codex config; API Key Mode authorizes the client-side image executor.',
+        authModeLegacy: 'Legacy',
+        authModeApiKey: 'API Key Mode',
+        authModeApiKeyWarn:
+          'After saving, fully quit and restart Codex Desktop or CLI, then start a new task so the client reloads the tool connection table.',
       },
       grok: {
         description:
@@ -148,8 +154,23 @@ export default {
         note: 'Make sure the config directory exists. macOS/Linux users can run mkdir -p ~/.codex to create it. Put this site API key in auth.json as OPENAI_API_KEY.',
         noteWindows:
           'Press Win+R and enter %userprofile%\\.codex to open the config directory. Create it manually if it does not exist. Put this site API key in auth.json as OPENAI_API_KEY.',
+        cliDescription:
+          'Configure Grok Build, Claude Code, Codex, or OpenCode so requests go through this Sub2API Grok group.',
+        cliConfigHint:
+          'If config.toml already exists, back it up and merge this model block. Then run grok inspect to verify.',
+        cliNote:
+          'Save as ~/.grok/config.toml, run grok inspect, then pick grok in /model.',
+        cliNoteWindows:
+          'Save as %userprofile%\\.grok\\config.toml, run grok inspect, then pick grok in /model.',
+        claudeDescription:
+          'Configure Claude Code so Messages API requests go through this Sub2API Grok group.',
+        claudeSettingsHint:
+          'User-level persistent config. This file contains the API key — do not commit it to a project repo.',
+        claudeNote:
+          'Use either option: terminal exports apply to the current session; settings.json is a persistent user-level config.',
       },
       cliTabs: {
+        grokCli: 'Grok CLI',
         claudeCode: 'Claude Code',
         geminiCli: 'Gemini CLI',
         codexCli: 'Codex CLI',
@@ -300,7 +321,7 @@ export default {
     latencyFirstToken: 'First',
     latencyTotal: 'Total',
     outputRate: 'Rate',
-    outputRateHint: 'Output token rate = output_tokens / total duration',
+    outputRateHint: 'Output token rate = output_tokens / (total duration - first token latency), generation phase only',
     firstToken: 'First Token',
     duration: 'Duration',
     time: 'Time',
@@ -429,6 +450,17 @@ export default {
 
   // Channel Status (user-facing read-only view)
   channelStatus: {
+    availabilityTitle: 'Service availability',
+    availabilitySubtitle: 'Recent channel success rates and response speed',
+    viewAll: 'View details',
+    successRate: 'Success',
+    avgLatency: 'Latency',
+    samples: 'Samples',
+    healthy: 'Healthy',
+    degraded: 'Minor disruption',
+    attention: 'Needs attention',
+    noSamples: 'No samples',
+    allPlatforms: 'All',
     title: 'Channel Status',
     description: 'Inspect channel availability, latency and recent status',
     searchPlaceholder: 'Search channels...',
@@ -482,6 +514,15 @@ export default {
     public: 'Public',
     exclusiveTooltip: 'Exclusive groups granted to you by an admin',
     publicTooltip: 'Groups open to all users',
+    publicPricing: {
+      kicker: 'Public pricing catalog',
+      title: 'Model Pricing',
+      description: 'Browse current public models and prices without signing in',
+      searchPlaceholder: 'Search models or platforms...',
+      updatedAt: 'Price snapshot updated {time}',
+      publicRate: 'Public price',
+      loadFailed: 'The pricing catalog is temporarily unavailable. Please try again later.'
+    },
     stats: {
       models: 'Models',
       platforms: 'Platforms',
@@ -509,7 +550,7 @@ export default {
       model: 'Model',
       provider: 'Provider',
       billingMode: 'Billing',
-      discount: 'Discount',
+      discount: 'Save',
       channels: 'Channels'
     },
     pricing: {
@@ -522,10 +563,12 @@ export default {
       cacheWritePrice: 'Cache Write',
       cacheReadPrice: 'Cache Read',
       imageOutputPrice: 'Image Output',
+      videoOutputPrice: 'Video Output',
       perRequestPrice: 'Per Request',
       intervals: 'Tiered Pricing',
       unitPerMillion: '/ 1M tokens',
-      unitPerRequest: '/ request'
+      unitPerRequest: '/ request',
+      unitPerSecond: '/ second'
     }
   },
 

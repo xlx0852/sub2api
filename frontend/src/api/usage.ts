@@ -55,6 +55,28 @@ export interface UserDashboardStats {
   by_platform?: PlatformDashboardStats[]
 }
 
+export interface TrafficAvailabilityBucket {
+  start_at: string
+  success_count: number
+  failure_count: number
+  sample_count: number
+  success_rate: number | null
+  average_latency_ms: number | null
+  status: 'healthy' | 'degraded' | 'attention' | 'no_traffic'
+}
+
+export interface TrafficAvailability {
+  start_at: string
+  end_at: string
+  bucket_minutes: number
+  success_count: number
+  failure_count: number
+  sample_count: number
+  success_rate: number | null
+  average_latency_ms: number | null
+  buckets: TrafficAvailabilityBucket[]
+}
+
 export interface TrendParams {
   start_date?: string
   end_date?: string
@@ -261,6 +283,11 @@ export async function getDashboardStats(): Promise<UserDashboardStats> {
   return data
 }
 
+export async function getDashboardAvailability(platform = ''): Promise<TrafficAvailability> {
+  const { data } = await apiClient.get<TrafficAvailability>('/usage/dashboard/availability', { params: platform ? { platform } : undefined })
+  return data
+}
+
 /**
  * Get user usage trend data
  * @param params - Query parameters for filtering
@@ -377,6 +404,7 @@ export const usageAPI = {
   getById,
   // Dashboard
   getDashboardStats,
+  getDashboardAvailability,
   getDashboardTrend,
   getDashboardModels,
   getMyApiKeyDailyUsage,

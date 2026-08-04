@@ -1,32 +1,32 @@
 <template>
   <AppLayout>
-    <TablePageLayout>
+    <TablePageLayout compact transparent>
       <template #filters>
-        <div class="space-y-4">
+        <div class="space-y-3">
           <!-- Header stats -->
-          <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div class="rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-dark-700 dark:bg-dark-800">
+          <div class="grid grid-cols-2 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800 sm:grid-cols-4">
+            <div class="border-b border-r border-gray-100 px-4 py-3 dark:border-dark-700 sm:border-b-0">
               <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('availableChannels.stats.models') }}</div>
               <div class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ stats.models }}</div>
             </div>
-            <div class="rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-dark-700 dark:bg-dark-800">
+            <div class="border-b border-gray-100 px-4 py-3 dark:border-dark-700 sm:border-b-0 sm:border-r">
               <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('availableChannels.stats.platforms') }}</div>
               <div class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ stats.platforms }}</div>
             </div>
-            <div class="rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-dark-700 dark:bg-dark-800">
+            <div class="border-r border-gray-100 px-4 py-3 dark:border-dark-700">
               <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('availableChannels.stats.channels') }}</div>
               <div class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ stats.channels }}</div>
             </div>
-            <div class="rounded-xl border border-gray-200 bg-white px-4 py-3 dark:border-dark-700 dark:bg-dark-800">
+            <div class="px-4 py-3">
               <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('availableChannels.stats.groups') }}</div>
               <div class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ stats.groups }}</div>
             </div>
           </div>
 
           <!-- Filters -->
-          <div class="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
+          <div class="flex flex-col justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3 dark:border-dark-700 dark:bg-dark-800 lg:flex-row lg:items-center">
             <div class="flex flex-1 flex-wrap items-center gap-3">
-              <div class="relative w-full sm:w-80">
+              <div class="relative w-full sm:w-72 lg:w-80">
                 <Icon
                   name="search"
                   size="md"
@@ -36,7 +36,7 @@
                   v-model="searchQuery"
                   type="text"
                   :placeholder="t('availableChannels.searchPlaceholder')"
-                  class="input pl-10"
+                  class="input h-10 pl-10"
                 />
               </div>
 
@@ -60,14 +60,14 @@
             </div>
 
             <div class="flex w-full flex-shrink-0 flex-wrap items-center justify-end gap-3 lg:w-auto">
-              <select v-model="selectedChannel" class="input w-full sm:w-48">
+              <select v-model="selectedChannel" class="input h-10 w-full sm:w-48">
                 <option value="">{{ t('availableChannels.filters.allChannels') }}</option>
                 <option v-for="ch in channelOptions" :key="ch" :value="ch">{{ ch }}</option>
               </select>
               <button
                 @click="loadData"
                 :disabled="loading"
-                class="btn btn-secondary"
+                class="btn btn-secondary h-10 w-10 p-0"
                 :title="t('common.refresh', 'Refresh')"
               >
                 <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />

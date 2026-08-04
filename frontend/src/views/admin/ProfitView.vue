@@ -1,8 +1,8 @@
 <template>
   <AppLayout>
-    <TablePageLayout transparent>
+    <TablePageLayout transparent compact>
       <template #filters>
-        <div class="space-y-3">
+        <div class="flex flex-wrap items-center gap-3">
           <div class="flex items-center gap-2">
             <div class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
               <button
@@ -33,55 +33,54 @@
             </HelpTooltip>
           </div>
 
-          <div v-if="activeView === 'review'" class="flex flex-wrap items-center gap-3">
-          <div class="flex flex-wrap items-center gap-2">
-            <button
-              v-for="preset in presets"
-              :key="preset.key"
-              class="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
-              :class="activePreset === preset.key
-                ? 'bg-primary-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-dark-700 dark:text-dark-200 dark:hover:bg-dark-600'"
-              @click="applyPreset(preset.key)"
-            >
-              {{ preset.label }}
-            </button>
-          </div>
-          <div class="flex items-center gap-2">
-            <input v-model="startDate" type="date" class="input-sm" @change="loadAll()" />
-            <span class="text-gray-400">-</span>
-            <input v-model="endDate" type="date" class="input-sm" @change="loadAll()" />
-          </div>
-          <div class="ml-auto flex flex-wrap items-center justify-end gap-2 text-xs text-gray-400 dark:text-dark-400">
-            <span v-if="snapshotGeneratedAt" data-testid="profit-snapshot-time">
-              {{ t('admin.profit.snapshotGeneratedAt', { time: snapshotTimeLabel }) }}
-            </span>
-            <button
-              data-testid="profit-refresh"
-              type="button"
-              class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-600 dark:bg-dark-700 dark:text-dark-200 dark:hover:bg-dark-600"
-              :disabled="loading"
-              :title="t('admin.profit.refreshSnapshot')"
-              @click="loadAll(true)"
-            >
-              <Icon name="refresh" size="xs" :class="loading ? 'animate-spin' : ''" />
-              <span>{{ t('admin.profit.refreshSnapshot') }}</span>
-            </button>
-            <span
-              class="inline-flex items-center"
-              :title="t('admin.profit.globalOnlyHint')"
-              :aria-label="t('admin.profit.globalOnlyHint')"
-            >
-              <Icon name="infoCircle" size="xs" />
-            </span>
-          </div>
+          <div v-if="activeView === 'review'" class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                v-for="preset in presets"
+                :key="preset.key"
+                class="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
+                :class="activePreset === preset.key
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-dark-700 dark:text-dark-200 dark:hover:bg-dark-600'"
+                @click="applyPreset(preset.key)"
+              >
+                {{ preset.label }}
+              </button>
+            </div>
+            <div class="flex items-center gap-2">
+              <input v-model="startDate" type="date" class="input-sm" @change="loadAll()" />
+              <span class="text-gray-400">-</span>
+              <input v-model="endDate" type="date" class="input-sm" @change="loadAll()" />
+            </div>
+            <div class="flex flex-wrap items-center justify-end gap-2 text-xs text-gray-400 dark:text-dark-400">
+              <button
+                data-testid="profit-refresh"
+                type="button"
+                class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-600 dark:bg-dark-700 dark:text-dark-200 dark:hover:bg-dark-600"
+                :disabled="loading"
+                :title="snapshotGeneratedAt ? t('admin.profit.snapshotGeneratedAt', { time: snapshotTimeLabel }) : t('admin.profit.refreshSnapshot')"
+                @click="loadAll(true)"
+              >
+                <Icon name="refresh" size="xs" :class="loading ? 'animate-spin' : ''" />
+                <span data-testid="profit-snapshot-time">
+                  {{ snapshotGeneratedAt ? snapshotTimeLabel : t('admin.profit.refreshSnapshot') }}
+                </span>
+              </button>
+              <span
+                class="inline-flex items-center"
+                :title="t('admin.profit.globalOnlyHint')"
+                :aria-label="t('admin.profit.globalOnlyHint')"
+              >
+                <Icon name="infoCircle" size="xs" />
+              </span>
+            </div>
           </div>
         </div>
       </template>
 
       <template #table>
         <SupplyForecastPanel v-if="activeView === 'forecast'" />
-        <div v-else class="flex min-h-full flex-col space-y-5">
+        <div v-else class="flex flex-col space-y-5">
           <section class="grid grid-cols-1 gap-4 sm:grid-cols-3" :class="loading ? 'opacity-60' : ''">
             <div class="rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-700 dark:bg-dark-800">
               <div class="text-sm text-gray-500 dark:text-dark-400">{{ t('admin.profit.totalRevenue') }}</div>
@@ -113,7 +112,9 @@
             </div>
           </section>
 
-          <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800">
+          <QuotaWindowPanel :accounts="accountRows" />
+
+          <section class="rounded-xl border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-800">
             <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-dark-700">
               <div>
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.profit.accountDetails') }}</h3>
@@ -122,13 +123,13 @@
               <div class="flex flex-wrap items-center gap-2 text-xs font-medium">
                 <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">{{ t('admin.profit.profitableAccounts', { count: profitableCount }) }}</span>
                 <span v-if="lossCount" class="rounded-full bg-red-50 px-2.5 py-1 text-red-700 dark:bg-red-950/40 dark:text-red-300">{{ t('admin.profit.lossAccounts', { count: lossCount }) }}</span>
-                <span class="rounded-full bg-gray-100 px-2.5 py-1 text-gray-600 dark:bg-dark-700 dark:text-dark-300">{{ t('admin.profit.accountCount', { count: accountRows.length }) }}</span>
+                <span class="rounded-full bg-gray-100 px-2.5 py-1 text-gray-600 dark:bg-dark-700 dark:text-dark-300">{{ t('admin.profit.accountCount', { count: visibleAccountRows.length }) }}</span>
               </div>
             </div>
 
-            <div v-if="accountRows.length" class="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto dark:divide-dark-700">
+            <div v-if="visibleAccountRows.length" class="divide-y divide-gray-100 dark:divide-dark-700">
               <article
-                v-for="account in accountRows"
+                v-for="account in visibleAccountRows"
                 :key="account.account_id"
                 data-testid="account-profit-item"
                 class="grid gap-4 px-4 py-4 transition-colors hover:bg-gray-50/70 sm:px-5 md:grid-cols-[minmax(180px,0.9fr)_minmax(300px,1.8fr)_minmax(110px,0.55fr)] md:items-center dark:hover:bg-dark-700/40"
@@ -138,6 +139,12 @@
                     <div class="truncate font-semibold text-gray-900 dark:text-white">{{ account.account_name }}</div>
                     <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium" :class="account.cost_type === 'subscription' ? 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300' : 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300'">
                       {{ account.cost_type === 'subscription' ? t('admin.profit.subscription') : t('admin.profit.metered') }}
+                    </span>
+                    <span
+                      v-if="account.deleted"
+                      class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-600 dark:bg-dark-600 dark:text-dark-200"
+                    >
+                      {{ t('admin.profit.deletedAccount') }}
                     </span>
                   </div>
                   <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-400">
@@ -198,6 +205,7 @@ import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Icon from '@/components/icons/Icon.vue'
 import SupplyForecastPanel from '@/components/admin/profit/SupplyForecastPanel.vue'
+import QuotaWindowPanel from '@/components/admin/profit/QuotaWindowPanel.vue'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -221,6 +229,7 @@ const data = ref<ProfitSummaryResponse | null>(null)
 const trendPoints = ref<ProfitTrendPoint[]>([])
 const snapshotGeneratedAt = ref('')
 const accountRows = computed(() => [...(data.value?.accounts || [])].sort((a, b) => b.profit - a.profit))
+const visibleAccountRows = computed(() => accountRows.value.filter((account) => account.revenue !== 0 || account.cost !== 0))
 const profitableCount = computed(() => accountRows.value.filter((account) => account.profit > 0).length)
 const lossCount = computed(() => accountRows.value.filter((account) => account.profit < 0).length)
 

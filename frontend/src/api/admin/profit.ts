@@ -82,6 +82,18 @@ export interface SubscriptionCycleListResponse {
   cycles: AccountSubscriptionCycle[]
   subscription_expires_at?: string
   oauth_token_expires_at?: string
+  account_expires_at?: string | null
+}
+
+export interface ProfitQuotaWindow {
+  id: string
+  label: string
+  kind: '5h' | '7d' | '24h' | 'session' | 'other' | string
+  used_percent?: number
+  start_at?: string
+  end_at?: string
+  window_minutes?: number
+  recurring_until_at?: string
 }
 
 export interface AccountProfitSummary {
@@ -91,6 +103,7 @@ export interface AccountProfitSummary {
   account_type: string
   cost_type: 'subscription' | 'metered'
   configured: boolean
+  deleted?: boolean
   requests: number
   revenue: number
   cost: number
@@ -98,6 +111,7 @@ export interface AccountProfitSummary {
   margin: number
   five_hour_utilization?: number
   seven_day_utilization?: number
+  quota_windows?: ProfitQuotaWindow[]
   window_efficiency?: number
   window_baseline_source?: string
   billing_window_start?: string

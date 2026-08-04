@@ -73,6 +73,10 @@ type openAIAccountTestRepo struct {
 	setErrorMsg        string
 }
 
+func (r *openAIAccountTestRepo) Restore(ctx context.Context, id int64) error {
+	return nil
+}
+
 func (r *openAIAccountTestRepo) UpdateExtra(_ context.Context, _ int64, updates map[string]any) error {
 	r.updatedExtra = updates
 	return nil

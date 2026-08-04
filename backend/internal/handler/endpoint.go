@@ -180,7 +180,7 @@ func DeriveUpstreamEndpoint(inbound, rawRequestPath, platform string) string {
 		}
 		// OpenAI forwards everything to the Responses API.
 		// Preserve subresource suffix (e.g. /v1/responses/compact,
-		// /v1/responses/compact/detail) as derived from the raw path.
+		// /v1/responses/input_tokens) when present on the closed allowlist.
 		if suffix := responsesSubpathSuffix(rawRequestPath); suffix != "" {
 			return EndpointResponses + suffix
 		}
@@ -219,9 +219,16 @@ func DeriveUpstreamEndpoint(inbound, rawRequestPath, platform string) string {
 	return inbound
 }
 
+// allowedResponsesPathSuffixes is the closed allowlist of /responses subpaths
+// that may be forwarded upstream (GHSA-vrxq-qm4h-6hgg).
+var allowedResponsesPathSuffixes = map[string]struct{}{
+	"/compact":      {},
+	"/input_tokens": {},
+}
+
 // responsesSubpathSuffix extracts the part after "/responses" in a raw
 // request path, e.g. "/openai/v1/responses/compact" → "/compact".
-// Returns "" when there is no meaningful suffix.
+// Only closed-set suffixes are returned; unknown fragments yield "".
 func responsesSubpathSuffix(rawPath string) string {
 	trimmed := strings.TrimRight(strings.TrimSpace(rawPath), "/")
 	idx := strings.LastIndex(trimmed, "/responses")
@@ -229,10 +236,20 @@ func responsesSubpathSuffix(rawPath string) string {
 		return ""
 	}
 	suffix := trimmed[idx+len("/responses"):]
+	suffix = strings.TrimRight(strings.TrimSpace(suffix), "/")
 	if suffix == "" || suffix == "/" {
 		return ""
 	}
 	if !strings.HasPrefix(suffix, "/") {
+		return ""
+	}
+	if strings.Contains(suffix, "//") || strings.Contains(suffix, "\\") || strings.Contains(suffix, "..") {
+		return ""
+	}
+	if strings.Count(suffix, "/") != 1 {
+		return ""
+	}
+	if _, ok := allowedResponsesPathSuffixes[suffix]; !ok {
 		return ""
 	}
 	return suffix

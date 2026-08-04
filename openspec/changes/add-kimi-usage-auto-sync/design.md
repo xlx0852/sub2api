@@ -15,8 +15,9 @@ one weekly detail and a list of rolling windows, including a 300-minute window.
 - Store the result in an in-memory `UsageCache` with a 10-minute success TTL,
   one-minute negative TTL, and singleflight per account. The cache is process
   local just like the existing OpenAI probe throttle.
-- Do not persist Kimi quota snapshots in account credentials or `Extra`; quota
-  responses are refreshed and served through the existing usage endpoint.
+- Persist only normalized Kimi utilization/reset metadata in `Extra`; never
+  persist raw quota responses. Full windows set a temporary scheduling block
+  ending at the latest official reset, so expiry restores scheduling naturally.
 
 ## Error handling
 

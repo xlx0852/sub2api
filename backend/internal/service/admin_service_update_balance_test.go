@@ -50,6 +50,17 @@ type authCacheInvalidatorStub struct {
 	keys     []string
 }
 
+type balanceAffiliateStub struct {
+	userID int64
+	amount float64
+}
+
+func (s *balanceAffiliateStub) AccrueInviteRebate(_ context.Context, userID int64, amount float64) (float64, error) {
+	s.userID = userID
+	s.amount = amount
+	return amount * 0.2, nil
+}
+
 func (s *authCacheInvalidatorStub) InvalidateAuthCacheByKey(ctx context.Context, key string) {
 	s.keys = append(s.keys, key)
 }
@@ -94,4 +105,30 @@ func TestAdminService_UpdateUserBalance_NoChangeNoInvalidate(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, invalidator.userIDs)
 	require.Empty(t, redeemRepo.created)
+}
+
+func TestAdminService_UpdateUserBalance_AccruesRebateOnlyForPositiveDelta(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		balance   float64
+		operation string
+		want      float64
+	}{
+		{name: "add", balance: 5, operation: "add", want: 5},
+		{name: "set increase", balance: 15, operation: "set", want: 5},
+		{name: "subtract", balance: 5, operation: "subtract", want: 0},
+		{name: "set decrease", balance: 5, operation: "set", want: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			baseRepo := &userRepoStub{user: &User{ID: 7, Balance: 10}}
+			repo := &balanceUserRepoStub{userRepoStub: baseRepo}
+			redeemRepo := &balanceRedeemRepoStub{redeemRepoStub: &redeemRepoStub{}}
+			affiliate := &balanceAffiliateStub{}
+			svc := &adminServiceImpl{userRepo: repo, redeemCodeRepo: redeemRepo, affiliateService: affiliate}
+
+			_, err := svc.UpdateUserBalance(context.Background(), 7, tc.balance, tc.operation, "")
+			require.NoError(t, err)
+			require.InDelta(t, tc.want, affiliate.amount, 1e-9)
+		})
+	}
 }

@@ -154,15 +154,15 @@ export default {
         custom: 'Custom'
       },
       openaiTokenStats: {
-        title: 'OpenAI Token Request Stats',
+        title: 'All-platform Model Request Performance',
         viewModeTopN: 'TopN',
         viewModePagination: 'Pagination',
         prevPage: 'Previous',
         nextPage: 'Next',
         pageInfo: 'Page {page}/{total}',
         totalModels: 'Total models: {total}',
-        failedToLoad: 'Failed to load OpenAI token stats',
-        empty: 'No OpenAI token stats for the current filters',
+        failedToLoad: 'Failed to load model request performance stats',
+        empty: 'No model request performance data for the current filters',
         table: {
           model: 'Model',
           requestCount: 'Requests',
@@ -740,8 +740,8 @@ export default {
         dashboardCards: 'Dashboard Cards',
         displayAlertEvents: 'Display alert events',
         displayAlertEventsHint: 'Show or hide the recent alert events card on the ops dashboard. Enabled by default.',
-        displayOpenAITokenStats: 'Display OpenAI token request stats',
-        displayOpenAITokenStatsHint: 'Show or hide the OpenAI token request stats card on the ops dashboard. Hidden by default.',
+        displayOpenAITokenStats: 'Display all-platform model request performance',
+        displayOpenAITokenStatsHint: 'Show or hide the all-platform model request performance card on the ops dashboard. Hidden by default.',
         autoRefreshCountdown: 'Auto refresh: {seconds}s',
         validation: {
           title: 'Please fix the following issues',

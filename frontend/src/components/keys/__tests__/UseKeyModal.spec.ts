@@ -47,6 +47,85 @@ describe('UseKeyModal', () => {
     expect(configToml).not.toContain('model_context_window')
     expect(configToml).not.toContain('model_auto_compact_token_limit')
     expect(configToml).toContain('[features]\ngoals = true')
+    expect(configToml).toContain('requires_openai_auth = true')
+    expect(configToml).not.toContain('local-image-extension')
+  })
+
+  it('switches OpenAI Codex config to API Key Mode', async () => {
+    const wrapper = mount(UseKeyModal, {
+      props: {
+        show: true,
+        apiKey: 'sk-test',
+        baseUrl: 'https://example.com/v1',
+        platform: 'openai'
+      },
+      global: {
+        stubs: {
+          BaseDialog: {
+            template: '<div><slot /><slot name="footer" /></div>'
+          },
+          Icon: {
+            template: '<span />'
+          }
+        }
+      }
+    })
+
+    const apiKeyModeBtn = wrapper.findAll('button').find((button) =>
+      button.text().includes('keys.useKeyModal.openai.authModeApiKey')
+    )
+    expect(apiKeyModeBtn).toBeDefined()
+    await apiKeyModeBtn!.trigger('click')
+    await nextTick()
+
+    const codeBlocks = wrapper.findAll('pre code').map((code) => code.text())
+    const configToml = codeBlocks.find((content) => content.includes('model_provider = "OpenAI"'))
+    expect(configToml).toBeDefined()
+    expect(configToml).toContain('requires_openai_auth = false')
+    expect(configToml).toContain('http_headers = { "x-openai-actor-authorization" = "local-image-extension" }')
+    expect(configToml).not.toContain('supports_websockets = true')
+  })
+
+  it('applies API Key Mode headers in OpenAI Codex WebSocket config', async () => {
+    const wrapper = mount(UseKeyModal, {
+      props: {
+        show: true,
+        apiKey: 'sk-test',
+        baseUrl: 'https://example.com/v1',
+        platform: 'openai'
+      },
+      global: {
+        stubs: {
+          BaseDialog: {
+            template: '<div><slot /><slot name="footer" /></div>'
+          },
+          Icon: {
+            template: '<span />'
+          }
+        }
+      }
+    })
+
+    const wsTab = wrapper.findAll('button').find((button) =>
+      button.text().includes('keys.useKeyModal.cliTabs.codexCliWs')
+    )
+    expect(wsTab).toBeDefined()
+    await wsTab!.trigger('click')
+    await nextTick()
+
+    const apiKeyModeBtn = wrapper.findAll('button').find((button) =>
+      button.text().includes('keys.useKeyModal.openai.authModeApiKey')
+    )
+    expect(apiKeyModeBtn).toBeDefined()
+    await apiKeyModeBtn!.trigger('click')
+    await nextTick()
+
+    const codeBlocks = wrapper.findAll('pre code').map((code) => code.text())
+    const configToml = codeBlocks.find((content) => content.includes('supports_websockets = true'))
+    expect(configToml).toBeDefined()
+    expect(configToml).toContain('requires_openai_auth = false')
+    expect(configToml).toContain('local-image-extension')
+    expect(configToml).toContain('responses_websockets_v2 = true')
   })
 
   it('renders GPT-5.5 and goals feature in OpenAI Codex WebSocket config', async () => {
@@ -87,9 +166,11 @@ describe('UseKeyModal', () => {
     expect(configToml).not.toContain('model_context_window')
     expect(configToml).not.toContain('model_auto_compact_token_limit')
     expect(configToml).toContain('[features]\nresponses_websockets_v2 = true\ngoals = true')
+    expect(configToml).toContain('requires_openai_auth = true')
+    expect(configToml).not.toContain('local-image-extension')
   })
 
-  it('renders Grok Codex CLI config with grok-4.5', () => {
+  it('defaults Grok platform to native Grok CLI config', () => {
     const wrapper = mount(UseKeyModal, {
       props: {
         show: true,
@@ -110,6 +191,53 @@ describe('UseKeyModal', () => {
     })
 
     const codeBlocks = wrapper.findAll('pre code').map((code) => code.text())
+    const configToml = codeBlocks.find((content) => content.includes('[model."grok"]'))
+
+    expect(configToml).toBeDefined()
+    expect(configToml).toContain('default = "grok"')
+    expect(configToml).toContain('model = "grok-4.5"')
+    expect(configToml).toContain('base_url = "https://code.sicts.shop/v1"')
+    expect(configToml).toContain('api_key = "sk-grok-test"')
+    expect(configToml).toContain('api_backend = "responses"')
+    expect(configToml).toContain('supports_backend_search = true')
+    expect(configToml).toContain('context_window = 1000000')
+
+    const tabLabels = wrapper.findAll('button').map((b) => b.text())
+    expect(tabLabels.some((label) => label.includes('keys.useKeyModal.cliTabs.grokCli'))).toBe(true)
+    expect(tabLabels.some((label) => label.includes('keys.useKeyModal.cliTabs.claudeCode'))).toBe(true)
+    expect(tabLabels.some((label) => label.includes('keys.useKeyModal.cliTabs.codexCli'))).toBe(true)
+    expect(tabLabels.some((label) => label.includes('keys.useKeyModal.cliTabs.codexCliWs'))).toBe(false)
+  })
+
+  it('renders Grok Codex CLI config with grok-4.5', async () => {
+    const wrapper = mount(UseKeyModal, {
+      props: {
+        show: true,
+        apiKey: 'sk-grok-test',
+        baseUrl: 'https://code.sicts.shop',
+        platform: 'grok'
+      },
+      global: {
+        stubs: {
+          BaseDialog: {
+            template: '<div><slot /><slot name="footer" /></div>'
+          },
+          Icon: {
+            template: '<span />'
+          }
+        }
+      }
+    })
+
+    const codexTab = wrapper.findAll('button').find((button) =>
+      button.text().includes('keys.useKeyModal.cliTabs.codexCli')
+      && !button.text().includes('codexCliWs')
+    )
+    expect(codexTab).toBeDefined()
+    await codexTab!.trigger('click')
+    await nextTick()
+
+    const codeBlocks = wrapper.findAll('pre code').map((code) => code.text())
     const configToml = codeBlocks.find((content) => content.includes('model_provider = "Grok"'))
     const authJson = codeBlocks.find((content) => content.includes('OPENAI_API_KEY'))
 
@@ -120,13 +248,48 @@ describe('UseKeyModal', () => {
     expect(configToml).toContain('wire_api = "responses"')
     expect(configToml).toContain('[features]\ngoals = true')
     expect(authJson).toContain('sk-grok-test')
-
-    const tabLabels = wrapper.findAll('button').map((b) => b.text())
-    expect(tabLabels.some((t) => t.includes('keys.useKeyModal.cliTabs.codexCli'))).toBe(true)
-    expect(tabLabels.some((t) => t.includes('keys.useKeyModal.cliTabs.codexCliWs'))).toBe(false)
-    expect(tabLabels.some((t) => t.includes('keys.useKeyModal.cliTabs.claudeCode'))).toBe(true)
     expect(configToml).not.toContain('supports_websockets')
     expect(configToml).not.toContain('responses_websockets_v2')
+  })
+
+  it('renders Grok Claude Code config with grok-4.5 model aliases', async () => {
+    const wrapper = mount(UseKeyModal, {
+      props: {
+        show: true,
+        apiKey: 'sk-grok-test',
+        baseUrl: 'https://code.sicts.shop',
+        platform: 'grok'
+      },
+      global: {
+        stubs: {
+          BaseDialog: {
+            template: '<div><slot /><slot name="footer" /></div>'
+          },
+          Icon: {
+            template: '<span />'
+          }
+        }
+      }
+    })
+
+    const claudeTab = wrapper.findAll('button').find((button) =>
+      button.text().includes('keys.useKeyModal.cliTabs.claudeCode')
+    )
+    expect(claudeTab).toBeDefined()
+    await claudeTab!.trigger('click')
+    await nextTick()
+
+    const codeBlocks = wrapper.findAll('pre code').map((code) => code.text())
+    const terminal = codeBlocks.find((content) => content.includes('export ANTHROPIC_BASE_URL'))
+    const settings = codeBlocks.find((content) => content.includes('claude-code-settings.json'))
+
+    expect(terminal).toBeDefined()
+    expect(terminal).toContain('ANTHROPIC_MODEL="grok-4.5"')
+    expect(terminal).toContain('ANTHROPIC_DEFAULT_OPUS_MODEL="grok-4.5"')
+    expect(terminal).toContain('ANTHROPIC_DEFAULT_FABLE_MODEL="grok-4.5"')
+    expect(terminal).toContain('CLAUDE_CODE_SUBAGENT_MODEL="grok-4.5"')
+    expect(settings).toContain('"ANTHROPIC_AUTH_TOKEN": "sk-grok-test"')
+    expect(settings).toContain('"ANTHROPIC_DEFAULT_SONNET_MODEL": "grok-4.5"')
   })
 
   it('does not advertise WebSocket transport for Grok', () => {

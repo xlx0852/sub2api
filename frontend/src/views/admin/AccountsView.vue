@@ -13,9 +13,32 @@
           />
           <AccountTableActions
             :loading="loading"
+            :hide-create="isTrashMode"
             @refresh="handleManualRefresh"
             @create="showCreate = true"
           >
+            <template #beforeCreate>
+              <button
+                v-if="!isTrashMode"
+                type="button"
+                class="btn btn-secondary px-2 md:px-3"
+                :title="t('admin.accounts.trash.title')"
+                @click="enterTrashMode"
+              >
+                <Icon name="trash" size="sm" class="md:mr-1.5" />
+                <span class="hidden md:inline">{{ t('admin.accounts.trash.title') }}</span>
+              </button>
+              <button
+                v-else
+                type="button"
+                class="btn btn-secondary px-2 md:px-3"
+                :title="t('admin.accounts.trash.exit')"
+                @click="exitTrashMode"
+              >
+                <Icon name="arrowLeft" size="sm" class="md:mr-1.5" />
+                <span class="hidden md:inline">{{ t('admin.accounts.trash.exit') }}</span>
+              </button>
+            </template>
             <template #after>
               <!-- Auto Refresh Dropdown -->
               <div class="relative" ref="autoRefreshDropdownRef">
@@ -241,8 +264,9 @@
                         <button
                           class="relative inline-flex h-5 w-9 flex-none cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-dark-800"
                           :class="row.schedulable ? 'bg-primary-500 hover:bg-primary-600' : 'bg-gray-200 hover:bg-gray-300 dark:bg-dark-600'"
-                          :disabled="togglingSchedulable === row.id"
+                          :disabled="isSchedulableToggleDisabled(row)"
                           :aria-label="t('admin.accounts.columns.schedulable')"
+                          :title="!canEnableSchedulable(row) && !row.schedulable ? t('admin.accounts.cannotEnableSchedulableBanned') : undefined"
                           @click.stop="handleToggleSchedulable(row)"
                         >
                           <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition" :class="row.schedulable ? 'translate-x-4' : 'translate-x-0'" />
@@ -277,7 +301,19 @@
                     <p class="mb-1 text-[11px] font-medium text-gray-400 dark:text-dark-500">
                       {{ t('admin.accounts.columns.status') }}
                     </p>
-                    <AccountStatusIndicator :account="row" @show-temp-unsched="handleShowTempUnsched" />
+                    <span
+                      v-if="isTrashDeleted(row)"
+                      class="badge badge-gray text-xs"
+                    >{{ t('admin.accounts.trash.badgeDeleted') }}</span>
+                    <span
+                      v-else-if="isTrashBanned(row)"
+                      class="badge badge-danger text-xs"
+                    >{{ t('admin.accounts.trash.badgeBanned') }}</span>
+                    <AccountStatusIndicator
+                      v-else
+                      :account="row"
+                      @show-temp-unsched="handleShowTempUnsched"
+                    />
                   </div>
                   <div
                     v-if="isColumnVisible('capacity')"
@@ -354,7 +390,19 @@
                   <Icon name="edit" size="sm" />
                   {{ t('common.edit') }}
                 </button>
-                <button class="flex h-11 items-center justify-center gap-1.5 border-x border-black/[0.07] text-xs font-medium text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:border-white/[0.08] dark:text-dark-400 dark:hover:bg-red-950/20 dark:hover:text-red-400" @click.stop="handleDelete(row)">
+                <button
+                  v-if="isTrashMode"
+                  class="flex h-11 items-center justify-center gap-1.5 border-x border-black/[0.07] text-xs font-medium text-emerald-600 transition-colors hover:bg-emerald-50 dark:border-white/[0.08] dark:text-emerald-400 dark:hover:bg-emerald-950/20"
+                  @click.stop="handleRestore(row)"
+                >
+                  <Icon name="refresh" size="sm" />
+                  {{ t('admin.accounts.trash.restore') }}
+                </button>
+                <button
+                  v-else
+                  class="flex h-11 items-center justify-center gap-1.5 border-x border-black/[0.07] text-xs font-medium text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:border-white/[0.08] dark:text-dark-400 dark:hover:bg-red-950/20 dark:hover:text-red-400"
+                  @click.stop="handleDelete(row)"
+                >
                   <Icon name="trash" size="sm" />
                   {{ t('common.delete') }}
                 </button>
@@ -446,11 +494,29 @@
           </template>
           <template #cell-status="{ row }">
             <div class="flex items-center gap-1.5">
-              <AccountStatusIndicator :account="row" @show-temp-unsched="handleShowTempUnsched" />
+              <span
+                v-if="isTrashDeleted(row)"
+                class="badge badge-gray text-xs"
+              >{{ t('admin.accounts.trash.badgeDeleted') }}</span>
+              <span
+                v-else-if="isTrashBanned(row)"
+                class="badge badge-danger text-xs"
+              >{{ t('admin.accounts.trash.badgeBanned') }}</span>
+              <AccountStatusIndicator
+                v-else
+                :account="row"
+                @show-temp-unsched="handleShowTempUnsched"
+              />
             </div>
           </template>
           <template #cell-schedulable="{ row }">
-            <button @click="handleToggleSchedulable(row)" :disabled="togglingSchedulable === row.id" class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-dark-800" :class="[row.schedulable ? 'bg-primary-500 hover:bg-primary-600' : 'bg-gray-200 hover:bg-gray-300 dark:bg-dark-600 dark:hover:bg-dark-500']" :title="row.schedulable ? t('admin.accounts.schedulableEnabled') : t('admin.accounts.schedulableDisabled')">
+            <button
+              @click="handleToggleSchedulable(row)"
+              :disabled="isSchedulableToggleDisabled(row)"
+              class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-dark-800"
+              :class="[row.schedulable ? 'bg-primary-500 hover:bg-primary-600' : 'bg-gray-200 hover:bg-gray-300 dark:bg-dark-600 dark:hover:bg-dark-500']"
+              :title="!canEnableSchedulable(row) && !row.schedulable ? t('admin.accounts.cannotEnableSchedulableBanned') : (row.schedulable ? t('admin.accounts.schedulableEnabled') : t('admin.accounts.schedulableDisabled'))"
+            >
               <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out" :class="[row.schedulable ? 'translate-x-4' : 'translate-x-0']" />
             </button>
           </template>
@@ -564,8 +630,20 @@
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
                 <span class="text-xs">{{ t('common.edit') }}</span>
               </button>
-              <button @click="handleDelete(row)" class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400">
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
+              <button
+                v-if="isTrashMode"
+                @click="handleRestore(row)"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-emerald-600 transition-colors hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-300"
+              >
+                <Icon name="refresh" size="sm" />
+                <span class="text-xs">{{ t('admin.accounts.trash.restore') }}</span>
+              </button>
+              <button
+                v-else
+                @click="handleDelete(row)"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+              >
+                <Icon name="trash" size="sm" />
                 <span class="text-xs">{{ t('common.delete') }}</span>
               </button>
               <button @click="openMenu(row, $event)" class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-dark-700 dark:hover:text-white">
@@ -579,7 +657,7 @@
       </template>
       <template #pagination><Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" /></template>
     </TablePageLayout>
-    <CreateAccountModal :show="showCreate" :proxies="proxies" :groups="groups" @close="showCreate = false" @created="reload" />
+    <CreateAccountModal :show="showCreate" :proxies="proxies" :groups="groups" @close="showCreate = false" @created="handleAccountCreated" />
     <EditAccountModal :show="showEdit" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
@@ -595,17 +673,8 @@
       @close="closeUsageDetails"
       @reauthorize="handleReAuth"
     />
-    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" @cost-config="handleCostConfig" />
-    <AccountCostConfigDialog
-      :show="showCostConfig"
-      :account-id="costConfigAcc?.id ?? null"
-      :account-name="costConfigAcc?.name"
-      :account-type="costConfigAcc?.type"
-      :account-platform="costConfigAcc?.platform"
-      @close="showCostConfig = false"
-      @saved="reload"
-    />
-    <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
+    <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
+<SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />
     <BulkEditAccountModal
       :show="showBulkEdit"
@@ -653,7 +722,6 @@ import AccountTableActions from '@/components/admin/account/AccountTableActions.
 import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
 import AccountBulkActionsBar from '@/components/admin/account/AccountBulkActionsBar.vue'
 import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
-import AccountCostConfigDialog from '@/components/admin/account/AccountCostConfigDialog.vue'
 import ImportDataModal from '@/components/admin/account/ImportDataModal.vue'
 import ReAuthAccountModal from '@/components/admin/account/ReAuthAccountModal.vue'
 import AccountTestModal from '@/components/admin/account/AccountTestModal.vue'
@@ -1570,9 +1638,6 @@ const cols = computed(() =>
 
 const handleEdit = (a: Account) => { edAcc.value = a; showEdit.value = true }
 // 成本配置（利润分析）
-const showCostConfig = ref(false)
-const costConfigAcc = ref<Account | null>(null)
-const handleCostConfig = (a: Account) => { costConfigAcc.value = a; showCostConfig.value = true }
 const openMenu = (a: Account, e: MouseEvent) => {
   menu.acc = a
 
@@ -1727,7 +1792,21 @@ const normalizeBulkSchedulableResult = (
   }
 }
 const handleBulkToggleSchedulable = async (schedulable: boolean) => {
-  const accountIds = [...selIds.value]
+  let accountIds = [...selIds.value]
+  if (schedulable) {
+    const blocked = accounts.value.filter((a) => accountIds.includes(a.id) && !canEnableSchedulable(a))
+    accountIds = accountIds.filter((id) => {
+      const acc = accounts.value.find((a) => a.id === id)
+      return acc ? canEnableSchedulable(acc) : false
+    })
+    if (accountIds.length === 0) {
+      appStore.showError(t('admin.accounts.cannotEnableSchedulableBanned'))
+      return
+    }
+    if (blocked.length > 0) {
+      appStore.showError(t('admin.accounts.bulkSchedulableSkippedBanned', { count: blocked.length }))
+    }
+  }
   try {
     const result = await adminAPI.accounts.bulkUpdate(accountIds, { schedulable })
     const { successIds, failedIds, successCount, failedCount, hasIds, hasCounts } = normalizeBulkSchedulableResult(result, accountIds)
@@ -1837,18 +1916,40 @@ const accountMatchesCurrentFilters = (account: Account) => {
     const isRateLimited = Number.isFinite(rateLimitResetAt) && rateLimitResetAt > now
     const tempUnschedUntil = account.temp_unschedulable_until ? new Date(account.temp_unschedulable_until).getTime() : Number.NaN
     const isTempUnschedulable = Number.isFinite(tempUnschedUntil) && tempUnschedUntil > now
+    // 成本配置手动结算封号
+    const isBanned = Boolean(account.subscription_banned)
+    const isDeleted = Boolean(account.deleted_at)
 
-    if (filters.status === 'active') {
+    if (filters.status === 'trash') {
+      if (!isDeleted && !isBanned) return false
+    } else if (filters.status === 'deleted') {
+      if (!isDeleted) return false
+    } else if (filters.status === 'banned') {
+      if (!isBanned || isDeleted) return false
+    } else if (filters.status === 'active') {
+      if (isDeleted || isBanned) return false
       if (account.status !== 'active' || isRateLimited || isTempUnschedulable || !account.schedulable) return false
     } else if (filters.status === 'rate_limited') {
+      if (isDeleted || isBanned) return false
       if (account.status !== 'active' || !isRateLimited || isTempUnschedulable) return false
     } else if (filters.status === 'temp_unschedulable') {
+      if (isDeleted || isBanned) return false
       if (account.status !== 'active' || !isTempUnschedulable) return false
     } else if (filters.status === 'unschedulable') {
+      if (isDeleted || isBanned) return false
       if (account.status !== 'active' || account.schedulable || isRateLimited || isTempUnschedulable) return false
+    } else if (filters.status === 'error') {
+      if (isDeleted || isBanned) return false
+      if (account.status !== 'error') return false
+    } else if (filters.status === 'inactive') {
+      if (isDeleted || isBanned) return false
+      if (account.status !== 'inactive') return false
     } else if (account.status !== filters.status) {
       return false
     }
+  } else {
+    // 默认服役列表：排除软删除与成本配置手动封号
+    if (account.deleted_at || account.subscription_banned) return false
   }
   if (filters.group) {
     const groupIds = account.group_ids ?? account.groups?.map((group) => group.id) ?? []
@@ -1909,6 +2010,10 @@ const patchAccountInList = (updatedAccount: Account) => {
   nextAccounts[index] = mergedAccount
   accounts.value = nextAccounts
   syncAccountRefs(mergedAccount)
+}
+const handleAccountCreated = (_account?: Account) => {
+  // 订阅账号创建后可能仍停留在成本配置步骤，此时不要强制关闭弹窗
+  reload()
 }
 const handleAccountUpdated = (updatedAccount: Account) => {
   patchAccountInList(updatedAccount)
@@ -2073,18 +2178,75 @@ const confirmCreateSparkShadow = async () => {
     appStore.showError(error?.response?.data?.message || t('admin.accounts.createSparkShadowFailed'))
   }
 }
+const isTrashMode = computed(() => {
+  const status = String((params as any).status || '')
+  return status === 'trash' || status === 'deleted' || status === 'banned'
+})
+
+const isTrashDeleted = (account: Account) => Boolean(account.deleted_at)
+const isTrashBanned = (account: Account) => {
+  if (account.deleted_at) return false
+  return Boolean(account.subscription_banned)
+}
+
+const canEnableSchedulable = (account: Account) => {
+  if (!account || account.deleted_at || account.subscription_banned) return false
+  return account.status === 'active'
+}
+
+const isSchedulableToggleDisabled = (account: Account) => {
+  if (togglingSchedulable.value === account.id) return true
+  // 已关闭时：仅 active 可打开；已开启时允许关闭
+  if (!account.schedulable && !canEnableSchedulable(account)) return true
+  return false
+}
+
+const enterTrashMode = () => {
+  ;(params as any).status = 'trash'
+  pagination.page = 1
+  reload()
+}
+
+const exitTrashMode = () => {
+  ;(params as any).status = ''
+  pagination.page = 1
+  reload()
+}
+
+const handleRestore = async (a: Account) => {
+  if (!confirm(t('admin.accounts.trash.restoreConfirm', { name: a.name }))) return
+  try {
+    const updated = await adminAPI.accounts.restore(a.id)
+    appStore.showSuccess(t('admin.accounts.trash.restoreSuccess'))
+    if (isTrashMode.value) {
+      accounts.value = accounts.value.filter(item => item.id !== a.id)
+      syncPaginationAfterLocalRemoval()
+    } else if (updated) {
+      patchAccountInList(updated)
+    }
+    enterAutoRefreshSilentWindow()
+  } catch (error: any) {
+    console.error('Failed to restore account:', error)
+    appStore.showError(error?.message || t('admin.accounts.trash.restoreFailed'))
+  }
+}
+
 const handleDelete = (a: Account) => { deletingAcc.value = a; showDeleteDialog.value = true }
 const confirmDelete = async () => { if(!deletingAcc.value) return; try { await adminAPI.accounts.delete(deletingAcc.value.id); showDeleteDialog.value = false; deletingAcc.value = null; reload() } catch (error) { console.error('Failed to delete account:', error) } }
 const handleToggleSchedulable = async (a: Account) => {
   const nextSchedulable = !a.schedulable
+  if (nextSchedulable && !canEnableSchedulable(a)) {
+    appStore.showError(t('admin.accounts.cannotEnableSchedulableBanned'))
+    return
+  }
   togglingSchedulable.value = a.id
   try {
     const updated = await adminAPI.accounts.setSchedulable(a.id, nextSchedulable)
     updateSchedulableInList([a.id], updated?.schedulable ?? nextSchedulable)
     enterAutoRefreshSilentWindow()
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to toggle schedulable:', error)
-    appStore.showError(t('admin.accounts.failedToToggleSchedulable'))
+    appStore.showError(error?.response?.data?.message || error?.message || t('admin.accounts.failedToToggleSchedulable'))
   } finally {
     togglingSchedulable.value = null
   }

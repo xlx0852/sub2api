@@ -27,7 +27,25 @@ const updatePrivacyMode = (value: string | number | boolean | null) => { emit('u
 const updateGroup = (value: string | number | boolean | null) => { emit('update:filters', { ...props.filters, group: value }) }
 const pOpts = computed(() => [{ value: '', label: t('admin.accounts.allPlatforms') }, { value: 'anthropic', label: 'Anthropic' }, { value: 'openai', label: 'OpenAI' }, { value: 'gemini', label: 'Gemini' }, { value: 'antigravity', label: 'Antigravity' }, { value: 'grok', label: 'Grok' }, { value: 'kimi', label: 'Kimi' }])
 const tOpts = computed(() => [{ value: '', label: t('admin.accounts.allTypes') }, { value: 'oauth', label: t('admin.accounts.oauthType') }, { value: 'setup-token', label: t('admin.accounts.setupToken') }, { value: 'apikey', label: t('admin.accounts.apiKey') }, { value: 'bedrock', label: 'AWS Bedrock' }])
-const sOpts = computed(() => [{ value: '', label: t('admin.accounts.allStatus') }, { value: 'active', label: t('admin.accounts.status.active') }, { value: 'inactive', label: t('admin.accounts.status.inactive') }, { value: 'error', label: t('admin.accounts.status.error') }, { value: 'rate_limited', label: t('admin.accounts.status.rateLimited') }, { value: 'temp_unschedulable', label: t('admin.accounts.status.tempUnschedulable') }, { value: 'unschedulable', label: t('admin.accounts.status.unschedulable') }])
+const isTrashMode = computed(() => props.filters?.status === 'trash' || props.filters?.status === 'deleted' || props.filters?.status === 'banned')
+const sOpts = computed(() => {
+  if (isTrashMode.value) {
+    return [
+      { value: 'trash', label: t('admin.accounts.trash.all') },
+      { value: 'deleted', label: t('admin.accounts.trash.deletedOnly') },
+      { value: 'banned', label: t('admin.accounts.trash.bannedOnly') }
+    ]
+  }
+  return [
+    { value: '', label: t('admin.accounts.allStatus') },
+    { value: 'active', label: t('admin.accounts.status.active') },
+    { value: 'inactive', label: t('admin.accounts.status.inactive') },
+    { value: 'error', label: t('admin.accounts.status.error') },
+    { value: 'rate_limited', label: t('admin.accounts.status.rateLimited') },
+    { value: 'temp_unschedulable', label: t('admin.accounts.status.tempUnschedulable') },
+    { value: 'unschedulable', label: t('admin.accounts.status.unschedulable') }
+  ]
+})
 const privacyOpts = computed(() => [
   { value: '', label: t('admin.accounts.allPrivacyModes') },
   { value: '__unset__', label: t('admin.accounts.privacyUnset') },

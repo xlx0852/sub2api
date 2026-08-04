@@ -335,7 +335,14 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			targetURL = buildOpenAIResponsesURL(validatedURL)
 		}
 	}
-	targetURL = appendOpenAIResponsesRequestPathSuffix(targetURL, openAIResponsesRequestPathSuffix(c))
+	suffix, suffixErr := openAIResponsesRequestPathSuffix(c)
+	if suffixErr != nil {
+		return nil, fmt.Errorf("invalid responses path: %w", suffixErr)
+	}
+	targetURL, suffixErr = appendOpenAIResponsesRequestPathSuffix(targetURL, suffix)
+	if suffixErr != nil {
+		return nil, fmt.Errorf("invalid responses path: %w", suffixErr)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
 	if err != nil {

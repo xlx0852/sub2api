@@ -299,6 +299,9 @@ func buildVertexGeminiURL(projectID, location, model, action string, stream bool
 	if model == "" {
 		return "", errors.New("vertex model is required")
 	}
+	if strings.ContainsAny(model, "/\\?#") || strings.Contains(model, "..") {
+		return "", fmt.Errorf("invalid vertex model path segment")
+	}
 	switch action {
 	case "generateContent", "streamGenerateContent", "countTokens":
 	default:
@@ -337,6 +340,9 @@ func buildVertexAnthropicURL(projectID, location, model string, stream bool) (st
 	}
 	if model == "" {
 		return "", errors.New("vertex model is required")
+	}
+	if strings.ContainsAny(model, "/\\?#") || strings.Contains(model, "..") {
+		return "", fmt.Errorf("invalid vertex model path segment")
 	}
 	action := "rawPredict"
 	if stream {

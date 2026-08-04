@@ -661,7 +661,7 @@
             type="number"
             min="1"
             :disabled="!enableConcurrency"
-            class="input"
+            class="input w-full sm:w-40"
             :class="!enableConcurrency && 'cursor-not-allowed opacity-50'"
             aria-labelledby="bulk-edit-concurrency-label"
             @input="concurrency = Math.max(1, concurrency || 1)"
@@ -690,7 +690,7 @@
             type="number"
             min="1"
             :disabled="!enableLoadFactor"
-            class="input"
+            class="input w-full sm:w-40"
             :class="!enableLoadFactor && 'cursor-not-allowed opacity-50'"
             aria-labelledby="bulk-edit-load-factor-label"
             @input="loadFactor = (loadFactor &amp;&amp; loadFactor >= 1) ? loadFactor : null"
@@ -720,7 +720,7 @@
             type="number"
             min="1"
             :disabled="!enablePriority"
-            class="input"
+            class="input w-full sm:w-40"
             :class="!enablePriority && 'cursor-not-allowed opacity-50'"
             aria-labelledby="bulk-edit-priority-label"
           />
@@ -749,7 +749,7 @@
             min="0"
             step="0.01"
             :disabled="!enableRateMultiplier"
-            class="input"
+            class="input w-full sm:w-40"
             :class="!enableRateMultiplier && 'cursor-not-allowed opacity-50'"
             aria-labelledby="bulk-edit-rate-multiplier-label"
           />
@@ -1103,7 +1103,7 @@
                 min="1"
                 max="1000"
                 step="1"
-                class="input"
+                class="input w-full sm:w-40"
                 :placeholder="t('admin.accounts.quotaControl.rpmLimit.baseRpmPlaceholder')"
               />
               <p class="input-hint">{{ t('admin.accounts.quotaControl.rpmLimit.baseRpmHint') }}</p>
@@ -1146,7 +1146,7 @@
                 type="number"
                 min="1"
                 step="1"
-                class="input"
+                class="input w-full sm:w-40"
                 :placeholder="t('admin.accounts.quotaControl.rpmLimit.stickyBufferPlaceholder')"
               />
               <p class="input-hint">{{ t('admin.accounts.quotaControl.rpmLimit.stickyBufferHint') }}</p>

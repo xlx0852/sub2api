@@ -89,3 +89,24 @@ calculation and presentation as OpenAI.
 - **WHEN** the Grok weekly snapshot lacks a valid non-future period start
 - **THEN** the system falls back to the existing local today statistics
 - **AND** does not query a fabricated weekly start timestamp
+
+### Requirement: Grok Billing scheduling recovery
+
+The system SHALL remove a Grok OAuth account from scheduling when its official
+weekly Billing utilization is full and SHALL automatically make it eligible no
+later than the official `period_end` reset time.
+
+#### Scenario: Weekly Billing window is full
+
+- **WHEN** a successful Billing probe reports weekly utilization at 100 percent with a future `period_end`
+- **THEN** the account is temporarily unschedulable until that official reset
+
+#### Scenario: Weekly Billing window recovers
+
+- **WHEN** a later successful Billing probe reports utilization below 100 percent
+- **THEN** the system clears a temporary block previously owned by the Grok Billing quota policy
+
+#### Scenario: Gateway receives Grok 429
+
+- **WHEN** a Grok OAuth request receives HTTP 429
+- **THEN** the gateway refreshes official Billing in the background and synchronizes the scheduling block with `period_end`

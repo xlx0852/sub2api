@@ -82,13 +82,31 @@ func (m *mockAccountRepoForPlatform) FindByExtraField(ctx context.Context, key s
 	return nil, nil
 }
 
+func (m *mockAccountRepoForPlatform) FindOAuthByPlatformEmail(ctx context.Context, platform, email string, includeDeleted bool) ([]Account, error) {
+	return nil, nil
+}
+
+func (m *mockAccountRepoForPlatform) ListOAuthIncludingDeleted(ctx context.Context) ([]Account, error) {
+	return nil, nil
+}
+
 func (m *mockAccountRepoForPlatform) ListCRSAccountIDs(ctx context.Context) (map[string]int64, error) {
 	return nil, nil
 }
 func (m *mockAccountRepoForPlatform) Update(ctx context.Context, account *Account) error {
 	return nil
 }
+func (m *mockAccountRepoForPlatform) Restore(ctx context.Context, id int64) error {
+	panic("unexpected Restore call")
+}
+
 func (m *mockAccountRepoForPlatform) Delete(ctx context.Context, id int64) error { return nil }
+func (m *mockAccountRepoForPlatform) HardDelete(ctx context.Context, id int64) error {
+	return nil
+}
+func (m *mockAccountRepoForPlatform) ReassignAccountReferences(ctx context.Context, fromID, toID int64) error {
+	return nil
+}
 func (m *mockAccountRepoForPlatform) List(ctx context.Context, params pagination.PaginationParams) ([]Account, *pagination.PaginationResult, error) {
 	return nil, nil, nil
 }
@@ -120,6 +138,9 @@ func (m *mockAccountRepoForPlatform) ClearError(ctx context.Context, id int64) e
 	return nil
 }
 func (m *mockAccountRepoForPlatform) SetSchedulable(ctx context.Context, id int64, schedulable bool) error {
+	return nil
+}
+func (m *mockAccountRepoForPlatform) SetExpiresAt(ctx context.Context, id int64, expiresAt *time.Time) error {
 	return nil
 }
 func (m *mockAccountRepoForPlatform) AutoPauseExpiredAccounts(ctx context.Context, now time.Time) (int64, error) {

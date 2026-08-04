@@ -899,12 +899,15 @@ export interface Account {
   auto_pause_on_expired: boolean
   created_at: string
   updated_at: string
+  deleted_at?: string | null
   proxy?: Proxy
   group_ids?: number[] // Groups this account belongs to
   groups?: Group[] // Preloaded group objects
 
   // Rate limit & scheduling fields
   schedulable: boolean
+  // 成本配置中手动「结算封号」且未撤销
+  subscription_banned?: boolean
   diagnostics_enabled?: boolean
   diagnostics_plan_count?: number
   diagnostics_enabled_count?: number

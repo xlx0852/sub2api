@@ -2557,23 +2557,68 @@ func TestOpenAIResponsesRequestPathSuffix(t *testing.T) {
 	c, _ := gin.CreateTestContext(rec)
 
 	tests := []struct {
-		name string
-		path string
-		want string
+		name    string
+		path    string
+		want    string
+		wantErr bool
 	}{
 		{name: "exact v1 responses", path: "/v1/responses", want: ""},
 		{name: "compact v1 responses", path: "/v1/responses/compact", want: "/compact"},
 		{name: "compact alias responses", path: "/responses/compact/", want: "/compact"},
-		{name: "nested suffix", path: "/openai/v1/responses/compact/detail", want: "/compact/detail"},
+		{name: "input_tokens", path: "/v1/responses/input_tokens", want: "/input_tokens"},
+		{name: "nested suffix rejected", path: "/openai/v1/responses/compact/detail", wantErr: true},
+		{name: "traversal rejected", path: "/v1/responses/../evil", wantErr: true},
+		{name: "unknown suffix rejected", path: "/v1/responses/evil", wantErr: true},
 		{name: "unrelated path", path: "/v1/chat/completions", want: ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c.Request = httptest.NewRequest(http.MethodPost, tt.path, nil)
-			require.Equal(t, tt.want, openAIResponsesRequestPathSuffix(c))
+			got, err := openAIResponsesRequestPathSuffix(c)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestAppendOpenAIResponsesRequestPathSuffix(t *testing.T) {
+	got, err := appendOpenAIResponsesRequestPathSuffix("https://api.openai.com/v1/responses", "/compact")
+	require.NoError(t, err)
+	require.Equal(t, "https://api.openai.com/v1/responses/compact", got)
+
+	_, err = appendOpenAIResponsesRequestPathSuffix("https://api.openai.com/v1/responses", "/compact/detail")
+	require.Error(t, err)
+
+	_, err = appendOpenAIResponsesRequestPathSuffix("https://api.openai.com/v1/responses", "/../admin")
+	require.Error(t, err)
+
+	got, err = appendOpenAIResponsesRequestPathSuffix("https://api.openai.com/v1/responses", "")
+	require.NoError(t, err)
+	require.Equal(t, "https://api.openai.com/v1/responses", got)
+}
+
+func TestBuildGeminiAIStudioModelURL(t *testing.T) {
+	got, err := buildGeminiAIStudioModelURL("https://generativelanguage.googleapis.com", "gemini-2.5-pro", "generateContent", false)
+	require.NoError(t, err)
+	require.Equal(t, "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent", got)
+
+	got, err = buildGeminiAIStudioModelURL("https://generativelanguage.googleapis.com/", "gemini-2.5-flash", "streamGenerateContent", true)
+	require.NoError(t, err)
+	require.Equal(t, "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse", got)
+
+	_, err = buildGeminiAIStudioModelURL("https://generativelanguage.googleapis.com", "../evil", "generateContent", false)
+	require.Error(t, err)
+
+	_, err = buildGeminiAIStudioModelURL("https://generativelanguage.googleapis.com", "gemini-2.5-pro", "deleteModel", false)
+	require.Error(t, err)
+
+	_, err = buildGeminiAIStudioModelURL("https://generativelanguage.googleapis.com", "gemini/../x", "generateContent", false)
+	require.Error(t, err)
 }
 
 func TestNormalizeOpenAICompactRequestBodyPreservesCurrentCodexPayloadFields(t *testing.T) {

@@ -5,6 +5,23 @@
     width="wide"
     @close="handleClose"
   >
+    <div v-if="showPostCreateCost" class="space-y-4" data-testid="create-account-cost-step">
+      <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300">
+        {{ t('admin.accounts.accountCreated') }} · {{ t('admin.profit.configure') }}
+      </div>
+      <AccountCostConfigPanel
+        :active="showPostCreateCost"
+        :account-id="postCreateCostAccount?.id ?? null"
+        :account-name="postCreateCostAccount?.name"
+        :account-type="postCreateCostAccount?.type"
+        :account-platform="postCreateCostAccount?.platform"
+        :show-account-header="true"
+        :show-inline-save="true"
+        :compact="true"
+        @saved="emit('created', postCreateCostAccount || undefined)"
+      />
+    </div>
+    <template v-else>
     <!-- Step Indicator for OAuth accounts -->
     <div v-if="isOAuthFlow" class="mb-6 flex items-center justify-center">
       <div class="flex items-center space-x-4">
@@ -1402,7 +1419,7 @@
               min="0"
               :max="MAX_POOL_MODE_RETRY_COUNT"
               step="1"
-              class="input"
+              class="input w-full sm:w-40"
             />
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {{
@@ -1863,7 +1880,7 @@
               min="0"
               :max="MAX_POOL_MODE_RETRY_COUNT"
               step="1"
-              class="input"
+              class="input w-full sm:w-40"
             />
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {{
@@ -1993,10 +2010,11 @@
         />
       </div>
 
-      <!-- OpenAI OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
+      <!-- OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
       <div
-        v-if="(form.platform === 'openai' || form.platform === 'grok') && accountCategory === 'oauth-based'"
+        v-if="(form.platform === 'openai' || form.platform === 'grok' || form.platform === 'kimi' || form.platform === 'anthropic' || form.platform === 'gemini') && accountCategory === 'oauth-based'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        data-testid="create-oauth-model-restriction"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
@@ -2473,7 +2491,7 @@
                 min="1"
                 max="1000"
                 step="1"
-                class="input"
+                class="input w-full sm:w-40"
                 :placeholder="t('admin.accounts.quotaControl.rpmLimit.baseRpmPlaceholder')"
               />
               <p class="input-hint">{{ t('admin.accounts.quotaControl.rpmLimit.baseRpmHint') }}</p>
@@ -2522,7 +2540,7 @@
                 type="number"
                 min="1"
                 step="1"
-                class="input"
+                class="input w-full sm:w-40"
                 :placeholder="t('admin.accounts.quotaControl.rpmLimit.stickyBufferPlaceholder')"
               />
               <p class="input-hint">{{ t('admin.accounts.quotaControl.rpmLimit.stickyBufferHint') }}</p>
@@ -2723,14 +2741,18 @@
         </div>
         <div>
           <label class="input-label">{{ t('admin.accounts.billingRateMultiplier') }}</label>
-          <input v-model.number="form.rate_multiplier" type="number" min="0" step="0.001" class="input" />
+          <input v-model.number="form.rate_multiplier" type="number" min="0" step="0.001" class="input w-full sm:w-40" />
           <p class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
         </div>
       </div>
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div
+        v-if="form.type === 'oauth' || form.type === 'setup-token'"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        data-testid="create-account-expiry-section"
+      >
         <label class="input-label">{{ t('admin.accounts.expiresAt') }}</label>
-        <input v-model="expiresAtInput" type="datetime-local" class="input" />
-        <p class="input-hint">{{ t('admin.accounts.expiresAtHint') }}</p>
+        <input v-model="expiresAtInput" type="datetime-local" class="input" disabled readonly />
+        <p class="input-hint">{{ t('admin.accounts.expiresAtFollowsCostCycle') }}</p>
       </div>
 
       <!-- OpenAI 自动透传开关（OAuth/API Key） -->
@@ -2997,7 +3019,7 @@
         </div>
       </div>
 
-      <div>
+      <div v-if="form.type === 'oauth' || form.type === 'setup-token'">
         <div class="flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{
@@ -3014,6 +3036,7 @@
               'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
               autoPauseOnExpired ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
             ]"
+            data-testid="create-account-auto-pause-on-expired"
           >
             <span
               :class="[
@@ -3191,8 +3214,15 @@
 
     </div>
 
+    </template>
+
     <template #footer>
-      <div v-if="step === 1" class="flex justify-end gap-3">
+      <div v-if="showPostCreateCost" class="flex justify-end gap-3">
+        <button type="button" class="btn btn-primary" data-testid="create-account-cost-done" @click="handleClose">
+          {{ t('common.done') }}
+        </button>
+      </div>
+      <div v-else-if="step === 1" class="flex justify-end gap-3">
         <button @click="handleClose" type="button" class="btn btn-secondary">
           {{ t('common.cancel') }}
         </button>
@@ -3533,6 +3563,7 @@ import { useOpenAIDeviceOAuth } from '@/composables/useOpenAIDeviceOAuth'
 import { useGrokDeviceOAuth } from '@/composables/useGrokDeviceOAuth'
 import type {
   Proxy,
+  Account,
   AdminGroup,
   AccountPlatform,
   AccountType,
@@ -3544,6 +3575,7 @@ import type {
   OpenAIEndpointCapability
 } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import AccountCostConfigPanel from '@/components/admin/account/AccountCostConfigPanel.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
@@ -3629,7 +3661,7 @@ interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits<{
   close: []
-  created: []
+  created: [account?: Account]
 }>()
 
 const appStore = useAppStore()
@@ -3708,6 +3740,8 @@ interface TempUnschedRuleForm {
 // State
 const step = ref(1)
 const submitting = ref(false)
+const postCreateCostAccount = ref<Account | null>(null)
+const showPostCreateCost = computed(() => !!postCreateCostAccount.value)
 const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_account'>('oauth-based') // UI selection for account category
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
@@ -4098,6 +4132,18 @@ const expiresAtInput = computed({
   get: () => formatDateTimeLocal(form.expires_at),
   set: (value: string) => {
     form.expires_at = parseDateTimeLocal(value)
+  }
+})
+
+const accountExpiryPayload = computed(() => {
+  const isSub = form.type === 'oauth' || form.type === 'setup-token'
+  // API Key 等非订阅账号不携带调度过期；订阅号仍提交表单值（后端 OAuth 会忽略 expires_at）
+  if (!isSub) {
+    return { expires_at: null as number | null, auto_pause_on_expired: false }
+  }
+  return {
+    expires_at: form.expires_at,
+    auto_pause_on_expired: autoPauseOnExpired.value
   }
 })
 
@@ -4582,13 +4628,27 @@ const ensureAntigravityMixedChannelConfirmed = async (onConfirm: () => Promise<v
   }
 }
 
+
+const finishCreateSuccess = (account?: Account | null, options?: { skipCost?: boolean }) => {
+  emit('created', account || undefined)
+  const shouldOfferCost =
+    !options?.skipCost &&
+    !!account &&
+    (account.type === 'oauth' || account.type === 'setup-token')
+  if (shouldOfferCost) {
+    postCreateCostAccount.value = account
+    step.value = 1
+    return
+  }
+  handleClose()
+}
+
 const submitCreateAccount = async (payload: CreateAccountRequest) => {
   submitting.value = true
   try {
-    await adminAPI.accounts.create(withAntigravityConfirmFlag(payload))
+    const account = await adminAPI.accounts.create(withAntigravityConfirmFlag(payload))
     appStore.showSuccess(t('admin.accounts.accountCreated'))
-    emit('created')
-    handleClose()
+    finishCreateSuccess(account)
   } catch (error: any) {
     if (error.response?.status === 409 && error.response?.data?.error === 'mixed_channel_warning' && needsMixedChannelCheck(form.platform)) {
       openMixedChannelDialog({
@@ -4713,6 +4773,7 @@ const resetForm = () => {
 }
 
 const handleClose = () => {
+  postCreateCostAccount.value = null
   if (openaiDeviceOAuth.session.value) void openaiDeviceOAuth.cancel()
   if (grokDeviceOAuth.session.value) void grokDeviceOAuth.cancel()
   if (kimiOAuth.session.value) void kimiOAuth.cancel()
@@ -5118,7 +5179,7 @@ const handleSubmit = async () => {
     ...form,
     group_ids: form.group_ids,
     extra,
-    auto_pause_on_expired: autoPauseOnExpired.value
+    ...accountExpiryPayload.value
   })
 }
 
@@ -5185,8 +5246,7 @@ const handleCreateOpenAIDeviceAccount = async () => {
       group_ids: form.group_ids
     })
     appStore.showSuccess(t('admin.accounts.accountCreated'))
-    emit('created')
-    handleClose()
+    finishCreateSuccess(null, { skipCost: true })
   } catch (error: any) {
     const message =
       error?.response?.data?.message ||
@@ -5221,8 +5281,7 @@ const handleCreateGrokDeviceAccount = async () => {
       group_ids: form.group_ids
     })
     appStore.showSuccess(t('admin.accounts.accountCreated'))
-    emit('created')
-    handleClose()
+    finishCreateSuccess(null, { skipCost: true })
   } catch (error: any) {
     const message =
       error?.response?.data?.message ||
@@ -5239,17 +5298,22 @@ const handleCreateGrokDeviceAccount = async () => {
 const handleCreateKimiAccount = async () => {
   submitting.value = true
   try {
+    const modelMapping = buildModelMappingObject(
+      modelRestrictionMode.value,
+      allowedModels.value,
+      modelMappings.value
+    )
     await kimiOAuth.createAccount({
       name: form.name,
       notes: form.notes || undefined,
       proxy_id: form.proxy_id,
       concurrency: form.concurrency,
       priority: form.priority,
-      group_ids: form.group_ids
+      group_ids: form.group_ids,
+      ...(modelMapping ? { model_mapping: modelMapping } : {})
     })
     appStore.showSuccess(t('admin.accounts.accountCreated'))
-    emit('created')
-    handleClose()
+    finishCreateSuccess(null, { skipCost: true })
   } catch (error: any) {
     const message = error.response?.data?.message || error.response?.data?.detail || error.message || t('admin.accounts.failedToCreate')
     kimiOAuth.error.value = message
@@ -5334,13 +5398,35 @@ const createAccountAndFinish = async (
       credentials.base_url = apiKeyBaseUrl.value.trim() || 'https://api.x.ai/v1'
     }
     applyGrokAPIKeyRouting(credentials, platform, type)
-    const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
-    if (modelMapping) {
-      credentials.model_mapping = modelMapping
-    } else {
-      delete credentials.model_mapping
+  }
+
+  // OAuth/setup-token 与通用 apikey：统一写入模型限制（Antigravity 使用独立映射 UI）
+  const shouldApplyStandardModelRestriction =
+    platform !== 'antigravity' &&
+    (
+      type === 'apikey' ||
+      type === 'bedrock' ||
+      type === 'service_account' ||
+      type === 'oauth' ||
+      type === 'setup-token'
+    )
+  if (shouldApplyStandardModelRestriction) {
+    if (!(platform === 'openai' && isOpenAIModelRestrictionDisabled.value)) {
+      const modelMapping = buildModelMappingObject(
+        modelRestrictionMode.value,
+        allowedModels.value,
+        modelMappings.value
+      )
+      if (modelMapping) {
+        credentials.model_mapping = modelMapping
+      } else if (type === 'oauth' || type === 'setup-token' || type === 'apikey' || type === 'bedrock' || type === 'service_account') {
+        // keep existing explicit mapping if already set by caller; only delete when empty builder and not pre-set?
+        // Prefer explicit current form state: clear when empty.
+        delete credentials.model_mapping
+      }
     }
   }
+
   await doCreateAccount({
     name: form.name,
     notes: form.notes,
@@ -5354,8 +5440,7 @@ const createAccountAndFinish = async (
     priority: form.priority,
     rate_multiplier: form.rate_multiplier,
     group_ids: form.group_ids,
-    expires_at: form.expires_at,
-    auto_pause_on_expired: autoPauseOnExpired.value
+    ...accountExpiryPayload.value
   })
 }
 
@@ -5378,6 +5463,7 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
 
   let successCount = 0
   let failedCount = 0
+  let lastCreatedAccount: Account | null = null
   const errors: string[] = []
 
   try {
@@ -5403,7 +5489,7 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
           return
         }
 
-        await adminAPI.accounts.create({
+        const created = await adminAPI.accounts.create({
           name: accountName,
           notes: form.notes,
           platform: 'grok',
@@ -5416,9 +5502,9 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
           priority: form.priority,
           rate_multiplier: form.rate_multiplier,
           group_ids: form.group_ids,
-          expires_at: form.expires_at,
-          auto_pause_on_expired: autoPauseOnExpired.value
+          ...accountExpiryPayload.value
         })
+        lastCreatedAccount = created
         successCount++
       } catch (error: any) {
         failedCount++
@@ -5433,12 +5519,15 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
           ? t('admin.accounts.oauth.batchSuccess', { count: successCount })
           : t('admin.accounts.accountCreated')
       )
-      emit('created')
-      handleClose()
+      if (refreshTokens.length === 1 && lastCreatedAccount) {
+        finishCreateSuccess(lastCreatedAccount)
+      } else {
+        finishCreateSuccess(null, { skipCost: true })
+      }
     } else if (successCount > 0) {
       appStore.showWarning(t('admin.accounts.oauth.batchPartialSuccess', { success: successCount, failed: failedCount }))
       grokOAuth.error.value = errors.join('\n')
-      emit('created')
+      emit('created', undefined)
     } else {
       grokOAuth.error.value = errors.join('\n')
       appStore.showError(t('admin.accounts.oauth.batchFailed'))
@@ -5510,14 +5599,12 @@ const handleOpenAIExchange = async (authCode: string) => {
         priority: form.priority,
         rate_multiplier: form.rate_multiplier,
         group_ids: form.group_ids,
-        expires_at: form.expires_at,
-        auto_pause_on_expired: autoPauseOnExpired.value
+        ...accountExpiryPayload.value
       })
       appStore.showSuccess(t('admin.accounts.accountCreated'))
     }
 
-    emit('created')
-    handleClose()
+    finishCreateSuccess(null, { skipCost: true })
   } catch (error: any) {
     oauthClient.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
     appStore.showError(oauthClient.error.value)
@@ -5587,8 +5674,7 @@ const handleOpenAIImportCodexSession = async (content: string) => {
       priority: form.priority,
       rate_multiplier: form.rate_multiplier,
       group_ids: form.group_ids,
-      expires_at: form.expires_at,
-      auto_pause_on_expired: autoPauseOnExpired.value,
+      ...accountExpiryPayload.value,
       credential_extras: Object.keys(credentialExtras).length > 0 ? credentialExtras : undefined,
       extra,
       update_existing: true
@@ -5604,8 +5690,7 @@ const handleOpenAIImportCodexSession = async (content: string) => {
 
     if (successCount > 0 && result.failed === 0) {
       appStore.showSuccess(t('admin.accounts.oauth.openai.codexSessionImportSuccess', params))
-      emit('created')
-      handleClose()
+      finishCreateSuccess(null, { skipCost: true })
       return
     }
 
@@ -5620,7 +5705,7 @@ const handleOpenAIImportCodexSession = async (content: string) => {
 
     if (successCount > 0) {
       appStore.showWarning(t('admin.accounts.oauth.openai.codexSessionImportPartial', params))
-      emit('created')
+      emit('created', undefined)
       return
     }
 
@@ -5665,15 +5750,13 @@ const handleOpenAIImportCodexPAT = async (accessToken: string) => {
       priority: form.priority,
       rate_multiplier: form.rate_multiplier,
       group_ids: form.group_ids,
-      expires_at: form.expires_at,
-      auto_pause_on_expired: autoPauseOnExpired.value,
+      ...accountExpiryPayload.value,
       credential_extras: Object.keys(credentialExtras).length > 0 ? credentialExtras : undefined,
       extra
     })
 
     appStore.showSuccess(t('admin.accounts.messages.accountCreated'))
-    emit('created')
-    handleClose()
+    finishCreateSuccess(null, { skipCost: true })
   } catch (error: any) {
     oauthClient.error.value =
       error.response?.data?.detail ||
@@ -5763,8 +5846,7 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
             priority: form.priority,
             rate_multiplier: form.rate_multiplier,
             group_ids: form.group_ids,
-            expires_at: form.expires_at,
-            auto_pause_on_expired: autoPauseOnExpired.value
+            ...accountExpiryPayload.value
           })
         }
 
@@ -5783,14 +5865,13 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
           ? t('admin.accounts.oauth.batchSuccess', { count: successCount })
           : t('admin.accounts.accountCreated')
       )
-      emit('created')
-      handleClose()
+      finishCreateSuccess(null, { skipCost: true })
     } else if (successCount > 0 && failedCount > 0) {
       appStore.showWarning(
         t('admin.accounts.oauth.batchPartialSuccess', { success: successCount, failed: failedCount })
       )
       oauthClient.error.value = errors.join('\n')
-      emit('created')
+      emit('created', undefined)
     } else {
       oauthClient.error.value = errors.join('\n')
       appStore.showError(t('admin.accounts.oauth.batchFailed'))
@@ -5862,8 +5943,7 @@ const handleAntigravityValidateRT = async (refreshTokenInput: string) => {
           priority: form.priority,
           rate_multiplier: form.rate_multiplier,
           group_ids: form.group_ids,
-          expires_at: form.expires_at,
-          auto_pause_on_expired: autoPauseOnExpired.value
+          ...accountExpiryPayload.value
         })
         await adminAPI.accounts.create(createPayload)
         successCount++
@@ -5881,14 +5961,13 @@ const handleAntigravityValidateRT = async (refreshTokenInput: string) => {
           ? t('admin.accounts.oauth.batchSuccess', { count: successCount })
           : t('admin.accounts.accountCreated')
       )
-      emit('created')
-      handleClose()
+      finishCreateSuccess(null, { skipCost: true })
     } else if (successCount > 0 && failedCount > 0) {
       appStore.showWarning(
         t('admin.accounts.oauth.batchPartialSuccess', { success: successCount, failed: failedCount })
       )
       antigravityOAuth.error.value = errors.join('\n')
-      emit('created')
+      emit('created', undefined)
     } else {
       antigravityOAuth.error.value = errors.join('\n')
       appStore.showError(t('admin.accounts.oauth.batchFailed'))
@@ -6227,6 +6306,14 @@ const handleCookieAuth = async (sessionKey: string) => {
           credentials.temp_unschedulable_enabled = true
           credentials.temp_unschedulable_rules = tempUnschedPayload
         }
+        const modelMapping = buildModelMappingObject(
+          modelRestrictionMode.value,
+          allowedModels.value,
+          modelMappings.value
+        )
+        if (modelMapping) {
+          credentials.model_mapping = modelMapping
+        }
 
         await adminAPI.accounts.create({
           name: accountName,
@@ -6241,8 +6328,7 @@ const handleCookieAuth = async (sessionKey: string) => {
           priority: form.priority,
           rate_multiplier: form.rate_multiplier,
           group_ids: form.group_ids,
-          expires_at: form.expires_at,
-          auto_pause_on_expired: autoPauseOnExpired.value
+          ...accountExpiryPayload.value
         })
 
         successCount++
@@ -6260,10 +6346,10 @@ const handleCookieAuth = async (sessionKey: string) => {
     if (successCount > 0) {
       appStore.showSuccess(t('admin.accounts.oauth.successCreated', { count: successCount }))
       if (failedCount === 0) {
-        emit('created')
+        emit('created', undefined)
         handleClose()
       } else {
-        emit('created')
+        emit('created', undefined)
       }
     }
 

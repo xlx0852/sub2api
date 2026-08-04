@@ -1582,3 +1582,24 @@ func TestHandleGrokAccountUpstreamErrorDoesNotShortenExistingPause(t *testing.T)
 	require.True(t, ok)
 	require.WithinDuration(t, existingUntil, runtimeUntil, time.Second)
 }
+
+type grok429QuotaProber struct{ calls chan int64 }
+
+func (p *grok429QuotaProber) ProbeUsage(_ context.Context, accountID int64) (*GrokQuotaProbeResult, error) {
+	p.calls <- accountID
+	return &GrokQuotaProbeResult{}, nil
+}
+
+func TestHandleGrok429TriggersOfficialBillingRefresh(t *testing.T) {
+	prober := &grok429QuotaProber{calls: make(chan int64, 1)}
+	account := &Account{ID: 83, Platform: PlatformGrok, Type: AccountTypeOAuth}
+	svc := &OpenAIGatewayService{accountRepo: &grokQuotaAccountRepo{}, grokQuotaService: prober}
+
+	svc.handleGrokAccountUpstreamError(context.Background(), account, http.StatusTooManyRequests, http.Header{}, nil)
+	select {
+	case accountID := <-prober.calls:
+		require.EqualValues(t, 83, accountID)
+	case <-time.After(time.Second):
+		t.Fatal("Grok billing refresh was not triggered")
+	}
+}

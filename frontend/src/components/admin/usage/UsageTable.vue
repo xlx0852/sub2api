@@ -1,8 +1,11 @@
 <template>
-  <div class="card overflow-hidden">
+  <div :class="isDesktopViewport ? 'card overflow-hidden' : 'space-y-3'">
     <div
       v-if="showIpGeoToolbar"
-      class="flex items-center justify-end gap-2 border-b border-gray-200 px-4 py-2 dark:border-dark-700"
+      class="flex items-center justify-end gap-2 px-4 py-2"
+      :class="isDesktopViewport
+        ? 'border-b border-gray-200 dark:border-dark-700'
+        : 'rounded-lg border border-black/[0.08] bg-[#fbfbf8] dark:border-white/[0.09] dark:bg-dark-900'"
     >
       <span v-if="pendingIpCount > 0" class="text-xs text-gray-500 dark:text-gray-400">
         {{ t('usage.ipGeo.pending', { count: pendingIpCount }) }}
@@ -16,7 +19,7 @@
         {{ ipGeoBatchLoading ? t('usage.ipGeo.batchFetching') : t('usage.ipGeo.batchFetch') }}
       </button>
     </div>
-    <div class="overflow-auto">
+    <div :class="isDesktopViewport ? 'overflow-auto' : ''">
       <DataTable
         :columns="columns"
         :data="data"
@@ -26,6 +29,197 @@
         :default-sort-order="defaultSortOrder"
         @sort="(key, order) => $emit('sort', key, order)"
       >
+        <template #mobile-card="{ row }">
+          <article class="min-w-0">
+            <header class="border-b border-black/[0.07] p-4 dark:border-white/[0.08]">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3
+                    class="min-w-0 break-all text-sm font-semibold text-gray-950 dark:text-white"
+                    :title="row.upstream_model && row.upstream_model !== row.model ? `${row.model} → ${row.upstream_model}` : row.model"
+                  >
+                    {{ row.model || '-' }}
+                  </h3>
+                  <span
+                    v-if="isColumnVisible('stream')"
+                    class="inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[11px] font-medium"
+                    :class="getRequestTypeBadgeClass(row)"
+                  >
+                    {{ getRequestTypeLabel(row) }}
+                  </span>
+                  <span
+                    v-if="isColumnVisible('billing_mode')"
+                    class="inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[11px] font-medium"
+                    :class="getBillingModeBadgeClass(getDisplayBillingMode(row))"
+                  >
+                    {{ getBillingModeLabel(getDisplayBillingMode(row), t) }}
+                  </span>
+                  <span
+                    v-if="isColumnVisible('service_tier')"
+                    class="inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[11px] font-medium"
+                    :class="getServiceTierBadgeClass(row.service_tier)"
+                  >
+                    {{ getUsageServiceTierLabel(row.service_tier, t) }}
+                  </span>
+                </div>
+                <p
+                  v-if="row.upstream_model && row.upstream_model !== row.model"
+                  class="mt-1 break-all text-xs text-gray-500 dark:text-dark-400"
+                >
+                  ↳ {{ row.upstream_model }}
+                </p>
+                <p
+                  v-else-if="row.model_mapping_chain && row.model_mapping_chain.includes('→')"
+                  class="mt-1 break-all text-xs text-gray-500 dark:text-dark-400"
+                >
+                  {{ row.model_mapping_chain }}
+                </p>
+                <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-dark-400">
+                  <span v-if="isColumnVisible('created_at')">{{ formatDateTime(row.created_at) }}</span>
+                  <span v-if="isColumnVisible('group') && row.group" class="inline-flex items-center rounded bg-indigo-100 px-1.5 py-0.5 text-[11px] font-medium text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
+                    {{ row.group.name }}
+                  </span>
+                  <span v-if="isColumnVisible('api_key')" class="truncate" :title="row.api_key?.name || '-'">
+                    {{ row.api_key?.name || '-' }}
+                  </span>
+                </div>
+              </div>
+            </header>
+
+            <div class="space-y-3 p-4">
+              <section
+                v-if="isColumnVisible('cost') || isColumnVisible('tokens') || isColumnVisible('latency') || isColumnVisible('output_rate')"
+                class="grid grid-cols-2 gap-2"
+              >
+                <div
+                  v-if="isColumnVisible('cost')"
+                  class="rounded-lg bg-black/[0.03] px-3 py-2.5 dark:bg-white/[0.04]"
+                >
+                  <div class="text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('usage.cost') }}</div>
+                  <div class="mt-1.5 text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    ${{ row.actual_cost?.toFixed(6) || '0.000000' }}
+                  </div>
+                  <div
+                    v-if="showAccountBilling && row.account_rate_multiplier != null"
+                    class="mt-0.5 text-[11px] tabular-nums text-orange-500 dark:text-orange-400"
+                  >
+                    A ${{ accountBilled(row).toFixed(6) }}
+                  </div>
+                </div>
+
+                <div
+                  v-if="isColumnVisible('tokens')"
+                  class="rounded-lg bg-black/[0.03] px-3 py-2.5 dark:bg-white/[0.04]"
+                >
+                  <div class="text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('usage.tokens') }}</div>
+                  <div v-if="isImageUsage(row)" class="mt-1.5 flex flex-wrap items-center gap-1.5 text-sm">
+                    <span class="font-semibold text-gray-900 dark:text-white">{{ row.image_count }}{{ t('usage.imageUnit') }}</span>
+                    <span class="text-xs text-gray-400">({{ formatImageBillingSize(row, t) }})</span>
+                  </div>
+                  <div v-else class="mt-1.5 space-y-1 text-sm">
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span class="inline-flex items-center gap-1">
+                        <Icon name="arrowDown" size="sm" class="h-3.5 w-3.5 text-emerald-500" />
+                        <span class="font-semibold tabular-nums text-gray-900 dark:text-white">{{ row.input_tokens?.toLocaleString() || 0 }}</span>
+                      </span>
+                      <span class="inline-flex items-center gap-1">
+                        <Icon name="arrowUp" size="sm" class="h-3.5 w-3.5 text-violet-500" />
+                        <span class="font-semibold tabular-nums text-gray-900 dark:text-white">{{ row.output_tokens?.toLocaleString() || 0 }}</span>
+                      </span>
+                    </div>
+                    <div v-if="row.cache_read_tokens > 0 || row.cache_creation_tokens > 0" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                      <span v-if="row.cache_read_tokens > 0" class="font-medium tabular-nums text-sky-600 dark:text-sky-400">
+                        R {{ formatCacheTokens(row.cache_read_tokens) }}
+                      </span>
+                      <span v-if="row.cache_creation_tokens > 0" class="font-medium tabular-nums text-amber-600 dark:text-amber-400">
+                        W {{ formatCacheTokens(row.cache_creation_tokens) }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  v-if="isColumnVisible('latency')"
+                  class="rounded-lg bg-black/[0.03] px-3 py-2.5 dark:bg-white/[0.04]"
+                >
+                  <div class="text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('usage.latency') }}</div>
+                  <div class="mt-1.5 space-y-1 text-xs">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="text-gray-400">{{ t('usage.latencyFirstToken') }}</span>
+                      <span class="font-semibold tabular-nums" :class="getLatencyTextClass(row.first_token_ms, 'first_token')">
+                        {{ formatDuration(row.first_token_ms) }}
+                      </span>
+                    </div>
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="text-gray-400">{{ t('usage.latencyTotal') }}</span>
+                      <span class="font-semibold tabular-nums" :class="getLatencyTextClass(row.duration_ms, 'duration')">
+                        {{ formatDuration(row.duration_ms) }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  v-if="isColumnVisible('output_rate')"
+                  class="rounded-lg bg-black/[0.03] px-3 py-2.5 dark:bg-white/[0.04]"
+                >
+                  <div class="text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('usage.outputRate') }}</div>
+                  <div class="mt-1.5 text-sm font-semibold tabular-nums" :class="getOutputRateTextClass(row)">
+                    {{ formatOutputRate(row) }}
+                  </div>
+                </div>
+              </section>
+
+              <section v-if="hasMobileMeta(row)" class="space-y-2 border-t border-black/[0.06] pt-3 dark:border-white/[0.07]">
+                <div v-if="isColumnVisible('user')" class="flex items-start justify-between gap-3 text-sm">
+                  <span class="shrink-0 text-xs text-gray-400 dark:text-dark-500">{{ t('admin.usage.user') }}</span>
+                  <div class="min-w-0 text-right">
+                    <button
+                      v-if="row.user?.email"
+                      type="button"
+                      class="break-all font-medium text-primary-600 dark:text-primary-400"
+                      @click="$emit('userClick', row.user_id, row.user?.email)"
+                    >
+                      {{ row.user.email }}
+                    </button>
+                    <span v-else class="text-gray-900 dark:text-white">-</span>
+                    <span class="ml-1 text-xs text-gray-400">#{{ row.user_id }}</span>
+                  </div>
+                </div>
+                <div v-if="isColumnVisible('account')" class="flex items-start justify-between gap-3 text-sm">
+                  <span class="shrink-0 text-xs text-gray-400 dark:text-dark-500">{{ t('admin.usage.account') }}</span>
+                  <span class="min-w-0 break-all text-right text-gray-900 dark:text-white">{{ row.account?.name || '-' }}</span>
+                </div>
+                <div v-if="isColumnVisible('reasoning_effort')" class="flex items-start justify-between gap-3 text-sm">
+                  <span class="shrink-0 text-xs text-gray-400 dark:text-dark-500">{{ t('usage.reasoningEffort') }}</span>
+                  <span class="min-w-0 break-all text-right text-gray-900 dark:text-white">{{ formatReasoningEffort(row.reasoning_effort) }}</span>
+                </div>
+                <div v-if="isColumnVisible('endpoint')" class="flex items-start justify-between gap-3 text-sm">
+                  <span class="shrink-0 text-xs text-gray-400 dark:text-dark-500">{{ t('usage.endpoint') }}</span>
+                  <div class="min-w-0 space-y-0.5 text-right text-xs text-gray-700 dark:text-gray-300">
+                    <div class="break-all">{{ row.inbound_endpoint?.trim() || '-' }}</div>
+                    <div v-if="showUpstreamEndpoint && row.upstream_endpoint?.trim()" class="break-all text-gray-400">
+                      ↑ {{ row.upstream_endpoint.trim() }}
+                    </div>
+                  </div>
+                </div>
+                <div v-if="isColumnVisible('ip_address') && row.ip_address" class="flex items-start justify-between gap-3 text-sm">
+                  <span class="shrink-0 text-xs text-gray-400 dark:text-dark-500">IP</span>
+                  <div class="min-w-0 text-right">
+                    <div class="font-mono text-xs text-gray-700 dark:text-gray-300">{{ row.ip_address }}</div>
+                    <IpGeoCell :ip="row.ip_address" />
+                  </div>
+                </div>
+                <div v-if="isColumnVisible('user_agent') && row.user_agent" class="flex items-start justify-between gap-3 text-sm">
+                  <span class="shrink-0 text-xs text-gray-400 dark:text-dark-500">{{ t('usage.userAgent') }}</span>
+                  <span class="min-w-0 break-all text-right text-xs text-gray-600 dark:text-gray-400" :title="row.user_agent">
+                    {{ formatUserAgent(row.user_agent) }}
+                  </span>
+                </div>
+              </section>
+            </div>
+          </article>
+        </template>
         <template #cell-user="{ row }">
           <div class="text-sm">
             <button
@@ -463,7 +657,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { formatDateTime, formatReasoningEffort } from '@/utils/format'
 import { formatCacheTokens, formatMultiplier } from '@/utils/formatters'
@@ -534,7 +728,38 @@ const showAccountBilling = props.showAccountBilling
 const showUpstreamEndpoint = props.showUpstreamEndpoint
 const ipGeoBatchLoading = ref(false)
 
+const desktopViewportQuery = '(min-width: 768px)'
+const isDesktopViewport = ref(
+  typeof window === 'undefined' ? true : window.matchMedia(desktopViewportQuery).matches
+)
+let desktopMediaQuery: MediaQueryList | null = null
+const handleDesktopViewportChange = (event: MediaQueryListEvent) => {
+  isDesktopViewport.value = event.matches
+}
+onMounted(() => {
+  if (typeof window === 'undefined') return
+  desktopMediaQuery = window.matchMedia(desktopViewportQuery)
+  isDesktopViewport.value = desktopMediaQuery.matches
+  desktopMediaQuery.addEventListener('change', handleDesktopViewportChange)
+})
+onUnmounted(() => {
+  desktopMediaQuery?.removeEventListener('change', handleDesktopViewportChange)
+  desktopMediaQuery = null
+})
+
 const showIpGeoToolbar = computed(() => props.columns.some((col) => col.key === 'ip_address'))
+const visibleColumnKeys = computed(() => new Set(props.columns.map((col) => col.key)))
+const isColumnVisible = (key: string) => visibleColumnKeys.value.has(key)
+const hasMobileMeta = (row: AdminUsageLog) => {
+  return (
+    isColumnVisible('user') ||
+    isColumnVisible('account') ||
+    isColumnVisible('reasoning_effort') ||
+    isColumnVisible('endpoint') ||
+    (isColumnVisible('ip_address') && Boolean(row.ip_address)) ||
+    (isColumnVisible('user_agent') && Boolean(row.user_agent))
+  )
+}
 
 const currentPageIps = computed(() =>
   Array.from(new Set(props.data.map((row) => row.ip_address).filter((ip): ip is string => Boolean(ip))))
@@ -614,15 +839,26 @@ const formatDuration = (ms: number | null | undefined): string => {
   return `${(ms / 1000).toFixed(2)}s`
 }
 
-/** output_tokens / duration_ms → tok/s；图片或无效数据返回 null */
+/** output_tokens / (duration_ms - first_token_ms) → tok/s；忽略连接/首字等待，仅按生成阶段时长 */
 const calcOutputRate = (row: AdminUsageLog): number | null => {
   if (isImageUsage(row)) return null
   const durationMs = row.duration_ms
+  const firstTokenMs = row.first_token_ms
   const outputTokens = row.output_tokens
-  if (durationMs == null || durationMs <= 0 || outputTokens == null || outputTokens <= 0) {
+  if (
+    durationMs == null ||
+    durationMs <= 0 ||
+    firstTokenMs == null ||
+    firstTokenMs < 0 ||
+    outputTokens == null ||
+    outputTokens <= 0
+  ) {
     return null
   }
-  return (outputTokens * 1000) / durationMs
+  // 生成时长 = 总耗时 - 首字延迟（连接/排队/预填充等待）
+  const generationMs = durationMs - firstTokenMs
+  if (generationMs <= 0) return null
+  return (outputTokens * 1000) / generationMs
 }
 
 const formatOutputRate = (row: AdminUsageLog): string => {

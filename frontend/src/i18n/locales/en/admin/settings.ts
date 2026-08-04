@@ -1115,6 +1115,14 @@ export default {
         previousResponseWeight: 'previous_response sticky',
         sessionStickyWeight: 'session_hash sticky'
       },
+      accountProfitWeighting: {
+        title: 'Dynamic account operation',
+        description: 'Works across platforms. Observe suggested ratios first, then activate automatic weighting for accounts explicitly enabled.',
+        accountHint: 'Account switch: Accounts → Edit account → Basic → Dynamic business weighting.',
+        off: 'Off',
+        observe: 'Observe',
+        active: 'Active'
+      },
       usageRecords: {
         title: 'Usage Records',
         description: 'Settings for usage and failed-request records visible to end users.',

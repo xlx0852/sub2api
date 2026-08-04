@@ -52,6 +52,7 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 
 	if statusCode == http.StatusTooManyRequests {
 		s.markOpenAIOAuth429RateLimited(stateCtx, account, headers, responseBody)
+		s.refreshKimiQuotaAfter429(account)
 	}
 	if s == nil || account == nil || s.rateLimitService == nil {
 		return false
@@ -69,6 +70,17 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 		s.BlockAccountScheduling(account, time.Time{}, "upstream_disable")
 	}
 	return shouldDisable
+}
+
+func (s *OpenAIGatewayService) refreshKimiQuotaAfter429(account *Account) {
+	if s == nil || s.kimiQuotaService == nil || account == nil || account.Platform != PlatformKimi || account.Type != AccountTypeOAuth {
+		return
+	}
+	go func(accountID int64) {
+		ctx, cancel := context.WithTimeout(context.Background(), openAIAccountStateUpdateTimeout+kimiQuotaUpstreamTimeout)
+		defer cancel()
+		_, _ = s.kimiQuotaService.QueryUsage(ctx, accountID)
+	}(account.ID)
 }
 
 func (s *OpenAIGatewayService) markOpenAIOAuth429RateLimited(ctx context.Context, account *Account, headers http.Header, responseBody []byte) {

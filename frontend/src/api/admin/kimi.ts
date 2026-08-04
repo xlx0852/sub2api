@@ -21,6 +21,7 @@ export interface KimiCreateAccountRequest {
   concurrency: number
   priority: number
   group_ids: number[]
+  model_mapping?: Record<string, string>
 }
 
 export async function startDeviceAuthorization(proxyId?: number | null): Promise<KimiDeviceAuthorization> {

@@ -1083,7 +1083,14 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	default:
 		targetURL = openaiPlatformAPIURL
 	}
-	targetURL = appendOpenAIResponsesRequestPathSuffix(targetURL, openAIResponsesRequestPathSuffix(c))
+	suffix, suffixErr := openAIResponsesRequestPathSuffix(c)
+	if suffixErr != nil {
+		return nil, fmt.Errorf("invalid responses path: %w", suffixErr)
+	}
+	targetURL, suffixErr = appendOpenAIResponsesRequestPathSuffix(targetURL, suffix)
+	if suffixErr != nil {
+		return nil, fmt.Errorf("invalid responses path: %w", suffixErr)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
 	if err != nil {

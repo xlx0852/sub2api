@@ -58,6 +58,14 @@ func (s *accountRepoStub) FindByExtraField(ctx context.Context, key string, valu
 	panic("unexpected FindByExtraField call")
 }
 
+func (s *accountRepoStub) FindOAuthByPlatformEmail(ctx context.Context, platform, email string, includeDeleted bool) ([]Account, error) {
+	panic("unexpected FindOAuthByPlatformEmail call")
+}
+
+func (s *accountRepoStub) ListOAuthIncludingDeleted(ctx context.Context) ([]Account, error) {
+	panic("unexpected ListOAuthIncludingDeleted call")
+}
+
 func (s *accountRepoStub) ListCRSAccountIDs(ctx context.Context) (map[string]int64, error) {
 	panic("unexpected ListCRSAccountIDs call")
 }
@@ -68,9 +76,21 @@ func (s *accountRepoStub) Update(ctx context.Context, account *Account) error {
 
 // Delete 记录被删除的账号 ID 并返回预设的错误。
 // 通过 deletedIDs 可以验证删除操作是否被正确调用。
+func (s *accountRepoStub) Restore(ctx context.Context, id int64) error {
+	panic("unexpected Restore call")
+}
+
 func (s *accountRepoStub) Delete(ctx context.Context, id int64) error {
 	s.deletedIDs = append(s.deletedIDs, id)
 	return s.deleteErr
+}
+
+func (s *accountRepoStub) HardDelete(ctx context.Context, id int64) error {
+	panic("unexpected HardDelete call")
+}
+
+func (s *accountRepoStub) ReassignAccountReferences(ctx context.Context, fromID, toID int64) error {
+	panic("unexpected ReassignAccountReferences call")
 }
 
 // 以下是接口要求实现但本测试不关心的方法
@@ -117,6 +137,9 @@ func (s *accountRepoStub) ClearError(ctx context.Context, id int64) error {
 
 func (s *accountRepoStub) SetSchedulable(ctx context.Context, id int64, schedulable bool) error {
 	panic("unexpected SetSchedulable call")
+}
+func (s *accountRepoStub) SetExpiresAt(ctx context.Context, id int64, expiresAt *time.Time) error {
+	return nil
 }
 
 func (s *accountRepoStub) AutoPauseExpiredAccounts(ctx context.Context, now time.Time) (int64, error) {

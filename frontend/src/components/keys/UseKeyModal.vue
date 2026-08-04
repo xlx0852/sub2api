@@ -50,6 +50,50 @@
           </nav>
         </div>
 
+        <!-- Codex auth mode (兼容模式 / API Key Mode) -->
+        <div
+          v-if="showCodexAuthMode"
+          class="rounded-xl border border-gray-200 bg-gray-50/80 p-3 dark:border-dark-700 dark:bg-dark-800/40"
+        >
+          <div class="mb-2">
+            <div class="text-sm font-medium text-gray-800 dark:text-dark-100">
+              {{ t('keys.useKeyModal.openai.authModeTitle') }}
+            </div>
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">
+              {{ t('keys.useKeyModal.openai.authModeHint') }}
+            </p>
+          </div>
+          <div class="grid grid-cols-2 gap-2 rounded-lg bg-white p-1 dark:bg-dark-900">
+            <button
+              type="button"
+              class="rounded-md px-3 py-2 text-sm font-medium transition-colors"
+              :class="codexAuthMode === 'legacy'
+                ? 'bg-primary-500 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-gray-100 dark:text-dark-300 dark:hover:bg-dark-800'"
+              @click="codexAuthMode = 'legacy'"
+            >
+              {{ t('keys.useKeyModal.openai.authModeLegacy') }}
+            </button>
+            <button
+              type="button"
+              class="rounded-md px-3 py-2 text-sm font-medium transition-colors"
+              :class="codexAuthMode === 'apiKey'
+                ? 'bg-primary-500 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-gray-100 dark:text-dark-300 dark:hover:bg-dark-800'"
+              @click="codexAuthMode = 'apiKey'"
+            >
+              {{ t('keys.useKeyModal.openai.authModeApiKey') }}
+            </button>
+          </div>
+          <p
+            v-if="codexAuthMode === 'apiKey'"
+            class="mt-2 flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400"
+          >
+            <Icon name="exclamationCircle" size="sm" class="mt-0.5 flex-shrink-0" />
+            <span>{{ t('keys.useKeyModal.openai.authModeApiKeyWarn') }}</span>
+          </p>
+        </div>
+
         <!-- OS/Shell Tabs -->
         <div v-if="showShellTabs" class="border-b border-gray-200 dark:border-dark-700">
           <nav class="-mb-px flex space-x-4" aria-label="Tabs">
@@ -175,13 +219,16 @@ const { copyToClipboard: clipboardCopy } = useClipboard()
 const copiedIndex = ref<number | null>(null)
 const activeTab = ref<string>('unix')
 const activeClientTab = ref<string>('claude')
+/** Codex auth: legacy keeps requires_openai_auth=true; apiKey uses local image extension header. */
+const codexAuthMode = ref<'legacy' | 'apiKey'>('legacy')
 
 // Reset tabs when platform changes
 const defaultClientTab = computed(() => {
   switch (props.platform) {
     case 'openai':
-    case 'grok':
       return 'codex'
+    case 'grok':
+      return 'grok'
     case 'gemini':
       return 'gemini'
     case 'antigravity':
@@ -194,12 +241,21 @@ const defaultClientTab = computed(() => {
 watch(() => props.platform, () => {
   activeTab.value = 'unix'
   activeClientTab.value = defaultClientTab.value
+  codexAuthMode.value = 'legacy'
 }, { immediate: true })
 
 // Reset shell tab when client changes
 watch(activeClientTab, () => {
   activeTab.value = 'unix'
+  if (activeClientTab.value !== 'codex' && activeClientTab.value !== 'codex-ws') {
+    codexAuthMode.value = 'legacy'
+  }
 })
+
+const showCodexAuthMode = computed(() =>
+  props.platform === 'openai'
+  && (activeClientTab.value === 'codex' || activeClientTab.value === 'codex-ws')
+)
 
 // Icon components
 const AppleIcon = {
@@ -279,13 +335,13 @@ const clientTabs = computed((): TabConfig[] => {
       return tabs
     }
     case 'grok': {
-      const tabs: TabConfig[] = [
+      // Native Grok CLI first; Codex/Claude/OpenCode remain as alternate clients.
+      return [
+        { id: 'grok', label: t('keys.useKeyModal.cliTabs.grokCli'), icon: TerminalIcon },
+        { id: 'claude', label: t('keys.useKeyModal.cliTabs.claudeCode'), icon: TerminalIcon },
         { id: 'codex', label: t('keys.useKeyModal.cliTabs.codexCli'), icon: TerminalIcon },
+        { id: 'opencode', label: t('keys.useKeyModal.cliTabs.opencode'), icon: TerminalIcon },
       ]
-      // Grok groups support Claude-compatible /v1/messages for CLI-style clients.
-      tabs.push({ id: 'claude', label: t('keys.useKeyModal.cliTabs.claudeCode'), icon: TerminalIcon })
-      tabs.push({ id: 'opencode', label: t('keys.useKeyModal.cliTabs.opencode'), icon: TerminalIcon })
-      return tabs
     }
     case 'gemini':
       return [
@@ -323,7 +379,11 @@ const showShellTabs = computed(() => activeClientTab.value !== 'opencode')
 
 const currentTabs = computed(() => {
   if (!showShellTabs.value) return []
-  if (activeClientTab.value === 'codex' || activeClientTab.value === 'codex-ws') {
+  if (
+    activeClientTab.value === 'codex'
+    || activeClientTab.value === 'codex-ws'
+    || activeClientTab.value === 'grok'
+  ) {
     return openaiTabs
   }
   return shellTabs
@@ -338,7 +398,10 @@ const platformDescription = computed(() => {
       return t('keys.useKeyModal.openai.description')
     case 'grok':
       if (activeClientTab.value === 'claude') {
-        return t('keys.useKeyModal.description')
+        return t('keys.useKeyModal.grok.claudeDescription')
+      }
+      if (activeClientTab.value === 'grok') {
+        return t('keys.useKeyModal.grok.cliDescription')
       }
       return t('keys.useKeyModal.grok.description')
     case 'gemini':
@@ -361,7 +424,12 @@ const platformNote = computed(() => {
         : t('keys.useKeyModal.openai.note')
     case 'grok':
       if (activeClientTab.value === 'claude') {
-        return t('keys.useKeyModal.note')
+        return t('keys.useKeyModal.grok.claudeNote')
+      }
+      if (activeClientTab.value === 'grok') {
+        return activeTab.value === 'windows'
+          ? t('keys.useKeyModal.grok.cliNoteWindows')
+          : t('keys.useKeyModal.grok.cliNote')
       }
       return activeTab.value === 'windows'
         ? t('keys.useKeyModal.grok.noteWindows')
@@ -447,9 +515,12 @@ const currentFiles = computed((): FileConfig[] => {
       return generateOpenAIFiles(baseUrl, apiKey)
     case 'grok':
       if (activeClientTab.value === 'claude') {
-        return generateAnthropicFiles(baseUrl, apiKey)
+        return generateGrokClaudeFiles(baseUrl, apiKey)
       }
-      return generateGrokFiles(baseUrl, apiKey)
+      if (activeClientTab.value === 'grok') {
+        return generateGrokCliFiles(baseUrl, apiKey)
+      }
+      return generateGrokCodexFiles(baseUrl, apiKey)
     case 'gemini':
       return [generateGeminiCliContent(baseUrl, apiKey)]
     case 'antigravity':
@@ -557,12 +628,23 @@ ${keyword('$env:')}${variable('GEMINI_MODEL')}${operator('=')}${string(`"${model
   return { path, content, highlighted }
 }
 
-function generateOpenAIFiles(baseUrl: string, apiKey: string): FileConfig[] {
-  const isWindows = activeTab.value === 'windows'
-  const configDir = isWindows ? '%userprofile%\\.codex' : '~/.codex'
+function buildOpenAICodexConfig(baseUrl: string, options: { websocket: boolean }): string {
+  const apiKeyMode = codexAuthMode.value === 'apiKey'
+  const authLine = apiKeyMode
+    ? 'requires_openai_auth = false'
+    : 'requires_openai_auth = true'
+  const headerLine = apiKeyMode
+    ? '\nhttp_headers = { "x-openai-actor-authorization" = "local-image-extension" }'
+    : ''
+  const wsLine = options.websocket ? '\nsupports_websockets = true' : ''
+  const features = options.websocket
+    ? `[features]
+responses_websockets_v2 = true
+goals = true`
+    : `[features]
+goals = true`
 
-  // config.toml content
-  const configContent = `model_provider = "OpenAI"
+  return `model_provider = "OpenAI"
 model = "gpt-5.5"
 review_model = "gpt-5.5"
 model_reasoning_effort = "xhigh"
@@ -573,13 +655,16 @@ windows_wsl_setup_acknowledged = true
 [model_providers.OpenAI]
 name = "OpenAI"
 base_url = "${baseUrl}"
-wire_api = "responses"
-requires_openai_auth = true
+wire_api = "responses"${wsLine}
+${authLine}${headerLine}
 
-[features]
-goals = true`
+${features}`
+}
 
-  // auth.json content
+function generateOpenAIFiles(baseUrl: string, apiKey: string): FileConfig[] {
+  const isWindows = activeTab.value === 'windows'
+  const configDir = isWindows ? '%userprofile%\\.codex' : '~/.codex'
+  const configContent = buildOpenAICodexConfig(baseUrl, { websocket: false })
   const authContent = `{
   "OPENAI_API_KEY": "${apiKey}"
 }`
@@ -600,28 +685,7 @@ goals = true`
 function generateOpenAIWsFiles(baseUrl: string, apiKey: string): FileConfig[] {
   const isWindows = activeTab.value === 'windows'
   const configDir = isWindows ? '%userprofile%\\.codex' : '~/.codex'
-
-  // config.toml content with WebSocket v2
-  const configContent = `model_provider = "OpenAI"
-model = "gpt-5.5"
-review_model = "gpt-5.5"
-model_reasoning_effort = "xhigh"
-disable_response_storage = true
-network_access = "enabled"
-windows_wsl_setup_acknowledged = true
-
-[model_providers.OpenAI]
-name = "OpenAI"
-base_url = "${baseUrl}"
-wire_api = "responses"
-supports_websockets = true
-requires_openai_auth = true
-
-[features]
-responses_websockets_v2 = true
-goals = true`
-
-  // auth.json content
+  const configContent = buildOpenAICodexConfig(baseUrl, { websocket: true })
   const authContent = `{
   "OPENAI_API_KEY": "${apiKey}"
 }`
@@ -646,7 +710,7 @@ function normalizeCodexBaseUrl(baseUrl: string): string {
   return `${trimmed}/v1`
 }
 
-function generateGrokFiles(baseUrl: string, apiKey: string): FileConfig[] {
+function generateGrokCodexFiles(baseUrl: string, apiKey: string): FileConfig[] {
   const isWindows = activeTab.value === 'windows'
   const configDir = isWindows ? '%userprofile%\\.codex' : '~/.codex'
   const providerBase = normalizeCodexBaseUrl(baseUrl)
@@ -682,6 +746,115 @@ goals = true`
     {
       path: `${configDir}/auth.json`,
       content: authContent
+    }
+  ]
+}
+
+/** Native Grok CLI (~/.grok/config.toml) configuration. */
+function generateGrokCliFiles(baseUrl: string, apiKey: string): FileConfig[] {
+  const isWindows = activeTab.value === 'windows'
+  const configPath = isWindows ? '%userprofile%\\.grok\\config.toml' : '~/.grok/config.toml'
+  const providerBase = normalizeCodexBaseUrl(baseUrl)
+
+  const configContent = `[models]
+default = "grok"
+web_search = "grok"
+
+[model."grok"]
+model = "grok-4.5"
+base_url = "${providerBase}"
+name = "Grok 4.5"
+api_key = "${apiKey}"
+api_backend = "responses"
+context_window = 1000000
+supports_backend_search = true`
+
+  return [
+    {
+      path: configPath,
+      content: configContent,
+      hint: t('keys.useKeyModal.grok.cliConfigHint')
+    }
+  ]
+}
+
+/** Claude Code env pointing model aliases at Grok via Sub2API Messages-compatible endpoint. */
+function generateGrokClaudeFiles(baseUrl: string, apiKey: string): FileConfig[] {
+  const model = 'grok-4.5'
+  let path: string
+  let content: string
+
+  switch (activeTab.value) {
+    case 'unix':
+      path = 'Terminal'
+      content = `export ANTHROPIC_BASE_URL="${baseUrl}"
+export ANTHROPIC_AUTH_TOKEN="${apiKey}"
+export ANTHROPIC_MODEL="${model}"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="${model}"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="${model}"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="${model}"
+export ANTHROPIC_DEFAULT_FABLE_MODEL="${model}"
+export CLAUDE_CODE_SUBAGENT_MODEL="${model}"
+export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"
+export CLAUDE_CODE_ATTRIBUTION_HEADER="0"`
+      break
+    case 'cmd':
+      path = 'Command Prompt'
+      content = `set ANTHROPIC_BASE_URL=${baseUrl}
+set ANTHROPIC_AUTH_TOKEN=${apiKey}
+set ANTHROPIC_MODEL=${model}
+set ANTHROPIC_DEFAULT_OPUS_MODEL=${model}
+set ANTHROPIC_DEFAULT_SONNET_MODEL=${model}
+set ANTHROPIC_DEFAULT_HAIKU_MODEL=${model}
+set ANTHROPIC_DEFAULT_FABLE_MODEL=${model}
+set CLAUDE_CODE_SUBAGENT_MODEL=${model}
+set CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+set CLAUDE_CODE_ATTRIBUTION_HEADER=0`
+      break
+    case 'powershell':
+      path = 'PowerShell'
+      content = `$env:ANTHROPIC_BASE_URL="${baseUrl}"
+$env:ANTHROPIC_AUTH_TOKEN="${apiKey}"
+$env:ANTHROPIC_MODEL="${model}"
+$env:ANTHROPIC_DEFAULT_OPUS_MODEL="${model}"
+$env:ANTHROPIC_DEFAULT_SONNET_MODEL="${model}"
+$env:ANTHROPIC_DEFAULT_HAIKU_MODEL="${model}"
+$env:ANTHROPIC_DEFAULT_FABLE_MODEL="${model}"
+$env:CLAUDE_CODE_SUBAGENT_MODEL="${model}"
+$env:CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"
+$env:CLAUDE_CODE_ATTRIBUTION_HEADER="0"`
+      break
+    default:
+      path = 'Terminal'
+      content = ''
+  }
+
+  const settingsPath = activeTab.value === 'unix'
+    ? '~/.claude/settings.json'
+    : '%userprofile%\\.claude\\settings.json'
+
+  const settingsContent = `{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "ANTHROPIC_BASE_URL": "${baseUrl}",
+    "ANTHROPIC_AUTH_TOKEN": "${apiKey}",
+    "ANTHROPIC_MODEL": "${model}",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "${model}",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "${model}",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "${model}",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "${model}",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "${model}",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0"
+  }
+}`
+
+  return [
+    { path, content },
+    {
+      path: settingsPath,
+      content: settingsContent,
+      hint: t('keys.useKeyModal.grok.claudeSettingsHint')
     }
   ]
 }

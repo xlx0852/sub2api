@@ -4,6 +4,7 @@
  */
 
 import { apiClient } from '../client'
+import type { TrafficAvailability } from '../usage'
 import type {
   DashboardStats,
   TrendDataPoint,
@@ -22,6 +23,11 @@ import type {
  */
 export async function getStats(): Promise<DashboardStats> {
   const { data } = await apiClient.get<DashboardStats>('/admin/dashboard/stats')
+  return data
+}
+
+export async function getTrafficAvailability(platform = ''): Promise<TrafficAvailability> {
+  const { data } = await apiClient.get<TrafficAvailability>('/admin/dashboard/availability', { params: platform ? { platform } : undefined })
   return data
 }
 
@@ -323,6 +329,7 @@ export async function getBatchApiKeysUsage(
 }
 
 export const dashboardAPI = {
+	getTrafficAvailability,
   getStats,
   getRealtimeMetrics,
   getUsageTrend,

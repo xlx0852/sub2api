@@ -18,6 +18,8 @@ The current Grok Build source confirms that the authoritative CLI OAuth control-
 - Preserve local usage statistics, billing, scheduling, and gateway forwarding behavior.
 - Align Grok local request/token/cost statistics to the official weekly period
   and expose the same full-utilization projection already used by OpenAI.
+- Synchronize a full official weekly Billing window with a temporary scheduling
+  block ending at `period_end`, and refresh Billing after gateway 429s.
 
 ## Impact
 

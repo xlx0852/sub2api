@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -30,6 +33,91 @@ func NewProfitService(profitRepo ProfitRepository, accountRepo AccountRepository
 	return &ProfitService{profitRepo: profitRepo, accountRepo: accountRepo}
 }
 
+// listAccountsForProfit 返回利润复盘用账号集合：在用 + 回收站。
+// 回收站包含软删除与结算封禁（SubscriptionBanned），避免封号亏损漏计。
+// 硬删除账号不再出现，但其 usage 若已归并到保留号，会体现在保留号上。
+func (s *ProfitService) listAccountsForProfit(ctx context.Context) ([]Account, error) {
+	if s == nil || s.accountRepo == nil {
+		return nil, nil
+	}
+	params := pagination.PaginationParams{Page: 1, PageSize: 10000}
+	live, _, err := s.accountRepo.ListWithFilters(ctx, params, "", "", "", "", 0, "")
+	if err != nil {
+		return nil, err
+	}
+	// trash = soft-deleted OR settlement-banned（与账号管理回收站一致）
+	trash, _, err := s.accountRepo.ListWithFilters(ctx, params, "", "", AccountListStatusTrash, "", 0, "")
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[int64]Account, len(live)+len(trash))
+	order := make([]int64, 0, len(live)+len(trash))
+	appendUnique := func(acc Account) {
+		if _, exists := byID[acc.ID]; exists {
+			// trash 列表带 SubscriptionBanned 标记，优先覆盖
+			byID[acc.ID] = acc
+			return
+		}
+		order = append(order, acc.ID)
+		byID[acc.ID] = acc
+	}
+	for _, acc := range live {
+		appendUnique(acc)
+	}
+	for _, acc := range trash {
+		appendUnique(acc)
+	}
+	out := make([]Account, 0, len(order))
+	for _, id := range order {
+		out = append(out, byID[id])
+	}
+	return out, nil
+}
+
+// getAccountForProfit 读取单个账号（含回收站软删/封禁），供单账号利润抽屉使用。
+func (s *ProfitService) getAccountForProfit(ctx context.Context, accountID int64) (*Account, error) {
+	if s == nil || s.accountRepo == nil {
+		return nil, fmt.Errorf("account repository unavailable")
+	}
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err == nil && account != nil {
+		return account, nil
+	}
+	params := pagination.PaginationParams{Page: 1, PageSize: 10000}
+	trash, _, listErr := s.accountRepo.ListWithFilters(ctx, params, "", "", AccountListStatusTrash, "", 0, "")
+	if listErr != nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, listErr
+	}
+	for i := range trash {
+		if trash[i].ID == accountID {
+			acc := trash[i]
+			return &acc, nil
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return nil, fmt.Errorf("account %d not found", accountID)
+}
+
+// ProfitQuotaWindow 是利润页时间轴用的滚动配额窗口快照。
+// Start/End 由 reset_at 与 window 时长反推；历史轮次不持久化，仅展示当前窗口。
+type ProfitQuotaWindow struct {
+	ID            string     `json:"id"`
+	Label         string     `json:"label"`
+	Kind          string     `json:"kind"` // "5h" | "7d" | "24h" | "session" | "other"
+	UsedPercent   *float64   `json:"used_percent,omitempty"`
+	StartAt       *time.Time `json:"start_at,omitempty"`
+	EndAt         *time.Time `json:"end_at,omitempty"`
+	WindowMinutes *int       `json:"window_minutes,omitempty"`
+	// RecurringUntilAt caps projected occurrences at the subscription cycle or
+	// confirmed ban end; it is absent for non-subscription windows.
+	RecurringUntilAt *time.Time `json:"recurring_until_at,omitempty"`
+}
+
 // AccountProfitSummary 单账号周期利润汇总。
 type AccountProfitSummary struct {
 	AccountID   int64  `json:"account_id"`
@@ -38,6 +126,8 @@ type AccountProfitSummary struct {
 	AccountType string `json:"account_type"`
 	CostType    string `json:"cost_type"`
 	Configured  bool   `json:"configured"` // 是否已绑定成本配置
+	// Deleted 为 true 表示账号当前在回收站（软删除或结算封禁），历史 usage/亏损仍计入利润复盘。
+	Deleted bool `json:"deleted"`
 
 	Requests int64   `json:"requests"`
 	Revenue  float64 `json:"revenue"` // SUM(actual_cost)
@@ -48,6 +138,9 @@ type AccountProfitSummary struct {
 	// 订阅账号窗口数据（当前快照，来自 accounts.extra 的 codex_5h/7d）
 	FiveHourUtilization *float64 `json:"five_hour_utilization,omitempty"`
 	SevenDayUtilization *float64 `json:"seven_day_utilization,omitempty"`
+
+	// QuotaWindows 供利润页「配额窗口」时间轴渲染；由账号 extra / session 字段推导。
+	QuotaWindows []ProfitQuotaWindow `json:"quota_windows,omitempty"`
 
 	// 窗口变现效率 = 周期内平均每 5h 窗口收入 / 基准窗口收入。
 	// 基准来自 window_baseline_revenue 或历史最佳 5h 窗口自动学习；无基准时为空。
@@ -118,7 +211,7 @@ func (s *ProfitService) GetSummary(ctx context.Context, start, end time.Time) (*
 	if end.Before(start) {
 		start, end = end, start
 	}
-	accounts, _, err := s.accountRepo.ListWithFilters(ctx, pagination.PaginationParams{Page: 1, PageSize: 10000}, "", "", "", "", 0, "")
+	accounts, err := s.listAccountsForProfit(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +225,7 @@ func (s *ProfitService) GetAccountSummary(ctx context.Context, accountID int64, 
 	if end.Before(start) {
 		start, end = end, start
 	}
-	account, err := s.accountRepo.GetByID(ctx, accountID)
+	account, err := s.getAccountForProfit(ctx, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -176,13 +269,17 @@ func (s *ProfitService) summarizeAccountsWithData(accounts []Account, start, end
 			Platform:    acc.Platform,
 			AccountType: acc.Type,
 			CostType:    costType,
+			Deleted:     acc.DeletedAt != nil || acc.SubscriptionBanned,
 			Requests:    stats.Requests,
 			Revenue:     roundMoney(stats.Revenue),
 			Currency:    "USD",
 		}
-		// 窗口利用率快照（OpenAI 订阅号）
-		summary.FiveHourUtilization = extraFloat(acc.Extra, "codex_5h_used_percent")
-		summary.SevenDayUtilization = extraFloat(acc.Extra, "codex_7d_used_percent")
+		// 窗口利用率快照 + 时间轴窗口（OpenAI/Kimi/Grok/Claude session）
+		var quotaWindowCutoff *time.Time
+		if isSubscriptionAccountType(acc.Type) {
+			quotaWindowCutoff = quotaWindowCutoffForCycles(accounting.cyclesByAccount[acc.ID], accounting.now)
+		}
+		fillProfitQuotaWindows(summary, acc, accounting.now, quotaWindowCutoff)
 
 		cost := stats.MeteredCost
 		if costType == AccountCostTypeSubscription {
@@ -355,6 +452,61 @@ func subscriptionCyclesCostForRange(cycles []*AccountSubscriptionCycle, start, e
 		cost += subscriptionCycleCostForRange(cycle, start, end)
 	}
 	return cost
+}
+
+// controllingSubscriptionCycle 选取驱动账号调度过期时间的成本周期：
+// 1) 当前活跃周期 2) 最早的未来周期 3) 最近一条已开始周期。
+func controllingSubscriptionCycle(cycles []*AccountSubscriptionCycle, now time.Time) *AccountSubscriptionCycle {
+	if active := activeSubscriptionCycle(cycles, now); active != nil {
+		return active
+	}
+	var future *AccountSubscriptionCycle
+	var latest *AccountSubscriptionCycle
+	for _, cycle := range cycles {
+		if cycle == nil {
+			continue
+		}
+		if now.Before(cycle.StartsAt) {
+			if future == nil || cycle.StartsAt.Before(future.StartsAt) {
+				future = cycle
+			}
+			continue
+		}
+		if latest == nil || cycle.StartsAt.After(latest.StartsAt) ||
+			(cycle.StartsAt.Equal(latest.StartsAt) && cycle.ID > latest.ID) {
+			latest = cycle
+		}
+	}
+	if future != nil {
+		return future
+	}
+	return latest
+}
+
+// deriveAccountExpiresAtFromCycles 由成本周期推导 accounts.expires_at。
+// 无周期时返回 nil（清空过期时间）。
+func deriveAccountExpiresAtFromCycles(cycles []*AccountSubscriptionCycle, now time.Time) *time.Time {
+	cycle := controllingSubscriptionCycle(cycles, now)
+	if cycle == nil {
+		return nil
+	}
+	end := cycle.StartsAt.AddDate(0, 0, cycle.PeriodDays)
+	if termination := activeCycleTermination(cycle); termination != nil && termination.EffectiveAt.Before(end) {
+		end = termination.EffectiveAt
+	}
+	return &end
+}
+
+func (s *ProfitService) syncAccountExpiresAtFromCycles(ctx context.Context, accountID int64) error {
+	if s == nil || s.accountRepo == nil || accountID <= 0 {
+		return nil
+	}
+	cycles, err := s.profitRepo.ListSubscriptionCycles(ctx, accountID)
+	if err != nil {
+		return err
+	}
+	expiresAt := deriveAccountExpiresAtFromCycles(cycles, time.Now())
+	return s.accountRepo.SetExpiresAt(ctx, accountID, expiresAt)
 }
 
 func activeSubscriptionCycle(cycles []*AccountSubscriptionCycle, now time.Time) *AccountSubscriptionCycle {
@@ -544,7 +696,7 @@ func (s *ProfitService) GetTrend(ctx context.Context, accountID *int64, start, e
 
 	subscriptionIDs := make([]int64, 0)
 	if s.accountRepo != nil && accountID != nil {
-		account, getErr := s.accountRepo.GetByID(ctx, *accountID)
+		account, getErr := s.getAccountForProfit(ctx, *accountID)
 		if getErr != nil {
 			return nil, getErr
 		}
@@ -552,7 +704,7 @@ func (s *ProfitService) GetTrend(ctx context.Context, accountID *int64, start, e
 			subscriptionIDs = append(subscriptionIDs, account.ID)
 		}
 	} else if s.accountRepo != nil {
-		accounts, _, listErr := s.accountRepo.ListWithFilters(ctx, pagination.PaginationParams{Page: 1, PageSize: 10000}, "", "", "", "", 0, "")
+		accounts, listErr := s.listAccountsForProfit(ctx)
 		if listErr != nil {
 			return nil, listErr
 		}
@@ -612,7 +764,7 @@ func (s *ProfitService) GetOverview(ctx context.Context, start, end time.Time, t
 	if tzName == "" {
 		tzName = "Asia/Shanghai"
 	}
-	accounts, _, err := s.accountRepo.ListWithFilters(ctx, pagination.PaginationParams{Page: 1, PageSize: 10000}, "", "", "", "", 0, "")
+	accounts, err := s.listAccountsForProfit(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -699,6 +851,8 @@ type SubscriptionCycleList struct {
 	Cycles                []*AccountSubscriptionCycle `json:"cycles"`
 	SubscriptionExpiresAt *time.Time                  `json:"subscription_expires_at,omitempty"`
 	OAuthTokenExpiresAt   *time.Time                  `json:"oauth_token_expires_at,omitempty"`
+	// AccountExpiresAt 账号调度过期时间（由成本周期驱动同步）
+	AccountExpiresAt *time.Time `json:"account_expires_at,omitempty"`
 }
 
 type SubscriptionCycleSettlementResult struct {
@@ -721,10 +875,20 @@ func (s *ProfitService) ListSubscriptionCycles(ctx context.Context, accountID in
 	if err := s.populateSubscriptionLossSummaries(ctx, cycles); err != nil {
 		return nil, err
 	}
+	// Keep the account scheduling expiry aligned for historical cycles too. Older
+	// cycles were created before expiry synchronization was introduced.
+	if err := s.syncAccountExpiresAtFromCycles(ctx, accountID); err != nil {
+		return nil, err
+	}
+	account, err = s.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
 	return &SubscriptionCycleList{
 		Cycles:                cycles,
 		SubscriptionExpiresAt: account.GetCredentialAsTime("subscription_expires_at"),
 		OAuthTokenExpiresAt:   account.GetCredentialAsTime("expires_at"),
+		AccountExpiresAt:      account.ExpiresAt,
 	}, nil
 }
 
@@ -745,11 +909,25 @@ func (s *ProfitService) CreateSubscriptionCycle(ctx context.Context, cycle *Acco
 	if cycle.Currency == "" {
 		cycle.Currency = "USD"
 	}
-	return s.profitRepo.CreateSubscriptionCycle(ctx, cycle)
+	created, err := s.profitRepo.CreateSubscriptionCycle(ctx, cycle)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.syncAccountExpiresAtFromCycles(ctx, created.AccountID); err != nil {
+		return created, err
+	}
+	return created, nil
 }
 
 func (s *ProfitService) DeleteSubscriptionCycle(ctx context.Context, id int64) error {
-	return s.profitRepo.DeleteSubscriptionCycle(ctx, id)
+	cycle, err := s.profitRepo.GetSubscriptionCycle(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.profitRepo.DeleteSubscriptionCycle(ctx, id); err != nil {
+		return err
+	}
+	return s.syncAccountExpiresAtFromCycles(ctx, cycle.AccountID)
 }
 
 func (s *ProfitService) CreateSubscriptionTermination(ctx context.Context, termination *AccountSubscriptionTermination, initialRefund *AccountSubscriptionRefund) (*SubscriptionCycleSettlementResult, error) {
@@ -781,6 +959,9 @@ func (s *ProfitService) CreateSubscriptionTermination(ctx context.Context, termi
 		for _, accountID := range writeResult.DisabledAccountIDs {
 			_ = s.accountRepo.SetSchedulable(ctx, accountID, false)
 		}
+	}
+	if err := s.syncAccountExpiresAtFromCycles(ctx, writeResult.Termination.AccountID); err != nil {
+		return nil, err
 	}
 	cycle, err := s.loadSubscriptionCycle(ctx, writeResult.Termination.AccountID, writeResult.Termination.CycleID)
 	if err != nil {
@@ -858,6 +1039,9 @@ func (s *ProfitService) ReverseSubscriptionTermination(ctx context.Context, id i
 	}
 	termination, err := s.profitRepo.ReverseSubscriptionTermination(ctx, id, reason, time.Now())
 	if err != nil {
+		return nil, err
+	}
+	if err := s.syncAccountExpiresAtFromCycles(ctx, termination.AccountID); err != nil {
 		return nil, err
 	}
 	cycle, err := s.loadSubscriptionCycle(ctx, termination.AccountID, termination.CycleID)
@@ -976,6 +1160,614 @@ func (s *ProfitService) BatchUpsertSubscriptionConfigs(ctx context.Context, fee 
 
 func roundMoney(v float64) float64 {
 	return math.Round(v*10000) / 10000
+}
+
+func fillProfitQuotaWindows(summary *AccountProfitSummary, acc *Account, now time.Time, cutoff ...*time.Time) {
+	if summary == nil || acc == nil {
+		return
+	}
+	windows := make([]ProfitQuotaWindow, 0, 4)
+
+	// OpenAI / Codex rolling windows from extra.
+	if w := profitWindowFromExtra(acc.Extra, "codex_5h", "5h", "5h", 300, now); w != nil {
+		windows = append(windows, *w)
+		summary.FiveHourUtilization = w.UsedPercent
+	}
+	if w := profitWindowFromExtra(acc.Extra, "codex_7d", "7d", "7d", 10080, now); w != nil {
+		windows = append(windows, *w)
+		summary.SevenDayUtilization = w.UsedPercent
+	}
+
+	// Kimi official rolling windows.
+	if w := profitWindowFromKimi(acc.Extra, "5h", "5h", 300, now); w != nil {
+		if summary.FiveHourUtilization == nil {
+			summary.FiveHourUtilization = w.UsedPercent
+		}
+		// Avoid duplicate 5h if codex already filled (shouldn't happen cross-platform).
+		if !hasProfitWindowKind(windows, "5h") {
+			windows = append(windows, *w)
+		}
+	}
+	if w := profitWindowFromKimi(acc.Extra, "7d", "7d", 10080, now); w != nil {
+		if summary.SevenDayUtilization == nil {
+			summary.SevenDayUtilization = w.UsedPercent
+		}
+		if !hasProfitWindowKind(windows, "7d") {
+			windows = append(windows, *w)
+		}
+	}
+
+	// Grok token rolling window (Free ≈ 24h).
+	if w := profitWindowFromGrok(acc.Extra, now); w != nil {
+		windows = append(windows, *w)
+	}
+
+	// Claude / Anthropic session window columns.
+	if acc.SessionWindowStart != nil && acc.SessionWindowEnd != nil && !acc.SessionWindowEnd.IsZero() {
+		start := acc.SessionWindowStart.UTC()
+		end := acc.SessionWindowEnd.UTC()
+		if end.After(start) {
+			mins := int(end.Sub(start).Minutes())
+			w := ProfitQuotaWindow{
+				ID:            "session",
+				Label:         "session",
+				Kind:          "session",
+				StartAt:       &start,
+				EndAt:         &end,
+				WindowMinutes: &mins,
+			}
+			// Session itself has no used%; leave empty and still render the span.
+			windows = append(windows, w)
+		}
+	}
+
+	var recurringUntil *time.Time
+	if len(cutoff) > 0 {
+		recurringUntil = cutoff[0]
+	}
+	if recurringUntil != nil {
+		capped := windows[:0]
+		for i := range windows {
+			w := windows[i]
+			if w.StartAt != nil && !w.StartAt.Before(*recurringUntil) {
+				continue
+			}
+			if w.EndAt != nil && w.EndAt.After(*recurringUntil) {
+				end := *recurringUntil
+				w.EndAt = &end
+			}
+			until := *recurringUntil
+			w.RecurringUntilAt = &until
+			if w.StartAt == nil || w.EndAt == nil || w.EndAt.After(*w.StartAt) {
+				capped = append(capped, w)
+			}
+		}
+		windows = capped
+	}
+	if len(windows) > 0 {
+		summary.QuotaWindows = windows
+	}
+}
+
+// quotaWindowCutoffForCycles returns the last instant at which a subscription
+// account may have quota windows. After the cycle expires, or after a confirmed
+// upstream-ban termination, the UI must not project another weekly window.
+func quotaWindowCutoffForCycles(cycles []*AccountSubscriptionCycle, now time.Time) *time.Time {
+	cycle := controllingSubscriptionCycle(cycles, now)
+	if cycle == nil || cycle.PeriodDays <= 0 {
+		return nil
+	}
+	end := cycle.StartsAt.AddDate(0, 0, cycle.PeriodDays)
+	if termination := activeCycleTermination(cycle); termination != nil && termination.EffectiveAt.Before(end) {
+		end = termination.EffectiveAt
+	}
+	return &end
+}
+
+func hasProfitWindowKind(windows []ProfitQuotaWindow, kind string) bool {
+	for _, w := range windows {
+		if w.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func profitWindowFromExtra(extra map[string]any, prefix, id, kind string, defaultMinutes int, now time.Time) *ProfitQuotaWindow {
+	used := extraFloat(extra, prefix+"_used_percent")
+	resetAt := extraTime(extra, prefix+"_reset_at")
+	resetAfter := extraInt(extra, prefix+"_reset_after_seconds")
+	windowMinutes := extraInt(extra, prefix+"_window_minutes")
+	if windowMinutes == nil || *windowMinutes <= 0 {
+		if defaultMinutes > 0 {
+			m := defaultMinutes
+			windowMinutes = &m
+		}
+	}
+	if used == nil && resetAt == nil && resetAfter == nil {
+		return nil
+	}
+	end := resolveProfitWindowEnd(resetAt, resetAfter, now)
+	start := resolveProfitWindowStart(end, windowMinutes)
+	return &ProfitQuotaWindow{
+		ID:            id,
+		Label:         kind,
+		Kind:          kind,
+		UsedPercent:   used,
+		StartAt:       start,
+		EndAt:         end,
+		WindowMinutes: windowMinutes,
+	}
+}
+
+func profitWindowFromKimi(extra map[string]any, name, kind string, defaultMinutes int, now time.Time) *ProfitQuotaWindow {
+	used := extraFloat(extra, "kimi_quota_"+name+"_utilization")
+	resetAt := extraTime(extra, "kimi_quota_"+name+"_reset_at")
+	if used == nil && resetAt == nil {
+		return nil
+	}
+	m := defaultMinutes
+	end := resolveProfitWindowEnd(resetAt, nil, now)
+	start := resolveProfitWindowStart(end, &m)
+	return &ProfitQuotaWindow{
+		ID:            "kimi-" + name,
+		Label:         kind,
+		Kind:          kind,
+		UsedPercent:   used,
+		StartAt:       start,
+		EndAt:         end,
+		WindowMinutes: &m,
+	}
+}
+
+func profitWindowFromGrok(extra map[string]any, now time.Time) *ProfitQuotaWindow {
+	if extra == nil {
+		return nil
+	}
+	// Prefer official billing period (weekly/monthly product quota). This is what
+	// the management UI shows as GrokBuild/GrokChat windows. Rate-limit header
+	// snapshots often lack reset_at and cannot be placed on a timeline.
+	if w := profitWindowFromGrokBilling(extra, now); w != nil {
+		return w
+	}
+	return profitWindowFromGrokUsageSnapshot(extra, now)
+}
+
+func profitWindowFromGrokBilling(extra map[string]any, now time.Time) *ProfitQuotaWindow {
+	billing := asStringAnyMap(firstNonNil(
+		extra["grok_billing_snapshot"],
+		extra["grok_billing"],
+	))
+	if billing == nil {
+		return nil
+	}
+
+	startAt := anyToTimeFlexible(firstNonNil(billing["period_start"], billing["billing_period_start"]))
+	endAt := anyToTimeFlexible(firstNonNil(billing["period_end"], billing["billing_period_end"]))
+	if startAt == nil && endAt == nil {
+		return nil
+	}
+
+	used := anyToFloat64(firstNonNil(billing["usage_percent"], billing["used_percent"]))
+	// Prefer product-specific percent when present (GrokBuild matches the screenshot).
+	if products, ok := billing["product_usage"].([]any); ok {
+		for _, raw := range products {
+			item := asStringAnyMap(raw)
+			if item == nil {
+				continue
+			}
+			product := strings.ToLower(strings.TrimSpace(fmt.Sprint(item["product"])))
+			if product == "" {
+				continue
+			}
+			if p := anyToFloat64(item["usage_percent"]); p != nil {
+				if strings.Contains(product, "grokbuild") || strings.Contains(product, "build") {
+					used = p
+					break
+				}
+				if used == nil {
+					used = p
+				}
+			}
+		}
+	}
+
+	kind := "7d"
+	label := "7d"
+	periodType := strings.ToLower(strings.TrimSpace(fmt.Sprint(billing["period_type"])))
+	switch {
+	case strings.Contains(periodType, "month"):
+		kind = "other"
+		label = "30d"
+	case strings.Contains(periodType, "week"):
+		kind = "7d"
+		label = "7d"
+	case startAt != nil && endAt != nil:
+		hours := endAt.Sub(*startAt).Hours()
+		if hours >= 20*24 && hours <= 40*24 {
+			kind = "other"
+			label = "30d"
+		} else if hours >= 5*24 && hours <= 10*24 {
+			kind = "7d"
+			label = "7d"
+		} else if hours >= 20 && hours <= 30 {
+			kind = "24h"
+			label = "24h"
+		}
+	}
+
+	var windowMinutes *int
+	if startAt != nil && endAt != nil && endAt.After(*startAt) {
+		m := int(endAt.Sub(*startAt).Minutes())
+		if m > 0 {
+			windowMinutes = &m
+		}
+	} else if endAt != nil && windowMinutes == nil {
+		// Fallback duration for weekly billing when only end is known.
+		m := 7 * 24 * 60
+		windowMinutes = &m
+		startAt = resolveProfitWindowStart(endAt, windowMinutes)
+	} else if startAt != nil && endAt == nil && windowMinutes == nil {
+		m := 7 * 24 * 60
+		windowMinutes = &m
+		tmp := startAt.Add(time.Duration(m) * time.Minute)
+		endAt = &tmp
+	}
+
+	if used == nil && startAt == nil && endAt == nil {
+		return nil
+	}
+	return &ProfitQuotaWindow{
+		ID:            "grok-billing",
+		Label:         label,
+		Kind:          kind,
+		UsedPercent:   used,
+		StartAt:       startAt,
+		EndAt:         endAt,
+		WindowMinutes: windowMinutes,
+	}
+}
+
+func profitWindowFromGrokUsageSnapshot(extra map[string]any, now time.Time) *ProfitQuotaWindow {
+	m := asStringAnyMap(extra["grok_usage_snapshot"])
+	if m == nil {
+		return nil
+	}
+	tokens := asStringAnyMap(m["tokens"])
+	requests := asStringAnyMap(m["requests"])
+	if tokens == nil && requests == nil {
+		return nil
+	}
+
+	source := tokens
+	id := "grok-tokens"
+	if source == nil {
+		source = requests
+		id = "grok-requests"
+	}
+
+	var used *float64
+	limit := anyToInt64(source["limit"])
+	remaining := anyToInt64(source["remaining"])
+	if limit != nil && *limit > 0 && remaining != nil {
+		u := (1.0 - float64(*remaining)/float64(*limit)) * 100
+		if u < 0 {
+			u = 0
+		}
+		if u > 100 {
+			u = 100
+		}
+		used = &u
+	}
+	resetAt := anyToTimeFlexible(source["reset_at"])
+	if resetAt == nil {
+		if ru := anyToInt64(source["reset_unix"]); ru != nil && *ru > 0 {
+			tt := time.Unix(*ru, 0).UTC()
+			resetAt = &tt
+		}
+	}
+	// No absolute reset: free-tier rolling token windows are ~24h. Anchor end at
+	// next 24h boundary from last observation when possible so the bar still renders.
+	if resetAt == nil {
+		observedAt := anyToTimeFlexible(firstNonNil(m["last_headers_seen_at"], m["updated_at"]))
+		if observedAt == nil {
+			observedAt = &now
+		}
+		if limit != nil && xaiIsLikelyFreeRolling(*limit) {
+			// Conservative: treat as rolling 24h ending 24h after last observation.
+			// Better than dropping the lane entirely when headers omit reset.
+			tt := observedAt.UTC().Add(24 * time.Hour)
+			resetAt = &tt
+		}
+	}
+	if used == nil && resetAt == nil {
+		return nil
+	}
+
+	mins := 24 * 60
+	if limit != nil && *limit > 0 && !xaiIsLikelyFreeRolling(*limit) {
+		mins = 24 * 60
+	}
+	end := resolveProfitWindowEnd(resetAt, nil, now)
+	start := resolveProfitWindowStart(end, &mins)
+	return &ProfitQuotaWindow{
+		ID:            id,
+		Label:         "24h",
+		Kind:          "24h",
+		UsedPercent:   used,
+		StartAt:       start,
+		EndAt:         end,
+		WindowMinutes: &mins,
+	}
+}
+
+func asStringAnyMap(v any) map[string]any {
+	if v == nil {
+		return nil
+	}
+	switch m := v.(type) {
+	case map[string]any:
+		return m
+	case map[string]string:
+		out := make(map[string]any, len(m))
+		for k, val := range m {
+			out[k] = val
+		}
+		return out
+	default:
+		// Some DB drivers decode jsonb objects as map[any]any.
+		if raw, ok := v.(map[any]any); ok {
+			out := make(map[string]any, len(raw))
+			for k, val := range raw {
+				out[fmt.Sprint(k)] = val
+			}
+			return out
+		}
+	}
+	return nil
+}
+
+func firstNonNil(values ...any) any {
+	for _, v := range values {
+		if v == nil {
+			continue
+		}
+		if s, ok := v.(string); ok && strings.TrimSpace(s) == "" {
+			continue
+		}
+		return v
+	}
+	return nil
+}
+
+func anyToFloat64(v any) *float64 {
+	if v == nil {
+		return nil
+	}
+	switch n := v.(type) {
+	case float64:
+		return &n
+	case float32:
+		f := float64(n)
+		return &f
+	case int:
+		f := float64(n)
+		return &f
+	case int32:
+		f := float64(n)
+		return &f
+	case int64:
+		f := float64(n)
+		return &f
+	case json.Number:
+		if f, err := n.Float64(); err == nil {
+			return &f
+		}
+	case string:
+		s := strings.TrimSpace(n)
+		if s == "" {
+			return nil
+		}
+		if f, err := strconv.ParseFloat(s, 64); err == nil {
+			return &f
+		}
+	}
+	return nil
+}
+
+func anyToTimeFlexible(v any) *time.Time {
+	if v == nil {
+		return nil
+	}
+	switch n := v.(type) {
+	case time.Time:
+		t := n.UTC()
+		return &t
+	case *time.Time:
+		if n == nil {
+			return nil
+		}
+		t := n.UTC()
+		return &t
+	case string:
+		s := strings.TrimSpace(n)
+		if s == "" {
+			return nil
+		}
+		layouts := []string{
+			time.RFC3339Nano,
+			time.RFC3339,
+			"2006-01-02T15:04:05.999999999Z07:00",
+			"2006-01-02 15:04:05.999999999Z07:00",
+			"2006-01-02 15:04:05Z07:00",
+		}
+		for _, layout := range layouts {
+			if ts, err := time.Parse(layout, s); err == nil {
+				t := ts.UTC()
+				return &t
+			}
+		}
+		// Some payloads omit timezone; assume UTC.
+		if ts, err := time.ParseInLocation("2006-01-02T15:04:05.999999999", s, time.UTC); err == nil {
+			t := ts.UTC()
+			return &t
+		}
+		if ts, err := time.ParseInLocation("2006-01-02T15:04:05", s, time.UTC); err == nil {
+			t := ts.UTC()
+			return &t
+		}
+	case float64:
+		// unix seconds
+		if n > 1e9 && n < 1e12 {
+			tt := time.Unix(int64(n), 0).UTC()
+			return &tt
+		}
+	case int64:
+		if n > 1e9 && n < 1e12 {
+			tt := time.Unix(n, 0).UTC()
+			return &tt
+		}
+	}
+	return nil
+}
+
+func xaiIsLikelyFreeRolling(limit int64) bool {
+	switch limit {
+	case 1_000_000, 2_000_000:
+		return true
+	default:
+		return false
+	}
+}
+
+func resolveProfitWindowEnd(resetAt *time.Time, resetAfterSeconds *int, now time.Time) *time.Time {
+	if resetAt != nil && !resetAt.IsZero() {
+		t := resetAt.UTC()
+		return &t
+	}
+	if resetAfterSeconds != nil && *resetAfterSeconds > 0 {
+		t := now.UTC().Add(time.Duration(*resetAfterSeconds) * time.Second)
+		return &t
+	}
+	return nil
+}
+
+func resolveProfitWindowStart(end *time.Time, windowMinutes *int) *time.Time {
+	if end == nil || windowMinutes == nil || *windowMinutes <= 0 {
+		return nil
+	}
+	t := end.Add(-time.Duration(*windowMinutes) * time.Minute)
+	return &t
+}
+
+func extraTime(extra map[string]any, key string) *time.Time {
+	if extra == nil {
+		return nil
+	}
+	v, ok := extra[key]
+	if !ok || v == nil {
+		return nil
+	}
+	switch n := v.(type) {
+	case string:
+		s := strings.TrimSpace(n)
+		if s == "" {
+			return nil
+		}
+		if ts, err := time.Parse(time.RFC3339, s); err == nil {
+			t := ts.UTC()
+			return &t
+		}
+		if ts, err := time.Parse(time.RFC3339Nano, s); err == nil {
+			t := ts.UTC()
+			return &t
+		}
+	case time.Time:
+		t := n.UTC()
+		return &t
+	case *time.Time:
+		if n == nil {
+			return nil
+		}
+		t := n.UTC()
+		return &t
+	}
+	return nil
+}
+
+func extraInt(extra map[string]any, key string) *int {
+	if extra == nil {
+		return nil
+	}
+	v, ok := extra[key]
+	if !ok || v == nil {
+		return nil
+	}
+	switch n := v.(type) {
+	case int:
+		return &n
+	case int32:
+		i := int(n)
+		return &i
+	case int64:
+		i := int(n)
+		return &i
+	case float64:
+		i := int(n)
+		return &i
+	case float32:
+		i := int(n)
+		return &i
+	}
+	return nil
+}
+
+func anyToInt64(v any) *int64 {
+	if v == nil {
+		return nil
+	}
+	switch n := v.(type) {
+	case int:
+		i := int64(n)
+		return &i
+	case int32:
+		i := int64(n)
+		return &i
+	case int64:
+		return &n
+	case float64:
+		i := int64(n)
+		return &i
+	case float32:
+		i := int64(n)
+		return &i
+	case json.Number:
+		if i, err := n.Int64(); err == nil {
+			return &i
+		}
+	}
+	return nil
+}
+
+func anyToTime(v any) *time.Time {
+	if v == nil {
+		return nil
+	}
+	switch n := v.(type) {
+	case string:
+		s := strings.TrimSpace(n)
+		if s == "" {
+			return nil
+		}
+		if ts, err := time.Parse(time.RFC3339, s); err == nil {
+			t := ts.UTC()
+			return &t
+		}
+	case time.Time:
+		t := n.UTC()
+		return &t
+	}
+	return nil
 }
 
 func extraFloat(extra map[string]any, key string) *float64 {

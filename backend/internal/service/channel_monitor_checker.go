@@ -186,7 +186,14 @@ var providerAdapters = map[string]providerAdapter{
 	},
 	MonitorProviderGemini: {
 		// Gemini 把 model 名写在 URL path 上：/v1beta/models/{model}:generateContent
-		buildPath: func(model string) string { return fmt.Sprintf(providerGeminiPathTemplate, model) },
+		buildPath: func(model string) string {
+			safeModel, err := sanitizeGeminiModelPathSegment(model)
+			if err != nil {
+				// Fall back to empty path; callProvider will surface the invalid model.
+				return ""
+			}
+			return fmt.Sprintf(providerGeminiPathTemplate, url.PathEscape(safeModel))
+		},
 		buildBody: func(_, prompt string) ([]byte, error) {
 			return json.Marshal(map[string]any{
 				"contents": []map[string]any{

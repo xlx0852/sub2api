@@ -159,10 +159,10 @@ func pricingNeedsFallback(p *ChannelModelPricing) bool {
 // 仅用于展示。
 //
 // 计费模式优先级：
-//  1. 渠道已选 BillingMode（admin 在 UI 里选了 image / per_request 但没填价的场景，
-//     按选定模式合成对应字段）
-//  2. LiteLLM mode="image_generation" → image
-//  3. 默认 token
+//  1. LiteLLM 明确标记媒体生成模型时，使用 image / video。空价格模板中的
+//     token 常是管理端默认值，不应覆盖价格库的真实模型类型。
+//  2. 非媒体模型保留渠道显式选择的 BillingMode。
+//  3. 默认 token。
 //
 // LiteLLM 中字段 0 视为未配置，不带入展示。
 func synthesizePricingFromLiteLLM(lp *LiteLLMModelPricing, existing *ChannelModelPricing) *ChannelModelPricing {
@@ -172,13 +172,15 @@ func synthesizePricingFromLiteLLM(lp *LiteLLMModelPricing, existing *ChannelMode
 
 	mode := BillingModeToken
 	switch {
-	case existing != nil && existing.BillingMode != "":
-		mode = existing.BillingMode
 	case lp.Mode == "image_generation":
 		mode = BillingModeImage
+	case lp.Mode == "video_generation":
+		mode = BillingModeVideo
+	case existing != nil && existing.BillingMode != "":
+		mode = existing.BillingMode
 	}
 
-	if mode == BillingModeImage || mode == BillingModePerRequest {
+	if mode == BillingModeImage || mode == BillingModeVideo || mode == BillingModePerRequest {
 		return &ChannelModelPricing{
 			BillingMode:      mode,
 			PerRequestPrice:  nonZeroPtr(lp.OutputCostPerImage),

@@ -70,6 +70,9 @@ func (r *rateLimitClearRepoStub) SetSchedulable(ctx context.Context, id int64, s
 	r.setSchedulableValue = &schedulable
 	return r.setSchedulableErr
 }
+func (r *rateLimitClearRepoStub) SetExpiresAt(ctx context.Context, id int64, expiresAt *time.Time) error {
+	return nil
+}
 
 type tempUnschedCacheRecorder struct {
 	deletedIDs []int64

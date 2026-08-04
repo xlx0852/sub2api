@@ -36,6 +36,111 @@ type kimiWindowStatsUsageRepo struct {
 	calls int
 }
 
+type kimiQuotaSchedulingRepo struct {
+	*mockAccountRepoForPlatform
+	extraUpdates        map[string]any
+	pauseUntil          *time.Time
+	pauseReason         string
+	clearCalls          int
+	rateLimitUntil      *time.Time
+	rateLimitCalls      int
+	clearRateLimitCalls int
+}
+
+func (r *kimiQuotaSchedulingRepo) UpdateExtra(_ context.Context, _ int64, updates map[string]any) error {
+	r.extraUpdates = updates
+	return nil
+}
+
+func (r *kimiQuotaSchedulingRepo) SetTempUnschedulable(_ context.Context, _ int64, until time.Time, reason string) error {
+	r.pauseUntil = &until
+	r.pauseReason = reason
+	return nil
+}
+
+func (r *kimiQuotaSchedulingRepo) ClearTempUnschedulable(_ context.Context, _ int64) error {
+	r.clearCalls++
+	return nil
+}
+
+func (r *kimiQuotaSchedulingRepo) SetRateLimited(_ context.Context, _ int64, resetAt time.Time) error {
+	r.rateLimitCalls++
+	r.rateLimitUntil = &resetAt
+	return nil
+}
+
+func (r *kimiQuotaSchedulingRepo) ClearRateLimit(_ context.Context, _ int64) error {
+	r.clearRateLimitCalls++
+	return nil
+}
+
+func TestSyncKimiQuotaSchedulingStatePausesUntilLatestFullWindow(t *testing.T) {
+	now := time.Date(2026, 7, 30, 2, 0, 0, 0, time.UTC)
+	fiveHourReset := now.Add(2 * time.Hour)
+	sevenDayReset := now.Add(20 * time.Hour)
+	account := &Account{
+		ID:                      105,
+		Platform:                PlatformKimi,
+		Type:                    AccountTypeOAuth,
+		TempUnschedulableReason: kimiQuotaPauseReasonPrefix + " official window reset",
+	}
+	repo := &kimiQuotaSchedulingRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{}}
+
+	syncKimiQuotaSchedulingState(context.Background(), repo, account, &KimiQuotaUsage{
+		FiveHour: &UsageProgress{Utilization: 100, ResetsAt: &fiveHourReset},
+		SevenDay: &UsageProgress{Utilization: 100, ResetsAt: &sevenDayReset},
+	}, now)
+
+	// OpenAI-aligned: write rate_limit_reset_at (latest full window), not temp-unsched.
+	require.Nil(t, repo.pauseUntil)
+	require.Equal(t, 1, repo.rateLimitCalls)
+	require.NotNil(t, repo.rateLimitUntil)
+	require.Equal(t, sevenDayReset, *repo.rateLimitUntil)
+	require.Equal(t, 1, repo.clearCalls) // migrate legacy temp-unsched
+	require.Equal(t, float64(100), repo.extraUpdates["kimi_quota_7d_utilization"])
+	require.Equal(t, sevenDayReset.UTC().Format(time.RFC3339), repo.extraUpdates[kimiQuotaRateLimitUntilKey])
+}
+
+func TestSyncKimiQuotaSchedulingStateClearsRecoveredQuotaPause(t *testing.T) {
+	now := time.Now().UTC()
+	reset := now.Add(5 * time.Hour)
+	account := &Account{
+		ID: 105, Platform: PlatformKimi, Type: AccountTypeOAuth,
+		TempUnschedulableReason: kimiQuotaPauseReasonPrefix + " official window reset",
+		Extra: map[string]any{
+			kimiQuotaRateLimitUntilKey: now.Add(2 * time.Hour).UTC().Format(time.RFC3339),
+		},
+	}
+	repo := &kimiQuotaSchedulingRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{}}
+
+	syncKimiQuotaSchedulingState(context.Background(), repo, account, &KimiQuotaUsage{
+		FiveHour: &UsageProgress{Utilization: 10, ResetsAt: &reset},
+		SevenDay: &UsageProgress{Utilization: 20, ResetsAt: &reset},
+	}, now)
+
+	require.Nil(t, repo.pauseUntil)
+	require.Equal(t, 1, repo.clearCalls)
+	require.Equal(t, 1, repo.clearRateLimitCalls)
+	require.Nil(t, repo.extraUpdates[kimiQuotaRateLimitUntilKey])
+}
+
+func TestSyncKimiQuotaSchedulingStateDoesNotClearUnrelatedRateLimit(t *testing.T) {
+	now := time.Now().UTC()
+	reset := now.Add(5 * time.Hour)
+	account := &Account{
+		ID: 105, Platform: PlatformKimi, Type: AccountTypeOAuth,
+		Extra: map[string]any{},
+	}
+	repo := &kimiQuotaSchedulingRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{}}
+
+	syncKimiQuotaSchedulingState(context.Background(), repo, account, &KimiQuotaUsage{
+		FiveHour: &UsageProgress{Utilization: 10, ResetsAt: &reset},
+		SevenDay: &UsageProgress{Utilization: 20, ResetsAt: &reset},
+	}, now)
+
+	require.Equal(t, 0, repo.clearRateLimitCalls)
+}
+
 func (r *kimiWindowStatsUsageRepo) GetAccountWindowStats(context.Context, int64, time.Time) (*usagestats.AccountStats, error) {
 	index := r.calls
 	r.calls++

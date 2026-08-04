@@ -1,11 +1,15 @@
 package routes
 
 import (
+	"time"
+
 	"github.com/Wei-Shaw/sub2api/internal/handler"
+	basemiddleware "github.com/Wei-Shaw/sub2api/internal/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 // RegisterUserRoutes 注册用户相关路由（需要认证）
@@ -14,7 +18,19 @@ func RegisterUserRoutes(
 	h *handler.Handlers,
 	jwtAuth middleware.JWTAuthMiddleware,
 	settingService *service.SettingService,
+	redisClients ...*redis.Client,
 ) {
+	publicPricingHandlers := []gin.HandlerFunc{}
+	if len(redisClients) > 0 && redisClients[0] != nil {
+		publicLimiter := basemiddleware.NewRateLimiter(redisClients[0])
+		publicPricingHandlers = append(publicPricingHandlers, publicLimiter.LimitWithOptions(
+			"public_pricing", 60, time.Minute,
+			basemiddleware.RateLimitOptions{FailureMode: basemiddleware.RateLimitFailClose},
+		))
+	}
+	publicPricingHandlers = append(publicPricingHandlers, h.AvailableChannel.PublicPricing)
+	v1.GET("/public/pricing", publicPricingHandlers...)
+
 	authenticated := v1.Group("")
 	authenticated.Use(gin.HandlerFunc(jwtAuth))
 	authenticated.Use(middleware.BackendModeUserGuard(settingService))
@@ -91,6 +107,7 @@ func RegisterUserRoutes(
 			usage.GET("/stats", h.Usage.Stats)
 			// User dashboard endpoints
 			usage.GET("/dashboard/stats", h.Usage.DashboardStats)
+			usage.GET("/dashboard/availability", h.Usage.DashboardAvailability)
 			usage.GET("/dashboard/trend", h.Usage.DashboardTrend)
 			usage.GET("/dashboard/models", h.Usage.DashboardModels)
 			usage.GET("/dashboard/snapshot-v2", h.Usage.DashboardSnapshotV2)

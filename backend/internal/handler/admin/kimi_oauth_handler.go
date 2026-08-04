@@ -56,13 +56,14 @@ func (h *KimiOAuthHandler) CancelDeviceAuthorization(c *gin.Context) {
 
 func (h *KimiOAuthHandler) CreateAccountFromDevice(c *gin.Context) {
 	var req struct {
-		SessionID   string  `json:"session_id" binding:"required"`
-		Name        string  `json:"name"`
-		Notes       *string `json:"notes"`
-		ProxyID     *int64  `json:"proxy_id"`
-		Concurrency int     `json:"concurrency"`
-		Priority    int     `json:"priority"`
-		GroupIDs    []int64 `json:"group_ids"`
+		SessionID     string         `json:"session_id" binding:"required"`
+		Name          string         `json:"name"`
+		Notes         *string        `json:"notes"`
+		ProxyID       *int64         `json:"proxy_id"`
+		Concurrency   int            `json:"concurrency"`
+		Priority      int            `json:"priority"`
+		GroupIDs      []int64        `json:"group_ids"`
+		ModelMapping  map[string]any `json:"model_mapping"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
@@ -81,9 +82,13 @@ func (h *KimiOAuthHandler) CreateAccountFromDevice(c *gin.Context) {
 	if name == "" {
 		name = "Kimi OAuth Account"
 	}
+	credentials := h.kimiOAuthService.BuildAccountCredentials(token)
+	if len(req.ModelMapping) > 0 {
+		credentials["model_mapping"] = req.ModelMapping
+	}
 	account, err := h.adminService.CreateAccount(c.Request.Context(), &service.CreateAccountInput{
 		Name: name, Notes: req.Notes, Platform: service.PlatformKimi, Type: service.AccountTypeOAuth,
-		Credentials: h.kimiOAuthService.BuildAccountCredentials(token), ProxyID: token.ProxyID,
+		Credentials: credentials, ProxyID: token.ProxyID,
 		Concurrency: req.Concurrency, Priority: req.Priority, GroupIDs: req.GroupIDs,
 	})
 	if err != nil {

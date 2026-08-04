@@ -128,6 +128,16 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 	})
 }
 
+// GetTrafficAvailability returns 24h real-request availability across the site.
+func (h *DashboardHandler) GetTrafficAvailability(c *gin.Context) {
+	result, err := h.dashboardService.GetTrafficAvailability(c.Request.Context(), c.Query("platform"))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
 type DashboardAggregationBackfillRequest struct {
 	Start string `json:"start"`
 	End   string `json:"end"`

@@ -103,7 +103,7 @@ async function loadData() {
       response.value = await opsAPI.getOpenAITokenStats(buildParams())
     }
   } catch (err: any) {
-    console.error('[OpsOpenAITokenStatsCard] Failed to load data', err)
+    console.error('[OpsModelPerformanceCard] Failed to load data', err)
     response.value = null
     errorMessage.value = err?.message || t('admin.ops.openaiTokenStats.failedToLoad')
   } finally {

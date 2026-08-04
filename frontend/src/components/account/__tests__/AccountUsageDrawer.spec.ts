@@ -3,6 +3,17 @@ import { flushPromises, mount } from '@vue/test-utils'
 import AccountUsageDrawer from '../AccountUsageDrawer.vue'
 import type { Account } from '@/types'
 
+const scheduledTestsMocks = vi.hoisted(() => ({
+  listByAccount: vi.fn(),
+  listResults: vi.fn(),
+  ensureDefault: vi.fn()
+}))
+
+vi.mock('@/api/admin/scheduledTests', () => ({
+  scheduledTestsAPI: scheduledTestsMocks,
+  default: scheduledTestsMocks
+}))
+
 vi.mock('@/components/admin/account/AccountStatsModal.vue', () => ({
   default: { props: ['account'], template: '<div data-testid="statistics-content">statistics</div>' }
 }))
@@ -35,6 +46,7 @@ const secondAccount = {
 describe('AccountUsageDrawer', () => {
   afterEach(() => {
     document.body.innerHTML = ''
+    vi.clearAllMocks()
   })
 
   const mountDrawer = () => mount(AccountUsageDrawer, {
@@ -85,5 +97,41 @@ describe('AccountUsageDrawer', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     await wrapper.vm.$nextTick()
     expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+
+  it('用最近定时测试结果展示可用性概览', async () => {
+    scheduledTestsMocks.listByAccount.mockResolvedValue([{ id: 8, account_id: 1, model_id: 'gpt-test', enabled: true, max_results: 50 }])
+    scheduledTestsMocks.listResults.mockResolvedValue([
+      { id: 1, plan_id: 8, status: 'success', started_at: '2026-08-04T10:00:00Z' },
+      { id: 2, plan_id: 8, status: 'failed', started_at: '2026-08-04T10:10:00Z' },
+      { id: 3, plan_id: 8, status: 'running', started_at: '2026-08-04T10:20:00Z' }
+    ])
+
+    const wrapper = mountDrawer()
+    await wrapper.findAll('[role="tab"]')[3]?.trigger('click')
+    await flushPromises()
+
+    const availability = wrapper.find('[role="list"]')
+    expect(availability.exists()).toBe(true)
+    expect(availability.findAll('[role="listitem"]')).toHaveLength(3)
+    expect(wrapper.text()).toContain('admin.accounts.usageDetails.scheduledTestsSuccess 1')
+    expect(wrapper.text()).toContain('admin.accounts.usageDetails.scheduledTestsFailed 1')
+    expect(wrapper.text()).toContain('50%')
+  })
+
+  it('可用性概览最多展示最近 200 条', async () => {
+    scheduledTestsMocks.listByAccount.mockResolvedValue([{ id: 9, account_id: 1, model_id: 'gpt-test', enabled: true, max_results: 250 }])
+    scheduledTestsMocks.listResults.mockResolvedValue(Array.from({ length: 200 }, (_, index) => ({
+      id: index + 1,
+      plan_id: 9,
+      status: 'success',
+      started_at: new Date(Date.UTC(2026, 7, 4, 0, index)).toISOString()
+    })))
+
+    const wrapper = mountDrawer()
+    await wrapper.findAll('[role="tab"]')[3]?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[role="list"]').findAll('[role="listitem"]')).toHaveLength(200)
   })
 })

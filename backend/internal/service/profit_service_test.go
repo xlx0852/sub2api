@@ -106,7 +106,18 @@ func (s *profitRepoStub) CreateSubscriptionCycle(_ context.Context, cycle *Accou
 	s.cycles[cycle.AccountID] = append(s.cycles[cycle.AccountID], cycle)
 	return cycle, nil
 }
-func (s *profitRepoStub) DeleteSubscriptionCycle(_ context.Context, id int64) error { return nil }
+func (s *profitRepoStub) DeleteSubscriptionCycle(_ context.Context, id int64) error {
+	for accountID, cycles := range s.cycles {
+		kept := cycles[:0]
+		for _, cycle := range cycles {
+			if cycle.ID != id {
+				kept = append(kept, cycle)
+			}
+		}
+		s.cycles[accountID] = kept
+	}
+	return nil
+}
 func (s *profitRepoStub) CreateSubscriptionTermination(_ context.Context, termination *AccountSubscriptionTermination, initialRefund *AccountSubscriptionRefund) (*SubscriptionTerminationWriteResult, error) {
 	termination.ID = 1
 	if cycles := s.cycles[termination.AccountID]; len(cycles) > 0 {
@@ -132,6 +143,15 @@ func (s *profitRepoStub) VoidSubscriptionRefund(_ context.Context, id int64, rea
 	return &AccountSubscriptionRefund{ID: id, VoidReason: reason, VoidedAt: &voidedAt}, nil
 }
 func (s *profitRepoStub) ReverseSubscriptionTermination(_ context.Context, id int64, reason string, reversedAt time.Time) (*AccountSubscriptionTermination, error) {
+	for _, cycles := range s.cycles {
+		for _, cycle := range cycles {
+			if cycle.Termination != nil && cycle.Termination.ID == id {
+				cycle.Termination.ReversedAt = &reversedAt
+				cycle.Termination.ReversalReason = reason
+				return cycle.Termination, nil
+			}
+		}
+	}
 	return &AccountSubscriptionTermination{ID: id, ReversalReason: reason, ReversedAt: &reversedAt}, nil
 }
 func (s *profitRepoStub) GetSubscriptionCycleRevenueBatch(_ context.Context, ranges []SubscriptionCycleUsageRange) (map[int64]float64, error) {
@@ -463,8 +483,40 @@ type profitAccountRepoStub struct {
 	byID     map[int64]*Account
 }
 
-func (m *profitAccountRepoStub) ListWithFilters(_ context.Context, _ pagination.PaginationParams, _, _, _, _ string, _ int64, _ string) ([]Account, *pagination.PaginationResult, error) {
-	return m.accounts, nil, nil
+func (m *profitAccountRepoStub) ListWithFilters(_ context.Context, _ pagination.PaginationParams, _, _, status, _ string, _ int64, _ string) ([]Account, *pagination.PaginationResult, error) {
+	switch status {
+	case AccountListStatusDeleted:
+		out := make([]Account, 0)
+		for _, acc := range m.accounts {
+			if acc.DeletedAt != nil {
+				out = append(out, acc)
+			}
+		}
+		return out, nil, nil
+	case AccountListStatusTrash:
+		out := make([]Account, 0)
+		for _, acc := range m.accounts {
+			if acc.DeletedAt != nil || acc.SubscriptionBanned {
+				out = append(out, acc)
+			}
+		}
+		return out, nil, nil
+	case AccountListStatusBanned:
+		out := make([]Account, 0)
+		for _, acc := range m.accounts {
+			if acc.SubscriptionBanned {
+				out = append(out, acc)
+			}
+		}
+		return out, nil, nil
+	}
+	out := make([]Account, 0, len(m.accounts))
+	for _, acc := range m.accounts {
+		if acc.DeletedAt == nil && !acc.SubscriptionBanned {
+			out = append(out, acc)
+		}
+	}
+	return out, nil, nil
 }
 
 func (m *profitAccountRepoStub) GetByID(_ context.Context, id int64) (*Account, error) {
@@ -486,6 +538,18 @@ func (m *profitAccountRepoStub) SetSchedulable(_ context.Context, id int64, sche
 	for i := range m.accounts {
 		if m.accounts[i].ID == id {
 			m.accounts[i].Schedulable = schedulable
+		}
+	}
+	return nil
+}
+
+func (m *profitAccountRepoStub) SetExpiresAt(_ context.Context, id int64, expiresAt *time.Time) error {
+	if account := m.byID[id]; account != nil {
+		account.ExpiresAt = expiresAt
+	}
+	for i := range m.accounts {
+		if m.accounts[i].ID == id {
+			m.accounts[i].ExpiresAt = expiresAt
 		}
 	}
 	return nil
@@ -673,5 +737,152 @@ func TestProfitService_UpsertDerivesCostTypeFromAccountAuth(t *testing.T) {
 	}
 	if repo.upserted.CostType != AccountCostTypeMetered || repo.upserted.PeriodFee != 0 {
 		t.Fatalf("API Key config = %+v, want metered with no subscription fields", repo.upserted)
+	}
+}
+
+
+func TestDeriveAccountExpiresAtFromCycles(t *testing.T) {
+	now := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
+	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	cycle := &AccountSubscriptionCycle{ID: 1, AccountID: 9, StartsAt: start, PeriodDays: 30, PeriodFee: 200}
+	got := deriveAccountExpiresAtFromCycles([]*AccountSubscriptionCycle{cycle}, now)
+	want := start.AddDate(0, 0, 30)
+	if got == nil || !got.Equal(want) {
+		t.Fatalf("active cycle expires = %v, want %v", got, want)
+	}
+
+	termAt := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
+	cycle.Termination = &AccountSubscriptionTermination{ID: 3, CycleID: 1, AccountID: 9, EffectiveAt: termAt}
+	got = deriveAccountExpiresAtFromCycles([]*AccountSubscriptionCycle{cycle}, now)
+	if got == nil || !got.Equal(termAt) {
+		t.Fatalf("terminated cycle expires = %v, want %v", got, termAt)
+	}
+
+	// future cycle preferred over expired terminated history when no active
+	futureStart := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	future := &AccountSubscriptionCycle{ID: 2, AccountID: 9, StartsAt: futureStart, PeriodDays: 30}
+	got = deriveAccountExpiresAtFromCycles([]*AccountSubscriptionCycle{cycle, future}, now)
+	wantFuture := futureStart.AddDate(0, 0, 30)
+	if got == nil || !got.Equal(wantFuture) {
+		t.Fatalf("future cycle expires = %v, want %v", got, wantFuture)
+	}
+
+	if got := deriveAccountExpiresAtFromCycles(nil, now); got != nil {
+		t.Fatalf("empty cycles should clear expires, got %v", got)
+	}
+}
+
+func TestProfitService_CreateSubscriptionCycleSyncsExpiresAt(t *testing.T) {
+	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	nowish := time.Date(2026, 7, 5, 0, 0, 0, 0, time.UTC)
+	_ = nowish
+	repo := &profitRepoStub{cycles: map[int64][]*AccountSubscriptionCycle{}}
+	accounts := &profitAccountRepoStub{
+		byID: map[int64]*Account{
+			9: {ID: 9, Type: AccountTypeOAuth, Platform: PlatformOpenAI, Name: "o"},
+		},
+	}
+	svc := &ProfitService{profitRepo: repo, accountRepo: accounts}
+	// Freeze-ish: create cycle covering "now" — derive uses time.Now(), so use recent start
+	start = time.Now().UTC().AddDate(0, 0, -3)
+	created, err := svc.CreateSubscriptionCycle(context.Background(), &AccountSubscriptionCycle{
+		AccountID: 9, StartsAt: start, PeriodDays: 30, PeriodFee: 200, Currency: "USD",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := start.AddDate(0, 0, 30)
+	acc := accounts.byID[9]
+	if acc.ExpiresAt == nil || !acc.ExpiresAt.Equal(want) {
+		t.Fatalf("expires_at = %v, want %v (cycle id %d)", acc.ExpiresAt, want, created.ID)
+	}
+}
+
+func TestProfitService_IncludesDeletedAccounts(t *testing.T) {
+	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 0, 7)
+	deletedAt := start.AddDate(0, 0, -1)
+	repo := &profitRepoStub{
+		stats: map[int64]*ProfitUsageStats{
+			1: {Requests: 10, Revenue: 50, MeteredCost: 20},
+			2: {Requests: 4, Revenue: 12, MeteredCost: 3},
+		},
+	}
+	svc := &ProfitService{
+		profitRepo: repo,
+		accountRepo: &profitAccountRepoStub{accounts: []Account{
+			{ID: 1, Name: "live", Platform: PlatformOpenAI, Type: AccountTypeAPIKey},
+			{ID: 2, Name: "trash", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, DeletedAt: &deletedAt},
+		}},
+	}
+	resp, err := svc.GetSummary(context.Background(), start, end)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Accounts) != 2 {
+		t.Fatalf("accounts = %d, want 2 (live + trash)", len(resp.Accounts))
+	}
+	var trash *AccountProfitSummary
+	for _, acc := range resp.Accounts {
+		if acc.AccountID == 2 {
+			trash = acc
+		}
+	}
+	if trash == nil {
+		t.Fatal("deleted account missing from profit summary")
+	}
+	if !trash.Deleted {
+		t.Fatalf("deleted flag = false, want true: %+v", trash)
+	}
+	if trash.Revenue != 12 || trash.Cost != 3 {
+		t.Fatalf("trash summary = %+v", trash)
+	}
+}
+
+func TestProfitService_IncludesBannedTrashAccounts(t *testing.T) {
+	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 0, 30)
+	bannedAt := time.Date(2026, 7, 11, 0, 0, 0, 0, time.UTC)
+	repo := &profitRepoStub{
+		stats: map[int64]*ProfitUsageStats{
+			1: {Requests: 10, Revenue: 50, MeteredCost: 0},
+			103: {Requests: 20, Revenue: 200, MeteredCost: 0},
+		},
+		cycles: map[int64][]*AccountSubscriptionCycle{
+			103: {{
+				ID: 3, AccountID: 103, StartsAt: start, PeriodFee: 865, PeriodDays: 30, Currency: "USD",
+				Termination: &AccountSubscriptionTermination{EffectiveAt: bannedAt, Reason: "upstream_banned"},
+			}},
+		},
+	}
+	svc := &ProfitService{
+		profitRepo: repo,
+		accountRepo: &profitAccountRepoStub{accounts: []Account{
+			{ID: 1, Name: "live", Platform: PlatformOpenAI, Type: AccountTypeOAuth},
+			{ID: 103, Name: "banned", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusError, SubscriptionBanned: true},
+		}},
+	}
+	resp, err := svc.GetSummary(context.Background(), start, end)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var banned *AccountProfitSummary
+	for _, acc := range resp.Accounts {
+		if acc.AccountID == 103 {
+			banned = acc
+		}
+	}
+	if banned == nil {
+		t.Fatal("banned trash account missing from profit summary")
+	}
+	if !banned.Deleted {
+		t.Fatalf("deleted/trash flag = false, want true: %+v", banned)
+	}
+	// 查询区间覆盖封禁日：成本应记满整期订阅费 865
+	if banned.Cost != 865 {
+		t.Fatalf("banned cost = %v, want 865", banned.Cost)
+	}
+	if banned.Profit != roundMoney(200-865) {
+		t.Fatalf("banned profit = %v, want %v", banned.Profit, roundMoney(200-865))
 	}
 }

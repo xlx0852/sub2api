@@ -1609,11 +1609,23 @@ func (s *OpenAIGatewayService) handleGrokAccountUpstreamError(ctx context.Contex
 			cooldown = time.Duration(*snapshot.RetryAfterSeconds) * time.Second
 		}
 		s.tempUnscheduleGrok(ctx, account, cooldown, "grok rate limited")
+		s.refreshGrokBillingAfter429(account)
 	default:
 		if statusCode >= 500 {
 			s.tempUnscheduleGrok(ctx, account, 2*time.Minute, "grok upstream temporary error")
 		}
 	}
+}
+
+func (s *OpenAIGatewayService) refreshGrokBillingAfter429(account *Account) {
+	if s == nil || s.grokQuotaService == nil || account == nil || account.Platform != PlatformGrok || account.Type != AccountTypeOAuth {
+		return
+	}
+	go func(accountID int64) {
+		ctx, cancel := context.WithTimeout(context.Background(), openAIAccountStateUpdateTimeout+grokQuotaUpstreamTimeout)
+		defer cancel()
+		_, _ = s.grokQuotaService.ProbeUsage(ctx, accountID)
+	}(account.ID)
 }
 
 func (s *OpenAIGatewayService) isGrokSameAccountRetry(c *gin.Context, statusCode int) bool {
