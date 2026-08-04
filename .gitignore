@@ -141,3 +141,8 @@ docs/*
 frontend/coverage/
 aicodex
 output/
+
+# editor / build artifacts
+.zcode/
+__pycache__/
+tools/sicts-image-gen/target/
