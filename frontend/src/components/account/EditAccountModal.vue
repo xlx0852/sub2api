@@ -11,23 +11,47 @@
       @submit.prevent="handleSubmit"
       class="space-y-5"
     >
-      <div>
-        <label class="input-label">{{ t('common.name') }}</label>
-        <input v-model="form.name" type="text" required class="input" data-tour="edit-account-form-name" />
+      <div class="sticky top-0 z-10 -mx-4 -mt-4 mb-1 border-b border-gray-200 bg-white px-4 pb-3 pt-3 dark:border-dark-600 dark:bg-dark-800 sm:-mx-6 sm:px-6 sm:-mt-4 sm:pt-4" data-testid="edit-account-tabs">
+        <div class="modal-tabs-scroll flex gap-2 overflow-x-auto overscroll-x-contain pb-1">
+          <button
+            v-for="tab in editTabs"
+            :key="tab.id"
+            type="button"
+            class="shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+            :class="activeEditTab === tab.id
+              ? 'bg-primary-600 text-white shadow-sm'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-dark-700 dark:text-dark-200 dark:hover:bg-dark-600'"
+            :data-testid="`edit-account-tab-${tab.id}`"
+            @click="activeEditTab = tab.id"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+        <p class="mt-2 text-xs text-gray-500 dark:text-dark-400">{{ activeEditTabHint }}</p>
       </div>
-      <div>
-        <label class="input-label">{{ t('admin.accounts.notes') }}</label>
-        <textarea
-          v-model="form.notes"
-          rows="3"
-          class="input"
-          :placeholder="t('admin.accounts.notesPlaceholder')"
-        ></textarea>
-        <p class="input-hint">{{ t('admin.accounts.notesHint') }}</p>
-      </div>
+
+      <div v-show="activeEditTab === 'basic'" class="space-y-4" data-testid="edit-tab-basic">
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div>
+            <label class="input-label">{{ t('common.name') }}</label>
+            <input v-model="form.name" type="text" required class="input" data-tour="edit-account-form-name" />
+          </div>
+          <div>
+            <label class="input-label">{{ t('admin.accounts.notes') }}</label>
+            <textarea
+              v-model="form.notes"
+              rows="2"
+              class="input min-h-[2.5rem]"
+              :placeholder="t('admin.accounts.notesPlaceholder')"
+            ></textarea>
+            <p class="input-hint">{{ t('admin.accounts.notesHint') }}</p>
+          </div>
+        </div>
+      </div><!-- /edit-tab-basic-name-notes -->
 
       <!-- API Key fields (only for apikey type) -->
       <div v-if="account.type === 'apikey'" class="space-y-4">
+        <div v-show="activeEditTab === 'basic'" class="space-y-4">
         <div>
           <label class="input-label">{{ t('admin.accounts.baseUrl') }}</label>
           <input
@@ -73,8 +97,9 @@
           <p class="input-hint">{{ t('admin.accounts.leaveEmptyToKeep') }}</p>
         </div>
 
+        </div><!-- /apikey basic fields -->
         <!-- Model Restriction Section (不适用于 Antigravity) -->
-        <div v-if="account.platform !== 'antigravity'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'models'" v-if="account.platform !== 'antigravity'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
           <div
@@ -260,7 +285,7 @@
         </div>
 
         <!-- Pool Mode Section -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'routing'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.poolMode') }}</label>
@@ -298,7 +323,7 @@
               min="0"
               :max="MAX_POOL_MODE_RETRY_COUNT"
               step="1"
-              class="input"
+              class="input w-full sm:w-40"
             />
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {{
@@ -324,7 +349,7 @@
         </div>
 
         <!-- Custom Error Codes Section -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'routing'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.customErrorCodes') }}</label>
@@ -422,7 +447,7 @@
         </div>
 
         <!-- Header Override Section (anthropic/openai apikey only) -->
-        <div
+        <div v-show="activeEditTab === 'routing'"
           v-if="isHeaderOverridePlatform(account.platform)"
           class="border-t border-gray-200 pt-4 dark:border-dark-600"
         >
@@ -527,10 +552,11 @@
 
       </div>
 
-      <!-- OpenAI/Grok OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
-      <div
-        v-if="(account.platform === 'openai' || account.platform === 'grok') && account.type === 'oauth'"
+      <!-- OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
+      <div v-show="activeEditTab === 'models'"
+        v-if="supportsOAuthModelRestriction"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        data-testid="edit-oauth-model-restriction"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
@@ -664,7 +690,7 @@
       </div>
 
       <!-- Upstream fields (only for upstream type) -->
-      <div v-if="account.type === 'upstream'" class="space-y-4">
+      <div v-show="activeEditTab === 'basic'" v-if="account.type === 'upstream'" class="space-y-4">
         <div>
           <label class="input-label">{{ t('admin.accounts.upstream.baseUrl') }}</label>
           <input
@@ -689,6 +715,7 @@
 
       <!-- Vertex Service Account -->
       <div v-if="(account.platform === 'gemini' || account.platform === 'anthropic') && account.type === 'service_account'" class="space-y-4">
+        <div v-show="activeEditTab === 'basic'" class="space-y-4">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label class="input-label">Project ID</label>
@@ -726,8 +753,9 @@
           </div>
         </div>
 
+        </div><!-- /sa basic fields -->
         <!-- Model Restriction Section for Service Account -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'models'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
           <!-- Mode Toggle -->
@@ -904,6 +932,7 @@
 
       <!-- Bedrock fields (for bedrock type, both SigV4 and API Key modes) -->
       <div v-if="account.type === 'bedrock'" class="space-y-4">
+        <div v-show="activeEditTab === 'basic'" class="space-y-4">
         <!-- SigV4 fields -->
         <template v-if="!isBedrockAPIKeyMode">
           <div>
@@ -974,8 +1003,9 @@
           <p class="input-hint mt-1">{{ t('admin.accounts.bedrockForceGlobalHint') }}</p>
         </div>
 
+        </div><!-- /bedrock basic fields -->
         <!-- Model Restriction for Bedrock -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'models'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
           <!-- Mode Toggle -->
@@ -1044,7 +1074,7 @@
         </div>
 
         <!-- Pool Mode Section for Bedrock -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'routing'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.poolMode') }}</label>
@@ -1082,7 +1112,7 @@
               min="0"
               :max="MAX_POOL_MODE_RETRY_COUNT"
               step="1"
-              class="input"
+              class="input w-full sm:w-40"
             />
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {{
@@ -1109,8 +1139,10 @@
       </div>
 
       <div
+        v-show="activeEditTab === 'basic'"
         v-if="account.platform === 'antigravity' && account.type === 'oauth'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        data-testid="edit-antigravity-project-id"
       >
         <label class="input-label">{{ t('admin.accounts.antigravityProjectIdLabel') }}</label>
         <input
@@ -1125,7 +1157,7 @@
 
       <!-- Antigravity model restriction (applies to all antigravity types) -->
       <!-- Antigravity 只支持模型映射模式，不支持白名单模式 -->
-      <div v-if="account.platform === 'antigravity'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-show="activeEditTab === 'models'" v-if="account.platform === 'antigravity'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
         <!-- Mapping Mode Only (no toggle for Antigravity) -->
@@ -1225,7 +1257,7 @@
       </div>
 
       <!-- Temp Unschedulable Rules -->
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4">
+      <div v-show="activeEditTab === 'advanced'" class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4">
         <div class="mb-3 flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.tempUnschedulable.title') }}</label>
@@ -1373,7 +1405,7 @@
       </div>
 
       <!-- Intercept Warmup Requests (Anthropic/Antigravity) -->
-      <div
+      <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'anthropic' || account?.platform === 'antigravity'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
@@ -1404,52 +1436,93 @@
         </div>
       </div>
 
-      <div v-if="!isSparkShadow">
-        <div class="mb-1 flex items-center gap-2">
-          <label class="input-label mb-0">{{ t('admin.accounts.proxy') }}</label>
-          <ProxyAdBanner />
+      <div v-show="activeEditTab === 'basic'" class="space-y-4" data-testid="edit-tab-basic-scheduling">
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div v-if="!isSparkShadow">
+            <div class="mb-1 flex items-center gap-2">
+              <label class="input-label mb-0">{{ t('admin.accounts.proxy') }}</label>
+              <ProxyAdBanner />
+            </div>
+            <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
+          </div>
+          <div :class="isSparkShadow ? 'lg:col-span-2' : ''">
+            <label class="input-label">{{ t('common.status') }}</label>
+            <Select v-model="form.status" :options="statusOptions" />
+          </div>
         </div>
-        <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
-      </div>
 
-      <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div>
-          <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
-          <input v-model.number="form.concurrency" type="number" min="1" class="input"
-            @input="form.concurrency = Math.max(1, form.concurrency || 1)" />
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div>
+            <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
+            <input v-model.number="form.concurrency" type="number" min="1" class="input"
+              @input="form.concurrency = Math.max(1, form.concurrency || 1)" />
+          </div>
+          <div>
+            <label class="input-label">{{ t('admin.accounts.loadFactor') }}</label>
+            <input v-model.number="form.load_factor" type="number" min="1"
+              class="input" :placeholder="String(form.concurrency || 1)"
+              @input="form.load_factor = (form.load_factor &amp;&amp; form.load_factor >= 1) ? form.load_factor : null" />
+            <p class="input-hint">{{ t('admin.accounts.loadFactorHint') }}</p>
+          </div>
+          <div class="col-span-2 sm:col-span-1">
+            <label class="input-label">{{ t('admin.accounts.priority') }}</label>
+            <input
+              v-model.number="form.priority"
+              type="number"
+              min="1"
+              class="input"
+              data-tour="account-form-priority"
+            />
+            <p class="input-hint">{{ t('admin.accounts.priorityHint') }}</p>
+          </div>
         </div>
-        <div>
-          <label class="input-label">{{ t('admin.accounts.loadFactor') }}</label>
-          <input v-model.number="form.load_factor" type="number" min="1"
-            class="input" :placeholder="String(form.concurrency || 1)"
-            @input="form.load_factor = (form.load_factor &amp;&amp; form.load_factor >= 1) ? form.load_factor : null" />
-          <p class="input-hint">{{ t('admin.accounts.loadFactorHint') }}</p>
+
+        <div
+          v-if="supportsAccountExpiry"
+          class="grid grid-cols-1 gap-4 rounded-lg border border-gray-200 p-3 dark:border-dark-600 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"
+          data-testid="edit-account-expiry-section"
+        >
+          <div>
+            <label class="input-label">{{ t('admin.accounts.expiresAt') }}</label>
+            <input
+              v-model="expiresAtInput"
+              type="datetime-local"
+              class="input"
+              disabled
+              readonly
+              data-testid="edit-account-expires-at"
+            />
+            <p class="input-hint">{{ t('admin.accounts.expiresAtFollowsCostCycle') }}</p>
+          </div>
+          <div class="flex items-start justify-between gap-3 rounded-md bg-gray-50 px-3 py-2 dark:bg-dark-700/60 lg:mt-6">
+            <div class="min-w-0">
+              <label class="input-label mb-0">{{ t('admin.accounts.autoPauseOnExpired') }}</label>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.accounts.autoPauseOnExpiredDesc') }}
+              </p>
+            </div>
+            <button
+              type="button"
+              @click="autoPauseOnExpired = !autoPauseOnExpired"
+              :class="[
+                'relative mt-0.5 inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+                autoPauseOnExpired ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+              ]"
+              data-testid="edit-account-auto-pause-on-expired"
+            >
+              <span
+                :class="[
+                  'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                  autoPauseOnExpired ? 'translate-x-5' : 'translate-x-0'
+                ]"
+              />
+            </button>
+          </div>
         </div>
-        <div>
-          <label class="input-label">{{ t('admin.accounts.priority') }}</label>
-          <input
-            v-model.number="form.priority"
-            type="number"
-            min="1"
-            class="input"
-            data-tour="account-form-priority"
-          />
-          <p class="input-hint">{{ t('admin.accounts.priorityHint') }}</p>
-        </div>
-        <div>
-          <label class="input-label">{{ t('admin.accounts.billingRateMultiplier') }}</label>
-          <input v-model.number="form.rate_multiplier" type="number" min="0" step="0.001" class="input" />
-          <p class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
-        </div>
-      </div>
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
-        <label class="input-label">{{ t('admin.accounts.expiresAt') }}</label>
-        <input v-model="expiresAtInput" type="datetime-local" class="input" />
-        <p class="input-hint">{{ t('admin.accounts.expiresAtHint') }}</p>
-      </div>
+      </div><!-- /edit-tab-basic-scheduling -->
 
       <!-- OpenAI 自动透传开关（OAuth/API Key） -->
-      <div
+      <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
@@ -1479,7 +1552,7 @@
       </div>
 
       <!-- OpenAI Codex 图片工具统一策略（自动注入 + 客户端显式携带） -->
-      <div
+      <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
@@ -1539,7 +1612,7 @@
       </div>
 
       <!-- OpenAI WS Mode 三态（off/ctx_pool/passthrough） -->
-      <div
+      <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
@@ -1560,7 +1633,7 @@
       </div>
 
       <!-- OpenAI APIKey Responses API support mode -->
-      <div
+      <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'openai' && account?.type === 'apikey'"
         class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600"
       >
@@ -1616,7 +1689,7 @@
       </div>
 
       <!-- Anthropic API Key 自动透传开关 -->
-      <div
+      <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'anthropic' && account?.type === 'apikey'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
@@ -1646,8 +1719,10 @@
       </div>
 
       <div
+        v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'anthropic' && account?.type === 'apikey'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        data-testid="edit-anthropic-auth-scheme"
       >
         <div class="flex items-center justify-between gap-4">
           <div>
@@ -1664,7 +1739,7 @@
       </div>
 
       <!-- Anthropic API Key: Web Search Emulation (hidden when global disabled) -->
-      <div
+      <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'anthropic' && account?.type === 'apikey' && webSearchGlobalEnabled"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
@@ -1684,7 +1759,7 @@
       </div>
 
       <!-- 配额控制 (Anthropic apikey/bedrock: 配额限制 + 亲和) -->
-      <div
+      <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'anthropic' && (account?.type === 'apikey' || account?.type === 'bedrock')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
       >
@@ -1735,7 +1810,7 @@
         />
       </div>
       <!-- 配额控制 (非 Anthropic apikey/bedrock) -->
-      <div
+      <div v-show="activeEditTab === 'advanced'"
         v-else-if="account?.type === 'apikey' || account?.type === 'bedrock'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
       >
@@ -1787,7 +1862,7 @@
       </div>
 
       <!-- OpenAI OAuth Codex 官方客户端限制开关 -->
-      <div
+      <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
@@ -1843,8 +1918,10 @@
       </div>
 
       <div
+        v-show="activeEditTab === 'models'"
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        data-testid="edit-openai-compact-mode"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -1900,37 +1977,12 @@
         </div>
       </div>
 
-      <div>
-        <div class="flex items-center justify-between">
-          <div>
-            <label class="input-label mb-0">{{
-              t('admin.accounts.autoPauseOnExpired')
-            }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('admin.accounts.autoPauseOnExpiredDesc') }}
-            </p>
-          </div>
-          <button
-            type="button"
-            @click="autoPauseOnExpired = !autoPauseOnExpired"
-            :class="[
-              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
-              autoPauseOnExpired ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-            ]"
-          >
-            <span
-              :class="[
-                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                autoPauseOnExpired ? 'translate-x-5' : 'translate-x-0'
-              ]"
-            />
-          </button>
-        </div>
-      </div>
 
       <div
+        v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'openai'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        data-testid="edit-openai-auto-pause-thresholds"
       >
         <div class="space-y-2">
           <div class="flex items-center justify-between">
@@ -1962,7 +2014,7 @@
             min="0"
             max="100"
             step="0.1"
-            class="input"
+            class="input w-full sm:w-40"
             :disabled="autoPause5hDisabled"
             data-testid="auto-pause-5h-threshold"
           />
@@ -1998,7 +2050,7 @@
             min="0"
             max="100"
             step="0.1"
-            class="input"
+            class="input w-full sm:w-40"
             :disabled="autoPause7dDisabled"
             data-testid="auto-pause-7d-threshold"
           />
@@ -2007,7 +2059,7 @@
       </div>
 
       <!-- 配额控制 (Anthropic OAuth/SetupToken: 亲和 + 窗口费用 + 会话 + RPM 等) -->
-      <div
+      <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'anthropic' && (account?.type === 'oauth' || account?.type === 'setup-token')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
       >
@@ -2170,7 +2222,7 @@
                 min="1"
                 max="1000"
                 step="1"
-                class="input"
+                class="input w-full sm:w-40"
                 :placeholder="t('admin.accounts.quotaControl.rpmLimit.baseRpmPlaceholder')"
               />
               <p class="input-hint">{{ t('admin.accounts.quotaControl.rpmLimit.baseRpmHint') }}</p>
@@ -2219,7 +2271,7 @@
                 type="number"
                 min="1"
                 step="1"
-                class="input"
+                class="input w-full sm:w-40"
                 :placeholder="t('admin.accounts.quotaControl.rpmLimit.stickyBufferPlaceholder')"
               />
               <p class="input-hint">{{ t('admin.accounts.quotaControl.rpmLimit.stickyBufferHint') }}</p>
@@ -2249,7 +2301,7 @@
         </div>
 
         <!-- TLS Fingerprint -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'advanced'" class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.tlsFingerprint.label') }}</label>
@@ -2284,7 +2336,7 @@
         </div>
 
         <!-- Session ID Masking -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'advanced'" class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.sessionIdMasking.label') }}</label>
@@ -2311,7 +2363,7 @@
         </div>
 
         <!-- Cache TTL Override -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'advanced'" class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.cacheTTLOverride.label') }}</label>
@@ -2351,7 +2403,7 @@
         </div>
 
         <!-- Custom Base URL Relay -->
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'advanced'" class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
           <div class="flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.quotaControl.customBaseUrl.label') }}</label>
@@ -2386,43 +2438,8 @@
         </div>
       </div>
 
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
-        <div>
-          <label class="input-label">{{ t('common.status') }}</label>
-          <Select v-model="form.status" :options="statusOptions" />
-        </div>
-
-        <!-- Mixed Scheduling (only for antigravity accounts, read-only in edit mode) -->
+      <div v-show="activeEditTab === 'basic'" class="space-y-4" data-testid="edit-tab-basic-status">
         <div v-if="account?.platform === 'antigravity'" class="flex items-center gap-2">
-          <label class="flex cursor-not-allowed items-center gap-2 opacity-60">
-            <input
-              type="checkbox"
-              v-model="mixedScheduling"
-              disabled
-              class="h-4 w-4 cursor-not-allowed rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
-            />
-            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
-              {{ t('admin.accounts.mixedScheduling') }}
-            </span>
-          </label>
-          <div class="group relative">
-            <span
-              class="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-gray-200 text-xs text-gray-500 hover:bg-gray-300 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500"
-            >
-              ?
-            </span>
-            <!-- Tooltip（向下显示避免被弹窗裁剪） -->
-            <div
-              class="pointer-events-none absolute left-0 top-full z-[100] mt-1.5 w-72 rounded bg-gray-900 px-3 py-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 dark:bg-gray-700"
-            >
-              {{ t('admin.accounts.mixedSchedulingTooltip') }}
-              <div
-                class="absolute bottom-full left-3 border-4 border-transparent border-b-gray-900 dark:border-b-gray-700"
-              ></div>
-            </div>
-          </div>
-        </div>
-        <div v-if="account?.platform === 'antigravity'" class="mt-3 flex items-center gap-2">
           <label class="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
@@ -2449,22 +2466,135 @@
             </div>
           </div>
         </div>
+
+        <GroupSelector
+          v-if="!authStore.isSimpleMode"
+          v-model="form.group_ids"
+          :groups="groups"
+          :platform="account?.platform"
+          :mixed-scheduling="mixedScheduling"
+          data-testid="account-form-groups"
+          data-tour="account-form-groups"
+        />
       </div>
 
-      <!-- Group Selection - 仅标准模式显示 -->
-      <GroupSelector
-        v-if="!authStore.isSimpleMode"
-        v-model="form.group_ids"
-        :groups="groups"
-        :platform="account?.platform"
-        :mixed-scheduling="mixedScheduling"
-        data-tour="account-form-groups"
-      />
+      <!-- Mixed Scheduling (only for antigravity accounts, read-only in edit mode) -->
+      <div
+        v-show="activeEditTab === 'advanced'"
+        v-if="account?.platform === 'antigravity'"
+        class="flex items-center gap-2 border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <label class="flex cursor-not-allowed items-center gap-2 opacity-60">
+          <input
+            type="checkbox"
+            v-model="mixedScheduling"
+            disabled
+            class="h-4 w-4 cursor-not-allowed rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
+          />
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ t('admin.accounts.mixedScheduling') }}
+          </span>
+        </label>
+        <div class="group relative">
+          <span
+            class="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-gray-200 text-xs text-gray-500 hover:bg-gray-300 dark:bg-dark-600 dark:text-gray-400 dark:hover:bg-dark-500"
+          >
+            ?
+          </span>
+          <div
+            class="pointer-events-none absolute left-0 top-full z-[100] mt-1.5 w-72 rounded bg-gray-900 px-3 py-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 dark:bg-gray-700"
+          >
+            {{ t('admin.accounts.mixedSchedulingTooltip') }}
+            <div
+              class="absolute bottom-full left-3 border-4 border-transparent border-b-gray-900 dark:border-b-gray-700"
+            ></div>
+          </div>
+        </div>
+      </div>
+
+      <div v-show="activeEditTab === 'cost'" class="space-y-4" data-testid="edit-account-cost-section">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.profit.configure') }}</h3>
+          <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">
+            {{ (account.type === 'oauth' || account.type === 'setup-token') ? t('admin.profit.costTypeAutoSubscription') : t('admin.profit.costTypeAutoMetered') }}
+          </p>
+        </div>
+        <div class="max-w-xs">
+          <label class="input-label">{{ t('admin.accounts.billingRateMultiplier') }}</label>
+          <input
+            v-model.number="form.rate_multiplier"
+            type="number"
+            min="0"
+            step="0.001"
+            class="input disabled:cursor-not-allowed disabled:opacity-60"
+            data-testid="edit-account-rate-multiplier"
+            :disabled="upstreamBillingRateSyncEnabled"
+          />
+          <p class="input-hint">
+            {{
+              upstreamBillingRateSyncEnabled
+                ? t('admin.accounts.upstreamBilling.syncRateManagedHint')
+                : t('admin.accounts.rateMultiplierCostHint')
+            }}
+          </p>
+        </div>
+
+        <!-- 上游 Sub2API 计费倍率探测（仅 API Key 账号） -->
+        <div v-if="account?.type === 'apikey'" class="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-dark-600" data-testid="edit-account-upstream-billing">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <label class="input-label mb-0">{{ t('admin.accounts.upstreamBilling.autoProbe') }}</label>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.accounts.upstreamBilling.autoProbeHint') }}
+              </p>
+            </div>
+            <Toggle
+              :model-value="upstreamBillingAutoProbeEnabled"
+              data-testid="upstream-billing-auto-probe"
+              :aria-label="t('admin.accounts.upstreamBilling.autoProbe')"
+              @update:model-value="handleUpstreamBillingAutoProbeChange"
+            />
+          </div>
+          <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-3 dark:border-dark-700">
+            <div>
+              <label class="input-label mb-0">{{ t('admin.accounts.upstreamBilling.syncRate') }}</label>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.accounts.upstreamBilling.syncRateHint') }}
+              </p>
+            </div>
+            <Toggle
+              :model-value="upstreamBillingRateSyncEnabled"
+              data-testid="upstream-billing-rate-sync"
+              :aria-label="t('admin.accounts.upstreamBilling.syncRate')"
+              @update:model-value="handleUpstreamBillingRateSyncChange"
+            />
+          </div>
+        </div>
+        <AccountCostConfigPanel
+          v-if="account.type === 'oauth' || account.type === 'setup-token'"
+          :active="show && !!account && activeEditTab === 'cost'"
+          :account-id="account.id"
+          :account-name="account.name"
+          :account-type="account.type"
+          :account-platform="account.platform"
+          :show-account-header="false"
+          :show-inline-save="true"
+          @saved="handleCostConfigSaved"
+        />
+        <div v-else class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-dark-600 dark:bg-dark-700" data-testid="edit-account-cost-metered">
+          <div class="font-medium text-gray-800 dark:text-dark-100">{{ t('admin.profit.metered') }}</div>
+          <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">{{ t('admin.profit.costTypeAutoMetered') }}</p>
+        </div>
+      </div>
 
     </form>
 
     <template #footer>
-      <div v-if="account" class="flex justify-end gap-3">
+      <div v-if="account" class="flex w-full items-center justify-between gap-3">
+        <p class="text-xs text-gray-500 dark:text-dark-400">
+          <span v-if="activeEditTab === 'cost'">{{ t('admin.accounts.editTabs.costFooterHint') }}</span>
+        </p>
+        <div class="flex justify-end gap-3">
         <button @click="handleClose" type="button" class="btn btn-secondary">
           {{ t('common.cancel') }}
         </button>
@@ -2473,6 +2603,7 @@
           form="edit-account-form"
           :disabled="submitting"
           class="btn btn-primary"
+          data-testid="account-form-submit"
           data-tour="account-form-submit"
         >
           <svg
@@ -2497,6 +2628,7 @@
           </svg>
           {{ submitting ? t('admin.accounts.updating') : t('common.update') }}
         </button>
+        </div>
       </div>
     </template>
   </BaseDialog>
@@ -2513,6 +2645,17 @@
     @cancel="handleMixedChannelCancel"
   />
 </template>
+
+<style scoped>
+.modal-tabs-scroll {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.modal-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+</style>
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
@@ -2531,6 +2674,8 @@ import type {
   OpenAIEndpointCapability
 } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import Toggle from '@/components/common/Toggle.vue'
+import AccountCostConfigPanel from '@/components/admin/account/AccountCostConfigPanel.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -2587,12 +2732,36 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+type EditAccountTab = 'basic' | 'models' | 'routing' | 'advanced' | 'cost'
+const activeEditTab = ref<EditAccountTab>('basic')
+const editTabs = computed(() => [
+  { id: 'basic' as const, label: t('admin.accounts.editTabs.basic') },
+  { id: 'models' as const, label: t('admin.accounts.editTabs.models') },
+  { id: 'routing' as const, label: t('admin.accounts.editTabs.routing') },
+  { id: 'advanced' as const, label: t('admin.accounts.editTabs.advanced') },
+  { id: 'cost' as const, label: t('admin.accounts.editTabs.cost') },
+])
+const activeEditTabHint = computed(() => t(`admin.accounts.editTabs.${activeEditTab.value}Hint` as const))
+
 const appStore = useAppStore()
 const authStore = useAuthStore()
 
 // Spark 影子账号(parent_account_id 非空):代理恒继承母账号,不可独立编辑(外审 B/P1),
 // 故隐藏代理选择器。
 const isSparkShadow = computed(() => props.account?.parent_account_id != null)
+const isSubscriptionAccount = computed(
+  () => props.account?.type === 'oauth' || props.account?.type === 'setup-token'
+)
+// API Key 按量模式无账号调度过期概念；仅订阅号（成本周期）展示过期。
+const supportsAccountExpiry = computed(() => isSubscriptionAccount.value)
+// OAuth/setup-token 通用模型限制（Antigravity 使用独立映射 UI）
+const supportsOAuthModelRestriction = computed(() => {
+  const platform = props.account?.platform
+  const type = props.account?.type
+  if (!platform || (type !== 'oauth' && type !== 'setup-token')) return false
+  return platform === 'openai' || platform === 'grok' || platform === 'kimi' || platform === 'anthropic' || platform === 'gemini'
+})
 
 // Platform-specific hint for Base URL
 const baseUrlHint = computed(() => {
@@ -3073,6 +3242,24 @@ const form = reactive({
   expires_at: null as number | null
 })
 
+// 上游 Sub2API 计费倍率探测：自动探测与倍率同步开关（仅存 extra，不动 rate_multiplier 列）
+const upstreamBillingAutoProbeEnabled = ref(false)
+const upstreamBillingRateSyncEnabled = ref(false)
+
+const handleUpstreamBillingRateSyncChange = (enabled: boolean) => {
+  upstreamBillingRateSyncEnabled.value = enabled
+  if (enabled) {
+    upstreamBillingAutoProbeEnabled.value = true
+  }
+}
+
+const handleUpstreamBillingAutoProbeChange = (enabled: boolean) => {
+  upstreamBillingAutoProbeEnabled.value = enabled
+  if (!enabled) {
+    upstreamBillingRateSyncEnabled.value = false
+  }
+}
+
 const statusOptions = computed(() => {
   const options = [
     { value: 'active', label: t('common.active') },
@@ -3150,6 +3337,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   mixedChannelWarningDetails.value = null
   mixedChannelWarningRawMessage.value = ''
   mixedChannelWarningAction.value = null
+  activeEditTab.value = 'basic'
   form.name = newAccount.name
   form.notes = newAccount.notes || ''
   form.proxy_id = newAccount.proxy_id
@@ -3162,6 +3350,12 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     : 'active'
   form.group_ids = newAccount.group_ids || []
   form.expires_at = newAccount.expires_at ?? null
+
+  // 回填上游计费倍率探测开关（extra）
+  const probeExtra = newAccount.extra as Record<string, unknown> | undefined
+  upstreamBillingAutoProbeEnabled.value = probeExtra?.upstream_billing_probe_enabled === true
+  upstreamBillingRateSyncEnabled.value =
+    upstreamBillingAutoProbeEnabled.value && probeExtra?.upstream_billing_rate_sync_enabled === true
 
   // Load intercept warmup requests setting (applies to all account types)
   const credentials = newAccount.credentials as Record<string, unknown> | undefined
@@ -3423,8 +3617,12 @@ const syncFormFromAccount = (newAccount: Account | null) => {
           : 'https://api.anthropic.com'
     editBaseUrl.value = platformDefaultUrl
 
-    // Load model mappings for OpenAI/Grok OAuth accounts
-    if ((newAccount.platform === 'openai' || newAccount.platform === 'grok') && newAccount.credentials) {
+    // Load model mappings for OAuth/setup-token accounts (non-antigravity)
+    if (
+      (newAccount.type === 'oauth' || newAccount.type === 'setup-token') &&
+      newAccount.platform !== 'antigravity' &&
+      newAccount.credentials
+    ) {
       const oauthCredentials = newAccount.credentials as Record<string, unknown>
       loadModelRestrictionFromMapping(oauthCredentials.model_mapping as Record<string, unknown> | undefined)
     } else {
@@ -3454,6 +3652,7 @@ watch(
   [() => props.show, () => props.account],
   ([show, newAccount], [wasShow, previousAccount]) => {
     if (!show || !newAccount) {
+      activeEditTab.value = 'basic'
       return
     }
     if (!wasShow || newAccount !== previousAccount) {
@@ -3911,7 +4110,24 @@ const submitUpdateAccount = async (accountID: number, updatePayload: Record<stri
   }
 }
 
+const handleCostConfigSaved = async (payload?: { account_expires_at?: string | null }) => {
+  if (!props.account) return
+  if (payload && Object.prototype.hasOwnProperty.call(payload, 'account_expires_at')) {
+    const raw = payload.account_expires_at
+    if (!raw) {
+      form.expires_at = null
+    } else {
+      const ms = Date.parse(raw)
+      if (Number.isFinite(ms)) {
+        form.expires_at = Math.floor(ms / 1000)
+      }
+    }
+  }
+  emit('updated', props.account)
+}
+
 const handleSubmit = async () => {
+
   if (!props.account) return
   const accountID = props.account.id
 
@@ -3926,15 +4142,20 @@ const handleSubmit = async () => {
     if (updatePayload.proxy_id === null) {
       updatePayload.proxy_id = 0
     }
-    if (form.expires_at === null) {
+    if (isSubscriptionAccount.value) {
+      // 订阅号过期时间由成本周期驱动，账号更新不覆盖
+      delete updatePayload.expires_at
+      updatePayload.auto_pause_on_expired = autoPauseOnExpired.value
+    } else {
+      // API Key 等非订阅账号无调度过期概念
       updatePayload.expires_at = 0
+      updatePayload.auto_pause_on_expired = false
     }
     // load_factor: 空值/NaN/0/负数 时发送 0（后端约定 <= 0 = 清除）
     const lf = form.load_factor
     if (lf == null || Number.isNaN(lf) || lf <= 0) {
       updatePayload.load_factor = 0
     }
-    updatePayload.auto_pause_on_expired = autoPauseOnExpired.value
 
     // For apikey type, handle credentials update
     if (props.account.type === 'apikey') {
@@ -4164,8 +4385,8 @@ const handleSubmit = async () => {
       updatePayload.credentials = newCredentials
     }
 
-    // OpenAI/Grok OAuth: persist model mapping to credentials
-    if ((props.account.platform === 'openai' || props.account.platform === 'grok') && props.account.type === 'oauth') {
+    // OAuth/setup-token: persist model mapping to credentials (non-antigravity)
+    if (supportsOAuthModelRestriction.value) {
       const currentCredentials = isSparkShadow.value
         ? {}
         : (updatePayload.credentials as Record<string, unknown>) ||
@@ -4214,7 +4435,7 @@ const handleSubmit = async () => {
 
     // For antigravity accounts, handle mixed_scheduling and allow_overages in extra
     if (props.account.platform === 'antigravity') {
-      const currentExtra = (props.account.extra as Record<string, unknown>) || {}
+      const currentExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
       const newExtra: Record<string, unknown> = { ...currentExtra }
       if (mixedScheduling.value) {
         newExtra.mixed_scheduling = true
@@ -4436,6 +4657,22 @@ const handleSubmit = async () => {
       const currentExtra = (updatePayload.extra as Record<string, unknown>) ||
         (props.account.extra as Record<string, unknown>) || {}
       const newExtra: Record<string, unknown> = { ...currentExtra }
+      // 上游计费倍率探测开关（Bedrock 凭证无静态 Key，不参与）
+      if (props.account.type === 'apikey') {
+        if (upstreamBillingAutoProbeEnabled.value) {
+          newExtra.upstream_billing_probe_enabled = true
+          if (upstreamBillingRateSyncEnabled.value) {
+            newExtra.upstream_billing_rate_sync_enabled = true
+            // 倍率归上游所有：避免手工值与下一次探测回写互相覆盖
+            delete updatePayload.rate_multiplier
+          } else {
+            delete newExtra.upstream_billing_rate_sync_enabled
+          }
+        } else {
+          delete newExtra.upstream_billing_probe_enabled
+          delete newExtra.upstream_billing_rate_sync_enabled
+        }
+      }
       // Total quota
       if (editQuotaLimit.value != null && editQuotaLimit.value > 0) {
         newExtra.quota_limit = editQuotaLimit.value

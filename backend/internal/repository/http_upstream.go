@@ -468,6 +468,11 @@ func (s *httpUpstreamService) redirectChecker(req *http.Request, via []*http.Req
 	if len(via) >= 10 {
 		return errors.New("stopped after 10 redirects")
 	}
+	if service.HTTPUpstreamRedirectsDisabled(req.Context()) {
+		// Credential-bearing probes must not follow redirects through the shared
+		// client: a redirect target would receive the upstream Authorization header.
+		return http.ErrUseLastResponse
+	}
 	return s.validateRequestHost(req)
 }
 

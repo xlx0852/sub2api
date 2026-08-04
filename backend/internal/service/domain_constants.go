@@ -537,3 +537,7 @@ const AdminAPIKeyPrefix = "admin-"
 // SettingKeyAllowUserViewErrorRequests controls whether end users can view
 // their own failed requests on the usage page. Default false (opt-in).
 const SettingKeyAllowUserViewErrorRequests = "allow_user_view_error_requests"
+
+// SettingKeyUpstreamBillingProbeSettings —— 系统全局：上游 Sub2API 计费倍率
+// 探测 runner 的开关与周期（JSON：enabled / interval_minutes）。
+const SettingKeyUpstreamBillingProbeSettings = "upstream_billing_probe_settings"
