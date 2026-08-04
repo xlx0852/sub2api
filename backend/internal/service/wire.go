@@ -175,6 +175,8 @@ func ProvideAccountUsageService(
 	)
 	service.SetKimiQuotaService(kimiQuotaService)
 	service.SetGrokQuotaService(grokQuotaService)
+	openAIGatewayService.SetKimiQuotaService(kimiQuotaService)
+	openAIGatewayService.SetGrokQuotaService(grokQuotaService)
 	service.agentIdentityWS = openAIGatewayService
 	return service
 }
@@ -702,6 +704,7 @@ var ProviderSet = wire.NewSet(
 	ProvideAccountUsageService,
 	ProvideAccountTestService,
 	ProvideSettingService,
+	ProvideUpstreamBillingProbeService,
 	NewDataManagementService,
 	ProvideBackupService,
 	ProvideOpsSystemLogSink,

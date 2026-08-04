@@ -68,7 +68,255 @@ func normalizeAccountConcurrency(platform, accountType string, concurrency int) 
 	return concurrency
 }
 
+
+func oauthAccountEmail(account *Account) string {
+	if account == nil {
+		return ""
+	}
+	email := strings.ToLower(strings.TrimSpace(account.GetCredential("email")))
+	if email != "" {
+		return email
+	}
+	if account.Extra == nil {
+		return ""
+	}
+	if v, ok := account.Extra["email"].(string); ok {
+		return strings.ToLower(strings.TrimSpace(v))
+	}
+	return ""
+}
+
+func oauthLoginRank(account *Account) time.Time {
+	if account == nil {
+		return time.Time{}
+	}
+	if account.LastUsedAt != nil && !account.LastUsedAt.IsZero() {
+		return *account.LastUsedAt
+	}
+	return account.CreatedAt
+}
+
+func pickLatestOAuthAccount(accounts []Account) *Account {
+	var best *Account
+	for i := range accounts {
+		acc := &accounts[i]
+		if acc.IsCredentialShadow() {
+			continue
+		}
+		if best == nil {
+			best = acc
+			continue
+		}
+		bestRank := oauthLoginRank(best)
+		accRank := oauthLoginRank(acc)
+		if accRank.After(bestRank) || (accRank.Equal(bestRank) && acc.ID > best.ID) {
+			best = acc
+		}
+	}
+	return best
+}
+
+func withOAuthEmailInExtra(extra map[string]any, email string) map[string]any {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return extra
+	}
+	if extra == nil {
+		extra = map[string]any{}
+	} else {
+		copied := make(map[string]any, len(extra)+1)
+		for k, v := range extra {
+			copied[k] = v
+		}
+		extra = copied
+	}
+	extra["email"] = email
+	return extra
+}
+
+func (s *adminServiceImpl) mergeIntoExistingOAuthAccount(ctx context.Context, existing *Account, input *CreateAccountInput, email string) (*Account, error) {
+	if existing == nil || input == nil {
+		return nil, errors.New("oauth merge target missing")
+	}
+
+	// 若保留账号此前被软删，先恢复再更新凭据。
+	if existing.DeletedAt != nil {
+		if err := s.accountRepo.Restore(ctx, existing.ID); err != nil {
+			return nil, err
+		}
+		restored, err := s.accountRepo.GetByID(ctx, existing.ID)
+		if err != nil {
+			return nil, err
+		}
+		existing = restored
+	}
+
+	credentials := MergeCredentials(existing.Credentials, input.Credentials)
+	extra := withOAuthEmailInExtra(MergeCredentials(existing.Extra, input.Extra), email)
+
+	update := &UpdateAccountInput{
+		Type:        input.Type,
+		Credentials: credentials,
+		Extra:       extra,
+	}
+	if strings.TrimSpace(input.Name) != "" {
+		update.Name = input.Name
+	}
+	if input.Notes != nil {
+		update.Notes = input.Notes
+	}
+	if input.ProxyID != nil {
+		update.ProxyID = input.ProxyID
+	}
+	if input.Concurrency > 0 {
+		c := normalizeAccountConcurrency(input.Platform, input.Type, input.Concurrency)
+		update.Concurrency = &c
+	}
+	if input.Priority != 0 {
+		p := input.Priority
+		update.Priority = &p
+	}
+	if input.RateMultiplier != nil {
+		update.RateMultiplier = input.RateMultiplier
+	}
+	if input.LoadFactor != nil {
+		update.LoadFactor = input.LoadFactor
+	}
+	if len(input.GroupIDs) > 0 {
+		groupIDs := append([]int64(nil), input.GroupIDs...)
+		update.GroupIDs = &groupIDs
+		update.SkipMixedChannelCheck = input.SkipMixedChannelCheck
+	}
+
+	updated, err := s.UpdateAccount(ctx, existing.ID, update)
+	if err != nil {
+		return nil, err
+	}
+
+	// 合并后清理同平台同邮箱的其他在用副本，保留最新登录账号。
+	duplicates, err := s.accountRepo.FindOAuthByPlatformEmail(ctx, input.Platform, email, false)
+	if err != nil {
+		return nil, err
+	}
+	for i := range duplicates {
+		dup := duplicates[i]
+		if dup.ID == updated.ID || dup.IsCredentialShadow() {
+			continue
+		}
+		if err := s.accountRepo.Delete(ctx, dup.ID); err != nil {
+			return nil, fmt.Errorf("soft-delete oauth duplicate %d: %w", dup.ID, err)
+		}
+		slog.Info("oauth_account_merged_duplicate_deleted",
+			"platform", input.Platform,
+			"email", email,
+			"kept_id", updated.ID,
+			"deleted_id", dup.ID,
+		)
+	}
+
+	_ = s.accountRepo.UpdateLastUsed(ctx, updated.ID)
+	if cleared, err := s.ClearAccountError(ctx, updated.ID); err == nil && cleared != nil {
+		updated = cleared
+	}
+	slog.Info("oauth_account_merged_on_create",
+		"platform", input.Platform,
+		"email", email,
+		"account_id", updated.ID,
+	)
+	return updated, nil
+}
+
+// CleanupOAuthEmailDuplicates 历史清理：同平台同邮箱仅保留最后登录账号。
+// 覆盖服役列表与回收站；重复项的 usage 等引用先归并到保留 ID，再硬删除重复行。
+func (s *adminServiceImpl) CleanupOAuthEmailDuplicates(ctx context.Context) (kept int, deleted int, err error) {
+	if s == nil || s.accountRepo == nil {
+		return 0, 0, errors.New("account repository unavailable")
+	}
+	// 完整枚举 OAuth（含回收站 / error / 封禁），避免默认列表过滤器漏号。
+	accounts, err := s.accountRepo.ListOAuthIncludingDeleted(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	type key struct {
+		platform string
+		email    string
+	}
+	groups := map[key][]Account{}
+	for _, acc := range accounts {
+		if acc.Type != AccountTypeOAuth && acc.Type != AccountTypeSetupToken {
+			continue
+		}
+		if acc.IsCredentialShadow() {
+			continue
+		}
+		email := oauthAccountEmail(&acc)
+		if email == "" {
+			continue
+		}
+		k := key{platform: acc.Platform, email: email}
+		groups[k] = append(groups[k], acc)
+	}
+	for k, group := range groups {
+		if len(group) <= 1 {
+			continue
+		}
+		winner := pickLatestOAuthAccount(group)
+		if winner == nil {
+			continue
+		}
+		kept++
+		for i := range group {
+			acc := group[i]
+			if acc.ID == winner.ID {
+				continue
+			}
+			// 先迁移引用，再硬删，避免 usage_logs 等被 CASCADE 丢掉。
+			if err := s.accountRepo.ReassignAccountReferences(ctx, acc.ID, winner.ID); err != nil {
+				return kept, deleted, fmt.Errorf("reassign oauth duplicate %d -> %d: %w", acc.ID, winner.ID, err)
+			}
+			if err := s.accountRepo.HardDelete(ctx, acc.ID); err != nil {
+				return kept, deleted, fmt.Errorf("hard-delete oauth duplicate %d: %w", acc.ID, err)
+			}
+			deleted++
+			slog.Info("oauth_email_duplicate_cleanup",
+				"platform", k.platform,
+				"email", k.email,
+				"kept_id", winner.ID,
+				"deleted_id", acc.ID,
+				"winner_in_trash", winner.DeletedAt != nil,
+			)
+		}
+	}
+	return kept, deleted, nil
+}
+
 func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccountInput) (*Account, error) {
+	// OAuth/setup-token：同平台同邮箱合并到最后登录账号，避免重复建号。
+	if input != nil && (input.Type == AccountTypeOAuth || input.Type == AccountTypeSetupToken) {
+		email := ""
+		if input.Credentials != nil {
+			if v, ok := input.Credentials["email"].(string); ok {
+				email = strings.ToLower(strings.TrimSpace(v))
+			}
+		}
+		if email == "" && input.Extra != nil {
+			if v, ok := input.Extra["email"].(string); ok {
+				email = strings.ToLower(strings.TrimSpace(v))
+			}
+		}
+		if email != "" {
+			input.Extra = withOAuthEmailInExtra(input.Extra, email)
+			existing, err := s.accountRepo.FindOAuthByPlatformEmail(ctx, input.Platform, email, true)
+			if err != nil {
+				return nil, err
+			}
+			if winner := pickLatestOAuthAccount(existing); winner != nil {
+				return s.mergeIntoExistingOAuthAccount(ctx, winner, input, email)
+			}
+		}
+	}
+
 	// 绑定分组
 	groupIDs := input.GroupIDs
 	// 如果没有指定分组,自动绑定对应平台的默认分组
@@ -118,7 +366,7 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 		ComputeQuotaResetAt(account.Extra)
 		NormalizeFixedQuotaWindows(account.Extra)
 	}
-	if input.ExpiresAt != nil && *input.ExpiresAt > 0 {
+	if input.ExpiresAt != nil && *input.ExpiresAt > 0 && account.Type != AccountTypeOAuth && account.Type != AccountTypeSetupToken {
 		expiresAt := time.Unix(*input.ExpiresAt, 0)
 		account.ExpiresAt = &expiresAt
 	}
@@ -259,6 +507,11 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 		ComputeQuotaResetAt(account.Extra)
 		NormalizeFixedQuotaWindows(account.Extra)
+		// 探测关闭/缺失时同步一律归零：不允许出现"同步开、探测关"的僵尸配置
+		// （倍率会被冻结，且任何无关编辑都不能静默重新打开周期性外呼）。
+		if !upstreamBillingProbeEnabled(account) {
+			delete(account.Extra, UpstreamBillingRateSyncEnabledExtraKey)
+		}
 	}
 	// 影子代理恒继承母账号(由 propagateProxyToShadows 同步),不接受独立编辑——外审 B/P1;
 	// 否则要等母账号下次改 proxy 才被覆盖,期间影子会出现"有时继承、有时独立"的漂移。
@@ -283,6 +536,13 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		if *input.RateMultiplier < 0 {
 			return nil, errors.New("rate_multiplier must be >= 0")
 		}
+		// 同步开启时倍率归上游所有，手工值活不过下一次成功探测（表现为"改了又自己
+		// 变回去"），与批量路径一样直接拒绝。判断的是本次请求生效后的状态：上面
+		// 已把请求携带的 extra 合并落进 account.Extra，所以"同一请求关闭同步 + 改倍率"
+		// （用户显式收回所有权）会走到这里时读到 false，正常放行。
+		if upstreamBillingRateSyncEnabled(account) {
+			return nil, ErrUpstreamBillingRateSyncConflict
+		}
 		account.RateMultiplier = input.RateMultiplier
 	}
 	if input.LoadFactor != nil {
@@ -297,7 +557,8 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	if input.Status != "" {
 		account.Status = input.Status
 	}
-	if input.ExpiresAt != nil {
+	// 订阅账号（oauth/setup-token）过期时间由成本周期驱动，忽略客户端手填。
+	if input.ExpiresAt != nil && account.Type != AccountTypeOAuth && account.Type != AccountTypeSetupToken {
 		if *input.ExpiresAt <= 0 {
 			account.ExpiresAt = nil
 		} else {
@@ -446,6 +707,26 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	if input.RateMultiplier != nil {
 		if *input.RateMultiplier < 0 {
 			return nil, errors.New("rate_multiplier must be >= 0")
+		}
+		// 倍率同步开启的账号，其倍率归上游探测所有：批量改值会在下一次成功探测时
+		// 被静默覆盖（表现为"改了又自己变回去"）。除非本请求同时关闭同步开关
+		// （extra 里显式置 upstream_billing_rate_sync_enabled=false），否则拒绝。
+		bulkDisablesSync := false
+		if input.Extra != nil {
+			if v, ok := input.Extra[UpstreamBillingRateSyncEnabledExtraKey].(bool); ok && !v {
+				bulkDisablesSync = true
+			}
+			if v, ok := input.Extra[UpstreamBillingProbeEnabledExtraKey].(bool); ok && !v {
+				// 关闭探测会连带关闭同步（见 SetAccountEnabled 的归零语义）。
+				bulkDisablesSync = true
+			}
+		}
+		if !bulkDisablesSync {
+			for _, acc := range cachedTargets {
+				if acc != nil && upstreamBillingRateSyncEnabled(acc) {
+					return nil, ErrUpstreamBillingRateSyncBulkConflict
+				}
+			}
 		}
 	}
 
@@ -607,6 +888,21 @@ func (s *adminServiceImpl) RefreshAccountCredentials(ctx context.Context, id int
 	return account, nil
 }
 
+func (s *adminServiceImpl) RestoreAccount(ctx context.Context, id int64) (*Account, error) {
+	if err := s.accountRepo.Restore(ctx, id); err != nil {
+		return nil, err
+	}
+	// 恢复后顺带清掉限流/临时不可调度等运行态，避免立刻再次被踢出调度。
+	_ = s.accountRepo.ClearRateLimit(ctx, id)
+	_ = s.accountRepo.ClearAntigravityQuotaScopes(ctx, id)
+	_ = s.accountRepo.ClearModelRateLimits(ctx, id)
+	_ = s.accountRepo.ClearTempUnschedulable(ctx, id)
+	if s.runtimeBlocker != nil {
+		s.runtimeBlocker.ClearAccountSchedulingBlock(id)
+	}
+	return s.accountRepo.GetByID(ctx, id)
+}
+
 func (s *adminServiceImpl) ClearAccountError(ctx context.Context, id int64) (*Account, error) {
 	if err := s.accountRepo.ClearError(ctx, id); err != nil {
 		return nil, err
@@ -634,7 +930,21 @@ func (s *adminServiceImpl) SetAccountError(ctx context.Context, id int64, errorM
 }
 
 func (s *adminServiceImpl) SetAccountSchedulable(ctx context.Context, id int64, schedulable bool) (*Account, error) {
+	if schedulable {
+		account, err := s.accountRepo.GetByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if account == nil || account.Status != StatusActive || account.SubscriptionBanned {
+			return nil, infraerrors.New(http.StatusBadRequest, "ACCOUNT_NOT_SCHEDULABLE",
+				"subscription-banned or inactive accounts cannot enable scheduling; reverse ban settlement first")
+		}
+	}
 	if err := s.accountRepo.SetSchedulable(ctx, id, schedulable); err != nil {
+		if errors.Is(err, ErrAccountNotSchedulable) {
+			return nil, infraerrors.New(http.StatusBadRequest, "ACCOUNT_NOT_SCHEDULABLE",
+				"banned or inactive accounts cannot enable scheduling; restore/clear error first")
+		}
 		return nil, err
 	}
 	updated, err := s.accountRepo.GetByID(ctx, id)

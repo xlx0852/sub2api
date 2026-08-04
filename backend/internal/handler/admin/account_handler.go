@@ -62,6 +62,7 @@ type AccountHandler struct {
 	sessionLimitCache       service.SessionLimitCache
 	rpmCache                service.RPMCache
 	tokenCacheInvalidator   service.TokenCacheInvalidator
+	upstreamBillingProbe    *service.UpstreamBillingProbeService
 }
 
 // NewAccountHandler creates a new admin account handler
@@ -1034,6 +1035,38 @@ func (h *AccountHandler) Test(c *gin.Context) {
 			_ = c.Error(err)
 		}
 	}
+}
+
+// Restore handles restoring a soft-deleted or banned account from trash.
+// POST /api/v1/admin/accounts/:id/restore
+func (h *AccountHandler) Restore(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+
+	account, err := h.adminService.RestoreAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), account))
+}
+
+// CleanupOAuthEmailDuplicates 合并同平台同邮箱的重复 OAuth 账号。
+// POST /api/v1/admin/accounts/cleanup-oauth-email-duplicates
+func (h *AccountHandler) CleanupOAuthEmailDuplicates(c *gin.Context) {
+	kept, deleted, err := h.adminService.CleanupOAuthEmailDuplicates(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{
+		"kept_groups":    kept,
+		"deleted_count":  deleted,
+	})
 }
 
 // RecoverState handles unified recovery of recoverable account runtime state.

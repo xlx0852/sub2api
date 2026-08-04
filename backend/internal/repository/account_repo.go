@@ -15,6 +15,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ import (
 	dbgroup "github.com/Wei-Shaw/sub2api/ent/group"
 	dbpredicate "github.com/Wei-Shaw/sub2api/ent/predicate"
 	dbproxy "github.com/Wei-Shaw/sub2api/ent/proxy"
+	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -214,6 +216,10 @@ func (r *accountRepository) GetByIDs(ctx context.Context, ids []int64) ([]*servi
 	if err != nil {
 		return nil, err
 	}
+	bannedSet, err := r.loadSubscriptionBannedAccountIDs(ctx, entAccounts)
+	if err != nil {
+		return nil, err
+	}
 
 	outByID := make(map[int64]*service.Account, len(entAccounts))
 	for _, entAcc := range entAccounts {
@@ -221,6 +227,7 @@ func (r *accountRepository) GetByIDs(ctx context.Context, ids []int64) ([]*servi
 		if out == nil {
 			continue
 		}
+		out.SubscriptionBanned = bannedSet[entAcc.ID]
 
 		// Prefer the preloaded proxy edge when available.
 		if entAcc.Edges.Proxy != nil {
@@ -480,8 +487,144 @@ func (r *accountRepository) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
+
+// ReassignAccountReferences 将 fromID 的业务数据引用迁移到 toID。
+// usage_logs / ops 日志 / batch jobs 等直接改 account_id；
+// 一对一配置（cost）若目标已存在则删除来源，避免唯一键冲突。
+func (r *accountRepository) ReassignAccountReferences(ctx context.Context, fromID, toID int64) error {
+	if fromID <= 0 || toID <= 0 || fromID == toID {
+		return nil
+	}
+	if r.sql == nil {
+		return errors.New("account repository SQL executor not configured")
+	}
+
+	// 1:1 成本配置：目标已有则丢弃来源，否则迁移。
+	if _, err := r.sql.ExecContext(ctx, `
+		DELETE FROM account_cost_configs src
+		WHERE src.account_id = $1
+		  AND EXISTS (SELECT 1 FROM account_cost_configs dst WHERE dst.account_id = $2)
+	`, fromID, toID); err != nil {
+		return fmt.Errorf("reassign cost configs delete: %w", err)
+	}
+	if _, err := r.sql.ExecContext(ctx, `
+		UPDATE account_cost_configs SET account_id = $2, updated_at = NOW()
+		WHERE account_id = $1
+	`, fromID, toID); err != nil {
+		return fmt.Errorf("reassign cost configs move: %w", err)
+	}
+
+	// 分组：目标已在同组则删来源关联，否则改绑。
+	if _, err := r.sql.ExecContext(ctx, `
+		DELETE FROM account_groups src
+		WHERE src.account_id = $1
+		  AND EXISTS (
+			SELECT 1 FROM account_groups dst
+			WHERE dst.account_id = $2 AND dst.group_id = src.group_id
+		  )
+	`, fromID, toID); err != nil {
+		return fmt.Errorf("reassign account groups delete: %w", err)
+	}
+	if _, err := r.sql.ExecContext(ctx, `
+		UPDATE account_groups SET account_id = $2 WHERE account_id = $1
+	`, fromID, toID); err != nil {
+		return fmt.Errorf("reassign account groups move: %w", err)
+	}
+
+	stmts := []struct {
+		name string
+		sql  string
+	}{
+		{"usage_logs", `UPDATE usage_logs SET account_id = $2 WHERE account_id = $1`},
+		{"account_subscription_cycles", `UPDATE account_subscription_cycles SET account_id = $2, updated_at = NOW() WHERE account_id = $1`},
+		{"account_subscription_terminations", `UPDATE account_subscription_terminations SET account_id = $2, updated_at = NOW() WHERE account_id = $1`},
+		{"batch_image_jobs", `UPDATE batch_image_jobs SET account_id = $2 WHERE account_id = $1`},
+		{"ops_error_logs", `UPDATE ops_error_logs SET account_id = $2 WHERE account_id = $1`},
+		{"ops_system_logs", `UPDATE ops_system_logs SET account_id = $2 WHERE account_id = $1`},
+		{"scheduled_test_plans", `UPDATE scheduled_test_plans SET account_id = $2, updated_at = NOW() WHERE account_id = $1`},
+		{"scheduler_outbox", `UPDATE scheduler_outbox SET account_id = $2 WHERE account_id = $1`},
+		// 影子 parent 指向来源时，改挂到保留账号（含已软删影子）
+		{"accounts_parent", `UPDATE accounts SET parent_account_id = $2, updated_at = NOW() WHERE parent_account_id = $1`},
+	}
+	for _, stmt := range stmts {
+		if _, err := r.sql.ExecContext(ctx, stmt.sql, fromID, toID); err != nil {
+			return fmt.Errorf("reassign %s: %w", stmt.name, err)
+		}
+	}
+	return nil
+}
+
+// HardDelete 真正删除账号行（绕过软删除）。已软删除的账号也可清除。
+func (r *accountRepository) HardDelete(ctx context.Context, id int64) error {
+	queryCtx := mixins.SkipSoftDelete(ctx)
+
+	tx, err := r.client.Tx(queryCtx)
+	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+		return err
+	}
+	var txClient *dbent.Client
+	if err == nil {
+		defer func() { _ = tx.Rollback() }()
+		txClient = tx.Client()
+	} else {
+		txClient = r.client
+	}
+
+	if _, err := txClient.AccountGroup.Delete().Where(dbaccountgroup.AccountIDEQ(id)).Exec(queryCtx); err != nil {
+		return err
+	}
+	if _, err := txClient.ExecContext(queryCtx, "DELETE FROM scheduled_test_plans WHERE account_id = $1", id); err != nil {
+		return err
+	}
+	if _, err := txClient.Account.Delete().Where(dbaccount.IDEQ(id)).Exec(queryCtx); err != nil {
+		return err
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	r.deleteSchedulerAccountSnapshot(ctx, id)
+	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
+		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue account hard delete failed: account=%d err=%v", id, err)
+	}
+	return nil
+}
+
 func (r *accountRepository) List(ctx context.Context, params pagination.PaginationParams) ([]service.Account, *pagination.PaginationResult, error) {
 	return r.ListWithFilters(ctx, params, "", "", "", "", 0, "")
+}
+
+func accountBannedPredicate() dbpredicate.Account {
+	// 成本配置「结算封号」：存在未撤销的 account_subscription_terminations。
+	// 影子账号跟随母账号封号状态。
+	return dbpredicate.Account(func(s *entsql.Selector) {
+		t := entsql.Table("account_subscription_terminations")
+		s.Where(entsql.Exists(
+			entsql.Select().
+				From(t).
+				Where(entsql.And(
+					entsql.IsNull(t.C("reversed_at")),
+					entsql.Or(
+						entsql.ColumnsEQ(t.C("account_id"), s.C(dbaccount.FieldID)),
+						entsql.ColumnsEQ(t.C("account_id"), s.C(dbaccount.FieldParentAccountID)),
+					),
+				)),
+		))
+	})
+}
+
+func accountNotBannedPredicate() dbpredicate.Account {
+	return dbaccount.Not(accountBannedPredicate())
+}
+
+func accountListNeedsSoftDeleteSkip(status string) bool {
+	switch strings.TrimSpace(status) {
+	case service.AccountListStatusTrash, service.AccountListStatusDeleted:
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *accountRepository) accountListFilteredQuery(platform, accountType, status, search string, groupID int64, privacyMode string) *dbent.AccountQuery {
@@ -493,6 +636,7 @@ func (r *accountRepository) accountListFilteredQuery(platform, accountType, stat
 	if accountType != "" {
 		q = q.Where(dbaccount.TypeEQ(accountType))
 	}
+	status = strings.TrimSpace(status)
 	if status != "" {
 		switch status {
 		case service.StatusActive:
@@ -550,9 +694,31 @@ func (r *accountRepository) accountListFilteredQuery(platform, accountType, stat
 					))
 				}),
 			)
+		case service.AccountListStatusTrash:
+			// 回收站：软删除 + 成本配置手动结算封号
+			q = q.Where(dbaccount.Or(
+				dbaccount.DeletedAtNotNil(),
+				accountBannedPredicate(),
+			))
+		case service.AccountListStatusDeleted:
+			q = q.Where(dbaccount.DeletedAtNotNil())
+		case service.AccountListStatusBanned, "forbidden":
+			q = q.Where(accountBannedPredicate())
+		case service.StatusError:
+			// 普通 error 仍可在服役列表筛选；手动封号走 banned/trash
+			q = q.Where(
+				dbaccount.StatusEQ(service.StatusError),
+				accountNotBannedPredicate(),
+			)
 		default:
-			q = q.Where(dbaccount.StatusEQ(status))
+			if status == "inactive" {
+				status = service.StatusDisabled
+			}
+			q = q.Where(dbaccount.StatusEQ(status), accountNotBannedPredicate())
 		}
+	} else {
+		// 默认列表排除封禁类账号（软删除由 SoftDeleteMixin 排除）
+		q = q.Where(accountNotBannedPredicate())
 	}
 	if search != "" {
 		q = q.Where(dbaccount.NameContainsFold(search))
@@ -582,11 +748,15 @@ func (r *accountRepository) accountListFilteredQuery(platform, accountType, stat
 
 func (r *accountRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, platform, accountType, status, search string, groupID int64, privacyMode string) ([]service.Account, *pagination.PaginationResult, error) {
 	q := r.accountListFilteredQuery(platform, accountType, status, search, groupID, privacyMode)
+	queryCtx := ctx
+	if accountListNeedsSoftDeleteSkip(status) {
+		queryCtx = mixins.SkipSoftDelete(ctx)
+	}
 	// Clone before Count so interceptor-appended predicates (SoftDeleteMixin's
 	// deleted_at IS NULL) don't accumulate on the shared builder and pollute the
 	// subsequent list query. Same pattern used in group_repo/promo_code_repo/user_repo
 	// (P1-03 audit fix, commit 2588fa6a).
-	total, err := q.Clone().Count(ctx)
+	total, err := q.Clone().Count(queryCtx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -598,7 +768,7 @@ func (r *accountRepository) ListWithFilters(ctx context.Context, params paginati
 		accountsQuery = accountsQuery.Order(order)
 	}
 
-	accounts, err := accountsQuery.All(ctx)
+	accounts, err := accountsQuery.All(queryCtx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -611,7 +781,11 @@ func (r *accountRepository) ListWithFilters(ctx context.Context, params paginati
 }
 
 func (r *accountRepository) ListAllWithFilters(ctx context.Context, platform, accountType, status, search string, groupID int64, privacyMode string) ([]service.Account, error) {
-	accounts, err := r.accountListFilteredQuery(platform, accountType, status, search, groupID, privacyMode).All(ctx)
+	queryCtx := ctx
+	if accountListNeedsSoftDeleteSkip(status) {
+		queryCtx = mixins.SkipSoftDelete(ctx)
+	}
+	accounts, err := r.accountListFilteredQuery(platform, accountType, status, search, groupID, privacyMode).All(queryCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -939,6 +1113,49 @@ func (r *accountRepository) ClearError(ctx context.Context, id int64) error {
 	}
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
 		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue clear error failed: account=%d err=%v", id, err)
+	}
+	r.syncSchedulerAccountSnapshot(ctx, id)
+	return nil
+}
+
+// Restore 从软删除恢复账号（清除 deleted_at），并重置为 active。
+// 若账号仅是封禁/错误态（未软删除），则等同于 ClearError。
+func (r *accountRepository) Restore(ctx context.Context, id int64) error {
+	queryCtx := mixins.SkipSoftDelete(ctx)
+	exists, err := r.client.Account.Query().Where(dbaccount.IDEQ(id)).Exist(queryCtx)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return service.ErrAccountNotFound
+	}
+
+	// 若存在成本配置手动封号，先撤销未冲销的 termination，再恢复服役。
+	if r.sql != nil {
+		if _, err := r.sql.ExecContext(ctx, `
+			UPDATE account_subscription_terminations
+			SET reversed_at = NOW(),
+			    reversal_reason = COALESCE(NULLIF(reversal_reason, ''), 'restored_from_account_trash'),
+			    updated_at = NOW()
+			WHERE reversed_at IS NULL
+			  AND account_id = $1
+		`, id); err != nil {
+			return err
+		}
+	}
+
+	_, err = r.client.Account.Update().
+		Where(dbaccount.IDEQ(id)).
+		ClearDeletedAt().
+		SetStatus(service.StatusActive).
+		SetErrorMessage("").
+		SetSchedulable(true).
+		Save(queryCtx)
+	if err != nil {
+		return err
+	}
+	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
+		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue restore failed: account=%d err=%v", id, err)
 	}
 	r.syncSchedulerAccountSnapshot(ctx, id)
 	return nil
@@ -1506,18 +1723,39 @@ func (r *accountRepository) UpdateSessionWindowEnd(ctx context.Context, id int64
 }
 
 func (r *accountRepository) SetSchedulable(ctx context.Context, id int64, schedulable bool) error {
-	_, err := r.client.Account.Update().
-		Where(dbaccount.IDEQ(id)).
-		SetSchedulable(schedulable).
-		Save(ctx)
+	upd := r.client.Account.Update().Where(dbaccount.IDEQ(id))
+	if schedulable {
+		// 仅 active 账号允许打开调度；error/disabled 等永久异常账号不可打开
+		upd = upd.Where(dbaccount.StatusEQ(service.StatusActive))
+	}
+	affected, err := upd.SetSchedulable(schedulable).Save(ctx)
 	if err != nil {
 		return err
+	}
+	if schedulable && affected == 0 {
+		return service.ErrAccountNotSchedulable
 	}
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
 		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue schedulable change failed: account=%d err=%v", id, err)
 	}
 	if !schedulable {
 		r.syncSchedulerAccountSnapshot(ctx, id)
+	}
+	return nil
+}
+
+func (r *accountRepository) SetExpiresAt(ctx context.Context, id int64, expiresAt *time.Time) error {
+	upd := r.client.Account.Update().Where(dbaccount.IDEQ(id))
+	if expiresAt != nil {
+		upd = upd.SetExpiresAt(*expiresAt)
+	} else {
+		upd = upd.ClearExpiresAt()
+	}
+	if _, err := upd.Save(ctx); err != nil {
+		return err
+	}
+	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
+		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue expires_at change failed: account=%d err=%v", id, err)
 	}
 	return nil
 }
@@ -1687,11 +1925,27 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 		setClauses = append(setClauses, "status = $"+itoa(idx))
 		args = append(args, *updates.Status)
 		idx++
+		if *updates.Status == service.StatusError || *updates.Status == service.StatusDisabled {
+			// 进入异常/禁用状态时强制关闭调度
+			setClauses = append(setClauses, "schedulable = FALSE")
+		}
 	}
 	if updates.Schedulable != nil {
-		setClauses = append(setClauses, "schedulable = $"+itoa(idx))
-		args = append(args, *updates.Schedulable)
-		idx++
+		if *updates.Schedulable {
+			// 打开调度时：仅 active 且无未撤销成本封号结算的账号可打开
+			setClauses = append(setClauses, `schedulable = CASE
+				WHEN status = 'active'
+				 AND NOT EXISTS (
+					SELECT 1 FROM account_subscription_terminations t
+					WHERE t.reversed_at IS NULL
+					  AND (t.account_id = accounts.id OR t.account_id = accounts.parent_account_id)
+				)
+				THEN TRUE ELSE FALSE END`)
+		} else {
+			setClauses = append(setClauses, "schedulable = $"+itoa(idx))
+			args = append(args, false)
+			idx++
+		}
 	}
 	// JSONB 需要合并而非覆盖，使用 raw SQL 保持旧行为。
 	if len(updates.Credentials) > 0 {
@@ -1842,6 +2096,10 @@ func (r *accountRepository) accountsToService(ctx context.Context, accounts []*d
 	if err != nil {
 		return nil, err
 	}
+	bannedSet, err := r.loadSubscriptionBannedAccountIDs(ctx, accounts)
+	if err != nil {
+		return nil, err
+	}
 
 	outAccounts := make([]service.Account, 0, len(accounts))
 	for _, acc := range accounts {
@@ -1849,6 +2107,7 @@ func (r *accountRepository) accountsToService(ctx context.Context, accounts []*d
 		if out == nil {
 			continue
 		}
+		out.SubscriptionBanned = bannedSet[acc.ID]
 		if acc.ProxyID != nil {
 			if proxy, ok := proxyMap[*acc.ProxyID]; ok {
 				out.Proxy = proxy
@@ -1892,6 +2151,62 @@ func notExpiredPredicate(now time.Time) dbpredicate.Account {
 		dbaccount.ExpiresAtGT(now),
 		dbaccount.AutoPauseOnExpiredEQ(false),
 	)
+}
+
+
+func (r *accountRepository) loadSubscriptionBannedAccountIDs(ctx context.Context, accounts []*dbent.Account) (map[int64]bool, error) {
+	out := make(map[int64]bool)
+	if r == nil || r.sql == nil || len(accounts) == 0 {
+		return out, nil
+	}
+	ids := make([]int64, 0, len(accounts)*2)
+	for _, acc := range accounts {
+		if acc == nil {
+			continue
+		}
+		ids = append(ids, acc.ID)
+		if acc.ParentAccountID != nil && *acc.ParentAccountID > 0 {
+			ids = append(ids, *acc.ParentAccountID)
+		}
+	}
+	ids = uniquePositiveInt64s(ids)
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT DISTINCT account_id
+		FROM account_subscription_terminations
+		WHERE reversed_at IS NULL
+		  AND account_id = ANY($1)
+	`, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	terminatedRoots := make(map[int64]bool)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		terminatedRoots[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, acc := range accounts {
+		if acc == nil {
+			continue
+		}
+		if terminatedRoots[acc.ID] {
+			out[acc.ID] = true
+			continue
+		}
+		if acc.ParentAccountID != nil && terminatedRoots[*acc.ParentAccountID] {
+			out[acc.ID] = true
+		}
+	}
+	return out, nil
 }
 
 func (r *accountRepository) loadProxies(ctx context.Context, proxyIDs []int64) (map[int64]*service.Proxy, error) {
@@ -2090,6 +2405,7 @@ func accountEntityToService(m *dbent.Account) *service.Account {
 		AutoPauseOnExpired:      m.AutoPauseOnExpired,
 		CreatedAt:               m.CreatedAt,
 		UpdatedAt:               m.UpdatedAt,
+		DeletedAt:               m.DeletedAt,
 		Schedulable:             m.Schedulable,
 		RateLimitedAt:           m.RateLimitedAt,
 		RateLimitResetAt:        m.RateLimitResetAt,
@@ -2135,6 +2451,63 @@ func joinClauses(clauses []string, sep string) string {
 
 func itoa(v int) string {
 	return strconv.Itoa(v)
+}
+
+
+// FindOAuthByPlatformEmail 按平台与邮箱查找 OAuth/setup-token 账号。
+// 邮箱匹配 credentials.email 或 extra.email（大小写不敏感，去首尾空白）。
+// includeDeleted=true 时包含软删除记录。
+// ListOAuthIncludingDeleted 返回全部 OAuth/setup-token 母账号（含软删除）。
+// 用于同邮箱去重清理，避免默认列表过滤掉 error/封禁账号。
+func (r *accountRepository) ListOAuthIncludingDeleted(ctx context.Context) ([]service.Account, error) {
+	queryCtx := mixins.SkipSoftDelete(ctx)
+	accounts, err := r.client.Account.Query().
+		Where(
+			dbaccount.TypeIn(service.AccountTypeOAuth, service.AccountTypeSetupToken),
+			dbaccount.ParentAccountIDIsNil(),
+		).
+		Order(dbent.Desc(dbaccount.FieldID)).
+		All(queryCtx)
+	if err != nil {
+		return nil, err
+	}
+	return r.accountsToService(queryCtx, accounts)
+}
+
+func (r *accountRepository) FindOAuthByPlatformEmail(ctx context.Context, platform, email string, includeDeleted bool) ([]service.Account, error) {
+	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
+	platform = strings.TrimSpace(platform)
+	if platform == "" || normalizedEmail == "" {
+		return nil, nil
+	}
+
+	queryCtx := ctx
+	if includeDeleted {
+		queryCtx = mixins.SkipSoftDelete(ctx)
+	}
+
+	accounts, err := r.client.Account.Query().
+		Where(
+			dbaccount.PlatformEQ(platform),
+			dbaccount.TypeIn(service.AccountTypeOAuth, service.AccountTypeSetupToken),
+			dbaccount.ParentAccountIDIsNil(),
+			func(s *entsql.Selector) {
+				s.Where(entsql.P(func(b *entsql.Builder) {
+					b.WriteString("LOWER(TRIM(COALESCE(").
+						Ident(s.C(dbaccount.FieldCredentials)).
+						WriteString("->>'email', ").
+						Ident(s.C(dbaccount.FieldExtra)).
+						WriteString("->>'email', ''))) = ").
+						Arg(normalizedEmail)
+				}))
+			},
+		).
+		Order(dbent.Desc(dbaccount.FieldID)).
+		All(queryCtx)
+	if err != nil {
+		return nil, err
+	}
+	return r.accountsToService(queryCtx, accounts)
 }
 
 // FindByExtraField 根据 extra 字段中的键值对查找账号。
@@ -2405,9 +2778,302 @@ func (r *accountRepository) ListShadowsByParent(ctx context.Context, parentID in
 	if err != nil {
 		return nil, err
 	}
-	out := make([]*service.Account, 0, len(rows))
-	for _, m := range rows {
-		out = append(out, accountEntityToService(m))
+	svcAccounts, err := r.accountsToService(ctx, rows)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*service.Account, 0, len(svcAccounts))
+	for i := range svcAccounts {
+		acc := svcAccounts[i]
+		out = append(out, &acc)
 	}
 	return out, nil
+}
+
+// ---------------------------------------------------------------------------
+// 上游 Sub2API 计费倍率探测：快照 CAS 落库与到期账号列举
+// ---------------------------------------------------------------------------
+
+// ListDueUpstreamBillingProbeAccounts bounds result hydration and network work
+// to limit. PostgreSQL must still filter and order all enabled candidates;
+// MATERIALIZED avoids repeating the defensive timestamp parse expression.
+// Go writes next_probe_at via RFC3339Nano (up to 9 fractional digits) while
+// jsonpath datetime() parses at most microseconds, so fractions beyond 6
+// digits are trimmed first. Without this, every nanosecond timestamp is
+// treated as malformed and the fail-open ordering pins the cycle to the
+// lowest account IDs, starving the rest of the pool.
+func (r *accountRepository) ListDueUpstreamBillingProbeAccounts(ctx context.Context, now time.Time, limit int) ([]service.Account, error) {
+	if limit <= 0 {
+		return []service.Account{}, nil
+	}
+	if r.sql == nil {
+		return nil, errors.New("account repository SQL executor not configured")
+	}
+
+	rows, err := r.sql.QueryContext(ctx, `
+		WITH candidates AS (
+			SELECT
+				id,
+				extra #>> '{upstream_billing_probe,status}' AS probe_status,
+				extra #>> '{upstream_billing_probe,next_probe_at}' AS next_probe_at
+			FROM accounts
+			WHERE deleted_at IS NULL
+				AND status = 'active'
+				AND type = 'apikey'
+				AND extra @> '{"upstream_billing_probe_enabled": true}'::jsonb
+		), parsed AS MATERIALIZED (
+			SELECT
+				id,
+				probe_status,
+				next_probe_at,
+				next_probe_at ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$' AS rfc3339_shape,
+				jsonb_path_query_first_tz(
+					jsonb_build_object(
+						'value',
+						replace(regexp_replace(regexp_replace(
+							next_probe_at,
+							'(\.[0-9]{6})[0-9]+(Z|[+-][0-9]{2}:[0-9]{2})$',
+							'\1\2'
+						), 'Z$', '+00:00'), 'T', ' ')
+					),
+					'$.value.datetime()',
+					'{}'::jsonb,
+					true
+				) #>> '{}' AS parsed_next_probe_at
+			FROM candidates
+		), normalized AS (
+			SELECT
+				id,
+				probe_status,
+				next_probe_at,
+				parsed_next_probe_at,
+				rfc3339_shape AND parsed_next_probe_at IS NOT NULL AS valid_next_probe_at
+			FROM parsed
+		)
+		SELECT id
+		FROM normalized
+		WHERE probe_status NOT IN ('ok', 'unsupported', 'failed')
+			OR probe_status IS NULL
+			OR next_probe_at IS NULL
+			OR NOT valid_next_probe_at
+			OR CASE WHEN valid_next_probe_at THEN parsed_next_probe_at::timestamptz <= $1 ELSE FALSE END
+		ORDER BY
+			CASE
+				WHEN probe_status NOT IN ('ok', 'unsupported', 'failed')
+					OR probe_status IS NULL
+					OR next_probe_at IS NULL
+					OR NOT valid_next_probe_at
+				THEN 0
+				ELSE 1
+			END ASC,
+			CASE WHEN valid_next_probe_at THEN parsed_next_probe_at::timestamptz END ASC NULLS FIRST,
+			id ASC
+		LIMIT $2
+	`, now.UTC(), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	ids := make([]int64, 0, limit)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return []service.Account{}, nil
+	}
+
+	accounts, err := r.GetByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]service.Account, 0, len(accounts))
+	for _, account := range accounts {
+		if account != nil {
+			out = append(out, *account)
+		}
+	}
+	return out, nil
+}
+
+// UpdateUpstreamBillingProbeSnapshot stores a probe result only while the
+// network identity used by that probe is still current.
+func (r *accountRepository) UpdateUpstreamBillingProbeSnapshot(
+	ctx context.Context,
+	account *service.Account,
+	snapshot *service.UpstreamBillingProbeSnapshot,
+	rateMultiplier *float64,
+) error {
+	if account == nil || snapshot == nil {
+		return service.ErrAccountNilInput
+	}
+	if snapshot.Status != service.UpstreamBillingProbeStatusOK {
+		rateMultiplier = nil
+	}
+	if dbent.TxFromContext(ctx) == nil {
+		tx, err := r.client.Tx(ctx)
+		if errors.Is(err, dbent.ErrTxStarted) {
+			return r.updateUpstreamBillingProbeSnapshotInTx(ctx, account, snapshot, rateMultiplier)
+		}
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback() }()
+
+		if err := r.updateUpstreamBillingProbeSnapshotInTx(dbent.NewTxContext(ctx, tx), account, snapshot, rateMultiplier); err != nil {
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		// The durable outbox event is committed with the snapshot. This direct
+		// cache write only reduces visibility latency on the current instance.
+		r.syncSchedulerAccountSnapshot(ctx, account.ID)
+		return nil
+	}
+	return r.updateUpstreamBillingProbeSnapshotInTx(ctx, account, snapshot, rateMultiplier)
+}
+
+func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
+	ctx context.Context,
+	account *service.Account,
+	snapshot *service.UpstreamBillingProbeSnapshot,
+	rateMultiplier *float64,
+) error {
+	payload, err := json.Marshal(map[string]any{service.UpstreamBillingProbeExtraKey: snapshot})
+	if err != nil {
+		return err
+	}
+	credentials, err := json.Marshal(account.Credentials)
+	if err != nil {
+		return err
+	}
+	var expectedSnapshot any
+	if account.Extra != nil {
+		expectedSnapshot = account.Extra[service.UpstreamBillingProbeExtraKey]
+	}
+	expectedSnapshotJSON, err := json.Marshal(expectedSnapshot)
+	if err != nil {
+		return err
+	}
+	var expectedEnabled any
+	if account.Extra != nil {
+		expectedEnabled = account.Extra[service.UpstreamBillingProbeEnabledExtraKey]
+	}
+	expectedEnabledJSON, err := json.Marshal(expectedEnabled)
+	if err != nil {
+		return err
+	}
+	var expectedRateSyncEnabled any
+	if account.Extra != nil {
+		expectedRateSyncEnabled = account.Extra[service.UpstreamBillingRateSyncEnabledExtraKey]
+	}
+	expectedRateSyncEnabledJSON, err := json.Marshal(expectedRateSyncEnabled)
+	if err != nil {
+		return err
+	}
+	client := clientFromContext(ctx, r.client)
+	proxyMatches, err := lockAndMatchProbeProxyIdentity(ctx, client, account)
+	if err != nil {
+		return err
+	}
+	if !proxyMatches {
+		return service.ErrUpstreamBillingProbeIdentityChanged
+	}
+	var proxyID any
+	if account.ProxyID != nil {
+		proxyID = *account.ProxyID
+	}
+	result, err := client.ExecContext(ctx, `
+		UPDATE accounts
+		SET
+			extra = COALESCE(extra, '{}'::jsonb) || $1::jsonb,
+			rate_multiplier = CASE
+				WHEN $10::numeric IS NOT NULL
+					AND extra @> '{"upstream_billing_probe_enabled": true}'::jsonb
+					AND extra @> '{"upstream_billing_rate_sync_enabled": true}'::jsonb
+				THEN $10::numeric
+				ELSE rate_multiplier
+			END,
+			updated_at = NOW()
+		WHERE id = $2
+			AND platform = $3
+			AND type = $4
+			AND credentials = $5::jsonb
+			AND proxy_id IS NOT DISTINCT FROM $6
+			AND COALESCE(extra -> 'upstream_billing_probe', 'null'::jsonb) = $7::jsonb
+			AND COALESCE(extra -> 'upstream_billing_probe_enabled', 'null'::jsonb) = $8::jsonb
+			AND COALESCE(extra -> 'upstream_billing_rate_sync_enabled', 'null'::jsonb) = $9::jsonb
+			AND deleted_at IS NULL
+	`, string(payload), account.ID, account.Platform, account.Type, string(credentials), proxyID, string(expectedSnapshotJSON), string(expectedEnabledJSON), string(expectedRateSyncEnabledJSON), rateMultiplier)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return service.ErrUpstreamBillingProbeIdentityChanged
+	}
+	return enqueueSchedulerOutbox(ctx, client, service.SchedulerOutboxEventAccountChanged, &account.ID, nil, nil)
+}
+
+// proxyProbeIdentity captures the proxy fields a probe request actually used,
+// so a concurrent proxy edit invalidates in-flight probe writes.
+type proxyProbeIdentity struct {
+	protocol string
+	host     string
+	port     int
+	username string
+	password string
+	status   string
+}
+
+func proxyProbeIdentityFromService(proxyIn *service.Proxy) proxyProbeIdentity {
+	return proxyProbeIdentity{
+		protocol: proxyIn.Protocol,
+		host:     proxyIn.Host,
+		port:     proxyIn.Port,
+		username: proxyIn.Username,
+		password: proxyIn.Password,
+		status:   proxyIn.Status,
+	}
+}
+
+func lockAndMatchProbeProxyIdentity(ctx context.Context, client *dbent.Client, account *service.Account) (bool, error) {
+	if account.ProxyID == nil {
+		return true, nil
+	}
+	rows, err := client.QueryContext(ctx, `
+		SELECT protocol, host, port, COALESCE(username, ''), COALESCE(password, ''), status
+		FROM proxies
+		WHERE id = $1 AND deleted_at IS NULL
+		FOR SHARE
+	`, *account.ProxyID)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return false, err
+		}
+		return account.Proxy == nil, nil
+	}
+	if account.Proxy == nil || account.Proxy.ID != *account.ProxyID {
+		return false, nil
+	}
+	var current proxyProbeIdentity
+	if err := rows.Scan(&current.protocol, &current.host, &current.port, &current.username, &current.password, &current.status); err != nil {
+		return false, err
+	}
+	return current == proxyProbeIdentityFromService(account.Proxy), rows.Err()
 }

@@ -85,6 +85,22 @@ export default {
       allPlatforms: 'All Platforms',
       allTypes: 'All Types',
       allStatus: 'All Status',
+      trash: {
+        title: 'Trash',
+        exit: 'Back to Accounts',
+        all: 'Deleted / Banned',
+        deletedOnly: 'Deleted only',
+        bannedOnly: 'Banned only',
+        empty: 'Trash is empty',
+        emptyDescription: 'Deleted and banned accounts appear here.',
+        restore: 'Restore',
+        restoreSuccess: 'Account restored',
+        restoreFailed: 'Failed to restore account',
+        restoreConfirm: "Restore account '{name}'?",
+        badgeDeleted: 'Deleted',
+        badgeBanned: 'Banned',
+        hint: 'Accounts in trash are hidden from the normal list and are not scheduled.'
+      },
       allGroups: 'All Groups',
       ungroupedGroup: 'Ungrouped',
       oauthType: 'OAuth',
@@ -97,6 +113,21 @@ export default {
       schedulableEnabled: 'Scheduling enabled',
       schedulableDisabled: 'Scheduling disabled',
       failedToToggleSchedulable: 'Failed to toggle scheduling status',
+      editTabs: {
+        basic: 'Basic',
+        models: 'Models',
+        routing: 'Routing',
+        advanced: 'Advanced',
+        cost: 'Cost',
+        basicHint: 'Name, notes, credentials, proxy, concurrency, status and groups',
+        modelsHint: 'Model whitelist and mappings',
+        routingHint: 'Pool retries, custom error codes and header overrides',
+        advancedHint: 'Passthrough, quotas, windows, auto-pause thresholds and runtime controls',
+        costHint: 'Subscription cycles, ban settlement, refunds and billing multiplier',
+        costFooterHint: 'Cycles and ban settlement save here; use Update for billing multiplier'
+      },
+      cannotEnableSchedulableBanned: 'Accounts marked banned in cost config cannot enable scheduling; reverse the ban settlement or restore from trash first',
+      bulkSchedulableSkippedBanned: 'Skipped {count} accounts that cannot enable scheduling',
       groupCountTotal: '{count} groups total',
       platforms: {
         anthropic: 'Anthropic',
@@ -125,6 +156,7 @@ export default {
       status: {
         active: 'Active',
         inactive: 'Inactive',
+        disabled: 'Disabled',
         error: 'Error',
         grokSpendingLimit: 'Grok Quota/Sub',
         grokSpendingLimitHelp: 'Grok upstream reports exhausted credits or requires a SuperGrok subscription. Add credits or upgrade before resuming the account.',
@@ -689,6 +721,19 @@ export default {
       billingRateMultiplierHint: '0 = free, affects account billing only',
       expiresAt: 'Expires At',
       expiresAtHint: 'Leave empty for no expiration',
+      expiresAtFollowsCostCycle: 'For subscription accounts, expiry follows the cost cycle (starts_at + period_days; ban settlement time if terminated)',
+      expiresAtFollowsCostCycleShort: 'Follows cost cycle',
+      rateMultiplierCostHint: 'Account billing multiplier used in cost and profit calculations',
+      upstreamBilling: {
+        autoProbe: 'Auto-probe upstream declared rate',
+        autoProbeHint:
+          'Periodically refreshes the billing multiplier declared by the upstream site; this toggle alone does not change the account rate.',
+        syncRate: 'Sync upstream declared rate',
+        syncRateHint:
+          'After a successful probe, automatically updates the account billing multiplier (the base rate without peak factor). Unchanged when the probe fails or the declared value is out of range. Enabling this also turns on auto-probe.',
+        syncRateManagedHint: 'Current rate is maintained automatically from the upstream-declared base rate (no peak factor).'
+      },
+
       higherPriorityFirst: 'Lower value means higher priority',
       mixedScheduling: 'Use in /v1/messages',
       mixedSchedulingHint: 'Enable to participate in Anthropic/Gemini group scheduling',
@@ -1298,6 +1343,7 @@ export default {
         scheduledTestsEmpty: 'No scheduled test plans',
         scheduledTestsNoResults: 'No runs yet',
         scheduledTestsHistory: 'History',
+        scheduledTestsAvailability: 'Recent availability',
         scheduledTestsShowing: 'Showing latest {count} (keep up to {max})',
         diagnosticsOn: 'On',
         diagnosticsOff: 'Off',
