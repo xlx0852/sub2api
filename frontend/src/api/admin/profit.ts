@@ -176,6 +176,12 @@ export interface PlatformSupplyForecast {
   metered_cost_ratio?: number
   metered_procurement_budget?: number
   metered_unavailable_reason?: string
+  // 额度驱动的订阅号供给（账号自身额度视角）
+  quota_accounts: number
+  quota_remaining_pct?: number
+  quota_exhausted: boolean
+  quota_snapshot_stale: boolean
+  account_daily_capacity_quota?: number
 }
 
 export interface SupplyForecastResponse {

@@ -54,6 +54,13 @@ type PlatformSupplyForecast struct {
 	MeteredCostRatio              *float64 `json:"metered_cost_ratio,omitempty"`
 	MeteredProcurementBudget      *float64 `json:"metered_procurement_budget,omitempty"`
 	MeteredUnavailableReason      string   `json:"metered_unavailable_reason,omitempty"`
+
+	// 额度驱动：账号自身额度视角的订阅号供给（非按量消耗）
+	QuotaAccounts            int      `json:"quota_accounts"`                        // 有有效额度数据的订阅号数
+	QuotaRemainingPct        *float64 `json:"quota_remaining_pct,omitempty"`         // 平均剩余额度 %（0-100）
+	QuotaExhausted           bool     `json:"quota_exhausted"`                       // 是否有额度已耗尽的号
+	QuotaSnapshotStale       bool     `json:"quota_snapshot_stale"`                  // 额度快照是否过期/缺失
+	AccountDailyCapacityQuota *float64 `json:"account_daily_capacity_quota,omitempty"` // 额度驱动的单号日产能
 }
 
 type platformForecastAccumulator struct {
@@ -63,6 +70,8 @@ type platformForecastAccumulator struct {
 	meteredCost          float64
 	subscriptionDays     []float64
 	subscriptionAccounts map[int64]struct{}
+	// 额度驱动：订阅号的额度快照（账号自己的额度，非按量消耗）
+	quotaSnapshots []*SubscriptionQuotaSnapshot
 }
 
 func (s *ProfitService) GetSupplyForecast(ctx context.Context, horizonDays int, safetyMargin float64, tzName string) (*SupplyForecastResponse, error) {
@@ -97,17 +106,23 @@ func (s *ProfitService) GetSupplyForecast(ctx context.Context, horizonDays int, 
 	if err != nil {
 		return nil, err
 	}
-	return calculateSupplyForecast(now.UTC(), historyStart, historyEnd, tzName, horizonDays, safetyMargin, balance, samples, currentSupply), nil
+	quotaSnapshots, err := s.profitRepo.GetSubscriptionQuotaSnapshots(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return calculateSupplyForecast(now.UTC(), now, historyStart, historyEnd, tzName, horizonDays, safetyMargin, balance, samples, currentSupply, quotaSnapshots), nil
 }
 
 func calculateSupplyForecast(
-	generatedAt, historyStart, historyEnd time.Time,
+	generatedAt, now time.Time,
+	historyStart, historyEnd time.Time,
 	tzName string,
 	horizonDays int,
 	safetyMargin float64,
 	balance *StoredValueSnapshot,
 	samples []*SupplyForecastUsageSample,
 	currentSupply map[string]int,
+	quotaSnapshots []*SubscriptionQuotaSnapshot,
 ) *SupplyForecastResponse {
 	if balance == nil {
 		balance = &StoredValueSnapshot{}
@@ -178,8 +193,19 @@ func calculateSupplyForecast(
 		platformNames = append(platformNames, platform)
 	}
 	sort.Strings(platformNames)
+
+	// 订阅号额度快照按平台分组（只保留有有效额度数据的号）
+	quotaByPlatform := make(map[string][]*SubscriptionQuotaSnapshot)
+	for _, snap := range quotaSnapshots {
+		if snap == nil || !snap.HasValidData {
+			continue
+		}
+		quotaByPlatform[snap.Platform] = append(quotaByPlatform[snap.Platform], snap)
+	}
+
 	for _, platform := range platformNames {
 		acc := platforms[platform]
+		acc.quotaSnapshots = quotaByPlatform[platform]
 		item := &PlatformSupplyForecast{
 			Platform:                    platform,
 			DemandShare:                 roundRatio(acc.revenue / totalRevenue),
@@ -195,14 +221,26 @@ func calculateSupplyForecast(
 		}
 		item.SubscriptionPlanningDaily = roundMoney(resp.PlanningDailyDemand * item.DemandShare * item.SubscriptionShare)
 		item.Confidence = supplyForecastConfidence(item.SampleAccounts, item.SampleAccountDays)
+
+		// 额度驱动的订阅号供给（账号自身额度视角）
+		var platformAvgDaily float64
+		if len(acc.subscriptionDays) > 0 {
+			var total float64
+			for _, d := range acc.subscriptionDays {
+				total += d
+			}
+			platformAvgDaily = total / float64(len(acc.subscriptionDays))
+		}
+		fillPlatformQuotaForecast(item, acc.quotaSnapshots, platformAvgDaily)
+
 		if item.SubscriptionShare > 0 {
-			capacity := percentile75(acc.subscriptionDays)
-			if capacity <= 0 {
-				item.SubscriptionUnavailableReason = "no_subscription_capacity_sample"
+			// 额度驱动：产能 = 账号额度视角的单号日产能（窗口满额产能折算）。
+			// 剩余额度低的号会标红提示，但产能按满额折算避免分母为 0。
+			capacity := item.AccountDailyCapacityQuota
+			if capacity == nil || *capacity <= 0 {
+				item.SubscriptionUnavailableReason = "no_quota_snapshot"
 			} else {
-				capacity = roundMoney(capacity)
-				item.AccountDailyCapacityP75 = &capacity
-				required := int(math.Ceil(item.SubscriptionPlanningDaily / capacity))
+				required := int(math.Ceil(item.SubscriptionPlanningDaily / *capacity))
 				item.RequiredSubscriptionAccounts = &required
 				gap := required - item.CurrentSubscriptionAccounts
 				if gap < 0 {
@@ -242,6 +280,64 @@ func percentile75(values []float64) float64 {
 		index = 0
 	}
 	return sorted[index]
+}
+
+// fillPlatformQuotaForecast 填充额度驱动的订阅号供给字段（账号自身额度视角）。
+//
+// 产能口径（窗口满额折算，避免分母为 0）：
+//
+//	单号日产能 = avgDaily × max(剩余额度%, 最小1%) / 窗口天数
+//
+// avgDaily 是该平台订阅号近 30 天历史日均消耗（作为"满额窗口能顶多少"的
+// 基准）。额度耗尽的号（remaining<=0）按满额折算产能，但会通过
+// QuotaExhausted 标红提示「需补充额度」；额度快照缺失的号不参与统计并置
+// QuotaSnapshotStale，前端显示对应提示。
+func fillPlatformQuotaForecast(item *PlatformSupplyForecast, snaps []*SubscriptionQuotaSnapshot, avgDaily float64) {
+	if len(snaps) == 0 {
+		item.QuotaSnapshotStale = true
+		item.SubscriptionUnavailableReason = "no_quota_snapshot"
+		return
+	}
+	item.QuotaAccounts = len(snaps)
+	var totalRemaining float64
+	var exhausted int
+	capacities := make([]float64, 0, len(snaps))
+	for _, snap := range snaps {
+		if snap == nil || snap.WindowDays <= 0 {
+			continue
+		}
+		r := snap.RemainingPct
+		if r < 0 {
+			r = 0
+		}
+		if r > 100 {
+			r = 100
+		}
+		totalRemaining += r
+		if r <= 0 {
+			exhausted++
+		}
+		// 产能系数：剩余额度占比，额度耗尽按满额折算（避免分母为 0）
+		coef := r / 100.0
+		if coef <= 0 {
+			coef = 1.0
+		}
+		capacities = append(capacities, avgDaily*coef/snap.WindowDays)
+	}
+	if len(capacities) == 0 {
+		item.QuotaSnapshotStale = true
+		item.SubscriptionUnavailableReason = "no_quota_snapshot"
+		return
+	}
+	item.QuotaExhausted = exhausted > 0
+	if item.QuotaAccounts > 0 {
+		avg := totalRemaining / float64(item.QuotaAccounts)
+		item.QuotaRemainingPct = &avg
+	}
+	cap := percentile75(capacities)
+	if cap > 0 {
+		item.AccountDailyCapacityQuota = &cap
+	}
 }
 
 func supplyForecastConfidence(accounts, accountDays int) string {

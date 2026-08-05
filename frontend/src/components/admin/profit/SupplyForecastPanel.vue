@@ -136,8 +136,10 @@
                   <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
                     <span v-if="(platform.subscription_account_gap ?? 0) > 0" class="rounded-full bg-red-50 px-2 py-1 font-medium text-red-700 dark:bg-red-950/40 dark:text-red-300">{{ t('admin.profit.accountGap', { count: platform.subscription_account_gap }) }}</span>
                     <span v-else class="rounded-full bg-emerald-50 px-2 py-1 font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">{{ t('admin.profit.accountSurplus', { count: platform.subscription_account_surplus ?? 0 }) }}</span>
+                    <span v-if="platform.quota_exhausted" class="rounded-full bg-amber-50 px-2 py-1 font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">{{ t('admin.profit.quotaExhausted') }}</span>
+                    <span v-if="platform.quota_snapshot_stale" class="rounded-full bg-gray-100 px-2 py-1 font-medium text-gray-500 dark:bg-dark-600 dark:text-dark-200">{{ t('admin.profit.quotaSnapshotStale') }}</span>
                   </div>
-                  <p class="mt-3 text-[11px] text-gray-400">{{ t('admin.profit.accountCapacityP75') }} ${{ money(platform.account_daily_capacity_p75) }} · {{ t('admin.profit.sampleCoverage', { accounts: platform.sample_accounts, days: platform.sample_account_days }) }}</p>
+                  <p class="mt-3 text-[11px] text-gray-400">{{ t('admin.profit.quotaCapacity') }} ${{ money(platform.account_daily_capacity_quota ?? platform.account_daily_capacity_p75) }} · {{ t('admin.profit.quotaRemaining', { pct: Math.round(platform.quota_remaining_pct ?? 0) }) }} · {{ t('admin.profit.sampleCoverage', { accounts: platform.sample_accounts, days: platform.sample_account_days }) }}</p>
                 </template>
                 <p v-else class="mt-3 text-xs leading-5 text-gray-400">{{ platform.subscription_share <= 0 ? t('admin.profit.noSubscriptionDemand') : unavailableText(platform.subscription_unavailable_reason) }}</p>
               </div>

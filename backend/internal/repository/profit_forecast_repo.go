@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -98,4 +99,88 @@ func (r *profitRepository) GetSchedulableSubscriptionSupply(ctx context.Context)
 		result[platform] = count
 	}
 	return result, rows.Err()
+}
+
+// GetSubscriptionQuotaSnapshots 返回可调度订阅号的额度快照（账号自己的额度
+// 视角），用于供给预测的产能折算。只返回有额度数据的号。
+//
+// 额度口径（账号额度，非按量消耗）：
+//   - openai/codex：codex_7d_used_percent（7d 窗口已用 %），reset_at 过期视为 100%
+//   - grok：grok_usage_snapshot.tokens（remaining/limit）
+//   - kimi：kimi_quota_7d_utilization
+//   - 其他/无数据：跳过（HasValidData=false 会被 service 层过滤）
+func (r *profitRepository) GetSubscriptionQuotaSnapshots(ctx context.Context) ([]*service.SubscriptionQuotaSnapshot, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT
+			a.id,
+			a.platform,
+			COALESCE(a.extra->>'codex_7d_used_percent', '') AS codex_7d_used_pct,
+			COALESCE(a.extra->>'codex_7d_reset_at', '') AS codex_7d_reset_at,
+			COALESCE(a.extra->'grok_usage_snapshot'->'tokens'->>'limit', '') AS grok_limit,
+			COALESCE(a.extra->'grok_usage_snapshot'->'tokens'->>'remaining', '') AS grok_remaining,
+			COALESCE(a.extra->'grok_usage_snapshot'->>'updated_at', '') AS grok_updated_at,
+			COALESCE(a.extra->>'kimi_quota_7d_utilization', '') AS kimi_7d_util,
+			COALESCE(a.extra->>'codex_usage_updated_at', '') AS codex_updated_at
+		FROM accounts a
+		WHERE a.deleted_at IS NULL
+			AND a.status = 'active'
+			AND a.type IN ('oauth', 'setup-token')
+			AND a.schedulable = TRUE
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]*service.SubscriptionQuotaSnapshot, 0)
+	for rows.Next() {
+		var (
+			snap                                     service.SubscriptionQuotaSnapshot
+			codex7dUsed, codex7dReset                string
+			grokLimit, grokRemaining, grokUpdatedAt  string
+			kimi7dUtil, codexUpdatedAt               string
+		)
+		if err := rows.Scan(&snap.AccountID, &snap.Platform,
+			&codex7dUsed, &codex7dReset,
+			&grokLimit, &grokRemaining, &grokUpdatedAt,
+			&kimi7dUtil, &codexUpdatedAt); err != nil {
+			return nil, err
+		}
+		snap.WindowDays = 7.0
+		snap.HasValidData = false
+
+		switch snap.Platform {
+		case "openai":
+			// codex_7d_used_percent + reset_at（reset 过期视为额度已耗尽）
+			if pct, err := strconv.ParseFloat(codex7dUsed, 64); err == nil {
+				snap.RemainingPct = 100 - pct
+				snap.HasValidData = true
+				if ts, err := time.Parse(time.RFC3339, codex7dReset); err == nil && time.Now().After(ts) {
+					snap.RemainingPct = 0 // reset 已过期 → 额度视为已耗尽
+				}
+				if ts, err := time.Parse(time.RFC3339, codexUpdatedAt); err == nil {
+					snap.UpdatedAt = ts
+				}
+			}
+		case "grok":
+			// grok_usage_snapshot.tokens: remaining / limit（24h 滚动窗口）
+			if limit, err := strconv.ParseFloat(grokLimit, 64); err == nil && limit > 0 {
+				if remaining, err := strconv.ParseFloat(grokRemaining, 64); err == nil {
+					snap.RemainingPct = remaining / limit * 100
+					snap.WindowDays = 1.0 // grok 是 24h 滚动
+					snap.HasValidData = true
+					if ts, err := time.Parse(time.RFC3339, grokUpdatedAt); err == nil {
+						snap.UpdatedAt = ts
+					}
+				}
+			}
+		case "kimi":
+			if pct, err := strconv.ParseFloat(kimi7dUtil, 64); err == nil {
+				snap.RemainingPct = 100 - pct
+				snap.HasValidData = true
+			}
+		}
+		out = append(out, &snap)
+	}
+	return out, rows.Err()
 }
