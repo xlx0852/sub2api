@@ -19,10 +19,11 @@ import (
 )
 
 const (
-	publicPricingRedisKey = "public:pricing:snapshot:v1"
-	publicPricingLockKey  = "public:pricing:rebuild-lock:v1"
-	publicPricingFreshTTL = time.Hour
-	publicPricingRedisTTL = 24 * time.Hour
+	publicPricingCacheVersion = 2
+	publicPricingRedisKey     = "public:pricing:snapshot:v2"
+	publicPricingLockKey      = "public:pricing:rebuild-lock:v2"
+	publicPricingFreshTTL     = time.Hour
+	publicPricingRedisTTL     = 24 * time.Hour
 )
 
 type publicPricingCacheEntry struct {
@@ -33,6 +34,7 @@ type publicPricingCacheEntry struct {
 }
 
 type publicPricingSnapshot struct {
+	Version     int                  `json:"version"`
 	GeneratedAt time.Time            `json:"generated_at"`
 	Models      []publicPricingModel `json:"models"`
 }
@@ -153,6 +155,9 @@ func (h *AvailableChannelHandler) loadPublicPricingRedis(ctx context.Context) (*
 	if err := json.Unmarshal(payload, &snapshot); err != nil {
 		return nil, err
 	}
+	if snapshot.Version != publicPricingCacheVersion {
+		return nil, fmt.Errorf("unsupported public pricing cache version: %d", snapshot.Version)
+	}
 	entry, _, err := encodePublicPricingSnapshot(&snapshot)
 	return entry, err
 }
@@ -230,7 +235,11 @@ func buildPublicPricingSnapshot(channels []service.AvailableChannel, catalog *mo
 		}
 		return strings.ToLower(models[i].DisplayName) < strings.ToLower(models[j].DisplayName)
 	})
-	return &publicPricingSnapshot{GeneratedAt: generatedAt, Models: models}
+	return &publicPricingSnapshot{
+		Version:     publicPricingCacheVersion,
+		GeneratedAt: generatedAt,
+		Models:      models,
+	}
 }
 
 type publicCatalogMeta struct {
