@@ -62,6 +62,40 @@
               <span v-if="!financialMetrics.cycle">{{ t('admin.accounts.usageDetails.profitRequests') }} <strong class="ml-1 text-gray-800 dark:text-dark-100">{{ formatNumber(financialMetrics.requests) }}</strong></span>
               <span v-if="financialMetrics.costType === 'metered'">{{ t('admin.profit.meteredCostSnapshotHint') }}</span>
             </div>
+            <div
+              v-if="profitSummary?.break_even_rate != null"
+              class="mt-3 rounded-lg border border-violet-100 bg-violet-50/70 px-3 py-2 text-[11px] text-violet-800 dark:border-violet-900/40 dark:bg-violet-950/30 dark:text-violet-200"
+              :title="t('admin.profit.breakEvenHint')"
+            >
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span class="font-semibold">
+                  {{ t('admin.profit.breakEvenRate') }}
+                  <strong class="ml-1 tabular-nums">×{{ profitSummary.break_even_rate.toFixed(2) }}</strong>
+                </span>
+                <span v-if="profitSummary.break_even_current_rate != null">
+                  {{ t('admin.profit.breakEvenCurrentRate') }}
+                  <strong class="ml-1 tabular-nums">×{{ profitSummary.break_even_current_rate.toFixed(2) }}</strong>
+                </span>
+              </div>
+              <div
+                v-if="profitSummary.break_even_full_window_revenue != null"
+                class="mt-1 text-[10px] text-violet-700/80 dark:text-violet-300/80"
+              >
+                {{ t('admin.profit.breakEvenDetail', {
+                  kind: profitSummary.break_even_window_kind || '—',
+                  used: Math.round(profitSummary.break_even_used_percent ?? 0),
+                  full: (profitSummary.break_even_full_window_revenue ?? 0).toFixed(2),
+                  windows: (profitSummary.break_even_windows_per_period ?? 0).toFixed(1),
+                  capacity: (profitSummary.break_even_capacity_revenue ?? 0).toFixed(2)
+                }) }}
+                <span v-if="profitSummary.break_even_period_fee != null" class="ml-1">
+                  · {{ t('admin.profit.breakEvenPeriod', {
+                    fee: (profitSummary.break_even_period_fee ?? 0).toFixed(2),
+                    days: profitSummary.break_even_period_days ?? 0
+                  }) }}
+                </span>
+              </div>
+            </div>
           </template>
           <p v-else class="text-sm text-gray-400 dark:text-dark-400">{{ t('admin.profit.empty') }}</p>
         </div>

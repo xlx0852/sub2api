@@ -165,6 +165,22 @@ type AccountProfitSummary struct {
 	BillingWindowRecoveryProgress  *float64   `json:"billing_window_recovery_progress,omitempty"`
 	BillingWindowLoss              *float64   `json:"billing_window_loss,omitempty"`
 
+	// 最低保本售卖倍率（仅订阅 OAuth/SetupToken）：
+	// break_even_rate = current_effective_rate × period_fee / (full_window_user_revenue × windows_per_period)
+	// current_effective_rate ≈ 窗内用户扣费 / 账号标价成本（分组实际倍率）
+	// full_window_user_revenue = 窗内用户扣费 / (used_percent/100)
+	// windows_per_period = period_days×24×60 / window_minutes
+	BreakEvenRate              *float64 `json:"break_even_rate,omitempty"`
+	BreakEvenWindowKind        string   `json:"break_even_window_kind,omitempty"`
+	BreakEvenWindowMinutes     *int     `json:"break_even_window_minutes,omitempty"`
+	BreakEvenUsedPercent       *float64 `json:"break_even_used_percent,omitempty"`
+	BreakEvenFullWindowRevenue *float64 `json:"break_even_full_window_revenue,omitempty"`
+	BreakEvenWindowsPerPeriod  *float64 `json:"break_even_windows_per_period,omitempty"`
+	BreakEvenCapacityRevenue   *float64 `json:"break_even_capacity_revenue,omitempty"`
+	BreakEvenCurrentRate       *float64 `json:"break_even_current_rate,omitempty"`
+	BreakEvenPeriodFee         *float64 `json:"break_even_period_fee,omitempty"`
+	BreakEvenPeriodDays        *int     `json:"break_even_period_days,omitempty"`
+
 	Currency string `json:"currency"`
 }
 
@@ -203,6 +219,9 @@ type profitAccountingData struct {
 	cyclesByAccount           map[int64][]*AccountSubscriptionCycle
 	bestWindowByAccount       map[int64]float64
 	windowStatsByAccount      map[int64]*ProfitUsageStats
+	// 保本倍率用：当前配额窗口快照 + 窗口内 usage 聚合
+	breakEvenWindowByAccount map[int64]*ProfitQuotaWindow
+	breakEvenStatsByAccount  map[int64]*ProfitUsageStats
 	now                       time.Time
 	includeOperationalMetrics bool
 }
@@ -299,6 +318,12 @@ func (s *ProfitService) summarizeAccountsWithData(accounts []Account, start, end
 							windowRevenue = windowStats.Revenue
 						}
 						fillBillingWindowFromRevenue(financialCycle, summary, windowRevenue, accounting.now)
+						fillBreakEvenRate(
+							summary,
+							financialCycle,
+							accounting.breakEvenWindowByAccount[acc.ID],
+							accounting.breakEvenStatsByAccount[acc.ID],
+						)
 					}
 				}
 			}
@@ -332,6 +357,8 @@ func (s *ProfitService) loadProfitAccountingData(ctx context.Context, accounts [
 		cyclesByAccount:           make(map[int64][]*AccountSubscriptionCycle),
 		bestWindowByAccount:       make(map[int64]float64),
 		windowStatsByAccount:      make(map[int64]*ProfitUsageStats),
+		breakEvenWindowByAccount:  make(map[int64]*ProfitQuotaWindow),
+		breakEvenStatsByAccount:   make(map[int64]*ProfitUsageStats),
 		now:                       time.Now(),
 		includeOperationalMetrics: includeOperationalMetrics,
 	}
@@ -390,6 +417,44 @@ func (s *ProfitService) loadProfitAccountingData(ctx context.Context, accounts [
 		}
 	}
 	data.windowStatsByAccount, err = s.profitRepo.GetAccountUsageStatsForRanges(ctx, ranges)
+	if err != nil {
+		return nil, err
+	}
+
+	// 为每个订阅号挑一个额度窗（优先 7d），拉取窗内 actual_cost / 账号成本以算保本倍率。
+	breakEvenRanges := make([]ProfitAccountUsageRange, 0, len(subscriptionIDs))
+	accountsByID := make(map[int64]*Account, len(accounts))
+	for i := range accounts {
+		accountsByID[accounts[i].ID] = &accounts[i]
+	}
+	for _, accountID := range subscriptionIDs {
+		acc := accountsByID[accountID]
+		if acc == nil {
+			continue
+		}
+		cutoff := quotaWindowCutoffForCycles(data.cyclesByAccount[accountID], data.now)
+		tmp := &AccountProfitSummary{}
+		fillProfitQuotaWindows(tmp, acc, data.now, cutoff)
+		win := pickPreferredBreakEvenWindow(tmp.QuotaWindows)
+		if win == nil || win.StartAt == nil {
+			continue
+		}
+		start := *win.StartAt
+		end := data.now
+		if win.EndAt != nil && win.EndAt.Before(end) {
+			end = *win.EndAt
+		}
+		if !end.After(start) {
+			continue
+		}
+		data.breakEvenWindowByAccount[accountID] = win
+		breakEvenRanges = append(breakEvenRanges, ProfitAccountUsageRange{
+			AccountID: accountID,
+			Start:     start,
+			End:       end,
+		})
+	}
+	data.breakEvenStatsByAccount, err = s.profitRepo.GetAccountUsageStatsForRanges(ctx, breakEvenRanges)
 	if err != nil {
 		return nil, err
 	}
@@ -597,6 +662,145 @@ func (s *ProfitService) fillBillingWindow(ctx context.Context, accountID int64, 
 		}
 	}
 	fillBillingWindowFromRevenue(cycle, summary, revenue, now)
+}
+
+// pickPreferredBreakEvenWindow 选择用于保本测算的配额窗：
+// 优先 7d（周额度），其次 5h / 24h；必须有 used_percent 与可解析时长。
+func pickPreferredBreakEvenWindow(windows []ProfitQuotaWindow) *ProfitQuotaWindow {
+	if len(windows) == 0 {
+		return nil
+	}
+	rank := func(kind string) int {
+		switch kind {
+		case "7d":
+			return 0
+		case "5h":
+			return 1
+		case "24h":
+			return 2
+		default:
+			return 3
+		}
+	}
+	var best *ProfitQuotaWindow
+	bestRank := 99
+	for i := range windows {
+		w := &windows[i]
+		if w.UsedPercent == nil || *w.UsedPercent <= 0 {
+			continue
+		}
+		mins := profitWindowMinutes(w)
+		if mins <= 0 {
+			continue
+		}
+		r := rank(w.Kind)
+		if best == nil || r < bestRank {
+			best = w
+			bestRank = r
+		}
+	}
+	return best
+}
+
+func profitWindowMinutes(w *ProfitQuotaWindow) int {
+	if w == nil {
+		return 0
+	}
+	if w.WindowMinutes != nil && *w.WindowMinutes > 0 {
+		return *w.WindowMinutes
+	}
+	switch w.Kind {
+	case "5h":
+		return 300
+	case "7d":
+		return 10080
+	case "24h":
+		return 1440
+	case "session":
+		return 300
+	default:
+		return 0
+	}
+}
+
+// fillBreakEvenRate 根据订阅周期 + 当前额度窗利用率 + 窗内扣费，计算最低保本售卖倍率。
+// 仅在能观测到有效用户扣费与账号标价成本时写入 BreakEvenRate。
+func fillBreakEvenRate(summary *AccountProfitSummary, cycle *AccountSubscriptionCycle, win *ProfitQuotaWindow, stats *ProfitUsageStats) {
+	if summary == nil || cycle == nil || win == nil || stats == nil {
+		return
+	}
+	if cycle.PeriodFee <= 0 || cycle.PeriodDays <= 0 {
+		return
+	}
+	used := 0.0
+	if win.UsedPercent != nil {
+		used = *win.UsedPercent
+	}
+	if used <= 0 {
+		return
+	}
+	if used > 100 {
+		used = 100
+	}
+	// 利用率过低时外推噪声大，至少 1%
+	if used < 1 {
+		used = 1
+	}
+	mins := profitWindowMinutes(win)
+	if mins <= 0 {
+		return
+	}
+	if stats.Revenue <= 0 {
+		return
+	}
+	fullWindowRevenue := stats.Revenue * (100.0 / used)
+	if fullWindowRevenue <= 0 {
+		return
+	}
+	windowsPerPeriod := float64(cycle.PeriodDays) * 24.0 * 60.0 / float64(mins)
+	if windowsPerPeriod < 1 {
+		windowsPerPeriod = 1
+	}
+	capacityRevenue := fullWindowRevenue * windowsPerPeriod
+	if capacityRevenue <= 0 {
+		return
+	}
+
+	fee := roundMoney(cycle.PeriodFee)
+	days := cycle.PeriodDays
+	fullRevRounded := roundMoney(fullWindowRevenue)
+	windowsRounded := roundMoney(windowsPerPeriod)
+	capacityRounded := roundMoney(capacityRevenue)
+	summary.BreakEvenPeriodFee = &fee
+	summary.BreakEvenPeriodDays = &days
+	summary.BreakEvenWindowKind = win.Kind
+	if summary.BreakEvenWindowKind == "" {
+		summary.BreakEvenWindowKind = win.Label
+	}
+	summary.BreakEvenWindowMinutes = &mins
+	usedCopy := used
+	summary.BreakEvenUsedPercent = &usedCopy
+	summary.BreakEvenFullWindowRevenue = &fullRevRounded
+	summary.BreakEvenWindowsPerPeriod = &windowsRounded
+	summary.BreakEvenCapacityRevenue = &capacityRounded
+
+	// 有效售卖倍率 ≈ 用户扣费 / 账号标价成本（与 usage 里 U/A 比值一致）
+	if stats.MeteredCost <= 0 {
+		return
+	}
+	currentRate := stats.Revenue / stats.MeteredCost
+	if currentRate <= 0 {
+		return
+	}
+	be := currentRate * cycle.PeriodFee / capacityRevenue
+	if be <= 0 {
+		return
+	}
+	// 倍率保留 4 位，与分组 rate_multiplier 展示一致
+	beRounded := math.Round(be*10000) / 10000
+	curRounded := math.Round(currentRate*10000) / 10000
+	summary.BreakEvenRate = &beRounded
+	summary.BreakEvenCurrentRate = &curRounded
 }
 
 func fillBillingWindowFromRevenue(cycle *AccountSubscriptionCycle, summary *AccountProfitSummary, revenue float64, now time.Time) {

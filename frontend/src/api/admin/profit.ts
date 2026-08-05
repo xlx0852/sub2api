@@ -129,6 +129,17 @@ export interface AccountProfitSummary {
   billing_window_recovery_progress?: number
   billing_window_loss?: number
   requires_cycle_start?: boolean
+  // 订阅 OAuth 账号：最低保本售卖倍率（按当前额度窗外推满负荷）
+  break_even_rate?: number
+  break_even_window_kind?: string
+  break_even_window_minutes?: number
+  break_even_used_percent?: number
+  break_even_full_window_revenue?: number
+  break_even_windows_per_period?: number
+  break_even_capacity_revenue?: number
+  break_even_current_rate?: number
+  break_even_period_fee?: number
+  break_even_period_days?: number
   currency: string
 }
 

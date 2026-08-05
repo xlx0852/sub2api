@@ -152,6 +152,18 @@
                     <span>{{ fmtNumber(account.requests) }} {{ t('admin.profit.requestsUnit') }}</span>
                     <span v-if="account.cost_type === 'subscription' && !account.configured" class="text-amber-600 dark:text-amber-400">{{ t('admin.profit.unconfigured') }}</span>
                   </div>
+                  <div
+                    v-if="account.break_even_rate != null"
+                    class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]"
+                    :title="breakEvenTitle(account)"
+                  >
+                    <span class="rounded bg-violet-50 px-1.5 py-0.5 font-semibold tabular-nums text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                      {{ t('admin.profit.breakEvenRate') }} ×{{ fmtRate(account.break_even_rate) }}
+                    </span>
+                    <span v-if="account.break_even_current_rate != null" class="text-gray-400 dark:text-dark-400">
+                      {{ t('admin.profit.breakEvenCurrentRate') }} ×{{ fmtRate(account.break_even_current_rate) }}
+                    </span>
+                  </div>
                 </div>
 
                 <div class="space-y-2.5">
@@ -281,6 +293,26 @@ const chartOptions = computed(() => ({
 const fmt = (value?: number) => (value ?? 0).toFixed(2)
 const fmtNumber = (value?: number) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value ?? 0)
 const fmtPercent = (value?: number) => `${(value ?? 0).toFixed(1)}%`
+const fmtRate = (value?: number) => (value ?? 0).toFixed(2)
+function breakEvenTitle(account: AccountProfitSummary) {
+  const parts = [t('admin.profit.breakEvenHint')]
+  if (account.break_even_period_fee != null && account.break_even_period_days != null) {
+    parts.push(t('admin.profit.breakEvenPeriod', {
+      fee: fmt(account.break_even_period_fee),
+      days: account.break_even_period_days
+    }))
+  }
+  if (account.break_even_full_window_revenue != null && account.break_even_windows_per_period != null) {
+    parts.push(t('admin.profit.breakEvenDetail', {
+      kind: account.break_even_window_kind || '—',
+      used: Math.round(account.break_even_used_percent ?? 0),
+      full: fmt(account.break_even_full_window_revenue),
+      windows: (account.break_even_windows_per_period ?? 0).toFixed(1),
+      capacity: fmt(account.break_even_capacity_revenue)
+    }))
+  }
+  return parts.join('\n')
+}
 const snapshotTimeLabel = computed(() => {
   if (!snapshotGeneratedAt.value) return ''
   const generatedAt = new Date(snapshotGeneratedAt.value)
