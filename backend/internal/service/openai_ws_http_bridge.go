@@ -375,17 +375,60 @@ func (c *openAIWSToolCallReplayCollector) AddEvent(eventType string, message []b
 		if !output.IsArray() {
 			return
 		}
-		// The terminal response is the authoritative, complete snapshot. Replace
-		// earlier per-item candidates wholesale so partial arguments, ordering,
-		// and even an explicitly empty output cannot leak into the next turn.
+		// Prefer the terminal snapshot when it is a real, complete output list.
+		// ChatGPT/Codex streams often emit full custom_tool_call items on
+		// output_item.done, then a completed event whose output is empty or
+		// omits tool calls. Wholesale-clearing here drops the only copy of the
+		// call; the next http_bridge turn then ships a bare
+		// custom_tool_call_output and upstream returns
+		// "No tool call found for custom tool call output".
 		terminal := &openAIWSToolCallReplayCollector{}
 		for _, item := range output.Array() {
 			terminal.addItem(item)
+		}
+		if len(output.Array()) == 0 {
+			// Empty terminal output is not authoritative for tool replay.
+			// Keep candidates collected from output_item.done.
+			c.terminalSnapshot = true
+			return
+		}
+		if openAIWSReplayCollectorToolCallCount(terminal) == 0 &&
+			openAIWSReplayCollectorToolCallCount(c) > 0 {
+			// Terminal kept messages/reasoning but lost tool calls. Merge the
+			// previously collected tool-call items after the terminal snapshot
+			// so call/output pairing survives into the next bridge turn.
+			merged := &openAIWSToolCallReplayCollector{}
+			for _, item := range terminal.items {
+				merged.addItem(gjson.ParseBytes(item))
+			}
+			for _, item := range c.items {
+				if !isCodexToolCallContextItemType(strings.TrimSpace(gjson.GetBytes(item, "type").String())) {
+					continue
+				}
+				merged.addItem(gjson.ParseBytes(item))
+			}
+			c.items = merged.items
+			c.seen = merged.seen
+			c.terminalSnapshot = true
+			return
 		}
 		c.items = terminal.items
 		c.seen = terminal.seen
 		c.terminalSnapshot = true
 	}
+}
+
+func openAIWSReplayCollectorToolCallCount(c *openAIWSToolCallReplayCollector) int {
+	if c == nil {
+		return 0
+	}
+	count := 0
+	for _, item := range c.items {
+		if isCodexToolCallContextItemType(strings.TrimSpace(gjson.GetBytes(item, "type").String())) {
+			count++
+		}
+	}
+	return count
 }
 
 func (c *openAIWSToolCallReplayCollector) Items() []json.RawMessage {

@@ -91,6 +91,106 @@ func TestOpenAIWSToolCallReplayCollectorKeepsAssistantAndToolItems(t *testing.T)
 	require.Equal(t, "c1", gjson.GetBytes(items[2], "call_id").String())
 }
 
+func TestOpenAIWSToolCallReplayCollectorTerminalSnapshotReplacesPartialItem(t *testing.T) {
+	t.Parallel()
+
+	collector := &openAIWSToolCallReplayCollector{}
+	collector.AddEvent("response.output_item.done", []byte(`{
+		"item":{"type":"function_call","id":"fc1","call_id":"c1","name":"shell","arguments":""}
+	}`))
+	collector.AddEvent("response.completed", []byte(`{
+		"response":{"output":[
+			{"type":"function_call","id":"fc1","call_id":"c1","name":"shell","arguments":"{\"command\":[\"pwd\"]}","status":"completed"}
+		]}
+	}`))
+
+	items := collector.Items()
+	require.Len(t, items, 1)
+	require.Equal(t, `{"command":["pwd"]}`, gjson.GetBytes(items[0], "arguments").String())
+	require.Equal(t, "completed", gjson.GetBytes(items[0], "status").String())
+}
+
+func TestOpenAIWSToolCallReplayCollectorIgnoresLatePartialAfterTerminalSnapshot(t *testing.T) {
+	t.Parallel()
+
+	collector := &openAIWSToolCallReplayCollector{}
+	collector.AddEvent("response.completed", []byte(`{
+		"response":{"output":[
+			{"type":"function_call","id":"fc1","call_id":"c1","name":"shell","arguments":"{\"command\":[\"pwd\"]}","status":"completed"}
+		]}
+	}`))
+	collector.AddEvent("response.output_item.done", []byte(`{
+		"item":{"type":"function_call","id":"fc1","call_id":"c1","name":"shell","arguments":""}
+	}`))
+
+	items := collector.Items()
+	require.Len(t, items, 1)
+	require.Equal(t, `{"command":["pwd"]}`, gjson.GetBytes(items[0], "arguments").String())
+}
+
+func TestOpenAIWSToolCallReplayCollectorTerminalEmptyOutputKeepsDoneCandidates(t *testing.T) {
+	t.Parallel()
+
+	// Codex/ChatGPT may finish a turn with an empty terminal output array even
+	// after streaming complete custom_tool_call items. Clearing candidates here
+	// is what produced bare custom_tool_call_output on the next bridge turn.
+	collector := &openAIWSToolCallReplayCollector{}
+	collector.AddEvent("response.output_item.done", []byte(`{
+		"item":{"type":"custom_tool_call","id":"ctc1","call_id":"call_keep","name":"exec","input":"ls"}
+	}`))
+	collector.AddEvent("response.completed", []byte(`{
+		"response":{"output":[]}
+	}`))
+
+	items := collector.Items()
+	require.Len(t, items, 1)
+	require.Equal(t, "custom_tool_call", gjson.GetBytes(items[0], "type").String())
+	require.Equal(t, "call_keep", gjson.GetBytes(items[0], "call_id").String())
+}
+
+func TestOpenAIWSToolCallReplayCollectorMergesToolCallsWhenTerminalOmitsThem(t *testing.T) {
+	t.Parallel()
+
+	collector := &openAIWSToolCallReplayCollector{}
+	collector.AddEvent("response.output_item.done", []byte(`{
+		"item":{"type":"custom_tool_call","id":"ctc1","call_id":"call_rHfZ8vMWNPu13pAIh0qs9NeV","name":"exec","input":"cat VERSION"}
+	}`))
+	collector.AddEvent("response.completed", []byte(`{
+		"response":{"output":[
+			{"type":"message","id":"m1","role":"assistant","content":[{"type":"output_text","text":"working"}]}
+		]}
+	}`))
+
+	items := collector.Items()
+	require.Len(t, items, 2)
+	require.Equal(t, "message", gjson.GetBytes(items[0], "type").String())
+	require.Equal(t, "custom_tool_call", gjson.GetBytes(items[1], "type").String())
+	require.Equal(t, "call_rHfZ8vMWNPu13pAIh0qs9NeV", gjson.GetBytes(items[1], "call_id").String())
+}
+
+func TestOpenAIWSToolCallReplayCollectorTerminalSnapshotOwnsOrdering(t *testing.T) {
+	t.Parallel()
+
+	collector := &openAIWSToolCallReplayCollector{}
+	collector.AddEvent("response.output_item.done", []byte(`{
+		"item":{"type":"function_call","id":"fc2","call_id":"c2","name":"second","arguments":"{}"}
+	}`))
+	collector.AddEvent("response.output_item.done", []byte(`{
+		"item":{"type":"function_call","id":"fc1","call_id":"c1","name":"first","arguments":"{}"}
+	}`))
+	collector.AddEvent("response.done", []byte(`{
+		"response":{"output":[
+			{"type":"function_call","id":"fc1","call_id":"c1","name":"first","arguments":"{}"},
+			{"type":"function_call","id":"fc2","call_id":"c2","name":"second","arguments":"{}"}
+		]}
+	}`))
+
+	items := collector.Items()
+	require.Len(t, items, 2)
+	require.Equal(t, "c1", gjson.GetBytes(items[0], "call_id").String())
+	require.Equal(t, "c2", gjson.GetBytes(items[1], "call_id").String())
+}
+
 func TestNormalizeOpenAIWSReplayMessageItemContentTypesByRole(t *testing.T) {
 	t.Parallel()
 
@@ -329,6 +429,162 @@ func TestOpenAIWSHTTPBridgeRelaysSSEFramesAsWebSocketMessages(t *testing.T) {
 	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
 }
 
+func TestOpenAIWSHTTPBridgeRetriesOnlyRejectedClientCallPair(t *testing.T) {
+	t.Parallel()
+
+	sseBody := strings.Join([]string{
+		`data: {"type":"response.completed","response":{"id":"resp_bridge_retry","model":"gpt-5.5","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}`,
+		"",
+	}, "\n")
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		newOpenAIRejectedFieldTestResponse(http.StatusBadRequest, `{"error":{"code":"unknown_parameter","message":"Unknown parameter: 'input[1].arguments'.","param":"input[1].arguments"}}`),
+		{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       io.NopCloser(strings.NewReader(sseBody)),
+		},
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:           &config.Config{},
+		httpUpstream:  upstream,
+		toolCorrector: NewCodexToolCorrector(),
+	}
+	account := &Account{
+		ID:          8601,
+		Name:        "bridge-indexed-retry",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Concurrency: 1,
+		Status:      StatusActive,
+		Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://compat.example"},
+	}
+	payload := []byte(`{"type":"response.create","model":"gpt-5.5","stream":true,"input":[
+		{"type":"message","role":"user","content":"keep"},
+		{"type":"custom_tool_call","id":"ctc_1","call_id":"call_1","name":"patch","input":"x","arguments":"private"},
+		{"type":"custom_tool_call_output","id":"ctco_1","call_id":"call_1","output":"ok"},
+		{"type":"tool_search_call","id":"tsc_2","call_id":"call_2","name":"search","arguments":"{\"q\":\"keep\"}"}
+	]}`)
+
+	wrote := make([][]byte, 0, 2)
+	result, err := svc.proxyOpenAIWSHTTPBridgeTurn(
+		context.Background(), nil, account, "sk-test", payload, len(payload), "gpt-5.5", "", "", "", 1,
+		func(message []byte) error {
+			wrote = append(wrote, append([]byte(nil), message...))
+			return nil
+		},
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, upstream.bodies, 2)
+	require.Equal(t, "custom_tool_call", gjson.GetBytes(upstream.bodies[0], "input.1.type").String(), "first attempt must preserve client input")
+	require.Equal(t, "function_call", gjson.GetBytes(upstream.bodies[1], "input.1.type").String())
+	require.JSONEq(t, `{"input":"x"}`, gjson.GetBytes(upstream.bodies[1], "input.1.arguments").String())
+	require.Equal(t, "function_call_output", gjson.GetBytes(upstream.bodies[1], "input.2.type").String())
+	require.Equal(t, "tool_search_call", gjson.GetBytes(upstream.bodies[1], "input.3.type").String(), "unrelated client item must remain unchanged")
+	require.False(t, gjson.GetBytes(upstream.bodies[1], "input.1.id").Exists())
+	require.False(t, gjson.GetBytes(upstream.bodies[1], "input.2.id").Exists())
+	require.Len(t, wrote, 1, "client must only receive the successful retry response")
+	require.Equal(t, "response.completed", gjson.GetBytes(wrote[0], "type").String())
+}
+
+func TestOpenAIWSHTTPBridgeRetriesMissingCustomToolCallWithMatchingFunctionCall(t *testing.T) {
+	t.Parallel()
+
+	sseBody := strings.Join([]string{
+		`data: {"type":"response.completed","response":{"id":"resp_bridge_pair_retry","model":"gpt-5.6-sol","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}`,
+		"",
+	}, "\n")
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		newOpenAIRejectedFieldTestResponse(http.StatusBadRequest, `{"error":{"code":"invalid_request_error","message":"No tool call found for custom tool call output with call_id fc_yxHnti6s5fgUU2ZJISVoSHN6."}}`),
+		{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       io.NopCloser(strings.NewReader(sseBody)),
+		},
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:           &config.Config{},
+		httpUpstream:  upstream,
+		toolCorrector: NewCodexToolCorrector(),
+	}
+	account := &Account{
+		ID: 8603, Name: "bridge-pair-retry", Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Concurrency: 1, Status: StatusActive,
+		Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://compat.example"},
+	}
+	payload := []byte(`{"type":"response.create","model":"gpt-5.6-sol","stream":true,"input":[
+		{"type":"custom_tool_call","id":"ctc_1","call_id":"call_yxHnti6s5fgUU2ZJISVoSHN6","name":"apply_patch","input":"*** Begin Patch"},
+		{"type":"custom_tool_call_output","id":"ctco_1","call_id":"call_yxHnti6s5fgUU2ZJISVoSHN6","output":"Done"}
+	]}`)
+
+	var wrote [][]byte
+	result, err := svc.proxyOpenAIWSHTTPBridgeTurn(
+		context.Background(), nil, account, "sk-test", payload, len(payload), "gpt-5.6-sol", "", "", "", 2,
+		func(message []byte) error {
+			wrote = append(wrote, append([]byte(nil), message...))
+			return nil
+		},
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, upstream.bodies, 2)
+	require.Equal(t, "custom_tool_call", gjson.GetBytes(upstream.bodies[0], "input.0.type").String())
+	require.Equal(t, "custom_tool_call_output", gjson.GetBytes(upstream.bodies[0], "input.1.type").String(), "first attempt preserves the received payload")
+	require.Equal(t, "function_call", gjson.GetBytes(upstream.bodies[1], "input.0.type").String())
+	require.Equal(t, "function_call_output", gjson.GetBytes(upstream.bodies[1], "input.1.type").String())
+	require.Equal(t, "fc_yxHnti6s5fgUU2ZJISVoSHN6", gjson.GetBytes(upstream.bodies[1], "input.0.call_id").String())
+	require.Equal(t, "fc_yxHnti6s5fgUU2ZJISVoSHN6", gjson.GetBytes(upstream.bodies[1], "input.1.call_id").String())
+	require.Len(t, wrote, 1)
+	require.Equal(t, "response.completed", gjson.GetBytes(wrote[0], "type").String())
+}
+
+func TestOpenAIWSHTTPBridgeDoesNotRetrySecondIndexedRejection(t *testing.T) {
+	t.Parallel()
+
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		newOpenAIRejectedFieldTestResponse(http.StatusBadRequest, `{"error":{"code":"unknown_parameter","message":"Unknown parameter: 'input[0].arguments'.","param":"input[0].arguments"}}`),
+		newOpenAIRejectedFieldTestResponse(http.StatusBadRequest, `{"error":{"code":"unknown_parameter","message":"Unknown parameter: 'input[2].arguments'.","param":"input[2].arguments"}}`),
+		newOpenAIRejectedFieldTestResponse(http.StatusOK, `{"output":[]}`),
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:           &config.Config{},
+		httpUpstream:  upstream,
+		toolCorrector: NewCodexToolCorrector(),
+	}
+	account := &Account{
+		ID:          8602,
+		Name:        "bridge-indexed-retry-cap",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Concurrency: 1,
+		Status:      StatusActive,
+		Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://compat.example"},
+	}
+	payload := []byte(`{"type":"response.create","model":"gpt-5.5","stream":true,"input":[
+		{"type":"custom_tool_call","id":"ctc_1","call_id":"call_1","name":"patch","input":"x"},
+		{"type":"custom_tool_call_output","id":"ctco_1","call_id":"call_1","output":"ok"},
+		{"type":"custom_tool_call","id":"ctc_2","call_id":"call_2","name":"patch","input":"y"},
+		{"type":"custom_tool_call_output","id":"ctco_2","call_id":"call_2","output":"ok"}
+	]}`)
+
+	wrote := make([][]byte, 0, 1)
+	result, err := svc.proxyOpenAIWSHTTPBridgeTurn(
+		context.Background(), nil, account, "sk-test", payload, len(payload), "gpt-5.5", "", "", "", 1,
+		func(message []byte) error {
+			wrote = append(wrote, append([]byte(nil), message...))
+			return nil
+		},
+	)
+
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Len(t, upstream.bodies, 2, "each turn permits only one indexed compatibility retry")
+	require.Len(t, wrote, 1)
+	require.Equal(t, "error", gjson.GetBytes(wrote[0], "type").String())
+}
+
 func TestOpenAIWSHTTPBridgeAcceptsFirstFrameAboveLegacy16MiB(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -465,7 +721,7 @@ func TestOpenAIWSHTTPBridgeKeepsContinuationFramesOnHTTPWithoutPreviousResponseI
 	gin.SetMode(gin.TestMode)
 
 	firstSSEBody := strings.Join([]string{
-		`data: {"type":"response.completed","response":{"id":"resp_bridge_first","model":"gpt-5.1","output":[{"type":"function_call","id":"fc_bridge_1","call_id":"call_bridge_1","name":"shell","arguments":"{}"}],"usage":{"input_tokens":9,"output_tokens":1}}}`,
+		`data: {"type":"response.completed","response":{"id":"resp_bridge_first","model":"gpt-5.1","output":[{"type":"function_call","id":"fc_bridge_1","call_id":"call_bridge_real","name":"shell","arguments":"{}"}],"usage":{"input_tokens":9,"output_tokens":1}}}`,
 		"",
 	}, "\n")
 	secondSSEBody := strings.Join([]string{
@@ -589,7 +845,7 @@ func TestOpenAIWSHTTPBridgeKeepsContinuationFramesOnHTTPWithoutPreviousResponseI
 	require.Equal(t, "response.completed", gjson.GetBytes(firstTurnEvent, "type").String())
 	require.Equal(t, "resp_bridge_first", gjson.GetBytes(firstTurnEvent, "response.id").String())
 
-	writeMessage(`{"type":"response.create","model":"gpt-5.1","stream":false,"previous_response_id":"resp_bridge_first","input":[{"type":"function_call_output","call_id":"call_bridge_1","output":"ok"}]}`)
+	writeMessage(`{"type":"response.create","model":"gpt-5.1","stream":false,"previous_response_id":"resp_bridge_first","input":[{"type":"custom_tool_call_output","call_id":"fc_bridge_1","output":"ok"}]}`)
 	secondTurnEvent := readMessage()
 	require.Equal(t, "response.completed", gjson.GetBytes(secondTurnEvent, "type").String())
 	require.Equal(t, "resp_bridge_second", gjson.GetBytes(secondTurnEvent, "response.id").String())
@@ -609,9 +865,9 @@ func TestOpenAIWSHTTPBridgeKeepsContinuationFramesOnHTTPWithoutPreviousResponseI
 	require.Len(t, secondInput, 3)
 	require.Equal(t, "first", secondInput[0].String())
 	require.Equal(t, "function_call", secondInput[1].Get("type").String())
-	require.Equal(t, "call_bridge_1", secondInput[1].Get("call_id").String())
+	require.Equal(t, "call_bridge_real", secondInput[1].Get("call_id").String())
 	require.Equal(t, "function_call_output", secondInput[2].Get("type").String())
-	require.Equal(t, "call_bridge_1", secondInput[2].Get("call_id").String())
+	require.Equal(t, "call_bridge_real", secondInput[2].Get("call_id").String())
 	require.Equal(t, 0, captureDialer.DialCount())
 	require.Empty(t, captureConn.writes)
 }
