@@ -530,7 +530,7 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 		)
 		return nil, true, nil
 	}
-	result, acquireErr := s.service.tryAcquireAccountSlot(ctx, accountID, account.Concurrency)
+	result, acquireErr := s.service.tryAcquireAccountSlot(ctx, req.RequestedModel, accountID, account.Concurrency)
 	if acquireErr == nil && result != nil && result.Acquired {
 		_ = s.service.refreshStickySessionTTL(ctx, req.GroupID, sessionHash, s.service.openAIWSSessionStickyTTL())
 		s.service.setStickySessionAccountEpoch(ctx, req.GroupID, sessionHash, account, s.service.openAIWSSessionStickyTTL())
@@ -538,6 +538,13 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 			Account:     account,
 			Acquired:    true,
 			ReleaseFunc: result.ReleaseFunc,
+		}, false, nil
+	}
+	if acquireErr == nil && result != nil && result.ModelLimited {
+		// 模型级并发预算已满：立即让路，不进入账号等待队列。
+		return &AccountSelectionResult{
+			Account:      account,
+			ModelLimited: true,
 		}, false, nil
 	}
 
@@ -1240,7 +1247,7 @@ func (s *defaultOpenAIAccountScheduler) tryAcquireOpenAISelectionOrder(
 			compactBlocked = true
 			continue
 		}
-		result, acquireErr := s.service.tryAcquireAccountSlot(ctx, fresh.ID, fresh.Concurrency)
+		result, acquireErr := s.service.tryAcquireAccountSlot(ctx, req.RequestedModel, fresh.ID, fresh.Concurrency)
 		if acquireErr != nil {
 			return nil, compactBlocked, acquireErr
 		}
@@ -1252,6 +1259,13 @@ func (s *defaultOpenAIAccountScheduler) tryAcquireOpenAISelectionOrder(
 				Account:     fresh,
 				Acquired:    true,
 				ReleaseFunc: result.ReleaseFunc,
+			}, compactBlocked, nil
+		}
+		if result != nil && result.ModelLimited {
+			// 模型级并发预算已满：立即让路，不进入账号等待队列。
+			return &AccountSelectionResult{
+				Account:      fresh,
+				ModelLimited: true,
 			}, compactBlocked, nil
 		}
 	}
@@ -1296,7 +1310,7 @@ func (s *defaultOpenAIAccountScheduler) tryFallbackToWeightedSticky(
 		if req.RequireCompact && openAICompactSupportTier(account) == 0 {
 			continue
 		}
-		result, acquireErr := s.service.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
+		result, acquireErr := s.service.tryAcquireAccountSlot(ctx, req.RequestedModel, account.ID, account.Concurrency)
 		if acquireErr != nil {
 			return nil, acquireErr
 		}
@@ -1308,6 +1322,13 @@ func (s *defaultOpenAIAccountScheduler) tryFallbackToWeightedSticky(
 				Account:     account,
 				Acquired:    true,
 				ReleaseFunc: result.ReleaseFunc,
+			}, nil
+		}
+		if result != nil && result.ModelLimited {
+			// 模型级并发预算已满：立即让路，不进入账号等待队列。
+			return &AccountSelectionResult{
+				Account:      account,
+				ModelLimited: true,
 			}, nil
 		}
 		if s.service.concurrencyService != nil {

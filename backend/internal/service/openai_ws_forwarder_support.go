@@ -312,7 +312,7 @@ func (s *OpenAIGatewayService) selectAccountByPreviousResponseIDForCapability(
 		return nil, nil
 	}
 
-	result, acquireErr := s.tryAcquireAccountSlot(ctx, accountID, account.Concurrency)
+	result, acquireErr := s.tryAcquireAccountSlot(ctx, requestedModel, accountID, account.Concurrency)
 	if acquireErr == nil && result.Acquired {
 		logOpenAIWSBindResponseAccountWarn(
 			derefGroupID(groupID),
@@ -324,6 +324,13 @@ func (s *OpenAIGatewayService) selectAccountByPreviousResponseIDForCapability(
 			Account:     account,
 			Acquired:    true,
 			ReleaseFunc: result.ReleaseFunc,
+		}, nil
+	}
+	if acquireErr == nil && result != nil && result.ModelLimited {
+		// 模型级并发预算已满：立即让路，不进入账号等待队列。
+		return &AccountSelectionResult{
+			Account:      account,
+			ModelLimited: true,
 		}, nil
 	}
 

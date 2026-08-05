@@ -57,6 +57,41 @@ export function sanitizePlatformQuotasMap(input?: DefaultPlatformQuotasMap | nul
   return result
 }
 
+/** 模型级全局并发预算 map（key = canonical model，值 = 并发上限；>0 生效） */
+export type ModelConcurrencyLimitsMap = Record<string, number>
+
+/** 归一化：只保留有限正整数条目（0/负数/非数字丢弃 = 不限制） */
+export function normalizeModelConcurrencyLimits(input?: ModelConcurrencyLimitsMap | null): ModelConcurrencyLimitsMap {
+  const result: ModelConcurrencyLimitsMap = {}
+  if (!input || typeof input !== "object") return result
+  for (const [model, limit] of Object.entries(input)) {
+    const key = model.trim()
+    if (!key || key.length > 128) continue
+    if (typeof limit !== "number" || !Number.isFinite(limit) || limit < 1) continue
+    result[key] = Math.floor(limit)
+  }
+  return result
+}
+
+/** 序列化：map → JSON 字符串（供模板 JSON 文本编辑框使用） */
+export function serializeModelConcurrencyLimits(input?: ModelConcurrencyLimitsMap | null): string {
+  return JSON.stringify(normalizeModelConcurrencyLimits(input), null, 2)
+}
+
+/** 解析：JSON 字符串 → map（非法 JSON 返回空 map） */
+export function parseModelConcurrencyLimits(raw: string): ModelConcurrencyLimitsMap {
+  if (!raw.trim()) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return normalizeModelConcurrencyLimits(parsed as ModelConcurrencyLimitsMap)
+    }
+    return {}
+  } catch {
+    return {}
+  }
+}
+
 export type AuthSourceType =
   | "email"
   | "linuxdo"
@@ -424,6 +459,8 @@ export interface SystemSettings {
   auth_source_default_github_platform_quotas?: DefaultPlatformQuotasMap;
   auth_source_default_google_platform_quotas?: DefaultPlatformQuotasMap;
   auth_source_default_dingtalk_platform_quotas?: DefaultPlatformQuotasMap;
+  // ── 模型级全局并发预算（canonical model → 并发上限）──────────────────────────────
+  model_concurrency_limits?: ModelConcurrencyLimitsMap;
   // OEM settings
   site_name: string;
   site_logo: string;
@@ -721,6 +758,8 @@ export interface UpdateSettingsRequest {
   auth_source_default_github_platform_quotas?: DefaultPlatformQuotasMap;
   auth_source_default_google_platform_quotas?: DefaultPlatformQuotasMap;
   auth_source_default_dingtalk_platform_quotas?: DefaultPlatformQuotasMap;
+  // ── 模型级全局并发预算（canonical model → 并发上限）──────────────────────────────
+  model_concurrency_limits?: ModelConcurrencyLimitsMap;
   site_name?: string;
   site_logo?: string;
   site_subtitle?: string;

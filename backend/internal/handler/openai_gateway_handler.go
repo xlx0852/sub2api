@@ -507,7 +507,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		reqLog.Debug("openai.account_selected", zap.Int64("account_id", account.ID), zap.String("account_name", account.Name))
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
-		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, reqStream, &streamStarted, reqLog)
+		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, reqModel, reqStream, &streamStarted, reqLog)
 		if !acquired {
 			if penalty := grokRetry.penaltyForFailedAttempt(nil); penalty != nil {
 				h.gatewayService.ApplyGrokSameAccountRetryPenalty(c.Request.Context(), account, penalty)
@@ -1152,7 +1152,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		_ = scheduleDecision
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
-		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, reqStream, &streamStarted, reqLog)
+		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, reqModel, reqStream, &streamStarted, reqLog)
 		if !acquired {
 			return
 		}
@@ -1436,6 +1436,7 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlot(
 	groupID *int64,
 	sessionHash string,
 	selection *service.AccountSelectionResult,
+	reqModel string,
 	reqStream bool,
 	streamStarted *bool,
 	reqLog *zap.Logger,
@@ -1451,20 +1452,43 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlot(
 	if selection.Acquired {
 		return wrapReleaseOnDone(ctx, selection.ReleaseFunc), true
 	}
+	if selection.ModelLimited {
+		// 模型级并发预算已满：直接 429 让路，不进入账号等待队列。
+		reqLog.Warn("openai.account_slot_model_capacity_limited",
+			zap.Int64("account_id", account.ID),
+			zap.String("model", reqModel),
+		)
+		writeModelCapacityLimitHeader(c)
+		status, errType, msg := modelCapacityLimitResponse(reqModel)
+		h.handleStreamingAwareError(c, status, errType, msg, *streamStarted)
+		return nil, false
+	}
 	if selection.WaitPlan == nil {
 		markOpsRoutingCapacityLimited(c)
 		h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No available accounts", *streamStarted)
 		return nil, false
 	}
 
-	fastReleaseFunc, fastAcquired, err := h.concurrencyHelper.TryAcquireAccountSlot(
+	fastReleaseFunc, fastAcquired, fastModelLimited, err := h.concurrencyHelper.TryAcquireModelAwareAccountSlot(
 		ctx,
+		reqModel,
 		account.ID,
 		selection.WaitPlan.MaxConcurrency,
 	)
 	if err != nil {
 		reqLog.Warn("openai.account_slot_quick_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 		h.handleConcurrencyError(c, err, "account", *streamStarted)
+		return nil, false
+	}
+	if fastModelLimited {
+		// 模型级并发预算在快速重试窗口内被占满：直接 429 让路。
+		reqLog.Warn("openai.account_slot_quick_acquire_model_capacity_limited",
+			zap.Int64("account_id", account.ID),
+			zap.String("model", reqModel),
+		)
+		writeModelCapacityLimitHeader(c)
+		status, errType, msg := modelCapacityLimitResponse(reqModel)
+		h.handleStreamingAwareError(c, status, errType, msg, *streamStarted)
 		return nil, false
 	}
 	if fastAcquired {
@@ -1795,18 +1819,37 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		}
 		accountReleaseFunc := selection.ReleaseFunc
 		if !selection.Acquired {
+			if selection.ModelLimited {
+				// 模型级并发预算已满：直接关闭让路，不进入账号等待队列。
+				reqLog.Warn("openai.websocket_account_model_capacity_limited",
+					zap.Int64("account_id", account.ID),
+					zap.String("model", reqModel),
+				)
+				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "model capacity exceeded, please retry later")
+				return
+			}
 			if selection.WaitPlan == nil {
 				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "account is busy, please retry later")
 				return
 			}
-			fastReleaseFunc, fastAcquired, err := h.concurrencyHelper.TryAcquireAccountSlot(
+			fastReleaseFunc, fastAcquired, fastModelLimited, err := h.concurrencyHelper.TryAcquireModelAwareAccountSlot(
 				ctx,
+				reqModel,
 				account.ID,
 				selection.WaitPlan.MaxConcurrency,
 			)
 			if err != nil {
 				reqLog.Warn("openai.websocket_account_slot_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 				closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "failed to acquire account concurrency slot")
+				return
+			}
+			if fastModelLimited {
+				// 模型预算在快速重试窗口内被占满：直接关闭让路。
+				reqLog.Warn("openai.websocket_account_slot_quick_model_capacity_limited",
+					zap.Int64("account_id", account.ID),
+					zap.String("model", reqModel),
+				)
+				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "model capacity exceeded, please retry later")
 				return
 			}
 			if !fastAcquired {
@@ -1902,12 +1945,19 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if !userAcquired {
 					return service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "too many concurrent requests, please retry later", nil)
 				}
-				accountReleaseFunc, accountAcquired, err := h.concurrencyHelper.TryAcquireAccountSlot(ctx, account.ID, accountMaxConcurrency)
+				accountReleaseFunc, accountAcquired, accountModelLimited, err := h.concurrencyHelper.TryAcquireModelAwareAccountSlot(ctx, reqModel, account.ID, accountMaxConcurrency)
 				if err != nil {
 					if userReleaseFunc != nil {
 						userReleaseFunc()
 					}
 					return service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "failed to acquire account concurrency slot", err)
+				}
+				if accountModelLimited {
+					// 模型级并发预算已满：释放本轮已抢的 user 槽并让路。
+					if userReleaseFunc != nil {
+						userReleaseFunc()
+					}
+					return service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "model capacity exceeded, please retry later", nil)
 				}
 				if !accountAcquired {
 					if userReleaseFunc != nil {

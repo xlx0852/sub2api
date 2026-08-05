@@ -196,7 +196,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		_ = scheduleDecision
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
-		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, reqStream, &streamStarted, reqLog)
+		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, reqModel, reqStream, &streamStarted, reqLog)
 		if !acquired {
 			if penalty := grokRetry.penaltyForFailedAttempt(nil); penalty != nil {
 				h.gatewayService.ApplyGrokSameAccountRetryPenalty(c.Request.Context(), account, penalty)

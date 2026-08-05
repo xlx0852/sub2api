@@ -192,6 +192,17 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		// 4. Acquire account concurrency slot
 		accountReleaseFunc := selection.ReleaseFunc
 		if !selection.Acquired {
+			if selection.ModelLimited {
+				// 模型级并发预算已满：直接 429 让路，不进入账号等待队列。
+				reqLog.Warn("gateway.responses.account_slot_model_capacity_limited",
+					zap.Int64("account_id", account.ID),
+					zap.String("model", reqModel),
+				)
+				writeModelCapacityLimitHeader(c)
+				status, errType, msg := modelCapacityLimitResponse(reqModel)
+				h.responsesErrorResponse(c, status, errType, msg)
+				return
+			}
 			if selection.WaitPlan == nil {
 				markOpsRoutingCapacityLimited(c)
 				h.responsesErrorResponse(c, http.StatusServiceUnavailable, "api_error", "No available accounts")

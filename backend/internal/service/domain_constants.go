@@ -281,6 +281,11 @@ const (
 	SettingKeyDefaultSubscriptions = "default_subscriptions"  // 新用户默认订阅列表（JSON）
 	SettingKeyDefaultUserRPMLimit  = "default_user_rpm_limit" // 新用户默认 RPM 限制（0 = 不限制）
 
+	// 模型级全局并发预算（JSON map：canonical model → 并发上限）。
+	// 仅对配置了预算的模型生效；值为 0 或缺失 = 不限制。
+	// 预算满时该模型请求会被降级让路（HTTP 429 / WS 1013），不再抢占其它模型的账号并发。
+	SettingKeyModelConcurrencyLimits = "model_concurrency_limits"
+
 	// 第三方认证来源默认授予配置
 	SettingKeyAuthSourceDefaultEmailBalance             = "auth_source_default_email_balance"
 	SettingKeyAuthSourceDefaultEmailConcurrency         = "auth_source_default_email_concurrency"

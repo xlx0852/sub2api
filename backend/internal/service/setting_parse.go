@@ -119,6 +119,7 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyAffiliateRebatePerInviteeCap:              strconv.FormatFloat(AffiliateRebatePerInviteeCapDefault, 'f', 2, 64),
 		SettingKeyDefaultUserRPMLimit:                       "0",
 		SettingKeyDefaultSubscriptions:                      "[]",
+		SettingKeyModelConcurrencyLimits:                    marshalModelConcurrencyLimits(map[string]int{"gpt-5.6-luna": 8}),
 		SettingKeyAuthSourceDefaultEmailBalance:             "0",
 		SettingKeyAuthSourceDefaultEmailConcurrency:         "5",
 		SettingKeyAuthSourceDefaultEmailSubscriptions:       "[]",
@@ -839,9 +840,56 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		}
 	}
 
+	// 模型级全局并发预算（canonical model → 并发上限）。
+	// 解析失败时置空并告警（优雅降级：等价于未配置预算，所有模型行为不变）。
+	if raw := settings[SettingKeyModelConcurrencyLimits]; strings.TrimSpace(raw) != "" {
+		parsed := map[string]int{}
+		if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+			slog.Warn("[Setting] parseSettings: unmarshal model_concurrency_limits failed", "error", err)
+		} else {
+			result.ModelConcurrencyLimits = sanitizeModelConcurrencyLimits(parsed)
+		}
+	}
+
 	result.AllowUserViewErrorRequests = settings[SettingKeyAllowUserViewErrorRequests] == "true" // default false
 
 	return result
+}
+
+// sanitizeModelConcurrencyLimits 清洗模型并发预算 map：
+// 只保留合法模型键（非空、长度受限），值 clamp 到 [1, 1e6]；非法条目丢弃。
+func sanitizeModelConcurrencyLimits(limits map[string]int) map[string]int {
+	if len(limits) == 0 {
+		return limits
+	}
+	cleaned := make(map[string]int, len(limits))
+	for model, limit := range limits {
+		model = strings.TrimSpace(model)
+		if model == "" || len(model) > 128 {
+			continue
+		}
+		if limit < 1 {
+			continue
+		}
+		if limit > 1_000_000 {
+			limit = 1_000_000
+		}
+		cleaned[model] = limit
+	}
+	return cleaned
+}
+
+// marshalModelConcurrencyLimits 序列化模型并发预算为 JSON 字符串。
+// 空 map 序列化为 {}，保证写入值与默认值格式一致。
+func marshalModelConcurrencyLimits(limits map[string]int) string {
+	if limits == nil {
+		limits = map[string]int{}
+	}
+	raw, err := json.Marshal(limits)
+	if err != nil {
+		return "{}"
+	}
+	return string(raw)
 }
 
 func clampAffiliateRebateRate(value float64) float64 {

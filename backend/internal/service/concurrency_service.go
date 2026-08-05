@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -68,6 +69,14 @@ type OpenAIWSIngressLeaseCache interface {
 	AcquireOpenAIWSIngressLease(ctx context.Context, apiKeyID int64, maxConnections int, leaseID string) (bool, error)
 	RefreshOpenAIWSIngressLease(ctx context.Context, apiKeyID int64, leaseID string) (bool, error)
 	ReleaseOpenAIWSIngressLease(ctx context.Context, apiKeyID int64, leaseID string) error
+}
+
+// ModelConcurrencyCache owns the model-level global concurrency budget slots
+// (concurrency:model:{canonicalModel}). It is optional: when the backing Redis
+// implementation does not expose it, model budgets are skipped (fail-open).
+type ModelConcurrencyCache interface {
+	AcquireModelSlot(ctx context.Context, modelKey string, maxConcurrency int, requestID string) (bool, error)
+	ReleaseModelSlot(ctx context.Context, modelKey string, requestID string) error
 }
 
 const (
@@ -235,6 +244,11 @@ type ConcurrencyService struct {
 	accountLoadCacheMu  sync.RWMutex
 	accountLoadCache    map[string]cachedAccountLoadBatch
 	accountLoadGroup    singleflight.Group
+
+	// modelConcurrencyLimitProvider 返回模型级全局并发预算（canonical model → 上限）。
+	// 由 SettingService 注入，热路径经 60s 进程内缓存读取，避免每次请求访问 DB。
+	// 为 nil 或 map 为空时表示未启用模型预算，所有模型行为不变。
+	modelConcurrencyLimitProvider atomic.Value // func(context.Context) map[string]int
 }
 
 type cachedAccountLoadBatch struct {
@@ -306,10 +320,137 @@ func (s *ConcurrencyService) SetAccountLoadBatchCacheTTL(ttl time.Duration) {
 	}
 }
 
+// SetModelConcurrencyLimitProvider 注入模型级全局并发预算读取函数。
+// 传入 nil 会清除 provider，等价于禁用模型预算。
+func (s *ConcurrencyService) SetModelConcurrencyLimitProvider(provider func(ctx context.Context) map[string]int) {
+	if s == nil {
+		return
+	}
+	if provider == nil {
+		s.modelConcurrencyLimitProvider.Store((func(ctx context.Context) map[string]int)(nil))
+		return
+	}
+	s.modelConcurrencyLimitProvider.Store(provider)
+}
+
+// modelConcurrencyLimit 返回指定模型的全局并发预算；未配置或非正数表示不限制。
+// modelKey 须为已折叠的规范模型名；provider 未注入或 Redis 不支持 model 槽位时返回 0。
+func (s *ConcurrencyService) modelConcurrencyLimit(ctx context.Context, modelKey string) int {
+	if s == nil || strings.TrimSpace(modelKey) == "" {
+		return 0
+	}
+	provider, _ := s.modelConcurrencyLimitProvider.Load().(func(ctx context.Context) map[string]int)
+	if provider == nil {
+		return 0
+	}
+	limits := provider(ctx)
+	if limits == nil {
+		return 0
+	}
+	if v, ok := limits[modelKey]; ok {
+		if v > 0 {
+			return v
+		}
+		// 显式配置为 0 表示显式不限制该模型
+		return 0
+	}
+	// 未配置精确名时，再按规范家族折叠匹配一次（例如配置了 gpt-5.6-luna，
+	// 而 modelKey 是历史精确名 gpt-5.6-luna-2026-08-01 时也能命中）。
+	if folded := normalizeKnownOpenAICodexModel(modelKey); folded != "" && folded != modelKey {
+		if v, ok := limits[folded]; ok && v > 0 {
+			return v
+		}
+	}
+	return 0
+}
+
+// modelSlotKeyForRequest 解析请求模型到模型预算的规范键。
+// 复用 normalizeKnownOpenAICodexModel 的家族折叠：任何 gpt-5.6-luna 变体
+// （含 -openai-compact、日期后缀）都折叠到 gpt-5.6-luna；非 codex 模型返回 ""。
+func modelSlotKeyForRequest(requestedModel string) string {
+	return normalizeKnownOpenAICodexModel(requestedModel)
+}
+
+// AcquireModelAwareAccountSlot 先抢模型级全局并发预算槽位，再抢账号槽位。
+// 仅对配置了预算的模型生效；未配置预算的模型直接透传原账号槽位逻辑，行为不变。
+// 返回值的 ModelLimited 表示模型预算已满：此时不应进入账号等待队列，
+// 而应直接降级让路（HTTP 429 / WS 1013），避免无利润模型抢占 sol 的账号并发。
+// 所有 Redis 错误均 fail-open（记录日志并继续，不因预算功能破坏请求）。
+func (s *ConcurrencyService) AcquireModelAwareAccountSlot(ctx context.Context, requestedModel string, accountID int64, maxConcurrency int) (*AcquireResult, error) {
+	if s == nil {
+		return &AcquireResult{Acquired: true, ReleaseFunc: func() {}}, nil
+	}
+	modelKey := modelSlotKeyForRequest(requestedModel)
+	limit := s.modelConcurrencyLimit(ctx, modelKey)
+	if limit <= 0 {
+		// 未配置预算：透传原账号槽位逻辑。
+		return s.AcquireAccountSlot(ctx, accountID, maxConcurrency)
+	}
+
+	// 模型预算已配置：先抢 model 槽（全局跨所有账号），失败即让路，不碰账号槽。
+	var modelRequestID string
+	var modelCache ModelConcurrencyCache
+	var modelAcquired bool
+	if s.cache != nil {
+		if mc, ok := s.cache.(ModelConcurrencyCache); ok {
+			modelCache = mc
+			modelRequestID = generateRequestID()
+			acquired, err := mc.AcquireModelSlot(ctx, modelKey, limit, modelRequestID)
+			if err != nil {
+				// Redis 错误 fail-open：记录日志后继续走账号槽位，不因预算功能拒绝请求。
+				logger.LegacyPrintf("service.concurrency", "Warning: acquire model slot %s failed: %v", modelKey, err)
+				return s.AcquireAccountSlot(ctx, accountID, maxConcurrency)
+			}
+			modelAcquired = acquired
+		}
+	}
+	if !modelAcquired {
+		if modelCache == nil {
+			// Redis 不支持 model 槽位：fail-open 走原逻辑。
+			return s.AcquireAccountSlot(ctx, accountID, maxConcurrency)
+		}
+		return &AcquireResult{Acquired: false, ModelLimited: true}, nil
+	}
+
+	// model 槽已抢到：继续抢账号槽；账号槽失败时反向释放 model 槽。
+	releaseModel := func() {
+		if modelCache == nil || modelRequestID == "" {
+			return
+		}
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := modelCache.ReleaseModelSlot(bgCtx, modelKey, modelRequestID); err != nil {
+			logger.LegacyPrintf("service.concurrency", "Warning: failed to release model slot %s (req=%s): %v", modelKey, modelRequestID, err)
+		}
+	}
+	accountResult, err := s.AcquireAccountSlot(ctx, accountID, maxConcurrency)
+	if err != nil {
+		releaseModel()
+		return nil, err
+	}
+	if !accountResult.Acquired {
+		releaseModel()
+		return accountResult, nil
+	}
+	accountRelease := accountResult.ReleaseFunc
+	if accountRelease == nil {
+		accountRelease = func() {}
+	}
+	return &AcquireResult{
+		Acquired:    true,
+		ReleaseFunc: func() { accountRelease(); releaseModel() },
+	}, nil
+}
+
 // AcquireResult represents the result of acquiring a concurrency slot
 type AcquireResult struct {
 	Acquired    bool
 	ReleaseFunc func() // Must be called when done (typically via defer)
+
+	// ModelLimited 表示本次获取因模型级全局并发预算已满而被拒绝。
+	// 此时 Acquired 为 false，且调用方不应再进入账号等待队列，
+	// 而应直接降级让路（HTTP 429 / WS 1013）。
+	ModelLimited bool
 }
 
 type AccountWithConcurrency struct {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -30,6 +31,10 @@ const (
 	userSlotKeyPrefix = "concurrency:user:"
 	// 格式: concurrency:api_key:{apiKeyID}
 	apiKeySlotKeyPrefix = "concurrency:api_key:"
+	// 模型级全局并发预算槽位（仅对配置了预算的模型生效）。
+	// 格式: concurrency:model:{canonicalModel}
+	// 与账号/用户槽位共用 acquireScript：ZSET member=requestID，score=Redis Unix 秒。
+	modelSlotKeyPrefix = "concurrency:model:"
 	// API-key-scoped client WebSocket ingress leases use a shorter TTL than
 	// ordinary request slots, because idle ingress sessions do not hold a turn slot.
 	openAIWSIngressLeaseKeyPrefix  = "concurrency:openai_ws_ingress:api_key:"
@@ -328,6 +333,12 @@ func userSlotKey(userID int64) string {
 
 func apiKeySlotKey(apiKeyID int64) string {
 	return fmt.Sprintf("%s%d", apiKeySlotKeyPrefix, apiKeyID)
+}
+
+// modelSlotKey 构造模型级并发预算槽位键。modelKey 必须是已折叠的规范模型名
+// （如 gpt-5.6-luna），由调用方保证；这里只负责拼键。
+func modelSlotKey(modelKey string) string {
+	return modelSlotKeyPrefix + modelKey
 }
 
 func openAIWSIngressLeaseKey(apiKeyID int64) string {
@@ -753,6 +764,33 @@ func (c *concurrencyCache) GetAPIKeyConcurrencyBatch(ctx context.Context, apiKey
 	return result, nil
 }
 
+// Model slot operations
+//
+// 模型级全局并发预算槽位（concurrency:model:{modelKey}）与账号/用户槽位同构，
+// 复用 acquireScript 的 ZSET 计数与过期成员清理。与账号/用户槽位不同，这里
+// 不做活跃索引：预算键数量极少（只对配置了预算的模型存在），且每次 acquire
+// 都会惰性清理过期成员，键自带滑动 EXPIRE，无需索引即可自愈。
+
+func (c *concurrencyCache) AcquireModelSlot(ctx context.Context, modelKey string, maxConcurrency int, requestID string) (bool, error) {
+	if c == nil || c.rdb == nil || strings.TrimSpace(modelKey) == "" || maxConcurrency <= 0 || requestID == "" {
+		return false, nil
+	}
+	key := modelSlotKey(modelKey)
+	// 时间戳在 Lua 脚本内使用 Redis TIME 命令获取，与账号/用户槽位一致。
+	result, _, err := runScriptInt64Pair(ctx, c.rdb, acquireScript, []string{key}, maxConcurrency, c.slotTTLSeconds, requestID)
+	if err != nil {
+		return false, err
+	}
+	return result == 1, nil
+}
+
+func (c *concurrencyCache) ReleaseModelSlot(ctx context.Context, modelKey string, requestID string) error {
+	if c == nil || c.rdb == nil || strings.TrimSpace(modelKey) == "" || requestID == "" {
+		return nil
+	}
+	return c.rdb.ZRem(ctx, modelSlotKey(modelKey), requestID).Err()
+}
+
 // Wait queue operations
 
 func (c *concurrencyCache) IncrementWaitCount(ctx context.Context, userID int64, maxWait int) (bool, error) {
@@ -953,7 +991,37 @@ func (c *concurrencyCache) CleanupExpiredAccountSlotKeys(ctx context.Context) er
 	if err := c.reconcileExpiredIndexCandidates(ctx, accountSlotIndex); err != nil {
 		return err
 	}
-	return c.reconcileExpiredIndexCandidates(ctx, userSlotIndex)
+	if err := c.reconcileExpiredIndexCandidates(ctx, userSlotIndex); err != nil {
+		return err
+	}
+	return c.cleanupExpiredModelSlots(ctx)
+}
+
+// cleanupExpiredModelSlots 清理模型级预算槽位键中已过期的成员，空键直接删除。
+// 模型键不做活跃索引（数量少、惰性自愈），这里用 SCAN 兜底，避免无流量期间
+// 过期成员残留占满预算。SCAN 范围仅限 concurrency:model:*，键数量极少。
+func (c *concurrencyCache) cleanupExpiredModelSlots(ctx context.Context) error {
+	if c == nil || c.rdb == nil {
+		return nil
+	}
+	var cursor uint64
+	for {
+		keys, next, err := c.rdb.Scan(ctx, cursor, modelSlotKeyPrefix+"*", 200).Result()
+		if err != nil {
+			return fmt.Errorf("scan model slot keys: %w", err)
+		}
+		for _, key := range keys {
+			_, err := cleanupExpiredSlotsScript.Run(ctx, c.rdb, []string{key}, c.slotTTLSeconds).Result()
+			if err != nil {
+				logger.LegacyPrintf("repository.concurrency", "Warning: cleanup expired model slots for %s failed: %v", key, err)
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return nil
 }
 
 // reconcileExpiredIndexCandidates 处理单个活跃索引中 score 已到期的候选：
@@ -1026,7 +1094,38 @@ func (c *concurrencyCache) CleanupStaleProcessSlots(ctx context.Context, activeR
 	if err != nil {
 		return err
 	}
-	return c.cleanupStaleProcessSlotsForIndex(ctx, userSlotIndex, userMembers, activeRequestPrefix, now)
+	if err := c.cleanupStaleProcessSlotsForIndex(ctx, userSlotIndex, userMembers, activeRequestPrefix, now); err != nil {
+		return err
+	}
+	return c.cleanupStaleProcessModelSlots(ctx, activeRequestPrefix, now)
+}
+
+// cleanupStaleProcessModelSlots 启动时清理模型级预算槽位中非当前进程前缀的成员。
+// 模型键没有活跃索引，但数量极少，直接 SCAN concurrency:model:* 即可；
+// 与账号/用户槽位一样，崩溃进程遗留的模型槽位会在重启时被回收，避免预算被占满。
+func (c *concurrencyCache) cleanupStaleProcessModelSlots(ctx context.Context, activeRequestPrefix string, now int64) error {
+	if c == nil || c.rdb == nil || activeRequestPrefix == "" {
+		return nil
+	}
+	var cursor uint64
+	for {
+		keys, next, err := c.rdb.Scan(ctx, cursor, modelSlotKeyPrefix+"*", 200).Result()
+		if err != nil {
+			return fmt.Errorf("scan model slot keys: %w", err)
+		}
+		for _, key := range keys {
+			_, remaining, err := runScriptInt64Pair(ctx, c.rdb, startupCleanupSlotScript, []string{key}, activeRequestPrefix, c.slotTTLSeconds)
+			if err != nil {
+				return fmt.Errorf("cleanup stale model slots %s: %w", key, err)
+			}
+			_ = remaining // 模型键无索引可刷新，空键已由脚本 DEL
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return nil
 }
 
 // sweepLegacyWaitKeysOnce 一次性清扫活跃索引机制上线前遗留的等待计数键。

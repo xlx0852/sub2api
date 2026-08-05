@@ -139,7 +139,7 @@ func TestGrokSameAccountRetryReacquiresAndReleasesAccountSlot(t *testing.T) {
 	}
 	streamStarted := false
 
-	release, ok := h.acquireResponsesAccountSlot(c, nil, "", selection, false, &streamStarted, zap.NewNop())
+	release, ok := h.acquireResponsesAccountSlot(c, nil, "", selection, "grok-2", false, &streamStarted, zap.NewNop())
 	require.True(t, ok)
 	release()
 
@@ -150,7 +150,7 @@ func TestGrokSameAccountRetryReacquiresAndReleasesAccountSlot(t *testing.T) {
 	pinned, ok := state.takePinnedSelection()
 	require.True(t, ok)
 	require.Same(t, account, pinned.Account)
-	release, ok = h.acquireResponsesAccountSlot(c, nil, "", pinned, false, &streamStarted, zap.NewNop())
+	release, ok = h.acquireResponsesAccountSlot(c, nil, "", pinned, "grok-2", false, &streamStarted, zap.NewNop())
 	require.True(t, ok)
 	release()
 	state.finishSuccessfulAttempt()

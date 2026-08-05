@@ -70,6 +70,12 @@ type SettingService struct {
 	// instance owns its own cache, no shared package-level state.
 	openAIQuotaAutoPauseSettingsCache atomic.Value // *cachedOpenAIQuotaAutoPauseSettings
 	openAIQuotaAutoPauseSettingsSF    singleflight.Group
+
+	// modelConcurrencyLimitsCache 缓存模型级全局并发预算（canonical model → 并发上限）。
+	// GetModelConcurrencyLimits 在网关请求热路径上被调用，进程内缓存避免每次访问 DB；
+	// 配置更新时由 refreshCachedSettings 主动刷新。
+	modelConcurrencyLimitsCache atomic.Value // *cachedModelConcurrencyLimits
+	modelConcurrencyLimitsSF    singleflight.Group
 }
 
 // DefaultPlatformQuotaSetting 单 platform 三档限额（nil = 沿用上层；0 = 显式禁用；>0 = 上限）

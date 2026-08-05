@@ -3350,6 +3350,42 @@
             </div>
           </div>
 
+          <!-- 模型级全局并发预算 -->
+          <div class="card">
+            <div
+              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+            >
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ t("admin.settings.modelConcurrency.title") }}
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{ t("admin.settings.modelConcurrency.description") }}
+              </p>
+            </div>
+            <div class="space-y-4 p-6">
+              <div>
+                <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t("admin.settings.modelConcurrency.limitsLabel") }}
+                </label>
+                <textarea
+                  v-model="form.model_concurrency_limits_text"
+                  rows="5"
+                  class="input w-full resize-y font-mono text-xs"
+                  spellcheck="false"
+                  :placeholder="t('admin.settings.modelConcurrency.placeholder')"
+                ></textarea>
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.modelConcurrency.hint") }}
+                </p>
+              </div>
+              <div class="rounded-lg bg-black/[0.03] px-4 py-3 dark:bg-white/[0.05]">
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.modelConcurrency.help") }}
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div class="card">
             <div
               class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
@@ -7343,6 +7379,9 @@ import {
   deriveWeChatConnectStoredMode,
   normalizeDefaultSubscriptionSettings,
   resolveWeChatConnectModeCapabilities,
+  normalizeModelConcurrencyLimits,
+  parseModelConcurrencyLimits,
+  serializeModelConcurrencyLimits,
 } from "@/api/admin/settings";
 import type {
   AuthSourceDefaultsState,
@@ -7351,6 +7390,7 @@ import type {
   UpdateSettingsRequest,
   DefaultSubscriptionSetting,
   DefaultPlatformQuotasMap,
+  ModelConcurrencyLimitsMap,
   OpenAIFastPolicyRule,
   WeChatConnectMode,
   WebSearchEmulationConfig,
@@ -8040,6 +8080,9 @@ type SettingsForm = Omit<
   openai_advanced_scheduler_weight_session_sticky: string;
   // 系统全局平台限额 map；form 内始终归一化为全 4 平台对象（模板非空绑定依赖此不变量）
   default_platform_quotas: DefaultPlatformQuotasMap;
+  // 模型级全局并发预算 map（canonical model → 并发上限）；JSON 文本编辑框持有序列化文本
+  model_concurrency_limits: ModelConcurrencyLimitsMap;
+  model_concurrency_limits_text: string;
 };
 
 const form = reactive<SettingsForm>({
@@ -8057,6 +8100,8 @@ const form = reactive<SettingsForm>({
   login_agreement_documents: defaultLoginAgreementDocuments(),
   default_balance: 0,
   default_platform_quotas: normalizePlatformQuotasMap() as DefaultPlatformQuotasMap,
+  model_concurrency_limits: {},
+  model_concurrency_limits_text: "{}",
   affiliate_rebate_rate: 20,
   affiliate_rebate_freeze_hours: 0,
   affiliate_rebate_duration_days: 0,
@@ -9071,6 +9116,8 @@ async function loadSettings() {
         : defaultLoginAgreementDocuments();
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(settings));
     form.default_platform_quotas = normalizePlatformQuotasMap(settings.default_platform_quotas);
+    form.model_concurrency_limits = normalizeModelConcurrencyLimits(settings.model_concurrency_limits);
+    form.model_concurrency_limits_text = serializeModelConcurrencyLimits(form.model_concurrency_limits);
     form.backend_mode_enabled = settings.backend_mode_enabled;
     form.default_subscriptions = normalizeDefaultSubscriptionSettings(
       settings.default_subscriptions,
@@ -9682,6 +9729,9 @@ async function saveSettings() {
     }
 
     payload.default_platform_quotas = sanitizePlatformQuotasMap(form.default_platform_quotas);
+    // 模型级全局并发预算：从 JSON 文本编辑框解析（非法 JSON 视为空，不阻塞保存）
+    form.model_concurrency_limits = parseModelConcurrencyLimits(form.model_concurrency_limits_text);
+    payload.model_concurrency_limits = form.model_concurrency_limits;
     appendAuthSourceDefaultsToUpdateRequest(payload, authSourceDefaults);
 
     const updated = await adminAPI.settings.updateSettings(payload);
@@ -9693,6 +9743,8 @@ async function saveSettings() {
     }
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(updated));
     form.default_platform_quotas = normalizePlatformQuotasMap(updated.default_platform_quotas);
+    form.model_concurrency_limits = normalizeModelConcurrencyLimits(updated.model_concurrency_limits);
+    form.model_concurrency_limits_text = serializeModelConcurrencyLimits(form.model_concurrency_limits);
     registrationEmailSuffixWhitelistTags.value =
       normalizeRegistrationEmailSuffixDomains(
         updated.registration_email_suffix_whitelist,

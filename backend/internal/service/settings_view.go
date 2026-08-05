@@ -257,6 +257,10 @@ type SystemSettings struct {
 	// 系统全局默认平台配额（key = platform，nil/缺省 = 不限制）
 	DefaultPlatformQuotas map[string]*DefaultPlatformQuotaSetting `json:"default_platform_quotas"`
 
+	// 模型级全局并发预算（key = canonical model，值 = 并发上限；0/缺失 = 不限制）。
+	// 预算满时该模型请求会被降级让路（HTTP 429 / WS 1013），不再抢占其它模型的账号并发。
+	ModelConcurrencyLimits map[string]int `json:"model_concurrency_limits"`
+
 	// 允许终端用户在用量页查看自己的失败请求
 	AllowUserViewErrorRequests bool
 }
