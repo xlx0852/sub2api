@@ -823,6 +823,10 @@ func (s *RateLimitService) handle403(ctx context.Context, account *Account, upst
 		s.handleAuthError(ctx, account, buildGrokSpendingLimitErrorMessage(responseBody, upstreamMsg))
 		return true
 	}
+	if account.Platform == PlatformKimi && isKimiQuotaLimitError(responseBody, upstreamMsg) {
+		s.handleKimiQuotaLimit(ctx, account)
+		return true
+	}
 	// 非 Antigravity 平台：保持原有行为
 	msg := buildForbiddenErrorMessage(
 		"Access forbidden (403):",
@@ -832,6 +836,52 @@ func (s *RateLimitService) handle403(ctx context.Context, account *Account, upst
 	)
 	s.handleAuthError(ctx, account, msg)
 	return true
+}
+
+func isKimiQuotaLimitError(responseBody []byte, upstreamMsg string) bool {
+	text := strings.ToLower(strings.TrimSpace(upstreamMsg + " " + string(responseBody)))
+	return strings.Contains(text, "reached your usage limit") ||
+		strings.Contains(text, "usage limit for this billing cycle") ||
+		(strings.Contains(text, "quota will be refreshed") && strings.Contains(text, "next cycle"))
+}
+
+func kimiQuotaLimitResetAt(account *Account, now time.Time) time.Time {
+	if account == nil {
+		return time.Time{}
+	}
+	var resetAt time.Time
+	for _, window := range []string{"5h", "7d"} {
+		if account.getExtraFloat64("kimi_quota_"+window+"_utilization") < 100 {
+			continue
+		}
+		candidate := account.getExtraTime("kimi_quota_" + window + "_reset_at")
+		if candidate.After(now) && candidate.After(resetAt) {
+			resetAt = candidate
+		}
+	}
+	return resetAt
+}
+
+func (s *RateLimitService) handleKimiQuotaLimit(ctx context.Context, account *Account) {
+	now := time.Now()
+	resetAt := kimiQuotaLimitResetAt(account, now)
+	if resetAt.IsZero() {
+		// The official quota refresh runs asynchronously in the gateway. Keep the
+		// account active and briefly out of rotation until that refresh supplies
+		// the authoritative window reset.
+		resetAt = now.Add(5 * time.Minute)
+	}
+	s.notifyAccountSchedulingBlocked(account, resetAt, "kimi_quota_limit")
+	if err := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
+		kimiQuotaRateLimitUntilKey: resetAt.UTC().Format(time.RFC3339),
+	}); err != nil {
+		slog.Warn("kimi_quota_limit_marker_failed", "account_id", account.ID, "error", err)
+	}
+	if err := s.accountRepo.SetRateLimited(ctx, account.ID, resetAt); err != nil {
+		slog.Warn("kimi_quota_limit_set_failed", "account_id", account.ID, "error", err)
+		return
+	}
+	slog.Info("kimi_account_quota_limited", "account_id", account.ID, "reset_at", resetAt, "reset_in", time.Until(resetAt).Truncate(time.Second))
 }
 
 func (s *RateLimitService) handleOpenAI403(ctx context.Context, account *Account, upstreamMsg string, responseBody []byte) (shouldDisable bool) {

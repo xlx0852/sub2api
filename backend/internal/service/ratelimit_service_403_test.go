@@ -112,3 +112,44 @@ func TestRateLimitService_HandleUpstreamError_Grok403SpendingLimitMarked(t *test
 	require.Contains(t, repo.lastErrorMsg, "You have run out of credits")
 	require.NotContains(t, repo.lastErrorMsg, `{"code"`)
 }
+
+func TestRateLimitService_HandleUpstreamError_KimiQuota403UsesWindowCooldown(t *testing.T) {
+	repo := &rateLimitAccountRepoStub{}
+	service := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	resetAt := time.Now().Add(44 * time.Minute).Truncate(time.Second)
+	account := &Account{
+		ID:       304,
+		Platform: PlatformKimi,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			"kimi_quota_5h_utilization": 100.0,
+			"kimi_quota_5h_reset_at":    resetAt.Format(time.RFC3339),
+			"kimi_quota_7d_utilization": 69.0,
+			"kimi_quota_7d_reset_at":    time.Now().Add(44 * time.Hour).Format(time.RFC3339),
+		},
+	}
+	body := []byte(`{"error":"You've reached your usage limit for this billing cycle. Your quota will be refreshed in the next cycle."}`)
+
+	shouldDisable := service.HandleUpstreamError(context.Background(), account, http.StatusForbidden, http.Header{}, body)
+
+	require.True(t, shouldDisable, "current request should fail over to another account")
+	require.Zero(t, repo.setErrorCalls, "quota exhaustion must not permanently disable the account")
+	require.Equal(t, 1, repo.setRateLimitedCalls)
+	require.Equal(t, account.ID, repo.lastRateLimitedID)
+	require.WithinDuration(t, resetAt, repo.lastRateLimitResetAt, time.Second)
+	require.Equal(t, resetAt.Format(time.RFC3339), repo.lastExtraUpdates[kimiQuotaRateLimitUntilKey])
+}
+
+func TestRateLimitService_HandleUpstreamError_KimiGeneric403StillDisables(t *testing.T) {
+	repo := &rateLimitAccountRepoStub{}
+	service := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	account := &Account{ID: 305, Platform: PlatformKimi, Type: AccountTypeOAuth}
+
+	shouldDisable := service.HandleUpstreamError(
+		context.Background(), account, http.StatusForbidden, http.Header{}, []byte(`{"error":"account suspended"}`),
+	)
+
+	require.True(t, shouldDisable)
+	require.Equal(t, 1, repo.setErrorCalls)
+	require.Zero(t, repo.setRateLimitedCalls)
+}
