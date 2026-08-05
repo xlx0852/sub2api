@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -57,22 +58,24 @@ func TestPrepareOpenAIWSHTTPBridgeBodyEnsuresArguments(t *testing.T) {
 
 // 多轮重放会把 codex 私有工具类型原样注入 input，OpenAI 官方上游不认识这些
 // 私有 type（local_shell_call/custom_tool_call/mcp_tool_call 等），报
-// "Unknown parameter: 'input[N].arguments'"。桥接 body 应归一化为
-// function_call / function_call_output。
+// "Unknown parameter: 'input[N].arguments'"；同时私有项的 id（lc_/ctco_/
+// mcp_/tsc_ 前缀）不满足 function_call* 的 fc_ 前缀要求，报
+// "Invalid 'input[N].id': ... Expected an ID that begins with 'fc'"。
+// 桥接 body 应归一化 type 与 id，保留 call_id。
 func TestPrepareOpenAIWSHTTPBridgeBodyNormalizesPrivateToolTypes(t *testing.T) {
 	payload := []byte(`{
 		"type": "response.create",
 		"model": "gpt-5.6-luna",
 		"input": [
 			{"type": "message", "role": "user", "content": "run ls"},
-			{"type": "local_shell_call", "call_id": "sh_1", "name": "Shell", "arguments": "{\"cmd\": \"ls\"}"},
-			{"type": "local_shell_call_output", "call_id": "sh_1", "output": "total 8"},
-			{"type": "custom_tool_call", "call_id": "ct_1", "name": "Freeform", "input": "do something"},
-			{"type": "custom_tool_call_output", "call_id": "ct_1", "output": "done"},
-			{"type": "mcp_tool_call", "call_id": "mcp_1", "name": "McpTool", "arguments": "{}"},
-			{"type": "mcp_tool_call_output", "call_id": "mcp_1", "output": "ok"},
-			{"type": "tool_search_call", "call_id": "ts_1", "name": "Search", "arguments": "{}"},
-			{"type": "tool_search_output", "call_id": "ts_1", "output": "results"}
+			{"type": "local_shell_call", "id": "lc_ab1", "call_id": "sh_1", "name": "Shell", "arguments": "{\"cmd\": \"ls\"}"},
+			{"type": "local_shell_call_output", "id": "ctco_019fd0d8", "call_id": "sh_1", "output": "total 8"},
+			{"type": "custom_tool_call", "id": "ctc_cd2", "call_id": "ct_1", "name": "Freeform", "input": "do something"},
+			{"type": "custom_tool_call_output", "id": "ctco_cd2", "call_id": "ct_1", "output": "done"},
+			{"type": "mcp_tool_call", "id": "mcp_ef3", "call_id": "mcp_1", "name": "McpTool", "arguments": "{}"},
+			{"type": "mcp_tool_call_output", "id": "ctco_ef3", "call_id": "mcp_1", "output": "ok"},
+			{"type": "tool_search_call", "id": "tsc_gh4", "call_id": "ts_1", "name": "Search", "arguments": "{}"},
+			{"type": "tool_search_output", "id": "tsco_gh4", "call_id": "ts_1", "output": "results"}
 		]
 	}`)
 	body, err := prepareOpenAIWSHTTPBridgeBody(payload)
@@ -92,7 +95,7 @@ func TestPrepareOpenAIWSHTTPBridgeBodyNormalizesPrivateToolTypes(t *testing.T) {
 			typeByCall[cid] = append(typeByCall[cid], item)
 		}
 	}
-	// local_shell_call → function_call（arguments 保留）
+	// local_shell_call → function_call（arguments 保留，id 归一化为 fc_ 前缀）
 	if items := typeByCall["sh_1"]; len(items) != 2 {
 		t.Fatalf("sh_1 items = %d, want 2", len(items))
 	} else {
@@ -107,6 +110,9 @@ func TestPrepareOpenAIWSHTTPBridgeBodyNormalizesPrivateToolTypes(t *testing.T) {
 		}
 		if (*call)["arguments"] != `{"cmd": "ls"}` {
 			t.Fatalf("local_shell_call arguments lost: %v", (*call)["arguments"])
+		}
+		if id, _ := (*call)["id"].(string); !strings.HasPrefix(id, "fc_") {
+			t.Fatalf("local_shell_call id not normalized: %v", (*call)["id"])
 		}
 	}
 	// custom_tool_call → function_call，input 包进 arguments.input
@@ -128,10 +134,13 @@ func TestPrepareOpenAIWSHTTPBridgeBodyNormalizesPrivateToolTypes(t *testing.T) {
 		if _, has := (*call)["input"]; has {
 			t.Fatalf("custom_tool_call input field not removed")
 		}
+		if id, _ := (*call)["id"].(string); !strings.HasPrefix(id, "fc_") {
+			t.Fatalf("custom_tool_call id not normalized: %v", (*call)["id"])
+		}
 	} else {
 		t.Fatalf("ct_1 items = %d, want 2", len(items))
 	}
-	// mcp/tool_search 私有类型 → function_call
+	// mcp/tool_search 私有类型 → function_call，id 归一化
 	for _, cid := range []string{"mcp_1", "ts_1"} {
 		items := typeByCall[cid]
 		if len(items) != 2 {
@@ -141,20 +150,26 @@ func TestPrepareOpenAIWSHTTPBridgeBodyNormalizesPrivateToolTypes(t *testing.T) {
 		for i := range items {
 			if items[i]["type"] == "function_call" {
 				found = true
+				if id, _ := items[i]["id"].(string); !strings.HasPrefix(id, "fc_") {
+					t.Fatalf("%s id not normalized: %v", cid, items[i]["id"])
+				}
 			}
 		}
 		if !found {
 			t.Fatalf("%s not normalized to function_call", cid)
 		}
 	}
-	// 所有输出项归一化为 function_call_output
+	// 所有输出项归一化为 function_call_output 且 id 以 fc_ 开头（客户报错场景：
+	// Invalid 'input[106].id': 'ctco_...' Expected an ID that begins with 'fc'）
 	for _, cid := range []string{"sh_1", "ct_1", "mcp_1", "ts_1"} {
 		found := false
 		for _, raw := range items {
 			item := raw.(map[string]any)
 			if item["call_id"] == cid && item["type"] == "function_call_output" {
 				found = true
-				break
+				if id, _ := item["id"].(string); !strings.HasPrefix(id, "fc_") {
+					t.Fatalf("output for %s id not normalized: %v", cid, item["id"])
+				}
 			}
 		}
 		if !found {
