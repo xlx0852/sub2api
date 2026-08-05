@@ -221,16 +221,58 @@ func processOpenAIReplayItems(items []json.RawMessage, adaptToStandard bool) []j
 			originalCallIDs[callID] = struct{}{}
 		}
 
-		outputItem := item
-		if isCall || isOut {
-			validated, keep := normalizeOpenAIReplayItem(item)
-			if !keep {
-				continue
+outputItem := item
+			if isCall || isOut {
+				validated, keep := normalizeOpenAIReplayItem(item)
+				if !keep {
+					// Never drop a call that still has an association key: the
+					// paired client output may arrive on the next bridge turn.
+					// Prefer a minimal portable function_call over deleting the
+					// only evidence of the tool invocation.
+					if isCall && callID != "" {
+						name := strings.TrimSpace(stringValue(item["name"]))
+						if name == "" {
+							name = strings.TrimSpace(stringValue(item["tool_name"]))
+						}
+						if name == "" && originalType == "local_shell_call" {
+							name = "shell"
+						}
+						if name == "" {
+							name = "tool"
+						}
+						fallback := map[string]any{
+							"type":      "function_call",
+							"call_id":   callID,
+							"name":      name,
+							"arguments": "{}",
+						}
+						if !adaptToStandard {
+							// Native dialect: keep the original wire shape when
+							// possible so custom_tool_call stays custom.
+							outputItem = item
+							if _, hasArgs := item["arguments"]; !hasArgs {
+								if _, hasInput := item["input"]; !hasInput {
+									// Ensure something valid for strict upstreams.
+									copied := cloneOpenAIReplayItem(item)
+									copied["arguments"] = "{}"
+									outputItem = copied
+								}
+							}
+						} else {
+							outputItem = fallback
+						}
+						if isCall && callID != "" {
+							keptCallIDs[callID] = struct{}{}
+						}
+						candidates = append(candidates, replayCandidate{item: outputItem, callID: callID, isCall: isCall, isOut: isOut})
+						continue
+					}
+					continue
+				}
+				if adaptToStandard {
+					outputItem = validated
+				}
 			}
-			if adaptToStandard {
-				outputItem = validated
-			}
-		}
 		if id := strings.TrimSpace(stringValue(outputItem["id"])); id != "" {
 			if _, duplicate := seenIDs[id]; duplicate {
 				// Item id is not the call/output association key. Keep the semantic
@@ -443,16 +485,32 @@ func completeOpenAIReplayArguments(raw any) (string, bool) {
 	switch typed := raw.(type) {
 	case string:
 		trimmed := strings.TrimSpace(typed)
-		if trimmed == "" || !json.Valid([]byte(trimmed)) {
+		if trimmed == "" {
+			// Partial stream snapshots often land with empty arguments. Prefer a
+			// neutral object over dropping the whole function_call — without the
+			// call, the next bridge turn ships a bare tool output and upstream
+			// returns "No tool call found".
+			return "{}", true
+		}
+		if json.Valid([]byte(trimmed)) {
+			return typed, true
+		}
+		// Codex freeform tools (exec/apply_patch/js_repl) frequently put plain
+		// text in arguments/input. Wrap as {"input": ...} so the call survives
+		// standard-dialect replay the same way custom_tool_call does.
+		encoded, err := json.Marshal(map[string]any{"input": typed})
+		if err != nil || !json.Valid(encoded) {
 			return "", false
 		}
-		return typed, true
+		return string(encoded), true
 	case map[string]any, []any:
 		encoded, err := json.Marshal(typed)
 		if err != nil || !json.Valid(encoded) {
 			return "", false
 		}
 		return string(encoded), true
+	case nil:
+		return "{}", true
 	default:
 		return "", false
 	}

@@ -27,23 +27,61 @@ func TestNormalizeOpenAIReplayItemsConvertsPrivatePairsWithoutSyntheticIDs(t *te
 	require.False(t, gjson.GetBytes(normalized[1], "id").Exists())
 }
 
-func TestNormalizeOpenAIReplayItemsDropsIncompleteCall(t *testing.T) {
+func TestNormalizeOpenAIReplayItemsKeepsEmptyArgumentsAsObject(t *testing.T) {
 	t.Parallel()
 
+	// Empty arguments used to drop the call entirely, which left the next
+	// http_bridge turn with a bare tool output (No tool call found).
 	items := []json.RawMessage{
 		json.RawMessage(`{"type":"function_call","id":"fc_1","call_id":"call_1","name":"shell","arguments":""}`),
 	}
-	require.Empty(t, normalizeOpenAIReplayItems(items))
+	normalized := normalizeOpenAIReplayItems(items)
+	require.Len(t, normalized, 1)
+	require.Equal(t, "function_call", gjson.GetBytes(normalized[0], "type").String())
+	require.Equal(t, "call_1", gjson.GetBytes(normalized[0], "call_id").String())
+	require.Equal(t, "{}", gjson.GetBytes(normalized[0], "arguments").String())
 }
 
-func TestNormalizeOpenAIReplayItemsDropsOutputWhoseCollectedCallWasIncomplete(t *testing.T) {
+func TestNormalizeOpenAIReplayItemsKeepsOutputWhenCollectedCallHadEmptyArguments(t *testing.T) {
 	t.Parallel()
 
 	items := []json.RawMessage{
 		json.RawMessage(`{"type":"function_call","id":"fc_1","call_id":"call_1","name":"shell","arguments":""}`),
-		json.RawMessage(`{"type":"function_call_output","call_id":"call_1","output":"must not be orphaned"}`),
+		json.RawMessage(`{"type":"function_call_output","call_id":"call_1","output":"must stay paired"}`),
 	}
-	require.Empty(t, normalizeOpenAIReplayItems(items))
+	normalized := normalizeOpenAIReplayItems(items)
+	require.Len(t, normalized, 2)
+	require.Equal(t, "function_call", gjson.GetBytes(normalized[0], "type").String())
+	require.Equal(t, "function_call_output", gjson.GetBytes(normalized[1], "type").String())
+	require.Equal(t, "call_1", gjson.GetBytes(normalized[1], "call_id").String())
+}
+
+func TestNormalizeOpenAIReplayItemsWrapsFreeformNonJSONArguments(t *testing.T) {
+	t.Parallel()
+
+	// Cicadas/APIKey standard dialect previously dropped non-JSON freeform
+	// arguments, then the client custom_tool_call_output arrived alone.
+	items := []json.RawMessage{
+		json.RawMessage(`{"type":"function_call","id":"fc_HzwjtFUQq9juDXOS05Y0LVmO","call_id":"fc_HzwjtFUQq9juDXOS05Y0LVmO","name":"exec","arguments":"const r = await tools.exec_command({cmd:\"ls\"})"}`),
+	}
+	normalized := normalizeOpenAIReplayItems(items)
+	require.Len(t, normalized, 1)
+	require.Equal(t, "function_call", gjson.GetBytes(normalized[0], "type").String())
+	require.Equal(t, "fc_HzwjtFUQq9juDXOS05Y0LVmO", gjson.GetBytes(normalized[0], "call_id").String())
+	require.JSONEq(t, `{"input":"const r = await tools.exec_command({cmd:\"ls\"})"}`, gjson.GetBytes(normalized[0], "arguments").String())
+}
+
+func TestAlignOpenAIReplayOutputTypesToCallsKeepsCustomOutputWithFunctionCall(t *testing.T) {
+	t.Parallel()
+
+	items := []json.RawMessage{
+		json.RawMessage(`{"type":"function_call","call_id":"fc_sw0vm1bg3OQ6obcXN35pUYXe","name":"exec","arguments":"{\"input\":\"ls\"}"}`),
+		json.RawMessage(`{"type":"custom_tool_call_output","call_id":"fc_sw0vm1bg3OQ6obcXN35pUYXe","output":"ok"}`),
+	}
+	aligned := alignOpenAIReplayOutputTypesToCalls(items)
+	require.Equal(t, "function_call", gjson.GetBytes(aligned[0], "type").String())
+	require.Equal(t, "function_call_output", gjson.GetBytes(aligned[1], "type").String())
+	require.Equal(t, "fc_sw0vm1bg3OQ6obcXN35pUYXe", gjson.GetBytes(aligned[1], "call_id").String())
 }
 
 func TestNormalizeOpenAIReplayItemsKeepsOutputLinkedToEarlierContext(t *testing.T) {
@@ -105,15 +143,20 @@ func TestNormalizeOpenAIReplayItemsForAccountHonorsDialect(t *testing.T) {
 	require.Equal(t, "x", gjson.GetBytes(oauthItems[0], "input").String())
 }
 
-func TestNormalizeOpenAIReplayItemsForAccountFiltersIncompleteNativeCall(t *testing.T) {
+func TestNormalizeOpenAIReplayItemsForAccountKeepsEmptyArgsNativeCall(t *testing.T) {
 	t.Parallel()
 
+	// OAuth/native dialect still must keep the call association key when
+	// arguments are empty; dropping it recreates bare tool-output 400s.
 	items := []json.RawMessage{
 		json.RawMessage(`{"type":"function_call","id":"fc_1","call_id":"call_1","name":"shell","arguments":""}`),
-		json.RawMessage(`{"type":"function_call_output","call_id":"call_1","output":"must not be orphaned"}`),
+		json.RawMessage(`{"type":"function_call_output","call_id":"call_1","output":"must stay paired"}`),
 	}
 	normalized := normalizeOpenAIReplayItemsForAccount(&Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}, items)
-	require.Empty(t, normalized)
+	require.Len(t, normalized, 2)
+	require.Equal(t, "function_call", gjson.GetBytes(normalized[0], "type").String())
+	require.Equal(t, "call_1", gjson.GetBytes(normalized[0], "call_id").String())
+	require.Equal(t, "function_call_output", gjson.GetBytes(normalized[1], "type").String())
 }
 
 func TestNormalizeOpenAIReplayItemsResolvesPrivateOutputCallIDFromItemIdentity(t *testing.T) {
