@@ -961,6 +961,10 @@ func (r *contentModerationHandlerTestRepo) ListLogs(ctx context.Context, filter 
 	return nil, nil, nil
 }
 
+func (r *contentModerationHandlerTestRepo) SummarizeLogs(ctx context.Context, filter service.ContentModerationLogFilter) (*service.ContentModerationLogSummary, error) {
+	return &service.ContentModerationLogSummary{}, nil
+}
+
 func (r *contentModerationHandlerTestRepo) CountFlaggedByUserSince(ctx context.Context, userID int64, since time.Time, excludeCyberPolicy bool) (int, error) {
 	return 0, nil
 }

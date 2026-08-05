@@ -53,17 +53,17 @@ INSERT INTO content_moderation_logs (
     request_id, user_id, user_email, api_key_id, api_key_name, group_id, group_name,
     endpoint, provider, model, mode, action, flagged, highest_category, highest_score,
     category_scores, threshold_snapshot, input_excerpt, upstream_latency_ms, error,
-    violation_count, auto_banned, email_sent, queue_delay_ms, matched_keyword
+    violation_count, api_key_disabled, auto_banned, enforcement_error, email_sent, queue_delay_ms, matched_keyword
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7,
     $8, $9, $10, $11, $12, $13, $14, $15,
     $16::jsonb, $17::jsonb, $18, $19, $20,
-    $21, $22, $23, $24, $25
+    $21, $22, $23, $24, $25, $26, $27
 ) RETURNING id, created_at`,
 		log.RequestID, userID, log.UserEmail, apiKeyID, log.APIKeyName, groupID, log.GroupName,
 		log.Endpoint, log.Provider, log.Model, log.Mode, log.Action, log.Flagged, log.HighestCategory, log.HighestScore,
 		string(categoryScores), string(thresholdSnapshot), log.InputExcerpt, latency, log.Error,
-		log.ViolationCount, log.AutoBanned, log.EmailSent, nullableIntPtr(log.QueueDelayMS), log.MatchedKeyword,
+		log.ViolationCount, log.APIKeyDisabled, log.AutoBanned, log.EnforcementError, log.EmailSent, nullableIntPtr(log.QueueDelayMS), log.MatchedKeyword,
 	).Scan(&log.ID, &log.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("insert content moderation log: %w", err)
@@ -97,7 +97,7 @@ SELECT
     l.id, l.request_id, l.user_id, l.user_email, l.api_key_id, l.api_key_name, l.group_id, l.group_name,
     l.endpoint, l.provider, l.model, l.mode, l.action, l.flagged, l.highest_category, l.highest_score,
     l.category_scores, l.threshold_snapshot, l.input_excerpt, l.upstream_latency_ms, l.error,
-    l.violation_count, l.auto_banned, l.email_sent, COALESCE(u.status, ''), l.queue_delay_ms, l.matched_keyword, l.created_at
+    l.violation_count, l.api_key_disabled, l.auto_banned, l.enforcement_error, l.email_sent, COALESCE(u.status, ''), l.queue_delay_ms, l.matched_keyword, l.created_at
 FROM content_moderation_logs l
 LEFT JOIN users u ON u.id = l.user_id `+whereSQL+`
 ORDER BY l.created_at DESC, l.id DESC
@@ -137,7 +137,9 @@ LIMIT $`+fmt.Sprint(len(queryArgs)-1)+` OFFSET $`+fmt.Sprint(len(queryArgs)),
 			&latency,
 			&item.Error,
 			&item.ViolationCount,
+			&item.APIKeyDisabled,
 			&item.AutoBanned,
+			&item.EnforcementError,
 			&item.EmailSent,
 			&item.UserStatus,
 			&queueDelay,
@@ -178,6 +180,29 @@ LIMIT $`+fmt.Sprint(len(queryArgs)-1)+` OFFSET $`+fmt.Sprint(len(queryArgs)),
 	return items, paginationResultFromTotal(total, params), nil
 }
 
+func (r *contentModerationRepository) SummarizeLogs(ctx context.Context, filter service.ContentModerationLogFilter) (*service.ContentModerationLogSummary, error) {
+	where, args := buildContentModerationLogWhere(filter)
+	query := `
+SELECT
+    COUNT(*) FILTER (WHERE l.action IN ('block', 'keyword_block', 'hash_block')),
+    COUNT(*) FILTER (WHERE l.action = 'cyber_policy'),
+    COUNT(*) FILTER (WHERE l.action = 'error' OR l.error <> ''),
+    COUNT(*)
+FROM content_moderation_logs l
+WHERE ` + strings.Join(where, " AND ")
+
+	var summary service.ContentModerationLogSummary
+	if err := r.db.QueryRowContext(ctx, query, args...).Scan(
+		&summary.LocalPreBlock,
+		&summary.UpstreamPolicy,
+		&summary.Errors,
+		&summary.Total,
+	); err != nil {
+		return nil, fmt.Errorf("summarize content moderation logs: %w", err)
+	}
+	return &summary, nil
+}
+
 func (r *contentModerationRepository) CountFlaggedByUserSince(ctx context.Context, userID int64, since time.Time, excludeCyberPolicy bool) (int, error) {
 	if userID <= 0 {
 		return 0, nil
@@ -204,7 +229,6 @@ WHERE user_id = $1
 	}
 	return count, nil
 }
-
 
 func (r *contentModerationRepository) ListLatestFlaggedLogsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*service.ContentModerationLog, error) {
 	out := make(map[int64]*service.ContentModerationLog, len(userIDs))
@@ -262,6 +286,14 @@ func (r *contentModerationRepository) UpdateLogEmailSent(ctx context.Context, id
 	_, err := r.db.ExecContext(ctx, `UPDATE content_moderation_logs SET email_sent = $1 WHERE id = $2`, sent, id)
 	if err != nil {
 		return fmt.Errorf("update content moderation log email_sent: %w", err)
+	}
+	return nil
+}
+
+func (r *contentModerationRepository) UpdateLogEnforcement(ctx context.Context, id int64, apiKeyDisabled bool, enforcementError string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE content_moderation_logs SET api_key_disabled = $1, enforcement_error = $2 WHERE id = $3`, apiKeyDisabled, enforcementError, id)
+	if err != nil {
+		return fmt.Errorf("update content moderation enforcement: %w", err)
 	}
 	return nil
 }

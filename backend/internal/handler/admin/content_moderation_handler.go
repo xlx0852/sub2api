@@ -20,29 +20,30 @@ func NewContentModerationHandler(svc *service.ContentModerationService) *Content
 }
 
 type contentModerationConfigRequest struct {
-	Enabled              *bool               `json:"enabled"`
-	Mode                 *string             `json:"mode"`
-	BaseURL              *string             `json:"base_url"`
-	Model                *string             `json:"model"`
-	APIKey               *string             `json:"api_key"`
-	APIKeys              *[]string           `json:"api_keys"`
-	APIKeysMode          string              `json:"api_keys_mode"`
-	DeleteAPIKeyHashes   *[]string           `json:"delete_api_key_hashes"`
-	ClearAPIKey          bool                `json:"clear_api_key"`
-	TimeoutMS            *int                `json:"timeout_ms"`
-	SampleRate           *int                `json:"sample_rate"`
-	AllGroups            *bool               `json:"all_groups"`
-	GroupIDs             *[]int64            `json:"group_ids"`
-	RecordNonHits        *bool               `json:"record_non_hits"`
-	Thresholds           *map[string]float64 `json:"thresholds"`
-	WorkerCount          *int                `json:"worker_count"`
-	QueueSize            *int                `json:"queue_size"`
-	BlockStatus          *int                `json:"block_status"`
-	BlockMessage         *string             `json:"block_message"`
-	EmailOnHit           *bool               `json:"email_on_hit"`
-	AutoBanEnabled       *bool               `json:"auto_ban_enabled"`
-	BanThreshold         *int                `json:"ban_threshold"`
-	ViolationWindowHours *int                `json:"violation_window_hours"`
+	Enabled                  *bool               `json:"enabled"`
+	Mode                     *string             `json:"mode"`
+	BaseURL                  *string             `json:"base_url"`
+	Model                    *string             `json:"model"`
+	APIKey                   *string             `json:"api_key"`
+	APIKeys                  *[]string           `json:"api_keys"`
+	APIKeysMode              string              `json:"api_keys_mode"`
+	DeleteAPIKeyHashes       *[]string           `json:"delete_api_key_hashes"`
+	ClearAPIKey              bool                `json:"clear_api_key"`
+	TimeoutMS                *int                `json:"timeout_ms"`
+	SampleRate               *int                `json:"sample_rate"`
+	AllGroups                *bool               `json:"all_groups"`
+	GroupIDs                 *[]int64            `json:"group_ids"`
+	RecordNonHits            *bool               `json:"record_non_hits"`
+	Thresholds               *map[string]float64 `json:"thresholds"`
+	WorkerCount              *int                `json:"worker_count"`
+	QueueSize                *int                `json:"queue_size"`
+	BlockStatus              *int                `json:"block_status"`
+	BlockMessage             *string             `json:"block_message"`
+	EmailOnHit               *bool               `json:"email_on_hit"`
+	AutoDisableAPIKeyEnabled *bool               `json:"auto_disable_api_key_enabled"`
+	AutoBanEnabled           *bool               `json:"auto_ban_enabled"`
+	BanThreshold             *int                `json:"ban_threshold"`
+	ViolationWindowHours     *int                `json:"violation_window_hours"`
 	// cyber_policy 命中是否排除出自动封号计数；前端 RiskControlView 已发送该字段，
 	// service.UpdateContentModerationConfigInput 已支持，此前 handler 层缺透传导致开关静默失效。
 	CyberPolicyExcludeFromBanCount *bool                                 `json:"cyber_policy_exclude_from_ban_count"`
@@ -104,6 +105,7 @@ func (h *ContentModerationHandler) UpdateConfig(c *gin.Context) {
 		BlockStatus:                    req.BlockStatus,
 		BlockMessage:                   req.BlockMessage,
 		EmailOnHit:                     req.EmailOnHit,
+		AutoDisableAPIKeyEnabled:       req.AutoDisableAPIKeyEnabled,
 		AutoBanEnabled:                 req.AutoBanEnabled,
 		BanThreshold:                   req.BanThreshold,
 		ViolationWindowHours:           req.ViolationWindowHours,
@@ -197,7 +199,22 @@ func (h *ContentModerationHandler) ListLogs(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Paginated(c, items, pageResult.Total, pageResult.Page, pageResult.PageSize)
+	summary, err := h.service.SummarizeLogs(c.Request.Context(), filter)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, struct {
+		Items    []service.ContentModerationLog       `json:"items"`
+		Total    int64                                `json:"total"`
+		Page     int                                  `json:"page"`
+		PageSize int                                  `json:"page_size"`
+		Pages    int                                  `json:"pages"`
+		Summary  *service.ContentModerationLogSummary `json:"summary"`
+	}{
+		Items: items, Total: pageResult.Total, Page: pageResult.Page,
+		PageSize: pageResult.PageSize, Pages: pageResult.Pages, Summary: summary,
+	})
 }
 
 func (h *ContentModerationHandler) UnbanUser(c *gin.Context) {

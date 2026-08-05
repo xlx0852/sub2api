@@ -314,6 +314,13 @@
               </div>
             </div>
 
+            <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div v-for="item in logSummaryItems" :key="item.key" class="rounded-lg border border-gray-100 bg-white px-4 py-3 dark:border-dark-700 dark:bg-dark-800">
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ item.label }}</p>
+                <p class="mt-1 text-xl font-semibold" :class="item.valueClass">{{ formatNumber(item.value) }}</p>
+              </div>
+            </div>
+
             <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
               <Select v-model="filters.result" :options="resultOptions" @change="reloadLogsFromFirstPage" />
               <Select v-model="filters.group_id" :options="groupFilterOptions" @change="reloadLogsFromFirstPage" />
@@ -377,7 +384,11 @@
                       <div class="text-xs text-gray-400">
                         {{ row.email_sent ? t('admin.riskControl.emailSent') : t('admin.riskControl.emailNotSent') }}
                         <span v-if="row.user_status === 'disabled'"> / {{ t('admin.riskControl.autoBanned') }}</span>
-                        <span v-else-if="row.auto_banned"> / {{ t('admin.riskControl.banEvent') }}</span>
+                        <span v-else-if="row.auto_banned && !row.enforcement_error"> / {{ t('admin.riskControl.banEvent') }}</span>
+                        <span v-if="row.api_key_disabled"> / {{ t('admin.riskControl.apiKeyDisabledEvent') }}</span>
+                      </div>
+                      <div v-if="row.enforcement_error" class="mt-1 max-w-xs truncate text-xs text-amber-600 dark:text-amber-300" :title="row.enforcement_error">
+                        {{ t('admin.riskControl.enforcementFailed') }}: {{ row.enforcement_error }}
                       </div>
                       <button
                         v-if="canUnbanRow(row)"
@@ -931,8 +942,15 @@
               </div>
               <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
                 <div>
-                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.autoBan') }}</p>
-                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.autoBanHint') }}</p>
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.lightHitAction') }}</p>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.lightHitActionHint') }}</p>
+                </div>
+                <Toggle v-model="configForm.auto_disable_api_key_enabled" />
+              </div>
+              <div class="flex items-center justify-between rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                <div>
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.repeatedHitAction') }}</p>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.repeatedHitActionHint') }}</p>
                 </div>
                 <Toggle v-model="configForm.auto_ban_enabled" />
               </div>
@@ -1318,6 +1336,7 @@ const configForm = reactive({
   block_status: 403,
   block_message: defaultBlockMessage(),
   email_on_hit: true,
+  auto_disable_api_key_enabled: false,
   auto_ban_enabled: true,
   cyber_policy_exclude_from_ban_count: false,
   ban_threshold: 10,
@@ -1337,6 +1356,12 @@ const pagination = reactive({
   page_size: 20,
   total: 0,
   pages: 1,
+})
+const logSummary = reactive({
+  local_pre_block: 0,
+  upstream_policy: 0,
+  errors: 0,
+  total: 0,
 })
 
 const filters = reactive({
@@ -1630,6 +1655,13 @@ const overviewItems = computed<OverviewItem[]>(() => [
   },
 ])
 
+const logSummaryItems = computed(() => [
+  { key: 'local', label: t('admin.riskControl.summary.localPreBlock'), value: logSummary.local_pre_block, valueClass: 'text-rose-600 dark:text-rose-300' },
+  { key: 'upstream', label: t('admin.riskControl.summary.upstreamPolicy'), value: logSummary.upstream_policy, valueClass: 'text-orange-600 dark:text-orange-300' },
+  { key: 'errors', label: t('admin.riskControl.summary.errors'), value: logSummary.errors, valueClass: 'text-amber-600 dark:text-amber-300' },
+  { key: 'total', label: t('admin.riskControl.summary.total'), value: logSummary.total, valueClass: 'text-gray-900 dark:text-white' },
+])
+
 const moderationScoreRows = computed<ModerationScoreRow[]>(() => {
   const result = moderationTestResult.value
   if (!result) return []
@@ -1796,6 +1828,7 @@ function applyConfig(config: ContentModerationConfig) {
   configForm.block_message = config.block_message || defaultBlockMessage()
   configForm.email_on_hit = config.email_on_hit ?? true
   configForm.auto_ban_enabled = config.auto_ban_enabled ?? true
+  configForm.auto_disable_api_key_enabled = config.auto_disable_api_key_enabled ?? false
   configForm.cyber_policy_exclude_from_ban_count = config.cyber_policy_exclude_from_ban_count ?? false
   configForm.ban_threshold = config.ban_threshold || 10
   configForm.violation_window_hours = config.violation_window_hours || 720
@@ -1877,6 +1910,7 @@ async function saveConfig() {
       block_message: configForm.block_message || defaultBlockMessage(),
       email_on_hit: configForm.email_on_hit,
       auto_ban_enabled: configForm.auto_ban_enabled,
+      auto_disable_api_key_enabled: configForm.auto_disable_api_key_enabled,
       cyber_policy_exclude_from_ban_count: configForm.cyber_policy_exclude_from_ban_count,
       ban_threshold: Number(configForm.ban_threshold) || 10,
       violation_window_hours: Number(configForm.violation_window_hours) || 720,
@@ -1933,6 +1967,7 @@ async function loadLogs() {
     pagination.page = result.page
     pagination.page_size = result.page_size
     pagination.pages = result.pages
+    Object.assign(logSummary, result.summary || { local_pre_block: 0, upstream_policy: 0, errors: 0, total: result.total })
   } catch (err: unknown) {
     appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.logsFailed')))
   } finally {

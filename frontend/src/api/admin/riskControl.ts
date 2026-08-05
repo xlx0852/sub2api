@@ -30,6 +30,7 @@ export interface ContentModerationConfig {
   block_status: number
   block_message: string
   email_on_hit: boolean
+  auto_disable_api_key_enabled: boolean
   auto_ban_enabled: boolean
   ban_threshold: number
   violation_window_hours: number
@@ -106,6 +107,7 @@ export interface UpdateContentModerationConfig {
   block_status?: number
   block_message?: string
   email_on_hit?: boolean
+  auto_disable_api_key_enabled?: boolean
   auto_ban_enabled?: boolean
   ban_threshold?: number
   violation_window_hours?: number
@@ -201,7 +203,9 @@ export interface ContentModerationLog {
   upstream_latency_ms: number | null
   error: string
   violation_count: number
+  api_key_disabled: boolean
   auto_banned: boolean
+  enforcement_error: string
   email_sent: boolean
   user_status: string
   queue_delay_ms: number | null
@@ -225,6 +229,14 @@ export interface ContentModerationLogsResponse {
   page: number
   page_size: number
   pages: number
+  summary: ContentModerationLogSummary
+}
+
+export interface ContentModerationLogSummary {
+  local_pre_block: number
+  upstream_policy: number
+  errors: number
+  total: number
 }
 
 export interface ContentModerationUnbanUserResponse {

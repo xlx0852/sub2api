@@ -40,6 +40,10 @@ func (r *cyberOrderingTestRepo) ListLogs(ctx context.Context, filter ContentMode
 	return nil, nil, nil
 }
 
+func (r *cyberOrderingTestRepo) SummarizeLogs(ctx context.Context, filter ContentModerationLogFilter) (*ContentModerationLogSummary, error) {
+	return &ContentModerationLogSummary{}, nil
+}
+
 func (r *cyberOrderingTestRepo) CountFlaggedByUserSince(ctx context.Context, userID int64, since time.Time, excludeCyberPolicy bool) (int, error) {
 	return 0, nil
 }
@@ -47,7 +51,6 @@ func (r *cyberOrderingTestRepo) CountFlaggedByUserSince(ctx context.Context, use
 func (r *cyberOrderingTestRepo) ListLatestFlaggedLogsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*ContentModerationLog, error) {
 	return map[int64]*ContentModerationLog{}, nil
 }
-
 
 func (r *cyberOrderingTestRepo) CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time) (*ContentModerationCleanupResult, error) {
 	return &ContentModerationCleanupResult{}, nil
@@ -255,16 +258,20 @@ func TestApplyFlaggedAccountSideEffects_PassesExcludeCyberFlag(t *testing.T) {
 
 func TestRecordCyberPolicyEvent_ExcludeFromBanCount_SkipsBanJudgment(t *testing.T) {
 	repo := &banCountArgsTestRepo{}
+	userRepo := &contentModerationTestUserRepo{user: &User{ID: 1, Role: RoleUser, Status: StatusActive}}
+	apiKeyRepo := &contentModerationTestAPIKeyRepo{key: &APIKey{ID: 7, UserID: 1, Key: "sk-cyber", Status: StatusAPIKeyActive}}
 	svc := NewContentModerationService(
 		&contentModerationTestSettingRepo{values: map[string]string{
 			SettingKeyRiskControlEnabled:      "true",
-			SettingKeyContentModerationConfig: `{"cyber_policy_exclude_from_ban_count":true}`,
+			SettingKeyContentModerationConfig: `{"cyber_policy_exclude_from_ban_count":true,"auto_disable_api_key_enabled":true}`,
 		}},
-		repo, nil, nil, nil, nil, nil,
+		repo, nil, nil, userRepo, &contentModerationTestAuthCacheInvalidator{}, nil,
 	)
+	svc.apiKeyRepo = apiKeyRepo
 
 	svc.RecordCyberPolicyEvent(context.Background(), CyberPolicyRecordInput{
 		UserID:          1,
+		APIKeyID:        7,
 		UserEmail:       "u@x.com",
 		Model:           "gpt-5",
 		Endpoint:        "/v1/responses",
@@ -279,6 +286,7 @@ func TestRecordCyberPolicyEvent_ExcludeFromBanCount_SkipsBanJudgment(t *testing.
 	require.Equal(t, "cyber_policy", logs[0].Action)
 	require.Equal(t, 0, logs[0].ViolationCount, "不参与计数时 ViolationCount 保持 0")
 	require.False(t, logs[0].AutoBanned)
+	require.Empty(t, apiKeyRepo.updated, "开关开时 cyber_policy 也不得禁用 API Key")
 }
 
 func TestRecordCyberPolicyEvent_DefaultCountsTowardBan(t *testing.T) {
