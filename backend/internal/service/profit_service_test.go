@@ -452,19 +452,79 @@ func TestProfitService_GetOverviewUsesBoundedBatchQueries(t *testing.T) {
 	if repo.dailyBatchCalls != 1 || repo.listConfigsCalls != 1 || repo.cycleBatchCalls != 1 {
 		t.Fatalf("batch calls daily/config/cycle = %d/%d/%d, want all 1", repo.dailyBatchCalls, repo.listConfigsCalls, repo.cycleBatchCalls)
 	}
-	if repo.bestBatchCalls != 0 || repo.rangeStatsCalls != 0 {
-		t.Fatalf("overview loaded drawer-only best/range stats: %d/%d", repo.bestBatchCalls, repo.rangeStatsCalls)
+// 列表只允许保本用的额度窗聚合；无额度窗快照时连 range 查询也应跳过。
+		// 禁止 best 5h 窗与整期计费窗（抽屉专用）。
+		if repo.bestBatchCalls != 0 {
+			t.Fatalf("overview loaded drawer-only best-window batch: %d", repo.bestBatchCalls)
+		}
+		if repo.rangeStatsCalls != 0 {
+			t.Fatalf("overview without quota windows should skip range stats, got %d", repo.rangeStatsCalls)
+		}
+		if repo.statsBatchCalls != 0 {
+			t.Fatalf("overview performed duplicate account stats query: %d", repo.statsBatchCalls)
+		}
+		if overview.GeneratedAt.IsZero() {
+			t.Fatal("overview generated_at must be set")
+		}
+		if overview.Summary.Accounts[0].WindowEfficiency != nil || overview.Summary.Accounts[0].BillingWindowRevenue != nil {
+			t.Fatalf("overview returned drawer-only metrics: %+v", overview.Summary.Accounts[0])
+		}
 	}
-	if repo.statsBatchCalls != 0 {
-		t.Fatalf("overview performed duplicate account stats query: %d", repo.statsBatchCalls)
+
+	func TestProfitService_GetOverviewComputesBreakEvenWithoutDrawerQueries(t *testing.T) {
+		start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+		cycleStart := time.Date(2026, 6, 7, 0, 0, 0, 0, time.UTC)
+		winStart := start.Add(-3 * 24 * time.Hour)
+		winEnd := start.Add(4 * 24 * time.Hour)
+		repo := &profitRepoStub{
+			cycles: map[int64][]*AccountSubscriptionCycle{
+				83: {{AccountID: 83, StartsAt: cycleStart, PeriodFee: 65, PeriodDays: 90}},
+			},
+			dailyByAccount: []*ProfitAccountDailyUsagePoint{
+				{AccountID: 83, Date: "2026-08-01", Requests: 10, Revenue: 1},
+			},
+			// 额度窗内 U/A → 有效倍率 0.12；满窗外推后保本 ~0.13
+			rangeStats: map[int64]*ProfitUsageStats{
+				83: {Revenue: 4.60, MeteredCost: 38.31},
+			},
+			bestWindows: map[int64]float64{83: 999}, // 若误触发 best 查询会污染
+		}
+		svc := &ProfitService{
+			profitRepo: repo,
+			accountRepo: &profitAccountRepoStub{accounts: []Account{{
+				ID: 83, Name: "GROK-自建", Platform: PlatformGrok, Type: AccountTypeOAuth,
+				Extra: map[string]any{
+					"grok_billing_snapshot": map[string]any{
+						"period_type":   "weekly",
+						"period_start":  winStart.Format(time.RFC3339),
+						"period_end":    winEnd.Format(time.RFC3339),
+						"usage_percent": 100,
+					},
+				},
+			}}},
+		}
+
+		overview, err := svc.GetOverview(context.Background(), start, start.AddDate(0, 0, 1), "UTC")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if repo.bestBatchCalls != 0 {
+			t.Fatalf("bestBatchCalls=%d, want 0 (list skips window efficiency)", repo.bestBatchCalls)
+		}
+		if repo.rangeStatsCalls != 1 {
+			t.Fatalf("rangeStatsCalls=%d, want 1 (break-even window only)", repo.rangeStatsCalls)
+		}
+		acc := overview.Summary.Accounts[0]
+		if acc.BillingWindowRevenue != nil || acc.WindowEfficiency != nil {
+			t.Fatalf("drawer-only fields must stay empty on list: %+v", acc)
+		}
+		if acc.BreakEvenRate == nil || *acc.BreakEvenRate < 0.13 || *acc.BreakEvenRate > 0.135 {
+			t.Fatalf("break_even_rate=%v, want ~0.132", acc.BreakEvenRate)
+		}
+		if acc.BreakEvenCurrentRate == nil || *acc.BreakEvenCurrentRate < 0.11 || *acc.BreakEvenCurrentRate > 0.13 {
+			t.Fatalf("current_rate=%v, want ~0.12", acc.BreakEvenCurrentRate)
+		}
 	}
-	if overview.GeneratedAt.IsZero() {
-		t.Fatal("overview generated_at must be set")
-	}
-	if overview.Summary.Accounts[0].WindowEfficiency != nil || overview.Summary.Accounts[0].BillingWindowRevenue != nil {
-		t.Fatalf("overview returned drawer-only metrics: %+v", overview.Summary.Accounts[0])
-	}
-}
 
 func TestProfitService_UpsertDefaults(t *testing.T) {
 	repo := &profitRepoStub{}
