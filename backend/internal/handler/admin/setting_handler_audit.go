@@ -520,8 +520,26 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if !equalPlatformQuotaSettings(before.DefaultPlatformQuotas, after.DefaultPlatformQuotas) {
 		changed = append(changed, service.SettingKeyDefaultPlatformQuotas)
 	}
+	// 模型级全局并发预算（JSON map，整体比较）
+	if !equalIntMap(before.ModelConcurrencyLimits, after.ModelConcurrencyLimits) {
+		changed = append(changed, service.SettingKeyModelConcurrencyLimits)
+	}
 	changed = appendAuthSourceDefaultChanges(changed, beforeAuthSourceDefaults, afterAuthSourceDefaults)
 	return changed
+}
+
+// equalIntMap 比较两个 map[string]int（nil 与空 map 视为相等）。
+func equalIntMap(a, b map[string]int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, av := range a {
+		bv, ok := b[k]
+		if !ok || av != bv {
+			return false
+		}
+	}
+	return true
 }
 
 func appendAuthSourceDefaultChanges(changed []string, before *service.AuthSourceDefaultSettings, after *service.AuthSourceDefaultSettings) []string {

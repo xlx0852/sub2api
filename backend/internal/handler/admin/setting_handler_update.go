@@ -315,6 +315,9 @@ type UpdateSettingsRequest struct {
 	// 系统全局 platform quota 默认值（整体替换语义：nil = 不修改，non-nil = 整体覆盖）。
 	DefaultPlatformQuotas map[string]*service.DefaultPlatformQuotaSetting `json:"default_platform_quotas"`
 
+	// 模型级全局并发预算（整体替换语义：nil = 不修改，non-nil 含空 map = 整体覆盖/清空）。
+	ModelConcurrencyLimits map[string]int `json:"model_concurrency_limits"`
+
 	// auth-source 层 platform quota 覆盖（override 语义：nil = 不修改，non-nil = 整体覆盖该 source 的 quota 配置）。
 	AuthSourceEmailPlatformQuotas    map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_email_platform_quotas"`
 	AuthSourceLinuxDoPlatformQuotas  map[string]*service.DefaultPlatformQuotaSetting `json:"auth_source_default_linuxdo_platform_quotas"`
@@ -1171,6 +1174,8 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	settings := &service.SystemSettings{
 		// 系统全局 platform quota 默认值（整体替换语义）
 		DefaultPlatformQuotas: req.DefaultPlatformQuotas,
+		// 模型级全局并发预算（nil = 不修改）
+		ModelConcurrencyLimits: req.ModelConcurrencyLimits,
 
 		RegistrationEnabled:              req.RegistrationEnabled,
 		EmailVerifyEnabled:               req.EmailVerifyEnabled,
@@ -1908,6 +1913,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		slog.Error("default_platform_quotas_get_failed", "error", err)
 	} else {
 		payload.DefaultPlatformQuotas = platformQuotas
+	}
+	// 模型级并发预算：与 GetSettings 一致，保存后响应带回最新值
+	if updatedSettings.ModelConcurrencyLimits != nil {
+		payload.ModelConcurrencyLimits = updatedSettings.ModelConcurrencyLimits
 	}
 	response.Success(c, systemSettingsResponseData(payload, updatedAuthSourceDefaults))
 }
