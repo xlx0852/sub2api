@@ -107,6 +107,28 @@ func newBridgeCallIDMapper(body []byte) *bridgeCallIDMapper {
 		return m
 	}
 	items, _ := parsed["input"].([]any)
+
+	// 第一遍：收集已有配对的 output call_id。历史重放进来的 function_call
+	// 一定带对应的 function_call_output（重放收集器成对注入）；这些是已执行
+	// 完的调用，上游响应里不会再出现它们的 function_call，不能进配对队列。
+	outputCallIDs := make(map[string]struct{})
+	for _, raw := range items {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		typ, _ := item["type"].(string)
+		if !isOpenAIReplayCallOutputType(typ) {
+			continue
+		}
+		if callID, _ := item["call_id"].(string); callID != "" {
+			outputCallIDs[callID] = struct{}{}
+		}
+	}
+
+	// 第二遍：只收集本轮新增（无配对 output）的调用入队。
+	// codex 真实场景下工具名可能全部相同（如 exec），name 队列只能靠
+	// "本轮新增"过滤 + 上游按序返回 function_call 来配对。
 	for _, raw := range items {
 		item, ok := raw.(map[string]any)
 		if !ok {
@@ -116,9 +138,16 @@ func newBridgeCallIDMapper(body []byte) *bridgeCallIDMapper {
 		if !isCodexToolCallContextItemType(typ) {
 			continue
 		}
-		name, _ := item["name"].(string)
 		callID, _ := item["call_id"].(string)
-		if name == "" || callID == "" {
+		if callID == "" {
+			continue
+		}
+		if _, hasOutput := outputCallIDs[callID]; hasOutput {
+			// 已配对：历史调用，跳过
+			continue
+		}
+		name, _ := item["name"].(string)
+		if name == "" {
 			continue
 		}
 		m.codexByCallName[name] = append(m.codexByCallName[name], callID)
@@ -154,29 +183,56 @@ func (m *bridgeCallIDMapper) restoreCallID(upstreamCallID string) string {
 	return upstreamCallID
 }
 
-// restoreBridgeResponseCallIDs 改写响应 SSE 事件里 function_call / 
+// restoreBridgeResponseCallIDs 改写响应 SSE 事件里 function_call /
 // function_call_output 的 call_id，使其匹配 codex 客户端记录的 codex call_id。
-// function_call 事件用于建立 name→call_id 映射（不改写）；function_call_output
+// function_call 事件：先按 name 建立上游→codex 映射，再把 call_id 还原（客户端
+// 历史与下一轮 custom_tool_call_output 都认 codex call_id）。function_call_output
 // 事件按已建立的映射还原。返回 (改写后的 bytes, 是否变化)。
 func (m *bridgeCallIDMapper) restoreBridgeResponseCallIDs(msg []byte) ([]byte, bool) {
 	if m == nil || len(msg) == 0 {
 		return msg, false
 	}
 	itemType := gjson.GetBytes(msg, "item.type").String()
+	itemPath := "item"
 	if itemType == "" {
 		itemType = gjson.GetBytes(msg, "response.output.0.type").String()
+		if itemType != "" {
+			itemPath = "response.output.0"
+		}
 	}
 	switch itemType {
-	case "function_call":
-		name := gjson.GetBytes(msg, "item.name").String()
-		callID := gjson.GetBytes(msg, "item.call_id").String()
+	case "function_call",
+		"custom_tool_call",
+		"local_shell_call",
+		"mcp_tool_call",
+		"tool_call",
+		"tool_search_call":
+		name := gjson.GetBytes(msg, itemPath+".name").String()
+		callID := gjson.GetBytes(msg, itemPath+".call_id").String()
 		if name == "" || callID == "" {
-			return msg, false
+			// Terminal snapshot may only carry output[] without a name on every
+			// path; still try restore when mapping already exists.
+			if callID == "" {
+				return msg, false
+			}
+			codexCallID := m.restoreCallID(callID)
+			if codexCallID == callID {
+				return msg, false
+			}
+			return bytes.Replace(msg, []byte(callID), []byte(codexCallID), 1), true
 		}
 		m.observeUpstreamCall(name, callID)
-		return msg, false
-	case "function_call_output":
-		callID := gjson.GetBytes(msg, "item.call_id").String()
+		codexCallID := m.restoreCallID(callID)
+		if codexCallID == callID {
+			return msg, false
+		}
+		return bytes.Replace(msg, []byte(callID), []byte(codexCallID), 1), true
+	case "function_call_output",
+		"custom_tool_call_output",
+		"local_shell_call_output",
+		"mcp_tool_call_output",
+		"tool_search_output":
+		callID := gjson.GetBytes(msg, itemPath+".call_id").String()
 		if callID == "" {
 			return msg, false
 		}
@@ -185,8 +241,25 @@ func (m *bridgeCallIDMapper) restoreBridgeResponseCallIDs(msg []byte) ([]byte, b
 			return msg, false
 		}
 		return bytes.Replace(msg, []byte(callID), []byte(codexCallID), 1), true
+	default:
+		// response.completed may pack many output items; rewrite every mapped call_id.
+		if !gjson.GetBytes(msg, "response.output").IsArray() || len(m.upstreamToCodex) == 0 {
+			return msg, false
+		}
+		changed := false
+		out := msg
+		for upstreamCallID, codexCallID := range m.upstreamToCodex {
+			if upstreamCallID == "" || codexCallID == "" || upstreamCallID == codexCallID {
+				continue
+			}
+			if !bytes.Contains(out, []byte(upstreamCallID)) {
+				continue
+			}
+			out = bytes.ReplaceAll(out, []byte(upstreamCallID), []byte(codexCallID))
+			changed = true
+		}
+		return out, changed
 	}
-	return msg, false
 }
 
 // normalizeOpenAIWSBridgeToolTypes 把 codex 私有工具类型归一化为 OpenAI
@@ -876,26 +949,28 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		if needModelReplace && len(mappedModelBytes) > 0 && openAIWSEventMayContainModel(eventType) && strings.Contains(trimmedData, mappedModel) {
 			upstreamMessage = replaceOpenAIWSMessageModel(upstreamMessage, mappedModel, originalModel)
 		}
-		if s.toolCorrector != nil && openAIWSEventMayContainToolCalls(eventType) && openAIWSMessageLikelyContainsToolCalls(upstreamMessage) {
-			if corrected, changed := s.toolCorrector.CorrectToolCallsInSSEBytes(upstreamMessage); changed {
-				upstreamMessage = corrected
+if s.toolCorrector != nil && openAIWSEventMayContainToolCalls(eventType) && openAIWSMessageLikelyContainsToolCalls(upstreamMessage) {
+				if corrected, changed := s.toolCorrector.CorrectToolCallsInSSEBytes(upstreamMessage); changed {
+					upstreamMessage = corrected
+				}
 			}
-		}
-		replayCollector.AddEvent(eventType, upstreamMessage)
 
-		restoredMessage, restoreErr := restoreOpenAIResponsesNamespacePayload(c, upstreamMessage)
-		if restoreErr != nil {
-			return resultWithUsage(), fmt.Errorf("restore http bridge namespace response: %w", restoreErr)
-		}
-		upstreamMessage = restoredMessage
-
-		// 上游自生成的 fc_ call_id 还原为 codex 的 call_id（工具名配对），
-		// 避免 codex 客户端 custom_tool_call_output 找不到对应调用报 orphan。
-		if callIDMapper != nil {
-			if restored, changed := callIDMapper.restoreBridgeResponseCallIDs(upstreamMessage); changed {
-				upstreamMessage = restored
+			restoredMessage, restoreErr := restoreOpenAIResponsesNamespacePayload(c, upstreamMessage)
+			if restoreErr != nil {
+				return resultWithUsage(), fmt.Errorf("restore http bridge namespace response: %w", restoreErr)
 			}
-		}
+			upstreamMessage = restoredMessage
+
+			// 上游自生成的 fc_ call_id 还原为 codex 的 call_id（工具名配对），
+			// 必须在 replayCollector 之前完成：重放序列注入下一轮 input 时也要
+			// 带 codex call_id，否则客户端 custom_tool_call_output(call_*) 与
+			// 重放 function_call(fc_*) 断链 → 上游 No tool call found。
+			if callIDMapper != nil {
+				if restored, changed := callIDMapper.restoreBridgeResponseCallIDs(upstreamMessage); changed {
+					upstreamMessage = restored
+				}
+			}
+			replayCollector.AddEvent(eventType, upstreamMessage)
 
 		if !clientDisconnected {
 			if err := writeClientMessage(upstreamMessage); err != nil {

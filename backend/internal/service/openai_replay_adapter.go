@@ -68,6 +68,14 @@ func normalizeOpenAIReplayItemsForAccount(account *Account, items []json.RawMess
 // alignOpenAIReplayOutputTypesToCalls repairs only mixed pairs created at the
 // replay merge boundary. It leaves complete client-native pairs untouched and
 // never fabricates a missing call for a true orphan output.
+//
+// Codex freeform tools round-trip as custom_tool_call + custom_tool_call_output
+// with the same opaque call_id (see codex-rs/core/src/tools/context.rs and
+// context_manager/normalize.rs). HTTP bridge replay may inject a prior-turn
+// function_call whose call_id was rewritten call_ → fc_ by an intermediate
+// layer while the client still emits custom_tool_call_output with call_*.
+// Match both exact and call_/fc_ prefix-equivalent ids, then coerce the output
+// side to function_call_output under the call's call_id.
 func alignOpenAIReplayOutputTypesToCalls(items []json.RawMessage) []json.RawMessage {
 	if len(items) == 0 {
 		return nil
@@ -79,6 +87,7 @@ func alignOpenAIReplayOutputTypesToCalls(items []json.RawMessage) []json.RawMess
 	}
 	callsByCallID := make(map[string]callTypeState)
 	callsByItemID := make(map[string]callTypeState)
+	callsBySuffix := make(map[string]callTypeState)
 	addCall := func(index map[string]callTypeState, key string, state callTypeState) {
 		if key == "" {
 			return
@@ -104,6 +113,9 @@ func alignOpenAIReplayOutputTypesToCalls(items []json.RawMessage) []json.RawMess
 		state := callTypeState{typ: typ, callID: callID}
 		addCall(callsByCallID, callID, state)
 		addCall(callsByItemID, strings.TrimSpace(stringValue(item["id"])), state)
+		if _, suffix := splitOpenAIReplayCallIDPrefix(callID); suffix != "" {
+			addCall(callsBySuffix, suffix, state)
+		}
 	}
 
 	aligned := cloneOpenAIWSRawMessages(items)
@@ -120,11 +132,26 @@ func alignOpenAIReplayOutputTypesToCalls(items []json.RawMessage) []json.RawMess
 				item["call_id"] = state.callID
 			}
 		}
+		if !exists {
+			if _, suffix := splitOpenAIReplayCallIDPrefix(callID); suffix != "" {
+				state, exists = callsBySuffix[suffix]
+				if exists && !state.ambiguous && state.callID != "" {
+					item["call_id"] = state.callID
+				}
+			}
+		}
 		if !exists || state.ambiguous || state.typ != "function_call" {
 			continue
 		}
 		if strings.TrimSpace(stringValue(item["type"])) == "function_call_output" &&
-			strings.TrimSpace(stringValue(item["call_id"])) == callID {
+			strings.TrimSpace(stringValue(item["call_id"])) == state.callID {
+			// call_id may already have been rewritten via prefix alias above;
+			// re-encode when only the association key changed.
+			if strings.TrimSpace(stringValue(item["call_id"])) != callID {
+				if encoded, err := json.Marshal(item); err == nil {
+					aligned[i] = encoded
+				}
+			}
 			continue
 		}
 		normalized, keep := normalizeOpenAIReplayCallOutput(item)
@@ -588,11 +615,23 @@ func normalizeOpenAIRejectedReplayPairByCallID(body []byte, callID string) ([]by
 	case len(directCalls) == 1:
 		callIndex = directCalls[0]
 		effectiveCallID = callID
+		// Compatibility layers often report the canonical fc_* id while the
+		// client-side output still carries the original call_* association key
+		// (or vice versa). Prefer exact outputs, then fall back to a unique
+		// prefix-equivalent output so the pair can still be repaired.
+		if len(selectedOutputs) == 0 && len(prefixAliasOutputs) > 0 {
+			selectedOutputs = prefixAliasOutputs
+			rewriteCallID = true
+		}
 	case len(directCalls) > 1:
 		return nil, false, nil
 	case len(itemIDAliasCalls) == 1:
 		callIndex = itemIDAliasCalls[0]
 		effectiveCallID = strings.TrimSpace(stringValue(input[callIndex].(map[string]any)["call_id"]))
+		if len(selectedOutputs) == 0 && len(prefixAliasOutputs) > 0 {
+			selectedOutputs = prefixAliasOutputs
+			rewriteCallID = true
+		}
 	case len(itemIDAliasCalls) > 1:
 		return nil, false, nil
 	case len(prefixAliasCalls) == 1:
@@ -602,6 +641,10 @@ func normalizeOpenAIRejectedReplayPairByCallID(body []byte, callID string) ([]by
 		// pair. The client-visible history remains untouched.
 		effectiveCallID = callID
 		selectedOutputs = prefixAliasOutputs
+		if len(selectedOutputs) == 0 {
+			// Error reported fc_X while both call and output still use call_X.
+			selectedOutputs = exactOutputs
+		}
 		rewriteCallID = true
 	default:
 		return nil, false, nil
