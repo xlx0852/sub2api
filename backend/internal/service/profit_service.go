@@ -1006,8 +1006,8 @@ func (s *ProfitService) GetOverview(ctx context.Context, start, end time.Time, t
 	for _, date := range dateOrder {
 		dailyPoints = append(dailyPoints, dailyByDate[date])
 	}
-	// 全局页只需要区间财务数据；最佳 5h 窗口和当前周期收入仅供账号抽屉展示。
-	accounting, err := s.loadProfitAccountingData(ctx, accounts, false)
+// 全局页也要算保本倍率 / 计费窗运营指标，与账号抽屉一致（订阅 OAuth 明细展示用）。
+		accounting, err := s.loadProfitAccountingData(ctx, accounts, true)
 	if err != nil {
 		return nil, err
 	}

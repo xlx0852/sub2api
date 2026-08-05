@@ -22,7 +22,7 @@ export default {
     quotaWindowBy5h: '5 hours',
     breakEvenRate: 'Break-even rate',
     breakEvenCurrentRate: 'Current effective rate',
-    breakEvenHint: 'From this account’s subscription fee + current quota window at full load: break-even rate = current effective rate × period fee / (full-window user revenue × windows per period). Auto-computed for OAuth/subscription accounts only.',
+    breakEvenHint: 'From this account’s subscription fee + current quota window at full load: break-even rate = current effective rate × period fee / (full-window user revenue × windows per period). “Current effective rate” = window user revenue U ÷ account list cost A (observed from usage, not the group list price). Auto-computed for OAuth/subscription accounts only.',
     breakEvenDetail: 'Window {kind} · {used}% used · full U ${full} · ~{windows} windows/period · capacity ~${capacity}',
     breakEvenPeriod: 'Period ${fee} / {days}d',
     quotaWindowCurrent: 'Current',

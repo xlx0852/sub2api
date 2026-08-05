@@ -22,7 +22,7 @@ export default {
     quotaWindowBy5h: '5 小时',
     breakEvenRate: '最低保本倍率',
     breakEvenCurrentRate: '当前有效倍率',
-    breakEvenHint: '按本账号订阅费 + 当前额度窗满负荷外推：保本倍率 = 现有效倍率 × 周期费 / (满窗用户扣费 × 每期窗数)。仅 OAuth/订阅号自动计算。',
+    breakEvenHint: '按本账号订阅费 + 当前额度窗满负荷外推：保本倍率 = 现有效倍率 × 周期费 / (满窗用户扣费 × 每期窗数)。「当前有效倍率」= 窗内用户扣费 U ÷ 账号标价成本 A（usage 实测，不是分组挂牌倍率）。仅 OAuth/订阅号自动计算。',
     breakEvenDetail: '窗 {kind} · 利用率 {used}% · 满窗 U ${full} · 每期约 {windows} 窗 · 满负荷约 ${capacity}',
     breakEvenPeriod: '周期 ${fee} / {days} 天',
     quotaWindowCurrent: '当前窗口',
