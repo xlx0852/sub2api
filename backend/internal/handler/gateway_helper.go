@@ -242,6 +242,24 @@ func (h *ConcurrencyHelper) TryAcquireAccountSlot(ctx context.Context, accountID
 	return result.ReleaseFunc, true, nil
 }
 
+// TryAcquireModelAwareAccountSlot 尝试获取模型级并发预算槽位 + 账号槽位。
+// 返回值: (releaseFunc, acquired, modelLimited, error)
+// modelLimited 表示模型级全局并发预算已满：调用方应直接让路（HTTP 429 / WS 1013），
+// 不应进入账号等待队列，避免低利润模型抢占其它模型的账号并发。
+func (h *ConcurrencyHelper) TryAcquireModelAwareAccountSlot(ctx context.Context, requestedModel string, accountID int64, maxConcurrency int) (func(), bool, bool, error) {
+	if h == nil || h.concurrencyService == nil {
+		return nil, false, false, nil
+	}
+	result, err := h.concurrencyService.AcquireModelAwareAccountSlot(ctx, requestedModel, accountID, maxConcurrency)
+	if err != nil {
+		return nil, false, false, err
+	}
+	if !result.Acquired {
+		return nil, false, result.ModelLimited, nil
+	}
+	return result.ReleaseFunc, true, false, nil
+}
+
 // AcquireUserSlotWithWait acquires a user concurrency slot, waiting if necessary.
 // For streaming requests, sends ping events during the wait.
 // streamStarted is updated if streaming response has begun.

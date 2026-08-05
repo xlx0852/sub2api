@@ -331,8 +331,15 @@ func ProvideDeferredService(accountRepo AccountRepository, timingWheel *TimingWh
 }
 
 // ProvideConcurrencyService creates ConcurrencyService and starts slot cleanup worker.
-func ProvideConcurrencyService(cache ConcurrencyCache, accountRepo AccountRepository, cfg *config.Config) *ConcurrencyService {
+func ProvideConcurrencyService(cache ConcurrencyCache, accountRepo AccountRepository, cfg *config.Config, settingService *SettingService) *ConcurrencyService {
 	svc := NewConcurrencyService(cache)
+	if settingService != nil {
+		// 注入模型级全局并发预算读取函数：网关请求热路径经 60s 进程内缓存读取，
+		// 不增加每次请求的 DB 往返。
+		svc.SetModelConcurrencyLimitProvider(func(ctx context.Context) map[string]int {
+			return settingService.GetModelConcurrencyLimits(ctx)
+		})
+	}
 	if err := svc.CleanupStaleProcessSlots(context.Background()); err != nil {
 		logger.LegacyPrintf("service.concurrency", "Warning: startup cleanup stale process slots failed: %v", err)
 	}

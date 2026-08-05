@@ -521,6 +521,12 @@ type AccountSelectionResult struct {
 	Acquired    bool
 	ReleaseFunc func()
 	WaitPlan    *AccountWaitPlan // nil means no wait allowed
+
+	// ModelLimited 表示该请求因模型级全局并发预算已满被拒绝。
+	// 此时 Acquired=false 且 WaitPlan=nil；调用方应直接降级让路
+	// （HTTP 429 + Retry-After / WS 1013），不应进入账号等待队列，
+	// 避免低利润模型抢占其它模型的账号并发。
+	ModelLimited bool
 }
 
 // ClaudeUsage 表示Claude API返回的usage信息

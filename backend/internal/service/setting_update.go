@@ -414,6 +414,11 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		updates[SettingKeyDefaultPlatformQuotas] = string(blob)
 	}
 
+	// 模型级全局并发预算：整体替换语义（null = 不更新，空 map = 清空预算）。
+	if settings.ModelConcurrencyLimits != nil {
+		updates[SettingKeyModelConcurrencyLimits] = marshalModelConcurrencyLimits(sanitizeModelConcurrencyLimits(settings.ModelConcurrencyLimits))
+	}
+
 	updates[SettingKeyAllowUserViewErrorRequests] = strconv.FormatBool(settings.AllowUserViewErrorRequests)
 
 	return updates, nil
@@ -567,6 +572,10 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 			settings:  cached.settings,
 			expiresAt: 0,
 		})
+	}
+	// 模型级并发预算：配置更新时直接刷新缓存，让变更即时生效（无需等一个 TTL）。
+	if settings.ModelConcurrencyLimits != nil {
+		s.SetModelConcurrencyLimitsCache(settings.ModelConcurrencyLimits)
 	}
 	if s.cfg != nil {
 		s.cfg.SetTrustForwardedIPForAPIKeyACL(settings.APIKeyACLTrustForwardedIP)

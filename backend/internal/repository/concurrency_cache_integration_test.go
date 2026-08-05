@@ -841,3 +841,112 @@ func (s *ConcurrencyCacheSuite) TestCleanupStaleProcessSlots_DeletesEmptySlotKey
 	require.NoError(s.T(), err)
 	require.EqualValues(s.T(), 0, exists)
 }
+
+func (s *ConcurrencyCacheSuite) TestModelSlot_AcquireAndRelease() {
+	modelKey := "gpt-5.6-luna"
+	reqID1, reqID2, reqID3 := "mreq1", "mreq2", "mreq3"
+
+	cache, ok := s.cache.(service.ModelConcurrencyCache)
+	require.True(s.T(), ok, "cache must implement ModelConcurrencyCache")
+
+	ok1, err := cache.AcquireModelSlot(s.ctx, modelKey, 2, reqID1)
+	require.NoError(s.T(), err)
+	require.True(s.T(), ok1)
+
+	ok2, err := cache.AcquireModelSlot(s.ctx, modelKey, 2, reqID2)
+	require.NoError(s.T(), err)
+	require.True(s.T(), ok2)
+
+	// 预算满：第三个 acquire 失败
+	ok3, err := cache.AcquireModelSlot(s.ctx, modelKey, 2, reqID3)
+	require.NoError(s.T(), err)
+	require.False(s.T(), ok3)
+
+	slotKey := modelSlotKey(modelKey)
+	cur, err := s.rdb.ZCard(s.ctx, slotKey).Result()
+	require.NoError(s.T(), err)
+	require.EqualValues(s.T(), 2, cur)
+
+	require.NoError(s.T(), cache.ReleaseModelSlot(s.ctx, modelKey, reqID1))
+	cur, err = s.rdb.ZCard(s.ctx, slotKey).Result()
+	require.NoError(s.T(), err)
+	require.EqualValues(s.T(), 1, cur)
+}
+
+func (s *ConcurrencyCacheSuite) TestModelSlot_TTL() {
+	modelKey := "gpt-5.6-sol"
+	reqID := "mreq_ttl"
+	slotKey := modelSlotKey(modelKey)
+
+	cache, ok := s.cache.(service.ModelConcurrencyCache)
+	require.True(s.T(), ok)
+
+	acquired, err := cache.AcquireModelSlot(s.ctx, modelKey, 5, reqID)
+	require.NoError(s.T(), err)
+	require.True(s.T(), acquired)
+
+	ttl, err := s.rdb.TTL(s.ctx, slotKey).Result()
+	require.NoError(s.T(), err)
+	s.AssertTTLWithin(ttl, 1*time.Second, testSlotTTL)
+}
+
+func (s *ConcurrencyCacheSuite) TestModelSlot_DuplicateReqID_Idempotent() {
+	modelKey := "gpt-5.6-terra"
+	reqID := "mreq-dup"
+
+	cache, ok := s.cache.(service.ModelConcurrencyCache)
+	require.True(s.T(), ok)
+
+	ok1, err := cache.AcquireModelSlot(s.ctx, modelKey, 2, reqID)
+	require.NoError(s.T(), err)
+	require.True(s.T(), ok1)
+
+	// 相同 requestID 重复获取幂等：计数不增加
+	ok2, err := cache.AcquireModelSlot(s.ctx, modelKey, 2, reqID)
+	require.NoError(s.T(), err)
+	require.True(s.T(), ok2)
+
+	cur, err := s.rdb.ZCard(s.ctx, modelSlotKey(modelKey)).Result()
+	require.NoError(s.T(), err)
+	require.EqualValues(s.T(), 1, cur)
+}
+
+func (s *ConcurrencyCacheSuite) TestCleanupExpiredModelSlots_ReapsExpiredMembers() {
+	modelKey := "gpt-5.6-cleanup"
+	slotKey := modelSlotKey(modelKey)
+
+	// 直接写入一个已过期的成员（score 远早于 now-ttl）
+	now, err := s.rawCache.redisUnixSeconds(s.ctx)
+	require.NoError(s.T(), err)
+	expiredScore := float64(now - 2*int64(testSlotTTL.Seconds()))
+	require.NoError(s.T(), s.rdb.ZAdd(s.ctx, slotKey, redis.Z{Score: expiredScore, Member: "expired-req"}).Err())
+
+	require.NoError(s.T(), s.cache.CleanupExpiredAccountSlotKeys(s.ctx))
+
+	exists, err := s.rdb.Exists(s.ctx, slotKey).Result()
+	require.NoError(s.T(), err)
+	require.EqualValues(s.T(), 0, exists, "empty expired model slot key should be deleted")
+}
+
+func (s *ConcurrencyCacheSuite) TestCleanupStaleProcessModelSlots_RemovesOldPrefixes() {
+	modelKey := "gpt-5.6-stale"
+	slotKey := modelSlotKey(modelKey)
+
+	now, err := s.rawCache.redisUnixSeconds(s.ctx)
+	require.NoError(s.T(), err)
+	// 旧进程残留 + 当前进程成员
+	require.NoError(s.T(), s.rdb.ZAdd(s.ctx, slotKey,
+		redis.Z{Score: float64(now), Member: "oldproc-1"},
+		redis.Z{Score: float64(now), Member: "activeproc-1"},
+	).Err())
+
+	require.NoError(s.T(), s.cache.CleanupStaleProcessSlots(s.ctx, "activeproc-"))
+
+	// 旧进程成员被移除，当前进程成员保留
+	remain, err := s.rdb.ZCard(s.ctx, slotKey).Result()
+	require.NoError(s.T(), err)
+	require.EqualValues(s.T(), 1, remain)
+	members, err := s.rdb.ZRange(s.ctx, slotKey, 0, -1).Result()
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), []string{"activeproc-1"}, members)
+}

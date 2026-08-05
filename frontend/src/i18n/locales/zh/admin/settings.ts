@@ -275,6 +275,14 @@ export default {
         defaultPlatformQuotasHint: '新用户注册时自动写入平台限额记录；已有用户不受影响。留空 = 该平台该窗口不限制。',
         platformQuotaNotice: '月限额为 30 天滚动窗口，非自然月',
       },
+      modelConcurrency: {
+        title:       '模型并发限制',
+        description: '为指定模型设置全局并发预算：预算内正常服务，预算满时该模型请求会被降级让路（HTTP 429 / WS 1013），不再抢占其它模型的账号并发。',
+        limitsLabel: '模型 → 并发上限（JSON）',
+        placeholder: '{\n  "gpt-5.6-luna": 8\n}',
+        hint:        '键为规范模型名（如 gpt-5.6-luna，任意变体自动折叠）；值为全局并发上限（>0 生效）。预算满时请求直接返回 429 + Retry-After，不进入账号等待队列。',
+        help:        '示例：{"gpt-5.6-luna": 8} 表示全平台同时最多 8 个 gpt-5.6-luna 会话在跑，超出即降级让路，sol 等其它模型完全不受影响。未配置的模型行为不变。',
+      },
       platformQuota: {
         platform:    '平台',
         daily:       '日限额 (USD)',
