@@ -200,4 +200,18 @@ type ProfitRepository interface {
 	GetStoredValueSnapshot(ctx context.Context) (*StoredValueSnapshot, error)
 	GetSupplyForecastUsageSamples(ctx context.Context, start, end time.Time, tzName string) ([]*SupplyForecastUsageSample, error)
 	GetSchedulableSubscriptionSupply(ctx context.Context) (map[string]int, error)
+	// GetSubscriptionQuotaSnapshots 返回所有可调度订阅号的额度快照（账号自己的
+	// 额度视角，不是按量用户烧的钱），用于供给预测的产能折算。
+	// 只返回有额度数据的号（codex/grok/kimi 等），无额度数据的号会被跳过。
+	GetSubscriptionQuotaSnapshots(ctx context.Context) ([]*SubscriptionQuotaSnapshot, error)
+}
+
+// SubscriptionQuotaSnapshot 订阅号额度快照（账号自己的额度，非按量消耗）。
+type SubscriptionQuotaSnapshot struct {
+	AccountID     int64
+	Platform      string
+	RemainingPct  float64   // 剩余额度百分比（0-100）
+	WindowDays    float64   // 窗口总天数（如 7 天、24h=1 天）
+	UpdatedAt     time.Time // 快照更新时间
+	HasValidData  bool      // 是否有有效额度数据（无则跳过）
 }

@@ -45,8 +45,9 @@ type profitRepoStub struct {
 	bestBatchCalls   int
 	statsBatchCalls  int
 	storedValue      *StoredValueSnapshot
-	forecastSamples  []*SupplyForecastUsageSample
-	forecastSupply   map[string]int
+	forecastSamples        []*SupplyForecastUsageSample
+	forecastSupply         map[string]int
+	forecastQuotaSnapshots []*SubscriptionQuotaSnapshot
 	cycleRevenues    map[int64]float64
 }
 
@@ -202,6 +203,9 @@ func (s *profitRepoStub) GetSupplyForecastUsageSamples(context.Context, time.Tim
 }
 func (s *profitRepoStub) GetSchedulableSubscriptionSupply(context.Context) (map[string]int, error) {
 	return s.forecastSupply, nil
+}
+func (s *profitRepoStub) GetSubscriptionQuotaSnapshots(context.Context) ([]*SubscriptionQuotaSnapshot, error) {
+	return s.forecastQuotaSnapshots, nil
 }
 
 func TestProfitService_AmortizedSubscriptionCost(t *testing.T) {
