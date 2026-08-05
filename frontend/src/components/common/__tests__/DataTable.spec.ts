@@ -115,6 +115,29 @@ describe('DataTable', () => {
     expect(wrapper.findAll('.sticky-col')).toHaveLength(0)
   })
 
+  it('centers the desktop empty state within the visible table viewport', async () => {
+    const wrapper = mount(DataTable, {
+      props: {
+        columns: Array.from({ length: 12 }, (_, index) => ({
+          key: `column_${index}`,
+          label: `Column ${index}`
+        })),
+        data: []
+      },
+      slots: {
+        empty: '<div data-test="empty-content">No rows</div>'
+      }
+    })
+
+    await wrapper.vm.$nextTick()
+
+    const emptyState = wrapper.get('.desktop-empty-state')
+    expect(emptyState.classes()).toContain('sticky')
+    expect(emptyState.classes()).toContain('left-0')
+    expect(emptyState.attributes('style')).toContain('width: 100%')
+    expect(emptyState.get('[data-test="empty-content"]').text()).toBe('No rows')
+  })
+
   it('uses a dedicated mobile card slot without duplicating generic field rows', async () => {
     stubMobileMatchMedia()
     const wrapper = mount(DataTable, {
