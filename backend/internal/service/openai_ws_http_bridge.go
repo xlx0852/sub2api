@@ -75,8 +75,45 @@ func prepareOpenAIWSHTTPBridgeBody(payload []byte) ([]byte, error) {
 	delete(body, "type")
 	delete(body, "generate")
 	delete(body, "previous_response_id")
+	ensureOpenAIWSBridgeInputArguments(body)
 	body["stream"] = true
 	return json.Marshal(body)
+}
+
+// ensureOpenAIWSBridgeInputArguments 兜底多轮会话重放时 function_call 系列项的
+// arguments 字段。上游 OpenAI 对每个 tool 调用项都要求 arguments（缺失或空会
+// 返回 400 "Missing required parameter: 'input[N].arguments'"）。重放路径会把
+// 上一轮从 response.output_item.done 抓到的 function_call 项原样注入下一轮
+// input，若该事件抓到的是分片中间态（arguments 尚未到齐），就会原样转发触发
+// 400。此处对缺失或空字符串的 arguments 统一补 "{}"，对象形态（新版 codex）
+// 保持原样。
+func ensureOpenAIWSBridgeInputArguments(body map[string]any) {
+	rawInput, ok := body["input"]
+	if !ok {
+		return
+	}
+	items, ok := rawInput.([]any)
+	if !ok {
+		return
+	}
+	for _, rawItem := range items {
+		item, ok := rawItem.(map[string]any)
+		if !ok {
+			continue
+		}
+		typ, _ := item["type"].(string)
+		if !isCodexToolCallContextItemType(typ) {
+			continue
+		}
+		args, has := item["arguments"]
+		if !has {
+			item["arguments"] = "{}"
+			continue
+		}
+		if s, ok := args.(string); ok && strings.TrimSpace(s) == "" {
+			item["arguments"] = "{}"
+		}
+	}
 }
 
 type openAIWSToolCallReplayCollector struct {
