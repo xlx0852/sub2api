@@ -872,6 +872,175 @@ func TestOpenAIWSHTTPBridgeKeepsContinuationFramesOnHTTPWithoutPreviousResponseI
 	require.Empty(t, captureConn.writes)
 }
 
+// Production regression (account 72/73 http_bridge): turn1 streams a complete
+// custom_tool_call on output_item.done, then response.completed arrives with an
+// empty output array. The next client turn only sends custom_tool_call_output.
+// Replay must still re-inject the prior custom_tool_call so upstream does not
+// return "No tool call found for custom tool call output".
+func TestOpenAIWSHTTPBridgeReplaysCustomToolCallWhenCompletedOutputEmpty(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	firstSSEBody := strings.Join([]string{
+		`data: {"type":"response.output_item.done","item":{"type":"custom_tool_call","id":"ctc_1","call_id":"call_rHfZ8vMWNPu13pAIh0qs9NeV","name":"exec","input":"cat VERSION","status":"completed"}}`,
+		`data: {"type":"response.completed","response":{"id":"resp_bridge_empty_out","model":"gpt-5.6-sol","output":[],"usage":{"input_tokens":9,"output_tokens":1}}}`,
+		"",
+	}, "\n")
+	secondSSEBody := strings.Join([]string{
+		`data: {"type":"response.completed","response":{"id":"resp_bridge_empty_out_2","model":"gpt-5.6-sol","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}`,
+		"",
+	}, "\n")
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       io.NopCloser(strings.NewReader(firstSSEBody)),
+		},
+		{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       io.NopCloser(strings.NewReader(secondSSEBody)),
+		},
+	}}
+	cfg := &config.Config{}
+	cfg.Security.URLAllowlist.Enabled = false
+	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
+	cfg.Gateway.OpenAIWS.Enabled = true
+	cfg.Gateway.OpenAIWS.OAuthEnabled = true
+	cfg.Gateway.OpenAIWS.APIKeyEnabled = true
+	cfg.Gateway.OpenAIWS.ResponsesWebsocketsV2 = true
+	cfg.Gateway.OpenAIWS.HTTPBridgeEnabled = true
+	cfg.Gateway.OpenAIWS.HTTPBridgeThresholdBytes = 1
+	cfg.Gateway.OpenAIWS.MaxConnsPerAccount = 1
+	cfg.Gateway.OpenAIWS.MinIdlePerAccount = 0
+	cfg.Gateway.OpenAIWS.MaxIdlePerAccount = 1
+	cfg.Gateway.OpenAIWS.QueueLimitPerConn = 8
+	cfg.Gateway.OpenAIWS.DialTimeoutSeconds = 3
+	cfg.Gateway.OpenAIWS.ReadTimeoutSeconds = 3
+	cfg.Gateway.OpenAIWS.WriteTimeoutSeconds = 3
+
+	captureConn := &openAIWSCaptureConn{}
+	captureDialer := &openAIWSCaptureDialer{conn: captureConn}
+	pool := newOpenAIWSConnPool(cfg)
+	pool.setClientDialerForTest(captureDialer)
+
+	svc := &OpenAIGatewayService{
+		cfg:              cfg,
+		httpUpstream:     upstream,
+		cache:            &stubGatewayCache{},
+		openaiWSResolver: NewOpenAIWSProtocolResolver(cfg),
+		toolCorrector:    NewCodexToolCorrector(),
+		openaiWSPool:     pool,
+	}
+	// Account 73 shape: apikey forced onto http_bridge.
+	account := &Account{
+		ID:          73,
+		Name:        "GPT-PRO-知了",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "sk-upstream", "base_url": "https://api.cicadas.top"},
+		Extra: map[string]any{
+			"openai_apikey_responses_websockets_v2_mode": OpenAIWSIngressModeHTTPBridge,
+			"responses_websockets_v2_enabled":            true,
+		},
+		Concurrency: 1,
+		Status:      StatusActive,
+		Schedulable: true,
+	}
+
+	errCh := make(chan error, 1)
+	wsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := coderws.Accept(w, r, &coderws.AcceptOptions{CompressionMode: coderws.CompressionContextTakeover})
+		if err != nil {
+			errCh <- err
+			return
+		}
+		defer func() { _ = conn.CloseNow() }()
+
+		readCtx, cancelRead := context.WithTimeout(r.Context(), 3*time.Second)
+		msgType, firstMessage, err := conn.Read(readCtx)
+		cancelRead()
+		if err != nil {
+			errCh <- err
+			return
+		}
+		if msgType != coderws.MessageText && msgType != coderws.MessageBinary {
+			errCh <- NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "unexpected client websocket message type", nil)
+			return
+		}
+
+		rec := httptest.NewRecorder()
+		ginCtx, _ := gin.CreateTestContext(rec)
+		req := r.Clone(r.Context())
+		req.Header = req.Header.Clone()
+		req.Header.Set("User-Agent", "codex_cli_rs/0.146.0")
+		ginCtx.Request = req
+
+		errCh <- svc.ProxyResponsesWebSocketFromClient(r.Context(), ginCtx, conn, account, "sk-test", firstMessage, nil)
+	}))
+	defer wsServer.Close()
+
+	dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
+	clientConn, _, err := coderws.Dial(dialCtx, "ws"+strings.TrimPrefix(wsServer.URL, "http"), nil)
+	cancelDial()
+	require.NoError(t, err)
+	defer func() { _ = clientConn.CloseNow() }()
+
+	writeMessage := func(payload string) {
+		writeCtx, cancelWrite := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancelWrite()
+		require.NoError(t, clientConn.Write(writeCtx, coderws.MessageText, []byte(payload)))
+	}
+	readUntilCompleted := func() {
+		for {
+			readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
+			msgType, event, readErr := clientConn.Read(readCtx)
+			cancelRead()
+			require.NoError(t, readErr)
+			require.Equal(t, coderws.MessageText, msgType)
+			if gjson.GetBytes(event, "type").String() == "response.completed" {
+				return
+			}
+		}
+	}
+
+	writeMessage(`{"type":"response.create","model":"gpt-5.6-sol","stream":true,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"continue"}]}]}`)
+	readUntilCompleted()
+
+	writeMessage(`{"type":"response.create","model":"gpt-5.6-sol","stream":false,"previous_response_id":"resp_bridge_empty_out","input":[{"type":"custom_tool_call_output","id":"ctco_1","call_id":"call_rHfZ8vMWNPu13pAIh0qs9NeV","output":"0.1.211"}]}`)
+	readUntilCompleted()
+
+	require.NoError(t, clientConn.Close(coderws.StatusNormalClosure, "done"))
+	select {
+	case proxyErr := <-errCh:
+		require.NoError(t, proxyErr)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for websocket bridge proxy to finish")
+	}
+
+	require.Len(t, upstream.bodies, 2)
+	// Second request must contain the prior custom_tool_call from turn1, not only
+	// the client-supplied custom_tool_call_output. Otherwise cicadas/OpenAI returns
+	// "No tool call found for custom tool call output with call_id call_...".
+	secondInput := gjson.GetBytes(upstream.bodies[1], "input")
+	require.True(t, secondInput.IsArray())
+	var sawCall, sawOutput bool
+	for _, item := range secondInput.Array() {
+		switch item.Get("type").String() {
+		case "custom_tool_call", "function_call":
+			if item.Get("call_id").String() == "call_rHfZ8vMWNPu13pAIh0qs9NeV" {
+				sawCall = true
+			}
+		case "custom_tool_call_output", "function_call_output":
+			if item.Get("call_id").String() == "call_rHfZ8vMWNPu13pAIh0qs9NeV" {
+				sawOutput = true
+			}
+		}
+	}
+	require.True(t, sawCall, "second bridge body missing replayed tool call: %s", upstream.bodies[1])
+	require.True(t, sawOutput, "second bridge body missing tool output: %s", upstream.bodies[1])
+	require.False(t, gjson.GetBytes(upstream.bodies[1], "previous_response_id").Exists())
+}
+
 func TestOpenAIWSHTTPBridge_IdleTimeoutClosesClientSession(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
