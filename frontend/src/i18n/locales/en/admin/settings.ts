@@ -283,9 +283,10 @@ export default {
         title:       'Model Concurrency Limits',
         description: 'Set a global concurrency budget per model: requests are served within the budget; when the budget is exhausted the model degrades gracefully (HTTP 429 / WS 1013) instead of consuming concurrency for other models.',
         limitsLabel: 'Model → Concurrency limit (JSON)',
-        placeholder: '{\n  "gpt-5.6-luna": 8\n}',
+        // Do not put raw JSON braces in vue-i18n strings; they are parsed as interpolation.
+        placeholder: '"gpt-5.6-luna": 8',
         hint:        'Keys are canonical model names (e.g. gpt-5.6-luna; variants are folded automatically), values are the global concurrency cap (>0 enables). When the budget is full, requests return 429 + Retry-After without entering the account wait queue.',
-        help:        'Example: {"gpt-5.6-luna": 8} means at most 8 concurrent gpt-5.6-luna sessions across all accounts; excess requests degrade gracefully and other models (e.g. sol) are unaffected. Unconfigured models behave as before.',
+        help:        'Example: set gpt-5.6-luna to 8 for at most 8 concurrent sessions across all accounts; excess requests degrade gracefully and other models (e.g. sol) are unaffected. Unconfigured models behave as before.',
       },
       platformQuota: {
         platform:    'Platform',
