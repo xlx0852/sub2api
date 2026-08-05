@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 )
 
 // ProfitService 账号利润分析服务。
@@ -1197,8 +1198,9 @@ func fillProfitQuotaWindows(summary *AccountProfitSummary, acc *Account, now tim
 		}
 	}
 
-	// Grok token rolling window (Free ≈ 24h).
-	if w := profitWindowFromGrok(acc.Extra, now); w != nil {
+	// Grok quota window: prefer billing period; Free 24h fallback only for
+	// official xAI hosts (not third-party apikey relays).
+	if w := profitWindowFromGrok(acc, now); w != nil {
 		windows = append(windows, *w)
 	}
 
@@ -1320,17 +1322,31 @@ func profitWindowFromKimi(extra map[string]any, name, kind string, defaultMinute
 	}
 }
 
-func profitWindowFromGrok(extra map[string]any, now time.Time) *ProfitQuotaWindow {
-	if extra == nil {
+func profitWindowFromGrok(acc *Account, now time.Time) *ProfitQuotaWindow {
+	if acc == nil || acc.Extra == nil {
 		return nil
 	}
 	// Prefer official billing period (weekly/monthly product quota). This is what
 	// the management UI shows as GrokBuild/GrokChat windows. Rate-limit header
 	// snapshots often lack reset_at and cannot be placed on a timeline.
-	if w := profitWindowFromGrokBilling(extra, now); w != nil {
+	if w := profitWindowFromGrokBilling(acc.Extra, now); w != nil {
 		return w
 	}
-	return profitWindowFromGrokUsageSnapshot(extra, now)
+	// Free-tier 24h inference is only meaningful for official xAI Free traffic.
+	// Third-party apikey relays (e.g. biuapi.com) may echo limit=1e6 rate-limit
+	// headers that are not xAI's Free rolling window — inventing a 24h bar there
+	// mislabels the account.
+	return profitWindowFromGrokUsageSnapshot(acc.Extra, now, grokQuotaSourceIsOfficial(acc))
+}
+
+// grokQuotaSourceIsOfficial reports whether this account's Grok traffic targets
+// an official xAI host (api.x.ai / regional / CLI gateway). Empty base_url is
+// treated as official because GetGrokBaseURL defaults there.
+func grokQuotaSourceIsOfficial(acc *Account) bool {
+	if acc == nil || !acc.IsGrok() {
+		return false
+	}
+	return xai.IsOfficialBaseURL(acc.GetGrokBaseURL())
 }
 
 func profitWindowFromGrokBilling(extra map[string]any, now time.Time) *ProfitQuotaWindow {
@@ -1428,7 +1444,7 @@ func profitWindowFromGrokBilling(extra map[string]any, now time.Time) *ProfitQuo
 	}
 }
 
-func profitWindowFromGrokUsageSnapshot(extra map[string]any, now time.Time) *ProfitQuotaWindow {
+func profitWindowFromGrokUsageSnapshot(extra map[string]any, now time.Time, allowFree24hFallback bool) *ProfitQuotaWindow {
 	m := asStringAnyMap(extra["grok_usage_snapshot"])
 	if m == nil {
 		return nil
@@ -1468,17 +1484,20 @@ func profitWindowFromGrokUsageSnapshot(extra map[string]any, now time.Time) *Pro
 	}
 	// No absolute reset: free-tier rolling token windows are ~24h. Anchor end at
 	// next 24h boundary from last observation when possible so the bar still renders.
+	// Only invent this timeline for official xAI Free traffic — third-party relays
+	// often advertise limit=1e6 without meaning Free's 24h rolling budget.
 	if resetAt == nil {
+		if !allowFree24hFallback || limit == nil || !xaiIsLikelyFreeRolling(*limit) {
+			// Without a real reset (or Free-24h eligibility), do not invent a
+			// multi-day timeline from rate-limit headers alone.
+			return nil
+		}
 		observedAt := anyToTimeFlexible(firstNonNil(m["last_headers_seen_at"], m["updated_at"]))
 		if observedAt == nil {
 			observedAt = &now
 		}
-		if limit != nil && xaiIsLikelyFreeRolling(*limit) {
-			// Conservative: treat as rolling 24h ending 24h after last observation.
-			// Better than dropping the lane entirely when headers omit reset.
-			tt := observedAt.UTC().Add(24 * time.Hour)
-			resetAt = &tt
-		}
+		tt := observedAt.UTC().Add(24 * time.Hour)
+		resetAt = &tt
 	}
 	if used == nil && resetAt == nil {
 		return nil
