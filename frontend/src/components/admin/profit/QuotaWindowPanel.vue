@@ -12,50 +12,19 @@
         <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">{{ t('admin.profit.quotaWindowHint') }}</p>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2">
-        <div class="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-dark-600 dark:bg-dark-700">
-          <button
-            type="button"
-            class="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition hover:bg-white hover:text-gray-800 disabled:opacity-40 dark:text-dark-300 dark:hover:bg-dark-600 dark:hover:text-white"
-            :disabled="!canShift(-1)"
-            @click="shiftView(-1)"
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition"
-            :class="isTodayView
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white'
-              : 'text-gray-500 hover:text-gray-800 dark:text-dark-300 dark:hover:text-white'"
-            @click="goToday"
-          >
-            {{ t('admin.profit.quotaWindowToday') }}
-          </button>
-          <button
-            type="button"
-            class="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition hover:bg-white hover:text-gray-800 disabled:opacity-40 dark:text-dark-300 dark:hover:bg-dark-600 dark:hover:text-white"
-            :disabled="!canShift(1)"
-            @click="shiftView(1)"
-          >
-            ›
-          </button>
-        </div>
-
-        <div class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
-          <button
-            v-for="mode in modes"
-            :key="mode.key"
-            type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium transition"
-            :class="viewMode === mode.key
-              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white'
-              : 'text-gray-500 hover:text-gray-800 dark:text-dark-300 dark:hover:text-white'"
-            @click="setMode(mode.key)"
-          >
-            {{ mode.label }}
-          </button>
-        </div>
+      <div class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
+        <button
+          v-for="mode in modes"
+          :key="mode.key"
+          type="button"
+          class="rounded-md px-2.5 py-1 text-xs font-medium transition"
+          :class="viewMode === mode.key
+            ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white'
+            : 'text-gray-500 hover:text-gray-800 dark:text-dark-300 dark:hover:text-white'"
+          @click="setMode(mode.key)"
+        >
+          {{ mode.label }}
+        </button>
       </div>
     </div>
 
@@ -227,19 +196,6 @@ const viewRange = computed(() => {
 
 const viewDurationMs = computed(() => Math.max(1, viewRange.value.end.getTime() - viewRange.value.start.getTime()))
 
-const isTodayView = computed(() => {
-  const now = new Date()
-  if (viewMode.value === '5h') {
-    return Math.abs(anchor.value.getTime() - alignTo5h(now).getTime()) < 60_000
-  }
-  if (viewMode.value === 'month') {
-    const cur = startOfLocalMonth(now)
-    return anchor.value.getFullYear() === cur.getFullYear()
-      && anchor.value.getMonth() === cur.getMonth()
-  }
-  return sameDay(anchor.value, startOfLocalDay(now))
-})
-
 const rangeLabel = computed(() => {
   const { start, end } = viewRange.value
   const scope = viewMode.value === '5h'
@@ -334,41 +290,6 @@ function setMode(mode: ViewMode) {
   } else {
     anchor.value = startOfLocalDay(new Date())
   }
-}
-
-function goToday() {
-  if (viewMode.value === '5h') {
-    anchor.value = alignTo5h(new Date())
-  } else if (viewMode.value === 'month') {
-    anchor.value = startOfLocalMonth(new Date())
-  } else {
-    anchor.value = startOfLocalDay(new Date())
-  }
-}
-
-function canShift(direction: number) {
-  const next = shiftAnchor(direction)
-  const today = startOfLocalDay(new Date()).getTime()
-  // 月视图跨度更大，允许前后约 12 个月；周/5h 仍限制在约 60 天内
-  const maxDeltaMs = viewMode.value === 'month'
-    ? 370 * 86_400_000
-    : 60 * 86_400_000
-  return Math.abs(next.getTime() - today) <= maxDeltaMs
-}
-
-function shiftView(direction: number) {
-  if (!canShift(direction)) return
-  anchor.value = shiftAnchor(direction)
-}
-
-function shiftAnchor(direction: number) {
-  if (viewMode.value === '5h') {
-    return new Date(anchor.value.getTime() + direction * 5 * 3600_000)
-  }
-  if (viewMode.value === 'month') {
-    return addMonths(startOfLocalMonth(anchor.value), direction)
-  }
-  return new Date(anchor.value.getTime() + direction * 7 * 86_400_000)
 }
 
 function pickPreferredWindow(account: AccountProfitSummary): ProfitQuotaWindow | null {
@@ -542,12 +463,6 @@ function alignTo5h(date: Date) {
   const ms = date.getTime()
   const block = 5 * 3600_000
   return new Date(Math.floor(ms / block) * block)
-}
-
-function sameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear()
-    && a.getMonth() === b.getMonth()
-    && a.getDate() === b.getDate()
 }
 
 function formatShortDate(date: Date) {
