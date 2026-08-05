@@ -485,6 +485,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				return fmt.Errorf("build websocket http bridge replay input: %w", replayInputErr)
 			}
 			if needsBridgeReplay && turnReplayInputExists {
+				turnReplayInput = alignOpenAIReplayOutputTypesToCalls(turnReplayInput)
 				updatedPayload, setInputErr := setOpenAIWSPayloadInputSequence(
 					currentBridgePayload.payloadRaw,
 					turnReplayInput,
@@ -735,7 +736,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		return lease, nil
 	}
 
-	sendAndRelay := func(turn int, lease *openAIWSConnLease, payload []byte, payloadBytes int, originalModel string, imageBillingModel string, imageSizeTier string, imageInputSize string) (*OpenAIForwardResult, error) {
+	sendAndRelay := func(turn int, lease *openAIWSConnLease, payload []byte, payloadBytes int, originalModel string, imageBillingModel string, imageSizeTier string, imageInputSize string, allowIndexedCompatibilityRetry bool) (*OpenAIForwardResult, error) {
 		if lease == nil {
 			return nil, errors.New("upstream websocket lease is nil")
 		}
@@ -810,6 +811,21 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			if eventType == "error" {
 				errCodeRaw, errTypeRaw, errMsgRaw := parseOpenAIWSErrorEventFields(upstreamMessage)
 				s.persistOpenAIWSRateLimitSignal(ctx, account, lease.HandshakeHeaders(), upstreamMessage, errCodeRaw, errTypeRaw, errMsgRaw)
+				if allowIndexedCompatibilityRetry && !wroteDownstream {
+					retryBody, reason, changed, repairErr := normalizeOpenAIResponsesRejectedFieldRetryBody(http.StatusBadRequest, payload, upstreamMessage)
+					if repairErr != nil {
+						lease.MarkBroken()
+						return nil, wrapOpenAIWSIngressTurnError(
+							"indexed_compatibility_repair",
+							repairErr,
+							false,
+						)
+					}
+					if changed {
+						lease.MarkBroken()
+						return nil, newOpenAIWSIndexedCompatibilityRetryError(retryBody, reason)
+					}
+				}
 				fallbackReason, _ := classifyOpenAIWSErrorEventFromRaw(errCodeRaw, errTypeRaw, errMsgRaw)
 				errCode, errType, errMessage := summarizeOpenAIWSErrorEventFieldsFromRaw(errCodeRaw, errTypeRaw, errMsgRaw)
 				recoverablePrevNotFound := fallbackReason == openAIWSIngressStagePreviousResponseNotFound &&
@@ -989,7 +1005,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					WSConnPickMs:    &connPickMs,
 					WSQueueWaitMs:   &queueWaitMs,
 				}
-				if replayInput := replayCollector.Items(); len(replayInput) > 0 {
+				if replayInput := normalizeOpenAIReplayItemsForAccount(account, replayCollector.Items()); len(replayInput) > 0 {
 					result.wsReplayInput = replayInput
 					result.wsReplayInputExists = true
 				}
@@ -1070,6 +1086,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	turn := 1
 	turnRetry := 0
 	turnPrevRecoveryTried := false
+	turnIndexedCompatibilityRetryTried := false
 	lastTurnFinishedAt := time.Time{}
 	lastTurnResponseID := ""
 	lastTurnPayload := []byte(nil)
@@ -1197,6 +1214,30 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		skipBeforeTurn = true
 		return true
 	}
+	retryIngressIndexedCompatibility := func(relayErr error, turn int, connID string) bool {
+		var retryErr *openAIWSIndexedCompatibilityRetryError
+		if !errors.As(relayErr, &retryErr) || retryErr == nil || len(retryErr.body) == 0 {
+			return false
+		}
+		if turnIndexedCompatibilityRetryTried || ctx.Err() != nil {
+			return false
+		}
+		turnIndexedCompatibilityRetryTried = true
+		currentPayload = append([]byte(nil), retryErr.body...)
+		currentPayloadBytes = len(currentPayload)
+		logOpenAIWSModeInfo(
+			"ingress_ws_indexed_compatibility_retry account_id=%d turn=%d conn_id=%s reason=%s payload_bytes=%d",
+			account.ID,
+			turn,
+			truncateOpenAIWSLogValue(connID, openAIWSIDValueMaxLen),
+			normalizeOpenAIWSLogValue(retryErr.reason),
+			currentPayloadBytes,
+		)
+		resetSessionLease(true)
+		forceNewConnOnRetry = true
+		skipBeforeTurn = true
+		return true
+	}
 	for {
 		if turn > 1 && !skipBeforeTurn && hooks != nil && hooks.BeforeRequest != nil {
 			if err := hooks.BeforeRequest(turn, currentPayload, currentOriginalModel); err != nil {
@@ -1259,6 +1300,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			currentPayload,
 			currentPreviousResponseID != "",
 		)
+		if replayInputErr == nil && nextReplayInputExists {
+			nextReplayInput = alignOpenAIReplayOutputTypesToCalls(nextReplayInput)
+		}
 		if replayInputErr != nil {
 			logOpenAIWSModeInfo(
 				"ingress_ws_replay_input_skip account_id=%d turn=%d conn_id=%s reason=build_error cause=%s",
@@ -1505,9 +1549,12 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			)
 		}
 
-		result, relayErr := sendAndRelay(turn, sessionLease, currentPayload, currentPayloadBytes, currentOriginalModel, currentImageBillingModel, currentImageSizeTier, currentImageInputSize)
+		result, relayErr := sendAndRelay(turn, sessionLease, currentPayload, currentPayloadBytes, currentOriginalModel, currentImageBillingModel, currentImageSizeTier, currentImageInputSize, !turnIndexedCompatibilityRetryTried)
 		if relayErr != nil {
 			lastTurnClean = false
+			if retryIngressIndexedCompatibility(relayErr, turn, connID) {
+				continue
+			}
 			if recoverIngressPrevResponseNotFound(relayErr, turn, connID) {
 				continue
 			}
@@ -1526,6 +1573,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		}
 		turnRetry = 0
 		turnPrevRecoveryTried = false
+		turnIndexedCompatibilityRetryTried = false
 		lastTurnFinishedAt = time.Now()
 		lastTurnClean = true
 		if hooks != nil && hooks.AfterTurn != nil {

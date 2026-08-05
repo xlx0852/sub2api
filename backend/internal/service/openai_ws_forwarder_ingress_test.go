@@ -797,6 +797,25 @@ func TestBuildOpenAIWSReplayInputSequence(t *testing.T) {
 		require.Equal(t, "hello", gjson.GetBytes(items[0], "text").String())
 		require.Equal(t, "world", gjson.GetBytes(items[1], "text").String())
 	})
+
+	t.Run("mixed_replay_pair_is_aligned_after_merge", func(t *testing.T) {
+		previous := []json.RawMessage{
+			json.RawMessage(`{"type":"function_call","call_id":"fc_pair","name":"patch","arguments":"{}"}`),
+		}
+		items, exists, err := buildOpenAIWSReplayInputSequence(
+			previous,
+			true,
+			[]byte(`{"previous_response_id":"resp_1","input":[{"type":"custom_tool_call_output","call_id":"fc_pair","output":"Done"}]}`),
+			true,
+		)
+		require.NoError(t, err)
+		require.True(t, exists)
+
+		items = alignOpenAIReplayOutputTypesToCalls(items)
+		require.Len(t, items, 2)
+		require.Equal(t, "function_call", gjson.GetBytes(items[0], "type").String())
+		require.Equal(t, "function_call_output", gjson.GetBytes(items[1], "type").String())
+	})
 }
 
 func TestOpenAIWSRawPayloadHasToolCallOutput(t *testing.T) {
