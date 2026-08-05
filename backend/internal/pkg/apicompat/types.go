@@ -7,6 +7,7 @@ package apicompat
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 )
 
 // ---------------------------------------------------------------------------
@@ -375,6 +376,92 @@ type ResponsesOutput struct {
 
 	// type=web_search_call
 	Action *WebSearchAction `json:"action,omitempty"`
+}
+
+// MarshalJSON 处理 tool_search_call 项的线上形态（复用 CallID/Arguments 字段）：
+// execution 固定为 "client"（codex 的必填字段，非 client 的调用会被静默忽略），
+// arguments 是 JSON 对象而非 function_call 语义下的字符串。其余类型走默认结构体
+// 序列化，输出逐字节不变。
+func (o ResponsesOutput) MarshalJSON() ([]byte, error) {
+	type responsesOutputAlias ResponsesOutput
+	if o.Type != "tool_search_call" {
+		return json.Marshal(responsesOutputAlias(o))
+	}
+	m := map[string]any{
+		"type":      o.Type,
+		"id":        o.ID,
+		"call_id":   o.CallID,
+		"execution": "client",
+		"arguments": toolSearchCallArgumentsJSON(o.Arguments),
+	}
+	if o.Status != "" {
+		m["status"] = o.Status
+	}
+	return json.Marshal(m)
+}
+
+// UnmarshalJSON accepts both the Responses function-call string form and the
+// tool_search_call object form for arguments. The bridge stores arguments as a
+// string internally, so object arguments are retained as their raw JSON.
+func (o *ResponsesOutput) UnmarshalJSON(data []byte) error {
+	type responsesOutputAlias ResponsesOutput
+
+	var kind struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(data, &kind); err != nil {
+		return err
+	}
+	if kind.Type != "tool_search_call" {
+		var decoded responsesOutputAlias
+		if err := json.Unmarshal(data, &decoded); err != nil {
+			return err
+		}
+		*o = ResponsesOutput(decoded)
+		return nil
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	arguments, hasArguments := fields["arguments"]
+	delete(fields, "arguments")
+	normalized, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+
+	var decoded responsesOutputAlias
+	if err := json.Unmarshal(normalized, &decoded); err != nil {
+		return err
+	}
+	*o = ResponsesOutput(decoded)
+	if !hasArguments || string(arguments) == "null" {
+		return nil
+	}
+
+	var argumentString string
+	if err := json.Unmarshal(arguments, &argumentString); err == nil {
+		o.Arguments = argumentString
+	} else {
+		o.Arguments = string(arguments)
+	}
+	return nil
+}
+
+// toolSearchCallArgumentsJSON normalizes the stored arguments string back into
+// the JSON object form codex expects on the wire for tool_search_call items.
+func toolSearchCallArgumentsJSON(arguments string) json.RawMessage {
+	trimmed := strings.TrimSpace(arguments)
+	if trimmed == "" {
+		return json.RawMessage(`{}`)
+	}
+	if json.Valid([]byte(trimmed)) {
+		return json.RawMessage(trimmed)
+	}
+	fallback, _ := json.Marshal(arguments)
+	return fallback
 }
 
 // WebSearchAction describes the search action in a web_search_call output item.
