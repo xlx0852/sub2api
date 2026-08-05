@@ -890,3 +890,78 @@ func TestProfitService_IncludesBannedTrashAccounts(t *testing.T) {
 		t.Fatalf("banned profit = %v, want %v", banned.Profit, roundMoney(200-865))
 	}
 }
+
+func TestFillBreakEvenRate_GrokWeeklyFullWindow(t *testing.T) {
+	// Screenshot case: 7d window full, U=$4.60 A=$38.31, cycle $65/90d.
+	// break_even ≈ 0.12 * 65 / (4.60 * 90/7) ≈ 0.1319
+	used := 100.0
+	mins := 7 * 24 * 60
+	win := &ProfitQuotaWindow{Kind: "7d", Label: "7d", UsedPercent: &used, WindowMinutes: &mins}
+	cycle := &AccountSubscriptionCycle{PeriodFee: 65, PeriodDays: 90}
+	stats := &ProfitUsageStats{Revenue: 4.60, MeteredCost: 38.31}
+	summary := &AccountProfitSummary{}
+	fillBreakEvenRate(summary, cycle, win, stats)
+	if summary.BreakEvenRate == nil {
+		t.Fatal("expected break-even rate")
+	}
+	if *summary.BreakEvenRate < 0.13 || *summary.BreakEvenRate > 0.135 {
+		t.Fatalf("break_even_rate = %v, want ~0.132", *summary.BreakEvenRate)
+	}
+	if summary.BreakEvenCurrentRate == nil || *summary.BreakEvenCurrentRate < 0.11 || *summary.BreakEvenCurrentRate > 0.13 {
+		t.Fatalf("current_rate = %v, want ~0.12", summary.BreakEvenCurrentRate)
+	}
+	if summary.BreakEvenWindowsPerPeriod == nil || *summary.BreakEvenWindowsPerPeriod < 12.8 || *summary.BreakEvenWindowsPerPeriod > 12.9 {
+		t.Fatalf("windows_per_period = %v, want ~12.857", summary.BreakEvenWindowsPerPeriod)
+	}
+}
+
+func TestFillBreakEvenRate_PartialUtilization(t *testing.T) {
+	// 50% used, revenue $2 → full window $4; 30d / 7d ≈ 4.286 windows
+	// current rate 0.1; fee 20 → be = 0.1 * 20 / (4 * 4.286) ≈ 0.1167
+	used := 50.0
+	mins := 10080
+	win := &ProfitQuotaWindow{Kind: "7d", UsedPercent: &used, WindowMinutes: &mins}
+	cycle := &AccountSubscriptionCycle{PeriodFee: 20, PeriodDays: 30}
+	stats := &ProfitUsageStats{Revenue: 2, MeteredCost: 20}
+	summary := &AccountProfitSummary{}
+	fillBreakEvenRate(summary, cycle, win, stats)
+	if summary.BreakEvenRate == nil {
+		t.Fatal("expected break-even rate")
+	}
+	if *summary.BreakEvenRate < 0.11 || *summary.BreakEvenRate > 0.13 {
+		t.Fatalf("break_even_rate = %v, want ~0.117", *summary.BreakEvenRate)
+	}
+	if summary.BreakEvenFullWindowRevenue == nil || *summary.BreakEvenFullWindowRevenue != 4 {
+		t.Fatalf("full_window_revenue = %v, want 4", summary.BreakEvenFullWindowRevenue)
+	}
+}
+
+func TestFillBreakEvenRate_RequiresMeteredCost(t *testing.T) {
+	used := 80.0
+	mins := 300
+	win := &ProfitQuotaWindow{Kind: "5h", UsedPercent: &used, WindowMinutes: &mins}
+	cycle := &AccountSubscriptionCycle{PeriodFee: 200, PeriodDays: 30}
+	// No account cost → keep capacity fields but no rate
+	stats := &ProfitUsageStats{Revenue: 1.5, MeteredCost: 0}
+	summary := &AccountProfitSummary{}
+	fillBreakEvenRate(summary, cycle, win, stats)
+	if summary.BreakEvenRate != nil {
+		t.Fatalf("expected nil rate without metered cost, got %v", *summary.BreakEvenRate)
+	}
+	if summary.BreakEvenCapacityRevenue == nil || *summary.BreakEvenCapacityRevenue <= 0 {
+		t.Fatal("expected capacity revenue even without metered cost")
+	}
+}
+
+func TestPickPreferredBreakEvenWindow_Prefers7d(t *testing.T) {
+	used5, used7 := 40.0, 60.0
+	m5, m7 := 300, 10080
+	windows := []ProfitQuotaWindow{
+		{Kind: "5h", UsedPercent: &used5, WindowMinutes: &m5},
+		{Kind: "7d", UsedPercent: &used7, WindowMinutes: &m7},
+	}
+	got := pickPreferredBreakEvenWindow(windows)
+	if got == nil || got.Kind != "7d" {
+		t.Fatalf("got %#v, want 7d", got)
+	}
+}
