@@ -15,13 +15,15 @@ import (
 const maxOpenAIResponsesRejectedFieldRetries = 6
 
 var (
-	openAIResponsesRejectedNamespaceParamPattern = regexp.MustCompile(`(?i)^input\[(\d+)\]\.namespace$`)
-	openAIResponsesRejectedMessageParamPattern   = regexp.MustCompile(`(?i)(?:unknown|unsupported)[ _-]+parameter\s*(?::|=|is)?\s*["']?(max_output_tokens|input\[\d+\]\.namespace)(?:["']|\b)`)
+	openAIResponsesRejectedIndexedParamPattern = regexp.MustCompile(`(?i)^input\[(\d+)\]\.(namespace|arguments|id)$`)
+	openAIResponsesRejectedMessageParamPattern = regexp.MustCompile(`(?i)(?:(?:unknown|unsupported)[ _-]+parameter|missing required parameter|invalid(?:\s+(?:parameter|value\s+for))?)\s*(?::|=|is)?\s*["']?(max_output_tokens|input\[\d+\]\.(?:namespace|arguments|id))(?:["']|\b)`)
+	openAIResponsesMissingToolCallPattern      = regexp.MustCompile(`(?i)no tool call found for (?:custom tool call|function call|tool call) output with call_id\s+["']?([A-Za-z0-9_:-]+)`)
 )
 
 type openAIResponsesRejectedFieldRetryState struct {
-	attempts       int
-	seenBodyHashes map[[sha256.Size]byte]struct{}
+	attempts          int
+	replayRepairTried bool
+	seenBodyHashes    map[[sha256.Size]byte]struct{}
 }
 
 func newOpenAIResponsesRejectedFieldRetryState(initialBody []byte) *openAIResponsesRejectedFieldRetryState {
@@ -33,7 +35,18 @@ func newOpenAIResponsesRejectedFieldRetryState(initialBody []byte) *openAIRespon
 }
 
 func (s *openAIResponsesRejectedFieldRetryState) Allow(nextBody []byte) bool {
+	return s.AllowForReason(nextBody, "")
+}
+
+func (s *openAIResponsesRejectedFieldRetryState) AllowForReason(nextBody []byte, reason string) bool {
 	if s == nil || len(nextBody) == 0 || s.attempts >= maxOpenAIResponsesRejectedFieldRetries {
+		return false
+	}
+	normalizedReason := strings.TrimSpace(reason)
+	isReplayRepair := strings.HasPrefix(normalizedReason, "indexed arguments ") ||
+		strings.HasPrefix(normalizedReason, "indexed id ") ||
+		strings.HasPrefix(normalizedReason, "tool call pairing ")
+	if isReplayRepair && s.replayRepairTried {
 		return false
 	}
 	bodyHash := sha256.Sum256(nextBody)
@@ -42,6 +55,9 @@ func (s *openAIResponsesRejectedFieldRetryState) Allow(nextBody []byte) bool {
 	}
 	s.seenBodyHashes[bodyHash] = struct{}{}
 	s.attempts++
+	if isReplayRepair {
+		s.replayRepairTried = true
+	}
 	return true
 }
 
@@ -61,7 +77,15 @@ func normalizeOpenAIResponsesRejectedFieldRetryBody(statusCode int, body, respon
 	}
 
 	code := strings.ToLower(strings.TrimSpace(extractUpstreamErrorCode(responseBody)))
-	message := strings.ToLower(strings.TrimSpace(extractUpstreamErrorMessage(responseBody)))
+	rawMessage := strings.TrimSpace(extractUpstreamErrorMessage(responseBody))
+	message := strings.ToLower(rawMessage)
+	if callID, ok := openAIResponsesMissingToolCallID(rawMessage); ok {
+		retryBody, changed, err := normalizeOpenAIRejectedReplayPairByCallID(body, callID)
+		if err != nil || !changed {
+			return nil, "", false, err
+		}
+		return retryBody, "tool call pairing compatibility rejection", true, nil
+	}
 	if !isExplicitOpenAIResponsesFieldRejection(code, message) {
 		return nil, "", false, nil
 	}
@@ -70,8 +94,17 @@ func normalizeOpenAIResponsesRejectedFieldRetryBody(statusCode int, body, respon
 	if param == "" {
 		param = openAIResponsesRejectedParamFromMessage(message)
 	}
-	if index, ok := openAIResponsesRejectedNamespaceIndex(param); ok {
-		return removeOpenAIResponsesRejectedNamespaceAtIndex(body, index)
+	if index, field, ok := openAIResponsesRejectedIndexedField(param); ok {
+		switch field {
+		case "namespace":
+			return removeOpenAIResponsesRejectedNamespaceAtIndex(body, index)
+		case "arguments", "id":
+			retryBody, changed, err := normalizeOpenAIRejectedReplayPairAtIndex(body, index)
+			if err != nil || !changed {
+				return nil, "", false, err
+			}
+			return retryBody, fmt.Sprintf("indexed %s compatibility rejection", field), true, nil
+		}
 	}
 	if param == "max_output_tokens" && gjson.GetBytes(body, "max_output_tokens").Exists() {
 		retryBody, err := sjson.DeleteBytes(body, "max_output_tokens")
@@ -83,13 +116,25 @@ func normalizeOpenAIResponsesRejectedFieldRetryBody(statusCode int, body, respon
 	return nil, "", false, nil
 }
 
+func openAIResponsesMissingToolCallID(message string) (string, bool) {
+	match := openAIResponsesMissingToolCallPattern.FindStringSubmatch(strings.TrimSpace(message))
+	if len(match) != 2 {
+		return "", false
+	}
+	callID := strings.TrimSpace(match[1])
+	return callID, callID != ""
+}
+
 func isExplicitOpenAIResponsesFieldRejection(code, message string) bool {
 	switch strings.TrimSpace(code) {
-	case "unknown_parameter", "unsupported_parameter":
+	case "unknown_parameter", "unsupported_parameter", "missing_required_parameter", "invalid_parameter", "invalid_value":
 		return true
 	}
 	return strings.Contains(message, "unknown parameter") ||
-		strings.Contains(message, "unsupported parameter")
+		strings.Contains(message, "unsupported parameter") ||
+		strings.Contains(message, "missing required parameter") ||
+		strings.Contains(message, "invalid parameter") ||
+		(strings.Contains(message, "invalid '") && strings.Contains(message, "input["))
 }
 
 func openAIResponsesRejectedParamFromMessage(message string) string {
@@ -100,16 +145,16 @@ func openAIResponsesRejectedParamFromMessage(message string) string {
 	return strings.ToLower(strings.TrimSpace(match[1]))
 }
 
-func openAIResponsesRejectedNamespaceIndex(param string) (int, bool) {
-	match := openAIResponsesRejectedNamespaceParamPattern.FindStringSubmatch(strings.TrimSpace(param))
-	if len(match) != 2 {
-		return 0, false
+func openAIResponsesRejectedIndexedField(param string) (int, string, bool) {
+	match := openAIResponsesRejectedIndexedParamPattern.FindStringSubmatch(strings.TrimSpace(param))
+	if len(match) != 3 {
+		return 0, "", false
 	}
 	index, err := strconv.Atoi(match[1])
 	if err == nil && index >= 0 {
-		return index, true
+		return index, strings.ToLower(match[2]), true
 	}
-	return 0, false
+	return 0, "", false
 }
 
 func removeOpenAIResponsesRejectedNamespaceAtIndex(body []byte, index int) ([]byte, string, bool, error) {
