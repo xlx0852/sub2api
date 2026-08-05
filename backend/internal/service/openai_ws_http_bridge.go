@@ -76,8 +76,46 @@ func prepareOpenAIWSHTTPBridgeBody(payload []byte) ([]byte, error) {
 	delete(body, "generate")
 	delete(body, "previous_response_id")
 	ensureOpenAIWSBridgeInputArguments(body)
+	normalizeOpenAIWSBridgeToolTypes(body)
 	body["stream"] = true
 	return json.Marshal(body)
+}
+
+// normalizeOpenAIWSBridgeToolTypes 把 codex 私有工具类型归一化为 OpenAI
+// Responses 认识的 function_call/function_call_output。多轮重放会把历史里的
+// local_shell_call/custom_tool_call/mcp_tool_call/tool_call 等原样注入下一轮
+// input，OpenAI 官方上游不认识这些私有 type，会报
+// "Unknown parameter: 'input[N].arguments'"。归一化后 type 合法、arguments
+// 保留，上游可正常接受。
+func normalizeOpenAIWSBridgeToolTypes(body map[string]any) {
+	rawInput, ok := body["input"]
+	if !ok {
+		return
+	}
+	items, ok := rawInput.([]any)
+	if !ok {
+		return
+	}
+	for _, rawItem := range items {
+		item, ok := rawItem.(map[string]any)
+		if !ok {
+			continue
+		}
+		typ, _ := item["type"].(string)
+		switch typ {
+		case "local_shell_call", "custom_tool_call", "mcp_tool_call", "tool_call", "tool_search_call":
+			// custom/freeform 工具的 input 自由文本包进 {"input": ...} 参数
+			// （与 chatcompletions bridge 的降级一致）。
+			if raw, has := item["input"]; has && typ == "custom_tool_call" {
+				encoded, _ := json.Marshal(map[string]any{"input": raw})
+				item["arguments"] = string(encoded)
+				delete(item, "input")
+			}
+			item["type"] = "function_call"
+		case "local_shell_call_output", "custom_tool_call_output", "mcp_tool_call_output", "tool_search_output":
+			item["type"] = "function_call_output"
+		}
+	}
 }
 
 // ensureOpenAIWSBridgeInputArguments 兜底多轮会话重放时 function_call 系列项的
