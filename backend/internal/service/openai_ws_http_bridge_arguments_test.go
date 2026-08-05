@@ -127,11 +127,17 @@ func TestBridgeCallIDMapperRestoresUpstreamCallID(t *testing.T) {
 	}`)
 	m := newBridgeCallIDMapper(body)
 
-	// 上游响应 function_call：观察映射（不改写）
+	// 上游响应 function_call：建立映射并还原 call_id，避免重放/客户端历史落 fc_
 	callEvent := []byte(`{"type":"response.output_item.done","item":{"id":"fc_1","type":"function_call","call_id":"fc_upstream_abc","name":"mcp_read","arguments":"{}"}}`)
 	out, changed := m.restoreBridgeResponseCallIDs(callEvent)
-	if changed {
-		t.Fatalf("function_call observe should not rewrite, got %s", string(out))
+	if !changed {
+		t.Fatalf("function_call should restore call_id, got %s", string(out))
+	}
+	if !strings.Contains(string(out), `"call_id":"ctco_019fd0d8"`) {
+		t.Fatalf("function_call call_id not restored to codex: %s", string(out))
+	}
+	if strings.Contains(string(out), "fc_upstream_abc") {
+		t.Fatalf("upstream call_id leaked on function_call: %s", string(out))
 	}
 	// 上游响应 function_call_output：fc_upstream_abc 应还原为 ctco_019fd0d8
 	outEvent := []byte(`{"type":"response.output_item.done","item":{"id":"fc_2","type":"function_call_output","call_id":"fc_upstream_abc","output":"ok"}}`)
@@ -176,5 +182,37 @@ func TestBridgeCallIDMapperPassthroughWhenNoMapping(t *testing.T) {
 	_ = out
 	if changed {
 		t.Fatalf("call_x already codex call_id, should not change: %s", string(out))
+	}
+}
+
+// 真实场景：历史重放进来的调用（call+output 成对）不应进配对队列；
+// 只有本轮新增（无 output）的调用才与上游 function_call 按序配对。
+func TestBridgeCallIDMapperSkipsHistoricalCalls(t *testing.T) {
+	// input：2 个历史 exec（带 output 配对）+ 2 个本轮新增 exec（无 output）
+	body := []byte(`{
+		"input": [
+			{"type": "function_call", "name": "exec", "call_id": "call_hist1", "arguments": "{}"},
+			{"type": "function_call_output", "call_id": "call_hist1", "output": "done"},
+			{"type": "function_call", "name": "exec", "call_id": "call_hist2", "arguments": "{}"},
+			{"type": "function_call_output", "call_id": "call_hist2", "output": "done"},
+			{"type": "function_call", "name": "exec", "call_id": "call_new1", "arguments": "{}"},
+			{"type": "function_call", "name": "exec", "call_id": "call_new2", "arguments": "{}"}
+		]
+	}`)
+	m := newBridgeCallIDMapper(body)
+	// 上游本轮只返回 2 个 function_call（新执行），应配对到 call_new1 / call_new2
+	m.restoreBridgeResponseCallIDs([]byte(`{"type":"response.output_item.done","item":{"id":"fc_1","type":"function_call","call_id":"fc_a","name":"exec","arguments":"{}"}}`))
+	m.restoreBridgeResponseCallIDs([]byte(`{"type":"response.output_item.done","item":{"id":"fc_2","type":"function_call","call_id":"fc_b","name":"exec","arguments":"{}"}}`))
+	out1, _ := m.restoreBridgeResponseCallIDs([]byte(`{"type":"response.output_item.done","item":{"id":"fc_3","type":"function_call_output","call_id":"fc_a","output":"a"}}`))
+	out2, _ := m.restoreBridgeResponseCallIDs([]byte(`{"type":"response.output_item.done","item":{"id":"fc_4","type":"function_call_output","call_id":"fc_b","output":"b"}}`))
+	if !strings.Contains(string(out1), `"call_id":"call_new1"`) {
+		t.Fatalf("fc_a should map to call_new1 (not historical), got %s", string(out1))
+	}
+	if !strings.Contains(string(out2), `"call_id":"call_new2"`) {
+		t.Fatalf("fc_b should map to call_new2 (not historical), got %s", string(out2))
+	}
+	// 历史 call_id 不应出现在映射里
+	if m.restoreCallID("fc_a") == "call_hist1" || m.restoreCallID("fc_b") == "call_hist2" {
+		t.Fatalf("historical call_id leaked into mapping")
 	}
 }
