@@ -2486,6 +2486,8 @@ func (r *accountRepository) FindOAuthByPlatformEmail(ctx context.Context, platfo
 		queryCtx = mixins.SkipSoftDelete(ctx)
 	}
 
+	// Match credentials/extra email or user_id. Kimi (and similar device OAuth
+	// flows) store the durable subject as user_id and also mirror it to email.
 	accounts, err := r.client.Account.Query().
 		Where(
 			dbaccount.PlatformEQ(platform),
@@ -2497,7 +2499,11 @@ func (r *accountRepository) FindOAuthByPlatformEmail(ctx context.Context, platfo
 						Ident(s.C(dbaccount.FieldCredentials)).
 						WriteString("->>'email', ").
 						Ident(s.C(dbaccount.FieldExtra)).
-						WriteString("->>'email', ''))) = ").
+						WriteString("->>'email', ").
+						Ident(s.C(dbaccount.FieldCredentials)).
+						WriteString("->>'user_id', ").
+						Ident(s.C(dbaccount.FieldExtra)).
+						WriteString("->>'user_id', ''))) = ").
 						Arg(normalizedEmail)
 				}))
 			},

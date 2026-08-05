@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -237,4 +238,21 @@ func TestKimiRefreshRejectsEmptyTokenResponse(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, 502, infraerrors.Code(err))
 	require.Equal(t, "KIMI_OAUTH_INVALID_TOKEN_RESPONSE", infraerrors.Reason(err))
+}
+
+
+func TestKimiUserIDFromAccessTokenPrefersUserIDClaim(t *testing.T) {
+	token := "eyJhbGciOiJub25lIn0." + base64.RawURLEncoding.EncodeToString([]byte(`{"user_id":"ctnrlinftaee7h5moq80","sub":"ctnrlinftaee7h5moq80","type":"access"}`)) + ".sig"
+	require.Equal(t, "ctnrlinftaee7h5moq80", kimiUserIDFromAccessToken(token))
+}
+
+func TestKimiBuildAccountCredentialsExtractsUserIDFromAccessToken(t *testing.T) {
+	service := NewKimiOAuthService(nil, &kimiOAuthClientStub{}, &kimiDeviceSessionStoreStub{sessions: map[string]*KimiDeviceSession{}})
+	access := "eyJhbGciOiJub25lIn0." + base64.RawURLEncoding.EncodeToString([]byte(`{"user_id":"ctnrlinftaee7h5moq80","sub":"ctnrlinftaee7h5moq80"}`)) + ".sig"
+	creds := service.BuildAccountCredentials(&KimiOAuthTokenInfo{
+		AccessToken: access, TokenType: "Bearer", ExpiresAt: time.Now().Add(time.Hour).Unix(),
+		DeviceID: "device-a", DeviceName: "host", DeviceModel: "macOS arm64",
+	})
+	require.Equal(t, "ctnrlinftaee7h5moq80", creds["user_id"])
+	require.Equal(t, "ctnrlinftaee7h5moq80", creds["email"])
 }

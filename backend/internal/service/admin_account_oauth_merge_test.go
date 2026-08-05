@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"testing"
 	"time"
 
@@ -28,6 +29,16 @@ type oauthMergeAccountRepoStub struct {
 
 func (s *oauthMergeAccountRepoStub) key(platform, email string) string {
 	return platform + "|" + email
+}
+
+func (s *oauthMergeAccountRepoStub) ListByPlatform(_ context.Context, platform string) ([]Account, error) {
+	out := make([]Account, 0, len(s.byID))
+	for _, acc := range s.byID {
+		if acc.Platform == platform {
+			out = append(out, *acc)
+		}
+	}
+	return out, nil
 }
 
 func (s *oauthMergeAccountRepoStub) FindOAuthByPlatformEmail(_ context.Context, platform, email string, includeDeleted bool) ([]Account, error) {
@@ -338,4 +349,43 @@ func TestCleanupOAuthEmailDuplicates_IncludesTrash(t *testing.T) {
 	_, ok6 := repo.byID[6]
 	require.False(t, ok28)
 	require.False(t, ok6)
+}
+
+
+func TestCreateAccount_MergesKimiByAccessTokenSubject(t *testing.T) {
+	// Legacy Kimi rows have no credentials.email; only the access JWT carries user_id.
+	accessOld := "eyJhbGciOiJub25lIn0." + mustB64(`{"user_id":"ctnrlinftaee7h5moq80","sub":"ctnrlinftaee7h5moq80"}`) + ".sig"
+	accessNew := "eyJhbGciOiJub25lIn0." + mustB64(`{"user_id":"ctnrlinftaee7h5moq80","sub":"ctnrlinftaee7h5moq80","token_id":"new"}`) + ".sig"
+	login := time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC)
+	repo := &oauthMergeAccountRepoStub{
+		byID: map[int64]*Account{
+			105: {
+				ID: 105, Name: "kimi", Platform: PlatformKimi, Type: AccountTypeOAuth, Status: StatusActive,
+				Credentials: map[string]any{"access_token": accessOld, "device_id": "device-old"},
+				LastUsedAt:  &login,
+			},
+		},
+		oauthByEmail: map[string][]Account{},
+	}
+	svc := &adminServiceImpl{accountRepo: repo}
+	account, err := svc.CreateAccount(context.Background(), &CreateAccountInput{
+		Name:     "ze",
+		Platform: PlatformKimi,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token":  accessNew,
+			"refresh_token": "fresh-rt",
+			"device_id":      "device-new",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(105), account.ID, "same Kimi user_id must merge into existing account")
+	require.Empty(t, repo.created)
+	require.Equal(t, "fresh-rt", repo.byID[105].Credentials["refresh_token"])
+	require.Equal(t, "ctnrlinftaee7h5moq80", repo.byID[105].Credentials["user_id"])
+	require.Equal(t, "ctnrlinftaee7h5moq80", repo.byID[105].Credentials["email"])
+}
+
+func mustB64(s string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(s))
 }

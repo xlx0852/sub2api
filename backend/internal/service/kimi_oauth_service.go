@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"os"
 	"runtime"
@@ -75,7 +77,10 @@ type KimiOAuthTokenInfo struct {
 	DeviceID     string `json:"device_id"`
 	DeviceName   string `json:"device_name"`
 	DeviceModel  string `json:"device_model"`
-	ProxyID      *int64 `json:"proxy_id,omitempty"`
+	// UserID is the durable Kimi subject (JWT user_id/sub). Used as the OAuth
+	// merge identity because Kimi device tokens do not include an email claim.
+	UserID  string `json:"user_id,omitempty"`
+	ProxyID *int64 `json:"proxy_id,omitempty"`
 }
 
 type KimiDeviceAuthorizationResult struct {
@@ -311,11 +316,23 @@ func (s *KimiOAuthService) BuildAccountCredentials(token *KimiOAuthTokenInfo) ma
 	if token == nil {
 		return nil
 	}
+	userID := strings.TrimSpace(token.UserID)
+	if userID == "" {
+		userID = kimiUserIDFromAccessToken(token.AccessToken)
+	}
 	credentials := map[string]any{
 		"access_token": token.AccessToken, "token_type": token.TokenType,
 		"expires_at": time.Unix(token.ExpiresAt, 0).UTC().Format(time.RFC3339),
 		"device_id":  token.DeviceID, "device_name": token.DeviceName, "device_model": token.DeviceModel,
 		"client_id": kimi.ClientID, "base_url": kimi.CodingBaseURL,
+	}
+	if userID != "" {
+		// Stable account identity for CreateAccount merge. Kimi device tokens do
+		// not expose a real email; user_id/sub from the access JWT is the only
+		// durable subject. Store it as both user_id and email so the existing
+		// platform+email OAuth merge path can collapse re-logins into one row.
+		credentials["user_id"] = userID
+		credentials["email"] = userID
 	}
 	if token.RefreshToken != "" {
 		credentials["refresh_token"] = token.RefreshToken
@@ -346,9 +363,41 @@ func (s *KimiOAuthService) tokenInfo(token *kimi.TokenResponse, headers kimi.Dev
 	if tokenType == "" {
 		tokenType = "Bearer"
 	}
-	return &KimiOAuthTokenInfo{AccessToken: token.AccessToken, RefreshToken: token.RefreshToken, TokenType: tokenType, Scope: token.Scope,
+	return &KimiOAuthTokenInfo{
+		AccessToken: token.AccessToken, RefreshToken: token.RefreshToken, TokenType: tokenType, Scope: token.Scope,
 		ExpiresIn: expiresIn, ExpiresAt: s.now().Add(time.Duration(expiresIn) * time.Second).Unix(),
-		DeviceID: headers.DeviceID, DeviceName: headers.DeviceName, DeviceModel: headers.DeviceModel}
+		DeviceID: headers.DeviceID, DeviceName: headers.DeviceName, DeviceModel: headers.DeviceModel,
+		UserID: kimiUserIDFromAccessToken(token.AccessToken),
+	}
+}
+
+// kimiUserIDFromAccessToken extracts the durable Kimi subject from a JWT access
+// token without verifying the signature (identity is used only as a local merge
+// key after a successful OAuth exchange). Prefer user_id, then sub.
+func kimiUserIDFromAccessToken(accessToken string) string {
+	accessToken = strings.TrimSpace(accessToken)
+	parts := strings.Split(accessToken, ".")
+	if len(parts) < 2 {
+		return ""
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		payload, err = base64.URLEncoding.DecodeString(parts[1])
+		if err != nil {
+			return ""
+		}
+	}
+	var claims struct {
+		UserID string `json:"user_id"`
+		Sub    string `json:"sub"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return ""
+	}
+	if id := strings.TrimSpace(claims.UserID); id != "" {
+		return id
+	}
+	return strings.TrimSpace(claims.Sub)
 }
 
 func (s *KimiOAuthService) proxyURL(ctx context.Context, proxyID *int64) (string, error) {

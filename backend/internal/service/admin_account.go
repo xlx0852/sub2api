@@ -134,6 +134,42 @@ func withOAuthEmailInExtra(extra map[string]any, email string) map[string]any {
 	return extra
 }
 
+// findKimiOAuthByAccessTokenSubject finds a Kimi OAuth mother account whose
+// access_token JWT subject matches identity. Used for legacy rows that predate
+// persisting credentials.email/user_id.
+func (s *adminServiceImpl) findKimiOAuthByAccessTokenSubject(ctx context.Context, identity string) (*Account, error) {
+	identity = strings.ToLower(strings.TrimSpace(identity))
+	if s == nil || s.accountRepo == nil || identity == "" {
+		return nil, nil
+	}
+	accounts, err := s.accountRepo.ListByPlatform(ctx, PlatformKimi)
+	if err != nil {
+		return nil, err
+	}
+	matches := make([]Account, 0, 2)
+	for i := range accounts {
+		acc := accounts[i]
+		if acc.Type != AccountTypeOAuth && acc.Type != AccountTypeSetupToken {
+			continue
+		}
+		if acc.IsCredentialShadow() || acc.ParentAccountID != nil {
+			continue
+		}
+		if id := strings.ToLower(strings.TrimSpace(acc.GetCredential("user_id"))); id != "" && id == identity {
+			matches = append(matches, acc)
+			continue
+		}
+		if id := strings.ToLower(strings.TrimSpace(acc.GetCredential("email"))); id != "" && id == identity {
+			matches = append(matches, acc)
+			continue
+		}
+		if id := strings.ToLower(strings.TrimSpace(kimiUserIDFromAccessToken(acc.GetCredential("access_token")))); id != "" && id == identity {
+			matches = append(matches, acc)
+		}
+	}
+	return pickLatestOAuthAccount(matches), nil
+}
+
 func (s *adminServiceImpl) mergeIntoExistingOAuthAccount(ctx context.Context, existing *Account, input *CreateAccountInput, email string) (*Account, error) {
 	if existing == nil || input == nil {
 		return nil, errors.New("oauth merge target missing")
@@ -299,6 +335,22 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 			if v, ok := input.Credentials["email"].(string); ok {
 				email = strings.ToLower(strings.TrimSpace(v))
 			}
+			if email == "" {
+				if v, ok := input.Credentials["user_id"].(string); ok {
+					email = strings.ToLower(strings.TrimSpace(v))
+				}
+			}
+			// Kimi device tokens have no email claim. Recover the stable subject
+			// from the access JWT so re-login merges into the existing row.
+			if email == "" && input.Platform == PlatformKimi {
+				if at, ok := input.Credentials["access_token"].(string); ok {
+					email = strings.ToLower(strings.TrimSpace(kimiUserIDFromAccessToken(at)))
+					if email != "" {
+						input.Credentials["user_id"] = email
+						input.Credentials["email"] = email
+					}
+				}
+			}
 		}
 		if email == "" && input.Extra != nil {
 			if v, ok := input.Extra["email"].(string); ok {
@@ -313,6 +365,16 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 			}
 			if winner := pickLatestOAuthAccount(existing); winner != nil {
 				return s.mergeIntoExistingOAuthAccount(ctx, winner, input, email)
+			}
+			// Legacy Kimi rows only store the subject inside the JWT, not
+			// credentials.email/user_id. Scan platform OAuth accounts once so a
+			// second device login still merges instead of creating #105+#106.
+			if input.Platform == PlatformKimi {
+				if winner, scanErr := s.findKimiOAuthByAccessTokenSubject(ctx, email); scanErr != nil {
+					return nil, scanErr
+				} else if winner != nil {
+					return s.mergeIntoExistingOAuthAccount(ctx, winner, input, email)
+				}
 			}
 		}
 	}
