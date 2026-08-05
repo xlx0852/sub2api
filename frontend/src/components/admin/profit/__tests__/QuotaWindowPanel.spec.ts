@@ -57,4 +57,52 @@ describe('QuotaWindowPanel', () => {
     expect(wrapper.text()).toContain('codex-main')
     expect(wrapper.text()).toContain('46%')
   })
+
+  it('supports month view mode toggle', async () => {
+    const end = new Date(Date.now() + 2 * 24 * 3600_000).toISOString()
+    const start = new Date(Date.now() - 5 * 24 * 3600_000).toISOString()
+    const wrapper = mount(QuotaWindowPanel, {
+      props: {
+        accounts: [
+          {
+            account_id: 2,
+            account_name: 'kimi-main',
+            platform: 'kimi',
+            account_type: 'oauth',
+            cost_type: 'subscription',
+            configured: true,
+            requests: 3,
+            revenue: 1,
+            cost: 1,
+            profit: 0,
+            margin: 0,
+            currency: 'USD',
+            quota_windows: [
+              {
+                id: '7d',
+                label: '7d',
+                kind: '7d',
+                used_percent: 83,
+                start_at: start,
+                end_at: end,
+                window_minutes: 10080
+              }
+            ]
+          }
+        ]
+      }
+    })
+
+    const modeButtons = wrapper.findAll('button').filter((btn) => {
+      const text = btn.text()
+      return text === 'admin.profit.quotaWindowByMonth' || text.includes('Month') || text.includes('按月')
+    })
+    // i18n mock returns the key string
+    const monthBtn = wrapper.findAll('button').find((btn) => btn.text() === 'admin.profit.quotaWindowByMonth')
+    expect(monthBtn).toBeTruthy()
+    await monthBtn!.trigger('click')
+    expect(wrapper.text()).toContain('admin.profit.quotaWindowByMonth')
+    expect(wrapper.findAll('[data-testid="profit-quota-window-lane"]').length).toBeGreaterThanOrEqual(1)
+    expect(modeButtons.length).toBeGreaterThanOrEqual(0)
+  })
 })

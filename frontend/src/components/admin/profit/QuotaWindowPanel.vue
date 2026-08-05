@@ -64,7 +64,7 @@
     </div>
 
     <div v-else class="overflow-x-auto">
-      <div class="min-w-[720px] px-4 py-3 sm:px-5">
+      <div class="px-4 py-3 sm:px-5" :class="viewMode === 'month' ? 'min-w-[960px]' : 'min-w-[720px]'">
         <div class="mb-2 grid gap-3" :style="gridTemplate">
           <div />
           <div class="relative h-7">
@@ -161,7 +161,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { AccountProfitSummary, ProfitQuotaWindow } from '@/api/admin/profit'
 
-type ViewMode = 'week' | '5h'
+type ViewMode = 'week' | 'month' | '5h'
 
 const props = defineProps<{
   accounts: AccountProfitSummary[]
@@ -174,6 +174,7 @@ const anchor = ref(startOfLocalDay(new Date()))
 
 const modes = computed(() => [
   { key: 'week' as const, label: t('admin.profit.quotaWindowByWeek') },
+  { key: 'month' as const, label: t('admin.profit.quotaWindowByMonth') },
   { key: '5h' as const, label: t('admin.profit.quotaWindowBy5h') }
 ])
 
@@ -217,24 +218,35 @@ const viewRange = computed(() => {
   if (viewMode.value === '5h') {
     return { start, end: new Date(start.getTime() + 5 * 3600_000) }
   }
+  if (viewMode.value === 'month') {
+    const monthStart = startOfLocalMonth(start)
+    return { start: monthStart, end: addMonths(monthStart, 1) }
+  }
   return { start, end: new Date(start.getTime() + 14 * 86_400_000) }
 })
 
 const viewDurationMs = computed(() => Math.max(1, viewRange.value.end.getTime() - viewRange.value.start.getTime()))
 
 const isTodayView = computed(() => {
-  const today = startOfLocalDay(new Date())
+  const now = new Date()
   if (viewMode.value === '5h') {
-    return Math.abs(anchor.value.getTime() - alignTo5h(new Date()).getTime()) < 60_000
+    return Math.abs(anchor.value.getTime() - alignTo5h(now).getTime()) < 60_000
   }
-  return sameDay(anchor.value, today)
+  if (viewMode.value === 'month') {
+    const cur = startOfLocalMonth(now)
+    return anchor.value.getFullYear() === cur.getFullYear()
+      && anchor.value.getMonth() === cur.getMonth()
+  }
+  return sameDay(anchor.value, startOfLocalDay(now))
 })
 
 const rangeLabel = computed(() => {
   const { start, end } = viewRange.value
   const scope = viewMode.value === '5h'
     ? t('admin.profit.quotaWindowBy5h')
-    : t('admin.profit.quotaWindowByWeek')
+    : viewMode.value === 'month'
+      ? t('admin.profit.quotaWindowByMonth')
+      : t('admin.profit.quotaWindowByWeek')
   return t('admin.profit.quotaWindowRange', {
     start: formatShortDate(start),
     end: formatShortDate(new Date(end.getTime() - 1)),
@@ -260,11 +272,17 @@ const dayTicks = computed(() => {
   let cursor = startOfLocalDay(start)
   while (cursor < end) {
     const left = ((cursor.getTime() - start.getTime()) / viewDurationMs.value) * 100
+    // 月视图格线仍按天，标签隔天显示（1 号必显），避免 30 个 weekday 挤成一团
+    const showLabel = viewMode.value !== 'month'
+      || cursor.getDate() === 1
+      || cursor.getDate() % 2 === 1
     ticks.push({
       key: cursor.toISOString(),
       left,
-      weekday: formatWeekday(cursor),
-      day: formatDay(cursor)
+      weekday: viewMode.value === 'month' ? '' : formatWeekday(cursor),
+      day: showLabel
+        ? (viewMode.value === 'month' ? formatMonthDay(cursor) : formatDay(cursor))
+        : ''
     })
     cursor = new Date(cursor.getTime() + 86_400_000)
   }
@@ -311,6 +329,8 @@ function setMode(mode: ViewMode) {
   viewMode.value = mode
   if (mode === '5h') {
     anchor.value = alignTo5h(new Date())
+  } else if (mode === 'month') {
+    anchor.value = startOfLocalMonth(new Date())
   } else {
     anchor.value = startOfLocalDay(new Date())
   }
@@ -319,6 +339,8 @@ function setMode(mode: ViewMode) {
 function goToday() {
   if (viewMode.value === '5h') {
     anchor.value = alignTo5h(new Date())
+  } else if (viewMode.value === 'month') {
+    anchor.value = startOfLocalMonth(new Date())
   } else {
     anchor.value = startOfLocalDay(new Date())
   }
@@ -327,7 +349,11 @@ function goToday() {
 function canShift(direction: number) {
   const next = shiftAnchor(direction)
   const today = startOfLocalDay(new Date()).getTime()
-  return Math.abs(next.getTime() - today) <= 60 * 86_400_000
+  // 月视图跨度更大，允许前后约 12 个月；周/5h 仍限制在约 60 天内
+  const maxDeltaMs = viewMode.value === 'month'
+    ? 370 * 86_400_000
+    : 60 * 86_400_000
+  return Math.abs(next.getTime() - today) <= maxDeltaMs
 }
 
 function shiftView(direction: number) {
@@ -338,6 +364,9 @@ function shiftView(direction: number) {
 function shiftAnchor(direction: number) {
   if (viewMode.value === '5h') {
     return new Date(anchor.value.getTime() + direction * 5 * 3600_000)
+  }
+  if (viewMode.value === 'month') {
+    return addMonths(startOfLocalMonth(anchor.value), direction)
   }
   return new Date(anchor.value.getTime() + direction * 7 * 86_400_000)
 }
@@ -501,6 +530,14 @@ function startOfLocalDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
 }
 
+function startOfLocalMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+function addMonths(date: Date, delta: number) {
+  return new Date(date.getFullYear(), date.getMonth() + delta, 1)
+}
+
 function alignTo5h(date: Date) {
   const ms = date.getTime()
   const block = 5 * 3600_000
@@ -519,6 +556,10 @@ function formatShortDate(date: Date) {
 
 function formatDay(date: Date) {
   return new Intl.DateTimeFormat(locale.value || undefined, { month: '2-digit', day: '2-digit' }).format(date)
+}
+
+function formatMonthDay(date: Date) {
+  return String(date.getDate())
 }
 
 function formatWeekday(date: Date) {
