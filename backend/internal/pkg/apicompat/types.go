@@ -234,31 +234,45 @@ type ResponsesInputItem struct {
 	Content json.RawMessage `json:"content,omitempty"` // string or []ResponsesContentPart
 
 	// type=function_call
-	CallID    string `json:"call_id,omitempty"`
-	Name      string `json:"name,omitempty"`
-	Arguments string `json:"arguments,omitempty"`
-	ID        string `json:"id,omitempty"`
+	CallID       string `json:"call_id,omitempty"`
+	Name         string `json:"name,omitempty"`
+	Arguments    string `json:"arguments,omitempty"`
+	argumentsRaw json.RawMessage
+	ID           string `json:"id,omitempty"`
 
 	// type=function_call_output
 	Output    string `json:"output,omitempty"`
 	outputRaw json.RawMessage
 }
 
-// UnmarshalJSON 兼容新版 codex：function_call_output 的 output 可能是 JSON 对象/
-// 数组（而不仅是字符串），旧定义 output string 会 unmarshal 失败导致 502 或静默
-// 丢工具结果（issue #2913）。字符串仍走原路径；对象/数组保留原始字节到 outputRaw，
-// 同时序列化回字符串到 Output，供按字符串消费的旧调用点继续工作。
+// UnmarshalJSON 兼容新版 codex 的两类非字符串载荷（issue #2913）：
+//   - function_call 的 arguments 可能是 JSON 对象（而非字符串）
+//   - function_call_output 的 output 可能是 JSON 对象/数组（而非字符串）
+//
+// 旧定义 string 会让整个 input 数组 unmarshal 失败 → Anthropic 上游 502、
+// OpenAI chat 兼容上游静默丢工具结果。字符串仍走原路径；对象/数组保留原始
+// 字节到 argumentsRaw/outputRaw，同时序列化回字符串到 Arguments/Output，
+// 供按字符串消费的旧调用点继续工作（tool_use 的 Input 语义不变）。
 func (i *ResponsesInputItem) UnmarshalJSON(data []byte) error {
 	type alias ResponsesInputItem
 	var wire struct {
 		*alias
-		Output json.RawMessage `json:"output"`
+		Arguments json.RawMessage `json:"arguments"`
+		Output    json.RawMessage `json:"output"`
 	}
 
 	*i = ResponsesInputItem{}
 	wire.alias = (*alias)(i)
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
+	}
+
+	arguments := bytes.TrimSpace(wire.Arguments)
+	if len(arguments) > 0 && !bytes.Equal(arguments, []byte("null")) {
+		if err := json.Unmarshal(arguments, &i.Arguments); err != nil {
+			i.argumentsRaw = append(i.argumentsRaw[:0], arguments...)
+			i.Arguments = string(arguments)
+		}
 	}
 
 	output := bytes.TrimSpace(wire.Output)
