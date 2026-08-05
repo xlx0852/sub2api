@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -51,13 +52,24 @@ func TestBuildPublicPricingSnapshotExcludesPrivateOffersAndChoosesLowestPublicPr
 }
 
 func TestEncodePublicPricingSnapshotProducesStableETag(t *testing.T) {
-	snapshot := &publicPricingSnapshot{GeneratedAt: time.Unix(123, 0).UTC(), Models: []publicPricingModel{}}
+	snapshot := &publicPricingSnapshot{Version: publicPricingCacheVersion, GeneratedAt: time.Unix(123, 0).UTC(), Models: []publicPricingModel{}}
 	first, _, err := encodePublicPricingSnapshot(snapshot)
 	require.NoError(t, err)
 	second, _, err := encodePublicPricingSnapshot(snapshot)
 	require.NoError(t, err)
 	require.NotEmpty(t, first.etag)
 	require.Equal(t, first.etag, second.etag)
+}
+
+func TestPublicPricingSnapshotCarriesCacheVersion(t *testing.T) {
+	snapshot := buildPublicPricingSnapshot(nil, nil, time.Unix(123, 0).UTC())
+	require.Equal(t, publicPricingCacheVersion, snapshot.Version)
+
+	_, payload, err := encodePublicPricingSnapshot(snapshot)
+	require.NoError(t, err)
+	var wire map[string]any
+	require.NoError(t, json.Unmarshal(payload, &wire))
+	require.EqualValues(t, publicPricingCacheVersion, wire["version"])
 }
 
 func TestSetPublicPricingCacheHeaders(t *testing.T) {
