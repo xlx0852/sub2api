@@ -145,8 +145,9 @@ var openAICodexOAuthUnsupportedFields = append([]string{
 
 func applyCodexOAuthTransform(reqBody map[string]any, isCodexCLI bool, isCompact bool) codexTransformResult {
 	return applyCodexOAuthTransformWithOptions(reqBody, codexOAuthTransformOptions{
-		IsCodexCLI: isCodexCLI,
-		IsCompact:  isCompact,
+		IsCodexCLI:          isCodexCLI,
+		IsCompact:           isCompact,
+		PreserveToolCallIDs: true,
 	})
 }
 

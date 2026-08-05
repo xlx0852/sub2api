@@ -96,6 +96,25 @@ type openAIWSIngressTurnError struct {
 	wroteDownstream bool
 }
 
+type openAIWSIndexedCompatibilityRetryError struct {
+	body   []byte
+	reason string
+}
+
+func (e *openAIWSIndexedCompatibilityRetryError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return "openai ws indexed compatibility retry: " + strings.TrimSpace(e.reason)
+}
+
+func newOpenAIWSIndexedCompatibilityRetryError(body []byte, reason string) error {
+	return &openAIWSIndexedCompatibilityRetryError{
+		body:   append([]byte(nil), body...),
+		reason: strings.TrimSpace(reason),
+	}
+}
+
 func (e *openAIWSIngressTurnError) Error() string {
 	if e == nil {
 		return ""
