@@ -116,9 +116,11 @@ func TestFillProfitQuotaWindows_GrokBilling(t *testing.T) {
 
 func TestFillProfitQuotaWindows_GrokFreeUsageFallback(t *testing.T) {
 	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+	// Official Free traffic (empty base_url → api.x.ai) may invent a 24h bar.
 	acc := &Account{
 		ID:       90,
 		Platform: PlatformGrok,
+		Type:     AccountTypeAPIKey,
 		Extra: map[string]any{
 			"grok_usage_snapshot": map[string]any{
 				"tokens": map[string]any{
@@ -138,6 +140,71 @@ func TestFillProfitQuotaWindows_GrokFreeUsageFallback(t *testing.T) {
 	require.InDelta(t, 75.0, *w.UsedPercent, 0.01)
 	require.NotNil(t, w.StartAt)
 	require.NotNil(t, w.EndAt)
+}
+
+// Third-party apikey relays often echo limit=1e6 rate-limit headers that are
+// NOT xAI Free's 24h rolling budget. Do not invent a 24h timeline for them.
+func TestFillProfitQuotaWindows_GrokRelayApikeyNoFake24h(t *testing.T) {
+	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+	acc := &Account{
+		ID:       90,
+		Platform: PlatformGrok,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key":  "sk-relay",
+			"base_url": "https://api.biuapi.com",
+		},
+		Extra: map[string]any{
+			"grok_usage_snapshot": map[string]any{
+				"tokens": map[string]any{
+					"limit":     int64(1000000),
+					"remaining": int64(1000000),
+				},
+				"requests": map[string]any{
+					"limit":     int64(21),
+					"remaining": int64(21),
+				},
+				"updated_at": "2026-08-05T02:50:10Z",
+			},
+		},
+	}
+	summary := &AccountProfitSummary{}
+	fillProfitQuotaWindows(summary, acc, now)
+	require.Empty(t, summary.QuotaWindows)
+}
+
+// When the relay (or official host) provides an explicit reset, still render.
+func TestFillProfitQuotaWindows_GrokRelayWithExplicitReset(t *testing.T) {
+	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+	resetAt := now.Add(6 * time.Hour)
+	acc := &Account{
+		ID:       91,
+		Platform: PlatformGrok,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key":  "sk-relay",
+			"base_url": "https://api.biuapi.com",
+		},
+		Extra: map[string]any{
+			"grok_usage_snapshot": map[string]any{
+				"tokens": map[string]any{
+					"limit":     int64(1000000),
+					"remaining": int64(500000),
+					"reset_at":  resetAt.Format(time.RFC3339),
+				},
+				"updated_at": "2026-08-01T09:00:00Z",
+			},
+		},
+	}
+	summary := &AccountProfitSummary{}
+	fillProfitQuotaWindows(summary, acc, now)
+	require.Len(t, summary.QuotaWindows, 1)
+	w := summary.QuotaWindows[0]
+	require.Equal(t, "24h", w.Kind)
+	require.NotNil(t, w.UsedPercent)
+	require.InDelta(t, 50.0, *w.UsedPercent, 0.01)
+	require.NotNil(t, w.EndAt)
+	require.WithinDuration(t, resetAt.UTC(), w.EndAt.UTC(), time.Second)
 }
 
 func TestFillProfitQuotaWindows_CapsAtSubscriptionCycleEnd(t *testing.T) {
