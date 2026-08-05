@@ -344,6 +344,11 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		payload.DefaultPlatformQuotas = platformQuotas
 	}
 
+	// 模型级并发预算：来自 parseSettings，保证 Settings 页能回显（避免前端默认 {}）
+	if settings.ModelConcurrencyLimits != nil {
+		payload.ModelConcurrencyLimits = settings.ModelConcurrencyLimits
+	}
+
 	response.Success(c, systemSettingsResponseData(payload, authSourceDefaults))
 }
 
