@@ -19,6 +19,7 @@ export default {
     quotaWindowEmpty: '当前账号暂无可用的配额窗口快照',
     quotaWindowToday: '今天',
     quotaWindowByWeek: '按周',
+    quotaWindowByMonth: '按月',
     quotaWindowBy5h: '5 小时',
     quotaWindowCurrent: '当前窗口',
     quotaWindowUpcoming: '即将开始',

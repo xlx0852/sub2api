@@ -19,6 +19,7 @@ export default {
     quotaWindowEmpty: 'No quota window snapshots for these accounts yet',
     quotaWindowToday: 'Today',
     quotaWindowByWeek: 'Week',
+    quotaWindowByMonth: 'Month',
     quotaWindowBy5h: '5 hours',
     quotaWindowCurrent: 'Current',
     quotaWindowUpcoming: 'Upcoming',
