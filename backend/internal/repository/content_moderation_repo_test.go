@@ -21,6 +21,22 @@ func TestBuildContentModerationLogWhere_BlockedIncludesAllBlockActions(t *testin
 	require.NotContains(t, sql, "l.action = 'block'")
 }
 
+func TestContentModerationRepositorySummarizeLogs(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := NewContentModerationRepository(db)
+	mock.ExpectQuery("(?s)COUNT\\(\\*\\) FILTER.*keyword_block.*cyber_policy.*action = 'error'.*FROM content_moderation_logs").
+		WillReturnRows(sqlmock.NewRows([]string{"local", "upstream", "errors", "total"}).AddRow(23, 10, 0, 33))
+
+	summary, err := repo.SummarizeLogs(context.Background(), service.ContentModerationLogFilter{})
+
+	require.NoError(t, err)
+	require.Equal(t, &service.ContentModerationLogSummary{LocalPreBlock: 23, UpstreamPolicy: 10, Errors: 0, Total: 33}, summary)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestContentModerationRepositoryCountFlaggedByUserSince_ExcludesHashBlock(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)

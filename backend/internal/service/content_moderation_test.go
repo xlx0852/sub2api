@@ -100,6 +100,10 @@ func (r *contentModerationTestRepo) ListLogs(ctx context.Context, filter Content
 	return nil, nil, nil
 }
 
+func (r *contentModerationTestRepo) SummarizeLogs(ctx context.Context, filter ContentModerationLogFilter) (*ContentModerationLogSummary, error) {
+	return &ContentModerationLogSummary{}, nil
+}
+
 func (r *contentModerationTestRepo) CountFlaggedByUserSince(ctx context.Context, userID int64, since time.Time, excludeCyberPolicy bool) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -141,7 +145,6 @@ func (r *contentModerationTestRepo) ListLatestFlaggedLogsByUserIDs(ctx context.C
 	}
 	return out, nil
 }
-
 
 func (r *contentModerationTestRepo) CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time) (*ContentModerationCleanupResult, error) {
 	return &ContentModerationCleanupResult{}, nil
@@ -332,9 +335,11 @@ func (r *contentModerationTestUserRepo) GetByIDIncludeDeleted(ctx context.Contex
 
 type contentModerationTestAuthCacheInvalidator struct {
 	userIDs []int64
+	keys    []string
 }
 
 func (i *contentModerationTestAuthCacheInvalidator) InvalidateAuthCacheByKey(ctx context.Context, key string) {
+	i.keys = append(i.keys, key)
 }
 
 func (i *contentModerationTestAuthCacheInvalidator) InvalidateAuthCacheByUserID(ctx context.Context, userID int64) {
@@ -342,6 +347,30 @@ func (i *contentModerationTestAuthCacheInvalidator) InvalidateAuthCacheByUserID(
 }
 
 func (i *contentModerationTestAuthCacheInvalidator) InvalidateAuthCacheByGroupID(ctx context.Context, groupID int64) {
+}
+
+type contentModerationTestAPIKeyRepo struct {
+	key       *APIKey
+	updated   []APIKey
+	updateErr error
+}
+
+func (r *contentModerationTestAPIKeyRepo) GetByID(_ context.Context, id int64) (*APIKey, error) {
+	if r.key == nil || r.key.ID != id {
+		return nil, ErrAPIKeyNotFound
+	}
+	clone := *r.key
+	return &clone, nil
+}
+
+func (r *contentModerationTestAPIKeyRepo) Update(_ context.Context, key *APIKey) error {
+	if r.updateErr != nil {
+		return r.updateErr
+	}
+	clone := *key
+	r.updated = append(r.updated, clone)
+	r.key = &clone
+	return nil
 }
 
 func (c *contentModerationTestHashCache) RecordFlaggedInputHash(ctx context.Context, inputHash string) error {
@@ -1651,6 +1680,81 @@ func TestContentModerationAutoBanDisablesRegularUserAtThreshold(t *testing.T) {
 	require.Equal(t, []int64{userID}, invalidator.userIDs)
 }
 
+func TestContentModerationLightHitDisablesOnlyCurrentAPIKey(t *testing.T) {
+	userID := int64(1001)
+	keyID := int64(2001)
+	userRepo := &contentModerationTestUserRepo{user: &User{ID: userID, Role: RoleUser, Status: StatusActive}}
+	apiKeyRepo := &contentModerationTestAPIKeyRepo{key: &APIKey{ID: keyID, UserID: userID, Key: "sk-current", Status: StatusAPIKeyActive}}
+	invalidator := &contentModerationTestAuthCacheInvalidator{}
+	svc := NewContentModerationService(nil, nil, nil, nil, userRepo, invalidator, nil)
+	svc.apiKeyRepo = apiKeyRepo
+	cfg := defaultContentModerationConfig()
+	cfg.AutoDisableAPIKeyEnabled = true
+	log := newContentModerationFlaggedLog(userID)
+	log.APIKeyID = &keyID
+
+	disabled, enforcementError := svc.applyAPIKeyDisable(context.Background(), cfg, log)
+
+	require.True(t, disabled)
+	require.Empty(t, enforcementError)
+	require.Equal(t, StatusAPIKeyDisabled, apiKeyRepo.key.Status)
+	require.Len(t, apiKeyRepo.updated, 1)
+	require.Equal(t, []string{"sk-current"}, invalidator.keys)
+	require.Equal(t, StatusActive, userRepo.user.Status)
+	require.Empty(t, userRepo.updated)
+}
+
+func TestContentModerationLightHitDoesNotDisableMismatchedOrAdminKey(t *testing.T) {
+	userID := int64(1001)
+	keyID := int64(2001)
+	cfg := defaultContentModerationConfig()
+	cfg.AutoDisableAPIKeyEnabled = true
+	log := newContentModerationFlaggedLog(userID)
+	log.APIKeyID = &keyID
+
+	t.Run("ownership mismatch", func(t *testing.T) {
+		apiKeyRepo := &contentModerationTestAPIKeyRepo{key: &APIKey{ID: keyID, UserID: 9999, Key: "sk-other", Status: StatusAPIKeyActive}}
+		svc := NewContentModerationService(nil, nil, nil, nil, &contentModerationTestUserRepo{user: &User{ID: userID, Role: RoleUser}}, &contentModerationTestAuthCacheInvalidator{}, nil)
+		svc.apiKeyRepo = apiKeyRepo
+		disabled, enforcementError := svc.applyAPIKeyDisable(context.Background(), cfg, log)
+		require.False(t, disabled)
+		require.Contains(t, enforcementError, "ownership mismatch")
+		require.Empty(t, apiKeyRepo.updated)
+	})
+
+	t.Run("administrator", func(t *testing.T) {
+		apiKeyRepo := &contentModerationTestAPIKeyRepo{key: &APIKey{ID: keyID, UserID: userID, Key: "sk-admin", Status: StatusAPIKeyActive}}
+		svc := NewContentModerationService(nil, nil, nil, nil, &contentModerationTestUserRepo{user: &User{ID: userID, Role: RoleAdmin}}, &contentModerationTestAuthCacheInvalidator{}, nil)
+		svc.apiKeyRepo = apiKeyRepo
+		disabled, enforcementError := svc.applyAPIKeyDisable(context.Background(), cfg, log)
+		require.False(t, disabled)
+		require.Contains(t, enforcementError, "administrator")
+		require.Empty(t, apiKeyRepo.updated)
+	})
+}
+
+func TestContentModerationLightHitReportsUpdateFailure(t *testing.T) {
+	userID := int64(1001)
+	keyID := int64(2001)
+	apiKeyRepo := &contentModerationTestAPIKeyRepo{
+		key:       &APIKey{ID: keyID, UserID: userID, Key: "sk-current", Status: StatusAPIKeyActive},
+		updateErr: fmt.Errorf("database unavailable"),
+	}
+	invalidator := &contentModerationTestAuthCacheInvalidator{}
+	svc := NewContentModerationService(nil, nil, nil, nil, &contentModerationTestUserRepo{user: &User{ID: userID, Role: RoleUser}}, invalidator, nil)
+	svc.apiKeyRepo = apiKeyRepo
+	cfg := defaultContentModerationConfig()
+	cfg.AutoDisableAPIKeyEnabled = true
+	log := newContentModerationFlaggedLog(userID)
+	log.APIKeyID = &keyID
+
+	disabled, enforcementError := svc.applyAPIKeyDisable(context.Background(), cfg, log)
+
+	require.False(t, disabled)
+	require.Contains(t, enforcementError, "database unavailable")
+	require.Empty(t, invalidator.keys)
+}
+
 func TestContentModerationAdminBelowBanThresholdRecordsViolationOnly(t *testing.T) {
 	cfg := defaultContentModerationConfig()
 	cfg.BanThreshold = 2
@@ -1940,7 +2044,6 @@ func TestContentModerationUpdateConfig_CyberPolicyExcludeFromBanCount(t *testing
 	require.False(t, view.CyberPolicyExcludeFromBanCount)
 }
 
-
 func TestContentModerationConfig_ShouldSampleDeterministic(t *testing.T) {
 	cfg := &ContentModerationConfig{SampleRate: 30}
 	// empty/invalid hash fails open to sample
@@ -2002,7 +2105,6 @@ func TestContentModerationCheck_CleanHashCacheSkipsAPI(t *testing.T) {
 	require.Equal(t, ContentModerationActionAllow, decision.Action)
 	require.Empty(t, repo.snapshotLogs())
 }
-
 
 func TestContentModerationCheck_ElevatedUserForcesSample(t *testing.T) {
 	// sample_rate=0 would skip normal users; elevated user must still be forced.
@@ -2100,7 +2202,6 @@ func TestContentModerationMarkElevatedOnFlaggedSideEffects(t *testing.T) {
 	require.True(t, elevated)
 }
 
-
 func TestContentModerationGetStatus_ElevatedUsers(t *testing.T) {
 	cfg := defaultContentModerationConfig()
 	cfg.Enabled = true
@@ -2130,7 +2231,6 @@ func TestContentModerationGetStatus_ElevatedUsers(t *testing.T) {
 	require.Len(t, st.ElevatedUsers, 2)
 }
 
-
 func TestStripSystemReminderSections_KeepsSurroundingUserText(t *testing.T) {
 	got := stripSystemReminderSections("hello <system-reminder>secret</system-reminder> world")
 	require.Equal(t, "hello  world", got)
@@ -2141,7 +2241,6 @@ func TestStripSystemReminderSections_KeepsSurroundingUserText(t *testing.T) {
 	require.Contains(t, input.Text, "jailbreak me")
 	require.NotContains(t, input.Text, "<system-reminder>")
 }
-
 
 func TestContentModerationCheck_ElevatedUserIgnoresCleanHash(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

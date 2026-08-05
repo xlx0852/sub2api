@@ -20,8 +20,12 @@ func buildContentModerationViolationEmailBody(siteName string, log *ContentModer
 		threshold = defaultContentModerationBanThreshold
 	}
 	statusBlock := ""
-	if log.AutoBanned {
+	if strings.TrimSpace(log.EnforcementError) != "" {
+		statusBlock = `<div style="margin-top:24px;padding:18px 20px;border-radius:10px;background:#fff7ed;color:#9a3412;font-size:15px;font-weight:600;text-align:center;line-height:1.6;">自动处置未完成，平台已记录并将由管理员复核</div>`
+	} else if log.AutoBanned {
 		statusBlock = `<div style="margin-top:24px;padding:18px 20px;border-radius:10px;background:#ff3b30;color:#fff;font-size:18px;font-weight:700;text-align:center;line-height:1.6;">账户当前处于封禁状态，所有 API 请求将被拒绝</div>`
+	} else if log.APIKeyDisabled {
+		statusBlock = `<div style="margin-top:24px;padding:18px 20px;border-radius:10px;background:#f59e0b;color:#fff;font-size:18px;font-weight:700;text-align:center;line-height:1.6;">本次请求使用的 API Key 已被禁用，其他 Key 不受影响</div>`
 	}
 	return fmt.Sprintf(`<!doctype html>
 <html>

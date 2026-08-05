@@ -88,7 +88,9 @@ const baseConfig = (): ContentModerationConfig => ({
   block_status: 403,
   block_message: '内容审计命中风险规则，请调整输入后重试',
   email_on_hit: true,
+  auto_disable_api_key_enabled: false,
   auto_ban_enabled: true,
+  cyber_policy_exclude_from_ban_count: false,
   ban_threshold: 10,
   violation_window_hours: 720,
   retry_count: 2,
@@ -208,6 +210,36 @@ describe('admin RiskControlView', () => {
       api_key_masks: [],
       api_key_statuses: [],
     }))
+  })
+
+  it('renders tiered enforcement controls and saves the light-hit strategy', async () => {
+	const wrapper = mount(RiskControlView, {
+	  global: {
+		stubs: {
+		  AppLayout: AppLayoutStub,
+		  BaseDialog: BaseDialogStub,
+		  Icon: true,
+		  Select: true,
+		  Toggle: true,
+		  Pagination: true,
+		  ModelWhitelistSelector: ModelWhitelistSelectorStub,
+		},
+	  },
+	})
+
+	await flushPromises()
+	await findButtonByText(wrapper, 'admin.riskControl.openSettings').trigger('click')
+	await findButtonByText(wrapper, 'admin.riskControl.tabs.response').trigger('click')
+
+	expect(wrapper.text()).toContain('admin.riskControl.lightHitAction')
+	expect(wrapper.text()).toContain('admin.riskControl.repeatedHitAction')
+	await findButtonByText(wrapper, 'admin.riskControl.saveConfig').trigger('click')
+	await flushPromises()
+
+	expect(updateConfig).toHaveBeenCalledWith(expect.objectContaining({
+	  auto_disable_api_key_enabled: false,
+	  auto_ban_enabled: true,
+	}))
   })
 
   it('saves the selected model filter mode and models', async () => {
