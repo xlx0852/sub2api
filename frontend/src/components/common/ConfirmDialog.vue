@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog :show="show" :title="title" width="narrow" @close="handleCancel">
+  <BaseDialog :show="show" :title="title" width="narrow" :z-index="zIndex" @close="handleCancel">
     <div class="space-y-4">
       <p class="text-sm text-gray-600 dark:text-gray-400">{{ message }}</p>
       <slot></slot>
@@ -45,6 +45,7 @@ interface Props {
   confirmText?: string
   cancelText?: string
   danger?: boolean
+  zIndex?: number
 }
 
 interface Emits {
@@ -53,7 +54,10 @@ interface Emits {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  danger: false
+  danger: false,
+  // Confirmation dialogs are frequently opened from drawers (z-90). Keep the
+  // confirmation layer above its parent surface so actions remain reachable.
+  zIndex: 100
 })
 
 const confirmText = computed(() => props.confirmText || t('common.confirm'))

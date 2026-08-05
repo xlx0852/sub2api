@@ -11,7 +11,7 @@
       @submit.prevent="handleSubmit"
       class="space-y-5"
     >
-      <div class="sticky top-0 z-10 -mx-4 -mt-4 mb-1 border-b border-gray-200 bg-white px-4 pb-3 pt-3 dark:border-dark-600 dark:bg-dark-800 sm:-mx-6 sm:px-6 sm:-mt-4 sm:pt-4" data-testid="edit-account-tabs">
+      <div class="sticky top-0 z-10 -mx-4 -mt-4 mb-1 bg-white px-4 pb-3 pt-3 dark:bg-dark-800 sm:-mx-6 sm:px-6 sm:-mt-4 sm:pt-4" data-testid="edit-account-tabs">
         <div class="modal-tabs-scroll flex gap-2 overflow-x-auto overscroll-x-contain pb-1">
           <button
             v-for="tab in editTabs"
@@ -99,7 +99,7 @@
 
         </div><!-- /apikey basic fields -->
         <!-- Model Restriction Section (不适用于 Antigravity) -->
-        <div v-show="activeEditTab === 'models'" v-if="account.platform !== 'antigravity'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'models'" v-if="account.platform !== 'antigravity'" class="pt-4">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
           <div
@@ -285,7 +285,7 @@
         </div>
 
         <!-- Pool Mode Section -->
-        <div v-show="activeEditTab === 'routing'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'routing'" class="pt-4">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.poolMode') }}</label>
@@ -349,7 +349,7 @@
         </div>
 
         <!-- Custom Error Codes Section -->
-        <div v-show="activeEditTab === 'routing'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'routing'" class="pt-4">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.customErrorCodes') }}</label>
@@ -449,7 +449,7 @@
         <!-- Header Override Section (anthropic/openai apikey only) -->
         <div v-show="activeEditTab === 'routing'"
           v-if="isHeaderOverridePlatform(account.platform)"
-          class="border-t border-gray-200 pt-4 dark:border-dark-600"
+          class="pt-4"
         >
           <div class="mb-3 flex items-center justify-between">
             <div>
@@ -555,7 +555,7 @@
       <!-- OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
       <div v-show="activeEditTab === 'models'"
         v-if="supportsOAuthModelRestriction"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="pt-4"
         data-testid="edit-oauth-model-restriction"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
@@ -755,7 +755,7 @@
 
         </div><!-- /sa basic fields -->
         <!-- Model Restriction Section for Service Account -->
-        <div v-show="activeEditTab === 'models'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'models'" class="pt-4">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
           <!-- Mode Toggle -->
@@ -1005,7 +1005,7 @@
 
         </div><!-- /bedrock basic fields -->
         <!-- Model Restriction for Bedrock -->
-        <div v-show="activeEditTab === 'models'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'models'" class="pt-4">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
           <!-- Mode Toggle -->
@@ -1074,7 +1074,7 @@
         </div>
 
         <!-- Pool Mode Section for Bedrock -->
-        <div v-show="activeEditTab === 'routing'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div v-show="activeEditTab === 'routing'" class="pt-4">
           <div class="mb-3 flex items-center justify-between">
             <div>
               <label class="input-label mb-0">{{ t('admin.accounts.poolMode') }}</label>
@@ -1141,7 +1141,7 @@
       <div
         v-show="activeEditTab === 'basic'"
         v-if="account.platform === 'antigravity' && account.type === 'oauth'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="pt-4"
         data-testid="edit-antigravity-project-id"
       >
         <label class="input-label">{{ t('admin.accounts.antigravityProjectIdLabel') }}</label>
@@ -1157,7 +1157,7 @@
 
       <!-- Antigravity model restriction (applies to all antigravity types) -->
       <!-- Antigravity 只支持模型映射模式，不支持白名单模式 -->
-      <div v-show="activeEditTab === 'models'" v-if="account.platform === 'antigravity'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-show="activeEditTab === 'models'" v-if="account.platform === 'antigravity'" class="pt-4">
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
         <!-- Mapping Mode Only (no toggle for Antigravity) -->
@@ -1257,7 +1257,7 @@
       </div>
 
       <!-- Temp Unschedulable Rules -->
-      <div v-show="activeEditTab === 'advanced'" class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4">
+      <div v-show="activeEditTab === 'advanced'" class="pt-4 space-y-4">
         <div class="mb-3 flex items-center justify-between">
           <div>
             <label class="input-label mb-0">{{ t('admin.accounts.tempUnschedulable.title') }}</label>
@@ -1407,7 +1407,7 @@
       <!-- Intercept Warmup Requests (Anthropic/Antigravity) -->
       <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'anthropic' || account?.platform === 'antigravity'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -1524,7 +1524,7 @@
       <!-- OpenAI 自动透传开关（OAuth/API Key） -->
       <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -1554,7 +1554,7 @@
       <!-- OpenAI Codex 图片工具统一策略（自动注入 + 客户端显式携带） -->
       <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="pt-4"
       >
         <div class="overflow-hidden rounded-lg border border-sky-100 bg-sky-50/60  dark:border-sky-900/50 dark:bg-sky-950/20">
           <div class="flex items-start gap-3 px-4 py-3">
@@ -1614,7 +1614,7 @@
       <!-- OpenAI WS Mode 三态（off/ctx_pool/passthrough） -->
       <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -1635,7 +1635,7 @@
       <!-- OpenAI APIKey Responses API support mode -->
       <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'openai' && account?.type === 'apikey'"
-        class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="space-y-4 pt-4"
       >
         <div class="flex items-center justify-between gap-4">
           <div>
@@ -1691,7 +1691,7 @@
       <!-- Anthropic API Key 自动透传开关 -->
       <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'anthropic' && account?.type === 'apikey'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -1721,7 +1721,7 @@
       <div
         v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'anthropic' && account?.type === 'apikey'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="pt-4"
         data-testid="edit-anthropic-auth-scheme"
       >
         <div class="flex items-center justify-between gap-4">
@@ -1741,7 +1741,7 @@
       <!-- Anthropic API Key: Web Search Emulation (hidden when global disabled) -->
       <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'anthropic' && account?.type === 'apikey' && webSearchGlobalEnabled"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -1761,7 +1761,7 @@
       <!-- 配额控制 (Anthropic apikey/bedrock: 配额限制 + 亲和) -->
       <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'anthropic' && (account?.type === 'apikey' || account?.type === 'bedrock')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        class="pt-4 space-y-4"
       >
         <div class="mb-3">
           <h3 class="input-label mb-0 text-base font-semibold">{{ t('admin.accounts.quotaControl.title') }}</h3>
@@ -1812,7 +1812,7 @@
       <!-- 配额控制 (非 Anthropic apikey/bedrock) -->
       <div v-show="activeEditTab === 'advanced'"
         v-else-if="account?.type === 'apikey' || account?.type === 'bedrock'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        class="pt-4 space-y-4"
       >
         <div class="mb-3">
           <h3 class="input-label mb-0 text-base font-semibold">{{ t('admin.accounts.quotaControl.title') }}</h3>
@@ -1864,7 +1864,7 @@
       <!-- OpenAI OAuth Codex 官方客户端限制开关 -->
       <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="pt-4"
       >
         <div class="flex items-center justify-between">
           <div>
@@ -1920,7 +1920,7 @@
       <div
         v-show="activeEditTab === 'models'"
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        class="pt-4 space-y-4"
         data-testid="edit-openai-compact-mode"
       >
         <div class="flex items-center justify-between">
@@ -1981,7 +1981,7 @@
       <div
         v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'openai'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        class="pt-4 space-y-4"
         data-testid="edit-openai-auto-pause-thresholds"
       >
         <div class="space-y-2">
@@ -2061,7 +2061,7 @@
       <!-- 配额控制 (Anthropic OAuth/SetupToken: 亲和 + 窗口费用 + 会话 + RPM 等) -->
       <div v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'anthropic' && (account?.type === 'oauth' || account?.type === 'setup-token')"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
+        class="pt-4 space-y-4"
       >
         <div class="mb-3">
           <h3 class="input-label mb-0 text-base font-semibold">{{ t('admin.accounts.quotaControl.title') }}</h3>
@@ -2482,7 +2482,7 @@
       <div
         v-show="activeEditTab === 'advanced'"
         v-if="account?.platform === 'antigravity'"
-        class="flex items-center gap-2 border-t border-gray-200 pt-4 dark:border-dark-600"
+        class="flex items-center gap-2 pt-4"
       >
         <label class="flex cursor-not-allowed items-center gap-2 opacity-60">
           <input
