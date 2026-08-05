@@ -6,10 +6,11 @@ import (
 	"testing"
 )
 
-// 多轮会话重放时 function_call 缺 arguments 会触发上游 400
-// "Missing required parameter: 'input[N].arguments'"（issue 场景）。
-// prepareOpenAIWSHTTPBridgeBody 应给所有 function_call 系列项兜底补 "{}"。
-func TestPrepareOpenAIWSHTTPBridgeBodyEnsuresArguments(t *testing.T) {
+// 客户端 payload 原样保留：codex 把 call_id 当作不透明关联键，发出原生
+// custom_tool_call/custom_tool_call_output 对。prepareOpenAIWSHTTPBridgeBody
+// 只剥 WS 信封字段，不归一化客户端输入（兼容适配只作用于重放项或上游显式
+// 拒绝后）。
+func TestPrepareOpenAIWSHTTPBridgeBodyPreservesClientInput(t *testing.T) {
 	payload := []byte(`{
 		"type": "response.create",
 		"model": "gpt-5.6-luna",
@@ -31,38 +32,28 @@ func TestPrepareOpenAIWSHTTPBridgeBodyEnsuresArguments(t *testing.T) {
 		t.Fatalf("output not json: %v", err)
 	}
 	items := parsed["input"].([]any)
-	argsByCall := map[string]any{}
-	for _, raw := range items {
-		item := raw.(map[string]any)
-		if item["type"] == "function_call" {
-			argsByCall[item["call_id"].(string)] = item["arguments"]
-		}
+	// 缺字段 → 保持缺失（不补）
+	if _, exists := items[0].(map[string]any)["arguments"]; exists {
+		t.Fatalf("missing client arguments must remain missing")
 	}
-	// 缺字段 → 补 "{}"
-	if got, ok := argsByCall["call_1"].(string); !ok || got != "{}" {
-		t.Fatalf("call_1 (missing) arguments=%v, want \"{}\"", argsByCall["call_1"])
-	}
-	// 空字符串 → 补 "{}"
-	if got, ok := argsByCall["call_2"].(string); !ok || got != "{}" {
-		t.Fatalf("call_2 (empty) arguments=%v, want \"{}\"", argsByCall["call_2"])
+	// 空字符串 → 保持空串
+	if got := items[1].(map[string]any)["arguments"]; got != "" {
+		t.Fatalf("empty client arguments mutated: %v", got)
 	}
 	// 已有 "{}" → 保持
-	if got, ok := argsByCall["call_3"].(string); !ok || got != "{}" {
-		t.Fatalf("call_3 arguments=%v, want \"{}\"", argsByCall["call_3"])
+	if got := items[2].(map[string]any)["arguments"]; got != "{}" {
+		t.Fatalf("call_3 arguments=%v, want \"{}\"", got)
 	}
 	// 对象形态（新版 codex）→ 保持
-	if _, ok := argsByCall["call_4"].(map[string]any); !ok {
-		t.Fatalf("call_4 object arguments mutated: %v", argsByCall["call_4"])
+	if _, ok := items[3].(map[string]any)["arguments"].(map[string]any); !ok {
+		t.Fatalf("call_4 object arguments mutated: %v", items[3])
 	}
 }
 
-// 多轮重放会把 codex 私有工具类型原样注入 input，OpenAI 官方上游不认识这些
-// 私有 type（local_shell_call/custom_tool_call/mcp_tool_call 等），报
-// "Unknown parameter: 'input[N].arguments'"；同时私有项的 id（lc_/ctco_/
-// mcp_/tsc_ 前缀）不满足 function_call* 的 fc_ 前缀要求，报
-// "Invalid 'input[N].id': ... Expected an ID that begins with 'fc'"。
-// 桥接 body 应归一化 type 与 id，保留 call_id。
-func TestPrepareOpenAIWSHTTPBridgeBodyNormalizesPrivateToolTypes(t *testing.T) {
+// 客户端私有工具类型原样保留：codex 的 custom_tool_call / local_shell_call 等
+// 原生形态不动（type、id、call_id 均保持），兼容适配只作用于服务端收集的
+// 重放项。
+func TestPrepareOpenAIWSHTTPBridgeBodyPreservesClientPrivateToolTypes(t *testing.T) {
 	payload := []byte(`{
 		"type": "response.create",
 		"model": "gpt-5.6-luna",
@@ -87,7 +78,6 @@ func TestPrepareOpenAIWSHTTPBridgeBodyNormalizesPrivateToolTypes(t *testing.T) {
 		t.Fatalf("output not json: %v", err)
 	}
 	items := parsed["input"].([]any)
-	// 按 call_id + type 分类断言（local_shell_call 与 output 共用 call_id）
 	typeByCall := map[string][]map[string]any{}
 	for _, raw := range items {
 		item := raw.(map[string]any)
@@ -95,85 +85,96 @@ func TestPrepareOpenAIWSHTTPBridgeBodyNormalizesPrivateToolTypes(t *testing.T) {
 			typeByCall[cid] = append(typeByCall[cid], item)
 		}
 	}
-	// local_shell_call → function_call（arguments 保留，id 归一化为 fc_ 前缀）
+	// local_shell_call 原样保留
 	if items := typeByCall["sh_1"]; len(items) != 2 {
 		t.Fatalf("sh_1 items = %d, want 2", len(items))
 	} else {
-		var call *map[string]any
-		for i := range items {
-			if items[i]["type"] == "function_call" {
-				call = &items[i]
-			}
+		if items[0]["type"] != "local_shell_call" || items[0]["id"] != "lc_ab1" {
+			t.Fatalf("local_shell_call mutated: %v", items[0])
 		}
-		if call == nil {
-			t.Fatalf("local_shell_call not normalized to function_call: %v", items)
-		}
-		if (*call)["arguments"] != `{"cmd": "ls"}` {
-			t.Fatalf("local_shell_call arguments lost: %v", (*call)["arguments"])
-		}
-		if id, _ := (*call)["id"].(string); !strings.HasPrefix(id, "fc_") {
-			t.Fatalf("local_shell_call id not normalized: %v", (*call)["id"])
+		if items[1]["type"] != "local_shell_call_output" {
+			t.Fatalf("local_shell_call_output mutated: %v", items[1])
 		}
 	}
-	// custom_tool_call → function_call，input 包进 arguments.input
+	// custom_tool_call 原样保留
 	if items := typeByCall["ct_1"]; len(items) == 2 {
-		var call *map[string]any
-		for i := range items {
-			if items[i]["type"] == "function_call" {
-				call = &items[i]
-			}
+		if items[0]["type"] != "custom_tool_call" || items[0]["id"] != "ctc_cd2" {
+			t.Fatalf("custom_tool_call mutated: %v", items[0])
 		}
-		if call == nil {
-			t.Fatalf("custom_tool_call not normalized: %v", items)
+		if _, has := items[0]["input"]; !has {
+			t.Fatalf("custom_tool_call input removed: %v", items[0])
 		}
-		args, _ := (*call)["arguments"].(string)
-		var argsObj map[string]any
-		if err := json.Unmarshal([]byte(args), &argsObj); err != nil || argsObj["input"] != "do something" {
-			t.Fatalf("custom_tool_call input not wrapped into arguments: %v", (*call)["arguments"])
-		}
-		if _, has := (*call)["input"]; has {
-			t.Fatalf("custom_tool_call input field not removed")
-		}
-		if id, _ := (*call)["id"].(string); !strings.HasPrefix(id, "fc_") {
-			t.Fatalf("custom_tool_call id not normalized: %v", (*call)["id"])
-		}
-	} else {
-		t.Fatalf("ct_1 items = %d, want 2", len(items))
 	}
-	// mcp/tool_search 私有类型 → function_call，id 归一化
+	// mcp/tool_search 原样保留
 	for _, cid := range []string{"mcp_1", "ts_1"} {
 		items := typeByCall[cid]
 		if len(items) != 2 {
 			t.Fatalf("%s items = %d, want 2", cid, len(items))
 		}
-		found := false
-		for i := range items {
-			if items[i]["type"] == "function_call" {
-				found = true
-				if id, _ := items[i]["id"].(string); !strings.HasPrefix(id, "fc_") {
-					t.Fatalf("%s id not normalized: %v", cid, items[i]["id"])
-				}
-			}
-		}
-		if !found {
-			t.Fatalf("%s not normalized to function_call", cid)
+		if items[0]["type"] == "function_call" || items[1]["type"] == "function_call_output" {
+			t.Fatalf("%s normalized (should preserve): %v", cid, items)
 		}
 	}
-	// 所有输出项归一化为 function_call_output 且 id 以 fc_ 开头（客户报错场景：
-	// Invalid 'input[106].id': 'ctco_...' Expected an ID that begins with 'fc'）
-	for _, cid := range []string{"sh_1", "ct_1", "mcp_1", "ts_1"} {
-		found := false
-		for _, raw := range items {
-			item := raw.(map[string]any)
-			if item["call_id"] == cid && item["type"] == "function_call_output" {
-				found = true
-				if id, _ := item["id"].(string); !strings.HasPrefix(id, "fc_") {
-					t.Fatalf("output for %s id not normalized: %v", cid, item["id"])
-				}
-			}
-		}
-		if !found {
-			t.Fatalf("output for %s not normalized to function_call_output", cid)
-		}
+}
+
+// call_id 映射：归一化后上游自生成 fc_ call_id，需按工具名还原为 codex call_id。
+func TestBridgeCallIDMapperRestoresUpstreamCallID(t *testing.T) {
+	body := []byte(`{
+		"input": [
+			{"type": "function_call", "name": "mcp_read", "call_id": "ctco_019fd0d8", "arguments": "{}"},
+			{"type": "function_call", "name": "mcp_write", "call_id": "ctco_write01", "arguments": "{}"}
+		]
+	}`)
+	m := newBridgeCallIDMapper(body)
+
+	// 上游响应 function_call：观察映射（不改写）
+	callEvent := []byte(`{"type":"response.output_item.done","item":{"id":"fc_1","type":"function_call","call_id":"fc_upstream_abc","name":"mcp_read","arguments":"{}"}}`)
+	out, changed := m.restoreBridgeResponseCallIDs(callEvent)
+	if changed {
+		t.Fatalf("function_call observe should not rewrite, got %s", string(out))
+	}
+	// 上游响应 function_call_output：fc_upstream_abc 应还原为 ctco_019fd0d8
+	outEvent := []byte(`{"type":"response.output_item.done","item":{"id":"fc_2","type":"function_call_output","call_id":"fc_upstream_abc","output":"ok"}}`)
+	restored, changed := m.restoreBridgeResponseCallIDs(outEvent)
+	if !changed {
+		t.Fatalf("function_call_output should be rewritten")
+	}
+	if !strings.Contains(string(restored), `"call_id":"ctco_019fd0d8"`) {
+		t.Fatalf("call_id not restored to codex: %s", string(restored))
+	}
+	if strings.Contains(string(restored), "fc_upstream_abc") {
+		t.Fatalf("upstream call_id leaked: %s", string(restored))
+	}
+}
+
+// 同名工具多次调用：按 name 队列顺序配对，还原各自 codex call_id。
+func TestBridgeCallIDMapperSameNamePairing(t *testing.T) {
+	body := []byte(`{
+		"input": [
+			{"type": "function_call", "name": "Read", "call_id": "ctco_r1", "arguments": "{}"},
+			{"type": "function_call", "name": "Read", "call_id": "ctco_r2", "arguments": "{}"}
+		]
+	}`)
+	m := newBridgeCallIDMapper(body)
+	m.restoreBridgeResponseCallIDs([]byte(`{"type":"response.output_item.done","item":{"id":"fc_1","type":"function_call","call_id":"fc_a","name":"Read","arguments":"{}"}}`))
+	m.restoreBridgeResponseCallIDs([]byte(`{"type":"response.output_item.done","item":{"id":"fc_2","type":"function_call","call_id":"fc_b","name":"Read","arguments":"{}"}}`))
+	out1, _ := m.restoreBridgeResponseCallIDs([]byte(`{"type":"response.output_item.done","item":{"id":"fc_3","type":"function_call_output","call_id":"fc_a","output":"a"}}`))
+	out2, _ := m.restoreBridgeResponseCallIDs([]byte(`{"type":"response.output_item.done","item":{"id":"fc_4","type":"function_call_output","call_id":"fc_b","output":"b"}}`))
+	if !strings.Contains(string(out1), `"call_id":"ctco_r1"`) {
+		t.Fatalf("fc_a should map to ctco_r1: %s", string(out1))
+	}
+	if !strings.Contains(string(out2), `"call_id":"ctco_r2"`) {
+		t.Fatalf("fc_b should map to ctco_r2: %s", string(out2))
+	}
+}
+
+// 客户端直接发的 function_call（call_id 无私有前缀）不建映射，原样回传。
+func TestBridgeCallIDMapperPassthroughWhenNoMapping(t *testing.T) {
+	body := []byte(`{"input": [{"type": "function_call", "name": "Read", "call_id": "call_x", "arguments": "{}"}]}`)
+	m := newBridgeCallIDMapper(body)
+	out, changed := m.restoreBridgeResponseCallIDs([]byte(`{"type":"response.output_item.done","item":{"id":"fc_1","type":"function_call_output","call_id":"call_x","output":"ok"}}`))
+	_ = out
+	if changed {
+		t.Fatalf("call_x already codex call_id, should not change: %s", string(out))
 	}
 }

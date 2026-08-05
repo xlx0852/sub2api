@@ -2,6 +2,7 @@ package service
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -75,10 +76,117 @@ func prepareOpenAIWSHTTPBridgeBody(payload []byte) ([]byte, error) {
 	delete(body, "type")
 	delete(body, "generate")
 	delete(body, "previous_response_id")
-	ensureOpenAIWSBridgeInputArguments(body)
-	normalizeOpenAIWSBridgeToolTypes(body)
+	// Codex treats call_id as an opaque association key and emits native
+	// custom_tool_call/custom_tool_call_output pairs. Keep the client payload
+	// byte-for-byte semantic here. Compatibility adaptation is applied only to
+	// server-collected replay items, or after an explicit upstream rejection.
 	body["stream"] = true
 	return json.Marshal(body)
+}
+
+// bridgeCallIDMapper 维护桥接 turn 内 codex call_id ↔ 上游 call_id 的映射。
+// codex 客户端用 call_id 把 custom_tool_call 与 custom_tool_call_output 配对；
+// OpenAI 上游执行工具会自生成新的 fc_ call_id（不 echo 请求里的），导致 codex
+// 拿 fc_ 匹配不到它记录的 ctco_ 报 orphan。这里按工具名配对：请求里 codex 的
+// (name → codex call_id) 队列，与上游响应里 (name → 上游 call_id) 顺序配对，
+// 把上游 call_id 还原成 codex call_id 回传。
+type bridgeCallIDMapper struct {
+	// codexByCallName: name -> 请求里按出现顺序的 codex call_id 队列
+	codexByCallName map[string][]string
+	// upstreamToCodex: 上游 fc_ call_id -> codex call_id（响应里逐事件累积）
+	upstreamToCodex map[string]string
+}
+
+func newBridgeCallIDMapper(body []byte) *bridgeCallIDMapper {
+	m := &bridgeCallIDMapper{
+		codexByCallName: make(map[string][]string),
+		upstreamToCodex: make(map[string]string),
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return m
+	}
+	items, _ := parsed["input"].([]any)
+	for _, raw := range items {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		typ, _ := item["type"].(string)
+		if !isCodexToolCallContextItemType(typ) {
+			continue
+		}
+		name, _ := item["name"].(string)
+		callID, _ := item["call_id"].(string)
+		if name == "" || callID == "" {
+			continue
+		}
+		m.codexByCallName[name] = append(m.codexByCallName[name], callID)
+	}
+	return m
+}
+
+// observeUpstreamCall 记录上游响应里的 function_call（name + 上游 call_id），
+// 按 name 顺序配对到请求里的 codex call_id。
+func (m *bridgeCallIDMapper) observeUpstreamCall(name, upstreamCallID string) {
+	if m == nil || name == "" || upstreamCallID == "" {
+		return
+	}
+	queue := m.codexByCallName[name]
+	if len(queue) == 0 {
+		return
+	}
+	codexCallID := queue[0]
+	m.codexByCallName[name] = queue[1:]
+	if _, exists := m.upstreamToCodex[upstreamCallID]; !exists {
+		m.upstreamToCodex[upstreamCallID] = codexCallID
+	}
+}
+
+// restoreCallID 把上游 call_id 还原为 codex call_id；无映射时原样返回。
+func (m *bridgeCallIDMapper) restoreCallID(upstreamCallID string) string {
+	if m == nil {
+		return upstreamCallID
+	}
+	if codexCallID, ok := m.upstreamToCodex[upstreamCallID]; ok {
+		return codexCallID
+	}
+	return upstreamCallID
+}
+
+// restoreBridgeResponseCallIDs 改写响应 SSE 事件里 function_call / 
+// function_call_output 的 call_id，使其匹配 codex 客户端记录的 codex call_id。
+// function_call 事件用于建立 name→call_id 映射（不改写）；function_call_output
+// 事件按已建立的映射还原。返回 (改写后的 bytes, 是否变化)。
+func (m *bridgeCallIDMapper) restoreBridgeResponseCallIDs(msg []byte) ([]byte, bool) {
+	if m == nil || len(msg) == 0 {
+		return msg, false
+	}
+	itemType := gjson.GetBytes(msg, "item.type").String()
+	if itemType == "" {
+		itemType = gjson.GetBytes(msg, "response.output.0.type").String()
+	}
+	switch itemType {
+	case "function_call":
+		name := gjson.GetBytes(msg, "item.name").String()
+		callID := gjson.GetBytes(msg, "item.call_id").String()
+		if name == "" || callID == "" {
+			return msg, false
+		}
+		m.observeUpstreamCall(name, callID)
+		return msg, false
+	case "function_call_output":
+		callID := gjson.GetBytes(msg, "item.call_id").String()
+		if callID == "" {
+			return msg, false
+		}
+		codexCallID := m.restoreCallID(callID)
+		if codexCallID == callID {
+			return msg, false
+		}
+		return bytes.Replace(msg, []byte(callID), []byte(codexCallID), 1), true
+	}
+	return msg, false
 }
 
 // normalizeOpenAIWSBridgeToolTypes 把 codex 私有工具类型归一化为 OpenAI
@@ -177,22 +285,33 @@ func ensureOpenAIWSBridgeInputArguments(body map[string]any) {
 }
 
 type openAIWSToolCallReplayCollector struct {
-	items []json.RawMessage
-	seen  map[string]struct{}
+	items            []json.RawMessage
+	seen             map[string]struct{}
+	terminalSnapshot bool
 }
 
 func (c *openAIWSToolCallReplayCollector) AddEvent(eventType string, message []byte) {
 	switch strings.TrimSpace(eventType) {
 	case "response.output_item.done":
+		if c.terminalSnapshot {
+			return
+		}
 		c.addItem(gjson.GetBytes(message, "item"))
 	case "response.completed", "response.done":
 		output := gjson.GetBytes(message, "response.output")
 		if !output.IsArray() {
 			return
 		}
+		// The terminal response is the authoritative, complete snapshot. Replace
+		// earlier per-item candidates wholesale so partial arguments, ordering,
+		// and even an explicitly empty output cannot leak into the next turn.
+		terminal := &openAIWSToolCallReplayCollector{}
 		for _, item := range output.Array() {
-			c.addItem(item)
+			terminal.addItem(item)
 		}
+		c.items = terminal.items
+		c.seen = terminal.seen
+		c.terminalSnapshot = true
 	}
 }
 
@@ -399,6 +518,12 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	if err != nil {
 		return nil, fmt.Errorf("prepare http bridge body: %w", err)
 	}
+	// 构建 codex call_id ↔ 上游 call_id 映射（本 turn 内）。客户端 payload 保持
+	// 原样（prepare 不做归一化），但 codex 的 custom_tool_call 等私有类型在
+	// 重放路径会被归一化为 function_call；无论哪种形态，上游执行工具后都会
+	// 自生成新的 fc_ call_id（不 echo 请求里的），导致 codex 客户端用 fc_ 匹配
+	// 不到它记录的 ctco_ 报 orphan。这里按工具名把上游 call_id 还原为 codex call_id。
+	callIDMapper := newBridgeCallIDMapper(body)
 	// HTTP bridge talks to ChatGPT over HTTP SSE, which does not accept native
 	// Codex namespace tools. Reuse the Forward-path flatten/restore so WS clients
 	// on http_bridge stay compatible with multi-turn namespace tool calls.
@@ -414,14 +539,6 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	streamDeadline := turnStart.Add(maxDuration)
 	upstreamCtx, releaseUpstreamCtx := openAIWSHTTPBridgeUpstreamContext(ctx, streamDeadline)
 	defer releaseUpstreamCtx()
-	upstreamReq, err := s.buildUpstreamRequestOpenAIPassthrough(upstreamCtx, c, account, body, token)
-	if err != nil {
-		return nil, err
-	}
-	if account.Platform != PlatformGrok && isOpenAIResponsesLiteWebSocketPayload(payload) {
-		upstreamReq.Header.Set(responsesLiteHeader, "true")
-	}
-
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
@@ -431,22 +548,50 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		c.Set("openai_ws_http_bridge", true)
 	}
 
-	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
-	if err != nil {
-		safeErr := sanitizeUpstreamErrorMessage(err.Error())
-		statusCode := http.StatusBadGateway
-		clientMessage := "Upstream request failed"
-		if errors.Is(err, context.DeadlineExceeded) {
-			statusCode = http.StatusGatewayTimeout
-			clientMessage = "Upstream response timed out"
+	rejectedFieldRetryState := newOpenAIResponsesRejectedFieldRetryState(body)
+	var resp *http.Response
+	for {
+		upstreamReq, buildErr := s.buildUpstreamRequestOpenAIPassthrough(upstreamCtx, c, account, body, token)
+		if buildErr != nil {
+			return nil, buildErr
 		}
-		_ = writeClientMessage(buildOpenAIWSHTTPBridgeErrorEvent(statusCode, clientMessage))
-		return nil, fmt.Errorf("upstream http bridge request failed: %s", safeErr)
-	}
-	defer func() { _ = resp.Body.Close() }()
+		if account.Platform != PlatformGrok && isOpenAIResponsesLiteWebSocketPayload(payload) {
+			upstreamReq.Header.Set(responsesLiteHeader, "true")
+		}
 
-	if resp.StatusCode >= 400 {
+		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+		if err != nil {
+			safeErr := sanitizeUpstreamErrorMessage(err.Error())
+			statusCode := http.StatusBadGateway
+			clientMessage := "Upstream request failed"
+			if errors.Is(err, context.DeadlineExceeded) {
+				statusCode = http.StatusGatewayTimeout
+				clientMessage = "Upstream response timed out"
+			}
+			_ = writeClientMessage(buildOpenAIWSHTTPBridgeErrorEvent(statusCode, clientMessage))
+			return nil, fmt.Errorf("upstream http bridge request failed: %s", safeErr)
+		}
+		if resp.StatusCode < http.StatusBadRequest {
+			break
+		}
+
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, openAIWSHTTPBridgeErrorBodyLimitBytes))
+		_ = resp.Body.Close()
+		retryBody, reason, changed, retryErr := normalizeOpenAIResponsesRejectedFieldRetryBody(resp.StatusCode, body, respBody)
+		if retryErr != nil {
+			return nil, fmt.Errorf("normalize http bridge compatibility retry body: %w", retryErr)
+		}
+		if changed && rejectedFieldRetryState.AllowForReason(retryBody, reason) {
+			body = retryBody
+			logOpenAIWSModeInfo(
+				"ingress_ws_http_bridge_compatibility_retry account_id=%d turn=%d reason=%s",
+				account.ID,
+				turn,
+				truncateOpenAIWSLogValue(reason, openAIWSLogValueMaxLen),
+			)
+			continue
+		}
+
 		upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))
 		if upstreamMsg == "" {
 			upstreamMsg = http.StatusText(resp.StatusCode)
@@ -454,6 +599,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		_ = writeClientMessage(buildOpenAIWSHTTPBridgeErrorEvent(resp.StatusCode, upstreamMsg))
 		return nil, fmt.Errorf("upstream http bridge error: status=%d message=%s", resp.StatusCode, upstreamMsg)
 	}
+	defer func() { _ = resp.Body.Close() }()
 
 	logOpenAIWSModeInfo(
 		"ingress_ws_http_bridge_upstream_ok account_id=%d turn=%d status=%d payload_bytes=%d header_ms=%d",
@@ -508,7 +654,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			WSPayloadBytes:  &payloadBytesValue,
 			WSEventCount:    &eventCountValue,
 		}
-		if replayInput := replayCollector.Items(); len(replayInput) > 0 {
+		if replayInput := normalizeOpenAIReplayItemsForAccount(account, replayCollector.Items()); len(replayInput) > 0 {
 			result.wsReplayInput = replayInput
 			result.wsReplayInputExists = true
 		}
@@ -742,6 +888,14 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			return resultWithUsage(), fmt.Errorf("restore http bridge namespace response: %w", restoreErr)
 		}
 		upstreamMessage = restoredMessage
+
+		// 上游自生成的 fc_ call_id 还原为 codex 的 call_id（工具名配对），
+		// 避免 codex 客户端 custom_tool_call_output 找不到对应调用报 orphan。
+		if callIDMapper != nil {
+			if restored, changed := callIDMapper.restoreBridgeResponseCallIDs(upstreamMessage); changed {
+				upstreamMessage = restored
+			}
+		}
 
 		if !clientDisconnected {
 			if err := writeClientMessage(upstreamMessage); err != nil {
