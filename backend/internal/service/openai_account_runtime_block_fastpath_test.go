@@ -33,6 +33,21 @@ func TestKimi429TriggersOfficialQuotaRefresh(t *testing.T) {
 	}
 }
 
+func TestKimiQuota403TriggersOfficialQuotaRefresh(t *testing.T) {
+	querier := &kimi429QuotaQuerier{calls: make(chan int64, 1)}
+	svc := &OpenAIGatewayService{kimiQuotaService: querier}
+	account := &Account{ID: 106, Platform: PlatformKimi, Type: AccountTypeOAuth}
+	body := []byte(`{"error":"You've reached your usage limit for this billing cycle. Your quota will be refreshed in the next cycle."}`)
+
+	require.False(t, svc.handleOpenAIAccountUpstreamError(context.Background(), account, http.StatusForbidden, http.Header{}, body))
+	select {
+	case accountID := <-querier.calls:
+		require.EqualValues(t, 106, accountID)
+	case <-time.After(time.Second):
+		t.Fatal("Kimi quota refresh was not triggered")
+	}
+}
+
 func TestOpenAI429FastPath_MarksOAuthAccountCoolingDown(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	account := &Account{ID: 42, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
