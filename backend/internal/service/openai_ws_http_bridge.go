@@ -85,8 +85,11 @@ func prepareOpenAIWSHTTPBridgeBody(payload []byte) ([]byte, error) {
 // Responses 认识的 function_call/function_call_output。多轮重放会把历史里的
 // local_shell_call/custom_tool_call/mcp_tool_call/tool_call 等原样注入下一轮
 // input，OpenAI 官方上游不认识这些私有 type，会报
-// "Unknown parameter: 'input[N].arguments'"。归一化后 type 合法、arguments
-// 保留，上游可正常接受。
+// "Unknown parameter: 'input[N].arguments'"；同时这些私有项的 id（lc_/ctco_/
+// tsc_ 前缀）不满足 OpenAI 对 function_call* 的 fc_ 前缀要求，会报
+// "Invalid 'input[N].id': ... Expected an ID that begins with 'fc'"。
+// 归一化后 type 合法、id 满足前缀、arguments 保留，上游可正常接受。
+// call_id 是 function_call 与 function_call_output 的关联键，保持不变。
 func normalizeOpenAIWSBridgeToolTypes(body map[string]any) {
 	rawInput, ok := body["input"]
 	if !ok {
@@ -112,10 +115,29 @@ func normalizeOpenAIWSBridgeToolTypes(body map[string]any) {
 				delete(item, "input")
 			}
 			item["type"] = "function_call"
+			normalizeOpenAIWSBridgeItemID(item)
 		case "local_shell_call_output", "custom_tool_call_output", "mcp_tool_call_output", "tool_search_output":
 			item["type"] = "function_call_output"
+			normalizeOpenAIWSBridgeItemID(item)
 		}
 	}
+}
+
+// normalizeOpenAIWSBridgeItemID 把 codex 私有前缀 id 改为 fc_ 前缀，满足
+// OpenAI Responses 对 function_call / function_call_output 项的 id 校验
+// （Expected an ID that begins with 'fc'）。call_id 不动。
+func normalizeOpenAIWSBridgeItemID(item map[string]any) {
+	id, _ := item["id"].(string)
+	if id == "" || strings.HasPrefix(id, "fc_") {
+		return
+	}
+	for _, prefix := range []string{"lc_", "ctco_", "ctc_", "tsco_", "tsc_", "mcp_", "call_", "sh_", "ct_", "ts_"} {
+		if strings.HasPrefix(id, prefix) {
+			id = strings.TrimPrefix(id, prefix)
+			break
+		}
+	}
+	item["id"] = "fc_" + id
 }
 
 // ensureOpenAIWSBridgeInputArguments 兜底多轮会话重放时 function_call 系列项的
