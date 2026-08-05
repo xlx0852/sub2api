@@ -169,8 +169,8 @@ const props = defineProps<{
 
 const { t, locale } = useI18n()
 
-const viewMode = ref<ViewMode>('week')
-const anchor = ref(startOfLocalDay(new Date()))
+const viewMode = ref<ViewMode>('month')
+const anchor = ref(startOfLocalMonth(new Date()))
 
 const modes = computed(() => [
   { key: 'week' as const, label: t('admin.profit.quotaWindowByWeek') },
