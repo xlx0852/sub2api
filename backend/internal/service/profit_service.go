@@ -214,16 +214,41 @@ type ProfitOverviewResponse struct {
 	Points      []*ProfitTrendPoint    `json:"points"`
 }
 
+// profitAccountingOptions 控制 loadProfitAccountingData 额外加载哪些运营指标。
+// 利润列表只需保本倍率；账号抽屉需要完整计费窗 + 5h 效率。
+type profitAccountingOptions struct {
+	// BreakEven 当前额度窗外推最低保本售卖倍率
+	BreakEven bool
+	// BillingWindow 当前订阅周期内收入（经营汇总）
+	BillingWindow bool
+	// WindowEfficiency 近 30 天最佳 5h 窗效率
+	WindowEfficiency bool
+}
+
+func (o profitAccountingOptions) any() bool {
+	return o.BreakEven || o.BillingWindow || o.WindowEfficiency
+}
+
+// fullProfitAccountingOptions 账号抽屉 / GetSummary 全量运营指标。
+func fullProfitAccountingOptions() profitAccountingOptions {
+	return profitAccountingOptions{BreakEven: true, BillingWindow: true, WindowEfficiency: true}
+}
+
+// listProfitAccountingOptions 利润页 overview：只算列表要展示的保本倍率，避免多余 usage 扫描。
+func listProfitAccountingOptions() profitAccountingOptions {
+	return profitAccountingOptions{BreakEven: true}
+}
+
 type profitAccountingData struct {
-	configsByAccount          map[int64]*AccountCostConfig
-	cyclesByAccount           map[int64][]*AccountSubscriptionCycle
-	bestWindowByAccount       map[int64]float64
-	windowStatsByAccount      map[int64]*ProfitUsageStats
+	configsByAccount     map[int64]*AccountCostConfig
+	cyclesByAccount      map[int64][]*AccountSubscriptionCycle
+	bestWindowByAccount  map[int64]float64
+	windowStatsByAccount map[int64]*ProfitUsageStats
 	// 保本倍率用：当前配额窗口快照 + 窗口内 usage 聚合
 	breakEvenWindowByAccount map[int64]*ProfitQuotaWindow
 	breakEvenStatsByAccount  map[int64]*ProfitUsageStats
-	now                       time.Time
-	includeOperationalMetrics bool
+	now                      time.Time
+	opts                     profitAccountingOptions
 }
 
 // GetSummary 计算 [start,end) 内所有账号的利润汇总。
@@ -264,7 +289,7 @@ func (s *ProfitService) summarizeAccounts(ctx context.Context, accounts []Accoun
 	if err != nil {
 		return nil, err
 	}
-	accounting, err := s.loadProfitAccountingData(ctx, accounts, true)
+	accounting, err := s.loadProfitAccountingData(ctx, accounts, fullProfitAccountingOptions())
 	if err != nil {
 		return nil, err
 	}
@@ -310,26 +335,28 @@ func (s *ProfitService) summarizeAccountsWithData(accounts []Account, start, end
 			} else {
 				summary.Configured = true
 				cost = subscriptionCyclesCostForRange(cycles, start, end)
-				if accounting.includeOperationalMetrics {
-					if financialCycle := financialSubscriptionCycle(cycles, accounting.now); financialCycle != nil {
+if financialCycle := financialSubscriptionCycle(cycles, accounting.now); financialCycle != nil {
 						summary.Currency = financialCycle.Currency
-						windowRevenue := 0.0
-						if windowStats := accounting.windowStatsByAccount[acc.ID]; windowStats != nil {
-							windowRevenue = windowStats.Revenue
+						if accounting.opts.BillingWindow {
+							windowRevenue := 0.0
+							if windowStats := accounting.windowStatsByAccount[acc.ID]; windowStats != nil {
+								windowRevenue = windowStats.Revenue
+							}
+							fillBillingWindowFromRevenue(financialCycle, summary, windowRevenue, accounting.now)
 						}
-						fillBillingWindowFromRevenue(financialCycle, summary, windowRevenue, accounting.now)
-						fillBreakEvenRate(
-							summary,
-							financialCycle,
-							accounting.breakEvenWindowByAccount[acc.ID],
-							accounting.breakEvenStatsByAccount[acc.ID],
-						)
+						if accounting.opts.BreakEven {
+							fillBreakEvenRate(
+								summary,
+								financialCycle,
+								accounting.breakEvenWindowByAccount[acc.ID],
+								accounting.breakEvenStatsByAccount[acc.ID],
+							)
+						}
 					}
 				}
-			}
-			if accounting.includeOperationalMetrics {
-				summary.WindowEfficiency, summary.WindowBaselineSource = windowEfficiencyFromBaseline(stats.Revenue, periodDays, accounting.bestWindowByAccount[acc.ID])
-			}
+				if accounting.opts.WindowEfficiency {
+					summary.WindowEfficiency, summary.WindowBaselineSource = windowEfficiencyFromBaseline(stats.Revenue, periodDays, accounting.bestWindowByAccount[acc.ID])
+				}
 		} else if cfg != nil {
 			// API Key 账号即使遗留了订阅配置，也必须按历史账号侧成本结算。
 			summary.Configured = true
@@ -351,16 +378,16 @@ func (s *ProfitService) summarizeAccountsWithData(accounts []Account, start, end
 	return resp
 }
 
-func (s *ProfitService) loadProfitAccountingData(ctx context.Context, accounts []Account, includeOperationalMetrics bool) (*profitAccountingData, error) {
+func (s *ProfitService) loadProfitAccountingData(ctx context.Context, accounts []Account, opts profitAccountingOptions) (*profitAccountingData, error) {
 	data := &profitAccountingData{
-		configsByAccount:          make(map[int64]*AccountCostConfig),
-		cyclesByAccount:           make(map[int64][]*AccountSubscriptionCycle),
-		bestWindowByAccount:       make(map[int64]float64),
-		windowStatsByAccount:      make(map[int64]*ProfitUsageStats),
-		breakEvenWindowByAccount:  make(map[int64]*ProfitQuotaWindow),
-		breakEvenStatsByAccount:   make(map[int64]*ProfitUsageStats),
-		now:                       time.Now(),
-		includeOperationalMetrics: includeOperationalMetrics,
+		configsByAccount:         make(map[int64]*AccountCostConfig),
+		cyclesByAccount:          make(map[int64][]*AccountSubscriptionCycle),
+		bestWindowByAccount:      make(map[int64]float64),
+		windowStatsByAccount:     make(map[int64]*ProfitUsageStats),
+		breakEvenWindowByAccount: make(map[int64]*ProfitQuotaWindow),
+		breakEvenStatsByAccount:  make(map[int64]*ProfitUsageStats),
+		now:                      time.Now(),
+		opts:                     opts,
 	}
 	if len(accounts) == 1 {
 		cfg, err := s.profitRepo.GetCostConfig(ctx, accounts[0].ID)
@@ -393,70 +420,82 @@ func (s *ProfitService) loadProfitAccountingData(ctx context.Context, accounts [
 	for _, cycle := range cycles {
 		data.cyclesByAccount[cycle.AccountID] = append(data.cyclesByAccount[cycle.AccountID], cycle)
 	}
-	if !includeOperationalMetrics {
+	if !opts.any() {
 		return data, nil
 	}
-	data.bestWindowByAccount, err = s.profitRepo.GetBestWindowRevenueBatch(ctx, subscriptionIDs, data.now.Add(-30*24*time.Hour), 5*3600)
-	if err != nil {
-		return nil, err
+
+	// 近 30 天最佳 5h 窗：仅抽屉效率指标需要，列表跳过。
+	if opts.WindowEfficiency {
+		data.bestWindowByAccount, err = s.profitRepo.GetBestWindowRevenueBatch(ctx, subscriptionIDs, data.now.Add(-30*24*time.Hour), 5*3600)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	ranges := make([]ProfitAccountUsageRange, 0, len(subscriptionIDs))
-	for _, accountID := range subscriptionIDs {
-		if cycle := financialSubscriptionCycle(data.cyclesByAccount[accountID], data.now); cycle != nil {
-			end := cycle.StartsAt.AddDate(0, 0, cycle.PeriodDays)
-			if termination := activeCycleTermination(cycle); termination != nil && termination.EffectiveAt.Before(end) {
-				end = termination.EffectiveAt
-			}
-			if data.now.Before(end) {
-				end = data.now
-			}
-			if end.After(cycle.StartsAt) {
-				ranges = append(ranges, ProfitAccountUsageRange{AccountID: accountID, Start: cycle.StartsAt, End: end})
+	// 当前订阅周期累计收入：经营汇总用，列表不展示则跳过。
+	if opts.BillingWindow {
+		ranges := make([]ProfitAccountUsageRange, 0, len(subscriptionIDs))
+		for _, accountID := range subscriptionIDs {
+			if cycle := financialSubscriptionCycle(data.cyclesByAccount[accountID], data.now); cycle != nil {
+				end := cycle.StartsAt.AddDate(0, 0, cycle.PeriodDays)
+				if termination := activeCycleTermination(cycle); termination != nil && termination.EffectiveAt.Before(end) {
+					end = termination.EffectiveAt
+				}
+				if data.now.Before(end) {
+					end = data.now
+				}
+				if end.After(cycle.StartsAt) {
+					ranges = append(ranges, ProfitAccountUsageRange{AccountID: accountID, Start: cycle.StartsAt, End: end})
+				}
 			}
 		}
-	}
-	data.windowStatsByAccount, err = s.profitRepo.GetAccountUsageStatsForRanges(ctx, ranges)
-	if err != nil {
-		return nil, err
+		data.windowStatsByAccount, err = s.profitRepo.GetAccountUsageStatsForRanges(ctx, ranges)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	// 为每个订阅号挑一个额度窗（优先 7d），拉取窗内 actual_cost / 账号成本以算保本倍率。
-	breakEvenRanges := make([]ProfitAccountUsageRange, 0, len(subscriptionIDs))
-	accountsByID := make(map[int64]*Account, len(accounts))
-	for i := range accounts {
-		accountsByID[accounts[i].ID] = &accounts[i]
-	}
-	for _, accountID := range subscriptionIDs {
-		acc := accountsByID[accountID]
-		if acc == nil {
-			continue
+	// 保本倍率：额度窗（优先 7d，通常 ≤7 天）内 U/A 聚合，比整期扫描轻。
+	if opts.BreakEven {
+		breakEvenRanges := make([]ProfitAccountUsageRange, 0, len(subscriptionIDs))
+		accountsByID := make(map[int64]*Account, len(accounts))
+		for i := range accounts {
+			accountsByID[accounts[i].ID] = &accounts[i]
 		}
-		cutoff := quotaWindowCutoffForCycles(data.cyclesByAccount[accountID], data.now)
-		tmp := &AccountProfitSummary{}
-		fillProfitQuotaWindows(tmp, acc, data.now, cutoff)
-		win := pickPreferredBreakEvenWindow(tmp.QuotaWindows)
-		if win == nil || win.StartAt == nil {
-			continue
+		for _, accountID := range subscriptionIDs {
+			acc := accountsByID[accountID]
+			if acc == nil {
+				continue
+			}
+			cutoff := quotaWindowCutoffForCycles(data.cyclesByAccount[accountID], data.now)
+			tmp := &AccountProfitSummary{}
+			fillProfitQuotaWindows(tmp, acc, data.now, cutoff)
+			win := pickPreferredBreakEvenWindow(tmp.QuotaWindows)
+			if win == nil || win.StartAt == nil {
+				continue
+			}
+			start := *win.StartAt
+			end := data.now
+			if win.EndAt != nil && win.EndAt.Before(end) {
+				end = *win.EndAt
+			}
+			if !end.After(start) {
+				continue
+			}
+			data.breakEvenWindowByAccount[accountID] = win
+			breakEvenRanges = append(breakEvenRanges, ProfitAccountUsageRange{
+				AccountID: accountID,
+				Start:     start,
+				End:       end,
+			})
 		}
-		start := *win.StartAt
-		end := data.now
-		if win.EndAt != nil && win.EndAt.Before(end) {
-			end = *win.EndAt
+		// 无可用额度窗时不打 DB（空 UNNEST 仍有往返成本）。
+		if len(breakEvenRanges) > 0 {
+			data.breakEvenStatsByAccount, err = s.profitRepo.GetAccountUsageStatsForRanges(ctx, breakEvenRanges)
+			if err != nil {
+				return nil, err
+			}
 		}
-		if !end.After(start) {
-			continue
-		}
-		data.breakEvenWindowByAccount[accountID] = win
-		breakEvenRanges = append(breakEvenRanges, ProfitAccountUsageRange{
-			AccountID: accountID,
-			Start:     start,
-			End:       end,
-		})
-	}
-	data.breakEvenStatsByAccount, err = s.profitRepo.GetAccountUsageStatsForRanges(ctx, breakEvenRanges)
-	if err != nil {
-		return nil, err
 	}
 	return data, nil
 }
@@ -1006,8 +1045,8 @@ func (s *ProfitService) GetOverview(ctx context.Context, start, end time.Time, t
 	for _, date := range dateOrder {
 		dailyPoints = append(dailyPoints, dailyByDate[date])
 	}
-// 全局页也要算保本倍率 / 计费窗运营指标，与账号抽屉一致（订阅 OAuth 明细展示用）。
-		accounting, err := s.loadProfitAccountingData(ctx, accounts, true)
+// 列表页只加载保本倍率所需查询（额度窗短区间），跳过最佳 5h 窗与整期计费窗聚合。
+		accounting, err := s.loadProfitAccountingData(ctx, accounts, listProfitAccountingOptions())
 	if err != nil {
 		return nil, err
 	}
