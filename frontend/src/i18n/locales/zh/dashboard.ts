@@ -343,6 +343,7 @@ export default {
     cacheHitRate: '缓存命中率',
     inputTokenPrice: '输入单价',
     outputTokenPrice: '输出单价',
+    lunaPriceAdjustedNote: 'Luna 标价已于 2026-08-06 调整为 $0.40/$2.40 / 1M Token（原 $0.20/$1.20）。历史记录仍按请求当时单价展示。',
     perMillionTokens: '/ 1M Token',
     unitPrice: '单次价格',
     imageUnitPrice: '单张价格',

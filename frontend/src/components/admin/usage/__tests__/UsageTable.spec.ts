@@ -21,6 +21,8 @@ const messages: Record<string, string> = {
   'admin.usage.cacheReadCost': 'Cache Read Cost',
   'usage.inputTokenPrice': 'Input price',
   'usage.outputTokenPrice': 'Output price',
+  'usage.lunaPriceAdjustedNote':
+    'Luna list price was adjusted on 2026-08-06 to $0.40/$2.40 per 1M tokens (was $0.20/$1.20). Historical rows still show the unit price at request time.',
   'usage.perMillionTokens': '/ 1M tokens',
   'usage.serviceTier': 'Service tier',
   'usage.serviceTierPriority': 'Fast',
@@ -175,6 +177,50 @@ describe('admin UsageTable tooltip', () => {
     expect(text).toContain('$5.0000 / 1M tokens')
     expect(text).toContain('$30.0000 / 1M tokens')
     expect(text).toContain('$0.069568')
+  })
+
+  it('shows luna price adjustment note for luna usage rows', async () => {
+    const row = {
+      request_id: 'req-admin-luna',
+      model: 'gpt-5.6-luna',
+      actual_cost: 0.006378,
+      total_cost: 0.053152,
+      account_rate_multiplier: 1,
+      rate_multiplier: 0.12,
+      service_tier: null,
+      input_cost: 0.048882,
+      output_cost: 0.004152,
+      cache_creation_cost: 0,
+      cache_read_cost: 0.000118,
+      input_tokens: 244410,
+      output_tokens: 3460,
+    }
+
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [row],
+        loading: false,
+        columns: [],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    const tooltipTriggers = wrapper.findAll('.group.relative')
+    await tooltipTriggers[tooltipTriggers.length - 1].trigger('mouseenter')
+    await nextTick()
+
+    const text = wrapper.text()
+    expect(text).toContain('Input price')
+    expect(text).toContain('$0.2000 / 1M tokens')
+    expect(text).toContain('$1.2000 / 1M tokens')
+    expect(text).toContain('Luna list price was adjusted on 2026-08-06 to $0.40/$2.40 per 1M tokens')
   })
 
   it('shows requested and upstream models separately for admin rows', () => {

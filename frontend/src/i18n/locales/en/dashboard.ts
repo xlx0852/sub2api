@@ -339,6 +339,8 @@ export default {
     cacheHitRate: 'Cache hit rate',
     inputTokenPrice: 'Input price',
     outputTokenPrice: 'Output price',
+    lunaPriceAdjustedNote:
+      'Luna list price was adjusted on 2026-08-06 to $0.40/$2.40 per 1M tokens (was $0.20/$1.20). Historical rows still show the unit price at request time.',
     perMillionTokens: '/ 1M tokens',
     unitPrice: 'Per-request price',
     imageUnitPrice: 'Per-image price',
