@@ -1543,19 +1543,28 @@ func fillProfitQuotaWindows(summary *AccountProfitSummary, acc *Account, now tim
 	}
 }
 
-// quotaWindowCutoffForCycles returns the last instant at which a subscription
-// account may have quota windows. After the cycle expires, or after a confirmed
-// upstream-ban termination, the UI must not project another weekly window.
+// quotaWindowCutoffForCycles returns the last instant at which future quota
+// windows may be projected for a subscription account.
+//
+// Only active cycles (or confirmed ban terminations) apply a cutoff. A fully
+// expired bookkeeping cycle must NOT wipe live upstream windows — e.g. Codex
+// free still reports a 30-day rolling window after our cost cycle ended.
 func quotaWindowCutoffForCycles(cycles []*AccountSubscriptionCycle, now time.Time) *time.Time {
-	cycle := controllingSubscriptionCycle(cycles, now)
-	if cycle == nil || cycle.PeriodDays <= 0 {
-		return nil
+	if active := activeSubscriptionCycle(cycles, now); active != nil && active.PeriodDays > 0 {
+		end := active.StartsAt.AddDate(0, 0, active.PeriodDays)
+		if termination := activeCycleTermination(active); termination != nil && termination.EffectiveAt.Before(end) {
+			end = termination.EffectiveAt
+		}
+		return &end
 	}
-	end := cycle.StartsAt.AddDate(0, 0, cycle.PeriodDays)
-	if termination := activeCycleTermination(cycle); termination != nil && termination.EffectiveAt.Before(end) {
-		end = termination.EffectiveAt
+	// Banned accounts: stop projecting after the ban effective time.
+	for _, cycle := range cycles {
+		if termination := activeCycleTermination(cycle); termination != nil && !now.Before(termination.EffectiveAt) {
+			end := termination.EffectiveAt
+			return &end
+		}
 	}
-	return &end
+	return nil
 }
 
 func hasProfitWindowKind(windows []ProfitQuotaWindow, kind string) bool {
