@@ -343,7 +343,7 @@ export default {
     cacheHitRate: '缓存命中率',
     inputTokenPrice: '输入单价',
     outputTokenPrice: '输出单价',
-    lunaPriceAdjustedNote: 'Luna ×2 · $0.40/$2.40',
+    lunaPriceAdjustedNote: '❗ 已叠加带宽成本 · $0.80/$4.80',
     perMillionTokens: '/ 1M Token',
     unitPrice: '单次价格',
     imageUnitPrice: '单张价格',
