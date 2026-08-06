@@ -472,6 +472,7 @@ type upsertCostConfigRequest struct {
 	PeriodDays            int      `json:"period_days"`
 	Currency              string   `json:"currency"`
 	WindowBaselineRevenue *float64 `json:"window_baseline_revenue"`
+	AutoRenew             *bool    `json:"auto_renew"`
 	Notes                 string   `json:"notes"`
 }
 
@@ -488,6 +489,10 @@ func (h *ProfitHandler) UpsertCostConfig(c *gin.Context) {
 		response.Error(c, 400, "Invalid request body")
 		return
 	}
+	autoRenew := false
+	if req.AutoRenew != nil {
+		autoRenew = *req.AutoRenew
+	}
 	cfg, err := h.profitService.UpsertCostConfig(c.Request.Context(), &service.AccountCostConfig{
 		AccountID:             accountID,
 		CostType:              req.CostType,
@@ -495,11 +500,36 @@ func (h *ProfitHandler) UpsertCostConfig(c *gin.Context) {
 		PeriodDays:            req.PeriodDays,
 		Currency:              req.Currency,
 		WindowBaselineRevenue: req.WindowBaselineRevenue,
+		AutoRenew:             autoRenew,
 		Notes:                 req.Notes,
 	})
 	if err != nil {
 		slog.Error("profit_cost_config_save_failed", "account_id", accountID, "error", err)
 		response.Error(c, 500, "Failed to save cost config")
+		return
+	}
+	h.invalidateOverviewCache()
+	response.Success(c, cfg)
+}
+
+
+// SetSubscriptionAutoRenew PUT /api/v1/admin/profit/configs/:account_id/auto-renew
+func (h *ProfitHandler) SetSubscriptionAutoRenew(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("account_id"), 10, 64)
+	if err != nil || accountID <= 0 {
+		response.Error(c, 400, "Invalid account_id")
+		return
+	}
+	var req struct {
+		AutoRenew bool `json:"auto_renew"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, 400, "Invalid request body")
+		return
+	}
+	cfg, err := h.profitService.SetSubscriptionAutoRenew(c.Request.Context(), accountID, req.AutoRenew)
+	if err != nil {
+		response.Error(c, 400, err.Error())
 		return
 	}
 	h.invalidateOverviewCache()

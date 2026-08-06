@@ -116,6 +116,8 @@ export default {
     windowElapsed: '{progress}% elapsed',
     cycleStartRequired: 'Set current cycle start',
     subscriptionCycles: 'Recharge Cycles',
+    autoRenew: 'Auto-renew',
+    autoRenewHint: 'When enabled, a new cycle is created automatically at the previous price and length when the last cycle ends. Ban-settled cycles are not renewed.',
     noSubscriptionCycles: 'No confirmed recharge cycles. Idle gaps do not incur subscription cost.',
     addSubscriptionCycle: 'Add Recharge Cycle',
     inferCycleStart: 'Infer Date',

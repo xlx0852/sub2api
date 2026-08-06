@@ -33,6 +33,8 @@ type AccountCostConfig struct {
 	Currency string `json:"currency,omitempty"`
 	// WindowBaselineRevenue holds the value of the "window_baseline_revenue" field.
 	WindowBaselineRevenue *float64 `json:"window_baseline_revenue,omitempty"`
+	// AutoRenew holds the value of the "auto_renew" field.
+	AutoRenew bool `json:"auto_renew,omitempty"`
 	// Notes holds the value of the "notes" field.
 	Notes        string `json:"notes,omitempty"`
 	selectValues sql.SelectValues
@@ -47,6 +49,8 @@ func (*AccountCostConfig) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case accountcostconfig.FieldID, accountcostconfig.FieldAccountID, accountcostconfig.FieldPeriodDays:
 			values[i] = new(sql.NullInt64)
+		case accountcostconfig.FieldAutoRenew:
+			values[i] = new(sql.NullBool)
 		case accountcostconfig.FieldCostType, accountcostconfig.FieldCurrency, accountcostconfig.FieldNotes:
 			values[i] = new(sql.NullString)
 		case accountcostconfig.FieldCreatedAt, accountcostconfig.FieldUpdatedAt:

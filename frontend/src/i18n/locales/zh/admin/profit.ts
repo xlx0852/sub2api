@@ -116,6 +116,9 @@ export default {
     windowElapsed: '已过 {progress}%',
     cycleStartRequired: '请填写本期起始日',
     subscriptionCycles: '充值周期账本',
+    autoRenew: '自动续期',
+    autoRenewHint: '开启后，上一周期结束将按相同费用与天数自动写入下一周期，无需手动新增。封禁结算的周期不会续。',
+
     noSubscriptionCycles: '暂无已确认的充值周期；停用空档不会计入订阅成本。',
     addSubscriptionCycle: '新增充值周期',
     inferCycleStart: '一键推算日期',

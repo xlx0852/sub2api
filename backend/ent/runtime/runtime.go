@@ -291,8 +291,12 @@ func init() {
 	accountcostconfig.DefaultCurrency = accountcostconfigDescCurrency.Default.(string)
 	// accountcostconfig.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
 	accountcostconfig.CurrencyValidator = accountcostconfigDescCurrency.Validators[0].(func(string) error)
+	// accountcostconfigDescAutoRenew is the schema descriptor for auto_renew field.
+	accountcostconfigDescAutoRenew := accountcostconfigFields[6].Descriptor()
+	// accountcostconfig.DefaultAutoRenew holds the default value on creation for the auto_renew field.
+	accountcostconfig.DefaultAutoRenew = accountcostconfigDescAutoRenew.Default.(bool)
 	// accountcostconfigDescNotes is the schema descriptor for notes field.
-	accountcostconfigDescNotes := accountcostconfigFields[6].Descriptor()
+	accountcostconfigDescNotes := accountcostconfigFields[7].Descriptor()
 	// accountcostconfig.DefaultNotes holds the default value on creation for the notes field.
 	accountcostconfig.DefaultNotes = accountcostconfigDescNotes.Default.(string)
 	accountgroupFields := schema.AccountGroup{}.Fields()

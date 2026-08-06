@@ -19,10 +19,13 @@ type AccountCostConfig struct {
 	Currency   string `json:"currency"`
 	// WindowBaselineRevenue 5h 窗口满载理论产出基准（美元）。
 	// nil 表示按历史最佳窗口收入自动学习。
-	WindowBaselineRevenue *float64  `json:"window_baseline_revenue"`
-	Notes                 string    `json:"notes"`
-	CreatedAt             time.Time `json:"created_at"`
-	UpdatedAt             time.Time `json:"updated_at"`
+	WindowBaselineRevenue *float64 `json:"window_baseline_revenue"`
+	// AutoRenew 开启后，上一订阅周期结束后按相同费用/天数自动创建下一周期（类似官方订阅续费）。
+	// 仅对 OAuth/SetupToken 订阅账号生效；封禁结算中的周期不会续。
+	AutoRenew bool      `json:"auto_renew"`
+	Notes     string    `json:"notes"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // AccountSubscriptionCycle 表示一次实际充值形成的独立订阅周期。
@@ -173,6 +176,8 @@ type ProfitRepository interface {
 	ListCostConfigs(ctx context.Context) ([]*AccountCostConfig, error)
 	InsertCostConfigsIfAbsent(ctx context.Context, configs []*AccountCostConfig) ([]int64, error)
 	DeleteCostConfig(ctx context.Context, accountID int64) error
+	ListAutoRenewSubscriptionAccounts(ctx context.Context) ([]*AccountCostConfig, error)
+	HasSubscriptionCycleStartingAt(ctx context.Context, accountID int64, startsAt time.Time) (bool, error)
 	ListSubscriptionCycles(ctx context.Context, accountID int64) ([]*AccountSubscriptionCycle, error)
 	ListSubscriptionCyclesBatch(ctx context.Context, accountIDs []int64) ([]*AccountSubscriptionCycle, error)
 	GetSubscriptionCycle(ctx context.Context, id int64) (*AccountSubscriptionCycle, error)

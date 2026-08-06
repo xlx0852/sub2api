@@ -6,6 +6,7 @@
 import { apiClient } from '../client'
 
 export interface AccountCostConfig {
+  auto_renew?: boolean
   id: number
   account_id: number
   cost_type: 'subscription' | 'metered'
@@ -80,6 +81,7 @@ export interface SubscriptionCycleSettlementResult {
 
 export interface SubscriptionCycleListResponse {
   cycles: AccountSubscriptionCycle[]
+  auto_renew?: boolean
   subscription_expires_at?: string
   oauth_token_expires_at?: string
   account_expires_at?: string | null
@@ -218,6 +220,7 @@ export interface SupplyForecastResponse {
 }
 
 export interface UpsertCostConfigRequest {
+  auto_renew?: boolean
   cost_type?: 'subscription' | 'metered'
   period_fee: number
   period_days: number
@@ -280,6 +283,12 @@ export async function listConfigs(): Promise<AccountCostConfig[]> {
 /** PUT /api/v1/admin/profit/configs/:account_id */
 export async function upsertConfig(accountID: number, req: UpsertCostConfigRequest): Promise<AccountCostConfig> {
   const { data } = await apiClient.put<AccountCostConfig>(`/admin/profit/configs/${accountID}`, req)
+  return data
+}
+
+/** PUT /api/v1/admin/profit/configs/:account_id/auto-renew */
+export async function setSubscriptionAutoRenew(accountID: number, auto_renew: boolean): Promise<AccountCostConfig> {
+  const { data } = await apiClient.put<AccountCostConfig>(`/admin/profit/configs/${accountID}/auto-renew`, { auto_renew })
   return data
 }
 
@@ -353,7 +362,7 @@ export async function batchConfigureSubscription(req: BatchSubscriptionConfigReq
 }
 
 export default {
-  overview, supplyForecast, summary, trend, listConfigs, upsertConfig, deleteConfig,
+  overview, supplyForecast, summary, trend, listConfigs, upsertConfig, setSubscriptionAutoRenew, deleteConfig,
   listSubscriptionCycles, createSubscriptionCycle, deleteSubscriptionCycle,
   previewSubscriptionTermination, terminateSubscriptionCycle, addSubscriptionRefund, voidSubscriptionRefund,
   reverseSubscriptionTermination, batchConfigureSubscription

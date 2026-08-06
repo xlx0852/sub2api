@@ -29,6 +29,8 @@ const (
 	FieldCurrency = "currency"
 	// FieldWindowBaselineRevenue holds the string denoting the window_baseline_revenue field in the database.
 	FieldWindowBaselineRevenue = "window_baseline_revenue"
+	// FieldAutoRenew holds the string denoting the auto_renew field in the database.
+	FieldAutoRenew = "auto_renew"
 	// FieldNotes holds the string denoting the notes field in the database.
 	FieldNotes = "notes"
 	// Table holds the table name of the accountcostconfig in the database.
@@ -46,6 +48,7 @@ var Columns = []string{
 	FieldPeriodDays,
 	FieldCurrency,
 	FieldWindowBaselineRevenue,
+	FieldAutoRenew,
 	FieldNotes,
 }
 
@@ -78,6 +81,8 @@ var (
 	DefaultCurrency string
 	// CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
 	CurrencyValidator func(string) error
+	// DefaultAutoRenew holds the default value on creation for the "auto_renew" field.
+	DefaultAutoRenew bool
 	// DefaultNotes holds the default value on creation for the "notes" field.
 	DefaultNotes string
 )
@@ -128,6 +133,11 @@ func ByCurrency(opts ...sql.OrderTermOption) OrderOption {
 // ByWindowBaselineRevenue orders the results by the window_baseline_revenue field.
 func ByWindowBaselineRevenue(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldWindowBaselineRevenue, opts...).ToFunc()
+}
+
+// ByAutoRenew orders the results by the auto_renew field.
+func ByAutoRenew(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAutoRenew, opts...).ToFunc()
 }
 
 // ByNotes orders the results by the notes field.
