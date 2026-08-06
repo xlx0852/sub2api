@@ -70,15 +70,15 @@ var (
 		SupportsPromptCaching:               true,
 	}
 	openAIGPT56LunaFallbackPricing = &LiteLLMModelPricing{
-		// 2026-08-06: luna 售价相对官方降价后基准再 ×4（$0.80/$4.80 per MTok），覆盖带宽成本
-		InputCostPerToken:                   8e-07,  // $0.80 per MTok
-		InputCostPerTokenPriority:           1.6e-06, // $1.60 per MTok
-		OutputCostPerToken:                  4.8e-06, // $4.80 per MTok
-		OutputCostPerTokenPriority:          9.6e-06, // $9.60 per MTok
-		CacheCreationInputTokenCost:         1e-06,
-		CacheCreationInputTokenCostPriority: 2e-06,
-		CacheReadInputTokenCost:             8e-08,
-		CacheReadInputTokenCostPriority:     1.6e-07,
+		// 官方基准价 $0.20/$1.20 per MTok；售卖加价走 channel_model_pricing，勿抬高此处以免污染利润成本
+		InputCostPerToken:                   2e-07,  // $0.20 per MTok
+		InputCostPerTokenPriority:           4e-07,  // $0.40 per MTok
+		OutputCostPerToken:                  1.2e-06, // $1.20 per MTok
+		OutputCostPerTokenPriority:          2.4e-06, // $2.40 per MTok
+		CacheCreationInputTokenCost:         2.5e-07,
+		CacheCreationInputTokenCostPriority: 5e-07,
+		CacheReadInputTokenCost:             2e-08,
+		CacheReadInputTokenCostPriority:     4e-08,
 		LongContextInputTokenThreshold:      openAIGPT54LongContextInputThreshold,
 		LongContextInputCostMultiplier:      openAIGPT54LongContextInputMultiplier,
 		LongContextOutputCostMultiplier:     openAIGPT54LongContextOutputMultiplier,
