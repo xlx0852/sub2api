@@ -252,6 +252,7 @@ const endDate = ref(fmtDate(today))
 const activePreset = ref('7d')
 
 const presets = computed(() => [
+  { key: 'today', label: t('admin.profit.today') },
   { key: '7d', label: t('admin.profit.last7Days') },
   { key: '30d', label: t('admin.profit.last30Days') },
   { key: 'month', label: t('admin.profit.currentMonth') }
@@ -260,6 +261,7 @@ const presets = computed(() => [
 function applyPreset(key: string) {
   activePreset.value = key
   const now = new Date()
+  if (key === 'today') startDate.value = fmtDate(now)
   if (key === '7d') startDate.value = fmtDate(new Date(now.getTime() - 6 * 86_400_000))
   if (key === '30d') startDate.value = fmtDate(new Date(now.getTime() - 29 * 86_400_000))
   if (key === 'month') startDate.value = fmtDate(new Date(now.getFullYear(), now.getMonth(), 1))

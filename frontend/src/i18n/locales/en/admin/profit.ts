@@ -83,6 +83,7 @@ export default {
     loadFailed: 'Failed to load profit data',
     saveFailed: 'Failed to save cost configuration',
     backendUpgradeRequired: 'The current backend does not support cost configuration. Upgrade the backend and try again.',
+    today: 'Today',
     last7Days: 'Last 7 Days',
     last30Days: 'Last 30 Days',
     currentMonth: 'This Month',
