@@ -131,6 +131,7 @@ func registerProfitRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	profit.POST("/refunds/:id/void", h.Admin.Profit.VoidSubscriptionRefund)
 	profit.POST("/configs/batch", h.Admin.Profit.BatchUpsertSubscriptionConfigs)
 	profit.PUT("/configs/:account_id", h.Admin.Profit.UpsertCostConfig)
+	profit.PUT("/configs/:account_id/auto-renew", h.Admin.Profit.SetSubscriptionAutoRenew)
 	profit.DELETE("/configs/:account_id", h.Admin.Profit.DeleteCostConfig)
 }
 

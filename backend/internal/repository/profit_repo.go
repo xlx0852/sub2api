@@ -22,24 +22,25 @@ func NewProfitRepository(db *sql.DB) service.ProfitRepository {
 
 func (r *profitRepository) UpsertCostConfig(ctx context.Context, cfg *service.AccountCostConfig) (*service.AccountCostConfig, error) {
 	row := r.db.QueryRowContext(ctx, `
-		INSERT INTO account_cost_configs (account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, notes, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+		INSERT INTO account_cost_configs (account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, auto_renew, notes, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
 		ON CONFLICT (account_id) DO UPDATE SET
 			cost_type = EXCLUDED.cost_type,
 			period_fee = EXCLUDED.period_fee,
 			period_days = EXCLUDED.period_days,
 			currency = EXCLUDED.currency,
 			window_baseline_revenue = EXCLUDED.window_baseline_revenue,
+			auto_renew = EXCLUDED.auto_renew,
 			notes = EXCLUDED.notes,
 			updated_at = NOW()
-		RETURNING id, account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, notes, created_at, updated_at
-	`, cfg.AccountID, cfg.CostType, cfg.PeriodFee, cfg.PeriodDays, cfg.Currency, cfg.WindowBaselineRevenue, cfg.Notes)
+		RETURNING id, account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, auto_renew, notes, created_at, updated_at
+	`, cfg.AccountID, cfg.CostType, cfg.PeriodFee, cfg.PeriodDays, cfg.Currency, cfg.WindowBaselineRevenue, cfg.AutoRenew, cfg.Notes)
 	return scanCostConfig(row)
 }
 
 func (r *profitRepository) GetCostConfig(ctx context.Context, accountID int64) (*service.AccountCostConfig, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, notes, created_at, updated_at
+		SELECT id, account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, auto_renew, notes, created_at, updated_at
 		FROM account_cost_configs WHERE account_id = $1
 	`, accountID)
 	cfg, err := scanCostConfig(row)
@@ -51,7 +52,7 @@ func (r *profitRepository) GetCostConfig(ctx context.Context, accountID int64) (
 
 func (r *profitRepository) ListCostConfigs(ctx context.Context) ([]*service.AccountCostConfig, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, notes, created_at, updated_at
+		SELECT id, account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, auto_renew, notes, created_at, updated_at
 		FROM account_cost_configs ORDER BY account_id ASC
 	`)
 	if err != nil {
@@ -79,8 +80,8 @@ func (r *profitRepository) InsertCostConfigsIfAbsent(ctx context.Context, config
 		return nil, err
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		INSERT INTO account_cost_configs (account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, notes, created_at, updated_at)
-		SELECT account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, notes, NOW(), NOW()
+		INSERT INTO account_cost_configs (account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, auto_renew, notes, created_at, updated_at)
+		SELECT account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, COALESCE(auto_renew, false), notes, NOW(), NOW()
 		FROM jsonb_to_recordset($1::jsonb) AS x(
 			account_id bigint,
 			cost_type varchar,
@@ -88,6 +89,7 @@ func (r *profitRepository) InsertCostConfigsIfAbsent(ctx context.Context, config
 			period_days integer,
 			currency varchar,
 			window_baseline_revenue numeric,
+			auto_renew boolean,
 			notes text
 		)
 		ON CONFLICT (account_id) DO NOTHING
@@ -442,7 +444,7 @@ func scanCostConfig(row costConfigScanner) (*service.AccountCostConfig, error) {
 	err := row.Scan(
 		&cfg.ID, &cfg.AccountID, &cfg.CostType, &cfg.PeriodFee,
 		&cfg.PeriodDays, &cfg.Currency,
-		&cfg.WindowBaselineRevenue, &cfg.Notes, &cfg.CreatedAt, &cfg.UpdatedAt,
+		&cfg.WindowBaselineRevenue, &cfg.AutoRenew, &cfg.Notes, &cfg.CreatedAt, &cfg.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -458,3 +460,39 @@ func scanSubscriptionCycle(row costConfigScanner) (*service.AccountSubscriptionC
 	}
 	return cycle, nil
 }
+
+// ListAutoRenewSubscriptionAccounts returns subscription cost configs with auto_renew enabled.
+func (r *profitRepository) ListAutoRenewSubscriptionAccounts(ctx context.Context) ([]*service.AccountCostConfig, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, auto_renew, notes, created_at, updated_at
+		FROM account_cost_configs
+		WHERE auto_renew = TRUE AND cost_type = 'subscription'
+		ORDER BY account_id ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []*service.AccountCostConfig
+	for rows.Next() {
+		cfg, err := scanCostConfig(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, cfg)
+	}
+	return out, rows.Err()
+}
+
+// HasSubscriptionCycleStartingAt reports whether account already has a cycle at starts_at (UTC day).
+func (r *profitRepository) HasSubscriptionCycleStartingAt(ctx context.Context, accountID int64, startsAt time.Time) (bool, error) {
+	var exists bool
+	err := r.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM account_subscription_cycles
+			WHERE account_id = $1 AND starts_at = $2
+		)
+	`, accountID, startsAt.UTC()).Scan(&exists)
+	return exists, err
+}
+

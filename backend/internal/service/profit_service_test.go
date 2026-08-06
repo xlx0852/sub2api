@@ -79,6 +79,23 @@ func (s *profitRepoStub) InsertCostConfigsIfAbsent(_ context.Context, configs []
 	return ids, nil
 }
 func (s *profitRepoStub) DeleteCostConfig(context.Context, int64) error { return nil }
+func (s *profitRepoStub) ListAutoRenewSubscriptionAccounts(context.Context) ([]*AccountCostConfig, error) {
+	out := make([]*AccountCostConfig, 0)
+	for _, cfg := range s.configs {
+		if cfg != nil && cfg.AutoRenew && cfg.CostType == AccountCostTypeSubscription {
+			out = append(out, cfg)
+		}
+	}
+	return out, nil
+}
+func (s *profitRepoStub) HasSubscriptionCycleStartingAt(_ context.Context, accountID int64, startsAt time.Time) (bool, error) {
+	for _, c := range s.cycles[accountID] {
+		if c != nil && c.StartsAt.Equal(startsAt) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
 func (s *profitRepoStub) ListSubscriptionCycles(_ context.Context, accountID int64) ([]*AccountSubscriptionCycle, error) {
 	return s.cycles[accountID], nil
 }
@@ -1023,5 +1040,53 @@ func TestPickPreferredBreakEvenWindow_Prefers7d(t *testing.T) {
 	got := pickPreferredBreakEvenWindow(windows)
 	if got == nil || got.Kind != "7d" {
 		t.Fatalf("got %#v, want 7d", got)
+	}
+}
+
+func TestProfitService_AutoRenewDueSubscriptionCycles(t *testing.T) {
+	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	repo := &profitRepoStub{
+		configs: []*AccountCostConfig{{AccountID: 7, CostType: AccountCostTypeSubscription, AutoRenew: true, PeriodFee: 65, PeriodDays: 90}},
+		cycles: map[int64][]*AccountSubscriptionCycle{
+			7: {{ID: 1, AccountID: 7, StartsAt: start, PeriodFee: 65, PeriodDays: 90, Currency: "USD"}},
+		},
+	}
+	svc := &ProfitService{
+		profitRepo:  repo,
+		accountRepo: &profitAccountRepoStub{byID: map[int64]*Account{7: {ID: 7, Type: AccountTypeOAuth}}},
+	}
+	// before end: no create
+	n, err := svc.AutoRenewDueSubscriptionCycles(context.Background(), start.AddDate(0, 0, 30))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("created=%d want 0 before due", n)
+	}
+	// after end: create one
+	n, err = svc.AutoRenewDueSubscriptionCycles(context.Background(), start.AddDate(0, 0, 90).Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("created=%d want 1", n)
+	}
+	if len(repo.cycles[7]) != 2 {
+		t.Fatalf("cycles=%d want 2", len(repo.cycles[7]))
+	}
+	next := repo.cycles[7][1]
+	if !next.StartsAt.Equal(start.AddDate(0, 0, 90)) {
+		t.Fatalf("next start=%v", next.StartsAt)
+	}
+	if next.PeriodFee != 65 || next.PeriodDays != 90 {
+		t.Fatalf("next fee/days=%v/%v", next.PeriodFee, next.PeriodDays)
+	}
+	// second run same time: idempotent
+	n, err = svc.AutoRenewDueSubscriptionCycles(context.Background(), start.AddDate(0, 0, 90).Add(2*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 || len(repo.cycles[7]) != 2 {
+		t.Fatalf("idempotent failed n=%d cycles=%d", n, len(repo.cycles[7]))
 	}
 }

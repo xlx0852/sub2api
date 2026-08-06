@@ -64,6 +64,10 @@ func (AccountCostConfig) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 
+		// auto_renew: 订阅自动续期（到期按上一期费用/天数续写周期）
+		field.Bool("auto_renew").
+			Default(false),
+
 		// notes: 管理员备注
 		field.String("notes").
 			Optional().

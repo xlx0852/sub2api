@@ -113,6 +113,27 @@
         </div>
       </div>
 
+      <div class="flex items-start justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2.5 dark:border-dark-600">
+        <div class="min-w-0">
+          <div class="text-sm font-semibold text-gray-800 dark:text-dark-100">{{ t('admin.profit.autoRenew') }}</div>
+          <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">{{ t('admin.profit.autoRenewHint') }}</p>
+        </div>
+        <button
+          type="button"
+          data-testid="auto-renew-toggle"
+          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500/40 disabled:opacity-50"
+          :class="autoRenew ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'"
+          :aria-pressed="autoRenew"
+          :disabled="!accountId || savingAutoRenew"
+          @click="toggleAutoRenew"
+        >
+          <span
+            class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+            :class="autoRenew ? 'translate-x-5' : 'translate-x-0'"
+          />
+        </button>
+      </div>
+
       <div class="rounded-lg border border-primary-200 bg-primary-50/40 p-3 dark:border-primary-900/50 dark:bg-primary-900/10">
         <div class="mb-3 flex items-center justify-between">
           <span class="text-sm font-semibold text-gray-800 dark:text-dark-100">{{ t('admin.profit.addSubscriptionCycle') }}</span>
@@ -178,6 +199,8 @@ const { t } = useI18n()
 const appStore = useAppStore()
 const saving = ref(false)
 const cycles = ref<AccountSubscriptionCycle[]>([])
+const autoRenew = ref(false)
+const savingAutoRenew = ref(false)
 const hints = ref<SubscriptionCycleListResponse | null>(null)
 const inferenceNote = ref('')
 const inferenceRisky = ref(false)
@@ -214,6 +237,7 @@ async function loadCycles() {
   if (!props.accountId || !isSubscription.value) return
   const result = await adminAPI.profit.listSubscriptionCycles(props.accountId)
   cycles.value = result.cycles || []
+  autoRenew.value = !!result.auto_renew
   hints.value = result
   return result
 }
@@ -225,6 +249,7 @@ function emitSaved() {
 watch(() => [props.active, props.accountId, props.accountType, props.accountPlatform] as const, async ([visible]) => {
   if (!visible) return
   cycles.value = []
+  autoRenew.value = false
   hints.value = null
   inferenceNote.value = ''
   form.value = { period_fee: 0, period_days: isGrokSubscription.value ? 31 : 30, starts_at: '', notes: '' }
@@ -243,6 +268,22 @@ function inferStartDate() {
   form.value.starts_at = end.toISOString().slice(0, 10)
   inferenceRisky.value = !hints.value?.subscription_expires_at
   inferenceNote.value = inferenceRisky.value ? t('admin.profit.inferFromTokenWarning') : t('admin.profit.inferFromSubscriptionExpiry')
+}
+
+async function toggleAutoRenew() {
+  if (!props.accountId || savingAutoRenew.value) return
+  const next = !autoRenew.value
+  savingAutoRenew.value = true
+  try {
+    await adminAPI.profit.setSubscriptionAutoRenew(props.accountId, next)
+    autoRenew.value = next
+    appStore.showSuccess(t('admin.profit.saveSuccess'))
+    emitSaved()
+  } catch (err) {
+    appStore.showError(extractApiErrorMessage(err, t('admin.profit.saveFailed')))
+  } finally {
+    savingAutoRenew.value = false
+  }
 }
 
 async function saveCycle() {

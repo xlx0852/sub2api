@@ -1087,6 +1087,43 @@ func (s *ProfitService) UpsertCostConfig(ctx context.Context, cfg *AccountCostCo
 	return s.profitRepo.UpsertCostConfig(ctx, cfg)
 }
 
+// SetSubscriptionAutoRenew toggles auto-renew on the account cost config.
+// Creates a subscription cost-config row if missing (fee/days left at defaults
+// until the first manual cycle exists; renew copies from previous cycle).
+func (s *ProfitService) SetSubscriptionAutoRenew(ctx context.Context, accountID int64, enabled bool) (*AccountCostConfig, error) {
+	account, err := s.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	if account == nil {
+		return nil, ErrAccountNotFound
+	}
+	if !isSubscriptionAccountType(account.Type) {
+		return nil, fmt.Errorf("auto renew requires oauth or setup-token account")
+	}
+	cfg, err := s.profitRepo.GetCostConfig(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		cfg = &AccountCostConfig{
+			AccountID:  accountID,
+			CostType:   AccountCostTypeSubscription,
+			PeriodDays: 30,
+			Currency:   "USD",
+		}
+	}
+	cfg.CostType = AccountCostTypeSubscription
+	cfg.AutoRenew = enabled
+	if cfg.PeriodDays <= 0 {
+		cfg.PeriodDays = 30
+	}
+	if cfg.Currency == "" {
+		cfg.Currency = "USD"
+	}
+	return s.profitRepo.UpsertCostConfig(ctx, cfg)
+}
+
 func (s *ProfitService) DeleteCostConfig(ctx context.Context, accountID int64) error {
 	return s.profitRepo.DeleteCostConfig(ctx, accountID)
 }
@@ -1097,6 +1134,8 @@ type SubscriptionCycleList struct {
 	OAuthTokenExpiresAt   *time.Time                  `json:"oauth_token_expires_at,omitempty"`
 	// AccountExpiresAt 账号调度过期时间（由成本周期驱动同步）
 	AccountExpiresAt *time.Time `json:"account_expires_at,omitempty"`
+	// AutoRenew 成本配置上的订阅自动续期开关
+	AutoRenew bool `json:"auto_renew"`
 }
 
 type SubscriptionCycleSettlementResult struct {
@@ -1128,11 +1167,18 @@ func (s *ProfitService) ListSubscriptionCycles(ctx context.Context, accountID in
 	if err != nil {
 		return nil, err
 	}
+	autoRenew := false
+	if cfg, cfgErr := s.profitRepo.GetCostConfig(ctx, accountID); cfgErr != nil {
+		return nil, cfgErr
+	} else if cfg != nil {
+		autoRenew = cfg.AutoRenew
+	}
 	return &SubscriptionCycleList{
 		Cycles:                cycles,
 		SubscriptionExpiresAt: account.GetCredentialAsTime("subscription_expires_at"),
 		OAuthTokenExpiresAt:   account.GetCredentialAsTime("expires_at"),
 		AccountExpiresAt:      account.ExpiresAt,
+		AutoRenew:             autoRenew,
 	}, nil
 }
 

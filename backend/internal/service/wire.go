@@ -496,6 +496,14 @@ func ProvideSystemOperationLockService(repo IdempotencyRepository, cfg *config.C
 	return NewSystemOperationLockService(repo, buildIdempotencyConfig(cfg))
 }
 
+
+// ProvideSubscriptionAutoRenewService creates and starts subscription cycle auto-renew worker.
+func ProvideSubscriptionAutoRenewService(profit *ProfitService) *SubscriptionAutoRenewService {
+	svc := NewSubscriptionAutoRenewService(profit)
+	svc.Start()
+	return svc
+}
+
 func ProvideIdempotencyCleanupService(repo IdempotencyRepository, cfg *config.Config) *IdempotencyCleanupService {
 	svc := NewIdempotencyCleanupService(repo, cfg)
 	svc.Start()
@@ -753,6 +761,7 @@ var ProviderSet = wire.NewSet(
 	ProvideIdempotencyCoordinator,
 	ProvideSystemOperationLockService,
 	ProvideIdempotencyCleanupService,
+	ProvideSubscriptionAutoRenewService,
 	ProvideScheduledTestService,
 	ProvideScheduledTestRunnerService,
 	NewGroupCapacityService,
