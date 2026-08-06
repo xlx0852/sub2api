@@ -270,7 +270,7 @@ const lanes = computed(() => {
       return {
         accountId: account.account_id,
         accountName: account.account_name,
-        kindLabel: preferred.label || preferred.kind || 'window',
+        kindLabel: formatWindowKindLabel(preferred),
         meta: `${account.platform} · ${usedLabel}`,
         dotClass: colors.dot,
         bars
@@ -304,7 +304,7 @@ function pickPreferredWindow(account: AccountProfitSummary): ProfitQuotaWindow |
     return null
   }
   const rank = (kind?: string) => {
-    if (kind === '7d') return 0
+    if (kind === '7d' || kind === '30d') return 0
     if (kind === '5h') return 1
     if (kind === '24h') return 2
     if (kind === 'session') return 3
@@ -436,9 +436,33 @@ function buildBar(
 function inferMinutes(kind?: string) {
   if (kind === '5h') return 300
   if (kind === '7d') return 10080
+  if (kind === '30d') return 30 * 24 * 60
   if (kind === '24h') return 1440
   if (kind === 'session') return 300
   return 300
+}
+
+/** Prefer server label; otherwise derive from window_minutes so free 30d is not stuck as 7d. */
+function formatWindowKindLabel(window?: { label?: string; kind?: string; window_minutes?: number | null } | null): string {
+  if (!window) return 'window'
+  if (window.label && window.label !== '7d' && window.label !== 'window') return window.label
+  const minutes = window.window_minutes && window.window_minutes > 0
+    ? window.window_minutes
+    : inferMinutes(window.kind)
+  if (minutes >= 20 * 24 * 60) {
+    const days = Math.round(minutes / (24 * 60))
+    return `${days}d`
+  }
+  if (minutes >= 36 * 60) {
+    const days = minutes / (24 * 60)
+    return Number.isInteger(days) ? `${days}d` : `${days.toFixed(1)}d`
+  }
+  if (minutes >= 90) {
+    const hours = minutes / 60
+    return Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`
+  }
+  if (minutes > 0) return `${minutes}m`
+  return window.label || window.kind || 'window'
 }
 
 function parseTime(value?: string) {

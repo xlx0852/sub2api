@@ -211,13 +211,15 @@ type AccountPerformanceStats struct {
 
 // UsageProgress 使用量进度
 type UsageProgress struct {
-	Utilization      float64      `json:"utilization"`            // 使用率百分比 (0-100+，100表示100%)
-	ResetsAt         *time.Time   `json:"resets_at"`              // 重置时间
-	RemainingSeconds int          `json:"remaining_seconds"`      // 距重置剩余秒数
-	WindowStats      *WindowStats `json:"window_stats,omitempty"` // 窗口期统计（从窗口开始到当前的使用量）
-	UsedRequests     int64        `json:"used_requests,omitempty"`
-	LimitRequests    int64        `json:"limit_requests,omitempty"`
-}
+		Utilization      float64      `json:"utilization"`            // 使用率百分比 (0-100+，100表示100%)
+		ResetsAt         *time.Time   `json:"resets_at"`              // 重置时间
+		RemainingSeconds int          `json:"remaining_seconds"`      // 距重置剩余秒数
+		WindowMinutes    *int         `json:"window_minutes,omitempty"` // 实际上游窗口长度（分钟）；Codex free 可能是 30 天
+		WindowLabel      string       `json:"window_label,omitempty"`   // 展示标签，如 7d / 30d / 5h
+		WindowStats      *WindowStats `json:"window_stats,omitempty"` // 窗口期统计（从窗口开始到当前的使用量）
+		UsedRequests     int64        `json:"used_requests,omitempty"`
+		LimitRequests    int64        `json:"limit_requests,omitempty"`
+	}
 
 // AntigravityModelQuota Antigravity 单个模型的配额信息
 type AntigravityModelQuota struct {
@@ -1863,9 +1865,11 @@ func buildCodexUsageProgressFromExtra(extra map[string]any, window string, now t
 	}
 
 	var (
-		usedPercentKey string
-		resetAfterKey  string
-		resetAtKey     string
+		usedPercentKey   string
+		resetAfterKey    string
+		resetAtKey       string
+		windowMinutesKey string
+		defaultMinutes   int
 	)
 
 	switch window {
@@ -1873,10 +1877,15 @@ func buildCodexUsageProgressFromExtra(extra map[string]any, window string, now t
 		usedPercentKey = "codex_5h_used_percent"
 		resetAfterKey = "codex_5h_reset_after_seconds"
 		resetAtKey = "codex_5h_reset_at"
+		windowMinutesKey = "codex_5h_window_minutes"
+		defaultMinutes = 300
 	case "7d":
+		// 字段名历史叫 7d，但上游可能下发 30 天滚动窗（free 等）
 		usedPercentKey = "codex_7d_used_percent"
 		resetAfterKey = "codex_7d_reset_after_seconds"
 		resetAtKey = "codex_7d_reset_at"
+		windowMinutesKey = "codex_7d_window_minutes"
+		defaultMinutes = 10080
 	default:
 		return nil
 	}
@@ -1887,6 +1896,21 @@ func buildCodexUsageProgressFromExtra(extra map[string]any, window string, now t
 	}
 
 	progress := &UsageProgress{Utilization: parseExtraFloat64(usedRaw)}
+	mins := defaultMinutes
+	if windowMinutesKey != "" {
+		if m := parseExtraInt(extra[windowMinutesKey]); m > 0 {
+			mins = m
+		} else if primary := parseExtraInt(extra["codex_primary_window_minutes"]); primary > 0 && window == "7d" {
+			mins = primary
+		}
+	}
+	if mins > 0 {
+		m := mins
+		progress.WindowMinutes = &m
+		_, progress.WindowLabel = classifyQuotaWindow(window, mins)
+	} else {
+		progress.WindowLabel = window
+	}
 	if resetAtRaw, ok := extra[resetAtKey]; ok {
 		if resetAt, err := parseTime(fmt.Sprint(resetAtRaw)); err == nil {
 			progress.ResetsAt = &resetAt
