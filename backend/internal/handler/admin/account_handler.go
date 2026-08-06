@@ -22,7 +22,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -2442,21 +2441,21 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 	if account.IsGemini() {
 		// For OAuth accounts: return default Gemini models
 		if account.IsOAuth() {
-			response.Success(c, geminicli.CurrentDefaultModels())
+			response.Success(c, service.GeminiDefaultModels())
 			return
 		}
 
 		// For API Key accounts: return models based on model_mapping
 		mapping := account.GetModelMapping()
 		if len(mapping) == 0 {
-			response.Success(c, geminicli.CurrentDefaultModels())
+			response.Success(c, service.GeminiDefaultModels())
 			return
 		}
 
-		var models []geminicli.Model
+		var models []service.GeminiModel
 		for requestedModel := range mapping {
 			var found bool
-			for _, dm := range geminicli.CurrentDefaultModels() {
+			for _, dm := range service.GeminiDefaultModels() {
 				if dm.ID == requestedModel {
 					models = append(models, dm)
 					found = true
@@ -2464,7 +2463,7 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 				}
 			}
 			if !found {
-				models = append(models, geminicli.Model{
+				models = append(models, service.GeminiModel{
 					ID:          requestedModel,
 					Type:        "model",
 					DisplayName: requestedModel,
@@ -2748,29 +2747,9 @@ func (h *AccountHandler) RefreshTier(c *gin.Context) {
 		return
 	}
 
-	tierID, extra, creds, err := h.geminiOAuthService.RefreshAccountGoogleOneTier(ctx, account)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
+_ = h.geminiOAuthService.RefreshAccountGoogleOneTier(ctx, account)
+		response.Error(c, http.StatusGone, "gemini platform/OAuth has been retired")
 	}
-
-	_, updateErr := h.adminService.UpdateAccount(ctx, accountID, &service.UpdateAccountInput{
-		Credentials: creds,
-		Extra:       extra,
-	})
-	if updateErr != nil {
-		response.ErrorFrom(c, updateErr)
-		return
-	}
-
-	response.Success(c, gin.H{
-		"tier_id":             tierID,
-		"storage_info":        extra,
-		"drive_storage_limit": extra["drive_storage_limit"],
-		"drive_storage_usage": extra["drive_storage_usage"],
-		"updated_at":          extra["drive_tier_updated_at"],
-	})
-}
 
 // BatchRefreshTierRequest represents batch tier refresh request
 type BatchRefreshTierRequest struct {
@@ -2834,8 +2813,7 @@ func (h *AccountHandler) BatchRefreshTier(c *gin.Context) {
 	for _, account := range accounts {
 		acc := account // 闭包捕获
 		g.Go(func() error {
-			_, extra, creds, err := h.geminiOAuthService.RefreshAccountGoogleOneTier(gctx, acc)
-			if err != nil {
+			if err := h.geminiOAuthService.RefreshAccountGoogleOneTier(gctx, acc); err != nil {
 				mu.Lock()
 				failedCount++
 				errors = append(errors, gin.H{
@@ -2845,10 +2823,11 @@ func (h *AccountHandler) BatchRefreshTier(c *gin.Context) {
 				mu.Unlock()
 				return nil
 			}
-
+			// retired: never succeeds
+			mu.Lock(); failedCount++; mu.Unlock(); return nil
 			_, updateErr := h.adminService.UpdateAccount(gctx, acc.ID, &service.UpdateAccountInput{
-				Credentials: creds,
-				Extra:       extra,
+				Credentials: nil,
+				Extra:       nil,
 			})
 
 			mu.Lock()

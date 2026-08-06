@@ -19,7 +19,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	pkgerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
@@ -1069,7 +1068,7 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 	if platform == service.PlatformGemini {
 		c.JSON(http.StatusOK, gin.H{
 			"object": "list",
-			"data":   geminicli.CurrentDefaultModels(),
+			"data":   service.GeminiDefaultModels(),
 		})
 		return
 	}
@@ -1201,8 +1200,8 @@ func defaultModelIDsForPlatform(platform string) []string {
 	case service.PlatformOpenAI:
 		return openai.DefaultModelIDs()
 	case service.PlatformGemini:
-		ids := make([]string, 0, len(geminicli.CurrentDefaultModels()))
-		for _, model := range geminicli.CurrentDefaultModels() {
+		ids := make([]string, 0, len(service.GeminiDefaultModels()))
+		for _, model := range service.GeminiDefaultModels() {
 			ids = append(ids, model.ID)
 		}
 		return ids
