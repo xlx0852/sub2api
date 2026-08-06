@@ -709,18 +709,19 @@ func pickPreferredBreakEvenWindow(windows []ProfitQuotaWindow) *ProfitQuotaWindo
 	if len(windows) == 0 {
 		return nil
 	}
-	rank := func(kind string) int {
-		switch kind {
-		case "7d":
-			return 0
-		case "5h":
-			return 1
-		case "24h":
-			return 2
-		default:
-			return 3
+rank := func(kind string) int {
+			switch kind {
+			case "7d", "30d":
+				// 长滚动窗（周/月）优先用于保本测算
+				return 0
+			case "5h":
+				return 1
+			case "24h":
+				return 2
+			default:
+				return 3
+			}
 		}
-	}
 	var best *ProfitQuotaWindow
 	bestRank := 99
 	for i := range windows {
@@ -742,21 +743,23 @@ func pickPreferredBreakEvenWindow(windows []ProfitQuotaWindow) *ProfitQuotaWindo
 }
 
 func profitWindowMinutes(w *ProfitQuotaWindow) int {
-	if w == nil {
-		return 0
-	}
-	if w.WindowMinutes != nil && *w.WindowMinutes > 0 {
-		return *w.WindowMinutes
-	}
-	switch w.Kind {
-	case "5h":
-		return 300
-	case "7d":
-		return 10080
-	case "24h":
-		return 1440
-	case "session":
-		return 300
+		if w == nil {
+			return 0
+		}
+		if w.WindowMinutes != nil && *w.WindowMinutes > 0 {
+			return *w.WindowMinutes
+		}
+		switch w.Kind {
+		case "5h":
+			return 300
+		case "7d":
+			return 10080
+		case "30d":
+			return 30 * 24 * 60
+		case "24h":
+			return 1440
+		case "session":
+			return 300
 	default:
 		return 0
 	}
@@ -1580,15 +1583,90 @@ func profitWindowFromExtra(extra map[string]any, prefix, id, kind string, defaul
 	}
 	end := resolveProfitWindowEnd(resetAt, resetAfter, now)
 	start := resolveProfitWindowStart(end, windowMinutes)
+	mins := defaultMinutes
+	if windowMinutes != nil && *windowMinutes > 0 {
+		mins = *windowMinutes
+	}
+	resolvedKind, label := classifyQuotaWindow(kind, mins)
+	resolvedID := id
+	if resolvedKind != kind && (id == kind || id == "") {
+		resolvedID = resolvedKind
+	}
 	return &ProfitQuotaWindow{
-		ID:            id,
-		Label:         kind,
-		Kind:          kind,
+		ID:            resolvedID,
+		Label:         label,
+		Kind:          resolvedKind,
 		UsedPercent:   used,
 		StartAt:       start,
 		EndAt:         end,
 		WindowMinutes: windowMinutes,
 	}
+}
+
+// classifyQuotaWindow 根据实际窗口分钟数生成展示标签，并在明显偏离默认 kind 时重分类。
+// 例如 Codex free 长窗可能是 30 天（43200 分钟），不能继续标成 7d。
+func classifyQuotaWindow(defaultKind string, minutes int) (kind, label string) {
+	label = formatQuotaWindowLabel(minutes)
+	if minutes <= 0 {
+		return defaultKind, defaultKind
+	}
+	switch {
+	case almostQuotaMinutes(minutes, 300):
+		return "5h", label
+	case almostQuotaMinutes(minutes, 1440):
+		return "24h", label
+	case almostQuotaMinutes(minutes, 10080):
+		return "7d", label
+	case minutes >= 20*24*60: // ≥20 天视作月度滚动窗
+		return "30d", label
+	case minutes >= 6*24*60 && minutes <= 10*24*60:
+		return "7d", label
+	default:
+		if defaultKind != "" {
+			return defaultKind, label
+		}
+		return "other", label
+	}
+}
+
+func formatQuotaWindowLabel(minutes int) string {
+	if minutes <= 0 {
+		return "window"
+	}
+	if minutes < 90 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+	if minutes < 36*60 {
+		h := float64(minutes) / 60.0
+		if almostEqualFloat(h, math.Round(h), 0.05) {
+			return fmt.Sprintf("%dh", int(math.Round(h)))
+		}
+		return fmt.Sprintf("%.1fh", h)
+	}
+	days := float64(minutes) / (24.0 * 60.0)
+	if almostEqualFloat(days, math.Round(days), 0.05) {
+		return fmt.Sprintf("%dd", int(math.Round(days)))
+	}
+	return fmt.Sprintf("%.1fd", days)
+}
+
+func almostQuotaMinutes(got, want int) bool {
+	if want <= 0 {
+		return false
+	}
+	delta := got - want
+	if delta < 0 {
+		delta = -delta
+	}
+	// 允许约 5% 偏差（上游窗口偶发非整）
+	return delta*20 <= want
+}
+
+func almostEqualFloat(a, b, eps float64) bool {
+	if a > b {
+		return a-b <= eps
+	}
+	return b-a <= eps
 }
 
 func profitWindowFromKimi(extra map[string]any, name, kind string, defaultMinutes int, now time.Time) *ProfitQuotaWindow {

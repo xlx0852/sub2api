@@ -236,3 +236,51 @@ func TestQuotaWindowCutoffForCycles_UsesBanEffectiveAt(t *testing.T) {
 	require.NotNil(t, cutoff)
 	require.WithinDuration(t, banAt, *cutoff, time.Second)
 }
+
+func TestFillProfitQuotaWindows_CodexFree30d(t *testing.T) {
+	now := time.Date(2026, 8, 6, 9, 22, 0, 0, time.UTC)
+	reset30d := now.Add(24 * 24 * time.Hour)
+	acc := &Account{
+		ID:       69,
+		Platform: PlatformOpenAI,
+		Extra: map[string]any{
+			"codex_7d_used_percent":   100.0,
+			"codex_7d_reset_at":       reset30d.Format(time.RFC3339),
+			"codex_7d_window_minutes": 43200,
+			"codex_primary_window_minutes": 43200,
+		},
+	}
+	summary := &AccountProfitSummary{}
+	fillProfitQuotaWindows(summary, acc, now)
+
+	require.NotNil(t, summary.SevenDayUtilization)
+	require.InDelta(t, 100.0, *summary.SevenDayUtilization, 0.01)
+	require.NotEmpty(t, summary.QuotaWindows)
+
+	var longWin *ProfitQuotaWindow
+	for i := range summary.QuotaWindows {
+		if summary.QuotaWindows[i].WindowMinutes != nil && *summary.QuotaWindows[i].WindowMinutes == 43200 {
+			longWin = &summary.QuotaWindows[i]
+		}
+	}
+	require.NotNil(t, longWin)
+	require.Equal(t, "30d", longWin.Kind)
+	require.Equal(t, "30d", longWin.Label)
+	require.NotNil(t, longWin.StartAt)
+	require.NotNil(t, longWin.EndAt)
+	require.WithinDuration(t, reset30d.Add(-30*24*time.Hour), *longWin.StartAt, time.Minute)
+}
+
+func TestClassifyQuotaWindow(t *testing.T) {
+	kind, label := classifyQuotaWindow("7d", 43200)
+	require.Equal(t, "30d", kind)
+	require.Equal(t, "30d", label)
+
+	kind, label = classifyQuotaWindow("7d", 10080)
+	require.Equal(t, "7d", kind)
+	require.Equal(t, "7d", label)
+
+	kind, label = classifyQuotaWindow("5h", 300)
+	require.Equal(t, "5h", kind)
+	require.Equal(t, "5h", label)
+}

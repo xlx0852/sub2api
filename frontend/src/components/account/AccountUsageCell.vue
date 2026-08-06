@@ -64,10 +64,10 @@
           color="indigo"
         />
 
-        <!-- 7d Window (OAuth only) -->
+        <!-- Long rolling window (OAuth only; may be 7d or 30d) -->
         <UsageProgressBar
           v-if="usageInfo.seven_day"
-          label="7d"
+          :label="usageWindowLabel(usageInfo.seven_day, '7d')"
           :utilization="usageInfo.seven_day.utilization"
           :resets-at="usageInfo.seven_day.resets_at"
           color="emerald"
@@ -131,7 +131,7 @@
         />
         <UsageProgressBar
           v-if="usageInfo?.seven_day"
-          label="7d"
+          :label="usageWindowLabel(usageInfo.seven_day, '7d')"
           :utilization="usageInfo.seven_day.utilization"
           :resets-at="usageInfo.seven_day.resets_at"
           :window-stats="usageInfo.seven_day.window_stats"
@@ -232,7 +232,7 @@
         />
         <UsageProgressBar
           v-if="usageInfo.seven_day"
-          label="7d"
+          :label="usageWindowLabel(usageInfo.seven_day, '7d')"
           :utilization="usageInfo.seven_day.utilization"
           :resets-at="usageInfo.seven_day.resets_at"
           :window-stats="usageInfo.seven_day.window_stats"
@@ -662,6 +662,29 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const desktopViewportQuery = '(min-width: 768px)'
+
+/** Codex free 等账号可能是 30 天滚动窗；优先用后端 window_label / window_minutes。 */
+function usageWindowLabel(
+  progress?: { window_label?: string | null; window_minutes?: number | null } | null,
+  fallback = '7d',
+): string {
+  if (!progress) return fallback
+  if (progress.window_label) return progress.window_label
+  const minutes = progress.window_minutes
+  if (typeof minutes === 'number' && minutes > 0) {
+    if (minutes >= 20 * 24 * 60) return `${Math.round(minutes / (24 * 60))}d`
+    if (minutes >= 36 * 60) {
+      const days = minutes / (24 * 60)
+      return Number.isInteger(days) ? `${days}d` : `${days.toFixed(1)}d`
+    }
+    if (minutes >= 90) {
+      const hours = minutes / 60
+      return Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`
+    }
+    return `${minutes}m`
+  }
+  return fallback
+}
 
 const unmounted = ref(false)
 onBeforeUnmount(() => { unmounted.value = true })

@@ -58,6 +58,46 @@ describe('QuotaWindowPanel', () => {
     expect(wrapper.text()).toContain('46%')
   })
 
+  it('labels long free rolling windows as 30d from window_minutes', () => {
+    const end = new Date(Date.now() + 20 * 24 * 3600_000).toISOString()
+    const start = new Date(Date.now() - 10 * 24 * 3600_000).toISOString()
+    const wrapper = mount(QuotaWindowPanel, {
+      props: {
+        accounts: [
+          {
+            account_id: 69,
+            account_name: 'GPT-自有-1',
+            platform: 'openai',
+            account_type: 'oauth',
+            cost_type: 'subscription',
+            configured: true,
+            requests: 10,
+            revenue: 1,
+            cost: 1,
+            profit: 0,
+            margin: 0,
+            currency: 'USD',
+            quota_windows: [
+              {
+                id: '7d',
+                label: '7d', // legacy hardcoded label from older backend
+                kind: '7d',
+                used_percent: 100,
+                start_at: start,
+                end_at: end,
+                window_minutes: 43200
+              }
+            ]
+          }
+        ]
+      }
+    })
+
+    expect(wrapper.text()).toContain('GPT-自有-1')
+    expect(wrapper.text()).toContain('30d')
+    expect(wrapper.text()).not.toMatch(/GPT-自有-1\s+7d/)
+  })
+
   it('supports month view mode toggle', async () => {
     const end = new Date(Date.now() + 2 * 24 * 3600_000).toISOString()
     const start = new Date(Date.now() - 5 * 24 * 3600_000).toISOString()
