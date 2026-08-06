@@ -50,7 +50,7 @@
           :requests="formatEstimatedRequests"
           :tokens="formatEstimatedTokens"
           :account-cost="formatEstimatedAccountCost"
-          :user-cost="windowStats?.user_cost != null ? formatEstimatedUserCost : null"
+          :user-cost="displayedFullEstimate?.user_cost != null ? formatEstimatedUserCost : null"
           stacked
         />
       </div>
@@ -67,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import type { WindowStats } from '@/types'
@@ -78,6 +78,12 @@ interface ExtraStat {
   label: string
   title?: string
 }
+
+// 满额预估展示稳定：上游 utilization / window_stats 轮询会抖，
+// factor=100/util 对抖动极敏感。展示层做短防抖 + 相对变化阈值。
+const FULL_ESTIMATE_DEBOUNCE_MS = 1200
+const FULL_ESTIMATE_MIN_REL_CHANGE = 0.04 // 预估总值相对变化 <4% 不更新展示
+const FULL_ESTIMATE_MIN_UTIL_DELTA = 0.6 // 利用率绝对变化 <0.6pp 视为噪声
 
 const props = defineProps<{
   label: string
@@ -140,12 +146,111 @@ const showWindowStats = computed(() => {
 // Linear projection: current local window usage / upstream utilized share.
 // Values above 100% are excluded because they no longer describe a useful
 // "full quota" projection and would produce an estimate below actual usage.
-const fullUtilizationFactor = computed(() => {
-  if (!showWindowStats.value || props.utilization <= 0 || props.utilization > 100) return null
-  return 100 / props.utilization
+function computeRawFullEstimate(
+  utilization: number,
+  stats: WindowStats | null | undefined
+): WindowStats | null {
+  if (!stats) return null
+  if (!(stats.requests > 0 || stats.tokens > 0)) return null
+  if (utilization <= 0 || utilization > 100) return null
+  const factor = 100 / utilization
+  return {
+    requests: stats.requests * factor,
+    tokens: stats.tokens * factor,
+    cost: stats.cost * factor,
+    user_cost: stats.user_cost == null ? undefined : stats.user_cost * factor
+  }
+}
+
+function estimateSignature(stats: WindowStats | null): number {
+  if (!stats) return 0
+  // 用用户扣费优先；没有则用账号成本/tokens 作量级锚点
+  if (stats.user_cost != null && stats.user_cost > 0) return stats.user_cost
+  if (stats.cost > 0) return stats.cost
+  return stats.tokens
+}
+
+const displayedFullEstimate = ref<WindowStats | null>(
+  computeRawFullEstimate(props.utilization, props.windowStats)
+)
+const lastCommittedUtil = ref(props.utilization)
+let fullEstimateTimer: ReturnType<typeof setTimeout> | null = null
+
+function commitFullEstimate(next: WindowStats | null, utilization: number) {
+  displayedFullEstimate.value = next
+  lastCommittedUtil.value = utilization
+}
+
+function shouldCommitFullEstimate(
+  prev: WindowStats | null,
+  next: WindowStats | null,
+  prevUtil: number,
+  nextUtil: number
+): boolean {
+  if (next == null) return prev != null
+  if (prev == null) return true
+  // 利用率从可预估区间掉出/进入已在 next==null 分支处理
+  const utilDelta = Math.abs(nextUtil - prevUtil)
+  const prevSig = estimateSignature(prev)
+  const nextSig = estimateSignature(next)
+  if (prevSig <= 0) return true
+  const rel = Math.abs(nextSig - prevSig) / prevSig
+  // 小抖动：利用率与预估量级都几乎不变 → 保持旧展示
+  if (utilDelta < FULL_ESTIMATE_MIN_UTIL_DELTA && rel < FULL_ESTIMATE_MIN_REL_CHANGE) {
+    return false
+  }
+  return true
+}
+
+function scheduleFullEstimateUpdate() {
+  const next = computeRawFullEstimate(props.utilization, props.windowStats)
+  // 立刻隐藏：利用率归零/超额时预估无意义，不应防抖拖着旧数
+  if (next == null) {
+    if (fullEstimateTimer != null) {
+      clearTimeout(fullEstimateTimer)
+      fullEstimateTimer = null
+    }
+    commitFullEstimate(null, props.utilization)
+    return
+  }
+  // 首次有值：立即展示，避免空白等 1.2s
+  if (displayedFullEstimate.value == null) {
+    commitFullEstimate(next, props.utilization)
+    return
+  }
+  if (fullEstimateTimer != null) clearTimeout(fullEstimateTimer)
+  fullEstimateTimer = setTimeout(() => {
+    fullEstimateTimer = null
+    const candidate = computeRawFullEstimate(props.utilization, props.windowStats)
+    if (
+      shouldCommitFullEstimate(
+        displayedFullEstimate.value,
+        candidate,
+        lastCommittedUtil.value,
+        props.utilization
+      )
+    ) {
+      commitFullEstimate(candidate, props.utilization)
+    }
+  }, FULL_ESTIMATE_DEBOUNCE_MS)
+}
+
+watch(
+  () => [props.utilization, props.windowStats] as const,
+  () => {
+    scheduleFullEstimateUpdate()
+  },
+  { deep: true }
+)
+
+onBeforeUnmount(() => {
+  if (fullEstimateTimer != null) {
+    clearTimeout(fullEstimateTimer)
+    fullEstimateTimer = null
+  }
 })
 
-const showFullUtilizationEstimate = computed(() => fullUtilizationFactor.value != null)
+const showFullUtilizationEstimate = computed(() => displayedFullEstimate.value != null)
 
 const visibleExtraStats = computed(() => props.extraStats ?? [])
 
@@ -225,22 +330,11 @@ const formatUserCost = computed(() => {
   return props.windowStats.user_cost.toFixed(2)
 })
 
-const estimatedStats = computed<WindowStats | null>(() => {
-  if (!props.windowStats || fullUtilizationFactor.value == null) return null
-  const factor = fullUtilizationFactor.value
-  return {
-    requests: props.windowStats.requests * factor,
-    tokens: props.windowStats.tokens * factor,
-    cost: props.windowStats.cost * factor,
-    user_cost: props.windowStats.user_cost == null ? undefined : props.windowStats.user_cost * factor
-  }
-})
-
 const formatEstimatedRequests = computed(() =>
-  formatCompactNumber(Math.round(estimatedStats.value?.requests ?? 0), { allowBillions: false })
+  formatCompactNumber(Math.round(displayedFullEstimate.value?.requests ?? 0), { allowBillions: false })
 )
-const formatEstimatedTokens = computed(() => formatCompactNumber(estimatedStats.value?.tokens ?? 0))
-const formatEstimatedAccountCost = computed(() => (estimatedStats.value?.cost ?? 0).toFixed(2))
-const formatEstimatedUserCost = computed(() => (estimatedStats.value?.user_cost ?? 0).toFixed(2))
+const formatEstimatedTokens = computed(() => formatCompactNumber(displayedFullEstimate.value?.tokens ?? 0))
+const formatEstimatedAccountCost = computed(() => (displayedFullEstimate.value?.cost ?? 0).toFixed(2))
+const formatEstimatedUserCost = computed(() => (displayedFullEstimate.value?.user_cost ?? 0).toFixed(2))
 
 </script>
