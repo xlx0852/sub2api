@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"math"
 	"math/rand/v2"
 	"net/http"
 	"sort"
@@ -164,12 +165,19 @@ func NewUsageCache() *UsageCache {
 // cost: 账号口径费用（total_cost * account_rate_multiplier）
 // standard_cost: 标准费用（total_cost，不含倍率）
 // user_cost: 用户/API Key 口径费用（actual_cost，受分组倍率影响）
+// full_* : 按当前消耗结构外推至 100% 利用率的满额预估（后端统一计算，避免前端 100/util 抖动）
 type WindowStats struct {
 	Requests     int64   `json:"requests"`
 	Tokens       int64   `json:"tokens"`
 	Cost         float64 `json:"cost"`
 	StandardCost float64 `json:"standard_cost"`
 	UserCost     float64 `json:"user_cost"`
+
+	FullRequests     *int64   `json:"full_requests,omitempty"`
+	FullTokens       *int64   `json:"full_tokens,omitempty"`
+	FullCost         *float64 `json:"full_cost,omitempty"`
+	FullStandardCost *float64 `json:"full_standard_cost,omitempty"`
+	FullUserCost     *float64 `json:"full_user_cost,omitempty"`
 }
 
 // AccountRequestTypePerformanceStats is a per-account latency summary grouped by request type.
@@ -709,6 +717,7 @@ func (s *AccountUsageService) getOpenAIUsage(ctx context.Context, account *Accou
 			usage.SevenDay.WindowStats = windowStatsFromAccountStats(stats)
 		}
 	}
+	attachFullWindowEstimates(usage)
 
 	return usage, nil
 }
@@ -1064,6 +1073,9 @@ func (s *AccountUsageService) getGrokUsage(ctx context.Context, account *Account
 		}
 		if err == nil && stats != nil {
 			usage.GrokLocalUsage = windowStatsFromAccountStats(stats)
+			if usage.GrokBilling != nil && usage.GrokBilling.UsagePercent != nil {
+				attachFullWindowEstimate(usage.GrokLocalUsage, *usage.GrokBilling.UsagePercent)
+			}
 		}
 	}
 
@@ -1256,6 +1268,7 @@ func (s *AccountUsageService) addKimiWindowStats(ctx context.Context, account *A
 		stats := *cached.sevenDay
 		usage.SevenDay.WindowStats = &stats
 	}
+	attachFullWindowEstimates(usage)
 }
 
 func buildKimiUsageInfo(quota *KimiQuotaUsage, now time.Time) *UsageInfo {
@@ -1474,8 +1487,11 @@ func (s *AccountUsageService) addWindowStats(ctx context.Context, account *Accou
 
 	// 为 FiveHour 添加 WindowStats（5h 窗口统计）
 	if usage.FiveHour != nil {
-		usage.FiveHour.WindowStats = windowStats
+		// 拷贝一份，避免多个窗口共享同一指针被 full_* 互相覆盖
+		copied := *windowStats
+		usage.FiveHour.WindowStats = &copied
 	}
+	attachFullWindowEstimates(usage)
 }
 
 // GetTodayStats 获取账号今日统计
@@ -1786,6 +1802,58 @@ func windowStatsFromAccountStats(stats *usagestats.AccountStats) *WindowStats {
 		Cost:         stats.Cost,
 		StandardCost: stats.StandardCost,
 		UserCost:     stats.UserCost,
+	}
+}
+
+// attachFullWindowEstimate 按 utilization 线性外推满额预估。
+// utilization 须在 (0,100]；≤0 或 >100 不写 full_*（与前端旧语义一致）。
+// 结果就地写回 stats，供额度抽屉直接展示，避免前端 100/util 放大抖动。
+func attachFullWindowEstimate(stats *WindowStats, utilization float64) {
+	if stats == nil {
+		return
+	}
+	// 清空旧预估，防止缓存复用脏字段
+	stats.FullRequests = nil
+	stats.FullTokens = nil
+	stats.FullCost = nil
+	stats.FullStandardCost = nil
+	stats.FullUserCost = nil
+
+	if utilization <= 0 || utilization > 100 {
+		return
+	}
+	if stats.Requests <= 0 && stats.Tokens <= 0 {
+		return
+	}
+	factor := 100.0 / utilization
+	req := int64(math.Round(float64(stats.Requests) * factor))
+	tok := int64(math.Round(float64(stats.Tokens) * factor))
+	cost := math.Round(stats.Cost*factor*100) / 100
+	std := math.Round(stats.StandardCost*factor*100) / 100
+	user := math.Round(stats.UserCost*factor*100) / 100
+	stats.FullRequests = &req
+	stats.FullTokens = &tok
+	stats.FullCost = &cost
+	stats.FullStandardCost = &std
+	stats.FullUserCost = &user
+}
+
+// attachFullWindowEstimates 给 UsageInfo 各进度条的 window_stats 填满额预估。
+func attachFullWindowEstimates(usage *UsageInfo) {
+	if usage == nil {
+		return
+	}
+	if usage.FiveHour != nil && usage.FiveHour.WindowStats != nil {
+		attachFullWindowEstimate(usage.FiveHour.WindowStats, usage.FiveHour.Utilization)
+	}
+	if usage.SevenDay != nil && usage.SevenDay.WindowStats != nil {
+		attachFullWindowEstimate(usage.SevenDay.WindowStats, usage.SevenDay.Utilization)
+	}
+	if usage.SevenDaySonnet != nil && usage.SevenDaySonnet.WindowStats != nil {
+		attachFullWindowEstimate(usage.SevenDaySonnet.WindowStats, usage.SevenDaySonnet.Utilization)
+	}
+	if usage.SevenDayFable != nil && usage.SevenDayFable.WindowStats != nil {
+		attachFullWindowEstimate(usage.SevenDayFable.WindowStats, usage.SevenDayFable.Utilization)
 	}
 }
 

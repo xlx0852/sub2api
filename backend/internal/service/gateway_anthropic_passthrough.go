@@ -113,6 +113,10 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 			if resp != nil && resp.Body != nil {
 				_ = resp.Body.Close()
 			}
+			// 客户端断开导致的 context canceled 不是上游故障，交由 handler 标 499。
+			if errors.Is(err, context.Canceled) || (c != nil && c.Request != nil && c.Request.Context().Err() != nil) {
+				return nil, err
+			}
 			safeErr := sanitizeUpstreamErrorMessage(err.Error())
 			setOpsUpstreamError(c, 0, safeErr, "")
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{

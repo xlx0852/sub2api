@@ -117,6 +117,10 @@ func isOpenAIInstructionsRequiredError(upstreamStatusCode int, upstreamMsg strin
 }
 
 func isOpenAITransientProcessingError(upstreamStatusCode int, upstreamMsg string, upstreamBody []byte) bool {
+	// Envoy/proxy reset before headers may arrive as 502/503 body text.
+	if isOpenAIUpstreamConnectionResetMessage(upstreamMsg) || isOpenAIUpstreamConnectionResetMessage(string(upstreamBody)) {
+		return true
+	}
 	if upstreamStatusCode != http.StatusBadRequest && upstreamStatusCode != http.StatusServiceUnavailable {
 		return false
 	}
@@ -502,6 +506,8 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		errMsg = upstreamMsg
 	} else if summarized := summarizeNonJSONUpstreamErrorBody(body); summarized != "" {
 		errMsg = summarized
+	} else if isOpenAIUpstreamConnectionResetMessage(upstreamMsg) || isOpenAIUpstreamConnectionResetMessage(string(body)) {
+		errMsg = "Upstream connection was reset before headers"
 	} else if strings.TrimSpace(upstreamMsg) != "" && resp.StatusCode >= 500 {
 		// Prefer concrete upstream text for 5xx when available and non-HTML.
 		errMsg = upstreamMsg
