@@ -39,43 +39,13 @@ func (h *GatewayHandler) GeminiV1BetaListModels(c *gin.Context) {
 		googleError(c, http.StatusUnauthorized, "Invalid API key")
 		return
 	}
-	// 检查平台：优先使用强制平台（/antigravity 路由），否则要求 gemini 分组
+	// Gemini standalone supplier is retired; only Antigravity force-platform remains.
 	forcePlatform, hasForcePlatform := middleware.GetForcePlatformFromContext(c)
-	if !hasForcePlatform && (apiKey.Group == nil || apiKey.Group.Platform != service.PlatformGemini) {
-		googleError(c, http.StatusBadRequest, "API key group platform is not gemini")
+	if !hasForcePlatform || forcePlatform != service.PlatformAntigravity {
+		googleError(c, http.StatusGone, "Gemini platform has been retired; use /antigravity routes")
 		return
 	}
-
-	// 强制 antigravity 模式：返回 antigravity 支持的模型列表
-	if forcePlatform == service.PlatformAntigravity {
-		c.JSON(http.StatusOK, antigravity.FallbackGeminiModelsList())
-		return
-	}
-
-	account, err := h.geminiCompatService.SelectAccountForAIStudioEndpoints(c.Request.Context(), apiKey.GroupID)
-	if err != nil {
-		// 没有 gemini 账户，检查是否有 antigravity 账户可用
-		hasAntigravity, _ := h.geminiCompatService.HasAntigravityAccounts(c.Request.Context(), apiKey.GroupID)
-		if hasAntigravity {
-			// antigravity 账户使用静态模型列表
-			c.JSON(http.StatusOK, gemini.FallbackModelsList())
-			return
-		}
-		markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
-		googleError(c, http.StatusServiceUnavailable, "No available Gemini accounts: "+err.Error())
-		return
-	}
-
-	res, err := h.geminiCompatService.ForwardAIStudioGET(c.Request.Context(), account, "/v1beta/models")
-	if err != nil {
-		googleError(c, http.StatusBadGateway, err.Error())
-		return
-	}
-	if shouldFallbackGeminiModels(res) {
-		c.JSON(http.StatusOK, gemini.FallbackModelsList())
-		return
-	}
-	writeUpstreamResponse(c, res)
+	c.JSON(http.StatusOK, antigravity.FallbackGeminiModelsList())
 }
 
 // GeminiV1BetaGetModel proxies:
@@ -86,62 +56,22 @@ func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
 		googleError(c, http.StatusUnauthorized, "Invalid API key")
 		return
 	}
-	// 检查平台：优先使用强制平台（/antigravity 路由），否则要求 gemini 分组
 	forcePlatform, hasForcePlatform := middleware.GetForcePlatformFromContext(c)
-	if !hasForcePlatform && (apiKey.Group == nil || apiKey.Group.Platform != service.PlatformGemini) {
-		googleError(c, http.StatusBadRequest, "API key group platform is not gemini")
+	if !hasForcePlatform || forcePlatform != service.PlatformAntigravity {
+		googleError(c, http.StatusGone, "Gemini platform has been retired; use /antigravity routes")
 		return
 	}
-
 	modelName := strings.TrimSpace(c.Param("model"))
 	if modelName == "" {
 		googleError(c, http.StatusBadRequest, "Missing model in URL")
 		return
 	}
-	getModelPath, pathErr := service.BuildGeminiAIStudioGetModelPath(modelName)
-	if pathErr != nil {
-		googleError(c, http.StatusBadRequest, "Invalid model in URL")
-		return
-	}
 	if safeModel, err := service.SanitizeGeminiModelPathSegment(modelName); err == nil {
 		modelName = safeModel
 	}
-
-	// 强制 antigravity 模式：返回 antigravity 模型信息
-	if forcePlatform == service.PlatformAntigravity {
-		c.JSON(http.StatusOK, antigravity.FallbackGeminiModel(modelName))
-		return
-	}
-
-	account, err := h.geminiCompatService.SelectAccountForAIStudioEndpoints(c.Request.Context(), apiKey.GroupID)
-	if err != nil {
-		// 没有 gemini 账户，检查是否有 antigravity 账户可用
-		hasAntigravity, _ := h.geminiCompatService.HasAntigravityAccounts(c.Request.Context(), apiKey.GroupID)
-		if hasAntigravity {
-			// antigravity 账户使用静态模型信息
-			c.JSON(http.StatusOK, gemini.FallbackModel(modelName))
-			return
-		}
-		markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
-		googleError(c, http.StatusServiceUnavailable, "No available Gemini accounts: "+err.Error())
-		return
-	}
-
-	res, err := h.geminiCompatService.ForwardAIStudioGET(c.Request.Context(), account, getModelPath)
-	if err != nil {
-		googleError(c, http.StatusBadGateway, err.Error())
-		return
-	}
-	if shouldFallbackGeminiModel(modelName, res) {
-		c.JSON(http.StatusOK, gemini.FallbackModel(modelName))
-		return
-	}
-	writeUpstreamResponse(c, res)
+	c.JSON(http.StatusOK, antigravity.FallbackGeminiModel(modelName))
 }
 
-// GeminiV1BetaModels proxies Gemini native REST endpoints like:
-// POST /v1beta/models/{model}:generateContent
-// POST /v1beta/models/{model}:streamGenerateContent?alt=sse
 func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 	apiKey, ok := middleware.GetAPIKeyFromContext(c)
 	if !ok || apiKey == nil {
@@ -161,12 +91,11 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		zap.Any("group_id", apiKey.GroupID),
 	)
 
-	// 检查平台：优先使用强制平台（/antigravity 路由，中间件已设置 request.Context），否则要求 gemini 分组
-	if !middleware.HasForcePlatform(c) {
-		if apiKey.Group == nil || apiKey.Group.Platform != service.PlatformGemini {
-			googleError(c, http.StatusBadRequest, "API key group platform is not gemini")
-			return
-		}
+	// Gemini standalone supplier retired: only /antigravity force-platform is accepted.
+	forcePlatform, hasForcePlatform := middleware.GetForcePlatformFromContext(c)
+	if !hasForcePlatform || forcePlatform != service.PlatformAntigravity {
+		googleError(c, http.StatusGone, "Gemini platform has been retired; use /antigravity routes")
+		return
 	}
 
 	modelName, action, err := parseGeminiModelAction(strings.TrimPrefix(c.Param("modelAction"), "/"))

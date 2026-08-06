@@ -41,8 +41,6 @@ func RegisterAdminRoutes(
 		// OpenAI OAuth
 		registerOpenAIOAuthRoutes(admin, h)
 
-		// Gemini OAuth
-		registerGeminiOAuthRoutes(admin, h)
 
 		// Antigravity OAuth
 		registerAntigravityOAuthRoutes(admin, h)
