@@ -83,6 +83,7 @@ export default {
     loadFailed: '加载利润数据失败',
     saveFailed: '保存成本配置失败',
     backendUpgradeRequired: '当前后端版本不支持成本配置，请同步升级后端后重试',
+    today: '今天',
     last7Days: '近 7 天',
     last30Days: '近 30 天',
     currentMonth: '本月',
