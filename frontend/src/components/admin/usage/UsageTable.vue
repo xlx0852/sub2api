@@ -569,7 +569,7 @@
               </div>
               <p
                 v-if="isLunaUsageModel(tooltipData)"
-                class="mt-1 max-w-[18rem] whitespace-normal text-[11px] leading-4 text-amber-300/90"
+                class="mt-1 text-[11px] leading-4 text-amber-300/90"
               >
                 {{ t('usage.lunaPriceAdjustedNote') }}
               </p>
