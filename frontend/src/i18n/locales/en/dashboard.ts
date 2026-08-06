@@ -339,7 +339,7 @@ export default {
     cacheHitRate: 'Cache hit rate',
     inputTokenPrice: 'Input price',
     outputTokenPrice: 'Output price',
-    lunaPriceAdjustedNote: 'Luna list price ×2 ($0.40/$2.40)',
+    lunaPriceAdjustedNote: 'Luna ×2 · $0.40/$2.40',
     perMillionTokens: '/ 1M tokens',
     unitPrice: 'Per-request price',
     imageUnitPrice: 'Per-image price',

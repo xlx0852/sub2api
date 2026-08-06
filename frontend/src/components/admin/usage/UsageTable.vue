@@ -567,12 +567,11 @@
                 <span class="text-gray-400">{{ t('usage.imageOutputTokenPrice') }}</span>
                 <span class="font-medium text-pink-300">{{ formatTokenPricePerMillion(tooltipData.image_output_cost ?? 0, tooltipData.image_output_tokens) }} {{ t('usage.perMillionTokens') }}</span>
               </div>
-              <p
-                v-if="isLunaUsageModel(tooltipData)"
-                class="mt-1 text-[11px] leading-4 text-amber-300/90"
-              >
-                {{ t('usage.lunaPriceAdjustedNote') }}
-              </p>
+              <div v-if="isLunaUsageModel(tooltipData)" class="mt-1.5">
+                <span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium leading-tight bg-amber-500/20 text-amber-300 ring-1 ring-inset ring-amber-500/30">
+                  {{ t('usage.lunaPriceAdjustedNote') }}
+                </span>
+              </div>
             </template>
             <template v-else-if="tooltipData && isImageUsage(tooltipData)">
               <div class="flex items-center justify-between gap-4">
