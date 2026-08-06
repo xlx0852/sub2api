@@ -468,8 +468,8 @@ source ~/.zshrc
   {
     id: 'gemini',
     hash: 'Gemini',
-    title: 'Gemini CLI 配置',
-    summary: '安装 @google/gemini-cli 并指向 SicTs。',
+    title: 'Gemini CLI（已停用）',
+    summary: 'Google 已宣布不再维护 Gemini CLI，SicTs 已下线该供应商。',
     markdown: `### 安装
 
 \`\`\`bash

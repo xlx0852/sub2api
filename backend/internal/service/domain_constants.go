@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
@@ -546,3 +547,13 @@ const SettingKeyAllowUserViewErrorRequests = "allow_user_view_error_requests"
 // SettingKeyUpstreamBillingProbeSettings —— 系统全局：上游 Sub2API 计费倍率
 // 探测 runner 的开关与周期（JSON：enabled / interval_minutes）。
 const SettingKeyUpstreamBillingProbeSettings = "upstream_billing_probe_settings"
+
+// rejectDeprecatedGeminiPlatform blocks new Gemini platform provisioning.
+// Google has discontinued Gemini CLI maintenance; the standalone gemini supplier
+// is retired. Antigravity remains a separate platform.
+func rejectDeprecatedGeminiPlatform(platform string) error {
+	if strings.EqualFold(strings.TrimSpace(platform), PlatformGemini) {
+		return fmt.Errorf("gemini platform has been retired (Gemini CLI discontinued); use antigravity or other providers")
+	}
+	return nil
+}

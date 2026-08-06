@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"net/http"
 	"fmt"
 	"strings"
 
@@ -21,6 +22,9 @@ func NewGeminiOAuthHandler(geminiOAuthService *service.GeminiOAuthService) *Gemi
 // GetCapabilities returns the Gemini OAuth configuration capabilities.
 // GET /api/v1/admin/gemini/oauth/capabilities
 func (h *GeminiOAuthHandler) GetCapabilities(c *gin.Context) {
+	response.Error(c, http.StatusGone, "Gemini platform/OAuth has been retired")
+	return
+
 	cfg := h.geminiOAuthService.GetOAuthConfig()
 	response.Success(c, cfg)
 }
@@ -38,6 +42,9 @@ type GeminiGenerateAuthURLRequest struct {
 // GenerateAuthURL generates Google OAuth authorization URL for Gemini.
 // POST /api/v1/admin/gemini/oauth/auth-url
 func (h *GeminiOAuthHandler) GenerateAuthURL(c *gin.Context) {
+	response.Error(c, http.StatusGone, "Gemini platform/OAuth has been retired")
+	return
+
 	var req GeminiGenerateAuthURLRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
@@ -91,6 +98,9 @@ type GeminiExchangeCodeRequest struct {
 // ExchangeCode exchanges authorization code for tokens.
 // POST /api/v1/admin/gemini/oauth/exchange-code
 func (h *GeminiOAuthHandler) ExchangeCode(c *gin.Context) {
+	response.Error(c, http.StatusGone, "Gemini platform/OAuth has been retired")
+	return
+
 	var req GeminiExchangeCodeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())

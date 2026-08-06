@@ -51,7 +51,7 @@ describe('locale completeness', () => {
   })
 
   it('defines labels for every group platform in both locales', () => {
-    const platforms = ['all', 'anthropic', 'openai', 'gemini', 'antigravity', 'grok', 'kimi']
+    const platforms = ['all', 'anthropic', 'openai', 'antigravity', 'grok', 'kimi']
     const required = platforms.map((platform) => `admin.groups.platforms.${platform}`)
 
     expect(required.filter((key) => !new Set(leafKeys(en)).has(key))).toEqual([])

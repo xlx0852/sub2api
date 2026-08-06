@@ -86,7 +86,6 @@ export {
   settingsAPI,
   systemAPI,
   usageAPI,
-  geminiAPI,
   antigravityAPI,
   grokAPI,
   kimiAPI,

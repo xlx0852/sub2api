@@ -140,6 +140,9 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	if platform == "" {
 		platform = PlatformAnthropic
 	}
+	if err := rejectDeprecatedGeminiPlatform(platform); err != nil {
+		return nil, err
+	}
 
 	if input.SubscriptionType == SubscriptionTypeSubscription {
 		return nil, errors.New("user subscription groups are no longer supported")

@@ -328,6 +328,11 @@ func (s *adminServiceImpl) CleanupOAuthEmailDuplicates(ctx context.Context) (kep
 }
 
 func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccountInput) (*Account, error) {
+	if input != nil {
+		if err := rejectDeprecatedGeminiPlatform(input.Platform); err != nil {
+			return nil, err
+		}
+	}
 	// OAuth/setup-token：同平台同邮箱合并到最后登录账号，避免重复建号。
 	if input != nil && (input.Type == AccountTypeOAuth || input.Type == AccountTypeSetupToken) {
 		email := ""

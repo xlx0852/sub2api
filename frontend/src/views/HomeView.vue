@@ -491,7 +491,6 @@ const heroTags = computed(() => [
 const providers = computed(() => [
   { name: t('home.providers.claude'), status: t('home.providers.supported'), tone: 'provider-supported' },
   { name: 'GPT', status: t('home.providers.supported'), tone: 'provider-supported' },
-  { name: t('home.providers.gemini'), status: t('home.providers.supported'), tone: 'provider-supported' },
   { name: t('home.providers.grok'), status: t('home.providers.supported'), tone: 'provider-supported' },
   { name: t('home.providers.more'), status: t('home.providers.soon'), tone: 'provider-muted' }
 ])
