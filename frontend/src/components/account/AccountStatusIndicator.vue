@@ -319,6 +319,12 @@ const hasError = computed(() => {
 
 const isGrokSpendingLimitBlocked = computed(() => {
   if (props.account.platform !== 'grok') return false
+  // 临时封禁已过期时，reason 里可能仍残留 spending-limit 文案，不能再当「当前卡额度」。
+  // 仅在账号 error，或 temp_unschedulable_until 仍生效时展示「Grok 额度/订阅」。
+  const tempActive =
+    !!props.account.temp_unschedulable_until &&
+    new Date(props.account.temp_unschedulable_until) > new Date()
+  if (props.account.status !== 'error' && !tempActive) return false
   const text = `${props.account.error_message ?? ''} ${props.account.temp_unschedulable_reason ?? ''}`.toLowerCase()
   return (
     text.includes('grok_spending_limit') ||

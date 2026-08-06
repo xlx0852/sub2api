@@ -193,4 +193,29 @@ describe('AccountStatusIndicator', () => {
     expect(wrapper.text()).toContain('admin.accounts.status.grokSpendingLimitHelp')
     expect(wrapper.text()).not.toContain('personal-team-blocked:spending-limit')
   })
+
+  it('Grok 临时封禁已过期时不因残留 reason 显示额度/订阅卡死', () => {
+    const wrapper = mount(AccountStatusIndicator, {
+      props: {
+        account: makeAccount({
+          id: 84,
+          name: 'GROK-自建',
+          platform: 'grok',
+          status: 'active',
+          schedulable: true,
+          temp_unschedulable_until: '2026-08-04T11:51:05Z',
+          temp_unschedulable_reason:
+            'scheduled diagnostics failed: personal-team-blocked:spending-limit You have run out of credits or need a Grok subscription'
+        })
+      },
+      global: {
+        stubs: {
+          Icon: true
+        }
+      }
+    })
+
+    expect(wrapper.text()).not.toContain('admin.accounts.status.grokSpendingLimit')
+    expect(wrapper.text()).toContain('admin.accounts.status.active')
+  })
 })
