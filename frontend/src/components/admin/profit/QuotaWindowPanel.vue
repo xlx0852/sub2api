@@ -343,11 +343,10 @@ function expandWindowOccurrences(
   if (endMs == null && startMs != null) endMs = startMs + durationMs
   if (startMs == null && endMs != null) startMs = endMs - durationMs
   if (startMs == null || endMs == null) return []
-	if (recurringUntilMs != null) {
-		endMs = Math.min(endMs, recurringUntilMs)
-		if (endMs <= startMs) return []
-	}
 
+  // Keep the live upstream snapshot intact. recurring_until only stops FUTURE
+  // projections (e.g. after ban / active cycle end), and must not shrink or drop
+  // the current bar when bookkeeping cycle end is earlier than upstream reset.
   const out: Array<ProfitQuotaWindow & { startMs: number; endMs: number }> = []
   const earliest = viewStart.getTime() - durationMs
   const latest = viewEnd.getTime() + durationMs
@@ -363,10 +362,11 @@ function expandWindowOccurrences(
   cursorEnd = endMs + durationMs
   while (cursorEnd <= latest) {
     const cursorStart = cursorEnd - durationMs
-		if (recurringUntilMs != null && cursorStart >= recurringUntilMs) break
-		const cappedEnd = recurringUntilMs != null ? Math.min(cursorEnd, recurringUntilMs) : cursorEnd
-	    if (cappedEnd > viewStart.getTime() && cursorStart < viewEnd.getTime()) {
-	      out.push({ ...window, startMs: cursorStart, endMs: cappedEnd })
+    if (recurringUntilMs != null && cursorStart >= recurringUntilMs) break
+    const cappedEnd = recurringUntilMs != null ? Math.min(cursorEnd, recurringUntilMs) : cursorEnd
+    if (cappedEnd <= cursorStart) break
+    if (cappedEnd > viewStart.getTime() && cursorStart < viewEnd.getTime()) {
+      out.push({ ...window, startMs: cursorStart, endMs: cappedEnd })
     }
     cursorEnd += durationMs
     if (out.length > 40) break

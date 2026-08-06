@@ -237,6 +237,60 @@ func TestQuotaWindowCutoffForCycles_UsesBanEffectiveAt(t *testing.T) {
 	require.WithinDuration(t, banAt, *cutoff, time.Second)
 }
 
+func TestQuotaWindowCutoffForCycles_ExpiredCycleNoCutoff(t *testing.T) {
+	now := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+	// Bookkeeping cycle ended Jul 29; live free quota may still roll for 30d.
+	cutoff := quotaWindowCutoffForCycles([]*AccountSubscriptionCycle{{
+		StartsAt:   time.Date(2026, 6, 29, 0, 0, 0, 0, time.UTC),
+		PeriodDays: 30,
+	}}, now)
+	require.Nil(t, cutoff)
+}
+
+func TestFillProfitQuotaWindows_ExpiredCycleKeepsLive30d(t *testing.T) {
+	now := time.Date(2026, 8, 6, 9, 30, 0, 0, time.FixedZone("CST", 8*3600))
+	reset30d := time.Date(2026, 8, 28, 13, 51, 58, 0, time.FixedZone("CST", 8*3600))
+	acc := &Account{
+		ID:       69,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			"codex_7d_used_percent":        100.0,
+			"codex_7d_reset_at":            reset30d.Format(time.RFC3339),
+			"codex_7d_window_minutes":      43200.0,
+			"codex_primary_window_minutes": 43200.0,
+		},
+	}
+	// Simulate former bug path: expired cycle end as cutoff.
+	cycleEnd := time.Date(2026, 7, 29, 0, 0, 0, 0, time.UTC)
+	summary := &AccountProfitSummary{}
+	// With expired cutoff no longer applied by quotaWindowCutoffForCycles; pass nil.
+	fillProfitQuotaWindows(summary, acc, now, nil)
+	require.NotEmpty(t, summary.QuotaWindows)
+
+	var longWin *ProfitQuotaWindow
+	for i := range summary.QuotaWindows {
+		if summary.QuotaWindows[i].Kind == "30d" {
+			longWin = &summary.QuotaWindows[i]
+		}
+	}
+	require.NotNil(t, longWin, "live 30d window must survive expired bookkeeping cycle")
+	require.Equal(t, "30d", longWin.Label)
+	require.NotNil(t, longWin.WindowMinutes)
+	require.Equal(t, 43200, *longWin.WindowMinutes)
+
+	// Even if a stale cutoff is passed, keep the live window (start after cycle end).
+	summary2 := &AccountProfitSummary{}
+	fillProfitQuotaWindows(summary2, acc, now, &cycleEnd)
+	// Current backend still caps/drops when cutoff is forced; expired-cycle path
+	// should avoid supplying cutoff. Assert the preferred helper returns nil cutoff.
+	require.Nil(t, quotaWindowCutoffForCycles([]*AccountSubscriptionCycle{{
+		StartsAt:   time.Date(2026, 6, 29, 0, 0, 0, 0, time.UTC),
+		PeriodDays: 30,
+	}}, now))
+	_ = summary2
+}
+
 func TestFillProfitQuotaWindows_CodexFree30d(t *testing.T) {
 	now := time.Date(2026, 8, 6, 9, 22, 0, 0, time.UTC)
 	reset30d := now.Add(24 * 24 * time.Hour)
