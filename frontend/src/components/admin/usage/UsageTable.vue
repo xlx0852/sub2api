@@ -567,6 +567,12 @@
                 <span class="text-gray-400">{{ t('usage.imageOutputTokenPrice') }}</span>
                 <span class="font-medium text-pink-300">{{ formatTokenPricePerMillion(tooltipData.image_output_cost ?? 0, tooltipData.image_output_tokens) }} {{ t('usage.perMillionTokens') }}</span>
               </div>
+              <p
+                v-if="isLunaUsageModel(tooltipData)"
+                class="mt-1 max-w-[18rem] whitespace-normal text-[11px] leading-4 text-amber-300/90"
+              >
+                {{ t('usage.lunaPriceAdjustedNote') }}
+              </p>
             </template>
             <template v-else-if="tooltipData && isImageUsage(tooltipData)">
               <div class="flex items-center justify-between gap-4">
@@ -688,6 +694,16 @@ function accountBilled(row: { total_cost?: number | null; account_stats_cost?: n
   const base = row.account_stats_cost != null ? row.account_stats_cost : (row.total_cost ?? 0)
   const result = base * (row.account_rate_multiplier ?? 1)
   return Number.isNaN(result) ? 0 : result
+}
+
+function isLunaUsageModel(row: {
+  model?: string | null
+  requested_model?: string | null
+  upstream_model?: string | null
+} | null | undefined): boolean {
+  if (!row) return false
+  const parts = [row.model, row.requested_model, row.upstream_model]
+  return parts.some((name) => typeof name === 'string' && name.toLowerCase().includes('luna'))
 }
 
 
