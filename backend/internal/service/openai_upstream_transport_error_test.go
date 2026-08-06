@@ -90,3 +90,22 @@ func errString(err error) string {
 	}
 	return err.Error()
 }
+
+
+
+func TestIsOpenAIUpstreamConnectionResetMessage(t *testing.T) {
+	cases := []struct{
+		msg string
+		want bool
+	}{
+		{"upstream connect error or disconnect/reset before headers. reset reason: connection termination", true},
+		{"connection termination", true},
+		{"authentication failed", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		if got := isOpenAIUpstreamConnectionResetMessage(tc.msg); got != tc.want {
+			t.Fatalf("msg=%q got=%v want=%v", tc.msg, got, tc.want)
+		}
+	}
+}

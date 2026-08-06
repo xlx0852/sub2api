@@ -371,6 +371,10 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 			if resp != nil && resp.Body != nil {
 				_ = resp.Body.Close()
 			}
+			// 客户端已断开：上游 Do 常表现为 context canceled，不应记成 502 upstream_error。
+			if errors.Is(err, context.Canceled) || (c != nil && c.Request != nil && c.Request.Context().Err() != nil) {
+				return nil, err
+			}
 			// Ensure the client receives an error response (handlers assume Forward writes on non-failover errors).
 			safeErr := sanitizeUpstreamErrorMessage(err.Error())
 			setOpsUpstreamError(c, 0, safeErr, "")

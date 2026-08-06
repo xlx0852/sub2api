@@ -24,6 +24,10 @@ const openAITransportErrorTempUnschedDuration = 10 * time.Minute
 // ultimately exhausted.
 var openAITransportFailoverBody = []byte(`{"error":{"type":"upstream_error","message":"Upstream request failed"}}`)
 
+// openAIConnectionResetFailoverBody is used when the upstream/proxy resets the
+// TCP stream before response headers (Envoy: "disconnect/reset before headers").
+var openAIConnectionResetFailoverBody = []byte(`{"error":{"type":"upstream_error","message":"Upstream connection was reset before headers"}}`)
+
 // openAITransportErrorClass describes how to react to a transport-level upstream
 // failure — i.e. the HTTP round-trip never completed (proxy / DNS / TCP / TLS
 // error, no HTTP status code received).
@@ -65,6 +69,27 @@ var openAIPersistentTransportErrorMarkers = []string{
 //     The network-layer string markers ("connection refused", "no route to host",
 //     "network is unreachable", "no such host") are kept as a cross-platform safety
 //     net even though the typed checks should cover them on modern Go+Linux.
+
+// isOpenAIUpstreamConnectionResetMessage detects Envoy/proxy style "headers never arrived"
+// blips (connection termination / disconnect before headers). These are transient:
+// failover to another account, do not temp-unsched for auth/DNS reasons.
+func isOpenAIUpstreamConnectionResetMessage(msg string) bool {
+	lower := strings.ToLower(strings.TrimSpace(msg))
+	if lower == "" {
+		return false
+	}
+	if strings.Contains(lower, "disconnect/reset before headers") {
+		return true
+	}
+	if strings.Contains(lower, "connection termination") {
+		return true
+	}
+	if strings.Contains(lower, "upstream connect error") && strings.Contains(lower, "reset") {
+		return true
+	}
+	return false
+}
+
 func classifyOpenAITransportError(err error) openAITransportErrorClass {
 	if err == nil {
 		return openAITransportErrorClass{}
@@ -113,7 +138,15 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 	}
 
 	safeErr := sanitizeUpstreamErrorMessage(err.Error())
-	setOpsUpstreamError(c, 0, safeErr, "")
+	opsMsg := safeErr
+	body := openAITransportFailoverBody
+	retrySame := false
+	if isOpenAIUpstreamConnectionResetMessage(err.Error()) || isOpenAIUpstreamConnectionResetMessage(safeErr) {
+		opsMsg = "Upstream connection was reset before headers"
+		body = openAIConnectionResetFailoverBody
+		retrySame = account != nil && account.IsPoolMode()
+	}
+	setOpsUpstreamError(c, 0, opsMsg, safeErr)
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 		Platform:           account.Platform,
 		AccountID:          account.ID,
@@ -121,7 +154,8 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 		UpstreamStatusCode: 0,
 		Passthrough:        passthrough,
 		Kind:               "request_error",
-		Message:            safeErr,
+		Message:            opsMsg,
+		Detail:             safeErr,
 	})
 
 	if classifyOpenAITransportError(err).Persistent {
@@ -129,8 +163,9 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 	}
 
 	return &UpstreamFailoverError{
-		StatusCode:   http.StatusBadGateway,
-		ResponseBody: openAITransportFailoverBody,
+		StatusCode:             http.StatusBadGateway,
+		ResponseBody:           body,
+		RetryableOnSameAccount: retrySame,
 	}
 }
 

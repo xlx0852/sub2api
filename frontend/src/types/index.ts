@@ -1004,6 +1004,12 @@ export interface WindowStats {
   cost: number // Account cost (account multiplier)
   standard_cost?: number
   user_cost?: number
+  // Backend full-window projection at 100% utilization (preferred over local 100/util).
+  full_requests?: number
+  full_tokens?: number
+  full_cost?: number
+  full_standard_cost?: number
+  full_user_cost?: number
 }
 
 export interface UsageProgress {

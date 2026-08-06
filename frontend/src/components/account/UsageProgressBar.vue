@@ -143,15 +143,30 @@ const showWindowStats = computed(() => {
   return !!props.windowStats && (props.windowStats.requests > 0 || props.windowStats.tokens > 0)
 })
 
-// Linear projection: current local window usage / upstream utilized share.
-// Values above 100% are excluded because they no longer describe a useful
-// "full quota" projection and would produce an estimate below actual usage.
+// Prefer backend full_* projection; fall back to local linear 100/util only when absent.
 function computeRawFullEstimate(
   utilization: number,
   stats: WindowStats | null | undefined
 ): WindowStats | null {
   if (!stats) return null
   if (!(stats.requests > 0 || stats.tokens > 0)) return null
+
+  const hasBackendFull =
+    stats.full_requests != null ||
+    stats.full_tokens != null ||
+    stats.full_cost != null ||
+    stats.full_user_cost != null
+  if (hasBackendFull) {
+    return {
+      requests: Number(stats.full_requests ?? 0),
+      tokens: Number(stats.full_tokens ?? 0),
+      cost: Number(stats.full_cost ?? 0),
+      standard_cost: stats.full_standard_cost,
+      user_cost: stats.full_user_cost
+    }
+  }
+
+  // Legacy fallback for older backends without full_*.
   if (utilization <= 0 || utilization > 100) return null
   const factor = 100 / utilization
   return {
