@@ -485,21 +485,61 @@ func (h *ChannelHandler) GetModelDefaultPricing(c *gin.Context) {
 		return
 	}
 
-	pricing, err := h.billingService.GetModelPricing(model)
-	if err != nil {
-		// 模型不在定价列表中
-		response.Success(c, gin.H{"found": false})
+	response.Success(c, h.modelDefaultPricingPayload(model))
+}
+
+type batchModelDefaultPricingRequest struct {
+	Models []string `json:"models"`
+}
+
+// BatchGetModelDefaultPricing 批量获取官方/LiteLLM 默认定价，供渠道编辑快捷填价。
+// POST /api/v1/admin/channels/model-pricing/batch
+func (h *ChannelHandler) BatchGetModelDefaultPricing(c *gin.Context) {
+	var req batchModelDefaultPricingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorFrom(c, infraerrors.BadRequest("INVALID_REQUEST", "invalid request body"))
+		return
+	}
+	if len(req.Models) == 0 {
+		response.ErrorFrom(c, infraerrors.BadRequest("MISSING_PARAMETER", "models is required").
+			WithMetadata(map[string]string{"param": "models"}))
+		return
+	}
+	const maxBatch = 100
+	if len(req.Models) > maxBatch {
+		response.ErrorFrom(c, infraerrors.BadRequest("TOO_MANY_MODELS",
+			fmt.Sprintf("at most %d models per batch", maxBatch)).
+			WithMetadata(map[string]string{"param": "models", "max": strconv.Itoa(maxBatch)}))
 		return
 	}
 
-	response.Success(c, gin.H{
+	items := make(map[string]gin.H, len(req.Models))
+	for _, raw := range req.Models {
+		model := strings.TrimSpace(raw)
+		if model == "" {
+			continue
+		}
+		if _, exists := items[model]; exists {
+			continue
+		}
+		items[model] = h.modelDefaultPricingPayload(model)
+	}
+	response.Success(c, gin.H{"items": items})
+}
+
+func (h *ChannelHandler) modelDefaultPricingPayload(model string) gin.H {
+	pricing, err := h.billingService.GetModelPricing(model)
+	if err != nil || pricing == nil {
+		return gin.H{"found": false}
+	}
+	return gin.H{
 		"found":              true,
 		"input_price":        pricing.InputPricePerToken,
 		"output_price":       pricing.OutputPricePerToken,
 		"cache_write_price":  pricing.CacheCreationPricePerToken,
 		"cache_read_price":   pricing.CacheReadPricePerToken,
 		"image_output_price": pricing.ImageOutputPricePerToken,
-	})
+	}
 }
 
 // platformToLiteLLMProvider maps a channel platform name to the corresponding
