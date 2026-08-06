@@ -21,7 +21,7 @@ const messages: Record<string, string> = {
   'admin.usage.cacheReadCost': 'Cache Read Cost',
   'usage.inputTokenPrice': 'Input price',
   'usage.outputTokenPrice': 'Output price',
-  'usage.lunaPriceAdjustedNote': '❗ Bandwidth included · $0.80/$4.80',
+  'usage.lunaPriceAdjustedNote': '❗ Sell price ×4 (bandwidth)',
   'usage.perMillionTokens': '/ 1M tokens',
   'usage.serviceTier': 'Service tier',
   'usage.serviceTierPriority': 'Fast',
@@ -219,7 +219,7 @@ describe('admin UsageTable tooltip', () => {
     expect(text).toContain('Input price')
     expect(text).toContain('$0.2000 / 1M tokens')
     expect(text).toContain('$1.2000 / 1M tokens')
-    expect(text).toContain('❗ Bandwidth included · $0.80/$4.80')
+    expect(text).toContain('❗ Sell price ×4 (bandwidth)')
   })
 
   it('shows requested and upstream models separately for admin rows', () => {

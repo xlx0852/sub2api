@@ -339,7 +339,7 @@ export default {
     cacheHitRate: 'Cache hit rate',
     inputTokenPrice: 'Input price',
     outputTokenPrice: 'Output price',
-    lunaPriceAdjustedNote: '❗ Bandwidth included · $0.80/$4.80',
+    lunaPriceAdjustedNote: '❗ Sell price ×4 (bandwidth)',
     perMillionTokens: '/ 1M tokens',
     unitPrice: 'Per-request price',
     imageUnitPrice: 'Per-image price',
