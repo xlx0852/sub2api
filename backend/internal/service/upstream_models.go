@@ -11,7 +11,6 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 )
 
 const upstreamModelsBodyLimit int64 = 8 << 20
@@ -317,9 +316,9 @@ func (s *AccountTestService) buildOpenAIUpstreamModelsRequest(ctx context.Contex
 }
 
 func (s *AccountTestService) buildGeminiUpstreamModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {
-	baseURL := account.GetGeminiBaseURL(geminicli.AIStudioBaseURL)
+	baseURL := account.GetGeminiBaseURL(GeminiAIStudioBaseURL)
 	if strings.TrimSpace(baseURL) == "" {
-		baseURL = geminicli.AIStudioBaseURL
+		baseURL = GeminiAIStudioBaseURL
 	}
 	normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
 	if err != nil {

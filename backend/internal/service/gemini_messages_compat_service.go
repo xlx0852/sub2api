@@ -20,7 +20,6 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
@@ -627,7 +626,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 				return nil, "", errors.New("gemini api_key not configured")
 			}
 
-			baseURL := account.GetGeminiBaseURL(geminicli.AIStudioBaseURL)
+			baseURL := account.GetGeminiBaseURL(GeminiAIStudioBaseURL)
 			normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
 			if err != nil {
 				return nil, "", err
@@ -675,7 +674,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 			// 2. Without project_id -> AI Studio API (direct OAuth, like API key but with Bearer token)
 			if projectID != "" {
 				// Mode 1: Code Assist API
-				baseURL, err := s.validateUpstreamBaseURL(geminicli.GeminiCliBaseURL)
+				baseURL, err := s.validateUpstreamBaseURL(GeminiCliBaseURL)
 				if err != nil {
 					return nil, "", err
 				}
@@ -701,11 +700,11 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 				}
 				upstreamReq.Header.Set("Content-Type", "application/json")
 				upstreamReq.Header.Set("Authorization", "Bearer "+accessToken)
-				upstreamReq.Header.Set("User-Agent", geminicli.GeminiCLIUserAgent)
+				upstreamReq.Header.Set("User-Agent", GeminiCLIUserAgent)
 				return upstreamReq, "x-request-id", nil
 			} else {
 				// Mode 2: AI Studio API with OAuth (like API key mode, but using Bearer token)
-				baseURL := account.GetGeminiBaseURL(geminicli.AIStudioBaseURL)
+				baseURL := account.GetGeminiBaseURL(GeminiAIStudioBaseURL)
 				normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
 				if err != nil {
 					return nil, "", err
@@ -1171,7 +1170,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 				return nil, "", errors.New("gemini api_key not configured")
 			}
 
-			baseURL := account.GetGeminiBaseURL(geminicli.AIStudioBaseURL)
+			baseURL := account.GetGeminiBaseURL(GeminiAIStudioBaseURL)
 			normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
 			if err != nil {
 				return nil, "", err
@@ -1212,7 +1211,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 			// 2. Without project_id -> AI Studio API (direct OAuth, like API key but with Bearer token)
 			if projectID != "" && !forceAIStudio {
 				// Mode 1: Code Assist API
-				baseURL, err := s.validateUpstreamBaseURL(geminicli.GeminiCliBaseURL)
+				baseURL, err := s.validateUpstreamBaseURL(GeminiCliBaseURL)
 				if err != nil {
 					return nil, "", err
 				}
@@ -1238,11 +1237,11 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 				}
 				upstreamReq.Header.Set("Content-Type", "application/json")
 				upstreamReq.Header.Set("Authorization", "Bearer "+accessToken)
-				upstreamReq.Header.Set("User-Agent", geminicli.GeminiCLIUserAgent)
+				upstreamReq.Header.Set("User-Agent", GeminiCLIUserAgent)
 				return upstreamReq, "x-request-id", nil
 			} else {
 				// Mode 2: AI Studio API with OAuth (like API key mode, but using Bearer token)
-				baseURL := account.GetGeminiBaseURL(geminicli.AIStudioBaseURL)
+				baseURL := account.GetGeminiBaseURL(GeminiAIStudioBaseURL)
 				normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
 				if err != nil {
 					return nil, "", err
@@ -2658,7 +2657,7 @@ func (s *GeminiMessagesCompatService) ForwardAIStudioGET(ctx context.Context, ac
 		return nil, pathErr
 	}
 
-	baseURL := account.GetGeminiBaseURL(geminicli.AIStudioBaseURL)
+	baseURL := account.GetGeminiBaseURL(GeminiAIStudioBaseURL)
 	normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
 	if err != nil {
 		return nil, err

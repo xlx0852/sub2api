@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"log"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -111,36 +110,9 @@ func (p *GeminiTokenProvider) GetAccessToken(ctx context.Context, account *Accou
 	projectID := strings.TrimSpace(account.GetCredential("project_id"))
 	autoDetectProjectID := account.GetCredential("auto_detect_project_id") == "true"
 
-	if projectID == "" && autoDetectProjectID {
-		if p.geminiOAuthService == nil {
-			return accessToken, nil
-		}
-
-		var proxyURL string
-		if account.ProxyID != nil && p.geminiOAuthService.proxyRepo != nil {
-			if proxy, err := p.geminiOAuthService.proxyRepo.GetByID(ctx, *account.ProxyID); err == nil && proxy != nil {
-				proxyURL = proxy.URL()
-			}
-		}
-
-		detected, tierID, err := p.geminiOAuthService.fetchProjectID(ctx, accessToken, proxyURL)
-		if err != nil {
-			log.Printf("[GeminiTokenProvider] Auto-detect project_id failed: %v, fallback to AI Studio API mode", err)
-			return accessToken, nil
-		}
-		detected = strings.TrimSpace(detected)
-		tierID = strings.TrimSpace(tierID)
-		if detected != "" {
-			if account.Credentials == nil {
-				account.Credentials = make(map[string]any)
-			}
-			account.Credentials["project_id"] = detected
-			if tierID != "" {
-				account.Credentials["tier_id"] = tierID
-			}
-			_ = persistAccountCredentials(ctx, p.accountRepo, account, account.Credentials)
-		}
-	}
+// project_id auto-detect via Gemini CLI/Code Assist is retired.
+		_ = projectID
+		_ = autoDetectProjectID
 
 	// 3) Populate cache with TTL.
 	if p.tokenCache != nil {

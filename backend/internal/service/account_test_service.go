@@ -20,7 +20,6 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
@@ -1105,7 +1104,7 @@ func (s *AccountTestService) testGeminiAccountConnection(c *gin.Context, account
 	// Determine the model to use
 	testModelID := modelID
 	if testModelID == "" {
-		testModelID = geminicli.CurrentDefaultTestModel()
+		testModelID = GeminiDefaultTestModel()
 	}
 
 	// For static upstream credentials with model mapping, map the model
@@ -1232,7 +1231,7 @@ func (s *AccountTestService) buildGeminiAPIKeyRequest(ctx context.Context, accou
 
 	baseURL := account.GetCredential("base_url")
 	if baseURL == "" {
-		baseURL = geminicli.AIStudioBaseURL
+		baseURL = GeminiAIStudioBaseURL
 	}
 	normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
 	if err != nil {
@@ -1273,7 +1272,7 @@ func (s *AccountTestService) buildGeminiOAuthRequest(ctx context.Context, accoun
 		// AI Studio OAuth mode (no project_id): call generativelanguage API directly with Bearer token.
 		baseURL := account.GetCredential("base_url")
 		if strings.TrimSpace(baseURL) == "" {
-			baseURL = geminicli.AIStudioBaseURL
+			baseURL = GeminiAIStudioBaseURL
 		}
 		normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
 		if err != nil {
@@ -1332,7 +1331,7 @@ func (s *AccountTestService) buildCodeAssistRequest(ctx context.Context, accessT
 	}
 	wrappedBytes, _ := json.Marshal(wrapped)
 
-	normalizedBaseURL, err := s.validateUpstreamBaseURL(geminicli.GeminiCliBaseURL)
+	normalizedBaseURL, err := s.validateUpstreamBaseURL(GeminiCliBaseURL)
 	if err != nil {
 		return nil, err
 	}
@@ -1345,7 +1344,7 @@ func (s *AccountTestService) buildCodeAssistRequest(ctx context.Context, accessT
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("User-Agent", geminicli.GeminiCLIUserAgent)
+	req.Header.Set("User-Agent", GeminiCLIUserAgent)
 
 	return req, nil
 }

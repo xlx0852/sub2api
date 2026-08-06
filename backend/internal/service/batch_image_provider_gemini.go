@@ -16,7 +16,6 @@ import (
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
 )
 
@@ -458,7 +457,7 @@ type GeminiBatchHTTPClient struct {
 func NewGeminiBatchHTTPClient(baseURL string, client *http.Client) *GeminiBatchHTTPClient {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
-		baseURL = geminicli.AIStudioBaseURL
+		baseURL = GeminiAIStudioBaseURL
 	}
 	if client == nil {
 		client = batchImageDefaultHTTPClient()

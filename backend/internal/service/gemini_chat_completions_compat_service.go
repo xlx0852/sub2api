@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
@@ -302,7 +301,7 @@ func (s *GeminiMessagesCompatService) buildGeminiChatCompletionsUpstreamRequestF
 				return nil, "", errors.New("gemini api_key not configured")
 			}
 
-			baseURL := account.GetGeminiBaseURL(geminicli.AIStudioBaseURL)
+			baseURL := account.GetGeminiBaseURL(GeminiAIStudioBaseURL)
 			normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
 			if err != nil {
 				return nil, "", err
@@ -344,7 +343,7 @@ func (s *GeminiMessagesCompatService) buildGeminiChatCompletionsUpstreamRequestF
 			}
 
 			if projectID != "" {
-				baseURL, err := s.validateUpstreamBaseURL(geminicli.GeminiCliBaseURL)
+				baseURL, err := s.validateUpstreamBaseURL(GeminiCliBaseURL)
 				if err != nil {
 					return nil, "", err
 				}
@@ -369,11 +368,11 @@ func (s *GeminiMessagesCompatService) buildGeminiChatCompletionsUpstreamRequestF
 				}
 				upstreamReq.Header.Set("Content-Type", "application/json")
 				upstreamReq.Header.Set("Authorization", "Bearer "+accessToken)
-				upstreamReq.Header.Set("User-Agent", geminicli.GeminiCLIUserAgent)
+				upstreamReq.Header.Set("User-Agent", GeminiCLIUserAgent)
 				return upstreamReq, "x-request-id", nil
 			}
 
-			baseURL := account.GetGeminiBaseURL(geminicli.AIStudioBaseURL)
+			baseURL := account.GetGeminiBaseURL(GeminiAIStudioBaseURL)
 			normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
 			if err != nil {
 				return nil, "", err

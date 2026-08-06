@@ -11,7 +11,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -100,8 +99,8 @@ func defaultModelsListCandidateIDs(platform string) []string {
 	case PlatformOpenAI:
 		return openai.DefaultModelIDs()
 	case PlatformGemini:
-		ids := make([]string, 0, len(geminicli.CurrentDefaultModels()))
-		for _, model := range geminicli.CurrentDefaultModels() {
+		ids := make([]string, 0, len(GeminiDefaultModels()))
+		for _, model := range GeminiDefaultModels() {
 			ids = append(ids, model.ID)
 		}
 		return ids
