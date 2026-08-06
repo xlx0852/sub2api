@@ -164,6 +164,18 @@ export async function getModelDefaultPricing(model: string): Promise<ModelDefaul
   return data
 }
 
+export interface BatchModelDefaultPricingResult {
+  items: Record<string, ModelDefaultPricing>
+}
+
+/** 批量查询官方/LiteLLM 默认定价（per-token） */
+export async function batchGetModelDefaultPricing(models: string[]): Promise<BatchModelDefaultPricingResult> {
+  const { data } = await apiClient.post<BatchModelDefaultPricingResult>('/admin/channels/model-pricing/batch', {
+    models
+  })
+  return data
+}
+
 export interface SyncPricingModelsResult {
   models: string[]
 }
@@ -178,5 +190,14 @@ export async function syncPricingModels(platform: string): Promise<SyncPricingMo
   return data
 }
 
-const channelsAPI = { list, getById, create, update, remove, getModelDefaultPricing, syncPricingModels }
+const channelsAPI = {
+  list,
+  getById,
+  create,
+  update,
+  remove,
+  getModelDefaultPricing,
+  batchGetModelDefaultPricing,
+  syncPricingModels
+}
 export default channelsAPI

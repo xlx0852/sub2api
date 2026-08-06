@@ -3,9 +3,12 @@
 package admin
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -419,6 +422,70 @@ func TestPricingRequestToService_NilPriceFields(t *testing.T) {
 	require.Nil(t, r.CacheReadPrice)
 	require.Nil(t, r.ImageOutputPrice)
 	require.Nil(t, r.PerRequestPrice)
+}
+
+// ---------------------------------------------------------------------------
+// 2b. BatchGetModelDefaultPricing handler
+// ---------------------------------------------------------------------------
+
+func setupBatchModelDefaultPricingRouter(billingSvc *service.BillingService) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	h := &ChannelHandler{billingService: billingSvc}
+	router.POST("/channels/model-pricing/batch", h.BatchGetModelDefaultPricing)
+	return router
+}
+
+func TestBatchGetModelDefaultPricing_MissingModels(t *testing.T) {
+	router := setupBatchModelDefaultPricingRouter(service.NewBillingService(nil, nil))
+	req := httptest.NewRequest(http.MethodPost, "/channels/model-pricing/batch", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestBatchGetModelDefaultPricing_TooManyModels(t *testing.T) {
+	router := setupBatchModelDefaultPricingRouter(service.NewBillingService(nil, nil))
+	models := make([]string, 101)
+	for i := range models {
+		models[i] = fmt.Sprintf("m-%d", i)
+	}
+	body, err := json.Marshal(map[string]any{"models": models})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/channels/model-pricing/batch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestBatchGetModelDefaultPricing_OK(t *testing.T) {
+	router := setupBatchModelDefaultPricingRouter(service.NewBillingService(nil, nil))
+	body := `{"models":["gpt-5.6-luna","gpt-5.6-luna","unknown-model-xyz",""]}`
+	req := httptest.NewRequest(http.MethodPost, "/channels/model-pricing/batch", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp struct {
+		Data struct {
+			Items map[string]struct {
+				Found       bool     `json:"found"`
+				InputPrice  *float64 `json:"input_price"`
+				OutputPrice *float64 `json:"output_price"`
+			} `json:"items"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Contains(t, resp.Data.Items, "gpt-5.6-luna")
+	require.True(t, resp.Data.Items["gpt-5.6-luna"].Found)
+	require.NotNil(t, resp.Data.Items["gpt-5.6-luna"].InputPrice)
+	require.InDelta(t, 2e-7, *resp.Data.Items["gpt-5.6-luna"].InputPrice, 1e-15)
+	require.Contains(t, resp.Data.Items, "unknown-model-xyz")
+	require.False(t, resp.Data.Items["unknown-model-xyz"].Found)
+	require.Len(t, resp.Data.Items, 2)
 }
 
 // ---------------------------------------------------------------------------

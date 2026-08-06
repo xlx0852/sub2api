@@ -12,7 +12,7 @@
         class="flex-shrink-0 text-gray-400 transition-transform duration-200"
       />
 
-      <!-- Summary: model tags + billing badge -->
+      <!-- Summary: model tags + price + billing badge -->
       <div v-if="collapsed" class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
         <!-- Compact model tags (show first 3) -->
         <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
@@ -37,6 +37,14 @@
             {{ t('admin.channels.form.noModels') }}
           </span>
         </div>
+
+        <span
+          class="hidden max-w-[14rem] truncate text-[11px] sm:inline"
+          :class="priceEmpty ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'"
+          :title="priceSummary"
+        >
+          {{ priceSummary }}
+        </span>
 
         <!-- Billing mode badge -->
         <span
@@ -96,10 +104,61 @@
 
         <!-- Token mode -->
         <div v-if="entry.billing_mode === 'token'">
+          <!-- Quick sell-price tools -->
+          <div class="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-dashed border-gray-300 bg-white/70 px-2 py-2 dark:border-dark-500 dark:bg-dark-900/40">
+            <button
+              type="button"
+              class="rounded border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-700 hover:border-primary-300 hover:text-primary-700 disabled:opacity-50 dark:border-dark-600 dark:text-gray-200"
+              :disabled="quickBusy || entry.models.length === 0"
+              @click="fillOfficialPrices"
+            >
+              {{ quickBusy ? t('admin.channels.form.quickPricingLoading') : t('admin.channels.form.fillOfficialPrice') }}
+            </button>
+            <div class="flex items-center gap-1">
+              <span class="text-[11px] text-gray-500">{{ t('admin.channels.form.scaleOfficialPrice') }}</span>
+              <button
+                v-for="n in [2, 4]"
+                :key="n"
+                type="button"
+                class="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+                :disabled="quickBusy || entry.models.length === 0"
+                @click="scaleFromOfficial(n)"
+              >
+                ×{{ n }}
+              </button>
+              <input
+                v-model.number="customScale"
+                type="number"
+                min="0.01"
+                step="0.1"
+                class="input h-7 w-16 px-1 text-[11px]"
+                :placeholder="t('admin.channels.form.customScalePlaceholder')"
+              />
+              <button
+                type="button"
+                class="rounded border border-amber-200 px-1.5 py-0.5 text-[11px] text-amber-800 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-900/50 dark:text-amber-200"
+                :disabled="quickBusy || entry.models.length === 0 || !(Number(customScale) > 0)"
+                @click="scaleFromOfficial(Number(customScale))"
+              >
+                {{ t('admin.channels.form.applyScale') }}
+              </button>
+            </div>
+            <button
+              type="button"
+              class="rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:text-gray-900 dark:border-dark-600 dark:text-gray-300"
+              @click="clearOverrides"
+            >
+              {{ t('admin.channels.form.clearPriceOverride') }}
+            </button>
+          </div>
+          <p class="mt-1 text-[11px] leading-4 text-gray-400">
+            {{ t('admin.channels.form.tokenPriceHint') }}
+          </p>
+
           <!-- Default prices (fallback when no interval matches) -->
           <label class="mt-3 block text-xs font-medium text-gray-500 dark:text-gray-400">
             {{ t('admin.channels.form.defaultPrices') }}
-            <span class="ml-1 font-normal text-gray-400">$/MTok</span>
+            <span class="ml-1 font-normal text-gray-400">$ / 1M tokens</span>
           </label>
           <div class="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-5">
             <div>
@@ -126,6 +185,7 @@
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.imageTokenPrice') }}</label>
               <input :value="entry.image_output_price" @input="emitField('image_output_price', ($event.target as HTMLInputElement).value)"
                 type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
+              <p class="mt-0.5 text-[10px] leading-3 text-amber-600/90 dark:text-amber-400/90">{{ t('admin.channels.form.imageOutputNullHint') }}</p>
             </div>
           </div>
 
@@ -237,6 +297,14 @@ import type { PricingFormEntry, IntervalFormEntry } from './types'
 import { perTokenToMTok, getPlatformTagClass } from './types'
 import type { BillingMode } from '@/api/admin/channels'
 import channelsAPI from '@/api/admin/channels'
+import {
+  clearTokenPriceOverrides,
+  formatTokenPriceSummary,
+  isTokenPricingEmpty,
+  officialPricingToFormMTok,
+  scaleOfficialPricingMTok,
+  type OfficialTokenPricing,
+} from './channelPricingTools'
 
 const { t } = useI18n()
 
@@ -252,6 +320,8 @@ const emit = defineEmits<{
 
 // Collapse state: entries with existing models default to collapsed
 const collapsed = ref(props.entry.models.length > 0)
+const quickBusy = ref(false)
+const customScale = ref(4)
 
 const billingModeOptions = computed(() => [
   { value: 'token', label: t('admin.channels.billingMode.token') },
@@ -264,8 +334,63 @@ const billingModeLabel = computed(() => {
   return opt ? opt.label : props.entry.billing_mode
 })
 
+const priceEmpty = computed(() => isTokenPricingEmpty(props.entry))
+const priceSummary = computed(() =>
+  formatTokenPriceSummary(props.entry, t('admin.channels.form.fallbackOfficialShort')),
+)
+
 function emitField(field: keyof PricingFormEntry, value: string) {
   emit('update', { ...props.entry, [field]: value === '' ? null : value })
+}
+
+function pickLookupModel(models: string[]): string | null {
+  const exact = models.find((m) => m && !m.includes('*'))
+  return exact || models.find((m) => !!m) || null
+}
+
+async function fetchOfficialForEntry(): Promise<OfficialTokenPricing | null> {
+  const model = pickLookupModel(props.entry.models)
+  if (!model) return null
+  const batch = await channelsAPI.batchGetModelDefaultPricing([model])
+  return batch.items?.[model] || null
+}
+
+async function fillOfficialPrices() {
+  if (quickBusy.value) return
+  quickBusy.value = true
+  try {
+    const official = await fetchOfficialForEntry()
+    const fields = official ? officialPricingToFormMTok(official) : null
+    if (!fields) return
+    emit('update', { ...props.entry, ...fields })
+  } catch {
+    // ignore
+  } finally {
+    quickBusy.value = false
+  }
+}
+
+async function scaleFromOfficial(multiplier: number) {
+  if (quickBusy.value) return
+  if (!(multiplier > 0)) return
+  quickBusy.value = true
+  try {
+    const official = await fetchOfficialForEntry()
+    const fields = official ? scaleOfficialPricingMTok(official, multiplier) : null
+    if (!fields) return
+    emit('update', { ...props.entry, ...fields })
+  } catch {
+    // ignore
+  } finally {
+    quickBusy.value = false
+  }
+}
+
+function clearOverrides() {
+  emit('update', {
+    ...props.entry,
+    ...clearTokenPriceOverrides(),
+  })
 }
 
 function addInterval() {

@@ -73,21 +73,52 @@
           </template>
 
           <template #cell-group_count="{ row }">
-            <span
-              class="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-dark-600 dark:text-gray-300"
-            >
-              {{ (row.group_ids || []).length }}
-              {{ t('admin.channels.groupsUnit', 'groups') }}
-            </span>
+            <div class="flex max-w-[14rem] flex-wrap gap-1">
+              <span
+                v-for="g in getChannelGroupSummaries(row).slice(0, 3)"
+                :key="g.id"
+                class="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium text-gray-800 dark:bg-dark-600 dark:text-gray-300"
+                :title="`${g.name} · ${g.rate}x`"
+              >
+                <span class="max-w-[5.5rem] truncate">{{ g.name }}</span>
+                <span class="text-[10px] text-primary-600 dark:text-primary-300">{{ g.rate }}x</span>
+              </span>
+              <span
+                v-if="getChannelGroupSummaries(row).length > 3"
+                class="text-[11px] text-gray-400"
+              >+{{ getChannelGroupSummaries(row).length - 3 }}</span>
+              <span
+                v-if="getChannelGroupSummaries(row).length === 0"
+                class="text-xs text-gray-400"
+              >-</span>
+            </div>
           </template>
 
           <template #cell-pricing_count="{ row }">
-            <span
-              class="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800 dark:bg-dark-600 dark:text-gray-300"
-            >
-              {{ (row.model_pricing || []).length }}
-              {{ t('admin.channels.pricingUnit', 'pricing rules') }}
-            </span>
+            <div class="min-w-[12rem] space-y-1" :title="t('admin.channels.pricingSummaryHint')">
+              <div class="flex flex-wrap gap-1">
+                <span
+                  v-for="m in getChannelPricingSummary(row).models.slice(0, 3)"
+                  :key="m"
+                  class="inline-flex rounded bg-sky-50 px-1.5 py-0.5 text-[11px] text-sky-800 dark:bg-sky-950/40 dark:text-sky-200"
+                >{{ m }}</span>
+                <span
+                  v-if="getChannelPricingSummary(row).models.length > 3"
+                  class="text-[11px] text-gray-400"
+                >+{{ getChannelPricingSummary(row).models.length - 3 }}</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span class="text-gray-600 dark:text-gray-300">
+                  {{ getChannelPricingSummary(row).sampleSummary || t('admin.channels.form.fallbackOfficialShort') }}
+                </span>
+                <span class="text-gray-400">·</span>
+                <span class="text-gray-500">{{ getChannelPricingSummary(row).ruleCount }} {{ t('admin.channels.pricingUnit') }}</span>
+                <span
+                  v-if="getChannelPricingSummary(row).emptyRuleCount > 0"
+                  class="rounded bg-amber-100 px-1 py-0.5 font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-200"
+                >{{ t('admin.channels.emptyPriceBadge', { count: getChannelPricingSummary(row).emptyRuleCount }) }}</span>
+              </div>
+            </div>
           </template>
 
           <template #cell-created_at="{ value }">
@@ -147,88 +178,35 @@
     >
       <div class="channel-dialog-body">
         <!-- Tab Bar -->
-        <div class="flex items-center border-b border-gray-200 dark:border-dark-700 flex-shrink-0 -mx-4 sm:-mx-6 px-4 sm:px-6 -mt-3 sm:-mt-4">
-          <!-- Basic Settings Tab -->
+        <div class="flex items-center border-b border-gray-200 dark:border-dark-700 flex-shrink-0 -mx-4 sm:-mx-6 px-4 sm:px-6 -mt-3 sm:-mt-4 overflow-x-auto">
           <button
+            v-for="tab in editorTabs"
+            :key="tab.id"
             type="button"
-            @click="activeTab = 'basic'"
-            class="channel-tab"
-            :class="activeTab === 'basic' ? 'channel-tab-active' : 'channel-tab-inactive'"
+            @click="activeTab = tab.id"
+            class="channel-tab whitespace-nowrap"
+            :class="activeTab === tab.id ? 'channel-tab-active' : 'channel-tab-inactive'"
           >
-            {{ t('admin.channels.form.basicSettings') }}
-          </button>
-          <!-- Platform Tabs (only enabled) -->
-          <button
-            v-for="section in form.platforms.filter(s => s.enabled)"
-            :key="section.platform"
-            type="button"
-            @click="activeTab = section.platform"
-            class="channel-tab group"
-            :class="activeTab === section.platform ? 'channel-tab-active' : 'channel-tab-inactive'"
-          >
-            <PlatformIcon :platform="section.platform" size="xs" :class="platformTextClass(section.platform)" />
-            <span :class="platformTextClass(section.platform)">{{ t('admin.groups.platforms.' + section.platform, section.platform) }}</span>
+            {{ tab.label }}
           </button>
         </div>
 
         <!-- Tab Content -->
         <form id="channel-form" @submit.prevent="handleSubmit" class="flex-1 overflow-y-auto pt-4">
-          <!-- Basic Settings Tab -->
+          <!-- Basic -->
           <div v-show="activeTab === 'basic'" class="space-y-5">
-            <!-- Name -->
             <div>
               <label class="input-label">{{ t('admin.channels.form.name', 'Name') }} <span class="text-red-500">*</span></label>
-              <input
-                v-model="form.name"
-                type="text"
-                required
-                class="input"
-                :placeholder="t('admin.channels.form.namePlaceholder', 'Enter channel name')"
-              />
+              <input v-model="form.name" type="text" required class="input" :placeholder="t('admin.channels.form.namePlaceholder', 'Enter channel name')" />
             </div>
-
-            <!-- Description -->
             <div>
               <label class="input-label">{{ t('admin.channels.form.description', 'Description') }}</label>
-              <textarea
-                v-model="form.description"
-                rows="2"
-                class="input"
-                :placeholder="t('admin.channels.form.descriptionPlaceholder', 'Optional description')"
-              ></textarea>
+              <textarea v-model="form.description" rows="2" class="input" :placeholder="t('admin.channels.form.descriptionPlaceholder', 'Optional description')"></textarea>
             </div>
-
-            <!-- Status (edit only) -->
             <div v-if="editingChannel">
               <label class="input-label">{{ t('admin.channels.form.status', 'Status') }}</label>
               <Select v-model="form.status" :options="statusEditOptions" />
             </div>
-
-            <!-- Model Restriction -->
-            <div>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  v-model="form.restrict_models"
-                  class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                />
-                <span class="input-label mb-0">{{ t('admin.channels.form.restrictModels', 'Restrict Models') }}</span>
-              </label>
-              <p class="mt-1 ml-6 text-xs text-gray-400">
-                {{ t('admin.channels.form.restrictModelsHint', 'When enabled, only models in the pricing list are allowed. Others will be rejected.') }}
-              </p>
-            </div>
-
-            <!-- Billing Basis -->
-            <div>
-              <label class="input-label">{{ t('admin.channels.form.billingModelSource', 'Billing Basis') }}</label>
-              <Select v-model="form.billing_model_source" :options="billingModelSourceOptions" />
-              <p class="mt-1 text-xs text-gray-400">
-                {{ t('admin.channels.form.billingModelSourceHint', 'Controls which model name is used for pricing lookup') }}
-              </p>
-            </div>
-
-            <!-- Platform Management -->
             <div class="space-y-3">
               <label class="input-label mb-0">{{ t('admin.channels.form.platformConfig') }}</label>
               <div class="flex flex-wrap gap-2">
@@ -240,59 +218,22 @@
                     ? 'bg-primary-50 border-primary-300 dark:bg-primary-900/20 dark:border-primary-700'
                     : 'border-gray-200 hover:bg-gray-50 dark:border-dark-600 dark:hover:bg-dark-700'"
                 >
-                  <input
-                    type="checkbox"
-                    :checked="activePlatforms.includes(p)"
-                    class="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                    @change="togglePlatform(p)"
-                  />
+                  <input type="checkbox" :checked="activePlatforms.includes(p)" class="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500" @change="togglePlatform(p)" />
                   <PlatformIcon :platform="p" size="xs" :class="platformTextClass(p)" />
                   <span :class="platformTextClass(p)">{{ t('admin.groups.platforms.' + p, p) }}</span>
                 </label>
               </div>
             </div>
 
-            <!-- Apply Pricing to Account Stats (toggle only in basic settings) -->
-            <div class="border-t border-gray-200 pt-4 dark:border-dark-700">
-              <div class="flex items-center justify-between">
-                <div>
-                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {{ t('admin.channels.form.applyPricingToAccountStats') }}
-                  </label>
-                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                    {{ t('admin.channels.form.applyPricingToAccountStatsDesc') }}
-                  </p>
-                </div>
-                <Toggle
-                  :modelValue="form.apply_pricing_to_account_stats"
-                  @update:modelValue="form.apply_pricing_to_account_stats = $event"
-                />
+            <div v-for="(section, sIdx) in form.platforms" :key="'groups-' + section.platform" v-show="section.enabled" class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+              <div class="mb-2 flex items-center gap-2 text-sm font-medium">
+                <PlatformIcon :platform="section.platform" size="xs" :class="platformTextClass(section.platform)" />
+                <span :class="platformTextClass(section.platform)">{{ t('admin.groups.platforms.' + section.platform, section.platform) }}</span>
+                <span class="text-xs font-normal text-gray-400">{{ t('admin.channels.form.groups') }}</span>
               </div>
-            </div>
-          </div>
-
-          <!-- Platform Tab Content -->
-          <div
-            v-for="(section, sIdx) in form.platforms"
-            :key="'tab-' + section.platform"
-            v-show="section.enabled && activeTab === section.platform"
-            class="space-y-4"
-          >
-            <!-- Groups -->
-            <div>
-              <label class="input-label text-xs">
-                {{ t('admin.channels.form.groups', 'Associated Groups') }} <span class="text-red-500">*</span>
-                <span v-if="section.group_ids.length > 0" class="ml-1 font-normal text-gray-400">
-                  ({{ t('admin.channels.form.selectedCount', { count: section.group_ids.length }) }})
-                </span>
-              </label>
               <div class="max-h-40 overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-2 dark:border-dark-600 dark:bg-dark-900">
-                <div v-if="groupsLoading" class="py-2 text-center text-xs text-gray-500">
-                  {{ t('common.loading', 'Loading...') }}
-                </div>
-                <div v-else-if="getGroupsForPlatform(section.platform).length === 0" class="py-2 text-center text-xs text-gray-500">
-                  {{ t('admin.channels.form.noGroupsAvailable', 'No groups available') }}
-                </div>
+                <div v-if="groupsLoading" class="py-2 text-center text-xs text-gray-500">{{ t('common.loading', 'Loading...') }}</div>
+                <div v-else-if="getGroupsForPlatform(section.platform).length === 0" class="py-2 text-center text-xs text-gray-500">{{ t('admin.channels.form.noGroupsAvailable', 'No groups available') }}</div>
                 <div v-else class="flex flex-wrap gap-1">
                   <label
                     v-for="group in getGroupsForPlatform(section.platform)"
@@ -303,142 +244,52 @@
                       isGroupInOtherChannel(group.id, section.platform) ? 'opacity-40' : ''
                     ]"
                   >
-                    <input
-                      type="checkbox"
-                      :checked="section.group_ids.includes(group.id)"
-                      :disabled="isGroupInOtherChannel(group.id, section.platform)"
-                      class="h-3 w-3 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                      @change="toggleGroupInSection(sIdx, group.id)"
-                    />
+                    <input type="checkbox" :checked="section.group_ids.includes(group.id)" :disabled="isGroupInOtherChannel(group.id, section.platform)" class="h-3 w-3 rounded border-gray-300 text-primary-600 focus:ring-primary-500" @change="toggleGroupInSection(sIdx, group.id)" />
                     <span :class="['font-medium', platformTextClass(group.platform)]">{{ group.name }}</span>
-                    <span
-                      :class="['rounded-full px-1 py-0 text-[10px]', platformBadgeLightClass(group.platform)]"
-                    >{{ group.rate_multiplier }}x</span>
+                    <span :class="['rounded-full px-1 py-0 text-[10px]', platformBadgeLightClass(group.platform)]">{{ group.rate_multiplier }}x</span>
                     <span class="text-[10px] text-gray-400">{{ group.account_count || 0 }}</span>
-                    <span
-                      v-if="isGroupInOtherChannel(group.id, section.platform)"
-                      class="text-[10px] text-gray-400"
-                    >{{ getGroupInOtherChannelLabel(group.id) }}</span>
+                    <span v-if="isGroupInOtherChannel(group.id, section.platform)" class="text-[10px] text-gray-400">{{ getGroupInOtherChannelLabel(group.id) }}</span>
                   </label>
                 </div>
               </div>
             </div>
+          </div>
 
-            <!-- Web Search Emulation (Anthropic only, hidden when global disabled) -->
-            <div v-if="section.platform === 'anthropic' && webSearchGlobalEnabled" class="border-t border-gray-200 pt-3 dark:border-dark-600">
-              <div class="flex items-center justify-between">
-                <div>
-                  <label class="text-xs font-medium text-gray-700 dark:text-gray-300">
-                    {{ t('admin.channels.form.webSearchEmulation') }}
-                  </label>
-                  <p class="mt-0.5 text-[11px] text-red-500 dark:text-red-400">
-                    {{ t('admin.channels.form.webSearchEmulationHint') }}
-                  </p>
-                </div>
-                <Toggle v-model="section.web_search_emulation" />
-              </div>
+          <!-- Sell pricing -->
+          <div v-show="activeTab === 'sell'" class="space-y-4">
+            <div class="rounded-lg border border-primary-200 bg-primary-50/50 px-3 py-2.5 text-xs leading-5 text-primary-900 dark:border-primary-900/40 dark:bg-primary-950/20 dark:text-primary-100">
+              <div class="font-semibold">{{ t('admin.channels.form.billingFlowTitle') }}</div>
+              <p class="mt-1">{{ t('admin.channels.form.billingFlowDesc') }}</p>
+              <p class="mt-1 text-[11px] opacity-80">{{ t('admin.channels.form.billingFlowCostNote') }}</p>
             </div>
 
-            <!-- Codex Image Generation Bridge (OpenAI only) -->
-            <div v-if="section.platform === 'openai'" class="border-t border-gray-200 pt-3 dark:border-dark-600">
-              <div class="flex items-center justify-between gap-4">
-                <div>
-                  <label class="text-xs font-medium text-gray-700 dark:text-gray-300">
-                    {{ t('admin.channels.form.codexImageGenerationBridge') }}
-                  </label>
-                  <p class="mt-0.5 text-[11px] text-amber-600 dark:text-amber-400">
-                    {{ t('admin.channels.form.codexImageGenerationBridgeHint') }}
-                  </p>
-                </div>
-                <Toggle v-model="section.codex_image_generation_bridge" />
-              </div>
+            <div v-if="enabledPlatformSections.length === 0" class="rounded border border-dashed border-gray-300 p-4 text-center text-xs text-gray-400 dark:border-dark-500">
+              {{ t('admin.channels.form.enablePlatformFirst') }}
             </div>
 
-            <!-- Bedrock CC Compatibility (Anthropic only) -->
-            <div v-if="section.platform === 'anthropic'" class="border-t border-gray-200 pt-3 dark:border-dark-600">
-              <div class="flex items-center justify-between gap-4">
-                <div>
-                  <label class="text-xs font-medium text-gray-700 dark:text-gray-300">
-                    {{ t('admin.channels.form.bedrockCCCompat') }}
-                  </label>
-                  <p class="mt-0.5 text-[11px] text-amber-600 dark:text-amber-400">
-                    {{ t('admin.channels.form.bedrockCCCompatHint') }}
-                  </p>
+            <div v-for="(section, sIdx) in form.platforms" :key="'sell-' + section.platform" v-show="section.enabled" class="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2 text-sm font-medium">
+                  <PlatformIcon :platform="section.platform" size="xs" :class="platformTextClass(section.platform)" />
+                  <span :class="platformTextClass(section.platform)">{{ t('admin.groups.platforms.' + section.platform, section.platform) }}</span>
+                  <span class="text-xs font-normal text-gray-400">{{ t('admin.channels.form.modelPricing', 'Model Pricing') }}</span>
                 </div>
-                <Toggle v-model="section.bedrock_cc_compat" />
-              </div>
-            </div>
-
-            <!-- Model Mapping -->
-            <div>
-              <div class="mb-1 flex items-center justify-between">
-                <label class="input-label text-xs mb-0">{{ t('admin.channels.form.modelMapping', 'Model Mapping') }}</label>
-                <button type="button" @click="addMappingEntry(sIdx)" class="text-xs text-primary-600 hover:text-primary-700">
-                  + {{ t('common.add', 'Add') }}
-                </button>
-              </div>
-              <div
-                v-if="Object.keys(section.model_mapping).length === 0"
-                class="rounded border border-dashed border-gray-300 p-2 text-center text-xs text-gray-400 dark:border-dark-500"
-              >
-                {{ t('admin.channels.form.noMappingRules', 'No mapping rules. Click "Add" to create one.') }}
-              </div>
-              <div v-else class="space-y-1">
-                <div
-                  v-for="(_, srcModel) in section.model_mapping"
-                  :key="srcModel"
-                  class="flex items-center gap-2"
-                >
-                  <input
-                    :value="srcModel"
-                    type="text"
-                    class="input flex-1 text-xs"
-                    :class="platformTextClass(section.platform)"
-                    :placeholder="t('admin.channels.form.mappingSource', 'Source model')"
-                    @change="renameMappingKey(sIdx, srcModel, ($event.target as HTMLInputElement).value)"
-                  />
-                  <span class="text-gray-400 text-xs">→</span>
-                  <input
-                    :value="section.model_mapping[srcModel]"
-                    type="text"
-                    class="input flex-1 text-xs"
-                    :class="platformTextClass(section.platform)"
-                    :placeholder="t('admin.channels.form.mappingTarget', 'Target model')"
-                    @input="section.model_mapping[srcModel] = ($event.target as HTMLInputElement).value"
-                  />
-                  <button
-                    type="button"
-                    @click="removeMappingEntry(sIdx, srcModel)"
-                    class="rounded p-0.5 text-gray-400 hover:text-red-500"
-                  >
-                    <Icon name="trash" size="sm" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Model Pricing -->
-            <div>
-              <div class="mb-1 flex items-center justify-between">
-                <label class="input-label text-xs mb-0">{{ t('admin.channels.form.modelPricing', 'Model Pricing') }}</label>
                 <div class="flex items-center gap-2">
-                  <button
-                    type="button"
-                    @click="syncLatestModels(sIdx)"
-                    :disabled="syncingPlatform === section.platform"
-                    class="text-xs text-gray-500 hover:text-primary-600 disabled:opacity-50"
-                  >
+                  <button type="button" @click="syncLatestModels(sIdx)" :disabled="syncingPlatform === section.platform" class="text-xs text-gray-500 hover:text-primary-600 disabled:opacity-50">
                     {{ syncingPlatform === section.platform ? t('admin.channels.form.syncingModels') : t('admin.channels.form.syncLatestModels') }}
                   </button>
-                  <button type="button" @click="addPricingEntry(sIdx)" class="text-xs text-primary-600 hover:text-primary-700">
-                    + {{ t('common.add', 'Add') }}
-                  </button>
+                  <button type="button" @click="addPricingEntry(sIdx)" class="text-xs text-primary-600 hover:text-primary-700">+ {{ t('common.add', 'Add') }}</button>
                 </div>
               </div>
-              <div
-                v-if="section.model_pricing.length === 0"
-                class="rounded border border-dashed border-gray-300 p-2 text-center text-xs text-gray-400 dark:border-dark-500"
-              >
+
+              <div v-if="section.group_ids.length" class="flex flex-wrap gap-1 text-[11px] text-gray-500">
+                <span>{{ t('admin.channels.form.linkedGroupRates') }}:</span>
+                <span v-for="gid in section.group_ids" :key="gid" class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-dark-700">
+                  {{ getGroupNameById(gid) }} {{ getGroupRateById(gid) }}x
+                </span>
+              </div>
+
+              <div v-if="section.model_pricing.length === 0" class="rounded border border-dashed border-gray-300 p-2 text-center text-xs text-gray-400 dark:border-dark-500">
                 {{ t('admin.channels.form.noPricingRules', 'No pricing rules yet. Click "Add" to create one.') }}
               </div>
               <div v-else class="space-y-2">
@@ -452,134 +303,139 @@
                 />
               </div>
             </div>
+          </div>
 
-            <!-- Account Stats Pricing Rules (per-platform, always visible) -->
-            <div class="mt-4 border-t border-gray-200 pt-4 dark:border-dark-700 space-y-3">
+          <!-- Account cost -->
+          <div v-show="activeTab === 'cost'" class="space-y-4">
+            <div class="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2.5 dark:border-amber-900/40 dark:bg-amber-950/20">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <div class="text-sm font-semibold text-amber-900 dark:text-amber-100">{{ t('admin.channels.form.applyPricingToAccountStats') }}</div>
+                  <p class="mt-0.5 text-xs text-amber-800/90 dark:text-amber-200/90">{{ t('admin.channels.form.applyPricingToAccountStatsDesc') }}</p>
+                  <p class="mt-1 text-[11px] text-amber-700/80 dark:text-amber-300/80">{{ t('admin.channels.form.accountCostDefaultHint') }}</p>
+                </div>
+                <Toggle :modelValue="form.apply_pricing_to_account_stats" @update:modelValue="form.apply_pricing_to_account_stats = $event" />
+              </div>
+            </div>
+
+            <div v-if="enabledPlatformSections.length === 0" class="rounded border border-dashed border-gray-300 p-4 text-center text-xs text-gray-400 dark:border-dark-500">
+              {{ t('admin.channels.form.enablePlatformFirst') }}
+            </div>
+
+            <div v-for="(section, sIdx) in form.platforms" :key="'cost-' + section.platform" v-show="section.enabled" class="space-y-3 rounded-lg border border-amber-200/70 p-3 dark:border-amber-900/30">
               <div class="flex items-center justify-between">
-                <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {{ t('admin.channels.form.accountStatsPricingRules') }}
-                </h4>
-                <button
-                  type="button"
-                  @click="addAccountStatsRule(sIdx)"
-                  class="rounded-lg border border-primary-300 px-3 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 dark:border-primary-600 dark:text-primary-400 dark:hover:bg-primary-900/20"
-                >
+                <div class="flex items-center gap-2 text-sm font-medium text-gray-800 dark:text-gray-100">
+                  <PlatformIcon :platform="section.platform" size="xs" :class="platformTextClass(section.platform)" />
+                  <span>{{ t('admin.channels.form.accountStatsPricingRules') }}</span>
+                </div>
+                <button type="button" @click="addAccountStatsRule(sIdx)" class="rounded-lg border border-primary-300 px-3 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 dark:border-primary-600 dark:text-primary-400 dark:hover:bg-primary-900/20">
                   + {{ t('admin.channels.form.addRule') }}
                 </button>
               </div>
-
-              <!-- Filter rules for this platform's groups -->
-              <p
-                v-if="section.account_stats_pricing_rules.length === 0"
-                class="text-xs italic text-gray-400 dark:text-gray-500"
-              >
-                {{ t('admin.channels.form.noRulesConfigured') }}
-              </p>
-
-              <div
-                v-for="(rule, ruleIndex) in section.account_stats_pricing_rules"
-                :key="ruleIndex"
-                class="space-y-3 rounded-lg border border-gray-200 p-4 dark:border-dark-600"
-              >
+              <p v-if="section.account_stats_pricing_rules.length === 0" class="text-xs italic text-gray-400 dark:text-gray-500">{{ t('admin.channels.form.noRulesConfigured') }}</p>
+              <div v-for="(rule, ruleIndex) in section.account_stats_pricing_rules" :key="ruleIndex" class="space-y-3 rounded-lg border border-gray-200 p-4 dark:border-dark-600">
                 <div class="flex items-center justify-between">
-                  <input
-                    v-model="rule.name"
-                    :placeholder="t('admin.channels.form.ruleName')"
-                    class="bg-transparent text-sm font-medium text-gray-700 placeholder-gray-400 outline-none dark:text-gray-300"
-                  />
-                  <button type="button" @click="removeAccountStatsRule(sIdx, ruleIndex)" class="text-xs text-red-500 hover:text-red-700">
-                    {{ t('common.delete') }}
-                  </button>
+                  <input v-model="rule.name" :placeholder="t('admin.channels.form.ruleName')" class="bg-transparent text-sm font-medium text-gray-700 placeholder-gray-400 outline-none dark:text-gray-300" />
+                  <button type="button" @click="removeAccountStatsRule(sIdx, ruleIndex)" class="text-xs text-red-500 hover:text-red-700">{{ t('common.delete') }}</button>
                 </div>
-
                 <div>
                   <label class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.channels.form.ruleGroups') }}</label>
                   <div class="mt-1 flex flex-wrap gap-1">
-                    <label
-                      v-for="gid in section.group_ids"
-                      :key="gid"
-                      class="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors"
-                      :class="rule.group_ids.includes(gid)
-                        ? 'border-primary-300 bg-primary-50 dark:border-primary-700 dark:bg-primary-900/20'
-                        : 'border-gray-200 hover:bg-gray-50 dark:border-dark-600 dark:hover:bg-dark-700'"
-                    >
+                    <label v-for="gid in section.group_ids" :key="gid" class="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors" :class="rule.group_ids.includes(gid) ? 'border-primary-300 bg-primary-50 dark:border-primary-700 dark:bg-primary-900/20' : 'border-gray-200 hover:bg-gray-50 dark:border-dark-600 dark:hover:bg-dark-700'">
                       <input type="checkbox" :checked="rule.group_ids.includes(gid)" class="h-3 w-3 rounded border-gray-300 text-primary-600 focus:ring-primary-500" @change="rule.group_ids.includes(gid) ? rule.group_ids.splice(rule.group_ids.indexOf(gid), 1) : rule.group_ids.push(gid)" />
                       <span :class="['font-medium', platformTextClass(section.platform)]">{{ getGroupNameById(gid) }}</span>
                     </label>
                   </div>
-                  <p v-if="section.group_ids.length === 0" class="mt-1 text-xs text-gray-400">
-                    {{ t('admin.channels.form.noGroupsInChannel') }}
-                  </p>
+                  <p v-if="section.group_ids.length === 0" class="mt-1 text-xs text-gray-400">{{ t('admin.channels.form.noGroupsInChannel') }}</p>
                 </div>
-
                 <div>
                   <label class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.channels.form.ruleAccounts') }}</label>
-                  <!-- Selected account chips -->
                   <div class="mt-1 flex flex-wrap gap-1">
-                    <span
-                      v-for="accountId in rule.account_ids"
-                      :key="accountId"
-                      class="inline-flex items-center gap-1 rounded-md border border-primary-300 bg-primary-50 px-2 py-0.5 text-xs dark:border-primary-700 dark:bg-primary-900/20"
-                    >
+                    <span v-for="accountId in rule.account_ids" :key="accountId" class="inline-flex items-center gap-1 rounded-md border border-primary-300 bg-primary-50 px-2 py-0.5 text-xs dark:border-primary-700 dark:bg-primary-900/20">
                       <span :class="['font-medium', platformTextClass(section.platform)]">{{ getRuleAccountLabel(accountId) }}</span>
-                      <button type="button" @click="removeRuleAccount(rule, accountId)" class="text-gray-400 hover:text-red-500">
-                        <Icon name="x" size="xs" />
-                      </button>
+                      <button type="button" @click="removeRuleAccount(rule, accountId)" class="text-gray-400 hover:text-red-500"><Icon name="x" size="xs" /></button>
                     </span>
                   </div>
-                  <!-- Account search input -->
                   <div class="relative mt-1 rule-account-search-container">
-                    <input
-                      v-model="ruleAccountSearchKeyword[`${section.platform}-${ruleIndex}`]"
-                      type="text"
-                      class="input text-sm"
-                      :placeholder="t('admin.channels.form.searchAccountPlaceholder')"
-                      @input="onRuleAccountSearchInput(section.platform, ruleIndex)"
-                      @focus="onRuleAccountSearchFocus(section.platform, ruleIndex)"
-                    />
-                    <!-- Search results dropdown -->
-                    <div
-                      v-if="showRuleAccountDropdown[`${section.platform}-${ruleIndex}`] && (ruleAccountSearchResults[`${section.platform}-${ruleIndex}`]?.length ?? 0) > 0"
-                      class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border bg-white shadow-lg dark:border-dark-600 dark:bg-dark-800"
-                    >
-                      <button
-                        v-for="account in ruleAccountSearchResults[`${section.platform}-${ruleIndex}`]"
-                        :key="account.id"
-                        type="button"
-                        @click="selectRuleAccount(rule, account, section.platform, ruleIndex)"
-                        class="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700"
-                        :class="{ 'opacity-50': rule.account_ids.includes(account.id) }"
-                        :disabled="rule.account_ids.includes(account.id)"
-                      >
+                    <input v-model="ruleAccountSearchKeyword[`${section.platform}-${ruleIndex}`]" type="text" class="input text-sm" :placeholder="t('admin.channels.form.searchAccountPlaceholder')" @input="onRuleAccountSearchInput(section.platform, ruleIndex)" @focus="onRuleAccountSearchFocus(section.platform, ruleIndex)" />
+                    <div v-if="showRuleAccountDropdown[`${section.platform}-${ruleIndex}`] && (ruleAccountSearchResults[`${section.platform}-${ruleIndex}`]?.length ?? 0) > 0" class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border bg-white shadow-lg dark:border-dark-600 dark:bg-dark-800">
+                      <button v-for="account in ruleAccountSearchResults[`${section.platform}-${ruleIndex}`]" :key="account.id" type="button" @click="selectRuleAccount(rule, account, section.platform, ruleIndex)" class="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-700" :class="{ 'opacity-50': rule.account_ids.includes(account.id) }" :disabled="rule.account_ids.includes(account.id)">
                         <span :class="platformTextClass(account.platform)">{{ account.name }}</span>
                         <span class="ml-2 text-xs text-gray-400">#{{ account.id }}</span>
                       </button>
                     </div>
                   </div>
-                  <p class="mt-1 text-xs text-gray-400">
-                    {{ t('admin.channels.form.ruleAccountsHint') }}
-                  </p>
+                  <p class="mt-1 text-xs text-gray-400">{{ t('admin.channels.form.ruleAccountsHint') }}</p>
                 </div>
-
                 <div>
                   <div class="mb-1 flex items-center justify-between">
                     <label class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.channels.form.ruleModelPricing') }}</label>
-                    <button type="button" @click="addRulePricingEntry(sIdx, ruleIndex)" class="text-xs text-primary-600 hover:text-primary-700">
-                      + {{ t('common.add') }}
-                    </button>
+                    <button type="button" @click="addRulePricingEntry(sIdx, ruleIndex)" class="text-xs text-primary-600 hover:text-primary-700">+ {{ t('common.add') }}</button>
                   </div>
-                  <div v-if="rule.pricing.length === 0" class="rounded border border-dashed border-gray-300 p-2 text-center text-xs text-gray-400 dark:border-dark-500">
-                    {{ t('admin.channels.form.noPricingRules') }}
-                  </div>
+                  <div v-if="rule.pricing.length === 0" class="rounded border border-dashed border-gray-300 p-2 text-center text-xs text-gray-400 dark:border-dark-500">{{ t('admin.channels.form.noPricingRules') }}</div>
                   <div v-else class="space-y-2">
-                    <PricingEntryCard
-                      v-for="(entry, pIdx) in rule.pricing"
-                      :key="pIdx"
-                      :entry="entry"
-                      :platform="section.platform"
-                      @update="rule.pricing.splice(pIdx, 1, $event)"
-                      @remove="removeRulePricingEntry(sIdx, ruleIndex, pIdx)"
-                    />
+                    <PricingEntryCard v-for="(entry, pIdx) in rule.pricing" :key="pIdx" :entry="entry" :platform="section.platform" @update="rule.pricing.splice(pIdx, 1, $event)" @remove="removeRulePricingEntry(sIdx, ruleIndex, pIdx)" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Advanced -->
+          <div v-show="activeTab === 'advanced'" class="space-y-5">
+            <div>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" v-model="form.restrict_models" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                <span class="input-label mb-0">{{ t('admin.channels.form.restrictModels', 'Restrict Models') }}</span>
+              </label>
+              <p class="mt-1 ml-6 text-xs text-gray-400">{{ t('admin.channels.form.restrictModelsHint', 'When enabled, only models in the pricing list are allowed. Others will be rejected.') }}</p>
+            </div>
+            <div>
+              <label class="input-label">{{ t('admin.channels.form.billingModelSource', 'Billing Basis') }}</label>
+              <Select v-model="form.billing_model_source" :options="billingModelSourceOptions" />
+              <p class="mt-1 text-xs text-gray-400">{{ t('admin.channels.form.billingModelSourceHint', 'Controls which model name is used for pricing lookup') }}</p>
+            </div>
+
+            <div v-for="(section, sIdx) in form.platforms" :key="'adv-' + section.platform" v-show="section.enabled" class="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+              <div class="flex items-center gap-2 text-sm font-medium">
+                <PlatformIcon :platform="section.platform" size="xs" :class="platformTextClass(section.platform)" />
+                <span :class="platformTextClass(section.platform)">{{ t('admin.groups.platforms.' + section.platform, section.platform) }}</span>
+              </div>
+
+              <div v-if="section.platform === 'anthropic' && webSearchGlobalEnabled" class="flex items-center justify-between border-t border-gray-200 pt-3 dark:border-dark-600">
+                <div>
+                  <label class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ t('admin.channels.form.webSearchEmulation') }}</label>
+                  <p class="mt-0.5 text-[11px] text-red-500 dark:text-red-400">{{ t('admin.channels.form.webSearchEmulationHint') }}</p>
+                </div>
+                <Toggle v-model="section.web_search_emulation" />
+              </div>
+              <div v-if="section.platform === 'openai'" class="flex items-center justify-between gap-4 border-t border-gray-200 pt-3 dark:border-dark-600">
+                <div>
+                  <label class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ t('admin.channels.form.codexImageGenerationBridge') }}</label>
+                  <p class="mt-0.5 text-[11px] text-amber-600 dark:text-amber-400">{{ t('admin.channels.form.codexImageGenerationBridgeHint') }}</p>
+                </div>
+                <Toggle v-model="section.codex_image_generation_bridge" />
+              </div>
+              <div v-if="section.platform === 'anthropic'" class="flex items-center justify-between gap-4 border-t border-gray-200 pt-3 dark:border-dark-600">
+                <div>
+                  <label class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ t('admin.channels.form.bedrockCCCompat') }}</label>
+                  <p class="mt-0.5 text-[11px] text-amber-600 dark:text-amber-400">{{ t('admin.channels.form.bedrockCCCompatHint') }}</p>
+                </div>
+                <Toggle v-model="section.bedrock_cc_compat" />
+              </div>
+
+              <div>
+                <div class="mb-1 flex items-center justify-between">
+                  <label class="input-label text-xs mb-0">{{ t('admin.channels.form.modelMapping', 'Model Mapping') }}</label>
+                  <button type="button" @click="addMappingEntry(sIdx)" class="text-xs text-primary-600 hover:text-primary-700">+ {{ t('common.add', 'Add') }}</button>
+                </div>
+                <div v-if="Object.keys(section.model_mapping).length === 0" class="rounded border border-dashed border-gray-300 p-2 text-center text-xs text-gray-400 dark:border-dark-500">{{ t('admin.channels.form.noMappingRules', 'No mapping rules. Click "Add" to create one.') }}</div>
+                <div v-else class="space-y-1">
+                  <div v-for="(_, srcModel) in section.model_mapping" :key="srcModel" class="flex items-center gap-2">
+                    <input :value="srcModel" type="text" class="input flex-1 text-xs" :class="platformTextClass(section.platform)" :placeholder="t('admin.channels.form.mappingSource', 'Source model')" @change="renameMappingKey(sIdx, srcModel, ($event.target as HTMLInputElement).value)" />
+                    <span class="text-gray-400 text-xs">→</span>
+                    <input :value="section.model_mapping[srcModel]" type="text" class="input flex-1 text-xs" :class="platformTextClass(section.platform)" :placeholder="t('admin.channels.form.mappingTarget', 'Target model')" @input="section.model_mapping[srcModel] = ($event.target as HTMLInputElement).value" />
+                    <button type="button" @click="removeMappingEntry(sIdx, srcModel)" class="rounded p-0.5 text-gray-400 hover:text-red-500"><Icon name="trash" size="sm" /></button>
                   </div>
                 </div>
               </div>
@@ -633,6 +489,7 @@ import { adminAPI } from '@/api/admin'
 import type { Channel, ChannelModelPricing, CreateChannelRequest, UpdateChannelRequest, AccountStatsPricingRule } from '@/api/admin/channels'
 import type { PricingFormEntry } from '@/components/admin/channel/types'
 import { mTokToPerToken, perTokenToMTok, apiIntervalsToForm, formIntervalsToAPI, findModelConflict, validateIntervals } from '@/components/admin/channel/types'
+import { summarizeChannelPricing } from '@/components/admin/channel/channelPricingTools'
 import type { AdminGroup, GroupPlatform } from '@/types'
 import type { Column } from '@/components/common/types'
 import { platformTextClass, platformBadgeLightClass } from '@/utils/platformColors'
@@ -698,6 +555,35 @@ const columns = computed<Column[]>(() => [
   { key: 'created_at', label: t('admin.channels.columns.createdAt', 'Created'), sortable: true },
   { key: 'actions', label: t('admin.channels.columns.actions', 'Actions'), sortable: false }
 ])
+
+const editorTabs = computed(() => [
+  { id: 'basic', label: t('admin.channels.form.basicSettings') },
+  { id: 'sell', label: t('admin.channels.form.sellPricingTab') },
+  { id: 'cost', label: t('admin.channels.form.accountCostTab') },
+  { id: 'advanced', label: t('admin.channels.form.advancedTab') },
+])
+
+const enabledPlatformSections = computed(() => form.platforms.filter((s) => s.enabled))
+
+function getChannelPricingSummary(row: Channel) {
+  return summarizeChannelPricing(row.model_pricing, t('admin.channels.form.fallbackOfficialShort'))
+}
+
+function getChannelGroupSummaries(row: Channel): Array<{ id: number; name: string; rate: number }> {
+  return (row.group_ids || []).map((id) => {
+    const g = allGroups.value.find((item) => item.id === id)
+    return {
+      id,
+      name: g?.name || `#${id}`,
+      rate: typeof g?.rate_multiplier === 'number' ? g.rate_multiplier : 1,
+    }
+  })
+}
+
+function getGroupRateById(groupId: number): number {
+  const g = allGroups.value.find((item) => item.id === groupId)
+  return typeof g?.rate_multiplier === 'number' ? g.rate_multiplier : 1
+}
 
 const statusFilterOptions = computed(() => [
   { value: '', label: t('admin.channels.allStatus', 'All Status') },
@@ -790,9 +676,6 @@ function togglePlatform(platform: GroupPlatform) {
   const section = form.platforms.find(s => s.platform === platform)
   if (section) {
     section.enabled = !section.enabled
-    if (!section.enabled && activeTab.value === platform) {
-      activeTab.value = 'basic'
-    }
   } else {
     addPlatformSection(platform)
   }
@@ -869,29 +752,65 @@ async function syncLatestModels(sectionIdx: number) {
   syncingPlatform.value = platform
   try {
     const result = await adminAPI.channels.syncPricingModels(platform)
-    // Collect all model names already present in this platform's pricing entries
     const existingModels = new Set<string>()
     for (const entry of form.platforms[sectionIdx].model_pricing) {
       for (const m of entry.models) existingModels.add(m)
     }
-    const newModels = result.models.filter(m => !existingModels.has(m))
+    const newModels = result.models.filter((m) => !existingModels.has(m))
     if (newModels.length === 0) {
       appStore.showSuccess(t('admin.channels.form.syncModelsAlreadyUpToDate'))
       return
     }
-    // Add new models as a single new pricing entry (user fills in prices)
-    form.platforms[sectionIdx].model_pricing.push({
-      models: newModels,
-      billing_mode: 'token',
-      input_price: null,
-      output_price: null,
-      cache_write_price: null,
-      cache_read_price: null,
-      image_output_price: null,
-      per_request_price: null,
-      intervals: []
-    })
-    appStore.showSuccess(t('admin.channels.form.syncModelsSuccess', { count: newModels.length }))
+
+    // 默认：每个新模型单独一行，并尽量填官方价
+    let filled = 0
+    try {
+      const batch = await adminAPI.channels.batchGetModelDefaultPricing(newModels)
+      for (const model of newModels) {
+        const official = batch.items?.[model]
+        const entry: PricingFormEntry = {
+          models: [model],
+          billing_mode: 'token',
+          input_price: null,
+          output_price: null,
+          cache_write_price: null,
+          cache_read_price: null,
+          image_output_price: null,
+          per_request_price: null,
+          intervals: [],
+        }
+        if (official?.found) {
+          entry.input_price = perTokenToMTok(official.input_price ?? null)
+          entry.output_price = perTokenToMTok(official.output_price ?? null)
+          entry.cache_write_price = perTokenToMTok(official.cache_write_price ?? null)
+          entry.cache_read_price = perTokenToMTok(official.cache_read_price ?? null)
+          entry.image_output_price = perTokenToMTok(official.image_output_price ?? null)
+          filled += 1
+        }
+        form.platforms[sectionIdx].model_pricing.push(entry)
+      }
+    } catch {
+      for (const model of newModels) {
+        form.platforms[sectionIdx].model_pricing.push({
+          models: [model],
+          billing_mode: 'token',
+          input_price: null,
+          output_price: null,
+          cache_write_price: null,
+          cache_read_price: null,
+          image_output_price: null,
+          per_request_price: null,
+          intervals: [],
+        })
+      }
+    }
+
+    appStore.showSuccess(
+      t('admin.channels.form.syncModelsFilledSuccess', {
+        count: newModels.length,
+        filled,
+      }),
+    )
   } catch (error) {
     appStore.showError(extractApiErrorMessage(error, t('admin.channels.form.syncModelsError')))
   } finally {
