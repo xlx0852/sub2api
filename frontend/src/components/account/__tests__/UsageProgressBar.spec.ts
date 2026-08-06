@@ -179,6 +179,53 @@ describe('UsageProgressBar', () => {
     expect(wrapper.find('[data-testid="usage-full-estimate"]').exists()).toBe(false)
   })
 
+  it('满额预估对利用率小抖动防抖，不立刻改展示', async () => {
+    const wrapper = mount(UsageProgressBar, {
+      props: {
+        label: '7d',
+        utilization: 50,
+        color: 'emerald',
+        windowStats: {
+          requests: 100,
+          tokens: 1_000_000,
+          cost: 100,
+          user_cost: 12
+        }
+      }
+    })
+
+    // 50% → 满额 U $24.00
+    expect(wrapper.get('[data-testid="usage-full-estimate"]').text()).toContain('U $24.00')
+
+    await wrapper.setProps({ utilization: 50.3 })
+    // 防抖窗口内保持旧值
+    expect(wrapper.get('[data-testid="usage-full-estimate"]').text()).toContain('U $24.00')
+
+    await vi.advanceTimersByTimeAsync(1300)
+    // 相对变化很小（~0.6%），阈值内仍不提交
+    expect(wrapper.get('[data-testid="usage-full-estimate"]').text()).toContain('U $24.00')
+
+    await wrapper.setProps({ utilization: 40 })
+    await vi.advanceTimersByTimeAsync(1300)
+    // 40% → 满额 U $30.00，应更新
+    expect(wrapper.get('[data-testid="usage-full-estimate"]').text()).toContain('U $30.00')
+  })
+
+  it('利用率掉到 0 时立刻隐藏满额预估，不防抖拖尾', async () => {
+    const wrapper = mount(UsageProgressBar, {
+      props: {
+        label: '7d',
+        utilization: 50,
+        color: 'emerald',
+        windowStats: { requests: 100, tokens: 1_000, cost: 10, user_cost: 1 }
+      }
+    })
+    expect(wrapper.find('[data-testid="usage-full-estimate"]').exists()).toBe(true)
+
+    await wrapper.setProps({ utilization: 0 })
+    expect(wrapper.find('[data-testid="usage-full-estimate"]').exists()).toBe(false)
+  })
+
   it.each([
     { utilization: 79, colorClass: 'bg-emerald-500' },
     { utilization: 80, colorClass: 'bg-amber-500' },
