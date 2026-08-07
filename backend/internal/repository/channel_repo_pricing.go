@@ -198,22 +198,61 @@ type dbExec interface {
 }
 
 func setGroupIDsTx(ctx context.Context, exec dbExec, channelID int64, groupIDs []int64) error {
-	if _, err := exec.ExecContext(ctx, `DELETE FROM channel_groups WHERE channel_id = $1`, channelID); err != nil {
-		return fmt.Errorf("delete old group associations: %w", err)
-	}
-	if len(groupIDs) == 0 {
+		// Dual-write: clear groups.sell_price_policy_id for groups leaving this policy.
+		// Safe if column missing until migration 185 runs — callers should migrate first.
+		if _, err := exec.ExecContext(ctx, `
+			UPDATE groups
+			SET sell_price_policy_id = NULL, updated_at = NOW()
+			WHERE sell_price_policy_id = $1
+			  AND deleted_at IS NULL
+			  AND (
+			    cardinality($2::bigint[]) = 0
+			    OR NOT (id = ANY($2::bigint[]))
+			  )
+		`, channelID, pq.Array(groupIDs)); err != nil {
+			// Column may not exist yet on older DBs mid-rollout; still write channel_groups.
+			if !isUndefinedColumnError(err) {
+				return fmt.Errorf("clear group sell_price_policy_id: %w", err)
+			}
+		}
+
+		if _, err := exec.ExecContext(ctx, `DELETE FROM channel_groups WHERE channel_id = $1`, channelID); err != nil {
+			return fmt.Errorf("delete old group associations: %w", err)
+		}
+		if len(groupIDs) == 0 {
+			return nil
+		}
+		_, err := exec.ExecContext(ctx,
+			`INSERT INTO channel_groups (channel_id, group_id)
+			 SELECT $1, unnest($2::bigint[])`,
+			channelID, pq.Array(groupIDs),
+		)
+		if err != nil {
+			return fmt.Errorf("insert group associations: %w", err)
+		}
+
+		if _, err := exec.ExecContext(ctx, `
+			UPDATE groups
+			SET sell_price_policy_id = $1, updated_at = NOW()
+			WHERE id = ANY($2::bigint[])
+			  AND deleted_at IS NULL
+		`, channelID, pq.Array(groupIDs)); err != nil {
+			if !isUndefinedColumnError(err) {
+				return fmt.Errorf("set group sell_price_policy_id: %w", err)
+			}
+		}
 		return nil
 	}
-	_, err := exec.ExecContext(ctx,
-		`INSERT INTO channel_groups (channel_id, group_id)
-		 SELECT $1, unnest($2::bigint[])`,
-		channelID, pq.Array(groupIDs),
-	)
-	if err != nil {
-		return fmt.Errorf("insert group associations: %w", err)
+
+	func isUndefinedColumnError(err error) bool {
+		if err == nil {
+			return false
+		}
+		// pq: column "sell_price_policy_id" does not exist
+		msg := strings.ToLower(err.Error())
+		return strings.Contains(msg, "sell_price_policy_id") &&
+			(strings.Contains(msg, "does not exist") || strings.Contains(msg, "undefined_column"))
 	}
-	return nil
-}
 
 func createModelPricingExec(ctx context.Context, exec dbExec, pricing *service.ChannelModelPricing) error {
 	modelsJSON, err := json.Marshal(pricing.Models)

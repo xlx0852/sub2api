@@ -99,3 +99,41 @@ func TestSampleAndCountPricingModels(t *testing.T) {
 	// but sample dedupes by lower
 	require.Equal(t, "a", samples[0])
 }
+
+func TestPopulateChannelCachePrefersGroupToPolicyMap(t *testing.T) {
+	t.Parallel()
+
+	in := 0.0000008
+	policy := Channel{
+		ID:     2,
+		Name:   "luna-x4",
+		Status: StatusActive,
+		// Intentionally empty GroupIDs — P2 map is the source of truth.
+		GroupIDs: nil,
+		ModelPricing: []ChannelModelPricing{
+			{Platform: PlatformOpenAI, Models: []string{"gpt-5.6-luna"}, InputPrice: &in},
+		},
+	}
+	// channel_groups still has another group for legacy path
+	legacy := Channel{
+		ID:       9,
+		Name:     "legacy",
+		Status:   StatusActive,
+		GroupIDs: []int64{99},
+	}
+
+	groupToPolicy := map[int64]int64{4: 2}
+	platforms := map[int64]string{4: PlatformOpenAI, 99: PlatformOpenAI}
+	cache := populateChannelCache([]Channel{policy, legacy}, platforms, groupToPolicy)
+
+	require.NotNil(t, cache.channelByGroupID[4])
+	require.Equal(t, int64(2), cache.channelByGroupID[4].ID)
+	// When explicit map is present, legacy GroupIDs expansion is skipped.
+	_, hasLegacy := cache.channelByGroupID[99]
+	require.False(t, hasLegacy)
+
+	// Empty map falls back to GroupIDs expansion.
+	cache2 := populateChannelCache([]Channel{policy, legacy}, platforms, nil)
+	require.NotNil(t, cache2.channelByGroupID[99])
+	require.Equal(t, int64(9), cache2.channelByGroupID[99].ID)
+}

@@ -28,7 +28,8 @@ type mockChannelRepository struct {
 	existsByNameExcludingFn    func(ctx context.Context, name string, excludeID int64) (bool, error)
 	getGroupIDsFn              func(ctx context.Context, channelID int64) ([]int64, error)
 	setGroupIDsFn              func(ctx context.Context, channelID int64, groupIDs []int64) error
-	getChannelIDByGroupIDFn    func(ctx context.Context, groupID int64) (int64, error)
+	getChannelIDByGroupIDFn     func(ctx context.Context, groupID int64) (int64, error)
+	getChannelIDsByGroupIDsFn   func(ctx context.Context, groupIDs []int64) (map[int64]int64, error)
 	getGroupsInOtherChannelsFn func(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error)
 	listModelPricingFn         func(ctx context.Context, channelID int64) ([]ChannelModelPricing, error)
 	createModelPricingFn       func(ctx context.Context, pricing *ChannelModelPricing) error
@@ -108,13 +109,31 @@ func (m *mockChannelRepository) SetGroupIDs(ctx context.Context, channelID int64
 }
 
 func (m *mockChannelRepository) GetChannelIDByGroupID(ctx context.Context, groupID int64) (int64, error) {
-	if m.getChannelIDByGroupIDFn != nil {
-		return m.getChannelIDByGroupIDFn(ctx, groupID)
+		if m.getChannelIDByGroupIDFn != nil {
+			return m.getChannelIDByGroupIDFn(ctx, groupID)
+		}
+		return 0, nil
 	}
-	return 0, nil
-}
 
-func (m *mockChannelRepository) GetGroupsInOtherChannels(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error) {
+	func (m *mockChannelRepository) GetChannelIDsByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]int64, error) {
+		if m.getChannelIDsByGroupIDsFn != nil {
+			return m.getChannelIDsByGroupIDsFn(ctx, groupIDs)
+		}
+		// Default: derive from GetChannelIDByGroupID for each id.
+		out := make(map[int64]int64, len(groupIDs))
+		for _, gid := range groupIDs {
+			id, err := m.GetChannelIDByGroupID(ctx, gid)
+			if err != nil {
+				return nil, err
+			}
+			if id > 0 {
+				out[gid] = id
+			}
+		}
+		return out, nil
+	}
+
+	func (m *mockChannelRepository) GetGroupsInOtherChannels(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error) {
 	if m.getGroupsInOtherChannelsFn != nil {
 		return m.getGroupsInOtherChannelsFn(ctx, channelID, groupIDs)
 	}

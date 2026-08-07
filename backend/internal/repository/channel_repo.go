@@ -171,6 +171,15 @@ func (r *channelRepository) Update(ctx context.Context, channel *service.Channel
 }
 
 func (r *channelRepository) Delete(ctx context.Context, id int64) error {
+	// Dual-write cleanup: groups pointing at this policy must not keep a dangling id.
+	if _, err := r.db.ExecContext(ctx, `
+		UPDATE groups
+		SET sell_price_policy_id = NULL, updated_at = NOW()
+		WHERE sell_price_policy_id = $1 AND deleted_at IS NULL
+	`, id); err != nil && !isUndefinedColumnError(err) {
+		return fmt.Errorf("clear group sell_price_policy_id on channel delete: %w", err)
+	}
+
 	result, err := r.db.ExecContext(ctx, `DELETE FROM channels WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("delete channel: %w", err)
@@ -437,15 +446,115 @@ func (r *channelRepository) SetGroupIDs(ctx context.Context, channelID int64, gr
 }
 
 func (r *channelRepository) GetChannelIDByGroupID(ctx context.Context, groupID int64) (int64, error) {
-	var channelID int64
-	err := r.db.QueryRowContext(ctx,
-		`SELECT channel_id FROM channel_groups WHERE group_id = $1`, groupID,
-	).Scan(&channelID)
-	if err == sql.ErrNoRows {
-		return 0, nil
+		// Prefer explicit group.sell_price_policy_id (P2 source of truth), fall back to channel_groups.
+		var channelID sql.NullInt64
+		err := r.db.QueryRowContext(ctx, `
+			SELECT COALESCE(
+				(SELECT g.sell_price_policy_id FROM groups g WHERE g.id = $1 AND g.deleted_at IS NULL),
+				(SELECT cg.channel_id FROM channel_groups cg WHERE cg.group_id = $1 LIMIT 1)
+			)
+		`, groupID).Scan(&channelID)
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		if err != nil {
+			// Mid-rollout without migration 185: fall back to channel_groups only.
+			if isUndefinedColumnError(err) {
+				var id int64
+				err2 := r.db.QueryRowContext(ctx,
+					`SELECT channel_id FROM channel_groups WHERE group_id = $1`, groupID,
+				).Scan(&id)
+				if err2 == sql.ErrNoRows {
+					return 0, nil
+				}
+				return id, err2
+			}
+			return 0, err
+		}
+		if !channelID.Valid || channelID.Int64 <= 0 {
+			return 0, nil
+		}
+		return channelID.Int64, nil
 	}
-	return channelID, err
-}
+
+	func (r *channelRepository) GetChannelIDsByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]int64, error) {
+		out := make(map[int64]int64, len(groupIDs))
+		if len(groupIDs) == 0 {
+			return out, nil
+		}
+		// Prefer groups.sell_price_policy_id; fill gaps from channel_groups.
+		rows, err := r.db.QueryContext(ctx, `
+			SELECT g.id, g.sell_price_policy_id
+			FROM groups g
+			WHERE g.id = ANY($1) AND g.deleted_at IS NULL
+		`, pq.Array(groupIDs))
+		if err != nil {
+			if isUndefinedColumnError(err) {
+				return r.getChannelIDsByGroupIDsLegacy(ctx, groupIDs)
+			}
+			return nil, fmt.Errorf("batch load group sell_price_policy_id: %w", err)
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var gid int64
+			var pid sql.NullInt64
+			if err := rows.Scan(&gid, &pid); err != nil {
+				return nil, err
+			}
+			if pid.Valid && pid.Int64 > 0 {
+				out[gid] = pid.Int64
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+
+		missing := make([]int64, 0)
+		seen := make(map[int64]struct{}, len(groupIDs))
+		for _, gid := range groupIDs {
+			seen[gid] = struct{}{}
+			if _, ok := out[gid]; !ok {
+				missing = append(missing, gid)
+			}
+		}
+		if len(missing) == 0 {
+			return out, nil
+		}
+		legacy, err := r.getChannelIDsByGroupIDsLegacy(ctx, missing)
+		if err != nil {
+			return nil, err
+		}
+		for gid, cid := range legacy {
+			if cid > 0 {
+				out[gid] = cid
+			}
+		}
+		_ = seen
+		return out, nil
+	}
+
+	func (r *channelRepository) getChannelIDsByGroupIDsLegacy(ctx context.Context, groupIDs []int64) (map[int64]int64, error) {
+		out := make(map[int64]int64, len(groupIDs))
+		if len(groupIDs) == 0 {
+			return out, nil
+		}
+		rows, err := r.db.QueryContext(ctx,
+			`SELECT group_id, channel_id FROM channel_groups WHERE group_id = ANY($1)`,
+			pq.Array(groupIDs),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("batch load channel_groups: %w", err)
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var gid, cid int64
+			if err := rows.Scan(&gid, &cid); err != nil {
+				return nil, err
+			}
+			out[gid] = cid
+		}
+		return out, rows.Err()
+	}
 
 func (r *channelRepository) GetGroupsInOtherChannels(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error) {
 	if len(groupIDs) == 0 {
