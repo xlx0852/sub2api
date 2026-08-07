@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -34,10 +35,23 @@ type GroupTrafficAvailabilitySummary struct {
 const groupAvailabilityBucket = 10 * time.Minute
 
 // GetGroupAvailability returns real-traffic availability for a group.
+// 30s 进程内缓存: 24h 路径是 request_id 级 DISTINCT ON + date_bin 分桶全扫,
+// 用户开 dashboard 时每个 group 各触发一次(还有管理端单 group 查询);
+// key=groupID(group 级数据, 与用户无关), 30s 内同 group 只回源一次。
 func (s *UsageService) GetGroupTrafficAvailability(ctx context.Context, groupID int64) (*GroupTrafficAvailabilitySummary, error) {
 	if groupID <= 0 {
 		return nil, fmt.Errorf("invalid group id")
 	}
+	if s.groupTrafficAvailabilityCache == nil {
+		return s.fetchGroupTrafficAvailability(ctx, groupID)
+	}
+	key := strconv.FormatInt(groupID, 10)
+	return s.groupTrafficAvailabilityCache.Load(ctx, key, func(ctx context.Context) (*GroupTrafficAvailabilitySummary, error) {
+		return s.fetchGroupTrafficAvailability(ctx, groupID)
+	})
+}
+
+func (s *UsageService) fetchGroupTrafficAvailability(ctx context.Context, groupID int64) (*GroupTrafficAvailabilitySummary, error) {
 	now := time.Now().UTC()
 	end := now.Truncate(groupAvailabilityBucket).Add(groupAvailabilityBucket)
 

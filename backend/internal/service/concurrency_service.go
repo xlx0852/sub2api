@@ -9,7 +9,6 @@ import (
 	"errors"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -333,40 +332,11 @@ func (s *ConcurrencyService) SetModelConcurrencyLimitProvider(provider func(ctx 
 	s.modelConcurrencyLimitProvider.Store(provider)
 }
 
-// modelConcurrencyLimit 返回指定模型的全局并发预算；未配置或非正数表示不限制。
-// modelKey 须为已折叠的规范模型名；provider 未注入或 Redis 不支持 model 槽位时返回 0。
-func (s *ConcurrencyService) modelConcurrencyLimit(ctx context.Context, modelKey string) int {
-	if s == nil || strings.TrimSpace(modelKey) == "" {
-		return 0
-	}
-	provider, _ := s.modelConcurrencyLimitProvider.Load().(func(ctx context.Context) map[string]int)
-	if provider == nil {
-		return 0
-	}
-	limits := provider(ctx)
-	if limits == nil {
-		return 0
-	}
-	if v, ok := limits[modelKey]; ok {
-		if v > 0 {
-			return v
-		}
-		// 显式配置为 0 表示显式不限制该模型
-		return 0
-	}
-	// 未配置精确名时，再按规范家族折叠匹配一次（例如配置了 gpt-5.6-luna，
-	// 而 modelKey 是历史精确名 gpt-5.6-luna-2026-08-01 时也能命中）。
-	if folded := normalizeKnownOpenAICodexModel(modelKey); folded != "" && folded != modelKey {
-		if v, ok := limits[folded]; ok && v > 0 {
-			return v
-		}
-	}
-	return 0
-}
-
 // modelSlotKeyForRequest 解析请求模型到模型预算的规范键。
 // 复用 normalizeKnownOpenAICodexModel 的家族折叠：任何 gpt-5.6-luna 变体
 // （含 -openai-compact、日期后缀）都折叠到 gpt-5.6-luna；非 codex 模型返回 ""。
+// 注意：仅在确认已配置预算后调用（AcquireModelAwareAccountSlot 的快速路径
+// 会先检查 limits 是否为空），避免热路径对每个请求做字符串解析。
 func modelSlotKeyForRequest(requestedModel string) string {
 	return normalizeKnownOpenAICodexModel(requestedModel)
 }
@@ -380,10 +350,26 @@ func (s *ConcurrencyService) AcquireModelAwareAccountSlot(ctx context.Context, r
 	if s == nil {
 		return &AcquireResult{Acquired: true, ReleaseFunc: func() {}}, nil
 	}
+	// 快速路径：未注入 provider 或未配置任何预算时，跳过模型字符串解析直接透传。
+	// 该方法是所有请求（含未配置预算的模型）账号槽位获取的必经之路，绝大多数请求
+	// 都不在预算内——若先做模型折叠再查 map，会给每个请求带来无谓的字符串处理开销。
+	provider, _ := s.modelConcurrencyLimitProvider.Load().(func(ctx context.Context) map[string]int)
+	if provider == nil {
+		return s.AcquireAccountSlot(ctx, accountID, maxConcurrency)
+	}
+	limits := provider(ctx)
+	if len(limits) == 0 {
+		return s.AcquireAccountSlot(ctx, accountID, maxConcurrency)
+	}
+
 	modelKey := modelSlotKeyForRequest(requestedModel)
-	limit := s.modelConcurrencyLimit(ctx, modelKey)
+	if modelKey == "" {
+		// 非 codex 家族模型：不可能命中预算，直接透传。
+		return s.AcquireAccountSlot(ctx, accountID, maxConcurrency)
+	}
+	limit := limits[modelKey]
 	if limit <= 0 {
-		// 未配置预算：透传原账号槽位逻辑。
+		// 未配置该模型或显式配置为 0（不限制）：透传原账号槽位逻辑。
 		return s.AcquireAccountSlot(ctx, accountID, maxConcurrency)
 	}
 

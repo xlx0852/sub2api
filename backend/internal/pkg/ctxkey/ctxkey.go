@@ -59,4 +59,9 @@ const (
 
 	// ClaudeCodeVersion stores the extracted Claude Code version from User-Agent (e.g. "2.1.22")
 	ClaudeCodeVersion Key = "ctx_claude_code_version"
+
+	// AccountPrefetch 请求级账号预取 map（ID → *service.Account），由调度入口一次性
+	// GetByIDs 填充，recheck / parent 解析优先查该 map，避免对每个候选账号裸 GetByID（N+1）。
+	// map 为 nil 或缺失 = 未预取（调用方回退逐账号查询，行为与未优化前一致）。
+	AccountPrefetch Key = "ctx_account_prefetch"
 )

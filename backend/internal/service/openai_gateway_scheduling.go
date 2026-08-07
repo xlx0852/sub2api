@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -943,6 +944,11 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 		return nil, ErrNoAvailableAccounts
 	}
 
+	// 请求级预取:对全部候选(含 shadow 母账号)做一次性 GetByIDs,供 recheck / parent
+	// 解析查 map,替代循环内逐候选裸 GetByID(N+1)。失败或快照不可用时跳过预取,
+	// 各调用点回退逐账号查询,行为与未优化前一致。
+	ctx = s.prefetchOpenAIAccountsForRequest(ctx, candidates)
+
 	accountLoads := make([]AccountWithConcurrency, 0, len(candidates))
 	for _, acc := range candidates {
 		accountLoads = append(accountLoads, AccountWithConcurrency{
@@ -1190,10 +1196,17 @@ func (s *OpenAIGatewayService) resolveFreshSchedulableOpenAIAccount(ctx context.
 // 按 ID 取当前 Account(repo 为空时 fail-closed 返回 nil)。统一调度/粘连各路径的母账号解析,
 // 取代各调用点重复内联的同一闭包(历史上 recheck 等路径还漏写过 accountRepo==nil 守卫)。
 // L2 候选循环改用带 per-pass 缓存的 parentLookupL2,不走此方法。
+// 请求级预取 map 存在时优先查 map,避免对母账号裸 GetByID。
 func (s *OpenAIGatewayService) parentAccountLookup(ctx context.Context) func(int64) *Account {
+	prefetch := accountPrefetchFromContext(ctx)
 	return func(id int64) *Account {
 		if s.accountRepo == nil {
 			return nil
+		}
+		if prefetch != nil {
+			if a, ok := prefetch[id]; ok {
+				return a
+			}
 		}
 		a, _ := s.accountRepo.GetByID(ctx, id)
 		return a
@@ -1215,9 +1228,21 @@ func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDB(ctx context.Co
 		return account
 	}
 
-	latest, err := s.accountRepo.GetByID(ctx, account.ID)
-	if err != nil || latest == nil {
-		return nil
+	// 请求级预取 map 优先:调度入口已对全部候选(含 shadow 母账号)做一次性 GetByIDs,
+	// 避免对每个候选账号逐个裸 GetByID(N+1)。map 缺失该 ID 时回退单查,语义与现状一致
+	// (GetByID 返回 ErrAccountNotFound 时同样返回 nil)。
+	var latest *Account
+	if prefetch := accountPrefetchFromContext(ctx); prefetch != nil {
+		latest = prefetch[account.ID]
+		if latest == nil {
+			return nil
+		}
+	} else {
+		var err error
+		latest, err = s.accountRepo.GetByID(ctx, account.ID)
+		if err != nil || latest == nil {
+			return nil
+		}
 	}
 	if !isOpenAICompatibleAccountEligibleForRequest(ctx, latest, platform, requestedModel, requireCompact, requiredCapability) {
 		return nil
@@ -1229,6 +1254,86 @@ func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDB(ctx context.Co
 		return nil
 	}
 	return latest
+}
+
+// withAccountPrefetch 将请求级账号预取 map 写入 context。map 为 nil 时同样写入,
+// 以区分「已尝试预取但未命中」与「未预取」——后者回退逐账号查询。
+func withAccountPrefetch(ctx context.Context, prefetch map[int64]*Account) context.Context {
+	if ctx == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, ctxkey.AccountPrefetch, prefetch)
+}
+
+// accountPrefetchFromContext 读取请求级账号预取 map;未设置(或已设置为 nil)返回 nil。
+func accountPrefetchFromContext(ctx context.Context) map[int64]*Account {
+	if ctx == nil {
+		return nil
+	}
+	prefetch, _ := ctx.Value(ctxkey.AccountPrefetch).(map[int64]*Account)
+	return prefetch
+}
+
+// accountBatchRepo 可选接口:实现 GetByIDs 的仓库才启用批量预取。
+// 测试桩大多只实现 GetByID 而未实现 GetByIDs(嵌入接口为 nil),直接调用会 panic;
+// 通过 type-assert 让不支持批量读取的仓库自动跳过预取、回退逐账号查询,行为与未优化前一致。
+type accountBatchRepo interface {
+	GetByIDs(ctx context.Context, ids []int64) ([]*Account, error)
+}
+
+// prefetchOpenAIAccountsForRequest 对候选账号(含 shadow 母账号)做一次性 GetByIDs 预取,
+// 并以带预取 map 的 context 返回。recheck / parent 解析在 map 命中时不再裸 GetByID,
+// 把循环内 N 次单查压成 1 次批量读。
+// 仅在 schedulerSnapshot 可用(recheck 走 DB 分支)且仓库支持批量读取时执行;
+// GetByIDs 失败仅记日志,返回原 ctx,各调用点回退逐账号查询,行为与未优化前一致(fail-open)。
+func (s *OpenAIGatewayService) prefetchOpenAIAccountsForRequest(ctx context.Context, candidates []*Account) context.Context {
+	if ctx == nil {
+		return ctx
+	}
+	if s.schedulerSnapshot == nil || s.accountRepo == nil || len(candidates) == 0 {
+		return ctx
+	}
+	batchRepo, ok := s.accountRepo.(accountBatchRepo)
+	if !ok {
+		return ctx
+	}
+	ids := make([]int64, 0, len(candidates)*2)
+	seen := make(map[int64]struct{}, len(candidates)*2)
+	add := func(id int64) {
+		if id <= 0 {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	for _, acc := range candidates {
+		if acc == nil {
+			continue
+		}
+		add(acc.ID)
+		if acc.ParentAccountID != nil {
+			add(*acc.ParentAccountID)
+		}
+	}
+	if len(ids) == 0 {
+		return ctx
+	}
+	accounts, err := batchRepo.GetByIDs(ctx, ids)
+	if err != nil {
+		slog.Warn("openai.account_prefetch_get_by_ids_failed", "count", len(ids), "error", err)
+		return ctx
+	}
+	prefetch := make(map[int64]*Account, len(accounts))
+	for i := range accounts {
+		if accounts[i] == nil {
+			continue
+		}
+		prefetch[accounts[i].ID] = accounts[i]
+	}
+	return withAccountPrefetch(ctx, prefetch)
 }
 
 func (s *OpenAIGatewayService) getSchedulableAccount(ctx context.Context, accountID int64) (*Account, error) {

@@ -4,16 +4,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ttlcache"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
 )
 
 var (
 	ErrUsageLogNotFound = infraerrors.NotFound("USAGE_LOG_NOT_FOUND", "usage log not found")
+)
+
+const (
+	// userDashboardStatsCacheTTL 用户 dashboard 统计的进程内缓存 TTL。
+	userDashboardStatsCacheTTL = 30 * time.Second
+	// groupTrafficAvailabilityCacheTTL group 可用性的进程内缓存 TTL。
+	groupTrafficAvailabilityCacheTTL = 30 * time.Second
 )
 
 // CreateUsageLogRequest 创建使用日志请求
@@ -61,6 +70,17 @@ type UsageService struct {
 	entClient            *dbent.Client
 	authCacheInvalidator APIKeyAuthCacheInvalidator
 	apiKeyService        *APIKeyService
+
+	// userDashboardStatsCache 缓存 GetUserDashboardStats 结果(30s TTL)。
+	// 该查询对 usage_logs 无时间上界全表聚合(扫用户全部历史),
+	// 用户每次打开 dashboard 都触发;30s 短 TTL 把回源压到最多每 30s 一次,
+	// 且不改变统计口径(前端「总/累计」仍是全部历史)。
+	userDashboardStatsCache *ttlcache.Cache[*usagestats.UserDashboardStats]
+
+	// groupTrafficAvailabilityCache 缓存 GetGroupTrafficAvailability 结果(30s TTL)。
+	// 24h 路径是 request_id 级 DISTINCT ON + date_bin 分桶全扫, 用户开 dashboard 时
+	// 每个 group 各触发一次; key=groupID(group 级数据, 与用户无关), 用户循环 + 管理端共用。
+	groupTrafficAvailabilityCache *ttlcache.Cache[*GroupTrafficAvailabilitySummary]
 }
 
 // SetAPIKeyService injects the API key service used to resolve the user's
@@ -72,10 +92,12 @@ func (s *UsageService) SetAPIKeyService(apiKeyService *APIKeyService) {
 // NewUsageService 创建使用统计服务实例
 func NewUsageService(usageRepo UsageLogRepository, userRepo UserRepository, entClient *dbent.Client, authCacheInvalidator APIKeyAuthCacheInvalidator) *UsageService {
 	return &UsageService{
-		usageRepo:            usageRepo,
-		userRepo:             userRepo,
-		entClient:            entClient,
-		authCacheInvalidator: authCacheInvalidator,
+		usageRepo:                     usageRepo,
+		userRepo:                      userRepo,
+		entClient:                     entClient,
+		authCacheInvalidator:          authCacheInvalidator,
+		userDashboardStatsCache:       ttlcache.New[*usagestats.UserDashboardStats](userDashboardStatsCacheTTL),
+		groupTrafficAvailabilityCache: ttlcache.New[*GroupTrafficAvailabilitySummary](groupTrafficAvailabilityCacheTTL),
 	}
 }
 
@@ -297,7 +319,19 @@ func (s *UsageService) Delete(ctx context.Context, id int64) error {
 }
 
 // GetUserDashboardStats returns per-user dashboard summary stats.
+// 30s 进程内缓存: 该查询对 usage_logs 无时间上界全表聚合(扫用户全部历史),
+// 用户每次打开 dashboard 都触发;key=userID, 30s 内同用户只回源一次。
 func (s *UsageService) GetUserDashboardStats(ctx context.Context, userID int64) (*usagestats.UserDashboardStats, error) {
+	if s.userDashboardStatsCache == nil {
+		return s.fetchUserDashboardStats(ctx, userID)
+	}
+	key := strconv.FormatInt(userID, 10)
+	return s.userDashboardStatsCache.Load(ctx, key, func(ctx context.Context) (*usagestats.UserDashboardStats, error) {
+		return s.fetchUserDashboardStats(ctx, userID)
+	})
+}
+
+func (s *UsageService) fetchUserDashboardStats(ctx context.Context, userID int64) (*usagestats.UserDashboardStats, error) {
 	stats, err := s.usageRepo.GetUserDashboardStats(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("get user dashboard stats: %w", err)
