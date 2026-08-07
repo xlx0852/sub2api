@@ -450,18 +450,6 @@ const routes: RouteRecordRaw[] = [
     path: '/admin/sell-price-policies/pricing',
     redirect: '/admin/groups'
   },
-  {
-    path: '/admin/endpoint-monitors',
-    name: 'AdminEndpointMonitors',
-    component: () => import('@/views/admin/ChannelMonitorView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Endpoint Monitor',
-      titleKey: 'admin.channelMonitor.title',
-      descriptionKey: 'admin.channelMonitor.description'
-    }
-  },
   // Legacy channel paths
   {
     path: '/admin/channels',
@@ -470,21 +458,6 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/channels/pricing',
     redirect: '/admin/groups'
-  },
-  {
-    path: '/admin/channels/monitor',
-    redirect: '/admin/endpoint-monitors'
-  },
-  {
-    path: '/monitor',
-    name: 'ChannelStatus',
-    component: () => import('@/views/user/ChannelStatusView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: false,
-      title: 'Endpoint Status',
-      titleKey: 'nav.channelStatus'
-    }
   },
   {
     path: '/admin/accounts',

@@ -1873,7 +1873,7 @@
             :class="editGroupTab === tab.id
               ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
               : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-dark-700'"
-            @click="editGroupTab = tab.id as 'basic' | 'rate' | 'routing' | 'advanced'"
+            @click="editGroupTab = tab.id as 'basic' | 'rate' | 'routing' | 'advanced' | 'availability'"
           >
             {{ tab.label }}
           </button>
@@ -3063,6 +3063,10 @@
 
                 </div><!-- /edit-tab-advanced -->
 
+        <div v-show="editGroupTab === 'availability'" class="space-y-4">
+          <GroupAvailabilityPanel :group-id="editingGroup?.id ?? null" :active="showEditModal && editGroupTab === 'availability'" />
+        </div>
+
         <div v-show="editGroupTab === 'routing' || editForm.platform !== 'anthropic'" class="space-y-5">
           <div v-if="editForm.platform !== 'anthropic'" class="rounded-lg border border-dashed border-gray-300 p-4 text-xs text-gray-500 dark:border-dark-600">
             {{ t('admin.groups.editTabs.routingOnlyAnthropic') }}
@@ -3455,6 +3459,7 @@ import Icon from "@/components/icons/Icon.vue";
 import GroupRateMultipliersModal from "@/components/admin/group/GroupRateMultipliersModal.vue";
 import GroupRPMOverridesModal from "@/components/admin/group/GroupRPMOverridesModal.vue";
 import GroupPricingModal from "@/components/admin/group/GroupPricingModal.vue";
+import GroupAvailabilityPanel from "@/components/admin/group/GroupAvailabilityPanel.vue";
 import GroupCapacityBadge from "@/components/common/GroupCapacityBadge.vue";
 import type { GroupSellPriceSource } from "@/types";
 import { VueDraggable } from "vue-draggable-plus";
@@ -3776,13 +3781,14 @@ let abortController: AbortController | null = null;
 
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
-const editGroupTab = ref<'basic' | 'rate' | 'routing' | 'advanced'>('basic');
+const editGroupTab = ref<'basic' | 'rate' | 'routing' | 'advanced' | 'availability'>('basic');
 const editGroupTabs = computed(() => {
-  const tabs: Array<{ id: 'basic' | 'rate' | 'routing' | 'advanced'; label: string; show?: boolean }> = [
+  const tabs: Array<{ id: 'basic' | 'rate' | 'routing' | 'advanced' | 'availability'; label: string; show?: boolean }> = [
     { id: 'basic', label: t('admin.groups.editTabs.basic') },
     { id: 'rate', label: t('admin.groups.editTabs.rate') },
     { id: 'routing', label: t('admin.groups.editTabs.routing'), show: editForm.platform === 'anthropic' },
     { id: 'advanced', label: t('admin.groups.editTabs.advanced') },
+    { id: 'availability', label: t('admin.groups.editTabs.availability') },
   ];
   return tabs.filter((x) => x.show !== false);
 });

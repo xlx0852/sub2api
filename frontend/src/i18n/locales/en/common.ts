@@ -200,8 +200,6 @@ export default {
     paymentPlans: 'Plans',
     channelManagement: 'Sell Prices',
     channelPricing: 'Sell Pricing',
-    channelMonitor: 'Endpoint Monitor',
-    channelStatus: 'Endpoint Status',
     sellPricePolicies: 'Sell-Price Policies',
     endpointMonitor: 'Endpoint Monitor',
     riskControl: 'Risk Control',

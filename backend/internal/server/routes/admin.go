@@ -45,7 +45,6 @@ func RegisterAdminRoutes(
 		// OpenAI OAuth
 		registerOpenAIOAuthRoutes(admin, h)
 
-
 		// Antigravity OAuth
 		registerAntigravityOAuthRoutes(admin, h)
 
@@ -102,7 +101,6 @@ func RegisterAdminRoutes(
 		registerChannelRoutes(admin, h)
 
 		// 渠道监控
-		registerChannelMonitorRoutes(admin, h)
 
 		// 风控中心
 		registerContentModerationRoutes(admin, h)
@@ -306,6 +304,7 @@ func registerGroupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		groups.PUT("/sort-order", h.Admin.Group.UpdateSortOrder)
 		groups.GET("/:id/models-list-candidates", h.Admin.Group.GetModelsListCandidates)
 		groups.GET("/:id/pricing-summary", h.Admin.Group.GetPricingSummary)
+		groups.GET("/:id/availability", h.Admin.Group.GetAvailability)
 		groups.PUT("/:id/sell-price-policy", h.Admin.Group.BindSellPricePolicy)
 		groups.GET("/:id", h.Admin.Group.GetByID)
 		groups.POST("", h.Admin.Group.Create)
@@ -704,30 +703,6 @@ func deprecatedSellPricePolicyPath() gin.HandlerFunc {
 			c.Header("X-API-Warn", "Use /api/v1/admin/sell-price-policies instead of /api/v1/admin/channels")
 		}
 		c.Next()
-	}
-}
-
-func registerChannelMonitorRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
-	monitors := admin.Group("/channel-monitors")
-	{
-		monitors.GET("", h.Admin.ChannelMonitor.List)
-		monitors.POST("", h.Admin.ChannelMonitor.Create)
-		monitors.GET("/:id", h.Admin.ChannelMonitor.Get)
-		monitors.PUT("/:id", h.Admin.ChannelMonitor.Update)
-		monitors.DELETE("/:id", h.Admin.ChannelMonitor.Delete)
-		monitors.POST("/:id/run", h.Admin.ChannelMonitor.Run)
-		monitors.GET("/:id/history", h.Admin.ChannelMonitor.History)
-	}
-
-	templates := admin.Group("/channel-monitor-templates")
-	{
-		templates.GET("", h.Admin.ChannelMonitorTemplate.List)
-		templates.POST("", h.Admin.ChannelMonitorTemplate.Create)
-		templates.GET("/:id", h.Admin.ChannelMonitorTemplate.Get)
-		templates.PUT("/:id", h.Admin.ChannelMonitorTemplate.Update)
-		templates.DELETE("/:id", h.Admin.ChannelMonitorTemplate.Delete)
-		templates.GET("/:id/monitors", h.Admin.ChannelMonitorTemplate.AssociatedMonitors)
-		templates.POST("/:id/apply", h.Admin.ChannelMonitorTemplate.Apply)
 	}
 }
 
