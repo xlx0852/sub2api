@@ -1,17 +1,17 @@
 export default {
     availableChannels: {
-      title: 'Available Channels',
-      description: 'Aggregated view: each channel with its linked groups and supported models (wildcards expanded)',
-      searchPlaceholder: 'Search channels or models...',
+      title: 'Model Plaza Preview',
+      description: 'Aggregated view: each sell-price policy with bound groups and supported models (wildcards expanded)',
+      searchPlaceholder: 'Search policies or models...',
       columns: {
-        name: 'Channel',
+        name: 'Policy',
         status: 'Status',
         billingSource: 'Billing Model Source',
-        groups: 'Linked Groups',
+        groups: 'Bound Groups',
         supportedModels: 'Supported Models'
       },
       empty: 'No data',
-      noGroups: 'No linked groups',
+      noGroups: 'No bound groups',
       noModels: 'No model mapping configured',
       noPricing: 'Pricing not configured',
       statusActive: 'Active',
@@ -19,7 +19,7 @@ export default {
       billingSource: {
         requested: 'Requested model',
         upstream: 'Upstream model',
-        channel_mapped: 'Channel-mapped model'
+        channel_mapped: 'Policy-mapped model'
       },
       pricing: {
         billingMode: 'Billing Mode',
@@ -41,7 +41,7 @@ export default {
     // Channel Management → Sell-price policy library (P0/P1 product rename; storage still channels)
     channels: {
       title: 'Sell-Price Policies',
-      description: 'Configure model sell overrides vs official base and bind them to groups; group rate stays on Groups',
+      description: 'Configure model sell overrides vs official base. Primary path: Groups → Pricing to bind; this page is the policy library.',
       emptyModelsInPricing: 'No available models in pricing for platform {platform}',
       noGroupsSelected: 'No groups selected for platform {platform}',
       searchChannels: 'Search policies...',
@@ -55,10 +55,11 @@ export default {
       pricingUnit: 'pricing rules',
       emptyPriceBadge: '{count} empty',
       pricingSummaryHint: 'Official base × sell-price policy × group rate = user charge; account cost defaults to official base',
-      unboundWarning: 'No groups bound — policy is inactive; users still pay official base',
+      libraryHint: 'Tip: day-to-day markups (e.g. luna ×N) — prefer Groups → Pricing to bind/preview; use this page to maintain policy rows.',
+      unboundWarning: 'No groups bound — policy is inactive; users still pay official base. Bind from Groups → Pricing.',
       unboundBadge: 'Inactive',
       noChannelsYet: 'No Policies Yet',
-      createFirstChannel: 'Create a sell-price policy to override model prices; you can also bind from Groups → Pricing',
+      createFirstChannel: 'Create a sell-price policy to override model prices; bind it from Groups → Pricing to take effect',
       loadError: 'Failed to load policies',
       createSuccess: 'Policy created',
       updateSuccess: 'Policy updated',
@@ -511,8 +512,8 @@ export default {
 
     // Channel Monitor
     channelMonitor: {
-      title: 'Channel Monitor',
-      description: 'Monitor channel availability, latency and status',
+      title: 'Endpoint Monitor',
+      description: 'Monitor endpoint availability, latency and status',
       searchPlaceholder: 'Search monitor name...',
       allProviders: 'All Providers',
       allStatus: 'All Status',
@@ -520,8 +521,8 @@ export default {
       onlyEnabled: 'Enabled only',
       onlyDisabled: 'Disabled only',
       createButton: 'Create Monitor',
-      createTitle: 'Create Channel Monitor',
-      editTitle: 'Edit Channel Monitor',
+      createTitle: 'Create Endpoint Monitor',
+      editTitle: 'Edit Endpoint Monitor',
       runNow: 'Run Now',
       runSuccess: 'Check completed',
       runFailed: 'Check failed',
@@ -576,7 +577,7 @@ export default {
       },
       runResultTitle: 'Check Result',
       noMonitorsYet: 'No monitors yet',
-      createFirstMonitor: 'Create your first monitor to track channel availability',
+      createFirstMonitor: 'Create your first monitor to track endpoint availability',
       advanced: {
         section: 'Advanced (optional)',
         sectionHint: 'Customize request headers and body to bypass upstream client-detection (e.g. "only Claude Code clients allowed").',

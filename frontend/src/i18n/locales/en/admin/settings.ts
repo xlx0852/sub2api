@@ -15,19 +15,19 @@ export default {
       },
       features: {
         channelMonitor: {
-          title: 'Channel Monitor',
-          description: 'Periodically probe configured channels and surface availability / latency to users. Turning it off stops the scheduler and returns an empty list on the user page.',
+          title: 'Endpoint Monitor',
+          description: 'Periodically probe configured endpoints and surface availability / latency to users. Turning it off stops the scheduler and returns an empty list on the user page.',
           configureLink: 'Configure monitors in Pricing & Monitor > Endpoint Monitor',
-          enabled: 'Enable Channel Monitor',
+          enabled: 'Enable Endpoint Monitor',
           enabledHint: 'Disabling stops background checks; existing history is preserved.',
           defaultInterval: 'Default check interval (seconds)',
           defaultIntervalHint: 'Pre-fills the interval when creating a new monitor; each monitor can override it. Range 15 – 3600.',
         },
         availableChannels: {
-          title: 'Available Channels',
-          description: 'Show logged-in users an aggregate view of the channels, models and pricing they can access. Disabled by default.',
-          configureLink: 'Configure sell prices in Pricing & Monitor > Sell-Price Policies (or bind from Groups → Pricing)',
-          enabled: 'Enable Available Channels',
+          title: 'Model Plaza',
+          description: 'Show logged-in users an aggregate view of accessible models, sell-price policies, and group discounts. Disabled by default.',
+          configureLink: 'Bind sell prices in Groups → Pricing, or maintain rows in Pricing & Monitor > Sell-Price Policies',
+          enabled: 'Enable Model Plaza',
           enabledHint: 'When off, the sidebar entry is hidden and the endpoint returns an empty list.',
         },
         riskControl: {

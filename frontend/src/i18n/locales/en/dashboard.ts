@@ -232,6 +232,9 @@ export default {
     failedToResetQuota: 'Failed to reset quota',
     rateLimitColumn: 'Rate Limit',
     rateLimitSection: 'Rate Limit',
+    forceOpenAIFast: 'Always use Fast mode',
+    forceOpenAIFastHint: 'When on, OpenAI requests with this key always use the faster lane and are billed at Fast rates. If Fast is disabled on the platform, requests may be rejected.',
+    forceOpenAIFastBadge: 'Fast',
     resetUsage: 'Reset',
     rateLimit5h: '5-Hour Limit (USD)',
     rateLimit1d: 'Daily Limit (USD)',
@@ -452,7 +455,7 @@ export default {
   // Channel Status (user-facing read-only view)
   channelStatus: {
     availabilityTitle: 'Service availability',
-    availabilitySubtitle: 'Recent channel success rates and response speed',
+    availabilitySubtitle: 'Recent endpoint success rates and response speed',
     viewAll: 'View details',
     successRate: 'Success',
     avgLatency: 'Latency',
@@ -462,13 +465,13 @@ export default {
     attention: 'Needs attention',
     noSamples: 'No samples',
     allPlatforms: 'All',
-    title: 'Channel Status',
-    description: 'Inspect channel availability, latency and recent status',
-    searchPlaceholder: 'Search channels...',
+    title: 'Endpoint Status',
+    description: 'Inspect endpoint availability, latency and recent status',
+    searchPlaceholder: 'Search endpoints...',
     allProviders: 'All Providers',
-    loadError: 'Failed to load channel status',
-    detailLoadError: 'Failed to load channel detail',
-    detailTitle: 'Channel Detail',
+    loadError: 'Failed to load endpoint status',
+    detailLoadError: 'Failed to load endpoint detail',
+    detailTitle: 'Endpoint Detail',
     closeDetail: 'Close',
     windowTab: {
       '7d': '7 days',
@@ -498,16 +501,16 @@ export default {
       avgLatency7d: '7d Avg Latency (ms)'
     },
     empty: {
-      title: 'No channels available',
-      description: 'No monitored channels have been configured yet.'
+      title: 'No endpoints available',
+      description: 'No monitored endpoints have been configured yet.'
     }
   },
 
-  // Available Channels (user-facing)
+  // Available Channels (user-facing model plaza; data still from sell-price policies)
   availableChannels: {
     title: 'Model Plaza',
-    description: 'Browse accessible models, list prices, and group discounts',
-    searchPlaceholder: 'Search models, channels, or groups...',
+    description: 'Browse accessible models, list/sell prices, and group discounts',
+    searchPlaceholder: 'Search models, policies, or groups...',
     empty: 'No models available',
     noModels: 'No models configured',
     noPricing: 'Pricing not configured',
@@ -527,12 +530,12 @@ export default {
     stats: {
       models: 'Models',
       platforms: 'Platforms',
-      channels: 'Channels',
+      channels: 'Policies',
       groups: 'Groups'
     },
     filters: {
       allPlatforms: 'All Platforms',
-      allChannels: 'All Channels'
+      allChannels: 'All Policies'
     },
     tags: {
       reasoning: 'Reasoning',
@@ -543,7 +546,7 @@ export default {
       per_request: 'Per Request'
     },
     columns: {
-      name: 'Channel',
+      name: 'Policy',
       description: 'Description',
       platform: 'Platform',
       groups: 'Your Accessible Groups',
@@ -552,7 +555,7 @@ export default {
       provider: 'Provider',
       billingMode: 'Billing',
       discount: 'Save',
-      channels: 'Channels'
+      channels: 'Sell Policies'
     },
     pricing: {
       billingMode: 'Billing Mode',

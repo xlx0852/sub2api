@@ -236,6 +236,9 @@ export default {
     failedToResetQuota: '重置额度失败',
     rateLimitColumn: '速率限制',
     rateLimitSection: '速率限制',
+    forceOpenAIFast: '强制使用 Fast 快速模式',
+    forceOpenAIFastHint: '开启后，用这把密钥访问 OpenAI 时会自动走快速通道，并按快速模式价格计费。若平台关闭了快速模式，请求可能会被拒绝。',
+    forceOpenAIFastBadge: 'Fast',
     resetUsage: '重置',
     rateLimit5h: '5小时限额 (USD)',
     rateLimit1d: '日限额 (USD)',
@@ -456,7 +459,7 @@ export default {
   // Channel Status (user-facing read-only view)
   channelStatus: {
     availabilityTitle: '服务可用性',
-    availabilitySubtitle: '查看近期渠道成功率和响应速度',
+    availabilitySubtitle: '查看近期端点成功率和响应速度',
     viewAll: '查看详情',
     successRate: '成功率',
     avgLatency: '响应',
@@ -466,13 +469,13 @@ export default {
     attention: '需要关注',
     noSamples: '暂无样本',
     allPlatforms: '全部',
-    title: '渠道状态',
-    description: '查看渠道可用性、延迟和近期状态',
-    searchPlaceholder: '搜索渠道...',
+    title: '端点状态',
+    description: '查看端点可用性、延迟和近期状态',
+    searchPlaceholder: '搜索端点...',
     allProviders: '全部供应商',
-    loadError: '加载渠道状态失败',
-    detailLoadError: '加载渠道详情失败',
-    detailTitle: '渠道详情',
+    loadError: '加载端点状态失败',
+    detailLoadError: '加载端点详情失败',
+    detailTitle: '端点详情',
     closeDetail: '关闭',
     windowTab: {
       '7d': '7 天',
@@ -502,16 +505,16 @@ export default {
       avgLatency7d: '7 天平均延迟 (ms)'
     },
     empty: {
-      title: '暂无可显示的渠道',
-      description: '管理员尚未配置可监控的渠道。'
+      title: '暂无可显示的端点',
+      description: '管理员尚未配置可监控的端点。'
     }
   },
 
-  // Available Channels (user-facing)
+  // Available Channels (user-facing model plaza; data still from sell-price policies)
   availableChannels: {
     title: '模型广场',
-    description: '浏览可访问模型、官方定价与分组折扣',
-    searchPlaceholder: '搜索模型、渠道或分组...',
+    description: '浏览可访问模型、官方/售价与分组折扣',
+    searchPlaceholder: '搜索模型、策略或分组...',
     empty: '暂无可用模型',
     noModels: '未配置模型',
     noPricing: '未配置定价',
@@ -531,12 +534,12 @@ export default {
     stats: {
       models: '模型数',
       platforms: '平台数',
-      channels: '渠道数',
+      channels: '策略数',
       groups: '可用分组'
     },
     filters: {
       allPlatforms: '全部平台',
-      allChannels: '全部渠道'
+      allChannels: '全部策略'
     },
     tags: {
       reasoning: '推理',
@@ -547,7 +550,7 @@ export default {
       per_request: '按次'
     },
     columns: {
-      name: '渠道名',
+      name: '策略名',
       description: '描述',
       platform: '平台',
       groups: '我可访问的分组',
@@ -556,7 +559,7 @@ export default {
       provider: '厂商',
       billingMode: '计费',
       discount: '节省',
-      channels: '可用渠道'
+      channels: '售价策略'
     },
     pricing: {
       billingMode: '计费模式',

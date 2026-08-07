@@ -45,6 +45,9 @@
             </button>
           </div>
         </div>
+        <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+          {{ t('admin.channels.libraryHint') }}
+        </p>
       </template>
 
       <template #table>
