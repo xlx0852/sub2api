@@ -104,6 +104,7 @@ func APIKeyFromService(k *service.APIKey) *APIKey {
 		Window5hStart:      k.Window5hStart,
 		Window1dStart:      k.Window1dStart,
 		Window7dStart:      k.Window7dStart,
+		ForceOpenAIFast:    k.ForceOpenAIFast,
 		User:               UserFromServiceShallow(k.User),
 		Group:              GroupFromServiceShallow(k.Group),
 	}

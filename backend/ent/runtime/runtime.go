@@ -145,6 +145,10 @@ func init() {
 	apikeyDescUsage7d := apikeyFields[16].Descriptor()
 	// apikey.DefaultUsage7d holds the default value on creation for the usage_7d field.
 	apikey.DefaultUsage7d = apikeyDescUsage7d.Default.(float64)
+	// apikeyDescForceOpenaiFast is the schema descriptor for force_openai_fast field.
+	apikeyDescForceOpenaiFast := apikeyFields[20].Descriptor()
+	// apikey.DefaultForceOpenaiFast holds the default value on creation for the force_openai_fast field.
+	apikey.DefaultForceOpenaiFast = apikeyDescForceOpenaiFast.Default.(bool)
 	accountMixin := schema.Account{}.Mixin()
 	accountMixinHooks1 := accountMixin[1].Hooks()
 	account.Hooks[0] = accountMixinHooks1[0]

@@ -35,11 +35,18 @@
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
                   <h3
-                    class="min-w-0 break-all text-sm font-semibold text-gray-950 dark:text-white"
-                    :title="row.upstream_model && row.upstream_model !== row.model ? `${row.model} → ${row.upstream_model}` : row.model"
-                  >
-                    {{ row.model || '-' }}
-                  </h3>
+                  class="inline-flex min-w-0 max-w-full items-center gap-1 break-all text-sm font-semibold text-gray-950 dark:text-white"
+                  :title="row.upstream_model && row.upstream_model !== row.model ? `${row.model} → ${row.upstream_model}` : row.model"
+                >
+                  <span class="min-w-0 break-all">{{ row.model || '-' }}</span>
+                  <Icon
+                    v-if="isFastServiceTier(row.service_tier)"
+                    name="bolt"
+                    size="xs"
+                    class="usage-fast-bolt shrink-0 text-yellow-500"
+                    :stroke-width="2.5"
+                  />
+                </h3>
                   <span
                     v-if="isColumnVisible('stream')"
                     class="inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[11px] font-medium"
@@ -53,13 +60,6 @@
                     :class="getBillingModeBadgeClass(getDisplayBillingMode(row))"
                   >
                     {{ getBillingModeLabel(getDisplayBillingMode(row), t) }}
-                  </span>
-                  <span
-                    v-if="isColumnVisible('service_tier')"
-                    class="inline-flex shrink-0 items-center rounded px-2 py-0.5 text-[11px] font-medium"
-                    :class="getServiceTierBadgeClass(row.service_tier)"
-                  >
-                    {{ getUsageServiceTierLabel(row.service_tier, t) }}
                   </span>
                 </div>
                 <p
@@ -250,16 +250,34 @@
 
         <template #cell-model="{ row }">
           <div v-if="row.model_mapping_chain && row.model_mapping_chain.includes('→')" class="space-y-0.5 text-xs">
-            <div v-for="(step, i) in row.model_mapping_chain.split('→')" :key="i"
-                 class="break-all"
-                 :class="i === 0 ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'"
-                 :style="i > 0 ? `padding-left: ${i * 0.75}rem` : ''">
-              <span v-if="i > 0" class="mr-0.5">↳</span>{{ step }}
+            <div
+              v-for="(step, i) in row.model_mapping_chain.split('→')"
+              :key="i"
+              class="inline-flex max-w-full items-center gap-1 break-all"
+              :class="i === 0 ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'"
+              :style="i > 0 ? `padding-left: ${i * 0.75}rem` : ''"
+            >
+              <span v-if="i > 0" class="mr-0.5">↳</span>
+              <span>{{ step }}</span>
+              <Icon
+                v-if="i === 0 && isFastServiceTier(row.service_tier)"
+                name="bolt"
+                size="xs"
+                class="usage-fast-bolt shrink-0 text-yellow-500"
+                :stroke-width="2.5"
+              />
             </div>
           </div>
           <div v-else-if="row.upstream_model && row.upstream_model !== row.model" class="space-y-0.5 text-xs">
-            <div class="break-all font-medium text-gray-900 dark:text-white">
-              {{ row.model }}
+            <div class="inline-flex max-w-full items-center gap-1 break-all font-medium text-gray-900 dark:text-white">
+              <span>{{ row.model }}</span>
+              <Icon
+                v-if="isFastServiceTier(row.service_tier)"
+                name="bolt"
+                size="xs"
+                class="usage-fast-bolt shrink-0 text-yellow-500"
+                :stroke-width="2.5"
+              />
             </div>
             <div class="break-all text-gray-500 dark:text-gray-400">
               <span class="mr-0.5">↳</span>{{ row.upstream_model }}
@@ -267,22 +285,23 @@
           </div>
           <span
             v-else
-            class="inline-flex max-w-52 truncate rounded border border-black/[0.08] bg-black/[0.035] px-2 py-1 font-mono text-xs font-medium text-gray-800 dark:border-white/[0.1] dark:bg-white/[0.06] dark:text-gray-100"
+            class="inline-flex max-w-52 items-center gap-1 truncate rounded border border-black/[0.08] bg-black/[0.035] px-2 py-1 font-mono text-xs font-medium text-gray-800 dark:border-white/[0.1] dark:bg-white/[0.06] dark:text-gray-100"
             :title="row.model"
           >
-            {{ row.model }}
+            <span class="truncate">{{ row.model }}</span>
+            <Icon
+              v-if="isFastServiceTier(row.service_tier)"
+              name="bolt"
+              size="xs"
+              class="usage-fast-bolt shrink-0 text-yellow-500"
+              :stroke-width="2.5"
+            />
           </span>
         </template>
 
         <template #cell-reasoning_effort="{ row }">
           <span class="text-sm text-gray-900 dark:text-white">
             {{ formatReasoningEffort(row.reasoning_effort) }}
-          </span>
-        </template>
-
-        <template #cell-service_tier="{ row }">
-          <span class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium" :class="getServiceTierBadgeClass(row.service_tier)">
-            {{ getUsageServiceTierLabel(row.service_tier, t) }}
           </span>
         </template>
 
@@ -623,7 +642,19 @@
           <!-- Rate and Summary -->
           <div class="flex items-center justify-between gap-6">
             <span class="text-gray-400">{{ t('usage.serviceTier') }}</span>
-            <span class="font-semibold text-cyan-300">{{ getUsageServiceTierLabel(tooltipData?.service_tier, t) }}</span>
+            <span
+              class="inline-flex items-center gap-1 font-semibold"
+              :class="isFastServiceTier(tooltipData?.service_tier) ? 'text-yellow-300' : 'text-cyan-300'"
+            >
+              <Icon
+                v-if="isFastServiceTier(tooltipData?.service_tier)"
+                name="bolt"
+                size="xs"
+                class="usage-fast-bolt text-yellow-400"
+                :stroke-width="2.5"
+              />
+              {{ getUsageServiceTierLabel(tooltipData?.service_tier, t) }}
+            </span>
           </div>
           <div class="flex items-center justify-between gap-6">
             <span class="text-gray-400">{{ t('usage.rate') }}</span>
@@ -831,11 +862,9 @@ const getRequestTypeBadgeClass = (row: AdminUsageLog): string => {
 }
 
 
-const getServiceTierBadgeClass = (serviceTier: string | null | undefined): string => {
+const isFastServiceTier = (serviceTier: string | null | undefined): boolean => {
   const tier = serviceTier?.trim().toLowerCase()
-  if (tier === 'fast' || tier === 'priority') return 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200'
-  if (tier === 'flex') return 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200'
-  return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+  return tier === 'fast' || tier === 'priority'
 }
 
 
@@ -951,3 +980,9 @@ const hideTokenTooltip = () => {
   tokenTooltipData.value = null
 }
 </script>
+
+<style scoped>
+.usage-fast-bolt {
+  color: #eab308;
+}
+</style>

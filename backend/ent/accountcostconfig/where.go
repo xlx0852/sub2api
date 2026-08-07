@@ -94,6 +94,11 @@ func WindowBaselineRevenue(v float64) predicate.AccountCostConfig {
 	return predicate.AccountCostConfig(sql.FieldEQ(FieldWindowBaselineRevenue, v))
 }
 
+// AutoRenew applies equality check predicate on the "auto_renew" field. It's identical to AutoRenewEQ.
+func AutoRenew(v bool) predicate.AccountCostConfig {
+	return predicate.AccountCostConfig(sql.FieldEQ(FieldAutoRenew, v))
+}
+
 // Notes applies equality check predicate on the "notes" field. It's identical to NotesEQ.
 func Notes(v string) predicate.AccountCostConfig {
 	return predicate.AccountCostConfig(sql.FieldEQ(FieldNotes, v))
@@ -477,6 +482,16 @@ func WindowBaselineRevenueIsNil() predicate.AccountCostConfig {
 // WindowBaselineRevenueNotNil applies the NotNil predicate on the "window_baseline_revenue" field.
 func WindowBaselineRevenueNotNil() predicate.AccountCostConfig {
 	return predicate.AccountCostConfig(sql.FieldNotNull(FieldWindowBaselineRevenue))
+}
+
+// AutoRenewEQ applies the EQ predicate on the "auto_renew" field.
+func AutoRenewEQ(v bool) predicate.AccountCostConfig {
+	return predicate.AccountCostConfig(sql.FieldEQ(FieldAutoRenew, v))
+}
+
+// AutoRenewNEQ applies the NEQ predicate on the "auto_renew" field.
+func AutoRenewNEQ(v bool) predicate.AccountCostConfig {
+	return predicate.AccountCostConfig(sql.FieldNEQ(FieldAutoRenew, v))
 }
 
 // NotesEQ applies the EQ predicate on the "notes" field.

@@ -336,7 +336,14 @@ const loadLogs = async () => {
       { signal: c.signal }
     )
     if(!c.signal.aborted) { usageLogs.value = res.items; pagination.total = res.total }
-  } catch (error: any) { if(error?.name !== 'AbortError') console.error('Failed to load usage logs:', error) } finally { if(abortController === c) loading.value = false }
+  } catch (error: any) {
+    // 筛选/翻页会 abort 上一次请求；axios 抛 CanceledError，不能当真实失败打日志
+    const canceled =
+      error?.name === 'AbortError' ||
+      error?.name === 'CanceledError' ||
+      error?.code === 'ERR_CANCELED'
+    if (!canceled) console.error('Failed to load usage logs:', error)
+  } finally { if(abortController === c) loading.value = false }
 }
 const loadStats = async (force = false) => {
   const seq = ++statsReqSeq
@@ -571,6 +578,7 @@ const exportToExcel = async () => {
 
 // Column visibility
 const ALWAYS_VISIBLE = ['user', 'created_at']
+// service_tier 不再单独成列：Fast 以模型徽章旁霓虹闪电图标展示
 const DEFAULT_HIDDEN_COLUMNS = ['reasoning_effort', 'user_agent']
 const HIDDEN_COLUMNS_KEY = 'usage-hidden-columns'
 
@@ -580,7 +588,6 @@ const allColumns = computed(() => [
   { key: 'account', label: t('admin.usage.account'), sortable: false },
   { key: 'model', label: t('usage.model'), sortable: true, class: 'min-w-44' },
   { key: 'reasoning_effort', label: t('usage.reasoningEffort'), sortable: false },
-  { key: 'service_tier', label: t('usage.serviceTier'), sortable: false },
   { key: 'endpoint', label: t('usage.endpoint'), sortable: false },
   { key: 'group', label: t('admin.usage.group'), sortable: false },
   { key: 'stream', label: t('usage.type'), sortable: false },

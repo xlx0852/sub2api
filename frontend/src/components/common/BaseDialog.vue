@@ -1,17 +1,26 @@
 <template>
   <Teleport to="body">
-    <Transition name="modal">
+    <Transition :name="transitionName">
       <div
         v-if="show"
-        class="modal-overlay"
+        :class="overlayClasses"
         :style="zIndexStyle"
         :aria-labelledby="dialogId"
         role="dialog"
         aria-modal="true"
+        data-testid="base-dialog-overlay"
+        :data-variant="variant"
         @click.self="handleClose"
       >
-        <!-- Modal panel -->
-        <div ref="dialogRef" :class="['modal-content', widthClasses]" tabindex="-1" @click.stop>
+        <!-- Modal / drawer panel -->
+        <div
+          ref="dialogRef"
+          :class="['modal-content', panelClasses, widthClasses]"
+          tabindex="-1"
+          data-testid="base-dialog-panel"
+          @click.stop
+          @invalid.capture="suppressHiddenInvalid"
+        >
           <!-- Header -->
           <div class="modal-header">
             <h3 :id="dialogId" class="modal-title">
@@ -55,11 +64,14 @@ const dialogRef = ref<HTMLElement | null>(null)
 let previousActiveElement: HTMLElement | null = null
 
 type DialogWidth = 'narrow' | 'normal' | 'wide' | 'extra-wide' | 'full'
+type DialogVariant = 'modal' | 'drawer'
 
 interface Props {
   show: boolean
   title: string
   width?: DialogWidth
+  /** modal=居中弹窗；drawer=右侧抽屉（适合多 Tab 长表单） */
+  variant?: DialogVariant
   closeOnEscape?: boolean
   closeOnClickOutside?: boolean
   showCloseButton?: boolean
@@ -72,6 +84,7 @@ interface Emits {
 
 const props = withDefaults(defineProps<Props>(), {
   width: 'normal',
+  variant: 'modal',
   closeOnEscape: true,
   closeOnClickOutside: false,
   showCloseButton: true,
@@ -79,6 +92,15 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<Emits>()
+
+const isDrawer = computed(() => props.variant === 'drawer')
+const transitionName = computed(() => (isDrawer.value ? 'drawer' : 'modal'))
+const overlayClasses = computed(() =>
+  isDrawer.value ? 'modal-overlay modal-overlay--drawer' : 'modal-overlay'
+)
+const panelClasses = computed(() =>
+  isDrawer.value ? 'modal-content--drawer' : ''
+)
 
 // Custom z-index style (overrides the default z-50 from CSS)
 const zIndexStyle = computed(() => {
@@ -89,6 +111,18 @@ const widthClasses = computed(() => {
   // Width guidance: narrow=confirm/short prompts, normal=standard forms,
   // wide=multi-section forms or rich content, extra-wide=analytics/tables,
   // full=full-screen or very dense layouts.
+  // Drawer uses the same tokens but prefers a fixed right-rail width on desktop.
+  if (isDrawer.value) {
+    // 抽屉宽度按侧栏场景收敛，避免 wide 在大屏拉到 4xl 占半屏。
+    const drawerWidths: Record<DialogWidth, string> = {
+      narrow: 'w-full sm:max-w-md',
+      normal: 'w-full sm:max-w-lg sm:w-[32rem]',
+      wide: 'w-full sm:max-w-xl sm:w-[36rem]',
+      'extra-wide': 'w-full sm:max-w-2xl sm:w-[42rem]',
+      full: 'w-full sm:max-w-3xl sm:w-[48rem]'
+    }
+    return drawerWidths[props.width]
+  }
   const widths: Record<DialogWidth, string> = {
     narrow: 'max-w-md',
     normal: 'max-w-lg',
@@ -111,6 +145,27 @@ const handleEscape = (event: KeyboardEvent) => {
   }
 }
 
+// 多 Tab / v-show 表单：隐藏的 required/min 控件会触发
+// "An invalid form control with name='' is not focusable."
+// 统一给弹层内 form 开 novalidate，并把不可见控件的 invalid 事件吞掉。
+const disableNativeFormValidation = () => {
+  const root = dialogRef.value
+  if (!root) return
+  root.querySelectorAll('form').forEach((form) => {
+    form.setAttribute('novalidate', '')
+  })
+}
+
+const suppressHiddenInvalid = (event: Event) => {
+  const el = event.target
+  if (!(el instanceof HTMLElement)) return
+  // 不可见（含 display:none / 祖先 v-show 隐藏）时禁止浏览器尝试 focus
+  if (el.offsetParent === null || el.getClientRects().length === 0) {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+}
+
 // Prevent body scroll when modal is open and manage focus
 watch(
   () => props.show,
@@ -123,6 +178,7 @@ watch(
 
       // 等待DOM更新后设置焦点到对话框
       await nextTick()
+      disableNativeFormValidation()
       if (dialogRef.value) {
         const firstFocusable = dialogRef.value.querySelector<HTMLElement>(
           'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'

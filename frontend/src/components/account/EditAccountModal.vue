@@ -2,12 +2,15 @@
   <BaseDialog
     :show="show"
     :title="t('admin.accounts.editAccount')"
+    variant="drawer"
     width="wide"
+    :close-on-click-outside="true"
     @close="handleClose"
   >
     <form
       v-if="account"
       id="edit-account-form"
+      novalidate
       @submit.prevent="handleSubmit"
       class="space-y-5"
     >
@@ -31,10 +34,10 @@
       </div>
 
       <div v-show="activeEditTab === 'basic'" class="space-y-4" data-testid="edit-tab-basic">
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div class="grid grid-cols-1 gap-4">
           <div>
             <label class="input-label">{{ t('common.name') }}</label>
-            <input v-model="form.name" type="text" required class="input" data-tour="edit-account-form-name" />
+            <input v-model="form.name" type="text" class="input" data-tour="edit-account-form-name" />
           </div>
           <div>
             <label class="input-label">{{ t('admin.accounts.notes') }}</label>
@@ -320,8 +323,8 @@
             <input
               v-model.number="poolModeRetryCount"
               type="number"
-              min="0"
-              :max="MAX_POOL_MODE_RETRY_COUNT"
+             
+             
               step="1"
               class="input w-full sm:w-40"
             />
@@ -405,8 +408,8 @@
               <input
                 v-model.number="customErrorCodeInput"
                 type="number"
-                min="100"
-                max="599"
+               
+               
                 class="input flex-1"
                 :placeholder="t('admin.accounts.enterErrorCode')"
                 @keyup.enter="addCustomErrorCode"
@@ -732,7 +735,6 @@
             <label class="input-label">Location</label>
             <select
               v-model="editVertexLocation"
-              required
               class="input font-mono"
             >
               <optgroup
@@ -1109,8 +1111,8 @@
             <input
               v-model.number="poolModeRetryCount"
               type="number"
-              min="0"
-              :max="MAX_POOL_MODE_RETRY_COUNT"
+             
+             
               step="1"
               class="input w-full sm:w-40"
             />
@@ -1347,8 +1349,8 @@
                   <input
                     v-model.number="rule.error_code"
                     type="number"
-                    min="100"
-                    max="599"
+                   
+                   
                     class="input"
                     :placeholder="t('admin.accounts.tempUnschedulable.errorCodePlaceholder')"
                   />
@@ -1358,7 +1360,7 @@
                   <input
                     v-model.number="rule.duration_minutes"
                     type="number"
-                    min="1"
+                   
                     class="input"
                     :placeholder="t('admin.accounts.tempUnschedulable.durationPlaceholder')"
                   />
@@ -1437,7 +1439,7 @@
       </div>
 
       <div v-show="activeEditTab === 'basic'" class="space-y-4" data-testid="edit-tab-basic-scheduling">
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div class="grid grid-cols-1 gap-4">
           <div v-if="!isSparkShadow">
             <div class="mb-1 flex items-center gap-2">
               <label class="input-label mb-0">{{ t('admin.accounts.proxy') }}</label>
@@ -1445,31 +1447,31 @@
             </div>
             <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
           </div>
-          <div :class="isSparkShadow ? 'lg:col-span-2' : ''">
+          <div>
             <label class="input-label">{{ t('common.status') }}</label>
             <Select v-model="form.status" :options="statusOptions" />
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
-            <input v-model.number="form.concurrency" type="number" min="1" class="input"
+            <input v-model.number="form.concurrency" type="number" class="input"
               @input="form.concurrency = Math.max(1, form.concurrency || 1)" />
           </div>
           <div>
             <label class="input-label">{{ t('admin.accounts.loadFactor') }}</label>
-            <input v-model.number="form.load_factor" type="number" min="1"
+            <input v-model.number="form.load_factor" type="number"
               class="input" :placeholder="String(form.concurrency || 1)"
               @input="form.load_factor = (form.load_factor &amp;&amp; form.load_factor >= 1) ? form.load_factor : null" />
             <p class="input-hint">{{ t('admin.accounts.loadFactorHint') }}</p>
           </div>
-          <div class="col-span-2 sm:col-span-1">
+          <div>
             <label class="input-label">{{ t('admin.accounts.priority') }}</label>
             <input
               v-model.number="form.priority"
               type="number"
-              min="1"
+             
               class="input"
               data-tour="account-form-priority"
             />
@@ -1479,7 +1481,7 @@
 
         <div
           v-if="supportsAccountExpiry"
-          class="grid grid-cols-1 gap-4 rounded-lg border border-gray-200 p-3 dark:border-dark-600 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"
+          class="grid grid-cols-1 gap-4 rounded-lg border border-gray-200 p-3 dark:border-dark-600"
           data-testid="edit-account-expiry-section"
         >
           <div>
@@ -1494,7 +1496,7 @@
             />
             <p class="input-hint">{{ t('admin.accounts.expiresAtFollowsCostCycle') }}</p>
           </div>
-          <div class="flex items-start justify-between gap-3 rounded-md bg-gray-50 px-3 py-2 dark:bg-dark-700/60 lg:mt-6">
+          <div class="flex items-start justify-between gap-3 rounded-md bg-gray-50 px-3 py-2 dark:bg-dark-700/60">
             <div class="min-w-0">
               <label class="input-label mb-0">{{ t('admin.accounts.autoPauseOnExpired') }}</label>
               <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -2011,8 +2013,8 @@
           <input
             v-model.number="autoPause5hThreshold"
             type="number"
-            min="0"
-            max="100"
+           
+           
             step="0.1"
             class="input w-full sm:w-40"
             :disabled="autoPause5hDisabled"
@@ -2047,8 +2049,8 @@
           <input
             v-model.number="autoPause7dThreshold"
             type="number"
-            min="0"
-            max="100"
+           
+           
             step="0.1"
             class="input w-full sm:w-40"
             :disabled="autoPause7dDisabled"
@@ -2104,7 +2106,7 @@
                 <input
                   v-model.number="windowCostLimit"
                   type="number"
-                  min="0"
+                 
                   step="1"
                   class="input pl-7"
                   :placeholder="t('admin.accounts.quotaControl.windowCost.limitPlaceholder')"
@@ -2119,7 +2121,7 @@
                 <input
                   v-model.number="windowCostStickyReserve"
                   type="number"
-                  min="0"
+                 
                   step="1"
                   class="input pl-7"
                   :placeholder="t('admin.accounts.quotaControl.windowCost.stickyReservePlaceholder')"
@@ -2162,7 +2164,7 @@
               <input
                 v-model.number="maxSessions"
                 type="number"
-                min="1"
+               
                 step="1"
                 class="input"
                 :placeholder="t('admin.accounts.quotaControl.sessionLimit.maxSessionsPlaceholder')"
@@ -2175,7 +2177,7 @@
                 <input
                   v-model.number="sessionIdleTimeout"
                   type="number"
-                  min="1"
+                 
                   step="1"
                   class="input pr-12"
                   :placeholder="t('admin.accounts.quotaControl.sessionLimit.idleTimeoutPlaceholder')"
@@ -2219,8 +2221,8 @@
               <input
                 v-model.number="baseRpm"
                 type="number"
-                min="1"
-                max="1000"
+               
+               
                 step="1"
                 class="input w-full sm:w-40"
                 :placeholder="t('admin.accounts.quotaControl.rpmLimit.baseRpmPlaceholder')"
@@ -2269,7 +2271,7 @@
               <input
                 v-model.number="rpmStickyBuffer"
                 type="number"
-                min="1"
+               
                 step="1"
                 class="input w-full sm:w-40"
                 :placeholder="t('admin.accounts.quotaControl.rpmLimit.stickyBufferPlaceholder')"
@@ -2473,6 +2475,7 @@
           :groups="groups"
           :platform="account?.platform"
           :mixed-scheduling="mixedScheduling"
+          :columns="1"
           data-testid="account-form-groups"
           data-tour="account-form-groups"
         />
@@ -2524,7 +2527,7 @@
           <input
             v-model.number="form.rate_multiplier"
             type="number"
-            min="0"
+           
             step="0.001"
             class="input disabled:cursor-not-allowed disabled:opacity-60"
             data-testid="edit-account-rate-multiplier"
@@ -2735,14 +2738,35 @@ const { t } = useI18n()
 
 type EditAccountTab = 'basic' | 'models' | 'routing' | 'advanced' | 'cost'
 const activeEditTab = ref<EditAccountTab>('basic')
-const editTabs = computed(() => [
-  { id: 'basic' as const, label: t('admin.accounts.editTabs.basic') },
-  { id: 'models' as const, label: t('admin.accounts.editTabs.models') },
-  { id: 'routing' as const, label: t('admin.accounts.editTabs.routing') },
-  { id: 'advanced' as const, label: t('admin.accounts.editTabs.advanced') },
-  { id: 'cost' as const, label: t('admin.accounts.editTabs.cost') },
-])
+// 池化/自定义错误码/请求头覆写仅 apikey、bedrock 有配置面；OAuth 打开「路由策略」会是空白页。
+const supportsRoutingTab = computed(() => {
+  const type = props.account?.type
+  return type === 'apikey' || type === 'bedrock'
+})
+const editTabs = computed(() => {
+  const tabs: { id: EditAccountTab; label: string }[] = [
+    { id: 'basic', label: t('admin.accounts.editTabs.basic') },
+    { id: 'models', label: t('admin.accounts.editTabs.models') },
+  ]
+  if (supportsRoutingTab.value) {
+    tabs.push({ id: 'routing', label: t('admin.accounts.editTabs.routing') })
+  }
+  tabs.push(
+    { id: 'advanced', label: t('admin.accounts.editTabs.advanced') },
+    { id: 'cost', label: t('admin.accounts.editTabs.cost') },
+  )
+  return tabs
+})
 const activeEditTabHint = computed(() => t(`admin.accounts.editTabs.${activeEditTab.value}Hint` as const))
+
+watch(
+  () => [props.show, props.account?.id, supportsRoutingTab.value] as const,
+  () => {
+    if (activeEditTab.value === 'routing' && !supportsRoutingTab.value) {
+      activeEditTab.value = 'basic'
+    }
+  },
+)
 
 const appStore = useAppStore()
 const authStore = useAuthStore()
@@ -4130,6 +4154,14 @@ const handleSubmit = async () => {
 
   if (!props.account) return
   const accountID = props.account.id
+
+  // 不用 HTML required：抽屉多 Tab 下隐藏字段会触发
+  // "An invalid form control with name='' is not focusable."
+  if (!String(form.name || '').trim()) {
+    activeEditTab.value = 'basic'
+    appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
+    return
+  }
 
   if (form.status !== 'active' && form.status !== 'inactive' && form.status !== 'error') {
     appStore.showError(t('admin.accounts.pleaseSelectStatus'))

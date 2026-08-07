@@ -42,6 +42,8 @@ type CreateAPIKeyRequest struct {
 	RateLimit5h *float64 `json:"rate_limit_5h"`
 	RateLimit1d *float64 `json:"rate_limit_1d"`
 	RateLimit7d *float64 `json:"rate_limit_7d"`
+
+	ForceOpenAIFast *bool `json:"force_openai_fast"`
 }
 
 // UpdateAPIKeyRequest represents the update API key request payload
@@ -60,6 +62,8 @@ type UpdateAPIKeyRequest struct {
 	RateLimit1d         *float64 `json:"rate_limit_1d"`
 	RateLimit7d         *float64 `json:"rate_limit_7d"`
 	ResetRateLimitUsage *bool    `json:"reset_rate_limit_usage"` // 重置限速用量
+
+	ForceOpenAIFast *bool `json:"force_openai_fast"`
 }
 
 // List handles listing user's API keys with pagination
@@ -170,11 +174,14 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 	if req.RateLimit1d != nil {
 		svcReq.RateLimit1d = *req.RateLimit1d
 	}
-	if req.RateLimit7d != nil {
-		svcReq.RateLimit7d = *req.RateLimit7d
-	}
+		if req.RateLimit7d != nil {
+			svcReq.RateLimit7d = *req.RateLimit7d
+		}
+		if req.ForceOpenAIFast != nil {
+			svcReq.ForceOpenAIFast = *req.ForceOpenAIFast
+		}
 
-	executeUserIdempotentJSON(c, "user.api_keys.create", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
+		executeUserIdempotentJSON(c, "user.api_keys.create", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
 		key, err := h.apiKeyService.Create(ctx, subject.UserID, svcReq)
 		if err != nil {
 			return nil, err
@@ -204,16 +211,17 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 		return
 	}
 
-	svcReq := service.UpdateAPIKeyRequest{
-		IPWhitelist:         req.IPWhitelist,
-		IPBlacklist:         req.IPBlacklist,
-		Quota:               req.Quota,
-		ResetQuota:          req.ResetQuota,
-		RateLimit5h:         req.RateLimit5h,
-		RateLimit1d:         req.RateLimit1d,
-		RateLimit7d:         req.RateLimit7d,
-		ResetRateLimitUsage: req.ResetRateLimitUsage,
-	}
+		svcReq := service.UpdateAPIKeyRequest{
+			IPWhitelist:         req.IPWhitelist,
+			IPBlacklist:         req.IPBlacklist,
+			Quota:               req.Quota,
+			ResetQuota:          req.ResetQuota,
+			RateLimit5h:         req.RateLimit5h,
+			RateLimit1d:         req.RateLimit1d,
+			RateLimit7d:         req.RateLimit7d,
+			ResetRateLimitUsage: req.ResetRateLimitUsage,
+			ForceOpenAIFast:     req.ForceOpenAIFast,
+		}
 	if req.Name != "" {
 		svcReq.Name = &req.Name
 	}

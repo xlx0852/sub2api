@@ -142,6 +142,7 @@ type APIKeyMutation struct {
 	window_5h_start    *time.Time
 	window_1d_start    *time.Time
 	window_7d_start    *time.Time
+	force_openai_fast  *bool
 	clearedFields      map[string]struct{}
 	user               *int64
 	cleareduser        bool
@@ -1390,6 +1391,42 @@ func (m *APIKeyMutation) ResetWindow7dStart() {
 	delete(m.clearedFields, apikey.FieldWindow7dStart)
 }
 
+// SetForceOpenaiFast sets the "force_openai_fast" field.
+func (m *APIKeyMutation) SetForceOpenaiFast(b bool) {
+	m.force_openai_fast = &b
+}
+
+// ForceOpenaiFast returns the value of the "force_openai_fast" field in the mutation.
+func (m *APIKeyMutation) ForceOpenaiFast() (r bool, exists bool) {
+	v := m.force_openai_fast
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldForceOpenaiFast returns the old "force_openai_fast" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldForceOpenaiFast(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldForceOpenaiFast is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldForceOpenaiFast requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldForceOpenaiFast: %w", err)
+	}
+	return oldValue.ForceOpenaiFast, nil
+}
+
+// ResetForceOpenaiFast resets all changes to the "force_openai_fast" field.
+func (m *APIKeyMutation) ResetForceOpenaiFast() {
+	m.force_openai_fast = nil
+}
+
 // ClearUser clears the "user" edge to the User entity.
 func (m *APIKeyMutation) ClearUser() {
 	m.cleareduser = true
@@ -1532,7 +1569,7 @@ func (m *APIKeyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *APIKeyMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 24)
 	if m.created_at != nil {
 		fields = append(fields, apikey.FieldCreatedAt)
 	}
@@ -1602,6 +1639,9 @@ func (m *APIKeyMutation) Fields() []string {
 	if m.window_7d_start != nil {
 		fields = append(fields, apikey.FieldWindow7dStart)
 	}
+	if m.force_openai_fast != nil {
+		fields = append(fields, apikey.FieldForceOpenaiFast)
+	}
 	return fields
 }
 
@@ -1656,6 +1696,8 @@ func (m *APIKeyMutation) Field(name string) (ent.Value, bool) {
 		return m.Window1dStart()
 	case apikey.FieldWindow7dStart:
 		return m.Window7dStart()
+	case apikey.FieldForceOpenaiFast:
+		return m.ForceOpenaiFast()
 	}
 	return nil, false
 }
@@ -1711,6 +1753,8 @@ func (m *APIKeyMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldWindow1dStart(ctx)
 	case apikey.FieldWindow7dStart:
 		return m.OldWindow7dStart(ctx)
+	case apikey.FieldForceOpenaiFast:
+		return m.OldForceOpenaiFast(ctx)
 	}
 	return nil, fmt.Errorf("unknown APIKey field %s", name)
 }
@@ -1880,6 +1924,13 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetWindow7dStart(v)
+		return nil
+	case apikey.FieldForceOpenaiFast:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetForceOpenaiFast(v)
 		return nil
 	}
 	return fmt.Errorf("unknown APIKey field %s", name)
@@ -2154,6 +2205,9 @@ func (m *APIKeyMutation) ResetField(name string) error {
 		return nil
 	case apikey.FieldWindow7dStart:
 		m.ResetWindow7dStart()
+		return nil
+	case apikey.FieldForceOpenaiFast:
+		m.ResetForceOpenaiFast()
 		return nil
 	}
 	return fmt.Errorf("unknown APIKey field %s", name)
@@ -5103,6 +5157,7 @@ type AccountCostConfigMutation struct {
 	currency                   *string
 	window_baseline_revenue    *float64
 	addwindow_baseline_revenue *float64
+	auto_renew                 *bool
 	notes                      *string
 	clearedFields              map[string]struct{}
 	done                       bool
@@ -5590,6 +5645,42 @@ func (m *AccountCostConfigMutation) ResetWindowBaselineRevenue() {
 	delete(m.clearedFields, accountcostconfig.FieldWindowBaselineRevenue)
 }
 
+// SetAutoRenew sets the "auto_renew" field.
+func (m *AccountCostConfigMutation) SetAutoRenew(b bool) {
+	m.auto_renew = &b
+}
+
+// AutoRenew returns the value of the "auto_renew" field in the mutation.
+func (m *AccountCostConfigMutation) AutoRenew() (r bool, exists bool) {
+	v := m.auto_renew
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAutoRenew returns the old "auto_renew" field's value of the AccountCostConfig entity.
+// If the AccountCostConfig object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountCostConfigMutation) OldAutoRenew(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAutoRenew is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAutoRenew requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAutoRenew: %w", err)
+	}
+	return oldValue.AutoRenew, nil
+}
+
+// ResetAutoRenew resets all changes to the "auto_renew" field.
+func (m *AccountCostConfigMutation) ResetAutoRenew() {
+	m.auto_renew = nil
+}
+
 // SetNotes sets the "notes" field.
 func (m *AccountCostConfigMutation) SetNotes(s string) {
 	m.notes = &s
@@ -5673,7 +5764,7 @@ func (m *AccountCostConfigMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AccountCostConfigMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if m.created_at != nil {
 		fields = append(fields, accountcostconfig.FieldCreatedAt)
 	}
@@ -5697,6 +5788,9 @@ func (m *AccountCostConfigMutation) Fields() []string {
 	}
 	if m.window_baseline_revenue != nil {
 		fields = append(fields, accountcostconfig.FieldWindowBaselineRevenue)
+	}
+	if m.auto_renew != nil {
+		fields = append(fields, accountcostconfig.FieldAutoRenew)
 	}
 	if m.notes != nil {
 		fields = append(fields, accountcostconfig.FieldNotes)
@@ -5725,6 +5819,8 @@ func (m *AccountCostConfigMutation) Field(name string) (ent.Value, bool) {
 		return m.Currency()
 	case accountcostconfig.FieldWindowBaselineRevenue:
 		return m.WindowBaselineRevenue()
+	case accountcostconfig.FieldAutoRenew:
+		return m.AutoRenew()
 	case accountcostconfig.FieldNotes:
 		return m.Notes()
 	}
@@ -5752,6 +5848,8 @@ func (m *AccountCostConfigMutation) OldField(ctx context.Context, name string) (
 		return m.OldCurrency(ctx)
 	case accountcostconfig.FieldWindowBaselineRevenue:
 		return m.OldWindowBaselineRevenue(ctx)
+	case accountcostconfig.FieldAutoRenew:
+		return m.OldAutoRenew(ctx)
 	case accountcostconfig.FieldNotes:
 		return m.OldNotes(ctx)
 	}
@@ -5818,6 +5916,13 @@ func (m *AccountCostConfigMutation) SetField(name string, value ent.Value) error
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetWindowBaselineRevenue(v)
+		return nil
+	case accountcostconfig.FieldAutoRenew:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAutoRenew(v)
 		return nil
 	case accountcostconfig.FieldNotes:
 		v, ok := value.(string)
@@ -5964,6 +6069,9 @@ func (m *AccountCostConfigMutation) ResetField(name string) error {
 		return nil
 	case accountcostconfig.FieldWindowBaselineRevenue:
 		m.ResetWindowBaselineRevenue()
+		return nil
+	case accountcostconfig.FieldAutoRenew:
+		m.ResetAutoRenew()
 		return nil
 	case accountcostconfig.FieldNotes:
 		m.ResetNotes()

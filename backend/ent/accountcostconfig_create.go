@@ -126,6 +126,20 @@ func (_c *AccountCostConfigCreate) SetNillableWindowBaselineRevenue(v *float64) 
 	return _c
 }
 
+// SetAutoRenew sets the "auto_renew" field.
+func (_c *AccountCostConfigCreate) SetAutoRenew(v bool) *AccountCostConfigCreate {
+	_c.mutation.SetAutoRenew(v)
+	return _c
+}
+
+// SetNillableAutoRenew sets the "auto_renew" field if the given value is not nil.
+func (_c *AccountCostConfigCreate) SetNillableAutoRenew(v *bool) *AccountCostConfigCreate {
+	if v != nil {
+		_c.SetAutoRenew(*v)
+	}
+	return _c
+}
+
 // SetNotes sets the "notes" field.
 func (_c *AccountCostConfigCreate) SetNotes(v string) *AccountCostConfigCreate {
 	_c.mutation.SetNotes(v)
@@ -199,6 +213,10 @@ func (_c *AccountCostConfigCreate) defaults() {
 		v := accountcostconfig.DefaultCurrency
 		_c.mutation.SetCurrency(v)
 	}
+	if _, ok := _c.mutation.AutoRenew(); !ok {
+		v := accountcostconfig.DefaultAutoRenew
+		_c.mutation.SetAutoRenew(v)
+	}
 	if _, ok := _c.mutation.Notes(); !ok {
 		v := accountcostconfig.DefaultNotes
 		_c.mutation.SetNotes(v)
@@ -237,6 +255,9 @@ func (_c *AccountCostConfigCreate) check() error {
 		if err := accountcostconfig.CurrencyValidator(v); err != nil {
 			return &ValidationError{Name: "currency", err: fmt.Errorf(`ent: validator failed for field "AccountCostConfig.currency": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.AutoRenew(); !ok {
+		return &ValidationError{Name: "auto_renew", err: errors.New(`ent: missing required field "AccountCostConfig.auto_renew"`)}
 	}
 	return nil
 }
@@ -296,6 +317,10 @@ func (_c *AccountCostConfigCreate) createSpec() (*AccountCostConfig, *sqlgraph.C
 	if value, ok := _c.mutation.WindowBaselineRevenue(); ok {
 		_spec.SetField(accountcostconfig.FieldWindowBaselineRevenue, field.TypeFloat64, value)
 		_node.WindowBaselineRevenue = &value
+	}
+	if value, ok := _c.mutation.AutoRenew(); ok {
+		_spec.SetField(accountcostconfig.FieldAutoRenew, field.TypeBool, value)
+		_node.AutoRenew = value
 	}
 	if value, ok := _c.mutation.Notes(); ok {
 		_spec.SetField(accountcostconfig.FieldNotes, field.TypeString, value)
@@ -464,6 +489,18 @@ func (u *AccountCostConfigUpsert) AddWindowBaselineRevenue(v float64) *AccountCo
 // ClearWindowBaselineRevenue clears the value of the "window_baseline_revenue" field.
 func (u *AccountCostConfigUpsert) ClearWindowBaselineRevenue() *AccountCostConfigUpsert {
 	u.SetNull(accountcostconfig.FieldWindowBaselineRevenue)
+	return u
+}
+
+// SetAutoRenew sets the "auto_renew" field.
+func (u *AccountCostConfigUpsert) SetAutoRenew(v bool) *AccountCostConfigUpsert {
+	u.Set(accountcostconfig.FieldAutoRenew, v)
+	return u
+}
+
+// UpdateAutoRenew sets the "auto_renew" field to the value that was provided on create.
+func (u *AccountCostConfigUpsert) UpdateAutoRenew() *AccountCostConfigUpsert {
+	u.SetExcluded(accountcostconfig.FieldAutoRenew)
 	return u
 }
 
@@ -660,6 +697,20 @@ func (u *AccountCostConfigUpsertOne) UpdateWindowBaselineRevenue() *AccountCostC
 func (u *AccountCostConfigUpsertOne) ClearWindowBaselineRevenue() *AccountCostConfigUpsertOne {
 	return u.Update(func(s *AccountCostConfigUpsert) {
 		s.ClearWindowBaselineRevenue()
+	})
+}
+
+// SetAutoRenew sets the "auto_renew" field.
+func (u *AccountCostConfigUpsertOne) SetAutoRenew(v bool) *AccountCostConfigUpsertOne {
+	return u.Update(func(s *AccountCostConfigUpsert) {
+		s.SetAutoRenew(v)
+	})
+}
+
+// UpdateAutoRenew sets the "auto_renew" field to the value that was provided on create.
+func (u *AccountCostConfigUpsertOne) UpdateAutoRenew() *AccountCostConfigUpsertOne {
+	return u.Update(func(s *AccountCostConfigUpsert) {
+		s.UpdateAutoRenew()
 	})
 }
 
@@ -1025,6 +1076,20 @@ func (u *AccountCostConfigUpsertBulk) UpdateWindowBaselineRevenue() *AccountCost
 func (u *AccountCostConfigUpsertBulk) ClearWindowBaselineRevenue() *AccountCostConfigUpsertBulk {
 	return u.Update(func(s *AccountCostConfigUpsert) {
 		s.ClearWindowBaselineRevenue()
+	})
+}
+
+// SetAutoRenew sets the "auto_renew" field.
+func (u *AccountCostConfigUpsertBulk) SetAutoRenew(v bool) *AccountCostConfigUpsertBulk {
+	return u.Update(func(s *AccountCostConfigUpsert) {
+		s.SetAutoRenew(v)
+	})
+}
+
+// UpdateAutoRenew sets the "auto_renew" field to the value that was provided on create.
+func (u *AccountCostConfigUpsertBulk) UpdateAutoRenew() *AccountCostConfigUpsertBulk {
+	return u.Update(func(s *AccountCostConfigUpsert) {
+		s.UpdateAutoRenew()
 	})
 }
 

@@ -26,6 +26,9 @@ type APIKeyAuthSnapshot struct {
 	RateLimit5h float64 `json:"rate_limit_5h"`
 	RateLimit1d float64 `json:"rate_limit_1d"`
 	RateLimit7d float64 `json:"rate_limit_7d"`
+
+	// ForceOpenAIFast mirrors APIKey.ForceOpenAIFast for gateway hot path.
+	ForceOpenAIFast bool `json:"force_openai_fast,omitempty"`
 }
 
 // APIKeyAuthUserSnapshot 用户快照

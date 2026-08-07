@@ -251,6 +251,11 @@ func getAPIKeyFromContext(c interface{ Get(string) (any, bool) }) *APIKey {
 	return apiKey
 }
 
+func forceOpenAIFastFromContext(c interface{ Get(string) (any, bool) }) bool {
+	apiKey := getAPIKeyFromContext(c)
+	return apiKey != nil && apiKey.ForceOpenAIFast
+}
+
 func apiKeyGroup(apiKey *APIKey) *Group {
 	if apiKey == nil {
 		return nil

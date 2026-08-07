@@ -115,6 +115,11 @@ func (APIKey) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("Start time of the current 7d rate limit window"),
+
+		// Force OpenAI Fast (service_tier=priority) for all OpenAI gateway traffic on this key.
+		field.Bool("force_openai_fast").
+			Default(false).
+			Comment("Force OpenAI service_tier=priority (Fast) and bill at Fast rates for this API key"),
 	}
 }
 

@@ -61,6 +61,10 @@ type APIKey struct {
 	Window5hStart *time.Time // Start of current 5h window
 	Window1dStart *time.Time // Start of current 1d window
 	Window7dStart *time.Time // Start of current 7d window
+
+	// ForceOpenAIFast 开启后，该 Key 的 OpenAI 网关请求强制 service_tier=priority（Fast），
+	// 并按 Fast/priority 标准计费；管理员 Fast 策略 block 仍可拦截。
+	ForceOpenAIFast bool
 }
 
 func (k *APIKey) IsActive() bool {

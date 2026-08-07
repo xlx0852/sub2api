@@ -70,42 +70,41 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	}
 	clientStream := gjson.GetBytes(body, "stream").Bool()
 
-	// 1b. Extract service tier from the raw body before any transformation.
-	serviceTier := extractOpenAIServiceTierFromBody(body)
-
-	// 2. Resolve model mapping (same as ForwardAsChatCompletions)
-	billingModel := resolveOpenAIForwardModel(account, originalModel, defaultMappedModel)
-	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
-	grokCacheIdentity := ""
-	if account.Platform == PlatformGrok {
-		// Resolve before image bridging or other body rewrites so the fallback is
-		// anchored to the client's stable conversation prefix.
-		grokCacheIdentity = resolveGrokCacheIdentity(c, body, "", upstreamModel)
-	}
-	reasoningEffort := extractOpenAIReasoningEffortFromBody(body, firstNonEmpty(upstreamModel, billingModel, originalModel))
-	// 国产模型默认 effort 补充：需要 mappedModel 判定，推迟到 billingModel 算出之后。
-	reasoningEffort = ApplyThinkingEnabledFallback(reasoningEffort, body, billingModel)
-
-	// 3. Rewrite model in body (no protocol conversion)
-	upstreamBody := body
-	if upstreamModel != originalModel {
-		upstreamBody = ReplaceModelInBody(body, upstreamModel)
-	}
-	if normalizedBody, normalized := NormalizeGLMOpenAIReasoningEffort(upstreamBody, upstreamModel); normalized {
-		upstreamBody = normalizedBody
-	}
-
-	// 4. Apply OpenAI fast policy on the CC body
-	updatedBody, policyErr := s.applyOpenAIFastPolicyToBody(ctx, account, upstreamModel, upstreamBody)
-	if policyErr != nil {
-		var blocked *OpenAIFastBlockedError
-		if errors.As(policyErr, &blocked) {
-			MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
-			writeChatCompletionsError(c, http.StatusForbidden, "permission_error", blocked.Message)
+		// 2. Resolve model mapping (same as ForwardAsChatCompletions)
+		billingModel := resolveOpenAIForwardModel(account, originalModel, defaultMappedModel)
+		upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
+		grokCacheIdentity := ""
+		if account.Platform == PlatformGrok {
+			// Resolve before image bridging or other body rewrites so the fallback is
+			// anchored to the client's stable conversation prefix.
+			grokCacheIdentity = resolveGrokCacheIdentity(c, body, "", upstreamModel)
 		}
-		return nil, policyErr
-	}
-	upstreamBody = updatedBody
+		reasoningEffort := extractOpenAIReasoningEffortFromBody(body, firstNonEmpty(upstreamModel, billingModel, originalModel))
+		// 国产模型默认 effort 补充：需要 mappedModel 判定，推迟到 billingModel 算出之后。
+		reasoningEffort = ApplyThinkingEnabledFallback(reasoningEffort, body, billingModel)
+
+		// 3. Rewrite model in body (no protocol conversion)
+		upstreamBody := body
+		if upstreamModel != originalModel {
+			upstreamBody = ReplaceModelInBody(body, upstreamModel)
+		}
+		if normalizedBody, normalized := NormalizeGLMOpenAIReasoningEffort(upstreamBody, upstreamModel); normalized {
+			upstreamBody = normalizedBody
+		}
+
+		// 4. Apply OpenAI fast policy on the CC body
+		updatedBody, policyErr := s.applyOpenAIFastPolicyToBody(ctx, account, upstreamModel, upstreamBody, forceOpenAIFastFromContext(c))
+		if policyErr != nil {
+			var blocked *OpenAIFastBlockedError
+			if errors.As(policyErr, &blocked) {
+				MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
+				writeChatCompletionsError(c, http.StatusForbidden, "permission_error", blocked.Message)
+			}
+			return nil, policyErr
+		}
+		upstreamBody = updatedBody
+		// Extract tier after policy so Key force-fast is billed as priority.
+		serviceTier := extractOpenAIServiceTierFromBody(upstreamBody)
 	if account.Platform == PlatformGrok {
 		optimizedBody, optimizeErr := s.optimizeGrokPayloadBeforeImageBridge(account, upstreamBody)
 		if optimizeErr != nil {
