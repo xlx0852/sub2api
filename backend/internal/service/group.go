@@ -14,20 +14,24 @@ type OpenAIMessagesDispatchModelConfig = domain.OpenAIMessagesDispatchModelConfi
 type GroupModelsListConfig = domain.GroupModelsListConfig
 
 type Group struct {
-	ID             int64
-	Name           string
-	Description    string
-	Platform       string
-	RateMultiplier float64
-	// 高峰时段倍率：peak_rate_enabled 为 true 且当前时刻处于 [PeakStart, PeakEnd) 时，
-	// token 计费倍率额外乘以 PeakRateMultiplier。详见 PeakMultiplierAt。
-	PeakRateEnabled    bool
-	PeakStart          string
-	PeakEnd            string
-	PeakRateMultiplier float64
-	IsExclusive        bool
-	Status             string
-	Hydrated           bool // indicates the group was loaded from a trusted repository source
+		ID             int64
+		Name           string
+		Description    string
+		Platform       string
+		RateMultiplier float64
+		// SellPricePolicyID 显式绑定的售价策略（channels.id）。
+		// nil/0 = 跟官方基准。P2 与 channel_groups 双写；热路径优先读此字段。
+		// 注意：当前 ent schema 尚未建模该列，读写由 channel 仓储 SQL 双写/回填维护。
+		SellPricePolicyID *int64
+		// 高峰时段倍率：peak_rate_enabled 为 true 且当前时刻处于 [PeakStart, PeakEnd) 时，
+		// token 计费倍率额外乘以 PeakRateMultiplier。详见 PeakMultiplierAt。
+		PeakRateEnabled    bool
+		PeakStart          string
+		PeakEnd            string
+		PeakRateMultiplier float64
+		IsExclusive        bool
+		Status             string
+		Hydrated           bool // indicates the group was loaded from a trusted repository source
 
 	SubscriptionType    string
 	DailyLimitUSD       *float64

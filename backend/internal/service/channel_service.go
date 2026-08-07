@@ -36,10 +36,12 @@ type ChannelRepository interface {
 	ExistsByNameExcluding(ctx context.Context, name string, excludeID int64) (bool, error)
 
 	// 分组关联
-	GetGroupIDs(ctx context.Context, channelID int64) ([]int64, error)
-	SetGroupIDs(ctx context.Context, channelID int64, groupIDs []int64) error
-	GetChannelIDByGroupID(ctx context.Context, groupID int64) (int64, error)
-	GetGroupsInOtherChannels(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error)
+GetGroupIDs(ctx context.Context, channelID int64) ([]int64, error)
+		SetGroupIDs(ctx context.Context, channelID int64, groupIDs []int64) error
+		GetChannelIDByGroupID(ctx context.Context, groupID int64) (int64, error)
+		// GetChannelIDsByGroupIDs batch resolves group → policy/channel id (0 = none).
+		GetChannelIDsByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]int64, error)
+		GetGroupsInOtherChannels(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error)
 
 	// 分组平台查询
 	GetGroupPlatforms(ctx context.Context, groupIDs []int64) (map[int64]string, error)
@@ -268,28 +270,63 @@ func (s *ChannelService) buildCache(ctx context.Context) (*channelCache, error) 
 	dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), channelCacheDBTimeout)
 	defer cancel()
 
-	channels, groupPlatforms, err := s.fetchChannelData(dbCtx)
-	if err != nil {
-		return nil, err
+channels, groupPlatforms, groupToPolicy, err := s.fetchChannelData(dbCtx)
+		if err != nil {
+			return nil, err
+		}
+
+		cache := populateChannelCache(channels, groupPlatforms, groupToPolicy)
+		s.cache.Store(cache)
+		return cache, nil
 	}
 
-	cache := populateChannelCache(channels, groupPlatforms)
-	s.cache.Store(cache)
-	return cache, nil
-}
-
 // fetchChannelData 从数据库加载渠道列表和分组平台映射。
-func (s *ChannelService) fetchChannelData(ctx context.Context) ([]Channel, map[int64]string, error) {
+func (s *ChannelService) fetchChannelData(ctx context.Context) ([]Channel, map[int64]string, map[int64]int64, error) {
 	channels, err := s.repo.ListAll(ctx)
 	if err != nil {
 		slog.Warn("failed to build channel cache", "error", err)
 		s.storeErrorCache()
-		return nil, nil, fmt.Errorf("list all channels: %w", err)
+		return nil, nil, nil, fmt.Errorf("list all channels: %w", err)
 	}
 
-	var allGroupIDs []int64
+	// Collect candidate group IDs from channel_groups; P2 may also attach groups via
+	// groups.sell_price_policy_id that still need platform lookup.
+	groupIDSet := make(map[int64]struct{})
 	for i := range channels {
-		allGroupIDs = append(allGroupIDs, channels[i].GroupIDs...)
+		for _, gid := range channels[i].GroupIDs {
+			groupIDSet[gid] = struct{}{}
+		}
+	}
+
+	// Explicit group → policy map (prefers sell_price_policy_id).
+	// Build from all group IDs we know about from channel_groups; then merge reverse.
+	allGroupIDs := make([]int64, 0, len(groupIDSet))
+	for gid := range groupIDSet {
+		allGroupIDs = append(allGroupIDs, gid)
+	}
+
+	groupToPolicy := make(map[int64]int64)
+	if len(allGroupIDs) > 0 {
+		if m, err := s.repo.GetChannelIDsByGroupIDs(ctx, allGroupIDs); err != nil {
+			slog.Warn("failed to load group sell_price_policy_id for channel cache", "error", err)
+			// Non-fatal: fall back to channel.GroupIDs only.
+		} else {
+			groupToPolicy = m
+		}
+	}
+	// Ensure every channel_groups binding is present even if batch lookup missed.
+	for i := range channels {
+		for _, gid := range channels[i].GroupIDs {
+			if _, ok := groupToPolicy[gid]; !ok {
+				groupToPolicy[gid] = channels[i].ID
+			}
+			groupIDSet[gid] = struct{}{}
+		}
+	}
+	// Recompute all group IDs after merge.
+	allGroupIDs = allGroupIDs[:0]
+	for gid := range groupIDSet {
+		allGroupIDs = append(allGroupIDs, gid)
 	}
 
 	groupPlatforms := make(map[int64]string)
@@ -298,17 +335,19 @@ func (s *ChannelService) fetchChannelData(ctx context.Context) ([]Channel, map[i
 		if err != nil {
 			slog.Warn("failed to load group platforms for channel cache", "error", err)
 			s.storeErrorCache()
-			return nil, nil, fmt.Errorf("get group platforms: %w", err)
+			return nil, nil, nil, fmt.Errorf("get group platforms: %w", err)
 		}
 	}
-	return channels, groupPlatforms, nil
+	return channels, groupPlatforms, groupToPolicy, nil
 }
 
 // populateChannelCache 将渠道列表和分组平台映射填充到缓存快照中。
 // 装填时对每个 Channel 统一归一化 BillingModelSource，让缓存命中的所有下游
 // （gateway routing / billing / 未来任何 cache-backed 读路径）都拿到已归一化的实体，
 // 避免"每个出口各自记得 normalize"反模式。
-func populateChannelCache(channels []Channel, groupPlatforms map[int64]string) *channelCache {
+//
+// groupToPolicy 优先使用 groups.sell_price_policy_id 解析结果；若为空则回退 channel.GroupIDs。
+func populateChannelCache(channels []Channel, groupPlatforms map[int64]string, groupToPolicy map[int64]int64) *channelCache {
 	cache := newEmptyChannelCache()
 	cache.groupPlatform = groupPlatforms
 	cache.byID = make(map[int64]*Channel, len(channels))
@@ -318,6 +357,29 @@ func populateChannelCache(channels []Channel, groupPlatforms map[int64]string) *
 		channels[i].normalizeBillingModelSource()
 		ch := &channels[i]
 		cache.byID[ch.ID] = ch
+	}
+
+	// Prefer explicit group→policy map when present.
+	if len(groupToPolicy) > 0 {
+		for gid, policyID := range groupToPolicy {
+			if policyID <= 0 {
+				continue
+			}
+			ch := cache.byID[policyID]
+			if ch == nil {
+				continue
+			}
+			cache.channelByGroupID[gid] = ch
+			platform := groupPlatforms[gid]
+			expandPricingToCache(cache, ch, gid, platform)
+			expandMappingToCache(cache, ch, gid, platform)
+		}
+		return cache
+	}
+
+	// Legacy: expand from channel.GroupIDs only.
+	for i := range channels {
+		ch := &channels[i]
 		for _, gid := range ch.GroupIDs {
 			cache.channelByGroupID[gid] = ch
 			platform := groupPlatforms[gid]
