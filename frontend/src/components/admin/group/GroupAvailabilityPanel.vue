@@ -26,6 +26,17 @@
       {{ t('common.loading') }}
     </div>
 
+    <div
+      v-else-if="loadError"
+      class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200"
+    >
+      <p class="font-medium">{{ t('admin.groups.availability.loadError') }}</p>
+      <p class="mt-1 text-xs opacity-80">{{ loadError }}</p>
+      <button type="button" class="btn btn-secondary btn-sm mt-2" @click="reload">
+        {{ t('common.refresh') }}
+      </button>
+    </div>
+
     <template v-else-if="summary">
       <!-- Summary cards -->
       <div class="grid gap-3 sm:grid-cols-2">
@@ -83,7 +94,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { adminAPI } from '@/api/admin'
 import type { GroupAvailabilityPoint, GroupAvailabilitySummary } from '@/api/admin/groups'
@@ -95,9 +105,9 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-const appStore = useAppStore()
 
 const loading = ref(false)
+const loadError = ref('')
 const summary = ref<GroupAvailabilitySummary | null>(null)
 
 const windowCards = computed(() => [
@@ -167,11 +177,22 @@ function formatLatency(v?: number | null) {
 async function reload() {
   if (!props.groupId) return
   loading.value = true
+  loadError.value = ''
   try {
-    summary.value = await adminAPI.groups.getAvailability(props.groupId)
+    // Client-side timeout so a slow/hung query never shows "加载中…" forever.
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 20000),
+    )
+    summary.value = await Promise.race([
+      adminAPI.groups.getAvailability(props.groupId),
+      timeout,
+    ])
   } catch (e: any) {
     summary.value = null
-    appStore.showError(extractApiErrorMessage(e, t('admin.groups.availability.loadError')))
+    loadError.value =
+      e?.message === 'timeout'
+        ? t('admin.groups.availability.timeout')
+        : extractApiErrorMessage(e, t('admin.groups.availability.loadError'))
   } finally {
     loading.value = false
   }

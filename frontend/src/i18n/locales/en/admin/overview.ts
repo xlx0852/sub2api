@@ -876,6 +876,7 @@ export default {
         timelineHint: 'Tall=healthy, short=failure, gray=no traffic',
         noTraffic: 'No traffic',
         loadError: 'Failed to load group availability',
+        timeout: 'Query timed out (large volume). Retry or narrow the window.',
         status: {
           healthy: 'Operational',
           degraded: 'Degraded',

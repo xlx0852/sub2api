@@ -973,6 +973,7 @@ export default {
         timelineHint: '长=健康 短=失败 灰=无流量',
         noTraffic: '无流量',
         loadError: '加载分组可用性失败',
+        timeout: '查询超时（数据量较大）。请稍后重试或缩小时间窗。',
         status: {
           healthy: '正常',
           degraded: '降级',
