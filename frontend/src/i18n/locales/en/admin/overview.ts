@@ -813,6 +813,8 @@ export default {
       finalRate: 'Final Rate',
       pricing: {
         action: 'Pricing',
+        architectureSplit: 'Bind sell policy and preview charges here. Account picking is Group model routing; upstream rename is Account mapping.',
+
         title: 'Group Pricing',
         billingFlowTitle: 'Billing flow',
         billingFlowDesc: 'Official base → sell-price policy (optional ×N) → × group rate → user charge',
@@ -966,8 +968,8 @@ export default {
         hintEdit: '⚠️ Warning: This will replace all existing account bindings'
       },
       modelRouting: {
-        title: 'Model Routing',
-        tooltip: 'Configure specific model requests to be routed to designated accounts. Supports wildcard matching, e.g., claude-opus-* matches all opus models.',
+        title: 'Model routing (pick accounts, not rename)',
+        tooltip: '[Pick accounts — not rename] Configure specific model requests to be routed to designated accounts. Supports wildcard matching, e.g., claude-opus-* matches all opus models.',
         enabled: 'Enabled',
         disabled: 'Disabled',
         disabledHint: 'Routing rules will only take effect when enabled',

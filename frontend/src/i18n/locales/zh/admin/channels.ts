@@ -1,7 +1,7 @@
 export default {
     availableChannels: {
       title: '模型广场预览',
-      description: '只配置模型售价与绑定分组；映射/限制/特性请放到分组或账号侧，不再挂在售价策略上',
+      description: '只配置模型售价与绑定分组。模型路由在「分组」，上游映射在「账号」。',
       searchPlaceholder: '搜索策略或模型...',
       columns: {
         name: '策略名',
@@ -56,6 +56,7 @@ export default {
       emptyPriceBadge: '空价 {count}',
       pricingSummaryHint: '官方基准 × 售价策略覆盖 × 分组倍率 = 用户实扣；账号成本默认跟官方基准',
       libraryHint: '提示：日常改 luna×N 等售价，优先在「分组管理 → 定价」绑定/预览；本页用于维护策略条目本身。',
+      architectureHint: '职责拆分：售价策略=卖价；分组=套餐倍率/模型选号；账号=上游映射与供给。',
       unboundWarning: '未绑定分组 — 策略不会生效，用户仍按官方基准计费。请到「分组 → 定价」绑定。',
       unboundBadge: '未生效',
       noChannelsYet: '暂无售价策略',
@@ -169,8 +170,8 @@ export default {
         accountCostTab: '账号成本',
         advancedTab: '高级',
         billingFlowTitle: '计费关系',
-        billingFlowDesc: '官方基准价 → 售价策略（可 ×N 加价）→ × 分组倍率 → 用户实扣',
-        billingFlowCostNote: '账号侧成本默认跟官方基准 × 账号倍率；售价策略只负责用户售价，不在此配置账号 COGS。',
+        billingFlowDesc: '官方基准 → 本策略售价 → × 分组倍率 → 用户实扣',
+        billingFlowCostNote: '不负责模型映射/选号/账号成本。映射→账号；按模型选号→分组路由；账号成本→账号倍率。',
         enablePlatformFirst: '请先在「基础设置」启用至少一个平台',
         linkedGroupRates: '关联分组倍率',
         fillOfficialPrice: '填入官方价',

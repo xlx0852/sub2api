@@ -779,6 +779,7 @@ func (s *ChannelService) Create(ctx context.Context, input *CreateChannelInput) 
 		return nil, err
 	}
 	created.normalizeBillingModelSource()
+	stripNonPricingPolicyFields(created)
 	return created, nil
 }
 
@@ -790,6 +791,7 @@ func (s *ChannelService) GetByID(ctx context.Context, id int64) (*Channel, error
 		return nil, err
 	}
 	ch.normalizeBillingModelSource()
+	stripNonPricingPolicyFields(ch)
 	return ch, nil
 }
 
@@ -822,6 +824,7 @@ func (s *ChannelService) Update(ctx context.Context, id int64, input *UpdateChan
 		return nil, err
 	}
 	updated.normalizeBillingModelSource()
+	stripNonPricingPolicyFields(updated)
 	return updated, nil
 }
 
@@ -1049,4 +1052,18 @@ type UpdateChannelInput struct {
 	RestrictModels             *bool
 	Features                   *string
 	FeaturesConfig             map[string]any
+}
+
+
+// stripNonPricingPolicyFields clears legacy non-pricing capabilities so sell-price
+// policies stay price+binding only (in-memory; DB may still have empty JSON).
+func stripNonPricingPolicyFields(ch *Channel) {
+	if ch == nil {
+		return
+	}
+	ch.ModelMapping = nil
+	ch.RestrictModels = false
+	ch.BillingModelSource = BillingModelSourceRequested
+	ch.Features = ""
+	ch.FeaturesConfig = nil
 }

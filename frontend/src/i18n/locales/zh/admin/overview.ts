@@ -910,6 +910,8 @@ export default {
       finalRate: '最终倍率',
       pricing: {
         action: '定价',
+        architectureSplit: '本页只绑售价策略与看实扣。模型选号见分组「模型路由」；上游改名见账号映射。',
+
         title: '分组定价',
         billingFlowTitle: '计费关系',
         billingFlowDesc: '官方基准价 → 售价策略（可 ×N）→ × 分组倍率 → 用户实扣',
@@ -1050,9 +1052,11 @@ export default {
         hintEdit: '⚠️ 注意：这会替换当前分组的所有账号绑定'
       },
       modelRouting: {
-        title: '模型路由配置',
+        title: '模型路由（选号，不改模型名）',
+        splitHint: '按请求模型优先调度到哪些账号。上游模型改名/白名单在「账号」配置，售价在「售价策略」。',
+
         tooltip:
-          '配置特定模型请求优先路由到指定账号。支持通配符匹配，如 claude-opus-* 匹配所有 opus 模型。',
+          '【选号，不是改模型名】配置特定模型请求优先路由到指定账号。支持通配符匹配，如 claude-opus-* 匹配所有 opus 模型。',
         enabled: '已启用',
         disabled: '已禁用',
         disabledHint: '启用后，配置的路由规则才会生效',

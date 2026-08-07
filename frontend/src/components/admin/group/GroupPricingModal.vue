@@ -22,6 +22,9 @@
         <p class="mt-1 text-xs text-sky-700/80 dark:text-sky-300/70">
           {{ t('admin.groups.pricing.billingFlowCostNote') }}
         </p>
+        <p class="mt-1 text-xs opacity-80">
+          {{ t('admin.groups.pricing.architectureSplit') }}
+        </p>
       </div>
 
       <!-- Current source -->
