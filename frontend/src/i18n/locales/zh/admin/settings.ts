@@ -14,15 +14,6 @@ export default {
         payment: '支付设置',
       },
       features: {
-        channelMonitor: {
-          title: '端点监控',
-          description: '定期对配置的端点发起健康检查，向用户展示可用性与延迟。关闭后调度器停止扫描，用户端列表为空。',
-          configureLink: '前往 售价与监控 > 端点监控 配置监控项',
-          enabled: '启用端点监控',
-          enabledHint: '关闭后后台不再执行定时检测，已有数据保留。',
-          defaultInterval: '默认检测间隔（秒）',
-          defaultIntervalHint: '新建监控时表单的默认值，可被单项覆盖。范围 15 – 3600 秒。',
-        },
         availableChannels: {
           title: '模型广场',
           description: '向已登录用户展示可访问的模型、售价策略与分组折扣聚合视图。默认关闭。',

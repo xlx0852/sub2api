@@ -94,11 +94,6 @@ function defineFlag<K extends keyof PublicSettings>(
  * public-settings-driven switch; see the "Adding a new flag" checklist above.
  */
 export const FeatureFlags = {
-  channelMonitor: defineFlag({
-    key: 'channel_monitor_enabled',
-    mode: 'opt-out',
-    label: 'Channel Monitor',
-  }),
   availableChannels: defineFlag({
     key: 'available_channels_enabled',
     mode: 'opt-in',

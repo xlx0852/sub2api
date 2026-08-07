@@ -322,8 +322,6 @@ export const useAppStore = defineStore('app', () => {
         balance_low_notify_enabled: false,
         account_quota_notify_enabled: false,
         balance_low_notify_threshold: 0,
-        channel_monitor_enabled: true,
-        channel_monitor_default_interval_seconds: 60,
         available_channels_enabled: false,
         risk_control_enabled: false,
         service_quota_enabled: false,

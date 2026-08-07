@@ -16,7 +16,6 @@
         >
           <Icon name="refresh" size="xs" :class="loading ? 'animate-spin' : ''" />
         </button>
-        <RouterLink to="/monitor" class="text-xs font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400">{{ t('channelStatus.viewAll') }}</RouterLink>
       </div>
     </div>
 
@@ -47,7 +46,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink } from 'vue-router'
 import Icon from '@/components/icons/Icon.vue'
 import type { TrafficAvailability, TrafficAvailabilityBucket } from '@/api/usage'
 

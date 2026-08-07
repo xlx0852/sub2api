@@ -22,6 +22,7 @@ type GroupHandler struct {
 	groupCapacityService *service.GroupCapacityService
 	channelService       *service.ChannelService
 	billingService       *service.BillingService
+	usageService         *service.UsageService
 }
 
 type optionalLimitField struct {
@@ -80,6 +81,7 @@ func NewGroupHandler(
 	groupCapacityService *service.GroupCapacityService,
 	channelService *service.ChannelService,
 	billingService *service.BillingService,
+	usageService *service.UsageService,
 ) *GroupHandler {
 	return &GroupHandler{
 		adminService:         adminService,
@@ -87,6 +89,7 @@ func NewGroupHandler(
 		groupCapacityService: groupCapacityService,
 		channelService:       channelService,
 		billingService:       billingService,
+		usageService:         usageService,
 	}
 }
 
@@ -217,19 +220,19 @@ func (h *GroupHandler) List(c *gin.Context) {
 		isExclusive = &val
 	}
 
-groups, total, err := h.adminService.ListGroups(c.Request.Context(), page, pageSize, platform, status, search, isExclusive, sortBy, sortOrder)
-		if err != nil {
-			response.ErrorFrom(c, err)
-			return
-		}
-
-		outGroups := make([]dto.AdminGroup, 0, len(groups))
-		for i := range groups {
-			outGroups = append(outGroups, *dto.GroupFromServiceAdmin(&groups[i]))
-		}
-		h.attachSellPriceSources(c, outGroups, groups)
-		response.Paginated(c, outGroups, total, page, pageSize)
+	groups, total, err := h.adminService.ListGroups(c.Request.Context(), page, pageSize, platform, status, search, isExclusive, sortBy, sortOrder)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
 	}
+
+	outGroups := make([]dto.AdminGroup, 0, len(groups))
+	for i := range groups {
+		outGroups = append(outGroups, *dto.GroupFromServiceAdmin(&groups[i]))
+	}
+	h.attachSellPriceSources(c, outGroups, groups)
+	response.Paginated(c, outGroups, total, page, pageSize)
+}
 
 // GetAll handles getting all active groups without pagination.
 // Pass ?include_inactive=true to also include disabled groups (used by the
@@ -256,39 +259,39 @@ func (h *GroupHandler) GetAll(c *gin.Context) {
 		return
 	}
 
-outGroups := make([]dto.AdminGroup, 0, len(groups))
-		for i := range groups {
-			outGroups = append(outGroups, *dto.GroupFromServiceAdmin(&groups[i]))
-		}
-		h.attachSellPriceSources(c, outGroups, groups)
-		response.Success(c, outGroups)
+	outGroups := make([]dto.AdminGroup, 0, len(groups))
+	for i := range groups {
+		outGroups = append(outGroups, *dto.GroupFromServiceAdmin(&groups[i]))
+	}
+	h.attachSellPriceSources(c, outGroups, groups)
+	response.Success(c, outGroups)
+}
+
+// GetByID handles getting a group by ID
+// GET /api/v1/admin/groups/:id
+func (h *GroupHandler) GetByID(c *gin.Context) {
+	groupID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid group ID")
+		return
 	}
 
-	// GetByID handles getting a group by ID
-	// GET /api/v1/admin/groups/:id
-	func (h *GroupHandler) GetByID(c *gin.Context) {
-		groupID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-		if err != nil {
-			response.BadRequest(c, "Invalid group ID")
-			return
-		}
+	group, err := h.adminService.GetGroup(c.Request.Context(), groupID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 
-		group, err := h.adminService.GetGroup(c.Request.Context(), groupID)
-		if err != nil {
-			response.ErrorFrom(c, err)
-			return
-		}
-
-		out := dto.GroupFromServiceAdmin(group)
-		if out != nil {
-			if sources, err := h.loadSellPriceSources(c, []int64{group.ID}); err == nil {
-				if src, ok := sources[group.ID]; ok {
-					out.SellPriceSource = sellPriceSourceToDTO(src)
-				}
+	out := dto.GroupFromServiceAdmin(group)
+	if out != nil {
+		if sources, err := h.loadSellPriceSources(c, []int64{group.ID}); err == nil {
+			if src, ok := sources[group.ID]; ok {
+				out.SellPriceSource = sellPriceSourceToDTO(src)
 			}
 		}
-		response.Success(c, out)
 	}
+	response.Success(c, out)
+}
 
 // GetModelsListCandidates handles getting candidate model IDs for custom /v1/models list.
 // GET /api/v1/admin/groups/:id/models-list-candidates
@@ -508,6 +511,31 @@ func (h *GroupHandler) GetCapacitySummary(c *gin.Context) {
 		return
 	}
 	response.Success(c, results)
+}
+
+// GetAvailability returns real-traffic availability (24h + 7d) for a group.
+// GET /api/v1/admin/groups/:id/availability
+func (h *GroupHandler) GetAvailability(c *gin.Context) {
+	if h.usageService == nil {
+		response.Error(c, 500, "usage service unavailable")
+		return
+	}
+	groupID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || groupID <= 0 {
+		response.BadRequest(c, "Invalid group ID")
+		return
+	}
+	// Ensure group exists
+	if _, err := h.adminService.GetGroup(c.Request.Context(), groupID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	summary, err := h.usageService.GetGroupTrafficAvailability(c.Request.Context(), groupID)
+	if err != nil {
+		response.Error(c, 500, "Failed to get group availability")
+		return
+	}
+	response.Success(c, summary)
 }
 
 // GetGroupAPIKeys handles getting API keys in a group

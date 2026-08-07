@@ -127,12 +127,5 @@ func RegisterUserRoutes(
 			redeem.POST("", h.Redeem.Redeem)
 			redeem.GET("/history", h.Redeem.GetHistory)
 		}
-
-		// 渠道监控（用户只读）
-		monitors := authenticated.Group("/channel-monitors")
-		{
-			monitors.GET("", h.ChannelMonitor.List)
-			monitors.GET("/:id/status", h.ChannelMonitor.GetStatus)
-		}
 	}
 }

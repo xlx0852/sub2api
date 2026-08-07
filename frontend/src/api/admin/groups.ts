@@ -405,6 +405,44 @@ export async function getUsageSummary(
 	  return data
 	}
 
+	
+	/** Real-traffic availability rollup (24h + 7d) for a group */
+	export interface GroupAvailabilityPoint {
+	  start_at: string
+	  success_count: number
+	  failure_count: number
+	  sample_count: number
+	  success_rate: number | null
+	  average_latency: number | null
+	  status: string
+	}
+
+	export interface GroupAvailabilityWindow {
+	  group_id: number
+	  start_at: string
+	  end_at: string
+	  bucket_minutes: number
+	  success_count: number
+	  failure_count: number
+	  sample_count: number
+	  success_rate: number | null
+	  average_latency_ms: number | null
+	  status: string
+	  buckets?: GroupAvailabilityPoint[]
+	}
+
+	export interface GroupAvailabilitySummary {
+	  group_id: number
+	  day?: GroupAvailabilityWindow
+	  week?: GroupAvailabilityWindow
+	}
+
+	/** GET /admin/groups/:id/availability */
+	export async function getAvailability(id: number): Promise<GroupAvailabilitySummary> {
+	  const { data } = await apiClient.get<GroupAvailabilitySummary>(`/admin/groups/${id}/availability`)
+	  return data
+	}
+
 	export const groupsAPI = {
 	  list,
 	  getAll,
@@ -428,7 +466,8 @@ export async function getUsageSummary(
 	  getUsageSummary,
 	  getCapacitySummary,
 	  getPricingSummary,
-	  bindSellPricePolicy
+	  bindSellPricePolicy,
+	  getAvailability
 	}
 
 export default groupsAPI

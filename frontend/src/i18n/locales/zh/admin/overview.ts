@@ -759,10 +759,12 @@ export default {
         rate: '倍率与定价',
         routing: '模型路由',
         advanced: '高级',
+        availability: '可用性',
         basicHint: '分组身份与可见性。售价策略在「倍率与定价」绑定，不在这里改模型名。',
         rateHint: '分组倍率影响用户实扣；卖价请点「定价」绑定售价策略。账号成本在账号编辑。',
         routingHint: '【选号】按请求模型优先调度到哪些账号。上游改名/白名单在账号映射。',
         advancedHint: '平台专用能力（Messages 调度、模型列表、客户端限制等）。',
+        availabilityHint: '基于真实流量的分组可用性（usage 成功 + 网关失败），非主动探测。',
         rateBannerTitle: '卖价不在本表单',
         rateBannerBody: '本页倍率是折扣系数。模型绝对售价请在售价策略配置，并在此绑定。',
         routingOnlyAnthropic: '模型路由（按模型选号）当前仅 Anthropic 分组提供。其他平台请用账号侧映射/调度配置。',
@@ -959,6 +961,24 @@ export default {
         loadError: '加载分组定价失败',
         bindSuccess: '售价策略已更新',
         bindError: '更新售价策略失败'
+      },
+      availability: {
+        title: '可用性观测',
+        sourceTag: '真实流量',
+        sourceHint: '基于真实请求：usage 成功 + 网关错误失败；非主动探测',
+        last24h: '近 24 小时',
+        last7d: '近 7 天',
+        samples: '成功 {ok} / 失败 {fail}',
+        timeline24h: '24h 时间线（10 分钟一格）',
+        timelineHint: '长=健康 短=失败 灰=无流量',
+        noTraffic: '无流量',
+        loadError: '加载分组可用性失败',
+        status: {
+          healthy: '正常',
+          degraded: '降级',
+          attention: '异常',
+          noTraffic: '无流量'
+        }
       },
       unsavedChanges: '有未保存的修改',
       revertChanges: '撤销修改',

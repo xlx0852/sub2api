@@ -200,8 +200,6 @@ export default {
     paymentPlans: '订阅套餐',
     channelManagement: '售价策略',
     channelPricing: '售价配置',
-    channelMonitor: '端点监控',
-    channelStatus: '端点状态',
     sellPricePolicies: '售价策略',
     endpointMonitor: '端点监控',
     riskControl: '风控中心',

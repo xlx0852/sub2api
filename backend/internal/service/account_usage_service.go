@@ -64,6 +64,8 @@ type UsageLogRepository interface {
 	// User dashboard stats
 	GetUserDashboardStats(ctx context.Context, userID int64) (*usagestats.UserDashboardStats, error)
 	GetTrafficAvailability(ctx context.Context, start, end time.Time, bucketSize time.Duration, userID *int64, platform string) (*TrafficAvailability, error)
+	// GetGroupTrafficAvailability aggregates real-traffic availability for a group.
+	GetGroupTrafficAvailability(ctx context.Context, groupID int64, start, end time.Time, bucketSize time.Duration) (*GroupTrafficAvailability, error)
 	GetAPIKeyDashboardStats(ctx context.Context, apiKeyID int64) (*usagestats.UserDashboardStats, error)
 	GetUserUsageTrendByUserID(ctx context.Context, userID int64, startTime, endTime time.Time, granularity string) ([]usagestats.TrendDataPoint, error)
 	GetUserModelStats(ctx context.Context, userID int64, startTime, endTime time.Time) ([]usagestats.ModelStat, error)
