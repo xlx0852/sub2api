@@ -202,22 +202,10 @@ func RegisterGatewayRoutes(
 		gateway.GET("/videos/:request_id", videoStatusHandler)
 	}
 
-	// Gemini 原生 API 兼容层（Gemini SDK/CLI 直连）
-	gemini := r.Group("/v1beta")
-	gemini.Use(bodyLimit)
-	gemini.Use(clientRequestID)
-	gemini.Use(opsErrorLogger)
-	gemini.Use(endpointNorm)
-	gemini.Use(middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg))
-	gemini.Use(requireGroupGoogle)
-	{
-		gemini.GET("/models", h.Gateway.GeminiV1BetaListModels)
-		gemini.GET("/models/:model", h.Gateway.GeminiV1BetaGetModel)
-		// Gin treats ":" as a param marker, but Gemini uses "{model}:{action}" in the same segment.
-		gemini.POST("/models/*modelAction", h.Gateway.GeminiV1BetaModels)
-	}
+		// Gemini 原生 /v1beta 供给端点已下线（gemini 平台不再提供账号/分组）。
+		// Gemini 协议仍由 antigravity 转换层承载：/antigravity/v1beta/* 见下。
 
-	// OpenAI Responses API（不带v1前缀的别名）— auto-route based on group platform
+		// OpenAI Responses API（不带v1前缀的别名）— auto-route based on group platform
 	responsesHandler := func(c *gin.Context) {
 		if isOpenAIResponsesCompatibleGatewayPlatform(c) {
 			h.OpenAIGateway.Responses(c)
