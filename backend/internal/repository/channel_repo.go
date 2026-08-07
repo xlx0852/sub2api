@@ -446,13 +446,13 @@ func (r *channelRepository) SetGroupIDs(ctx context.Context, channelID int64, gr
 }
 
 func (r *channelRepository) GetChannelIDByGroupID(ctx context.Context, groupID int64) (int64, error) {
-		// Prefer explicit group.sell_price_policy_id (P2 source of truth), fall back to channel_groups.
+		// P4.1a: groups.sell_price_policy_id is the sole source of truth for hot-path resolution.
+		// channel_groups remains dual-written for admin listing but is not consulted here.
 		var channelID sql.NullInt64
 		err := r.db.QueryRowContext(ctx, `
-			SELECT COALESCE(
-				(SELECT g.sell_price_policy_id FROM groups g WHERE g.id = $1 AND g.deleted_at IS NULL),
-				(SELECT cg.channel_id FROM channel_groups cg WHERE cg.group_id = $1 LIMIT 1)
-			)
+			SELECT g.sell_price_policy_id
+			FROM groups g
+			WHERE g.id = $1 AND g.deleted_at IS NULL
 		`, groupID).Scan(&channelID)
 		if err == sql.ErrNoRows {
 			return 0, nil
@@ -482,7 +482,7 @@ func (r *channelRepository) GetChannelIDByGroupID(ctx context.Context, groupID i
 		if len(groupIDs) == 0 {
 			return out, nil
 		}
-		// Prefer groups.sell_price_policy_id; fill gaps from channel_groups.
+		// P4.1a: only explicit groups.sell_price_policy_id (no channel_groups fill-in).
 		rows, err := r.db.QueryContext(ctx, `
 			SELECT g.id, g.sell_price_policy_id
 			FROM groups g
@@ -508,29 +508,35 @@ func (r *channelRepository) GetChannelIDByGroupID(ctx context.Context, groupID i
 		if err := rows.Err(); err != nil {
 			return nil, err
 		}
-
-		missing := make([]int64, 0)
-		seen := make(map[int64]struct{}, len(groupIDs))
-		for _, gid := range groupIDs {
-			seen[gid] = struct{}{}
-			if _, ok := out[gid]; !ok {
-				missing = append(missing, gid)
-			}
-		}
-		if len(missing) == 0 {
-			return out, nil
-		}
-		legacy, err := r.getChannelIDsByGroupIDsLegacy(ctx, missing)
-		if err != nil {
-			return nil, err
-		}
-		for gid, cid := range legacy {
-			if cid > 0 {
-				out[gid] = cid
-			}
-		}
-		_ = seen
 		return out, nil
+	}
+
+	// ListGroupIDsBoundToPolicies returns all groups that have sell_price_policy_id set,
+	// plus platforms — used to expand the hot-path cache beyond channel_groups membership.
+	func (r *channelRepository) ListGroupIDsWithSellPricePolicy(ctx context.Context) (map[int64]int64, error) {
+		rows, err := r.db.QueryContext(ctx, `
+			SELECT g.id, g.sell_price_policy_id
+			FROM groups g
+			WHERE g.deleted_at IS NULL
+			  AND g.sell_price_policy_id IS NOT NULL
+			  AND g.sell_price_policy_id > 0
+		`)
+		if err != nil {
+			if isUndefinedColumnError(err) {
+				return map[int64]int64{}, nil
+			}
+			return nil, fmt.Errorf("list groups with sell_price_policy_id: %w", err)
+		}
+		defer func() { _ = rows.Close() }()
+		out := make(map[int64]int64)
+		for rows.Next() {
+			var gid, pid int64
+			if err := rows.Scan(&gid, &pid); err != nil {
+				return nil, err
+			}
+			out[gid] = pid
+		}
+		return out, rows.Err()
 	}
 
 	func (r *channelRepository) getChannelIDsByGroupIDsLegacy(ctx context.Context, groupIDs []int64) (map[int64]int64, error) {

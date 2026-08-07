@@ -108,13 +108,13 @@ func TestPopulateChannelCachePrefersGroupToPolicyMap(t *testing.T) {
 		ID:     2,
 		Name:   "luna-x4",
 		Status: StatusActive,
-		// Intentionally empty GroupIDs — P2 map is the source of truth.
+		// Intentionally empty GroupIDs — explicit policy map is the source of truth.
 		GroupIDs: nil,
 		ModelPricing: []ChannelModelPricing{
 			{Platform: PlatformOpenAI, Models: []string{"gpt-5.6-luna"}, InputPrice: &in},
 		},
 	}
-	// channel_groups still has another group for legacy path
+	// channel_groups still has another group for legacy fallback path
 	legacy := Channel{
 		ID:       9,
 		Name:     "legacy",
@@ -128,12 +128,12 @@ func TestPopulateChannelCachePrefersGroupToPolicyMap(t *testing.T) {
 
 	require.NotNil(t, cache.channelByGroupID[4])
 	require.Equal(t, int64(2), cache.channelByGroupID[4].ID)
-	// When explicit map is present, legacy GroupIDs expansion is skipped.
+	// When explicit map is present, legacy GroupIDs expansion is skipped (P4.1a).
 	_, hasLegacy := cache.channelByGroupID[99]
 	require.False(t, hasLegacy)
 
-	// Empty map falls back to GroupIDs expansion.
-	cache2 := populateChannelCache([]Channel{policy, legacy}, platforms, nil)
+	// Empty map falls back to GroupIDs expansion (pre-migration safety).
+	cache2 := populateChannelCache([]Channel{policy, legacy}, platforms, map[int64]int64{})
 	require.NotNil(t, cache2.channelByGroupID[99])
 	require.Equal(t, int64(9), cache2.channelByGroupID[99].ID)
 }
