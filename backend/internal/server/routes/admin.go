@@ -671,10 +671,12 @@ func registerTLSFingerprintProfileRoutes(admin *gin.RouterGroup, h *handler.Hand
 }
 
 func registerChannelRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
-	// Legacy path (kept for compatibility).
-	registerSellPricePolicyRoutes(admin.Group("/channels"), h)
-	// P4 product path alias — same handlers, no table rename.
+	// P4.1 product path (preferred).
 	registerSellPricePolicyRoutes(admin.Group("/sell-price-policies"), h)
+	// Legacy path: still functional, but marked deprecated for clients.
+	legacy := admin.Group("/channels")
+	legacy.Use(deprecatedSellPricePolicyPath())
+	registerSellPricePolicyRoutes(legacy, h)
 }
 
 func registerSellPricePolicyRoutes(g *gin.RouterGroup, h *handler.Handlers) {
@@ -686,6 +688,17 @@ func registerSellPricePolicyRoutes(g *gin.RouterGroup, h *handler.Handlers) {
 	g.POST("", h.Admin.Channel.Create)
 	g.PUT("/:id", h.Admin.Channel.Update)
 	g.DELETE("/:id", h.Admin.Channel.Delete)
+}
+
+// deprecatedSellPricePolicyPath marks legacy /admin/channels* as sunset without breaking clients.
+func deprecatedSellPricePolicyPath() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Deprecation", "true")
+		c.Header("Sunset", "Sat, 01 Aug 2026 00:00:00 GMT")
+		c.Header("Link", "</api/v1/admin/sell-price-policies>; rel=\"successor-version\"")
+		c.Header("X-API-Warn", "Use /api/v1/admin/sell-price-policies instead of /api/v1/admin/channels")
+		c.Next()
+	}
 }
 
 func registerChannelMonitorRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
