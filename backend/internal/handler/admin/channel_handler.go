@@ -122,6 +122,18 @@ type pricingIntervalResponse struct {
 }
 
 
+func sanitizeSellPricePolicyResponse(resp *channelResponse) {
+	if resp == nil {
+		return
+	}
+	// Product architecture: sell-price policy no longer carries routing/features/mapping.
+	resp.ModelMapping = map[string]map[string]string{}
+	resp.RestrictModels = false
+	resp.BillingModelSource = "requested"
+	resp.Features = ""
+	resp.FeaturesConfig = map[string]any{}
+}
+
 func channelToResponse(ch *service.Channel) *channelResponse {
 	if ch == nil {
 		return nil
@@ -153,6 +165,7 @@ func channelToResponse(ch *service.Channel) *channelResponse {
 	}
 
 
+	sanitizeSellPricePolicyResponse(resp)
 	return resp
 }
 

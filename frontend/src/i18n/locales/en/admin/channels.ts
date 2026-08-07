@@ -1,7 +1,7 @@
 export default {
     availableChannels: {
       title: 'Model Plaza Preview',
-      description: 'Configure model sell prices and group bindings only; mapping/restrict/features no longer live on sell-price policies',
+      description: 'Model sell prices and group bindings only. Routing lives on Groups; upstream mapping on Accounts.',
       searchPlaceholder: 'Search policies or models...',
       columns: {
         name: 'Policy',
@@ -56,6 +56,7 @@ export default {
       emptyPriceBadge: '{count} empty',
       pricingSummaryHint: 'Official base × sell-price policy × group rate = user charge; account cost defaults to official base',
       libraryHint: 'Tip: day-to-day markups (e.g. luna ×N) — prefer Groups → Pricing to bind/preview; use this page to maintain policy rows.',
+      architectureHint: 'Split: Sell policy = prices; Groups = plan rate/routing; Accounts = upstream mapping/supply.',
       unboundWarning: 'No groups bound — policy is inactive; users still pay official base. Bind from Groups → Pricing.',
       unboundBadge: 'Inactive',
       noChannelsYet: 'No Policies Yet',
@@ -169,8 +170,8 @@ export default {
         accountCostTab: 'Account Cost',
         advancedTab: 'Advanced',
         billingFlowTitle: 'Billing flow',
-        billingFlowDesc: 'Official base → sell-price policy (optional ×N) → × group rate → user charge. You can also bind from Groups → Pricing.',
-        billingFlowCostNote: 'Account-side cost defaults to official base × account multiplier. Sell-price policies only set user sell prices; account COGS is not configured here.',
+        billingFlowDesc: 'Official base → this policy sell price → × group rate → user charge',
+        billingFlowCostNote: 'No model mapping, routing, or account COGS here. Mapping→Accounts; model routing→Groups; account multiplier→Accounts.',
         enablePlatformFirst: 'Enable at least one platform in Basic Settings first',
         linkedGroupRates: 'Linked group rates',
         fillOfficialPrice: 'Fill official price',
