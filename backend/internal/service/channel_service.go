@@ -20,7 +20,7 @@ var (
 	ErrChannelExists         = infraerrors.Conflict("CHANNEL_EXISTS", "channel name already exists")
 	ErrGroupAlreadyInChannel = infraerrors.Conflict(
 		"GROUP_ALREADY_IN_CHANNEL",
-		"one or more groups already belong to another channel",
+		"one or more groups already belong to another sell-price policy (a group can only bind one policy)",
 	)
 )
 

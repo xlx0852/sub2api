@@ -89,6 +89,7 @@ export default {
       deleteSuccess: 'Policy deleted',
       createError: 'Failed to save pricing',
       updateError: 'Failed to update pricing',
+      groupConflict: 'A group can bind only one sell-price policy; unbind it from the old policy or split to a dedicated one first.',
       deleteError: 'Failed to delete policy',
       nameRequired: 'Please enter a policy name',
       duplicateModels: 'Model "{0}" appears in multiple pricing entries',
