@@ -107,7 +107,7 @@
             {{ t('admin.groups.pricing.followOfficial') }}
           </button>
           <a
-            href="/admin/sell-price-policies/pricing"
+            :href="workspaceHref"
             class="btn btn-secondary btn-sm"
             @click="emit('close')"
           >
@@ -230,6 +230,13 @@ const saving = ref(false)
 const summary = ref<GroupPricingSummary | null>(null)
 /** '' = official; otherwise policy id as string for Select */
 const selectedPolicyKey = ref<string>('')
+
+const workspaceHref = computed(() => {
+  const id = props.group?.id
+  return id
+    ? `/admin/sell-price-policies/pricing?group=${id}`
+    : '/admin/sell-price-policies/pricing'
+})
 
 const sourceLabel = computed(() => {
   if (!summary.value) return ''

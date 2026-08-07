@@ -847,7 +847,7 @@ export default {
         optionOfficial: 'Follow official base (no sell override)',
         applyBinding: 'Apply binding',
         followOfficial: 'Follow official',
-        openPolicyLibrary: 'Open policy library',
+        openPolicyLibrary: 'Open group pricing workspace',
         sharedWith: 'Also bound to: {names}',
         modelPreview: 'Model price preview',
         unitHint: 'USD / 1M tokens; effective = sell × group rate',
