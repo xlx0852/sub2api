@@ -38,9 +38,6 @@ return 0
 // - Scheduling: 5-field cron spec (minute hour dom month dow).
 // - Multi-instance: best-effort Redis leader lock so only one node runs cleanup.
 // - Safety: deletes in batches to avoid long transactions.
-//
-// 附带：在 runCleanupOnce 末尾调用 ChannelMonitorService.RunDailyMaintenance，
-// 统一共享 cron schedule + leader lock + heartbeat，避免再引一套调度。
 type OpsCleanupService struct {
 	opsRepo     OpsRepository
 	db          *sql.DB

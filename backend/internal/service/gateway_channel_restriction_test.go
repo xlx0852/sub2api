@@ -113,7 +113,8 @@ func TestCheckChannelPricingRestriction_ChannelMapped_Restricted(t *testing.T) {
 
 func TestCheckChannelPricingRestriction_ChannelMapped_Allowed(t *testing.T) {
 	t.Parallel()
-	// 渠道映射 claude-sonnet-4-5 → claude-sonnet-4-6，定价列表包含 claude-sonnet-4-6
+	// channel_mapped 已废弃；normalize 后按 requested 处理。
+	// 请求模型 claude-sonnet-4-5 不在定价表 → restricted。
 	ch := Channel{
 		ID:                 1,
 		Status:             StatusActive,
@@ -131,8 +132,8 @@ func TestCheckChannelPricingRestriction_ChannelMapped_Allowed(t *testing.T) {
 	svc := &GatewayService{channelService: channelSvc}
 
 	gid := int64(10)
-	require.False(t, svc.checkChannelPricingRestriction(context.Background(), &gid, "claude-sonnet-4-5"),
-		"mapped model claude-sonnet-4-6 IS in pricing → allowed")
+	require.True(t, svc.checkChannelPricingRestriction(context.Background(), &gid, "claude-sonnet-4-5"),
+		"channel_mapped deprecated → treated as requested; requested model not in pricing → restricted")
 }
 
 func TestCheckChannelPricingRestriction_Requested_Restricted(t *testing.T) {

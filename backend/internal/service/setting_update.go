@@ -324,14 +324,10 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	}
 
 	// Channel monitor feature switch
-	updates[SettingKeyChannelMonitorEnabled] = strconv.FormatBool(settings.ChannelMonitorEnabled)
-	if v := clampChannelMonitorInterval(settings.ChannelMonitorDefaultIntervalSeconds); v > 0 {
-		updates[SettingKeyChannelMonitorDefaultIntervalSeconds] = strconv.Itoa(v)
-	}
 
-// Available channels / model plaza feature switch (dual-write P4 name)
-		updates[SettingKeyAvailableChannelsEnabled] = strconv.FormatBool(settings.AvailableChannelsEnabled)
-		updates[SettingKeyModelPlazaEnabled] = strconv.FormatBool(settings.AvailableChannelsEnabled)
+	// Available channels / model plaza feature switch (dual-write P4 name)
+	updates[SettingKeyAvailableChannelsEnabled] = strconv.FormatBool(settings.AvailableChannelsEnabled)
+	updates[SettingKeyModelPlazaEnabled] = strconv.FormatBool(settings.AvailableChannelsEnabled)
 
 	// Affiliate (邀请返利) feature switch
 	updates[SettingKeyAffiliateEnabled] = strconv.FormatBool(settings.AffiliateEnabled)

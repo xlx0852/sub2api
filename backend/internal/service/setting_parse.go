@@ -175,12 +175,10 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyOpsMetricsIntervalSeconds:    "60",
 
 		// Channel monitor defaults (enabled, 60s)
-		SettingKeyChannelMonitorEnabled:                "true",
-		SettingKeyChannelMonitorDefaultIntervalSeconds: "60",
 
-// Available channels / model plaza feature (default disabled; opt-in)
-			SettingKeyAvailableChannelsEnabled: "false",
-			SettingKeyModelPlazaEnabled:        "false",
+		// Available channels / model plaza feature (default disabled; opt-in)
+		SettingKeyAvailableChannelsEnabled: "false",
+		SettingKeyModelPlazaEnabled:        "false",
 
 		// Affiliate (邀请返利) feature (default disabled; opt-in)
 		SettingKeyAffiliateEnabled: "false",
@@ -711,14 +709,10 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	}
 
 	// Channel monitor feature (default: enabled, 60s)
-	result.ChannelMonitorEnabled = !isFalseSettingValue(settings[SettingKeyChannelMonitorEnabled])
-	result.ChannelMonitorDefaultIntervalSeconds = parseChannelMonitorInterval(
-		settings[SettingKeyChannelMonitorDefaultIntervalSeconds],
-	)
 
-// Available channels / model plaza (default: disabled; either key true enables)
-		result.AvailableChannelsEnabled = settings[SettingKeyAvailableChannelsEnabled] == "true" ||
-			settings[SettingKeyModelPlazaEnabled] == "true"
+	// Available channels / model plaza (default: disabled; either key true enables)
+	result.AvailableChannelsEnabled = settings[SettingKeyAvailableChannelsEnabled] == "true" ||
+		settings[SettingKeyModelPlazaEnabled] == "true"
 
 	// Affiliate (邀请返利) feature (default: disabled; strict true)
 	result.AffiliateEnabled = settings[SettingKeyAffiliateEnabled] == "true"
