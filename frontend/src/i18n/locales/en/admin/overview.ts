@@ -416,7 +416,7 @@ export default {
       allRoles: 'All Roles',
       allStatus: 'All Status',
       allGroups: 'All Groups',
-      searchGroups: 'Search groups...',
+      searchGroups: 'Search plans...',
       fuzzySearch: 'Fuzzy search',
       apiKeyGroupFilter: 'API Key Group',
       apiKeyGroupExclusive: 'Exclusive Groups',
@@ -694,11 +694,11 @@ export default {
 
     // Groups
     groups: {
-      title: 'Group Management',
-      description: 'Manage API key groups and rate multipliers',
-      searchGroups: 'Search groups...',
-      createGroup: 'Create Group',
-      editGroup: 'Edit Group',
+      title: 'Group Plans',
+      description: 'Manage API key plans: rates, model routing, and sell-price policy binding',
+      searchGroups: 'Search plans...',
+      createGroup: 'Create Plan',
+      editGroup: 'Edit Plan',
 
       editTabs: {
         basic: 'Basic',
@@ -713,7 +713,7 @@ export default {
         rateBannerBody: 'Rate here is a multiplier. Configure absolute sell prices on a sell-price policy, then bind it.',
         routingOnlyAnthropic: 'Model routing (pick accounts by model) is currently available for Anthropic groups. Other platforms use account mapping/scheduling.',
       },
-      deleteGroup: 'Delete Group',
+      deleteGroup: 'Delete Plan',
       sortOrder: 'Sort',
       columnSettings: 'Column Settings',
       sortOrderHint: 'Drag groups to adjust display order, groups at the top will be displayed first',

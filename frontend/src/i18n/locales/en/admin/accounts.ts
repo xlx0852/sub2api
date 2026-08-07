@@ -1,8 +1,8 @@
 export default {
     accounts: {
-      title: 'Account Management',
-      description: 'Manage AI platform accounts and credentials',
-      createAccount: 'Create Account',
+      title: 'Account Pool',
+      description: 'Manage upstream account supply pool: credentials, model mapping, scheduling, and account cost multipliers',
+      createAccount: 'Add Pool Account',
       autoRefresh: 'Auto Refresh',
       enableAutoRefresh: 'Enable auto refresh',
       refreshInterval5s: '5 seconds',
@@ -76,7 +76,7 @@ export default {
       crsUpdateBehaviorNote:
         'Existing accounts only sync fields returned by CRS; missing fields keep their current values. Credentials are merged by key — keys not returned by CRS are preserved. Proxies are kept when "Sync proxies" is unchecked.',
       crsBack: 'Back',
-      editAccount: 'Edit Account',
+      editAccount: 'Edit Pool Account',
       deleteAccount: 'Delete Account',
       searchAccounts: 'Search accounts...',
       notes: 'Notes',

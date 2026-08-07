@@ -435,7 +435,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
-      title: 'Group Management',
+      title: 'Group Plans',
       titleKey: 'admin.groups.title',
       descriptionKey: 'admin.groups.description'
     }
@@ -500,7 +500,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
-      title: 'Account Management',
+      title: 'Account Pool',
       titleKey: 'admin.accounts.title',
       descriptionKey: 'admin.accounts.description'
     }
