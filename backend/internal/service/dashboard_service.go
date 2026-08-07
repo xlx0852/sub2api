@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync/atomic"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ttlcache"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
 )
 
@@ -17,6 +19,8 @@ const (
 	defaultDashboardStatsFreshTTL       = 15 * time.Second
 	defaultDashboardStatsCacheTTL       = 30 * time.Second
 	defaultDashboardStatsRefreshTimeout = 30 * time.Second
+	// groupUsageSummaryCacheTTL 是分组用量汇总的进程内缓存 TTL。
+	groupUsageSummaryCacheTTL = 30 * time.Second
 )
 
 // ErrDashboardStatsCacheMiss 标记仪表盘缓存未命中。
@@ -51,6 +55,11 @@ type DashboardService struct {
 	aggInterval    time.Duration
 	aggLookback    time.Duration
 	aggUsageDays   int
+
+	// groupUsageSummaryCache 缓存 GetAllGroupUsageSummary 结果(30s TTL)。
+	// 该查询对 usage_logs 无时间上界全表聚合(LEFT JOIN + SUM actual_cost),
+	// 管理端每次点分组页都触发;30s 短 TTL 把回源压到最多每 30s 一次。
+	groupUsageSummaryCache *ttlcache.Cache[[]usagestats.GroupUsageSummary]
 }
 
 func (s *DashboardService) GetTrafficAvailability(ctx context.Context, platform string) (*TrafficAvailability, error) {
@@ -99,16 +108,17 @@ func NewDashboardService(usageRepo UsageLogRepository, aggRepo DashboardAggregat
 		aggEnabled = false
 	}
 	return &DashboardService{
-		usageRepo:      usageRepo,
-		aggRepo:        aggRepo,
-		cache:          cache,
-		cacheFreshTTL:  freshTTL,
-		cacheTTL:       cacheTTL,
-		refreshTimeout: refreshTimeout,
-		aggEnabled:     aggEnabled,
-		aggInterval:    aggInterval,
-		aggLookback:    aggLookback,
-		aggUsageDays:   aggUsageDays,
+		usageRepo:              usageRepo,
+		aggRepo:                aggRepo,
+		cache:                  cache,
+		cacheFreshTTL:          freshTTL,
+		cacheTTL:               cacheTTL,
+		refreshTimeout:         refreshTimeout,
+		aggEnabled:             aggEnabled,
+		aggInterval:            aggInterval,
+		aggLookback:            aggLookback,
+		aggUsageDays:           aggUsageDays,
+		groupUsageSummaryCache: ttlcache.New[[]usagestats.GroupUsageSummary](groupUsageSummaryCacheTTL),
 	}
 }
 
@@ -180,7 +190,19 @@ func (s *DashboardService) GetGroupStatsWithFilters(ctx context.Context, startTi
 }
 
 // GetGroupUsageSummary returns today's and cumulative cost for all groups.
+// 30s 进程内缓存: 该查询对 usage_logs 无时间上界全表聚合, 管理端每次点分组页都触发;
+// key 含 todayStart(按用户时区), 跨时区各存一份, 30s 内同窗口只回源一次。
 func (s *DashboardService) GetGroupUsageSummary(ctx context.Context, todayStart time.Time) ([]usagestats.GroupUsageSummary, error) {
+	if s.groupUsageSummaryCache == nil {
+		return s.fetchGroupUsageSummary(ctx, todayStart)
+	}
+	key := strconv.FormatInt(todayStart.Unix(), 10)
+	return s.groupUsageSummaryCache.Load(ctx, key, func(ctx context.Context) ([]usagestats.GroupUsageSummary, error) {
+		return s.fetchGroupUsageSummary(ctx, todayStart)
+	})
+}
+
+func (s *DashboardService) fetchGroupUsageSummary(ctx context.Context, todayStart time.Time) ([]usagestats.GroupUsageSummary, error) {
 	results, err := s.usageRepo.GetAllGroupUsageSummary(ctx, todayStart)
 	if err != nil {
 		return nil, fmt.Errorf("get group usage summary: %w", err)

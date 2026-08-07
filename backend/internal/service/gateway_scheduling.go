@@ -1761,9 +1761,12 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 	routingAccountIDs := s.routingAccountIDsForRequest(ctx, groupID, requestedModel, platform)
 
 	// require_privacy_set: 获取分组信息
+	// 用 GetByIDLite: schedGroup 只读 RequirePrivacySet/Name, 不需要 GetByID 的 3 个
+	// AccountCount; 且 GetByIDLite 有 30s 进程内缓存(见 groupRepository.liteCache),
+	// 避免每请求 4 条 SQL(1 主查 + 3 个 COUNT)。
 	var schedGroup *Group
 	if groupID != nil && s.groupRepo != nil {
-		schedGroup, _ = s.groupRepo.GetByID(ctx, *groupID)
+		schedGroup, _ = s.groupRepo.GetByIDLite(ctx, *groupID)
 	}
 
 	var accounts []Account
@@ -2021,9 +2024,12 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 	routingAccountIDs := s.routingAccountIDsForRequest(ctx, groupID, requestedModel, nativePlatform)
 
 	// require_privacy_set: 获取分组信息
+	// 用 GetByIDLite: schedGroup 只读 RequirePrivacySet/Name, 不需要 GetByID 的 3 个
+	// AccountCount; 且 GetByIDLite 有 30s 进程内缓存(见 groupRepository.liteCache),
+	// 避免每请求 4 条 SQL(1 主查 + 3 个 COUNT)。
 	var schedGroup *Group
 	if groupID != nil && s.groupRepo != nil {
-		schedGroup, _ = s.groupRepo.GetByID(ctx, *groupID)
+		schedGroup, _ = s.groupRepo.GetByIDLite(ctx, *groupID)
 	}
 
 	var accounts []Account

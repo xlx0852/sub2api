@@ -69,6 +69,22 @@ func TestAcquireModelAwareAccountSlot_NoBudgetForModel_Passthrough(t *testing.T)
 	require.Equal(t, int64(0), cache.modelAcquireCalls.Load())
 }
 
+func TestAcquireModelAwareAccountSlot_NonCodexModel_Passthrough(t *testing.T) {
+	// 有预算配置时，非 codex 模型请求（如 claude）也必须透传，不触碰 model 槽。
+	cache := &modelLimitCacheForTest{}
+	cache.acquireResult = true
+	svc := NewConcurrencyService(cache)
+	svc.SetModelConcurrencyLimitProvider(func(ctx context.Context) map[string]int {
+		return map[string]int{"gpt-5.6-luna": 8}
+	})
+
+	result, err := svc.AcquireModelAwareAccountSlot(context.Background(), "claude-sonnet-4-5", 1, 4)
+	require.NoError(t, err)
+	require.True(t, result.Acquired)
+	require.False(t, result.ModelLimited)
+	require.Equal(t, int64(0), cache.modelAcquireCalls.Load())
+}
+
 func TestAcquireModelAwareAccountSlot_ModelBudgetExceeded(t *testing.T) {
 	// 模型预算已满（model 槽获取失败）→ ModelLimited=true，且不碰账号槽。
 	cache := &modelLimitCacheForTest{}

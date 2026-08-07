@@ -6,12 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ttlcache"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/lib/pq"
 
@@ -26,14 +29,21 @@ type sqlExecutor interface {
 type groupRepository struct {
 	client *dbent.Client
 	sql    sqlExecutor
+
+	// liteCache 缓存 GetByIDLite 结果（30s TTL）。网关热路径(调度 RequirePrivacySet 检查)
+	// 每请求读取同一 group，短 TTL 进程内缓存避免每请求 4 条 SQL(1 主查 + 3 个 AccountCount)。
+	// 变更时在 Update/Delete/绑定账号等写路径主动失效；30s 容忍度对低频管理操作可接受。
+	liteCache *ttlcache.Cache[*service.Group]
 }
+
+const groupLiteCacheTTL = 30 * time.Second
 
 func NewGroupRepository(client *dbent.Client, sqlDB *sql.DB) service.GroupRepository {
 	return newGroupRepositoryWithSQL(client, sqlDB)
 }
 
 func newGroupRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor) *groupRepository {
-	return &groupRepository{client: client, sql: sqlq}
+	return &groupRepository{client: client, sql: sqlq, liteCache: ttlcache.New[*service.Group](groupLiteCacheTTL)}
 }
 
 func (r *groupRepository) Create(ctx context.Context, groupIn *service.Group) error {
@@ -118,6 +128,24 @@ func (r *groupRepository) GetByID(ctx context.Context, id int64) (*service.Group
 
 func (r *groupRepository) GetByIDLite(ctx context.Context, id int64) (*service.Group, error) {
 	// AccountCount is intentionally not loaded here; use GetByID when needed.
+	if r.liteCache != nil {
+		if cached, ok := r.liteCache.Get(cacheKeyForGroupID(id)); ok && cached != nil {
+			return cached, nil
+		}
+		group, err := r.liteCache.Load(ctx, cacheKeyForGroupID(id), func(ctx context.Context) (*service.Group, error) {
+			m, err := r.client.Group.Query().
+				Where(group.IDEQ(id)).
+				Only(ctx)
+			if err != nil {
+				return nil, translatePersistenceError(err, service.ErrGroupNotFound, nil)
+			}
+			return groupEntityToService(m), nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		return group, nil
+	}
 	m, err := r.client.Group.Query().
 		Where(group.IDEQ(id)).
 		Only(ctx)
@@ -125,6 +153,19 @@ func (r *groupRepository) GetByIDLite(ctx context.Context, id int64) (*service.G
 		return nil, translatePersistenceError(err, service.ErrGroupNotFound, nil)
 	}
 	return groupEntityToService(m), nil
+}
+
+// cacheKeyForGroupID 构造 group 缓存键。
+func cacheKeyForGroupID(id int64) string {
+	return strconv.FormatInt(id, 10)
+}
+
+// invalidateGroupLiteCache 使指定 group 的 GetByIDLite 缓存失效。
+func (r *groupRepository) invalidateGroupLiteCache(id int64) {
+	if r == nil || r.liteCache == nil || id <= 0 {
+		return
+	}
+	r.liteCache.Delete(cacheKeyForGroupID(id))
 }
 
 func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) error {
@@ -244,6 +285,7 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		return translatePersistenceError(err, service.ErrGroupNotFound, service.ErrGroupExists)
 	}
 	groupIn.UpdatedAt = updated.UpdatedAt
+	r.invalidateGroupLiteCache(groupIn.ID)
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group update failed: group=%d err=%v", groupIn.ID, err)
 	}
@@ -255,6 +297,7 @@ func (r *groupRepository) Delete(ctx context.Context, id int64) error {
 	if err != nil {
 		return translatePersistenceError(err, service.ErrGroupNotFound, nil)
 	}
+	r.invalidateGroupLiteCache(id)
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &id, nil); err != nil {
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group delete failed: group=%d err=%v", id, err)
 	}
@@ -641,6 +684,7 @@ func (r *groupRepository) DeleteAccountGroupsByGroupID(ctx context.Context, grou
 		return 0, err
 	}
 	affected, _ := res.RowsAffected()
+	r.invalidateGroupLiteCache(groupID)
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupID, nil); err != nil {
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group account clear failed: group=%d err=%v", groupID, err)
 	}
@@ -741,6 +785,7 @@ func (r *groupRepository) DeleteCascade(ctx context.Context, id int64) ([]int64,
 			return nil, err
 		}
 	}
+	r.invalidateGroupLiteCache(id)
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &id, nil); err != nil {
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group cascade delete failed: group=%d err=%v", id, err)
 	}
@@ -869,6 +914,7 @@ func (r *groupRepository) BindAccountsToGroup(ctx context.Context, groupID int64
 		return err
 	}
 
+	r.invalidateGroupLiteCache(groupID)
 	// 发送调度器事件
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupID, nil); err != nil {
 		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue bind accounts to group failed: group=%d err=%v", groupID, err)
@@ -946,6 +992,7 @@ func (r *groupRepository) UpdateSortOrders(ctx context.Context, updates []servic
 	}
 
 	for _, id := range groupIDs {
+		r.invalidateGroupLiteCache(id)
 		if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &id, nil); err != nil {
 			logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group sort update failed: group=%d err=%v", id, err)
 		}

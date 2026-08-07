@@ -1406,6 +1406,11 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 		return nil, 0, 0, 0, noAvailableOpenAISelectionError(req.RequestedModel, false)
 	}
 
+	// 请求级预取:对全部候选(含 shadow 母账号)做一次性 GetByIDs,供 recheck / parent
+	// 解析查 map,替代 tryAcquireOpenAISelectionOrder / finishLoadBalanceSelectionFallback
+	// 循环内逐候选裸 GetByID(N+1)。失败或快照不可用时跳过,各调用点回退逐账号查询。
+	ctx = s.service.prefetchOpenAIAccountsForRequest(ctx, filtered)
+
 	loadMap := map[int64]*AccountLoadInfo{}
 	if s.service.concurrencyService != nil {
 		if batchLoad, loadErr := s.service.concurrencyService.GetAccountsLoadBatch(ctx, loadReq); loadErr == nil {

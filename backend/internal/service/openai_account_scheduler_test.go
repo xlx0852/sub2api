@@ -33,6 +33,21 @@ func (r schedulerTestOpenAIAccountRepo) GetByID(ctx context.Context, id int64) (
 	return nil, errors.New("account not found")
 }
 
+// GetByIDs 支持请求级批量预取:返回与输入 ID 顺序一致的账号(缺失 ID 忽略)。
+func (r schedulerTestOpenAIAccountRepo) GetByIDs(ctx context.Context, ids []int64) ([]*Account, error) {
+	byID := make(map[int64]*Account, len(r.accounts))
+	for i := range r.accounts {
+		byID[r.accounts[i].ID] = &r.accounts[i]
+	}
+	result := make([]*Account, 0, len(ids))
+	for _, id := range ids {
+		if acc, ok := byID[id]; ok {
+			result = append(result, acc)
+		}
+	}
+	return result, nil
+}
+
 func (r schedulerTestOpenAIAccountRepo) ListSchedulableByGroupIDAndPlatform(ctx context.Context, groupID int64, platform string) ([]Account, error) {
 	var result []Account
 	for _, acc := range r.accounts {
