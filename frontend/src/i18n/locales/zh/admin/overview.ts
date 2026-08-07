@@ -944,7 +944,7 @@ export default {
         optionOfficial: '跟官方基准（不覆盖售价）',
         applyBinding: '应用绑定',
         followOfficial: '改为跟官方',
-        openPolicyLibrary: '打开售价策略库',
+        openPolicyLibrary: '打开分组售价配置',
         sharedWith: '该策略同时绑定：{names}',
         modelPreview: '模型售价预览',
         unitHint: '单位 $ / 1M tokens；实扣 = 售价 × 分组倍率',
