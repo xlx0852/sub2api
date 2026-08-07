@@ -550,6 +550,18 @@ export interface Group {
   updated_at: string
 }
 
+/** 分组售价来源（管理员列表/详情；底层仍是 channel 绑定） */
+export interface GroupSellPriceSource {
+  source: 'official' | 'policy' | string
+  policy_id?: number | null
+  policy_name?: string
+  policy_status?: string
+  effective: boolean
+  inactive_policy: boolean
+  model_count: number
+  sample_models?: string[]
+}
+
 export interface AdminGroup extends Group {
   // 模型路由配置（仅管理员可见，内部信息）
   model_routing: Record<string, number[]> | null
@@ -573,6 +585,9 @@ export interface AdminGroup extends Group {
 
   // 分组排序
   sort_order: number
+
+  // 售价策略来源（官方 / 售价策略）
+  sell_price_source?: GroupSellPriceSource | null
 }
 
 export interface ModelsListConfig {

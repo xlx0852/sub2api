@@ -318,39 +318,119 @@ export async function getUsageSummary(
 }
 
 /**
- * Get capacity summary (concurrency/sessions/RPM) for all active groups
- */
-export async function getCapacitySummary(): Promise<
-  { group_id: number; concurrency_used: number; concurrency_max: number; sessions_used: number; sessions_max: number; rpm_used: number; rpm_max: number }[]
-> {
-  const { data } = await apiClient.get<
-    { group_id: number; concurrency_used: number; concurrency_max: number; sessions_used: number; sessions_max: number; rpm_used: number; rpm_max: number }[]
-  >('/admin/groups/capacity-summary')
-  return data
-}
+	 * Get capacity summary (concurrency/sessions/RPM) for all active groups
+	 */
+	export async function getCapacitySummary(): Promise<
+	  { group_id: number; concurrency_used: number; concurrency_max: number; sessions_used: number; sessions_max: number; rpm_used: number; rpm_max: number }[]
+	> {
+	  const { data } = await apiClient.get<
+	    { group_id: number; concurrency_used: number; concurrency_max: number; sessions_used: number; sessions_max: number; rpm_used: number; rpm_max: number }[]
+	  >('/admin/groups/capacity-summary')
+	  return data
+	}
 
-export const groupsAPI = {
-  list,
-  getAll,
-  getByPlatform,
-  getAllIncludingInactive,
-  getById,
-  getModelsListCandidates,
-  create,
-  update,
-  delete: deleteGroup,
-  toggleStatus,
-  getStats,
-  getGroupApiKeys,
-  getGroupRateMultipliers,
-  clearGroupRateMultipliers,
-  batchSetGroupRateMultipliers,
-  getGroupRPMOverrides,
-  clearGroupRPMOverrides,
-  batchSetGroupRPMOverrides,
-  updateSortOrder,
-  getUsageSummary,
-  getCapacitySummary
-}
+	/** Sell-price source attached to group list/detail responses */
+	export interface GroupSellPriceSource {
+	  source: 'official' | 'policy' | string
+	  policy_id?: number | null
+	  policy_name?: string
+	  policy_status?: string
+	  effective: boolean
+	  inactive_policy: boolean
+	  model_count: number
+	  sample_models?: string[]
+	}
+
+	export interface GroupPricingModelPreview {
+	  model: string
+	  billing_mode: string
+	  official_input: number | null
+	  official_output: number | null
+	  sell_input: number | null
+	  sell_output: number | null
+	  source: 'official' | 'policy' | string
+	  effective_input: number | null
+	  effective_output: number | null
+	  markup_n?: number | null
+	}
+
+	export interface SellPricePolicyOption {
+	  id: number
+	  name: string
+	  status: string
+	  group_count: number
+	  model_count: number
+	  sample_models?: string[]
+	  bound_here: boolean
+	  bound_other_group_names?: string[]
+	}
+
+	export interface GroupPricingSummary {
+	  group_id: number
+	  group_name: string
+	  platform: string
+	  rate_multiplier: number
+	  source: 'official' | 'policy' | string
+	  policy_id?: number | null
+	  policy_name?: string
+	  policy_status?: string
+	  effective: boolean
+	  inactive_policy: boolean
+	  hint: string
+	  billing_model_source?: string
+	  restrict_models: boolean
+	  apply_pricing_to_account_stats: boolean
+	  account_stats_rule_count: number
+	  models: GroupPricingModelPreview[]
+	  available_policies: SellPricePolicyOption[]
+	}
+
+	/** GET /admin/groups/:id/pricing-summary */
+	export async function getPricingSummary(id: number): Promise<GroupPricingSummary> {
+	  const { data } = await apiClient.get<GroupPricingSummary>(`/admin/groups/${id}/pricing-summary`)
+	  return data
+	}
+
+	/**
+	 * Bind or unbind sell-price policy for a group.
+	 * Pass null/undefined to follow official pricing.
+	 * PUT /admin/groups/:id/sell-price-policy
+	 */
+	export async function bindSellPricePolicy(
+	  id: number,
+	  policyId: number | null
+	): Promise<GroupPricingSummary> {
+	  const { data } = await apiClient.put<GroupPricingSummary>(
+	    `/admin/groups/${id}/sell-price-policy`,
+	    { policy_id: policyId }
+	  )
+	  return data
+	}
+
+	export const groupsAPI = {
+	  list,
+	  getAll,
+	  getByPlatform,
+	  getAllIncludingInactive,
+	  getById,
+	  getModelsListCandidates,
+	  create,
+	  update,
+	  delete: deleteGroup,
+	  toggleStatus,
+	  getStats,
+	  getGroupApiKeys,
+	  getGroupRateMultipliers,
+	  clearGroupRateMultipliers,
+	  batchSetGroupRateMultipliers,
+	  getGroupRPMOverrides,
+	  clearGroupRPMOverrides,
+	  batchSetGroupRPMOverrides,
+	  updateSortOrder,
+	  getUsageSummary,
+	  getCapacitySummary,
+	  getPricingSummary,
+	  bindSellPricePolicy
+	}
 
 export default groupsAPI
