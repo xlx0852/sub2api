@@ -382,10 +382,15 @@ const (
 	// pre-filled when creating a new channel monitor from the admin UI. Range: [15, 3600].
 	SettingKeyChannelMonitorDefaultIntervalSeconds = "channel_monitor_default_interval_seconds"
 
-	// SettingKeyAvailableChannelsEnabled is a DB-backed soft switch for the "Available Channels"
-	// user-facing aggregate view. When false: user endpoint returns an empty list and the
-	// sidebar entry is hidden. Defaults to false (opt-in feature).
-	SettingKeyAvailableChannelsEnabled = "available_channels_enabled"
+// SettingKeyAvailableChannelsEnabled is a DB-backed soft switch for the "Available Channels"
+		// user-facing aggregate view. When false: user endpoint returns an empty list and the
+		// sidebar entry is hidden. Defaults to false (opt-in feature).
+		// P4: prefer SettingKeyModelPlazaEnabled; readers accept either key (OR).
+		SettingKeyAvailableChannelsEnabled = "available_channels_enabled"
+
+		// SettingKeyModelPlazaEnabled is the P4 product name for available_channels_enabled.
+		// Writers dual-write both keys; readers treat either "true" as enabled.
+		SettingKeyModelPlazaEnabled = "model_plaza_enabled"
 
 	// =========================
 	// Overload Cooldown (529)

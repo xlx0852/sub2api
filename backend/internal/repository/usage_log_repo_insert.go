@@ -1284,10 +1284,17 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 	videoDurationSeconds := nullInt(log.VideoDurationSeconds)
 	serviceTier := nullString(log.ServiceTier)
 	reasoningEffort := nullString(log.ReasoningEffort)
-	inboundEndpoint := nullString(log.InboundEndpoint)
-	upstreamEndpoint := nullString(log.UpstreamEndpoint)
-	channelID := nullInt64(log.ChannelID)
-	modelMappingChain := nullString(log.ModelMappingChain)
+inboundEndpoint := nullString(log.InboundEndpoint)
+		upstreamEndpoint := nullString(log.UpstreamEndpoint)
+		// P4: PricingPolicyID aliases ChannelID for sell-price policy reporting.
+		if log.ChannelID == nil && log.PricingPolicyID != nil {
+			log.ChannelID = log.PricingPolicyID
+		}
+		if log.PricingPolicyID == nil && log.ChannelID != nil {
+			log.PricingPolicyID = log.ChannelID
+		}
+		channelID := nullInt64(log.ChannelID)
+		modelMappingChain := nullString(log.ModelMappingChain)
 	billingTier := nullString(log.BillingTier)
 	billingMode := nullString(log.BillingMode)
 	requestedModel := strings.TrimSpace(log.RequestedModel)

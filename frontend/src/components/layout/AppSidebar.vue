@@ -777,14 +777,14 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/users', label: t('nav.users'), icon: UsersIcon, hideInSimpleMode: true },
     { path: '/admin/groups', label: t('nav.groups'), icon: FolderIcon, hideInSimpleMode: true },
     {
-      path: '/admin/channels',
+      path: '/admin/sell-price-policies',
       label: t('nav.channelManagement'),
       icon: ChannelIcon,
       hideInSimpleMode: true,
       expandOnly: true,
       children: [
-        { path: '/admin/channels/pricing', label: t('nav.channelPricing'), icon: PriceTagIcon },
-        { path: '/admin/channels/monitor', label: t('nav.channelMonitor'), icon: SignalIcon, featureFlag: flagChannelMonitor },
+        { path: '/admin/sell-price-policies/pricing', label: t('nav.channelPricing'), icon: PriceTagIcon },
+        { path: '/admin/endpoint-monitors', label: t('nav.channelMonitor'), icon: SignalIcon, featureFlag: flagChannelMonitor },
       ],
     },
     { path: '/admin/accounts', label: t('nav.accounts'), icon: GlobeIcon },

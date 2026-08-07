@@ -5867,7 +5867,7 @@
             </p>
             <p class="mt-1.5 text-xs">
               <router-link
-                to="/admin/channels/monitor"
+                to="/admin/endpoint-monitors"
                 class="inline-flex items-center gap-1 text-primary-600 hover:underline dark:text-primary-400"
               >
                 {{ t('admin.settings.features.channelMonitor.configureLink') }}
@@ -5917,7 +5917,7 @@
             </p>
             <p class="mt-1.5 text-xs">
               <router-link
-                to="/admin/channels/pricing"
+                to="/admin/sell-price-policies/pricing"
                 class="inline-flex items-center gap-1 text-primary-600 hover:underline dark:text-primary-400"
               >
                 {{ t('admin.settings.features.availableChannels.configureLink') }}

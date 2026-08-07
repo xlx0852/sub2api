@@ -217,10 +217,11 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyBalanceLowNotifyThreshold,
 		SettingKeyBalanceLowNotifyRechargeURL,
 		SettingKeyAccountQuotaNotifyEnabled,
-		SettingKeyChannelMonitorEnabled,
-		SettingKeyChannelMonitorDefaultIntervalSeconds,
-		SettingKeyAvailableChannelsEnabled,
-		SettingKeyAffiliateEnabled,
+SettingKeyChannelMonitorEnabled,
+			SettingKeyChannelMonitorDefaultIntervalSeconds,
+			SettingKeyAvailableChannelsEnabled,
+			SettingKeyModelPlazaEnabled,
+			SettingKeyAffiliateEnabled,
 		SettingKeyRiskControlEnabled,
 		SettingKeyAllowUserViewErrorRequests,
 	}
@@ -330,9 +331,10 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		ChannelMonitorEnabled:                !isFalseSettingValue(settings[SettingKeyChannelMonitorEnabled]),
 		ChannelMonitorDefaultIntervalSeconds: parseChannelMonitorInterval(settings[SettingKeyChannelMonitorDefaultIntervalSeconds]),
 
-		AvailableChannelsEnabled: settings[SettingKeyAvailableChannelsEnabled] == "true",
+AvailableChannelsEnabled: settings[SettingKeyAvailableChannelsEnabled] == "true" ||
+				settings[SettingKeyModelPlazaEnabled] == "true",
 
-		AffiliateEnabled: settings[SettingKeyAffiliateEnabled] == "true",
+			AffiliateEnabled: settings[SettingKeyAffiliateEnabled] == "true",
 
 		RiskControlEnabled: settings[SettingKeyRiskControlEnabled] == "true",
 
@@ -405,14 +407,18 @@ type AvailableChannelsRuntime struct {
 // from the settings store. Fail-closed: on error returns Enabled=false, matching
 // the opt-in default (unknown ↔ disabled).
 func (s *SettingService) GetAvailableChannelsRuntime(ctx context.Context) AvailableChannelsRuntime {
-	vals, err := s.settingRepo.GetMultiple(ctx, []string{SettingKeyAvailableChannelsEnabled})
-	if err != nil {
-		return AvailableChannelsRuntime{Enabled: false}
+		vals, err := s.settingRepo.GetMultiple(ctx, []string{
+			SettingKeyAvailableChannelsEnabled,
+			SettingKeyModelPlazaEnabled,
+		})
+		if err != nil {
+			return AvailableChannelsRuntime{Enabled: false}
+		}
+		return AvailableChannelsRuntime{
+			Enabled: vals[SettingKeyAvailableChannelsEnabled] == "true" ||
+				vals[SettingKeyModelPlazaEnabled] == "true",
+		}
 	}
-	return AvailableChannelsRuntime{
-		Enabled: vals[SettingKeyAvailableChannelsEnabled] == "true",
-	}
-}
 
 // IsUserErrorViewAllowed reads the user-facing error-requests visibility switch
 // directly from the settings store. Fail-closed: on error returns false (opt-in default).
