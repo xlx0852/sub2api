@@ -15,19 +15,19 @@ export default {
       },
       features: {
         channelMonitor: {
-          title: '渠道监控',
-          description: '定期对配置的渠道发起健康检查，向用户展示可用性与延迟。关闭后调度器停止扫描，用户端列表为空。',
+          title: '端点监控',
+          description: '定期对配置的端点发起健康检查，向用户展示可用性与延迟。关闭后调度器停止扫描，用户端列表为空。',
           configureLink: '前往 售价与监控 > 端点监控 配置监控项',
-          enabled: '启用渠道监控',
+          enabled: '启用端点监控',
           enabledHint: '关闭后后台不再执行定时检测，已有数据保留。',
           defaultInterval: '默认检测间隔（秒）',
-          defaultIntervalHint: '新建渠道监控时表单的默认值，可被单个渠道覆盖。范围 15 – 3600 秒。',
+          defaultIntervalHint: '新建监控时表单的默认值，可被单项覆盖。范围 15 – 3600 秒。',
         },
         availableChannels: {
-          title: '可用渠道',
-          description: '向已登录用户展示他们能访问的渠道、模型和定价聚合视图。默认关闭。',
-          configureLink: '前往 售价与监控 > 售价策略 配置模型售价（也可在分组 → 定价绑定）',
-          enabled: '启用可用渠道',
+          title: '模型广场',
+          description: '向已登录用户展示可访问的模型、售价策略与分组折扣聚合视图。默认关闭。',
+          configureLink: '前往 分组 → 定价 绑定售价，或 售价与监控 > 售价策略 维护条目',
+          enabled: '启用模型广场',
           enabledHint: '关闭后用户端侧边栏入口隐藏，接口返回空数组。',
         },
         riskControl: {

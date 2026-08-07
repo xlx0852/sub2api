@@ -1,17 +1,17 @@
 export default {
     availableChannels: {
-      title: '可用渠道',
-      description: '按渠道聚合查看关联分组与支持模型（已展开通配符）',
-      searchPlaceholder: '搜索渠道或模型...',
+      title: '模型广场预览',
+      description: '按售价策略聚合查看绑定分组与支持模型（已展开通配符）',
+      searchPlaceholder: '搜索策略或模型...',
       columns: {
-        name: '渠道名',
+        name: '策略名',
         status: '状态',
         billingSource: '计费模型来源',
-        groups: '关联分组',
+        groups: '绑定分组',
         supportedModels: '支持模型'
       },
       empty: '暂无数据',
-      noGroups: '未关联分组',
+      noGroups: '未绑定分组',
       noModels: '未配置模型映射',
       noPricing: '未配置定价',
       statusActive: '启用',
@@ -41,7 +41,7 @@ export default {
     // Channel Management → Sell-price policy library (P0/P1 product rename; storage still channels)
     channels: {
       title: '售价策略',
-      description: '配置模型售价覆盖（相对官方基准），并绑定到分组；分组倍率仍在分组管理中设置',
+      description: '配置模型售价覆盖（相对官方基准）。主路径：分组 → 定价 绑定本策略；此处为策略库。',
       emptyModelsInPricing: '平台 {platform} 的定价中没有可用模型',
       noGroupsSelected: '平台 {platform} 未选择分组',
       searchChannels: '搜索售价策略...',
@@ -55,10 +55,11 @@ export default {
       pricingUnit: '条定价',
       emptyPriceBadge: '空价 {count}',
       pricingSummaryHint: '官方基准 × 售价策略覆盖 × 分组倍率 = 用户实扣；账号成本默认跟官方基准',
-      unboundWarning: '未绑定分组 — 策略不会生效，用户仍按官方基准计费',
+      libraryHint: '提示：日常改 luna×N 等售价，优先在「分组管理 → 定价」绑定/预览；本页用于维护策略条目本身。',
+      unboundWarning: '未绑定分组 — 策略不会生效，用户仍按官方基准计费。请到「分组 → 定价」绑定。',
       unboundBadge: '未生效',
       noChannelsYet: '暂无售价策略',
-      createFirstChannel: '创建第一个售价策略来覆盖模型售价；也可在「分组 → 定价」中绑定',
+      createFirstChannel: '创建第一个售价策略来覆盖模型售价；创建后请在「分组 → 定价」绑定才会生效',
       loadError: '加载售价策略失败',
       createSuccess: '售价策略创建成功',
       updateSuccess: '售价策略更新成功',
@@ -511,8 +512,8 @@ export default {
 
     // Channel Monitor
     channelMonitor: {
-      title: '渠道监控',
-      description: '监测各渠道的可用性、延迟和状态',
+      title: '端点监控',
+      description: '监测各端点的可用性、延迟和状态',
       searchPlaceholder: '搜索监控名称...',
       allProviders: '全部供应商',
       allStatus: '全部状态',
@@ -520,8 +521,8 @@ export default {
       onlyEnabled: '仅启用',
       onlyDisabled: '仅禁用',
       createButton: '新增监控',
-      createTitle: '新增渠道监控',
-      editTitle: '编辑渠道监控',
+      createTitle: '新增端点监控',
+      editTitle: '编辑端点监控',
       runNow: '立即检测',
       runSuccess: '检测完成',
       runFailed: '检测失败',
@@ -576,7 +577,7 @@ export default {
       },
       runResultTitle: '检测结果',
       noMonitorsYet: '暂无监控',
-      createFirstMonitor: '创建第一个监控来跟踪渠道可用性',
+      createFirstMonitor: '创建第一个监控来跟踪端点可用性',
       advanced: {
         section: '高级（可选）',
         sectionHint: '自定义请求头和请求体，用于突破上游的客户端识别限制（如仅允许 Claude Code 客户端）。',
