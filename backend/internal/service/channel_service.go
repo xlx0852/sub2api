@@ -653,7 +653,7 @@ func validateChannelConfig(pricing []ChannelModelPricing, mapping map[string]map
 }
 
 // validatePricingEntries 校验定价条目（冲突检测 + 区间校验 + 计费模式校验），
-// 同时用于主渠道定价和 account_stats_pricing_rules 的内部定价。
+// 用于售价策略模型定价校验。
 func validatePricingEntries(pricing []ChannelModelPricing) error {
 	if err := validateNoConflictingModels(pricing); err != nil {
 		return err
@@ -760,10 +760,7 @@ func (s *ChannelService) Create(ctx context.Context, input *CreateChannelInput) 
 		ModelPricing:       input.ModelPricing,
 		ModelMapping:       input.ModelMapping,
 		Features:           input.Features,
-		FeaturesConfig:     input.FeaturesConfig,
-		// Product: sell-price policy account-cost overrides are not used; always off.
-		ApplyPricingToAccountStats: false,
-		AccountStatsPricingRules:   nil,
+		FeaturesConfig: input.FeaturesConfig,
 	}
 	channel.normalizeBillingModelSource()
 
@@ -869,9 +866,6 @@ func (s *ChannelService) applyUpdateInput(ctx context.Context, channel *Channel,
 	if input.FeaturesConfig != nil {
 		channel.FeaturesConfig = input.FeaturesConfig
 	}
-	// Product: always strip sell-price policy account-cost overrides on update.
-	channel.ApplyPricingToAccountStats = false
-	channel.AccountStatsPricingRules = nil
 	return nil
 }
 
@@ -1049,8 +1043,6 @@ type CreateChannelInput struct {
 	RestrictModels             bool
 	Features                   string
 	FeaturesConfig             map[string]any
-	ApplyPricingToAccountStats bool
-	AccountStatsPricingRules   []AccountStatsPricingRule
 }
 
 // UpdateChannelInput 更新渠道输入
@@ -1065,6 +1057,4 @@ type UpdateChannelInput struct {
 	RestrictModels             *bool
 	Features                   *string
 	FeaturesConfig             map[string]any
-	ApplyPricingToAccountStats *bool
-	AccountStatsPricingRules   *[]AccountStatsPricingRule
 }

@@ -35,13 +35,6 @@ export interface ChannelModelPricing {
   intervals: PricingInterval[]
 }
 
-export interface AccountStatsPricingRule {
-  id?: number
-  name: string
-  group_ids: number[]
-  account_ids: number[]
-  pricing: ChannelModelPricing[]
-}
 
 export interface Channel {
   id: number
@@ -54,8 +47,6 @@ export interface Channel {
   group_ids: number[]
   model_pricing: ChannelModelPricing[]
   model_mapping: Record<string, Record<string, string>> // platform → {src→dst}
-  apply_pricing_to_account_stats: boolean
-  account_stats_pricing_rules: AccountStatsPricingRule[]
   created_at: string
   updated_at: string
 }
@@ -69,8 +60,6 @@ export interface CreateChannelRequest {
   billing_model_source?: string
   restrict_models?: boolean
   features_config?: Record<string, unknown>
-  apply_pricing_to_account_stats?: boolean
-  account_stats_pricing_rules?: AccountStatsPricingRule[]
 }
 
 export interface UpdateChannelRequest {
@@ -83,8 +72,6 @@ export interface UpdateChannelRequest {
   billing_model_source?: string
   restrict_models?: boolean
   features_config?: Record<string, unknown>
-  apply_pricing_to_account_stats?: boolean
-  account_stats_pricing_rules?: AccountStatsPricingRule[]
 }
 
 interface PaginatedResponse<T> {

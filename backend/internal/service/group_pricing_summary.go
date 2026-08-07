@@ -64,10 +64,8 @@ type GroupPricingSummary struct {
 	// Hint is a short human-readable source line for UI badges.
 	Hint string `json:"hint"`
 
-	BillingModelSource         string `json:"billing_model_source,omitempty"`
-	RestrictModels             bool   `json:"restrict_models"`
-	ApplyPricingToAccountStats bool   `json:"apply_pricing_to_account_stats"`
-	AccountStatsRuleCount      int    `json:"account_stats_rule_count"`
+	BillingModelSource string `json:"billing_model_source,omitempty"`
+	RestrictModels     bool   `json:"restrict_models"`
 
 	Models []GroupPricingModelPreview `json:"models"`
 
@@ -306,8 +304,6 @@ func (s *ChannelService) BuildGroupPricingSummary(ctx context.Context, group *Gr
 		summary.InactivePolicy = !policy.IsActive()
 		summary.BillingModelSource = policy.BillingModelSource
 		summary.RestrictModels = policy.RestrictModels
-		summary.ApplyPricingToAccountStats = policy.ApplyPricingToAccountStats
-		summary.AccountStatsRuleCount = len(policy.AccountStatsPricingRules)
 		if summary.Effective {
 			summary.Hint = "policy"
 		} else {

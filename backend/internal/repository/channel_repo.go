@@ -46,9 +46,9 @@ func (r *channelRepository) Create(ctx context.Context, channel *service.Channel
 			return err
 		}
 		err = tx.QueryRowContext(ctx,
-			`INSERT INTO channels (name, description, status, model_mapping, billing_model_source, restrict_models, features, features_config, apply_pricing_to_account_stats) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			`INSERT INTO channels (name, description, status, model_mapping, billing_model_source, restrict_models, features, features_config, apply_pricing_to_account_stats) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false)
 			 RETURNING id, created_at, updated_at`,
-			channel.Name, channel.Description, channel.Status, modelMappingJSON, channel.BillingModelSource, channel.RestrictModels, channel.Features, featuresConfigJSON, channel.ApplyPricingToAccountStats,
+			channel.Name, channel.Description, channel.Status, modelMappingJSON, channel.BillingModelSource, channel.RestrictModels, channel.Features, featuresConfigJSON,
 		).Scan(&channel.ID, &channel.CreatedAt, &channel.UpdatedAt)
 		if err != nil {
 			if isUniqueViolation(err) {
@@ -72,11 +72,6 @@ func (r *channelRepository) Create(ctx context.Context, channel *service.Channel
 		}
 
 		// 设置账号统计定价规则
-		if len(channel.AccountStatsPricingRules) > 0 {
-			if err := replaceAccountStatsPricingRulesTx(ctx, tx, channel.ID, channel.AccountStatsPricingRules); err != nil {
-				return err
-			}
-		}
 
 		return nil
 	})
@@ -88,7 +83,7 @@ func (r *channelRepository) GetByID(ctx context.Context, id int64) (*service.Cha
 	err := r.db.QueryRowContext(ctx,
 		`SELECT id, name, description, status, model_mapping, billing_model_source, restrict_models, features, features_config, apply_pricing_to_account_stats, created_at, updated_at
 		 FROM channels WHERE id = $1`, id,
-	).Scan(&ch.ID, &ch.Name, &ch.Description, &ch.Status, &modelMappingJSON, &ch.BillingModelSource, &ch.RestrictModels, &ch.Features, &featuresConfigJSON, &ch.ApplyPricingToAccountStats, &ch.CreatedAt, &ch.UpdatedAt)
+	).Scan(&ch.ID, &ch.Name, &ch.Description, &ch.Status, &modelMappingJSON, &ch.BillingModelSource, &ch.RestrictModels, &ch.Features, &featuresConfigJSON, new(bool), &ch.CreatedAt, &ch.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, service.ErrChannelNotFound
 	}
@@ -110,11 +105,6 @@ func (r *channelRepository) GetByID(ctx context.Context, id int64) (*service.Cha
 	}
 	ch.ModelPricing = pricing
 
-	statsPricingRules, err := r.loadAccountStatsPricingRules(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	ch.AccountStatsPricingRules = statsPricingRules
 
 	return ch, nil
 }
@@ -130,9 +120,9 @@ func (r *channelRepository) Update(ctx context.Context, channel *service.Channel
 			return err
 		}
 		result, err := tx.ExecContext(ctx,
-			`UPDATE channels SET name = $1, description = $2, status = $3, model_mapping = $4, billing_model_source = $5, restrict_models = $6, features = $7, features_config = $8, apply_pricing_to_account_stats = $9, updated_at = NOW()
-			 WHERE id = $10`,
-			channel.Name, channel.Description, channel.Status, modelMappingJSON, channel.BillingModelSource, channel.RestrictModels, channel.Features, featuresConfigJSON, channel.ApplyPricingToAccountStats, channel.ID,
+			`UPDATE channels SET name = $1, description = $2, status = $3, model_mapping = $4, billing_model_source = $5, restrict_models = $6, features = $7, features_config = $8, apply_pricing_to_account_stats = false, updated_at = NOW()
+			 WHERE id = $9`,
+			channel.Name, channel.Description, channel.Status, modelMappingJSON, channel.BillingModelSource, channel.RestrictModels, channel.Features, featuresConfigJSON, channel.ID,
 		)
 		if err != nil {
 			if isUniqueViolation(err) {
@@ -160,11 +150,6 @@ func (r *channelRepository) Update(ctx context.Context, channel *service.Channel
 		}
 
 		// 更新账号统计定价规则
-		if channel.AccountStatsPricingRules != nil {
-			if err := replaceAccountStatsPricingRulesTx(ctx, tx, channel.ID, channel.AccountStatsPricingRules); err != nil {
-				return err
-			}
-		}
 
 		return nil
 	})
@@ -242,7 +227,7 @@ func (r *channelRepository) List(ctx context.Context, params pagination.Paginati
 	for rows.Next() {
 		var ch service.Channel
 		var modelMappingJSON, featuresConfigJSON []byte
-		if err := rows.Scan(&ch.ID, &ch.Name, &ch.Description, &ch.Status, &modelMappingJSON, &ch.BillingModelSource, &ch.RestrictModels, &ch.Features, &featuresConfigJSON, &ch.ApplyPricingToAccountStats, &ch.CreatedAt, &ch.UpdatedAt); err != nil {
+		if err := rows.Scan(&ch.ID, &ch.Name, &ch.Description, &ch.Status, &modelMappingJSON, &ch.BillingModelSource, &ch.RestrictModels, &ch.Features, &featuresConfigJSON, new(bool), &ch.CreatedAt, &ch.UpdatedAt); err != nil {
 			return nil, nil, fmt.Errorf("scan channel: %w", err)
 		}
 		ch.ModelMapping = unmarshalModelMapping(modelMappingJSON)
@@ -264,14 +249,9 @@ func (r *channelRepository) List(ctx context.Context, params pagination.Paginati
 		if err != nil {
 			return nil, nil, err
 		}
-		statsRulesMap, err := r.batchLoadAccountStatsPricingRules(ctx, channelIDs)
-		if err != nil {
-			return nil, nil, err
-		}
 		for i := range channels {
 			channels[i].GroupIDs = groupMap[channels[i].ID]
 			channels[i].ModelPricing = pricingMap[channels[i].ID]
-			channels[i].AccountStatsPricingRules = statsRulesMap[channels[i].ID]
 		}
 	}
 
@@ -329,7 +309,7 @@ func (r *channelRepository) ListAll(ctx context.Context) ([]service.Channel, err
 	for rows.Next() {
 		var ch service.Channel
 		var modelMappingJSON, featuresConfigJSON []byte
-		if err := rows.Scan(&ch.ID, &ch.Name, &ch.Description, &ch.Status, &modelMappingJSON, &ch.BillingModelSource, &ch.RestrictModels, &ch.Features, &featuresConfigJSON, &ch.ApplyPricingToAccountStats, &ch.CreatedAt, &ch.UpdatedAt); err != nil {
+		if err := rows.Scan(&ch.ID, &ch.Name, &ch.Description, &ch.Status, &modelMappingJSON, &ch.BillingModelSource, &ch.RestrictModels, &ch.Features, &featuresConfigJSON, new(bool), &ch.CreatedAt, &ch.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan channel: %w", err)
 		}
 		ch.ModelMapping = unmarshalModelMapping(modelMappingJSON)
@@ -358,15 +338,9 @@ func (r *channelRepository) ListAll(ctx context.Context) ([]service.Channel, err
 	}
 
 	// 批量加载账号统计定价规则
-	statsRulesMap, err := r.batchLoadAccountStatsPricingRules(ctx, channelIDs)
-	if err != nil {
-		return nil, err
-	}
-
 	for i := range channels {
 		channels[i].GroupIDs = groupMap[channels[i].ID]
 		channels[i].ModelPricing = pricingMap[channels[i].ID]
-		channels[i].AccountStatsPricingRules = statsRulesMap[channels[i].ID]
 	}
 
 	return channels, nil
