@@ -17,7 +17,7 @@ export default {
         channelMonitor: {
           title: 'Channel Monitor',
           description: 'Periodically probe configured channels and surface availability / latency to users. Turning it off stops the scheduler and returns an empty list on the user page.',
-          configureLink: 'Configure monitors in Channel Management > Channel Monitor',
+          configureLink: 'Configure monitors in Pricing & Monitor > Endpoint Monitor',
           enabled: 'Enable Channel Monitor',
           enabledHint: 'Disabling stops background checks; existing history is preserved.',
           defaultInterval: 'Default check interval (seconds)',
@@ -26,7 +26,7 @@ export default {
         availableChannels: {
           title: 'Available Channels',
           description: 'Show logged-in users an aggregate view of the channels, models and pricing they can access. Disabled by default.',
-          configureLink: 'Configure model pricing in Channel Management > Channel Pricing',
+          configureLink: 'Configure sell prices in Pricing & Monitor > Sell-Price Policies (or bind from Groups → Pricing)',
           enabled: 'Enable Available Channels',
           enabledHint: 'When off, the sidebar entry is hidden and the endpoint returns an empty list.',
         },
@@ -358,6 +358,11 @@ export default {
         openaiCodexUserAgent: 'OpenAI Codex UA',
         openaiCodexUserAgentPlaceholder: 'codex-tui/0.125.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.125.0)',
         openaiCodexUserAgentHint: 'Used to bypass Cloudflare browser-UA challenges on the OpenAI upstream. Only applies when the client User-Agent is detected as a browser (Mozilla/...). Leave empty to use the built-in default.',
+        openaiCodexClientVersion: 'Codex client version',
+        openaiCodexClientVersionHint: 'Empty follows auto-sync/builtin. Also rebuilds admin UA version segment.',
+        openaiCodexClientVersionSynced: 'Synced official version',
+        openaiCodexVersionAutoSync: 'Auto-sync Codex version',
+        openaiCodexVersionAutoSyncHint: 'Polls openai/codex latest stable every 6h with startup debounce.',
         codexHardeningTitle: "Codex Settings",
         codexClientRestrictionTitle: "Codex client restriction",
         codexHardeningDesc:

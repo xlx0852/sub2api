@@ -81,6 +81,9 @@ type APIKey struct {
 	Reset1dAt     *time.Time `json:"reset_1d_at,omitempty"`
 	Reset7dAt     *time.Time `json:"reset_7d_at,omitempty"`
 
+	// ForceOpenAIFast 强制该 Key 的 OpenAI 请求走 Fast（priority）并按 Fast 计费
+	ForceOpenAIFast bool `json:"force_openai_fast"`
+
 	User  *User  `json:"user,omitempty"`
 	Group *Group `json:"group,omitempty"`
 }
@@ -164,9 +167,24 @@ type AdminGroup struct {
 	ActiveAccountCount      int64          `json:"active_account_count,omitempty"`
 	RateLimitedAccountCount int64          `json:"rate_limited_account_count,omitempty"`
 
-	// 分组排序
-	SortOrder int `json:"sort_order"`
-}
+// 分组排序
+		SortOrder int `json:"sort_order"`
+
+		// 售价策略来源（管理员列表/详情；底层仍是 channel 绑定）
+		SellPriceSource *GroupSellPriceSource `json:"sell_price_source,omitempty"`
+	}
+
+	// GroupSellPriceSource 描述分组当前售价覆盖来源（官方 / 售价策略）。
+	type GroupSellPriceSource struct {
+		Source         string   `json:"source"` // official | policy
+		PolicyID       *int64   `json:"policy_id,omitempty"`
+		PolicyName     string   `json:"policy_name,omitempty"`
+		PolicyStatus   string   `json:"policy_status,omitempty"`
+		Effective      bool     `json:"effective"`
+		InactivePolicy bool     `json:"inactive_policy"`
+		ModelCount     int      `json:"model_count"`
+		SampleModels   []string `json:"sample_models,omitempty"`
+	}
 
 type Account struct {
 	ID       int64   `json:"id"`

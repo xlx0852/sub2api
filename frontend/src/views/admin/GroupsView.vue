@@ -160,6 +160,10 @@
                     <p class="text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.groups.columns.rateMultiplier') }}</p>
                     <p class="mt-1 text-base font-semibold text-gray-900 dark:text-white">{{ row.rate_multiplier }}x</p>
                   </div>
+                  <div v-if="isColumnVisible('sell_price_source')" class="rounded-md bg-black/[0.025] p-3 dark:bg-white/[0.04]">
+                    <p class="text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.groups.columns.sellPriceSource') }}</p>
+                    <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ sellSourceLabel(row.sell_price_source) }}</p>
+                  </div>
                   <div v-if="isColumnVisible('account_count')" class="rounded-md bg-black/[0.025] p-3 dark:bg-white/[0.04]">
                     <p class="text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.groups.columns.accounts') }}</p>
                     <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">
@@ -199,13 +203,16 @@
                 <button class="flex h-11 items-center justify-center gap-1.5 text-xs font-medium text-gray-500 hover:bg-black/[0.035] hover:text-gray-950 dark:text-dark-400 dark:hover:bg-white/[0.05] dark:hover:text-white" @click.stop="handleEdit(row)">
                   <Icon name="edit" size="sm" />{{ t('common.edit') }}
                 </button>
-                <button class="flex h-11 items-center justify-center gap-1.5 border-l border-black/[0.07] text-xs font-medium text-gray-500 hover:bg-black/[0.035] hover:text-gray-950 dark:border-white/[0.08] dark:text-dark-400 dark:hover:bg-white/[0.05] dark:hover:text-white" @click.stop="handleRateMultipliers(row)">
+                <button class="flex h-11 items-center justify-center gap-1.5 border-l border-black/[0.07] text-xs font-medium text-gray-500 hover:bg-black/[0.035] hover:text-sky-600 dark:border-white/[0.08] dark:text-dark-400 dark:hover:bg-white/[0.05] dark:hover:text-sky-400" @click.stop="handlePricing(row)">
+                  <Icon name="calculator" size="sm" />{{ t('admin.groups.pricing.action') }}
+                </button>
+                <button class="flex h-11 items-center justify-center gap-1.5 border-t border-black/[0.07] text-xs font-medium text-gray-500 hover:bg-black/[0.035] hover:text-gray-950 dark:border-white/[0.08] dark:text-dark-400 dark:hover:bg-white/[0.05] dark:hover:text-white" @click.stop="handleRateMultipliers(row)">
                   <Icon name="dollar" size="sm" />{{ t('admin.groups.rateMultipliers') }}
                 </button>
-                <button class="flex h-11 items-center justify-center gap-1.5 border-t border-black/[0.07] text-xs font-medium text-gray-500 hover:bg-black/[0.035] hover:text-gray-950 dark:border-white/[0.08] dark:text-dark-400 dark:hover:bg-white/[0.05] dark:hover:text-white" @click.stop="handleRPMOverrides(row)">
+                <button class="flex h-11 items-center justify-center gap-1.5 border-l border-t border-black/[0.07] text-xs font-medium text-gray-500 hover:bg-black/[0.035] hover:text-gray-950 dark:border-white/[0.08] dark:text-dark-400 dark:hover:bg-white/[0.05] dark:hover:text-white" @click.stop="handleRPMOverrides(row)">
                   <Icon name="bolt" size="sm" />{{ t('admin.groups.rpmOverrides') }}
                 </button>
-                <button class="flex h-11 items-center justify-center gap-1.5 border-l border-t border-black/[0.07] text-xs font-medium text-gray-500 hover:bg-red-50 hover:text-red-600 dark:border-white/[0.08] dark:text-dark-400 dark:hover:bg-red-950/20 dark:hover:text-red-400" @click.stop="handleDelete(row)">
+                <button class="col-span-2 flex h-11 items-center justify-center gap-1.5 border-t border-black/[0.07] text-xs font-medium text-gray-500 hover:bg-red-50 hover:text-red-600 dark:border-white/[0.08] dark:text-dark-400 dark:hover:bg-red-950/20 dark:hover:text-red-400" @click.stop="handleDelete(row)">
                   <Icon name="trash" size="sm" />{{ t('common.delete') }}
                 </button>
               </footer>
@@ -241,6 +248,26 @@
             <span class="text-sm text-gray-700 dark:text-gray-300"
               >{{ value }}x</span
             >
+          </template>
+
+          <template #cell-sell_price_source="{ row }">
+            <div class="min-w-[9rem] space-y-0.5">
+              <span
+                class="inline-flex max-w-full items-center rounded px-1.5 py-0.5 text-[11px] font-medium"
+                :class="sellSourceBadgeClass(row.sell_price_source)"
+                :title="sellSourceTitle(row.sell_price_source)"
+              >
+                <span class="truncate">{{ sellSourceLabel(row.sell_price_source) }}</span>
+              </span>
+              <p
+                v-if="row.sell_price_source?.sample_models?.length"
+                class="truncate text-[10px] text-gray-400"
+                :title="row.sell_price_source.sample_models.join(', ')"
+              >
+                {{ row.sell_price_source.sample_models.slice(0, 2).join(', ') }}
+                <span v-if="(row.sell_price_source.model_count || 0) > 2">…</span>
+              </p>
+            </div>
           </template>
 
           <template #cell-is_exclusive="{ value }">
@@ -353,6 +380,13 @@
               >
                 <Icon name="edit" size="sm" />
                 <span class="text-xs">{{ t("common.edit") }}</span>
+              </button>
+              <button
+                @click="handlePricing(row)"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-sky-600 dark:hover:bg-dark-700 dark:hover:text-sky-400"
+              >
+                <Icon name="calculator" size="sm" />
+                <span class="text-xs">{{ t("admin.groups.pricing.action") }}</span>
               </button>
               <button
                 @click="handleRateMultipliers(row)"
@@ -3345,6 +3379,14 @@
       @close="showRPMOverridesModal = false"
       @success="loadGroups"
     />
+
+    <!-- Group sell-price policy modal -->
+    <GroupPricingModal
+      :show="showPricingModal"
+      :group="pricingGroup"
+      @close="showPricingModal = false"
+      @success="loadGroups"
+    />
   </AppLayout>
 </template>
 
@@ -3368,7 +3410,9 @@ import PlatformIcon from "@/components/common/PlatformIcon.vue";
 import Icon from "@/components/icons/Icon.vue";
 import GroupRateMultipliersModal from "@/components/admin/group/GroupRateMultipliersModal.vue";
 import GroupRPMOverridesModal from "@/components/admin/group/GroupRPMOverridesModal.vue";
+import GroupPricingModal from "@/components/admin/group/GroupPricingModal.vue";
 import GroupCapacityBadge from "@/components/common/GroupCapacityBadge.vue";
+import type { GroupSellPriceSource } from "@/types";
 import { VueDraggable } from "vue-draggable-plus";
 import { createStableObjectKeyResolver } from "@/utils/stableObjectKey";
 import { useKeyedDebouncedSearch } from "@/composables/useKeyedDebouncedSearch";
@@ -3416,6 +3460,11 @@ const allColumns = computed<Column[]>(() => [
     key: "rate_multiplier",
     label: t("admin.groups.columns.rateMultiplier"),
     sortable: true,
+  },
+  {
+    key: "sell_price_source",
+    label: t("admin.groups.columns.sellPriceSource"),
+    sortable: false,
   },
   {
     key: "is_exclusive",
@@ -4766,6 +4815,44 @@ const removeEditMessagesDispatchMapping = (row: MessagesDispatchMappingRow) => {
   if (index !== -1) {
     editForm.exact_model_mappings.splice(index, 1);
   }
+};
+
+const showPricingModal = ref(false);
+const pricingGroup = ref<AdminGroup | null>(null);
+
+const handlePricing = (group: AdminGroup) => {
+  pricingGroup.value = group;
+  showPricingModal.value = true;
+};
+
+const sellSourceLabel = (src?: GroupSellPriceSource | null) => {
+  if (!src || src.source === "official" || !src.policy_id) {
+    return t("admin.groups.pricing.sourceOfficial");
+  }
+  if (!src.effective || src.inactive_policy) {
+    return src.policy_name
+      ? t("admin.groups.pricing.sourcePolicyNameInactive", { name: src.policy_name })
+      : t("admin.groups.pricing.sourcePolicyInactive");
+  }
+  return src.policy_name || t("admin.groups.pricing.sourcePolicy");
+};
+
+const sellSourceTitle = (src?: GroupSellPriceSource | null) => {
+  if (!src || !src.policy_id) {
+    return t("admin.groups.pricing.officialOnlyDesc");
+  }
+  const models = src.sample_models?.join(", ") || "";
+  return [src.policy_name, models].filter(Boolean).join(" · ");
+};
+
+const sellSourceBadgeClass = (src?: GroupSellPriceSource | null) => {
+  if (!src || !src.policy_id || src.source === "official") {
+    return "bg-gray-100 text-gray-700 dark:bg-dark-600 dark:text-gray-300";
+  }
+  if (!src.effective || src.inactive_policy) {
+    return "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200";
+  }
+  return "bg-violet-100 text-violet-800 dark:bg-violet-950/40 dark:text-violet-200";
 };
 
 const handleRateMultipliers = (group: AdminGroup) => {

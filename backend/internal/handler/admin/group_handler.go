@@ -20,6 +20,8 @@ type GroupHandler struct {
 	adminService         service.AdminService
 	dashboardService     *service.DashboardService
 	groupCapacityService *service.GroupCapacityService
+	channelService       *service.ChannelService
+	billingService       *service.BillingService
 }
 
 type optionalLimitField struct {
@@ -72,11 +74,19 @@ func (f optionalLimitField) ToServiceInput() *float64 {
 }
 
 // NewGroupHandler creates a new admin group handler
-func NewGroupHandler(adminService service.AdminService, dashboardService *service.DashboardService, groupCapacityService *service.GroupCapacityService) *GroupHandler {
+func NewGroupHandler(
+	adminService service.AdminService,
+	dashboardService *service.DashboardService,
+	groupCapacityService *service.GroupCapacityService,
+	channelService *service.ChannelService,
+	billingService *service.BillingService,
+) *GroupHandler {
 	return &GroupHandler{
 		adminService:         adminService,
 		dashboardService:     dashboardService,
 		groupCapacityService: groupCapacityService,
+		channelService:       channelService,
+		billingService:       billingService,
 	}
 }
 
@@ -207,18 +217,19 @@ func (h *GroupHandler) List(c *gin.Context) {
 		isExclusive = &val
 	}
 
-	groups, total, err := h.adminService.ListGroups(c.Request.Context(), page, pageSize, platform, status, search, isExclusive, sortBy, sortOrder)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
+groups, total, err := h.adminService.ListGroups(c.Request.Context(), page, pageSize, platform, status, search, isExclusive, sortBy, sortOrder)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
 
-	outGroups := make([]dto.AdminGroup, 0, len(groups))
-	for i := range groups {
-		outGroups = append(outGroups, *dto.GroupFromServiceAdmin(&groups[i]))
+		outGroups := make([]dto.AdminGroup, 0, len(groups))
+		for i := range groups {
+			outGroups = append(outGroups, *dto.GroupFromServiceAdmin(&groups[i]))
+		}
+		h.attachSellPriceSources(c, outGroups, groups)
+		response.Paginated(c, outGroups, total, page, pageSize)
 	}
-	response.Paginated(c, outGroups, total, page, pageSize)
-}
 
 // GetAll handles getting all active groups without pagination.
 // Pass ?include_inactive=true to also include disabled groups (used by the
@@ -245,30 +256,39 @@ func (h *GroupHandler) GetAll(c *gin.Context) {
 		return
 	}
 
-	outGroups := make([]dto.AdminGroup, 0, len(groups))
-	for i := range groups {
-		outGroups = append(outGroups, *dto.GroupFromServiceAdmin(&groups[i]))
-	}
-	response.Success(c, outGroups)
-}
-
-// GetByID handles getting a group by ID
-// GET /api/v1/admin/groups/:id
-func (h *GroupHandler) GetByID(c *gin.Context) {
-	groupID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.BadRequest(c, "Invalid group ID")
-		return
+outGroups := make([]dto.AdminGroup, 0, len(groups))
+		for i := range groups {
+			outGroups = append(outGroups, *dto.GroupFromServiceAdmin(&groups[i]))
+		}
+		h.attachSellPriceSources(c, outGroups, groups)
+		response.Success(c, outGroups)
 	}
 
-	group, err := h.adminService.GetGroup(c.Request.Context(), groupID)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
+	// GetByID handles getting a group by ID
+	// GET /api/v1/admin/groups/:id
+	func (h *GroupHandler) GetByID(c *gin.Context) {
+		groupID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil {
+			response.BadRequest(c, "Invalid group ID")
+			return
+		}
 
-	response.Success(c, dto.GroupFromServiceAdmin(group))
-}
+		group, err := h.adminService.GetGroup(c.Request.Context(), groupID)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+
+		out := dto.GroupFromServiceAdmin(group)
+		if out != nil {
+			if sources, err := h.loadSellPriceSources(c, []int64{group.ID}); err == nil {
+				if src, ok := sources[group.ID]; ok {
+					out.SellPriceSource = sellPriceSourceToDTO(src)
+				}
+			}
+		}
+		response.Success(c, out)
+	}
 
 // GetModelsListCandidates handles getting candidate model IDs for custom /v1/models list.
 // GET /api/v1/admin/groups/:id/models-list-candidates
@@ -656,4 +676,119 @@ func (h *GroupHandler) UpdateSortOrder(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{"message": "Sort order updated successfully"})
+}
+
+// GetPricingSummary returns sell-price source + model preview for a group.
+// GET /api/v1/admin/groups/:id/pricing-summary
+func (h *GroupHandler) GetPricingSummary(c *gin.Context) {
+	if h.channelService == nil {
+		response.BadRequest(c, "pricing service unavailable")
+		return
+	}
+	groupID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || groupID <= 0 {
+		response.BadRequest(c, "Invalid group ID")
+		return
+	}
+
+	group, err := h.adminService.GetGroup(c.Request.Context(), groupID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	summary, err := h.channelService.BuildGroupPricingSummary(c.Request.Context(), group, h.billingService)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, summary)
+}
+
+type bindGroupSellPricePolicyRequest struct {
+	// PolicyID nil / omitted / 0 → unbind (follow official pricing)
+	PolicyID *int64 `json:"policy_id"`
+}
+
+// BindSellPricePolicy binds or unbinds the group's sell-price policy (channel under the hood).
+// PUT /api/v1/admin/groups/:id/sell-price-policy
+func (h *GroupHandler) BindSellPricePolicy(c *gin.Context) {
+	if h.channelService == nil {
+		response.BadRequest(c, "pricing service unavailable")
+		return
+	}
+	groupID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || groupID <= 0 {
+		response.BadRequest(c, "Invalid group ID")
+		return
+	}
+
+	// Ensure group exists
+	if _, err := h.adminService.GetGroup(c.Request.Context(), groupID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	var req bindGroupSellPricePolicyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	if err := h.channelService.BindGroupSellPricePolicy(c.Request.Context(), groupID, req.PolicyID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	// Return refreshed summary
+	group, err := h.adminService.GetGroup(c.Request.Context(), groupID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	summary, err := h.channelService.BuildGroupPricingSummary(c.Request.Context(), group, h.billingService)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, summary)
+}
+
+func (h *GroupHandler) loadSellPriceSources(c *gin.Context, groupIDs []int64) (map[int64]service.GroupSellPriceSource, error) {
+	if h.channelService == nil || len(groupIDs) == 0 {
+		return map[int64]service.GroupSellPriceSource{}, nil
+	}
+	return h.channelService.ListGroupSellPriceSources(c.Request.Context(), groupIDs)
+}
+
+func (h *GroupHandler) attachSellPriceSources(c *gin.Context, out []dto.AdminGroup, groups []service.Group) {
+	if len(out) == 0 || len(out) != len(groups) {
+		return
+	}
+	ids := make([]int64, len(groups))
+	for i := range groups {
+		ids[i] = groups[i].ID
+	}
+	sources, err := h.loadSellPriceSources(c, ids)
+	if err != nil || len(sources) == 0 {
+		return
+	}
+	for i := range out {
+		if src, ok := sources[out[i].ID]; ok {
+			out[i].SellPriceSource = sellPriceSourceToDTO(src)
+		}
+	}
+}
+
+func sellPriceSourceToDTO(src service.GroupSellPriceSource) *dto.GroupSellPriceSource {
+	return &dto.GroupSellPriceSource{
+		Source:         src.Source,
+		PolicyID:       src.PolicyID,
+		PolicyName:     src.PolicyName,
+		PolicyStatus:   src.PolicyStatus,
+		Effective:      src.Effective,
+		InactivePolicy: src.InactivePolicy,
+		ModelCount:     src.ModelCount,
+		SampleModels:   src.SampleModels,
+	}
 }

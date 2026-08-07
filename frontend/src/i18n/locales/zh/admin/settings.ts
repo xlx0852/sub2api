@@ -17,7 +17,7 @@ export default {
         channelMonitor: {
           title: '渠道监控',
           description: '定期对配置的渠道发起健康检查，向用户展示可用性与延迟。关闭后调度器停止扫描，用户端列表为空。',
-          configureLink: '前往 渠道管理 > 渠道监控 配置监控项',
+          configureLink: '前往 售价与监控 > 端点监控 配置监控项',
           enabled: '启用渠道监控',
           enabledHint: '关闭后后台不再执行定时检测，已有数据保留。',
           defaultInterval: '默认检测间隔（秒）',
@@ -26,7 +26,7 @@ export default {
         availableChannels: {
           title: '可用渠道',
           description: '向已登录用户展示他们能访问的渠道、模型和定价聚合视图。默认关闭。',
-          configureLink: '前往 渠道管理 > 渠道定价 配置模型价格',
+          configureLink: '前往 售价与监控 > 售价策略 配置模型售价（也可在分组 → 定价绑定）',
           enabled: '启用可用渠道',
           enabledHint: '关闭后用户端侧边栏入口隐藏，接口返回空数组。',
         },
@@ -352,6 +352,11 @@ export default {
         openaiCodexUserAgent: 'OpenAI Codex UA',
         openaiCodexUserAgentPlaceholder: 'codex-tui/0.125.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex-tui; 0.125.0)',
         openaiCodexUserAgentHint: '用于规避 OpenAI 上游 Cloudflare 对浏览器 UA 的访问质询。仅在检测到客户端 User-Agent 为浏览器（Mozilla/...）时生效，其他客户端原样透传。留空使用内置默认值。',
+        openaiCodexClientVersion: 'Codex 客户端版本号',
+        openaiCodexClientVersionHint: '留空则跟随自动同步/内置版本；填写后优先生效。版本段也会用于重建面板 UA。',
+        openaiCodexClientVersionSynced: '已同步官方版本',
+        openaiCodexVersionAutoSync: '自动同步 Codex 版本',
+        openaiCodexVersionAutoSyncHint: '每 6 小时从 openai/codex 拉取最新稳定版；启动有防抖。',
         codexHardeningTitle: 'Codex 设置',
         codexClientRestrictionTitle: 'Codex 客户端限制',
         codexHardeningDesc:

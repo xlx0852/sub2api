@@ -57,8 +57,21 @@
           default-sort-order="desc"
           @sort="handleSort"
         >
-          <template #cell-name="{ value }">
-            <span class="font-medium text-gray-900 dark:text-white">{{ value }}</span>
+          <template #cell-name="{ row, value }">
+            <div class="min-w-0 space-y-1">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="font-medium text-gray-900 dark:text-white">{{ value }}</span>
+                <span
+                  v-if="!row.group_ids?.length"
+                  class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200"
+                  :title="t('admin.channels.unboundWarning')"
+                >{{ t('admin.channels.unboundBadge') }}</span>
+              </div>
+              <p
+                v-if="!row.group_ids?.length"
+                class="text-[11px] text-amber-700/90 dark:text-amber-300/80"
+              >{{ t('admin.channels.unboundWarning') }}</p>
+            </div>
           </template>
 
           <template #cell-description="{ value }">
@@ -89,8 +102,9 @@
               >+{{ getChannelGroupSummaries(row).length - 3 }}</span>
               <span
                 v-if="getChannelGroupSummaries(row).length === 0"
-                class="text-xs text-gray-400"
-              >-</span>
+                class="inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-200"
+                :title="t('admin.channels.unboundWarning')"
+              >{{ t('admin.channels.unboundBadge') }}</span>
             </div>
           </template>
 
@@ -192,12 +206,13 @@
         </div>
 
         <!-- Tab Content -->
-        <form id="channel-form" @submit.prevent="handleSubmit" class="flex-1 overflow-y-auto pt-4">
+        <!-- novalidate：多 Tab v-show 下隐藏的 number/required 会触发浏览器原生校验且无法聚焦，导致「更新」点了没反应 -->
+        <form id="channel-form" novalidate @submit.prevent="handleSubmit" class="flex-1 overflow-y-auto pt-4">
           <!-- Basic -->
           <div v-show="activeTab === 'basic'" class="space-y-5">
             <div>
               <label class="input-label">{{ t('admin.channels.form.name', 'Name') }} <span class="text-red-500">*</span></label>
-              <input v-model="form.name" type="text" required class="input" :placeholder="t('admin.channels.form.namePlaceholder', 'Enter channel name')" />
+              <input v-model="form.name" type="text" class="input" :placeholder="t('admin.channels.form.namePlaceholder', 'Enter channel name')" />
             </div>
             <div>
               <label class="input-label">{{ t('admin.channels.form.description', 'Description') }}</label>
@@ -1345,6 +1360,7 @@ function closeDialog() {
 async function handleSubmit() {
   if (submitting.value) return
   if (!form.name.trim()) {
+    activeTab.value = 'basic'
     appStore.showError(t('admin.channels.nameRequired', 'Please enter a channel name'))
     return
   }
@@ -1354,14 +1370,15 @@ async function handleSubmit() {
     if (section.group_ids.length === 0) {
       const platformLabel = t('admin.groups.platforms.' + section.platform, section.platform)
       appStore.showError(t('admin.channels.noGroupsSelected', { platform: platformLabel }))
-      activeTab.value = section.platform
+      // Tab 重构后是 basic/sell/cost/advanced，不再是平台 id
+      activeTab.value = 'basic'
       return
     }
     for (const entry of section.model_pricing) {
       if (entry.models.length === 0) {
         const platformLabel = t('admin.groups.platforms.' + section.platform, section.platform)
         appStore.showError(t('admin.channels.emptyModelsInPricing', { platform: platformLabel }))
-        activeTab.value = section.platform
+        activeTab.value = 'sell'
         return
       }
     }
@@ -1380,7 +1397,7 @@ async function handleSubmit() {
         t('admin.channels.modelConflict',
           { model1: pricingConflict[0], model2: pricingConflict[1] })
       )
-      activeTab.value = section.platform
+      activeTab.value = 'sell'
       return
     }
     // Check model mapping source pattern conflicts
@@ -1392,7 +1409,7 @@ async function handleSubmit() {
           t('admin.channels.mappingConflict',
             { model1: mappingConflict[0], model2: mappingConflict[1] })
         )
-        activeTab.value = section.platform
+        activeTab.value = 'advanced'
         return
       }
     }
@@ -1406,6 +1423,7 @@ async function handleSubmit() {
           (entry.per_request_price == null || entry.per_request_price === '') &&
           (!entry.intervals || entry.intervals.length === 0)) {
         appStore.showError(t('admin.channels.form.perRequestPriceRequired'))
+        activeTab.value = 'sell'
         return
       }
     }
@@ -1420,7 +1438,7 @@ async function handleSubmit() {
         const platformLabel = t('admin.groups.platforms.' + section.platform, section.platform)
         const modelLabel = entry.models.join(', ') || t('admin.channels.form.unnamed')
         appStore.showError(`${platformLabel} - ${modelLabel}: ${intervalErr}`)
-        activeTab.value = section.platform
+        activeTab.value = 'sell'
         return
       }
     }
