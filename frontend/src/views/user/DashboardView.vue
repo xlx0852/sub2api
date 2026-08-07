@@ -6,6 +6,7 @@
         <UserDashboardStats :stats="stats" :balance="user?.balance || 0" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
         <UserDashboardCharts v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" :models="modelStats" @dateRangeChange="loadCharts" @granularityChange="loadCharts" @refresh="refreshAll" />
         <UserDashboardAvailability :data="availability" :loading="availabilityLoading" :platform="availabilityPlatform" @update:platform="changeAvailabilityPlatform" @refresh="loadAvailability" />
+        <UserGroupAvailability />
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div class="lg:col-span-2"><UserDashboardRecentUsage :data="recentUsage" :loading="loadingUsage" /></div>
           <div class="lg:col-span-1"><UserDashboardQuickActions /></div>
@@ -21,6 +22,7 @@ import AppLayout from '@/components/layout/AppLayout.vue'; import LoadingSpinner
 import UserDashboardStats from '@/components/user/dashboard/UserDashboardStats.vue'; import UserDashboardCharts from '@/components/user/dashboard/UserDashboardCharts.vue'
 import UserDashboardRecentUsage from '@/components/user/dashboard/UserDashboardRecentUsage.vue'; import UserDashboardQuickActions from '@/components/user/dashboard/UserDashboardQuickActions.vue'
 import UserDashboardAvailability from '@/components/user/dashboard/UserDashboardAvailability.vue'
+import UserGroupAvailability from '@/components/user/dashboard/UserGroupAvailability.vue'
 import type { TrafficAvailability } from '@/api/usage'
 import type { UsageLog, TrendDataPoint, ModelStat, PlatformQuotaItem } from '@/types'
 import { getMyPlatformQuotas } from '@/api/user'
