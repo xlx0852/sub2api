@@ -295,8 +295,6 @@ type UpdateSettingsRequest struct {
 	PaymentAlipayForceQRCode *bool `json:"payment_alipay_force_qrcode"`
 
 	// Channel Monitor feature switch
-	ChannelMonitorEnabled                *bool `json:"channel_monitor_enabled"`
-	ChannelMonitorDefaultIntervalSeconds *int  `json:"channel_monitor_default_interval_seconds"`
 
 	// Available Channels feature switch (user-facing)
 	AvailableChannelsEnabled *bool `json:"available_channels_enabled"`
@@ -1520,18 +1518,6 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.AccountQuotaNotifyEmails
 		}(),
-		ChannelMonitorEnabled: func() bool {
-			if req.ChannelMonitorEnabled != nil {
-				return *req.ChannelMonitorEnabled
-			}
-			return previousSettings.ChannelMonitorEnabled
-		}(),
-		ChannelMonitorDefaultIntervalSeconds: func() int {
-			if req.ChannelMonitorDefaultIntervalSeconds != nil {
-				return *req.ChannelMonitorDefaultIntervalSeconds
-			}
-			return previousSettings.ChannelMonitorDefaultIntervalSeconds
-		}(),
 		AvailableChannelsEnabled: func() bool {
 			if req.AvailableChannelsEnabled != nil {
 				return *req.AvailableChannelsEnabled
@@ -1911,9 +1897,6 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PaymentCancelRateLimitUnit:                             updatedPaymentCfg.CancelRateLimitUnit,
 		PaymentCancelRateLimitMode:                             updatedPaymentCfg.CancelRateLimitMode,
 		PaymentAlipayForceQRCode:                               updatedPaymentCfg.AlipayForceQRCode,
-
-		ChannelMonitorEnabled:                updatedSettings.ChannelMonitorEnabled,
-		ChannelMonitorDefaultIntervalSeconds: updatedSettings.ChannelMonitorDefaultIntervalSeconds,
 
 		AvailableChannelsEnabled: updatedSettings.AvailableChannelsEnabled,
 

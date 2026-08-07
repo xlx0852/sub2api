@@ -4,7 +4,7 @@
  */
 
 import { apiClient } from '../client'
-import type { BillingMode, ChannelStatus, BillingModelSource } from '@/constants/channel'
+import type { BillingMode, ChannelStatus } from '@/constants/channel'
 
 export type { BillingMode } from '@/constants/channel'
 
@@ -41,12 +41,8 @@ export interface Channel {
   name: string
   description: string
   status: ChannelStatus
-  billing_model_source: BillingModelSource
-  restrict_models: boolean
-  features_config?: Record<string, unknown>
   group_ids: number[]
   model_pricing: ChannelModelPricing[]
-  model_mapping: Record<string, Record<string, string>> // platform → {src→dst}
   created_at: string
   updated_at: string
 }
@@ -56,10 +52,6 @@ export interface CreateChannelRequest {
   description?: string
   group_ids?: number[]
   model_pricing?: ChannelModelPricing[]
-  model_mapping?: Record<string, Record<string, string>>
-  billing_model_source?: string
-  restrict_models?: boolean
-  features_config?: Record<string, unknown>
 }
 
 export interface UpdateChannelRequest {
@@ -68,10 +60,6 @@ export interface UpdateChannelRequest {
   status?: string
   group_ids?: number[]
   model_pricing?: ChannelModelPricing[]
-  model_mapping?: Record<string, Record<string, string>>
-  billing_model_source?: string
-  restrict_models?: boolean
-  features_config?: Record<string, unknown>
 }
 
 interface PaginatedResponse<T> {

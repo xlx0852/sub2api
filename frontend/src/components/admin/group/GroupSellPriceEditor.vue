@@ -632,10 +632,6 @@ async function splitToDedicated() {
       description: form.description.trim() || undefined,
       group_ids: [group.id],
       model_pricing,
-      model_mapping: {},
-      billing_model_source: 'requested',
-      restrict_models: false,
-      features_config: {},
     }
     await adminAPI.channels.create(req)
     appStore.showSuccess(t('admin.channels.splitSuccess'))
@@ -690,10 +686,6 @@ async function handleSave() {
         status: form.status,
         group_ids: Array.from(groupIds),
         model_pricing: mergedPricing,
-        model_mapping: {},
-        billing_model_source: 'requested',
-        restrict_models: false,
-        features_config: {},
       }
       await adminAPI.channels.update(boundPolicy.value.id, req)
       appStore.showSuccess(t('admin.channels.updateSuccess'))
@@ -703,10 +695,6 @@ async function handleSave() {
         description: form.description.trim() || undefined,
         group_ids: [group.id],
         model_pricing: mergedPricing,
-        model_mapping: {},
-        billing_model_source: 'requested',
-        restrict_models: false,
-        features_config: {},
       }
       await adminAPI.channels.create(req)
       appStore.showSuccess(t('admin.channels.createSuccess'))

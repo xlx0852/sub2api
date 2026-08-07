@@ -68,15 +68,14 @@ func TestChannelToResponse_FullChannel(t *testing.T) {
 	require.Equal(t, "test-channel", resp.Name)
 	require.Equal(t, "desc", resp.Description)
 	require.Equal(t, "active", resp.Status)
-	require.Equal(t, "upstream", resp.BillingModelSource)
-	require.True(t, resp.RestrictModels)
+	require.Equal(t, "requested", resp.BillingModelSource)
+	require.False(t, resp.RestrictModels)
 	require.Equal(t, []int64{1, 2, 3}, resp.GroupIDs)
 	require.Equal(t, "2025-06-01T12:00:00Z", resp.CreatedAt)
 	require.Equal(t, "2025-06-01T13:00:00Z", resp.UpdatedAt)
 
 	// model mapping
-	require.Len(t, resp.ModelMapping, 1)
-	require.Equal(t, "claude-haiku-3", resp.ModelMapping["anthropic"]["claude-3-haiku"])
+	require.Empty(t, resp.ModelMapping)
 
 	// pricing
 	require.Len(t, resp.ModelPricing, 1)
@@ -116,7 +115,7 @@ func TestChannelToResponse_EmptyDefaults(t *testing.T) {
 	// 已下放到 service 层（Create/GetByID/List/Update/ListAvailable 出口统一处理），
 	// 因此这里构造 fixture 时直接传入归一化后的值。
 	resp := channelToResponse(ch)
-	require.Equal(t, "channel_mapped", resp.BillingModelSource)
+	require.Equal(t, "requested", resp.BillingModelSource)
 	require.NotNil(t, resp.GroupIDs)
 	require.Empty(t, resp.GroupIDs)
 	require.NotNil(t, resp.ModelMapping)
@@ -137,7 +136,7 @@ func TestChannelToResponse_BillingModelSourcePassthrough(t *testing.T) {
 		UpdatedAt:          time.Now(),
 	}
 	resp := channelToResponse(ch)
-	require.Equal(t, "", resp.BillingModelSource, "handler 应纯透传，默认值由 service.normalizeBillingModelSource 负责")
+	require.Equal(t, "requested", resp.BillingModelSource, "sell-price policy 统一 requested；mapping/source 不再透传")
 }
 
 func TestChannelToResponse_NilModels(t *testing.T) {

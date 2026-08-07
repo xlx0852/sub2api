@@ -935,13 +935,13 @@ func TestResolveChannelMapping_DefaultBillingModelSource(t *testing.T) {
 		ID:                 1,
 		Status:             StatusActive,
 		GroupIDs:           []int64{10},
-		BillingModelSource: "", // empty
+		BillingModelSource: "", // empty → defaults to requested (channel_mapped retired)
 	}
 	repo := makeStandardRepo(ch, map[int64]string{10: "anthropic"})
 	svc := newTestChannelService(repo)
 
 	result := svc.ResolveChannelMapping(context.Background(), 10, "claude-opus-4")
-	require.Equal(t, BillingModelSourceChannelMapped, result.BillingModelSource)
+	require.Equal(t, BillingModelSourceRequested, result.BillingModelSource)
 }
 
 func TestResolveChannelMapping_UpstreamBillingModelSource(t *testing.T) {
@@ -1484,7 +1484,7 @@ func TestCreate_DefaultBillingModelSource(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Equal(t, BillingModelSourceChannelMapped, result.BillingModelSource)
+	require.Equal(t, BillingModelSourceRequested, result.BillingModelSource)
 }
 
 func TestCreate_InvalidatesCache(t *testing.T) {
