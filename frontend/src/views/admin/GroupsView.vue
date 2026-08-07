@@ -1863,6 +1863,26 @@
         @submit.prevent="handleUpdateGroup"
         class="space-y-5"
       >
+        <!-- Architecture tabs: plan identity / rate / routing / advanced -->
+        <div class="flex flex-wrap gap-2 border-b border-gray-200 pb-3 dark:border-dark-600">
+          <button
+            v-for="tab in editGroupTabs"
+            :key="tab.id"
+            type="button"
+            class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+            :class="editGroupTab === tab.id
+              ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+              : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-dark-700'"
+            @click="editGroupTab = tab.id as 'basic' | 'rate' | 'routing' | 'advanced'"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-dark-400">
+          {{ t('admin.groups.editTabs.' + editGroupTab + 'Hint') }}
+        </p>
+
+        <div v-show="editGroupTab === 'basic'" class="space-y-5">
         <div>
           <label class="input-label">{{ t("admin.groups.form.name") }}</label>
           <input
@@ -1986,7 +2006,21 @@
             {{ t("admin.groups.copyAccounts.hintEdit") }}
           </p>
         </div>
-        <div>
+                </div><!-- /edit-tab-basic -->
+
+        <div v-show="editGroupTab === 'rate'" class="space-y-5">
+          <div class="rounded-lg border border-sky-200 bg-sky-50/70 px-3 py-2 text-xs text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-100">
+            <div class="font-medium">{{ t('admin.groups.editTabs.rateBannerTitle') }}</div>
+            <p class="mt-1 opacity-90">{{ t('admin.groups.editTabs.rateBannerBody') }}</p>
+            <button
+              type="button"
+              class="mt-2 text-primary-700 underline dark:text-primary-300"
+              @click="handlePricing(editingGroup); closeEditModal()"
+            >
+              {{ t('admin.groups.pricing.action') }} →
+            </button>
+          </div>
+<div>
           <label class="input-label">{{
             t("admin.groups.form.rateMultiplier")
           }}</label>
@@ -2485,6 +2519,9 @@
           </div>
         </div>
 
+        </div><!-- /edit-tab-rate -->
+
+        <div v-show="editGroupTab === 'advanced'" class="space-y-5">
         <!-- 支持的模型系列（仅 antigravity 平台） -->
         <div v-if="editForm.platform === 'antigravity'" class="border-t pt-4">
           <div class="mb-1.5 flex items-center gap-1">
@@ -3024,7 +3061,13 @@
           </p>
         </div>
 
-        <!-- 模型路由配置（仅 anthropic 平台） -->
+                </div><!-- /edit-tab-advanced -->
+
+        <div v-show="editGroupTab === 'routing' || editForm.platform !== 'anthropic'" class="space-y-5">
+          <div v-if="editForm.platform !== 'anthropic'" class="rounded-lg border border-dashed border-gray-300 p-4 text-xs text-gray-500 dark:border-dark-600">
+            {{ t('admin.groups.editTabs.routingOnlyAnthropic') }}
+          </div>
+<!-- 模型路由配置（仅 anthropic 平台） -->
         <div v-if="editForm.platform === 'anthropic'" class="border-t pt-4">
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -3216,6 +3259,7 @@
             {{ t("admin.groups.modelRouting.addRule") }}
           </button>
         </div>
+              </div><!-- /edit-tab-routing -->
       </form>
 
       <template #footer>
@@ -3732,6 +3776,17 @@ let abortController: AbortController | null = null;
 
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
+const editGroupTab = ref<'basic' | 'rate' | 'routing' | 'advanced'>('basic');
+const editGroupTabs = computed(() => {
+  const tabs: Array<{ id: 'basic' | 'rate' | 'routing' | 'advanced'; label: string; show?: boolean }> = [
+    { id: 'basic', label: t('admin.groups.editTabs.basic') },
+    { id: 'rate', label: t('admin.groups.editTabs.rate') },
+    { id: 'routing', label: t('admin.groups.editTabs.routing'), show: editForm.platform === 'anthropic' },
+    { id: 'advanced', label: t('admin.groups.editTabs.advanced') },
+  ];
+  return tabs.filter((x) => x.show !== false);
+});
+
 const showDeleteDialog = ref(false);
 const showSortModal = ref(false);
 const submitting = ref(false);
@@ -4674,6 +4729,7 @@ const handleEdit = async (group: AdminGroup) => {
     group.model_routing,
   );
   loadModelsListCandidates("edit", group.id, group.platform);
+  editGroupTab.value = 'basic';
   showEditModal.value = true;
 };
 
@@ -4683,6 +4739,7 @@ const closeEditModal = () => {
   });
   clearAllAccountSearchState();
   showEditModal.value = false;
+  editGroupTab.value = 'basic';
   editingGroup.value = null;
   editModelRoutingRules.value = [];
   editForm.copy_accounts_from_group_ids = [];
