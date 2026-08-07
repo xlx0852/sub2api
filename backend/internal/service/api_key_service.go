@@ -407,15 +407,15 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 
 	// 创建API Key记录
 	apiKey := &APIKey{
-		UserID:      userID,
-		Key:         key,
-		Name:        html.EscapeString(req.Name),
-		GroupID:     req.GroupID,
-		Status:      StatusActive,
-		IPWhitelist: req.IPWhitelist,
-		IPBlacklist: req.IPBlacklist,
-		Quota:       req.Quota,
-		QuotaUsed:   0,
+		UserID:          userID,
+		Key:             key,
+		Name:            html.EscapeString(req.Name),
+		GroupID:         req.GroupID,
+		Status:          StatusActive,
+		IPWhitelist:     req.IPWhitelist,
+		IPBlacklist:     req.IPBlacklist,
+		Quota:           req.Quota,
+		QuotaUsed:       0,
 		RateLimit5h:     req.RateLimit5h,
 		RateLimit1d:     req.RateLimit1d,
 		RateLimit7d:     req.RateLimit7d,
@@ -904,4 +904,43 @@ func (s *APIKeyService) UpdateRateLimitUsage(ctx context.Context, apiKeyID int64
 		return nil
 	}
 	return s.apiKeyRepo.IncrementRateLimitUsage(ctx, apiKeyID, cost)
+}
+
+// GetUserUsedGroupIDs returns the distinct group IDs the user actually uses:
+// groups bound on their API keys plus groups from active subscriptions.
+func (s *APIKeyService) GetUserUsedGroupIDs(ctx context.Context, userID int64) ([]int64, error) {
+	seen := make(map[int64]struct{})
+	out := make([]int64, 0, 4)
+
+	if keys, _, err := s.apiKeyRepo.ListByUserID(ctx, userID, pagination.PaginationParams{Page: 1, PageSize: 1000}, APIKeyListFilters{}); err == nil {
+		for _, k := range keys {
+			if k.GroupID != nil && *k.GroupID > 0 {
+				if _, ok := seen[*k.GroupID]; !ok {
+					seen[*k.GroupID] = struct{}{}
+					out = append(out, *k.GroupID)
+				}
+			}
+		}
+	}
+	if s.userSubRepo != nil {
+		if subs, err := s.userSubRepo.ListActiveByUserID(ctx, userID); err == nil {
+			for _, sub := range subs {
+				if sub.GroupID > 0 {
+					if _, ok := seen[sub.GroupID]; !ok {
+						seen[sub.GroupID] = struct{}{}
+						out = append(out, sub.GroupID)
+					}
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+// GetGroupBasic returns the group's name/platform for display.
+func (s *APIKeyService) GetGroupBasic(ctx context.Context, groupID int64) (*Group, error) {
+	if s.groupRepo == nil {
+		return nil, nil
+	}
+	return s.groupRepo.GetByID(ctx, groupID)
 }

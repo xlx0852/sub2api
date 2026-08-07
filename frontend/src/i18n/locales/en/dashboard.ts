@@ -452,6 +452,16 @@ export default {
     relativeDaysAgo: '{n}d ago'
   },
 
+  // My group availability (real traffic)
+  groupAvailability: {
+    title: 'My group availability',
+    subtitle: 'For the groups you actually use (usage successes + gateway failures), not active probing',
+    empty: 'No groups bound yet — no availability data',
+    last24h: 'Last 24h',
+    last7d: 'Last 7d',
+    noTraffic: 'No traffic'
+  },
+
   // Channel Status (user-facing read-only view)
   channelStatus: {
     availabilityTitle: 'Service availability',

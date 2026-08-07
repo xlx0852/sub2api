@@ -60,6 +60,13 @@ type UsageService struct {
 	userRepo             UserRepository
 	entClient            *dbent.Client
 	authCacheInvalidator APIKeyAuthCacheInvalidator
+	apiKeyService        *APIKeyService
+}
+
+// SetAPIKeyService injects the API key service used to resolve the user's
+// groups for per-group availability. Optional to keep construction order simple.
+func (s *UsageService) SetAPIKeyService(apiKeyService *APIKeyService) {
+	s.apiKeyService = apiKeyService
 }
 
 // NewUsageService 创建使用统计服务实例

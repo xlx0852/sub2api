@@ -283,6 +283,36 @@ export async function getDashboardStats(): Promise<UserDashboardStats> {
   return data
 }
 
+
+export interface GroupAvailabilityWindow {
+  group_id: number
+  success_count: number
+  failure_count: number
+  sample_count: number
+  success_rate: number | null
+  average_latency_ms: number | null
+  status: string
+  buckets?: TrafficAvailabilityBucket[]
+}
+
+export interface UserGroupAvailabilityItem {
+  group_id: number
+  group_name: string
+  platform: string
+  day?: GroupAvailabilityWindow
+  week?: GroupAvailabilityWindow
+}
+
+export interface UserGroupAvailabilityResult {
+  items: UserGroupAvailabilityItem[]
+}
+
+/** GET /usage/dashboard/group-availability — per-group availability for groups the user uses */
+export async function getDashboardGroupAvailability(): Promise<UserGroupAvailabilityResult> {
+  const { data } = await apiClient.get<UserGroupAvailabilityResult>('/usage/dashboard/group-availability')
+  return data
+}
+
 export async function getDashboardAvailability(platform = ''): Promise<TrafficAvailability> {
   const { data } = await apiClient.get<TrafficAvailability>('/usage/dashboard/availability', { params: platform ? { platform } : undefined })
   return data
@@ -405,6 +435,7 @@ export const usageAPI = {
   // Dashboard
   getDashboardStats,
   getDashboardAvailability,
+  getDashboardGroupAvailability,
   getDashboardTrend,
   getDashboardModels,
   getMyApiKeyDailyUsage,

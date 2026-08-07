@@ -59,6 +59,9 @@ func NewUsageHandler(
 	opsService *service.OpsService,
 	settingService *service.SettingService,
 ) *UsageHandler {
+	// Inject apiKeyService into usageService so per-group availability can
+	// resolve the user's groups (keeps wire graph unchanged on regeneration).
+	usageService.SetAPIKeyService(apiKeyService)
 	return &UsageHandler{
 		usageService:   usageService,
 		apiKeyService:  apiKeyService,
@@ -461,6 +464,23 @@ func (h *UsageHandler) DashboardAvailability(c *gin.Context) {
 		return
 	}
 	result, err := h.usageService.GetTrafficAvailability(c.Request.Context(), &subject.UserID, c.Query("platform"))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+// DashboardGroupAvailability returns real-traffic availability for the groups
+// the authenticated user actually uses (their API keys' groups + subscriptions).
+// GET /api/v1/usage/dashboard/group-availability
+func (h *UsageHandler) DashboardGroupAvailability(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	result, err := h.usageService.GetUserGroupAvailability(c.Request.Context(), subject.UserID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
