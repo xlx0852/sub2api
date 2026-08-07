@@ -751,28 +751,24 @@ func (s *ChannelService) Create(ctx context.Context, input *CreateChannelInput) 
 	}
 
 	channel := &Channel{
-		Name:                       input.Name,
-		Description:                input.Description,
-		Status:                     StatusActive,
-		BillingModelSource:         input.BillingModelSource,
-		RestrictModels:             input.RestrictModels,
-		GroupIDs:                   input.GroupIDs,
-		ModelPricing:               input.ModelPricing,
-		ModelMapping:               input.ModelMapping,
-		Features:                   input.Features,
-		FeaturesConfig:             input.FeaturesConfig,
-		ApplyPricingToAccountStats: input.ApplyPricingToAccountStats,
-		AccountStatsPricingRules:   input.AccountStatsPricingRules,
+		Name:               input.Name,
+		Description:        input.Description,
+		Status:             StatusActive,
+		BillingModelSource: input.BillingModelSource,
+		RestrictModels:     input.RestrictModels,
+		GroupIDs:           input.GroupIDs,
+		ModelPricing:       input.ModelPricing,
+		ModelMapping:       input.ModelMapping,
+		Features:           input.Features,
+		FeaturesConfig:     input.FeaturesConfig,
+		// Product: sell-price policy account-cost overrides are not used; always off.
+		ApplyPricingToAccountStats: false,
+		AccountStatsPricingRules:   nil,
 	}
 	channel.normalizeBillingModelSource()
 
 	if err := validateChannelConfig(channel.ModelPricing, channel.ModelMapping); err != nil {
 		return nil, err
-	}
-	for i, rule := range channel.AccountStatsPricingRules {
-		if err := validatePricingEntries(rule.Pricing); err != nil {
-			return nil, fmt.Errorf("account stats pricing rule #%d: %w", i+1, err)
-		}
 	}
 
 	if err := s.repo.Create(ctx, channel); err != nil {
@@ -812,11 +808,6 @@ func (s *ChannelService) Update(ctx context.Context, id int64, input *UpdateChan
 
 	if err := validateChannelConfig(channel.ModelPricing, channel.ModelMapping); err != nil {
 		return nil, err
-	}
-	for i, rule := range channel.AccountStatsPricingRules {
-		if err := validatePricingEntries(rule.Pricing); err != nil {
-			return nil, fmt.Errorf("account stats pricing rule #%d: %w", i+1, err)
-		}
 	}
 
 	oldGroupIDs := s.getOldGroupIDs(ctx, id)
@@ -878,12 +869,9 @@ func (s *ChannelService) applyUpdateInput(ctx context.Context, channel *Channel,
 	if input.FeaturesConfig != nil {
 		channel.FeaturesConfig = input.FeaturesConfig
 	}
-	if input.ApplyPricingToAccountStats != nil {
-		channel.ApplyPricingToAccountStats = *input.ApplyPricingToAccountStats
-	}
-	if input.AccountStatsPricingRules != nil {
-		channel.AccountStatsPricingRules = *input.AccountStatsPricingRules
-	}
+	// Product: always strip sell-price policy account-cost overrides on update.
+	channel.ApplyPricingToAccountStats = false
+	channel.AccountStatsPricingRules = nil
 	return nil
 }
 

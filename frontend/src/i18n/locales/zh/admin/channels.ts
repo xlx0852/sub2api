@@ -170,7 +170,7 @@ export default {
         advancedTab: '高级',
         billingFlowTitle: '计费关系',
         billingFlowDesc: '官方基准价 → 售价策略（可 ×N 加价）→ × 分组倍率 → 用户实扣',
-        billingFlowCostNote: '账号成本默认跟官方基准；仅在本页「账号成本」规则/开关中覆盖，不会被售价 ×N 抬高。主入口也可在「分组 → 定价」绑定本策略。',
+        billingFlowCostNote: '账号侧成本默认跟官方基准 × 账号倍率；售价策略只负责用户售价，不在此配置账号 COGS。',
         enablePlatformFirst: '请先在「基础设置」启用至少一个平台',
         linkedGroupRates: '关联分组倍率',
         fillOfficialPrice: '填入官方价',

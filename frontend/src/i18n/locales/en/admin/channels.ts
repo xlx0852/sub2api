@@ -170,7 +170,7 @@ export default {
         advancedTab: 'Advanced',
         billingFlowTitle: 'Billing flow',
         billingFlowDesc: 'Official base → sell-price policy (optional ×N) → × group rate → user charge. You can also bind from Groups → Pricing.',
-        billingFlowCostNote: 'Account cost defaults to the official base; only Account Cost rules/toggle override it — sell ×N does not inflate COGS.',
+        billingFlowCostNote: 'Account-side cost defaults to official base × account multiplier. Sell-price policies only set user sell prices; account COGS is not configured here.',
         enablePlatformFirst: 'Enable at least one platform in Basic Settings first',
         linkedGroupRates: 'Linked group rates',
         fillOfficialPrice: 'Fill official price',
