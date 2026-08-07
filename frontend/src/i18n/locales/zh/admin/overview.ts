@@ -441,7 +441,7 @@ export default {
       allRoles: '全部角色',
       allStatus: '全部状态',
       allGroups: '全部分组',
-      searchGroups: '搜索分组...',
+      searchGroups: '搜索套餐...',
       fuzzySearch: '模糊搜索',
       apiKeyGroupFilter: 'API Key 分组',
       apiKeyGroupExclusive: '专用分组',
@@ -748,11 +748,11 @@ export default {
 
     // Groups Management
     groups: {
-      title: '分组管理',
-      description: '管理 API 密钥分组和费率配置',
-      searchGroups: '搜索分组...',
-      createGroup: '创建分组',
-      editGroup: '编辑分组',
+      title: '分组套餐',
+      description: '管理 API Key 所属套餐：倍率、模型路由与售价策略绑定',
+      searchGroups: '搜索套餐...',
+      createGroup: '创建套餐',
+      editGroup: '编辑套餐',
 
       editTabs: {
         basic: '基础',
@@ -767,7 +767,7 @@ export default {
         rateBannerBody: '本页倍率是折扣系数。模型绝对售价请在售价策略配置，并在此绑定。',
         routingOnlyAnthropic: '模型路由（按模型选号）当前仅 Anthropic 分组提供。其他平台请用账号侧映射/调度配置。',
       },
-      deleteGroup: '删除分组',
+      deleteGroup: '删除套餐',
       sortOrder: '排序',
       columnSettings: '列设置',
       sortOrderHint: '拖拽分组调整显示顺序，排在前面的分组会优先显示',

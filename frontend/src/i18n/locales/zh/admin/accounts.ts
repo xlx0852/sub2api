@@ -1,8 +1,8 @@
 export default {
     accounts: {
-      title: '账号管理',
-      description: '管理 AI 平台账号和 Cookie',
-      createAccount: '添加账号',
+      title: '号池管理',
+      description: '管理上游账号供给池：凭证、模型映射、调度与账号成本倍率',
+      createAccount: '添加号池账号',
       autoRefresh: '自动刷新',
       enableAutoRefresh: '启用自动刷新',
       refreshInterval5s: '5 秒',
@@ -75,7 +75,7 @@ export default {
       crsUpdateBehaviorNote:
         '已有账号仅同步 CRS 返回的字段，缺失字段保持原值；凭据按键合并，不会清空未下发的键；未勾选"同步代理"时保留原有代理。',
       crsBack: '返回',
-      editAccount: '编辑账号',
+      editAccount: '编辑号池账号',
       deleteAccount: '删除账号',
       deleteConfirmMessage: "确定要删除账号 '{name}' 吗？",
       refreshCookie: '刷新 Cookie',
