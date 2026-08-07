@@ -89,6 +89,7 @@ export default {
       deleteSuccess: '售价策略删除成功',
       createError: '保存售价失败',
       updateError: '更新售价失败',
+      groupConflict: '一个分组只能绑定一个售价策略；请先把该分组从原策略解绑或拆成专属。',
       deleteError: '删除售价策略失败',
       nameRequired: '请输入策略名称',
       duplicateModels: '模型「{0}」在多个定价条目中重复',
