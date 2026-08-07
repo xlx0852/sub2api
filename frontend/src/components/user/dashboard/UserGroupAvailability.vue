@@ -4,10 +4,10 @@
       <div class="flex items-center justify-between gap-2">
         <div>
           <h2 class="text-base font-semibold text-gray-900 dark:text-white">
-            {{ t('dashboard.groupAvailability.title') }}
+            {{ t('channelStatus.myGroupsTitle') }}
           </h2>
           <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
-            {{ t('dashboard.groupAvailability.subtitle') }}
+            {{ t('channelStatus.myGroupsSubtitle') }}
           </p>
         </div>
         <button
@@ -31,7 +31,7 @@
         v-else-if="!items.length"
         class="py-6 text-center text-sm text-gray-500"
       >
-        {{ t('dashboard.groupAvailability.empty') }}
+        {{ t('channelStatus.myGroupsEmpty') }}
       </div>
 
       <div v-else class="space-y-3">
@@ -49,12 +49,12 @@
               <span
                 class="rounded px-1.5 py-0.5 font-semibold"
                 :class="badgeClass(g.day?.status)"
-                :title="t('dashboard.groupAvailability.last24h')"
+                :title="t('channelStatus.last24h')"
               >24h {{ fmtRate(g.day?.success_rate) }}</span>
               <span
                 class="rounded px-1.5 py-0.5 font-semibold"
                 :class="badgeClass(g.week?.status)"
-                :title="t('dashboard.groupAvailability.last7d')"
+                :title="t('channelStatus.last7d')"
               >7d {{ fmtRate(g.week?.success_rate) }}</span>
             </div>
           </div>
@@ -94,7 +94,7 @@ const items = ref<UserGroupAvailabilityItem[]>([])
 const loading = ref(false)
 
 function fmtRate(v?: number | null) {
-  if (v == null) return t('dashboard.groupAvailability.noTraffic')
+  if (v == null) return t('channelStatus.noSamples')
   return `${v.toFixed(1)}%`
 }
 
