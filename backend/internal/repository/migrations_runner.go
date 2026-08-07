@@ -80,6 +80,11 @@ var migrationChecksumCompatibilityRules = map[string]migrationChecksumCompatibil
 	"159_batch_image_foundation.sql":                          newMigrationChecksumCompatibilityRule("d902b70982025ec519749faf058aab7631e82c3f48167b9a4ae4db718eb72cce", "82da85b5d98e67a0507647b873a40373e84538e4adafdeed6767c0ac8b6570b2"),
 	"161_batch_image_pricing_snapshot.sql":                    newMigrationChecksumCompatibilityRule("4012af3e43636cb6af22e0176d59d1fcc70615c0f310194329461ae462c4fbd6", "96d915c9b7a6941ae99039e0ff3f1a61481eb9bddd933d11c6fadb2274554e87"),
 	"170_usage_log_compact_metrics.sql":                       newMigrationChecksumCompatibilityRule("9ae7dec58793fc0eb97f99e1bc403caede1f5c83470856e65bac45cedc0f2acc", "c6854d9cfe08b316d688dbf2a52ed4d63f44977c1a840c6dbd887b5a1008460b"),
+	// 189/189b 为 Gemini model_class 生成列 + 覆盖索引。线上先于本仓库提交执行过
+	// 不同构建的文本变体（仅注释/空白差异，schema 语义一致，见 schema_migrations
+	// 与 pg_indexes 校验），白名单放行使新版本启动校验通过。
+	"189_gemini_model_class_column.sql":                       newMigrationChecksumCompatibilityRule("ae2372ce76b740d7d6e0ee565143c5a6ac2a32d9308ab158e7cd02331e6eec53", "a813c8d7ecfbe34139b7fdb8d56f4583e952309e69932e9cab182c8a1ca5a384"),
+	"189b_gemini_model_class_index_notx.sql":                  newMigrationChecksumCompatibilityRule("c9a67ec735e3273a0b72208766af4101a3ad0b840abe9cd89ac309f57302460f", "e16caefaba954a12ca67b10a3017f0d42cbaedbfd47b37d0c78877bb6aef1108"),
 }
 
 // ApplyMigrations 将嵌入的 SQL 迁移文件应用到指定的数据库。
