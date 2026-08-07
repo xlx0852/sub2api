@@ -1,7 +1,7 @@
 export default {
     availableChannels: {
       title: '模型广场预览',
-      description: '按售价策略聚合查看绑定分组与支持模型（已展开通配符）',
+      description: '只配置模型售价与绑定分组；映射/限制/特性请放到分组或账号侧，不再挂在售价策略上',
       searchPlaceholder: '搜索策略或模型...',
       columns: {
         name: '策略名',

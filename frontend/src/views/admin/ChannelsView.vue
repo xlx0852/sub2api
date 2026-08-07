@@ -323,66 +323,6 @@
             </div>
           </div>
 
-          <!-- Advanced -->
-          <div v-show="activeTab === 'advanced'" class="space-y-5">
-            <div>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" v-model="form.restrict_models" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                <span class="input-label mb-0">{{ t('admin.channels.form.restrictModels', 'Restrict Models') }}</span>
-              </label>
-              <p class="mt-1 ml-6 text-xs text-gray-400">{{ t('admin.channels.form.restrictModelsHint', 'When enabled, only models in the pricing list are allowed. Others will be rejected.') }}</p>
-            </div>
-            <div>
-              <label class="input-label">{{ t('admin.channels.form.billingModelSource', 'Billing Basis') }}</label>
-              <Select v-model="form.billing_model_source" :options="billingModelSourceOptions" />
-              <p class="mt-1 text-xs text-gray-400">{{ t('admin.channels.form.billingModelSourceHint', 'Controls which model name is used for pricing lookup') }}</p>
-            </div>
-
-            <div v-for="(section, sIdx) in form.platforms" :key="'adv-' + section.platform" v-show="section.enabled" class="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-dark-600">
-              <div class="flex items-center gap-2 text-sm font-medium">
-                <PlatformIcon :platform="section.platform" size="xs" :class="platformTextClass(section.platform)" />
-                <span :class="platformTextClass(section.platform)">{{ t('admin.groups.platforms.' + section.platform, section.platform) }}</span>
-              </div>
-
-              <div v-if="section.platform === 'anthropic' && webSearchGlobalEnabled" class="flex items-center justify-between border-t border-gray-200 pt-3 dark:border-dark-600">
-                <div>
-                  <label class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ t('admin.channels.form.webSearchEmulation') }}</label>
-                  <p class="mt-0.5 text-[11px] text-red-500 dark:text-red-400">{{ t('admin.channels.form.webSearchEmulationHint') }}</p>
-                </div>
-                <Toggle v-model="section.web_search_emulation" />
-              </div>
-              <div v-if="section.platform === 'openai'" class="flex items-center justify-between gap-4 border-t border-gray-200 pt-3 dark:border-dark-600">
-                <div>
-                  <label class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ t('admin.channels.form.codexImageGenerationBridge') }}</label>
-                  <p class="mt-0.5 text-[11px] text-amber-600 dark:text-amber-400">{{ t('admin.channels.form.codexImageGenerationBridgeHint') }}</p>
-                </div>
-                <Toggle v-model="section.codex_image_generation_bridge" />
-              </div>
-              <div v-if="section.platform === 'anthropic'" class="flex items-center justify-between gap-4 border-t border-gray-200 pt-3 dark:border-dark-600">
-                <div>
-                  <label class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ t('admin.channels.form.bedrockCCCompat') }}</label>
-                  <p class="mt-0.5 text-[11px] text-amber-600 dark:text-amber-400">{{ t('admin.channels.form.bedrockCCCompatHint') }}</p>
-                </div>
-                <Toggle v-model="section.bedrock_cc_compat" />
-              </div>
-
-              <div>
-                <div class="mb-1 flex items-center justify-between">
-                  <label class="input-label text-xs mb-0">{{ t('admin.channels.form.modelMapping', 'Model Mapping') }}</label>
-                  <button type="button" @click="addMappingEntry(sIdx)" class="text-xs text-primary-600 hover:text-primary-700">+ {{ t('common.add', 'Add') }}</button>
-                </div>
-                <div v-if="Object.keys(section.model_mapping).length === 0" class="rounded border border-dashed border-gray-300 p-2 text-center text-xs text-gray-400 dark:border-dark-500">{{ t('admin.channels.form.noMappingRules', 'No mapping rules. Click "Add" to create one.') }}</div>
-                <div v-else class="space-y-1">
-                  <div v-for="(_, srcModel) in section.model_mapping" :key="srcModel" class="flex items-center gap-2">
-                    <input :value="srcModel" type="text" class="input flex-1 text-xs" :class="platformTextClass(section.platform)" :placeholder="t('admin.channels.form.mappingSource', 'Source model')" @change="renameMappingKey(sIdx, srcModel, ($event.target as HTMLInputElement).value)" />
-                    <span class="text-gray-400 text-xs">→</span>
-                    <input :value="section.model_mapping[srcModel]" type="text" class="input flex-1 text-xs" :class="platformTextClass(section.platform)" :placeholder="t('admin.channels.form.mappingTarget', 'Target model')" @input="section.model_mapping[srcModel] = ($event.target as HTMLInputElement).value" />
-                    <button type="button" @click="removeMappingEntry(sIdx, srcModel)" class="rounded p-0.5 text-gray-400 hover:text-red-500"><Icon name="trash" size="sm" /></button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
         </form>
       </div>
 
@@ -430,7 +370,7 @@ import { extractApiErrorMessage } from '@/utils/apiError'
 import { adminAPI } from '@/api/admin'
 import type { Channel, ChannelModelPricing, CreateChannelRequest, UpdateChannelRequest } from '@/api/admin/channels'
 import type { PricingFormEntry } from '@/components/admin/channel/types'
-import { mTokToPerToken, perTokenToMTok, apiIntervalsToForm, formIntervalsToAPI, findModelConflict, validateIntervals } from '@/components/admin/channel/types'
+import { mTokToPerToken, perTokenToMTok, formIntervalsToAPI, findModelConflict, validateIntervals } from '@/components/admin/channel/types'
 import { summarizeChannelPricing } from '@/components/admin/channel/channelPricingTools'
 import type { AdminGroup, GroupPlatform } from '@/types'
 import type { Column } from '@/components/common/types'
@@ -491,7 +431,6 @@ const columns = computed<Column[]>(() => [
 const editorTabs = computed(() => [
   { id: 'basic', label: t('admin.channels.form.basicSettings') },
   { id: 'sell', label: t('admin.channels.form.sellPricingTab') },
-  { id: 'advanced', label: t('admin.channels.form.advancedTab') },
 ])
 
 const enabledPlatformSections = computed(() => form.platforms.filter((s) => s.enabled))
@@ -532,11 +471,6 @@ const statusEditOptions = computed(() => [
   { value: 'disabled', label: t('admin.channels.statusDisabled', 'Disabled') }
 ])
 
-const billingModelSourceOptions = computed(() => [
-  { value: 'channel_mapped', label: t('admin.channels.form.billingModelSourceChannelMapped', 'Bill by channel-mapped model') },
-  { value: 'requested', label: t('admin.channels.form.billingModelSourceRequested', 'Bill by requested model') },
-  { value: 'upstream', label: t('admin.channels.form.billingModelSourceUpstream', 'Bill by final upstream model') }
-])
 
 // ── State ──
 const channels = ref<Channel[]>([])
@@ -760,52 +694,18 @@ function removePricingEntry(sectionIdx: number, idx: number) {
   form.platforms[sectionIdx].model_pricing.splice(idx, 1)
 }
 
-// ── Model Mapping helpers ──
-function addMappingEntry(sectionIdx: number) {
-  const mapping = form.platforms[sectionIdx].model_mapping
-  let key = ''
-  let i = 1
-  while (key === '' || key in mapping) {
-    key = `model-${i}`
-    i++
-  }
-  mapping[key] = ''
-}
-
-function removeMappingEntry(sectionIdx: number, key: string) {
-  delete form.platforms[sectionIdx].model_mapping[key]
-}
-
-function renameMappingKey(sectionIdx: number, oldKey: string, newKey: string) {
-  newKey = newKey.trim()
-  if (!newKey || newKey === oldKey) return
-  const mapping = form.platforms[sectionIdx].model_mapping
-  if (newKey in mapping) return
-  const value = mapping[oldKey]
-  delete mapping[oldKey]
-  mapping[newKey] = value
-}
 
 // ── Form ↔ API conversion ──
 function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[], model_mapping: Record<string, Record<string, string>>, features_config: Record<string, unknown> } {
   const group_ids: number[] = []
   const model_pricing: ChannelModelPricing[] = []
+  // Product: sell-price policy only carries sell pricing + group binds.
   const model_mapping: Record<string, Record<string, string>> = {}
-  // Preserve existing features_config fields not managed by the form
-  const featuresConfig: Record<string, unknown> = editingChannel.value?.features_config
-    ? { ...editingChannel.value.features_config }
-    : {}
+  const features_config: Record<string, unknown> = {}
 
   for (const section of form.platforms) {
     if (!section.enabled) continue
     group_ids.push(...section.group_ids)
-
-    // Model mapping per platform
-    if (Object.keys(section.model_mapping).length > 0) {
-      model_mapping[section.platform] = { ...section.model_mapping }
-    }
-
-    // Model pricing with platform tag
     for (const entry of section.model_pricing) {
       if (entry.models.length === 0) continue
       model_pricing.push({
@@ -822,114 +722,66 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
       })
     }
   }
-
-  // Collect web_search_emulation (only anthropic platform supports it)
-  // Always write the key so that disabling in the UI correctly sets platform to false,
-  // rather than leaving a stale true value from the cloned features_config.
-  const wsEmulation: Record<string, boolean> = {}
-  for (const section of form.platforms) {
-    if (!section.enabled) continue
-    if (section.platform === 'anthropic') {
-      wsEmulation[section.platform] = !!section.web_search_emulation
-    }
-  }
-  if (Object.keys(wsEmulation).length > 0) {
-    featuresConfig.web_search_emulation = wsEmulation
-  } else {
-    delete featuresConfig.web_search_emulation
-  }
-
-  const codexImageGenerationBridge: Record<string, boolean> = {}
-  for (const section of form.platforms) {
-    if (!section.enabled) continue
-    if (section.platform === 'openai') {
-      codexImageGenerationBridge[section.platform] = !!section.codex_image_generation_bridge
-    }
-  }
-  if (Object.keys(codexImageGenerationBridge).length > 0) {
-    featuresConfig.codex_image_generation_bridge = codexImageGenerationBridge
-  } else {
-    delete featuresConfig.codex_image_generation_bridge
-  }
-
-  const bedrockCCCompat: Record<string, boolean> = {}
-  for (const section of form.platforms) {
-    if (!section.enabled) continue
-    if (section.platform === 'anthropic') {
-      bedrockCCCompat[section.platform] = !!section.bedrock_cc_compat
-    }
-  }
-  if (Object.keys(bedrockCCCompat).length > 0) {
-    featuresConfig.bedrock_cc_compat = bedrockCCCompat
-  } else {
-    delete featuresConfig.bedrock_cc_compat
-  }
-
-  return { group_ids, model_pricing, model_mapping, features_config: featuresConfig }
+  return { group_ids, model_pricing, model_mapping, features_config }
 }
 
+
 function apiToForm(channel: Channel): PlatformSection[] {
-  // Build a map: groupID → platform
-  const groupPlatformMap = new Map<number, GroupPlatform>()
-  for (const g of allGroups.value) {
-    groupPlatformMap.set(g.id, g.platform)
+  // Collect platforms from pricing + bound groups only (ignore mapping/features).
+  const platformSet = new Set<GroupPlatform>()
+  for (const pricing of channel.model_pricing || []) {
+    const p = pricing.platform as GroupPlatform
+    if (p) platformSet.add(p)
   }
-
-  // Determine which platforms are active (from groups + pricing + mapping)
-  const activePlatforms = new Set<GroupPlatform>()
   for (const gid of channel.group_ids || []) {
-    const p = groupPlatformMap.get(gid)
-    if (p) activePlatforms.add(p)
+    const g = allGroups.value.find((item) => item.id === gid)
+    if (g?.platform) platformSet.add(g.platform as GroupPlatform)
   }
-  for (const p of channel.model_pricing || []) {
-    if (p.platform) activePlatforms.add(p.platform as GroupPlatform)
-  }
-  for (const p of Object.keys(channel.model_mapping || {})) {
-    if (platformOrder.includes(p as GroupPlatform)) activePlatforms.add(p as GroupPlatform)
-  }
-
-  // Build sections in platform order
   const sections: PlatformSection[] = []
   for (const platform of platformOrder) {
-    if (!activePlatforms.has(platform)) continue
-
-    const groupIds = (channel.group_ids || []).filter(gid => groupPlatformMap.get(gid) === platform)
-    const mapping = (channel.model_mapping || {})[platform] || {}
-    const pricing = (channel.model_pricing || [])
-      .filter(p => (p.platform || 'anthropic') === platform)
-      .map(p => ({
-        models: p.models || [],
-        billing_mode: p.billing_mode,
-        input_price: perTokenToMTok(p.input_price),
-        output_price: perTokenToMTok(p.output_price),
-        cache_write_price: perTokenToMTok(p.cache_write_price),
-        cache_read_price: perTokenToMTok(p.cache_read_price),
-        image_output_price: perTokenToMTok(p.image_output_price),
-        per_request_price: p.per_request_price,
-        intervals: apiIntervalsToForm(p.intervals || [])
-      } as PricingFormEntry))
-
-    // Read web_search_emulation from features_config
-    const fc = channel.features_config
-    const wsEmulation = fc?.web_search_emulation as Record<string, boolean> | undefined
-    const webSearchEnabled = wsEmulation?.[platform] === true
-    const codexImageGenerationBridge = fc?.codex_image_generation_bridge as Record<string, boolean> | undefined
-    const codexImageGenerationBridgeEnabled = codexImageGenerationBridge?.[platform] === true
-    const bedrockCCCompatEnabled = fc?.bedrock_cc_compat === true
-
+    if (!platformSet.has(platform) && !(channel.group_ids || []).some((gid) => allGroups.value.find((g) => g.id === gid)?.platform === platform)) {
+      continue
+    }
+    const group_ids = (channel.group_ids || []).filter((gid) => {
+      const g = allGroups.value.find((item) => item.id === gid)
+      return g?.platform === platform
+    })
+    const model_pricing: PricingFormEntry[] = (channel.model_pricing || [])
+      .filter((entry) => (entry.platform || 'anthropic') === platform)
+      .map((entry) => ({
+        models: [...(entry.models || [])],
+        billing_mode: (entry.billing_mode || 'token') as PricingFormEntry['billing_mode'],
+        input_price: perTokenToMTok(entry.input_price),
+        output_price: perTokenToMTok(entry.output_price),
+        cache_write_price: perTokenToMTok(entry.cache_write_price),
+        cache_read_price: perTokenToMTok(entry.cache_read_price),
+        image_output_price: perTokenToMTok(entry.image_output_price),
+        per_request_price: entry.per_request_price,
+        intervals: (entry.intervals || []).map((iv, idx) => ({
+          min_tokens: iv.min_tokens,
+          max_tokens: iv.max_tokens,
+          tier_label: iv.tier_label || '',
+          input_price: perTokenToMTok(iv.input_price),
+          output_price: perTokenToMTok(iv.output_price),
+          cache_write_price: perTokenToMTok(iv.cache_write_price),
+          cache_read_price: perTokenToMTok(iv.cache_read_price),
+          per_request_price: iv.per_request_price,
+          sort_order: iv.sort_order ?? idx,
+        })),
+      }))
     sections.push({
       platform,
       enabled: true,
       collapsed: false,
-      group_ids: groupIds,
-      model_mapping: { ...mapping },
-      model_pricing: pricing,
-      web_search_emulation: webSearchEnabled,
-      codex_image_generation_bridge: codexImageGenerationBridgeEnabled,
-      bedrock_cc_compat: bedrockCCCompatEnabled,
-      })
+      group_ids,
+      model_mapping: {},
+      model_pricing,
+      web_search_emulation: false,
+      codex_image_generation_bridge: false,
+      bedrock_cc_compat: false,
+    })
   }
-
+  // If nothing inferred, leave empty platforms list
   return sections
 }
 
@@ -1039,6 +891,15 @@ async function openEditDialog(channel: Channel) {
   // Must load groups first so apiToForm can map groupID → platform
   await Promise.all([loadGroups(), loadAllChannelsForConflict()])
   form.platforms = apiToForm(channel)
+  // Ignore legacy non-pricing policy capabilities in editor.
+  form.restrict_models = false
+  form.billing_model_source = 'requested'
+  for (const section of form.platforms) {
+    section.model_mapping = {}
+    section.web_search_emulation = false
+    section.codex_image_generation_bridge = false
+    section.bedrock_cc_compat = false
+  }
   showDialog.value = true
 }
 
@@ -1100,7 +961,7 @@ async function handleSubmit() {
           t('admin.channels.mappingConflict',
             { model1: mappingConflict[0], model2: mappingConflict[1] })
         )
-        activeTab.value = 'advanced'
+        activeTab.value = 'sell'
         return
       }
     }
@@ -1135,7 +996,7 @@ async function handleSubmit() {
     }
   }
 
-  const { group_ids, model_pricing, model_mapping, features_config } = formToAPI()
+  const { group_ids, model_pricing } = formToAPI()
 
   submitting.value = true
   try {
@@ -1146,11 +1007,11 @@ async function handleSubmit() {
         status: form.status,
         group_ids,
         model_pricing,
-        model_mapping: Object.keys(model_mapping).length > 0 ? model_mapping : {},
-        billing_model_source: form.billing_model_source,
-        restrict_models: form.restrict_models,
-        features_config,
-            }
+        model_mapping: {},
+        billing_model_source: 'requested',
+        restrict_models: false,
+        features_config: {},
+      }
       await adminAPI.channels.update(editingChannel.value.id, req)
       appStore.showSuccess(t('admin.channels.updateSuccess', 'Channel updated'))
     } else {
@@ -1159,11 +1020,11 @@ async function handleSubmit() {
         description: form.description.trim() || undefined,
         group_ids,
         model_pricing,
-        model_mapping: Object.keys(model_mapping).length > 0 ? model_mapping : {},
-        billing_model_source: form.billing_model_source,
-        restrict_models: form.restrict_models,
-        features_config,
-            }
+        model_mapping: {},
+        billing_model_source: 'requested',
+        restrict_models: false,
+        features_config: {},
+      }
       await adminAPI.channels.create(req)
       appStore.showSuccess(t('admin.channels.createSuccess', 'Channel created'))
     }

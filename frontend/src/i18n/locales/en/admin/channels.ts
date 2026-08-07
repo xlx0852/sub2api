@@ -1,7 +1,7 @@
 export default {
     availableChannels: {
       title: 'Model Plaza Preview',
-      description: 'Aggregated view: each sell-price policy with bound groups and supported models (wildcards expanded)',
+      description: 'Configure model sell prices and group bindings only; mapping/restrict/features no longer live on sell-price policies',
       searchPlaceholder: 'Search policies or models...',
       columns: {
         name: 'Policy',

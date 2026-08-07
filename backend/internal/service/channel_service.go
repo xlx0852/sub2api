@@ -751,16 +751,17 @@ func (s *ChannelService) Create(ctx context.Context, input *CreateChannelInput) 
 	}
 
 	channel := &Channel{
-		Name:               input.Name,
-		Description:        input.Description,
-		Status:             StatusActive,
-		BillingModelSource: input.BillingModelSource,
-		RestrictModels:     input.RestrictModels,
+		Name:        input.Name,
+		Description: input.Description,
+		Status:      StatusActive,
+		// Pricing-only product: no mapping/restrict/features on sell-price policies.
+		BillingModelSource: BillingModelSourceRequested,
+		RestrictModels:     false,
 		GroupIDs:           input.GroupIDs,
 		ModelPricing:       input.ModelPricing,
-		ModelMapping:       input.ModelMapping,
-		Features:           input.Features,
-		FeaturesConfig: input.FeaturesConfig,
+		ModelMapping:       nil,
+		Features:           "",
+		FeaturesConfig:     nil,
 	}
 	channel.normalizeBillingModelSource()
 
@@ -842,12 +843,6 @@ func (s *ChannelService) applyUpdateInput(ctx context.Context, channel *Channel,
 	if input.Status != "" {
 		channel.Status = input.Status
 	}
-	if input.RestrictModels != nil {
-		channel.RestrictModels = *input.RestrictModels
-	}
-	if input.Features != nil {
-		channel.Features = *input.Features
-	}
 	if input.GroupIDs != nil {
 		if err := s.checkGroupConflicts(ctx, channel.ID, *input.GroupIDs); err != nil {
 			return err
@@ -857,15 +852,12 @@ func (s *ChannelService) applyUpdateInput(ctx context.Context, channel *Channel,
 	if input.ModelPricing != nil {
 		channel.ModelPricing = *input.ModelPricing
 	}
-	if input.ModelMapping != nil {
-		channel.ModelMapping = input.ModelMapping
-	}
-	if input.BillingModelSource != "" {
-		channel.BillingModelSource = input.BillingModelSource
-	}
-	if input.FeaturesConfig != nil {
-		channel.FeaturesConfig = input.FeaturesConfig
-	}
+	// Pricing-only: always clear non-pricing policy capabilities.
+	channel.BillingModelSource = BillingModelSourceRequested
+	channel.RestrictModels = false
+	channel.ModelMapping = nil
+	channel.Features = ""
+	channel.FeaturesConfig = nil
 	return nil
 }
 
