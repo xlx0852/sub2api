@@ -45,6 +45,16 @@
             {{ t('common.refresh') }}
           </button>
           <button
+            v-if="sharedGroupNames.length"
+            type="button"
+            class="btn btn-secondary btn-sm"
+            :disabled="splitting || saving || loading"
+            @click="splitToDedicated"
+          >
+            <Icon v-if="splitting" name="refresh" size="sm" class="mr-1 animate-spin" />
+            {{ t('admin.channels.splitDedicated') }}
+          </button>
+          <button
             v-if="summary?.policy_id"
             type="button"
             class="btn btn-secondary btn-sm"
@@ -99,11 +109,14 @@
 
         <div
           v-if="sharedGroupNames.length"
-          class="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900 dark:border-violet-900/40 dark:bg-violet-950/30 dark:text-violet-100"
+          class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100"
         >
           <p class="font-medium">{{ t('admin.channels.sharedPolicyTitle') }}</p>
           <p class="mt-1 text-xs opacity-90">
             {{ t('admin.channels.sharedPolicyDesc', { names: sharedGroupNames.join(', ') }) }}
+          </p>
+          <p class="mt-1 text-xs font-medium">
+            {{ t('admin.channels.sharedPolicyHint') }}
           </p>
         </div>
 
@@ -300,6 +313,7 @@ const appStore = useAppStore()
 const loading = ref(false)
 const saving = ref(false)
 const syncing = ref(false)
+const splitting = ref(false)
 const summary = ref<GroupPricingSummary | null>(null)
 const boundPolicy = ref<Channel | null>(null)
 
@@ -603,6 +617,35 @@ function validatePricing(): string | null {
     }
   }
   return null
+}
+
+async function splitToDedicated() {
+  const group = props.group
+  if (!group || splitting.value) return
+  if (!window.confirm(t('admin.channels.splitConfirm'))) return
+  splitting.value = true
+  try {
+    // Create a dedicated copy of current form pricing for this group only.
+    const model_pricing = formToModelPricing(group.platform as GroupPlatform)
+    const req: CreateChannelRequest = {
+      name: t('admin.channels.defaultPolicyName', { group: group.name }),
+      description: form.description.trim() || undefined,
+      group_ids: [group.id],
+      model_pricing,
+      model_mapping: {},
+      billing_model_source: 'requested',
+      restrict_models: false,
+      features_config: {},
+    }
+    await adminAPI.channels.create(req)
+    appStore.showSuccess(t('admin.channels.splitSuccess'))
+    await reload()
+    emit('success')
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error, t('admin.channels.splitError')))
+  } finally {
+    splitting.value = false
+  }
 }
 
 async function handleSave() {
