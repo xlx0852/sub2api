@@ -26,7 +26,7 @@ export default {
         availableChannels: {
           title: 'Model Plaza',
           description: 'Show logged-in users an aggregate view of accessible models, sell-price policies, and group discounts. Disabled by default.',
-          configureLink: 'Bind sell prices in Groups → Pricing, or maintain rows in Pricing & Monitor > Sell-Price Policies',
+          configureLink: 'Configure sell prices in Group Plans → Pricing',
           enabled: 'Enable Model Plaza',
           enabledHint: 'When off, the sidebar entry is hidden and the endpoint returns an empty list.',
         },

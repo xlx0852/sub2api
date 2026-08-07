@@ -26,7 +26,7 @@ export default {
         availableChannels: {
           title: '模型广场',
           description: '向已登录用户展示可访问的模型、售价策略与分组折扣聚合视图。默认关闭。',
-          configureLink: '前往 分组 → 定价 绑定售价，或 售价与监控 > 售价策略 维护条目',
+          configureLink: '前往 分组套餐 → 定价 配置售价',
           enabled: '启用模型广场',
           enabledHint: '关闭后用户端侧边栏入口隐藏，接口返回空数组。',
         },
