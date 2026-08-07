@@ -166,6 +166,9 @@ type CreateAPIKeyRequest struct {
 	RateLimit5h float64 `json:"rate_limit_5h"`
 	RateLimit1d float64 `json:"rate_limit_1d"`
 	RateLimit7d float64 `json:"rate_limit_7d"`
+
+	// ForceOpenAIFast 强制该 Key 的 OpenAI 请求走 Fast（priority）并按 Fast 计费
+	ForceOpenAIFast bool `json:"force_openai_fast"`
 }
 
 // UpdateAPIKeyRequest 更新API Key请求
@@ -187,6 +190,9 @@ type UpdateAPIKeyRequest struct {
 	RateLimit1d         *float64 `json:"rate_limit_1d"`
 	RateLimit7d         *float64 `json:"rate_limit_7d"`
 	ResetRateLimitUsage *bool    `json:"reset_rate_limit_usage"` // Reset all usage counters to 0
+
+	// ForceOpenAIFast nil = no change
+	ForceOpenAIFast *bool `json:"force_openai_fast"`
 }
 
 // APIKeyService API Key服务
@@ -410,9 +416,10 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		IPBlacklist: req.IPBlacklist,
 		Quota:       req.Quota,
 		QuotaUsed:   0,
-		RateLimit5h: req.RateLimit5h,
-		RateLimit1d: req.RateLimit1d,
-		RateLimit7d: req.RateLimit7d,
+		RateLimit5h:     req.RateLimit5h,
+		RateLimit1d:     req.RateLimit1d,
+		RateLimit7d:     req.RateLimit7d,
+		ForceOpenAIFast: req.ForceOpenAIFast,
 	}
 
 	// Set expiration time if specified
@@ -648,6 +655,9 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	}
 	if req.RateLimit7d != nil {
 		apiKey.RateLimit7d = *req.RateLimit7d
+	}
+	if req.ForceOpenAIFast != nil {
+		apiKey.ForceOpenAIFast = *req.ForceOpenAIFast
 	}
 	resetRateLimit := req.ResetRateLimitUsage != nil && *req.ResetRateLimitUsage
 	if resetRateLimit {

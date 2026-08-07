@@ -129,7 +129,6 @@
               <input
                 v-model.number="customScale"
                 type="number"
-                min="0.01"
                 step="0.1"
                 class="input h-7 w-16 px-1 text-[11px]"
                 :placeholder="t('admin.channels.form.customScalePlaceholder')"
@@ -164,27 +163,27 @@
             <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.inputPrice') }}</label>
               <input :value="entry.input_price" @input="emitField('input_price', ($event.target as HTMLInputElement).value)"
-                type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
+                type="number" step="any" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.outputPrice') }}</label>
               <input :value="entry.output_price" @input="emitField('output_price', ($event.target as HTMLInputElement).value)"
-                type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
+                type="number" step="any" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.cacheWritePrice') }}</label>
               <input :value="entry.cache_write_price" @input="emitField('cache_write_price', ($event.target as HTMLInputElement).value)"
-                type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
+                type="number" step="any" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.cacheReadPrice') }}</label>
               <input :value="entry.cache_read_price" @input="emitField('cache_read_price', ($event.target as HTMLInputElement).value)"
-                type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
+                type="number" step="any" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.imageTokenPrice') }}</label>
               <input :value="entry.image_output_price" @input="emitField('image_output_price', ($event.target as HTMLInputElement).value)"
-                type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
+                type="number" step="any" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
               <p class="mt-0.5 text-[10px] leading-3 text-amber-600/90 dark:text-amber-400/90">{{ t('admin.channels.form.imageOutputNullHint') }}</p>
             </div>
           </div>
@@ -222,7 +221,7 @@
           </label>
           <div class="mt-1 w-48">
             <input :value="entry.per_request_price" @input="emitField('per_request_price', ($event.target as HTMLInputElement).value)"
-              type="number" step="any" min="0" class="input text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
+              type="number" step="any" class="input text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
           </div>
 
           <!-- Tiers -->
@@ -258,7 +257,7 @@
           </label>
           <div class="mt-1 w-48">
             <input :value="entry.per_request_price" @input="emitField('per_request_price', ($event.target as HTMLInputElement).value)"
-              type="number" step="any" min="0" class="input text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
+              type="number" step="any" class="input text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
           </div>
 
           <!-- Image tiers -->

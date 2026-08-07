@@ -340,9 +340,15 @@ const attachDesktopTableTracking = () => {
   checkScrollable()
   checkActionsColumnWidth()
   if (tableWrapperRef.value && typeof ResizeObserver !== 'undefined') {
+    // rAF 批处理：避免 ResizeObserver loop completed with undelivered notifications
+    let roRaf = 0
     resizeObserver = new ResizeObserver(() => {
-      checkScrollable()
-      checkActionsColumnWidth()
+      if (roRaf) return
+      roRaf = requestAnimationFrame(() => {
+        roRaf = 0
+        checkScrollable()
+        checkActionsColumnWidth()
+      })
     })
     resizeObserver.observe(tableWrapperRef.value)
   } else {

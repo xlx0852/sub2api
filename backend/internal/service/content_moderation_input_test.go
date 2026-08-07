@@ -177,3 +177,35 @@ func TestExtractContentModerationInput_ResponsesLastIsAssistantSkipped(t *testin
 	require.Empty(t, input.Text)
 	require.Empty(t, input.Images)
 }
+
+// 部分 Responses 客户端/历史回放会把用户侧文本标成 output_text；
+// 必须仍能抽出文本，否则审计日志 input_excerpt 快照会空。
+func TestExtractContentModerationInput_ResponsesUserOutputTextExtracted(t *testing.T) {
+	body := []byte(`{
+		"input":[
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"earlier"}]},
+			{"type":"message","role":"assistant","content":[{"type":"output_text","text":"reply"}]},
+			{"type":"message","role":"user","content":[{"type":"output_text","text":"latest via output_text"}]}
+		]
+	}`)
+
+	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIResponses, body)
+
+	require.Equal(t, "latest via output_text", input.Text)
+	require.Empty(t, input.Images)
+}
+
+func TestExtractContentModerationInput_ResponsesMixedContentPartsIncludeOutputText(t *testing.T) {
+	body := []byte(`{
+		"input":[
+			{"type":"message","role":"user","content":[
+				{"type":"input_text","text":"prefix"},
+				{"type":"output_text","text":"suffix"}
+			]}
+		]
+	}`)
+
+	input := ExtractContentModerationInput(ContentModerationProtocolOpenAIResponses, body)
+
+	require.Equal(t, "prefix suffix", input.Text)
+}

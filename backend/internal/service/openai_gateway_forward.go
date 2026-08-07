@@ -433,29 +433,20 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 	}
 
-	if rawTier := requestView.ServiceTier; rawTier != "" {
-		if normTier := normalizedOpenAIServiceTierValue(rawTier); normTier != "" {
-			action, errMsg := s.evaluateOpenAIFastPolicy(ctx, account, upstreamModel, normTier)
-			switch action {
-			case BetaPolicyActionBlock:
-				msg := errMsg
-				if msg == "" {
-					msg = fmt.Sprintf("openai service_tier=%s is not allowed for model %s", normTier, upstreamModel)
-				}
-				blocked := &OpenAIFastBlockedError{Message: msg}
-				writeOpenAIFastPolicyBlockedResponse(c, blocked)
-				return nil, blocked
-			case BetaPolicyActionFilter:
-				markPatchDelete("service_tier")
-			case OpenAIFastPolicyActionForcePriority:
-				if rawTier != OpenAIFastTierPriority {
-					markPatchSet("service_tier", OpenAIFastTierPriority)
-				}
-			default:
-				if normTier != rawTier {
-					markPatchSet("service_tier", normTier)
-				}
-			}
+	{
+		rawTier := requestView.ServiceTier
+		setTier, deleteTier, blockMsg := s.resolveOpenAIFastPolicyMutation(
+			ctx, account, upstreamModel, rawTier, forceOpenAIFastFromContext(c),
+		)
+		if blockMsg != "" {
+			blocked := &OpenAIFastBlockedError{Message: blockMsg}
+			writeOpenAIFastPolicyBlockedResponse(c, blocked)
+			return nil, blocked
+		}
+		if deleteTier {
+			markPatchDelete("service_tier")
+		} else if setTier != "" && setTier != rawTier {
+			markPatchSet("service_tier", setTier)
 		}
 	}
 
@@ -1187,7 +1178,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 
 	// 终态收口：originator 必须与最终 User-Agent 首段配套且为官方身份，否则上游 404（issue #3901）。
 	if account.Type == AccountTypeOAuth {
-		enforceCodexIdentityHeaders(req.Header)
+		enforceCodexIdentityHeadersWithUA(req.Header, s.codexIdentityOverrideUA(account))
 	}
 
 	// Ensure required headers exist

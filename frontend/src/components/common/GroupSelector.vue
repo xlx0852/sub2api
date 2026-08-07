@@ -18,7 +18,8 @@
     </div>
     <div
       :class="[
-        'grid max-h-32 grid-cols-2 gap-1 overflow-y-auto p-2',
+        'grid max-h-48 gap-1 overflow-y-auto p-2',
+        columns === 1 ? 'grid-cols-1' : 'grid-cols-2',
         isSearchable
           ? 'rounded-b-lg border border-t-0 border-gray-200 bg-gray-50 dark:border-dark-600 dark:bg-dark-800'
           : 'rounded-lg border border-gray-200 bg-gray-50 dark:border-dark-600 dark:bg-dark-800'
@@ -48,7 +49,8 @@
       </label>
       <div
         v-if="filteredGroups.length === 0"
-        class="col-span-2 py-2 text-center text-sm text-gray-500 dark:text-gray-400"
+        :class="columns === 1 ? 'col-span-1' : 'col-span-2'"
+        class="py-2 text-center text-sm text-gray-500 dark:text-gray-400"
       >
         {{ t('common.noGroupsAvailable') }}
       </div>
@@ -71,10 +73,13 @@ interface Props {
   platform?: GroupPlatform // Optional platform filter
   mixedScheduling?: boolean // For antigravity accounts: allow anthropic/gemini groups
   searchable?: boolean | 'auto'
+  /** 窄抽屉场景用 1 列，避免两列把侧栏撑得过宽 */
+  columns?: 1 | 2
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  searchable: 'auto'
+  searchable: 'auto',
+  columns: 2
 })
 const emit = defineEmits<{
   'update:modelValue': [value: number[]]

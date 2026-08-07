@@ -650,6 +650,32 @@
           </div>
         </div>
 
+        <!-- Force OpenAI Fast -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <div class="min-w-0 pr-3">
+              <label class="input-label mb-0">{{ t('keys.forceOpenAIFast') }}</label>
+              <p class="input-hint mt-1">{{ t('keys.forceOpenAIFastHint') }}</p>
+            </div>
+            <button
+              type="button"
+              @click="formData.force_openai_fast = !formData.force_openai_fast"
+              :class="[
+                'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+                formData.force_openai_fast ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+              ]"
+              data-testid="key-force-openai-fast"
+            >
+              <span
+                :class="[
+                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                  formData.force_openai_fast ? 'translate-x-4' : 'translate-x-0'
+                ]"
+              />
+            </button>
+          </div>
+        </div>
+
         <!-- Rate Limit Section -->
         <div class="space-y-3">
           <div class="flex items-center justify-between">
@@ -1311,6 +1337,7 @@ const formData = ref({
   quota: null as number | null,
   // Rate limit settings
   enable_rate_limit: false,
+  force_openai_fast: false,
   rate_limit_5h: null as number | null,
   rate_limit_1d: null as number | null,
   rate_limit_7d: null as number | null,
@@ -1546,6 +1573,7 @@ const editKey = (key: ApiKey) => {
     rate_limit_5h: key.rate_limit_5h || null,
     rate_limit_1d: key.rate_limit_1d || null,
     rate_limit_7d: key.rate_limit_7d || null,
+    force_openai_fast: !!key.force_openai_fast,
     enable_expiration: hasExpiration,
     expiration_preset: 'custom',
     expiration_date: key.expires_at ? formatDateTimeLocal(key.expires_at) : ''
@@ -1695,6 +1723,7 @@ const handleSubmit = async () => {
         rate_limit_5h: rateLimitData.rate_limit_5h,
         rate_limit_1d: rateLimitData.rate_limit_1d,
         rate_limit_7d: rateLimitData.rate_limit_7d,
+        force_openai_fast: !!formData.value.force_openai_fast,
       }
       if (shouldSubmitEditStatus(selectedKey.value, formData.value.status)) {
         updates.status = formData.value.status
@@ -1711,7 +1740,8 @@ const handleSubmit = async () => {
         ipBlacklist,
         quota,
         expiresInDays,
-        rateLimitData
+        rateLimitData,
+        !!formData.value.force_openai_fast
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
@@ -1766,6 +1796,7 @@ const closeModals = () => {
     enable_quota: false,
     quota: null,
     enable_rate_limit: false,
+    force_openai_fast: false,
     rate_limit_5h: null,
     rate_limit_1d: null,
     rate_limit_7d: null,

@@ -191,7 +191,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	// 默认 Codex CLI 身份（承接原「非 Codex UA 兜底」，并修复其把 codex-tui 等官方 UA 改写为
 	// codex_cli_rs 造成的 originator 错配 404），详见 issue #3901。
 	if account != nil && account.Type == AccountTypeOAuth {
-		enforceCodexIdentityHeaders(headers)
+		enforceCodexIdentityHeadersWithUA(headers, s.codexIdentityOverrideUA(account))
 	}
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）。

@@ -45,12 +45,12 @@ func (*AccountCostConfig) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case accountcostconfig.FieldAutoRenew:
+			values[i] = new(sql.NullBool)
 		case accountcostconfig.FieldPeriodFee, accountcostconfig.FieldWindowBaselineRevenue:
 			values[i] = new(sql.NullFloat64)
 		case accountcostconfig.FieldID, accountcostconfig.FieldAccountID, accountcostconfig.FieldPeriodDays:
 			values[i] = new(sql.NullInt64)
-		case accountcostconfig.FieldAutoRenew:
-			values[i] = new(sql.NullBool)
 		case accountcostconfig.FieldCostType, accountcostconfig.FieldCurrency, accountcostconfig.FieldNotes:
 			values[i] = new(sql.NullString)
 		case accountcostconfig.FieldCreatedAt, accountcostconfig.FieldUpdatedAt:
@@ -125,6 +125,12 @@ func (_m *AccountCostConfig) assignValues(columns []string, values []any) error 
 				_m.WindowBaselineRevenue = new(float64)
 				*_m.WindowBaselineRevenue = value.Float64
 			}
+		case accountcostconfig.FieldAutoRenew:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field auto_renew", values[i])
+			} else if value.Valid {
+				_m.AutoRenew = value.Bool
+			}
 		case accountcostconfig.FieldNotes:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field notes", values[i])
@@ -192,6 +198,9 @@ func (_m *AccountCostConfig) String() string {
 		builder.WriteString("window_baseline_revenue=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("auto_renew=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AutoRenew))
 	builder.WriteString(", ")
 	builder.WriteString("notes=")
 	builder.WriteString(_m.Notes)

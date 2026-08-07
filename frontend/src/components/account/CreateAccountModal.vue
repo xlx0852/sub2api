@@ -59,7 +59,7 @@
     <form
       v-if="step === 1"
       id="create-account-form"
-      @submit.prevent="handleSubmit"
+      novalidate @submit.prevent="handleSubmit"
       class="space-y-5"
     >
       <div>
@@ -67,7 +67,6 @@
         <input
           v-model="form.name"
           type="text"
-          required
           class="input"
           :placeholder="t('admin.accounts.enterAccountName')"
           data-tour="account-form-name"
@@ -892,7 +891,6 @@
           <input
             v-model="upstreamBaseUrl"
             type="text"
-            required
             class="input"
             placeholder="https://cloudcode-pa.googleapis.com"
           />
@@ -903,7 +901,6 @@
           <input
             v-model="upstreamApiKey"
             type="password"
-            required
             class="input font-mono"
             placeholder="sk-..."
           />
@@ -979,7 +976,6 @@
             <label class="input-label">Location</label>
             <select
               v-model="vertexLocation"
-              required
               class="input font-mono"
             >
               <optgroup
@@ -1144,7 +1140,6 @@
           <input
             v-model="apiKeyValue"
             type="password"
-            required
             class="input font-mono"
             :placeholder="
               form.platform === 'openai'
@@ -1657,7 +1652,6 @@
             <input
               v-model="bedrockAccessKeyId"
               type="text"
-              required
               class="input font-mono"
               placeholder="AKIA..."
             />
@@ -1667,7 +1661,6 @@
             <input
               v-model="bedrockSecretAccessKey"
               type="password"
-              required
               class="input font-mono"
             />
           </div>
@@ -1688,7 +1681,6 @@
           <input
             v-model="bedrockApiKeyValue"
             type="password"
-            required
             class="input font-mono"
           />
         </div>

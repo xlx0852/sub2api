@@ -91,7 +91,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	if policyModel == "" {
 		policyModel = reqModel
 	}
-	updatedBody, policyErr := s.applyOpenAIFastPolicyToBody(ctx, account, policyModel, body)
+	updatedBody, policyErr := s.applyOpenAIFastPolicyToBody(ctx, account, policyModel, body, forceOpenAIFastFromContext(c))
 	if policyErr != nil {
 		var blocked *OpenAIFastBlockedError
 		if errors.As(policyErr, &blocked) {
@@ -452,7 +452,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	// 默认 Codex CLI 身份（承接原「非 Codex UA 安全兜底」，并修复其把 codex-tui 等官方 UA 改写为
 	// codex_cli_rs 造成的 originator 错配 404），详见 issue #3901。
 	if account.Type == AccountTypeOAuth {
-		enforceCodexIdentityHeaders(req.Header)
+		enforceCodexIdentityHeadersWithUA(req.Header, s.codexIdentityOverrideUA(account))
 	}
 
 	if req.Header.Get("content-type") == "" {
@@ -731,6 +731,29 @@ func openAIStreamDataStartsClientOutput(data, eventType string) bool {
 	return !openAIStreamEventIsPreamble(eventType)
 }
 
+
+// openAIStreamFailedEventErrorCode 提取流内 failed 事件的错误码（小写），
+// 兼容 response.failed 的嵌套形态与裸 error 形态。
+func openAIStreamFailedEventErrorCode(payload []byte) string {
+	code := strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "response.error.code").String()))
+	if code == "" {
+		code = strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "error.code").String()))
+	}
+	return code
+}
+
+// isOpenAIUpstreamCapacityShedEvent 判断流内 failed 事件是否为上游容量降载信号。
+// 上游在容量紧张时会把请求丢进降载路径：HTTP 200 之后立刻推 event: error
+// （code=server_is_overloaded / slow_down）并以 response.failed 收尾。
+func isOpenAIUpstreamCapacityShedEvent(payload []byte) bool {
+	switch openAIStreamFailedEventErrorCode(payload) {
+	case "server_is_overloaded", "slow_down":
+		return true
+	default:
+		return false
+	}
+}
+
 func openAIStreamFailedEventSemanticStatus(payload []byte, message string) int {
 	if isOpenAIContextWindowError(message, payload) {
 		return http.StatusBadRequest
@@ -907,6 +930,23 @@ func (s *OpenAIGatewayService) recordOpenAIStreamUpstreamError(
 	return message
 }
 
+
+func openAIStreamFailedEventRetryableOnSameAccount(account *Account, payload []byte, message string) bool {
+	if account == nil {
+		return false
+	}
+	// 容量降载是请求级信号，不是账号级故障：先在同一账号上做有界重试。
+	if isOpenAIUpstreamCapacityShedEvent(payload) {
+		return true
+	}
+	if !account.IsPoolMode() {
+		return false
+	}
+	semanticStatus := openAIStreamFailedEventSemanticStatus(payload, message)
+	return account.IsPoolModeRetryableStatus(semanticStatus) ||
+		isOpenAITransientProcessingError(http.StatusBadRequest, message, payload)
+}
+
 func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 	c *gin.Context,
 	account *Account,
@@ -927,8 +967,10 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 		},
 	})
 	return &UpstreamFailoverError{
-		StatusCode:   http.StatusBadGateway,
-		ResponseBody: body,
+		StatusCode:             http.StatusBadGateway,
+		ResponseBody:           body,
+		RetryableOnSameAccount: openAIStreamFailedEventRetryableOnSameAccount(account, payload, message),
+		RequestScopedTransient: isOpenAIUpstreamCapacityShedEvent(payload),
 	}
 }
 

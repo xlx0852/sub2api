@@ -152,6 +152,20 @@ func (_u *AccountCostConfigUpdate) ClearWindowBaselineRevenue() *AccountCostConf
 	return _u
 }
 
+// SetAutoRenew sets the "auto_renew" field.
+func (_u *AccountCostConfigUpdate) SetAutoRenew(v bool) *AccountCostConfigUpdate {
+	_u.mutation.SetAutoRenew(v)
+	return _u
+}
+
+// SetNillableAutoRenew sets the "auto_renew" field if the given value is not nil.
+func (_u *AccountCostConfigUpdate) SetNillableAutoRenew(v *bool) *AccountCostConfigUpdate {
+	if v != nil {
+		_u.SetAutoRenew(*v)
+	}
+	return _u
+}
+
 // SetNotes sets the "notes" field.
 func (_u *AccountCostConfigUpdate) SetNotes(v string) *AccountCostConfigUpdate {
 	_u.mutation.SetNotes(v)
@@ -275,6 +289,9 @@ func (_u *AccountCostConfigUpdate) sqlSave(ctx context.Context) (_node int, err 
 	}
 	if _u.mutation.WindowBaselineRevenueCleared() {
 		_spec.ClearField(accountcostconfig.FieldWindowBaselineRevenue, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.AutoRenew(); ok {
+		_spec.SetField(accountcostconfig.FieldAutoRenew, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Notes(); ok {
 		_spec.SetField(accountcostconfig.FieldNotes, field.TypeString, value)
@@ -423,6 +440,20 @@ func (_u *AccountCostConfigUpdateOne) AddWindowBaselineRevenue(v float64) *Accou
 // ClearWindowBaselineRevenue clears the value of the "window_baseline_revenue" field.
 func (_u *AccountCostConfigUpdateOne) ClearWindowBaselineRevenue() *AccountCostConfigUpdateOne {
 	_u.mutation.ClearWindowBaselineRevenue()
+	return _u
+}
+
+// SetAutoRenew sets the "auto_renew" field.
+func (_u *AccountCostConfigUpdateOne) SetAutoRenew(v bool) *AccountCostConfigUpdateOne {
+	_u.mutation.SetAutoRenew(v)
+	return _u
+}
+
+// SetNillableAutoRenew sets the "auto_renew" field if the given value is not nil.
+func (_u *AccountCostConfigUpdateOne) SetNillableAutoRenew(v *bool) *AccountCostConfigUpdateOne {
+	if v != nil {
+		_u.SetAutoRenew(*v)
+	}
 	return _u
 }
 
@@ -579,6 +610,9 @@ func (_u *AccountCostConfigUpdateOne) sqlSave(ctx context.Context) (_node *Accou
 	}
 	if _u.mutation.WindowBaselineRevenueCleared() {
 		_spec.ClearField(accountcostconfig.FieldWindowBaselineRevenue, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.AutoRenew(); ok {
+		_spec.SetField(accountcostconfig.FieldAutoRenew, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Notes(); ok {
 		_spec.SetField(accountcostconfig.FieldNotes, field.TypeString, value)

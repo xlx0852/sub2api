@@ -275,7 +275,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		initialRequestModel = hooks.InitialRequestModel
 	}
 	usageMeta := newOpenAIWSPassthroughUsageMeta(initialRequestModel, firstClientMessage)
-	updatedFirst, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(ctx, account, capturedSessionModel, firstClientMessage)
+	updatedFirst, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(ctx, account, capturedSessionModel, firstClientMessage, forceOpenAIFastFromContext(c))
 	if policyErr != nil {
 		return fmt.Errorf("apply openai fast policy on first ws frame: %w", policyErr)
 	}
@@ -469,7 +469,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			if model == "" {
 				model = capturedSessionModel
 			}
-			out, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(ctx, account, model, payload)
+			out, blocked, policyErr := s.applyOpenAIFastPolicyToWSResponseCreate(ctx, account, model, payload, forceOpenAIFastFromContext(c))
 			if policyErr == nil && blocked == nil {
 				if sanitized, sanitizeChanged, sanitizeErr := sanitizeOpenAIWSResponseCreateFrame(out, account); sanitizeErr != nil {
 					return out, nil, sanitizeErr

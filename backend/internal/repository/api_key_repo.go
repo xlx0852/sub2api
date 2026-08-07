@@ -51,7 +51,8 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		SetNillableExpiresAt(key.ExpiresAt).
 		SetRateLimit5h(key.RateLimit5h).
 		SetRateLimit1d(key.RateLimit1d).
-		SetRateLimit7d(key.RateLimit7d)
+		SetRateLimit7d(key.RateLimit7d).
+		SetForceOpenaiFast(key.ForceOpenAIFast)
 
 	if len(key.IPWhitelist) > 0 {
 		builder.SetIPWhitelist(key.IPWhitelist)
@@ -140,6 +141,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 			apikey.FieldRateLimit5h,
 			apikey.FieldRateLimit1d,
 			apikey.FieldRateLimit7d,
+			apikey.FieldForceOpenaiFast,
 		).
 		WithUser(func(q *dbent.UserQuery) {
 			q.Select(
@@ -236,6 +238,7 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) erro
 		SetUsage5h(key.Usage5h).
 		SetUsage1d(key.Usage1d).
 		SetUsage7d(key.Usage7d).
+		SetForceOpenaiFast(key.ForceOpenAIFast).
 		SetUpdatedAt(now)
 	if key.GroupID != nil {
 		builder.SetGroupID(*key.GroupID)
@@ -728,9 +731,10 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		Usage5h:       m.Usage5h,
 		Usage1d:       m.Usage1d,
 		Usage7d:       m.Usage7d,
-		Window5hStart: m.Window5hStart,
-		Window1dStart: m.Window1dStart,
-		Window7dStart: m.Window7dStart,
+		Window5hStart:   m.Window5hStart,
+		Window1dStart:   m.Window1dStart,
+		Window7dStart:   m.Window7dStart,
+		ForceOpenAIFast: m.ForceOpenaiFast,
 	}
 	if m.Edges.User != nil {
 		out.User = userEntityToService(m.Edges.User)

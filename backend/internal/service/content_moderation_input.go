@@ -101,20 +101,20 @@ func collectAnthropicUserContentValue(value gjson.Result, parts *[]string, image
 			collectAnthropicUserContentValue(item, parts, images)
 			return true
 		})
-	case value.IsObject():
-		typ := strings.ToLower(strings.TrimSpace(value.Get("type").String()))
-		switch typ {
-		case "", "text", "input_text", "message":
-			if value.Get("text").Exists() && !isAnthropicSystemReminderText(value.Get("text").String()) {
-				addModerationText(parts, value.Get("text").String())
+		case value.IsObject():
+			typ := strings.ToLower(strings.TrimSpace(value.Get("type").String()))
+			switch typ {
+			case "", "text", "input_text", "output_text", "message":
+				if value.Get("text").Exists() && !isAnthropicSystemReminderText(value.Get("text").String()) {
+					addModerationText(parts, value.Get("text").String())
+				}
+				if value.Get("content").Exists() {
+					collectAnthropicUserContentValue(value.Get("content"), parts, images)
+				}
+			case "image_url", "input_image", "image":
+				collectContentValue(value, parts, images)
 			}
-			if value.Get("content").Exists() {
-				collectAnthropicUserContentValue(value.Get("content"), parts, images)
-			}
-		case "image_url", "input_image", "image":
-			collectContentValue(value, parts, images)
 		}
-	}
 }
 
 func isAnthropicSystemReminderText(text string) bool {
@@ -224,16 +224,18 @@ func collectContentValue(value gjson.Result, parts *[]string, images *[]string) 
 		addModerationImage(images, value.Get("source.data").String())
 		addModerationImage(images, value.Get("data").String())
 		addModerationImage(images, value.Get("base64").String())
-		switch typ {
-		case "", "text", "input_text", "message":
-			if value.Get("text").Exists() {
-				addModerationText(parts, value.Get("text").String())
+			switch typ {
+			// output_text：Responses 历史回放/部分客户端会把用户可见文本标成该类型；
+			// 漏解析会导致 isResponsesUserTextItem 判空、审计 input 快照缺失。
+			case "", "text", "input_text", "output_text", "message":
+				if value.Get("text").Exists() {
+					addModerationText(parts, value.Get("text").String())
+				}
+				if value.Get("content").Exists() {
+					collectContentValue(value.Get("content"), parts, images)
+				}
+			case "image_url", "input_image", "image":
 			}
-			if value.Get("content").Exists() {
-				collectContentValue(value.Get("content"), parts, images)
-			}
-		case "image_url", "input_image", "image":
-		}
 	}
 }
 
