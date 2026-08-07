@@ -13,10 +13,6 @@ export default {
     copied: '已复制',
     copyFailed: '复制失败'
   },
-  batchImageGuide: {
-    title: '图片批量生成',
-    description: '一次提交多条提示词，任务完成后可统一下载图片结果'
-  },
   // Home Page
   home: {
     viewDocs: '查看文档',
