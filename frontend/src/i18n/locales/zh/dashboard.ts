@@ -456,18 +456,13 @@ export default {
     relativeDaysAgo: '{n} 天前'
   },
 
-  // My group availability (real traffic)
-  groupAvailability: {
-    title: '我的分组可用性',
-    subtitle: '按你实际使用的分组展示（usage 成功 + 网关失败），非主动探测',
-    empty: '你还没有绑定任何分组，暂无可用性数据',
-    last24h: '近 24 小时',
-    last7d: '近 7 天',
-    noTraffic: '无流量'
-  },
-
   // Channel Status (user-facing read-only view)
   channelStatus: {
+    myGroupsTitle: '我的分组可用性',
+    myGroupsSubtitle: '按你实际使用的分组展示（usage 成功 + 网关失败），非主动探测',
+    myGroupsEmpty: '你还没有绑定任何分组，暂无可用性数据',
+    last24h: '近 24 小时',
+    last7d: '近 7 天',
     availabilityTitle: '服务可用性',
     availabilitySubtitle: '查看近期端点成功率和响应速度',
     viewAll: '查看详情',
