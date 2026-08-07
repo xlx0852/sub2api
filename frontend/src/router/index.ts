@@ -440,22 +440,15 @@ const routes: RouteRecordRaw[] = [
       descriptionKey: 'admin.groups.description'
     }
   },
-  // P4 product paths
+  // Sell pricing is inlined on Groups → Pricing (GroupSellPriceEditor).
+  // Keep old URLs as soft redirects so bookmarks don't 404.
   {
     path: '/admin/sell-price-policies',
-    redirect: '/admin/sell-price-policies/pricing'
+    redirect: '/admin/groups'
   },
   {
     path: '/admin/sell-price-policies/pricing',
-    name: 'AdminSellPricePolicies',
-    component: () => import('@/views/admin/ChannelsView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Sell-Price Policies',
-      titleKey: 'admin.channels.title',
-      descriptionKey: 'admin.channels.description'
-    }
+    redirect: '/admin/groups'
   },
   {
     path: '/admin/endpoint-monitors',
@@ -469,14 +462,14 @@ const routes: RouteRecordRaw[] = [
       descriptionKey: 'admin.channelMonitor.description'
     }
   },
-  // Legacy channel paths → P4 aliases
+  // Legacy channel paths
   {
     path: '/admin/channels',
-    redirect: '/admin/sell-price-policies/pricing'
+    redirect: '/admin/groups'
   },
   {
     path: '/admin/channels/pricing',
-    redirect: '/admin/sell-price-policies/pricing'
+    redirect: '/admin/groups'
   },
   {
     path: '/admin/channels/monitor',
