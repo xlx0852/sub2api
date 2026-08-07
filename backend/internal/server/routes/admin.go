@@ -2,6 +2,8 @@
 package routes
 
 import (
+	"strings"
+
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -17,6 +19,8 @@ func RegisterAdminRoutes(
 	settingService *service.SettingService,
 ) {
 	admin := v1.Group("/admin")
+	// Mark legacy channel admin paths even when auth rejects the request (P4.1a).
+	admin.Use(deprecatedSellPricePolicyPath())
 	admin.Use(gin.HandlerFunc(adminAuth))
 	admin.Use(middleware.AdminComplianceGuard(settingService))
 	{
@@ -673,10 +677,8 @@ func registerTLSFingerprintProfileRoutes(admin *gin.RouterGroup, h *handler.Hand
 func registerChannelRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	// P4.1 product path (preferred).
 	registerSellPricePolicyRoutes(admin.Group("/sell-price-policies"), h)
-	// Legacy path: still functional, but marked deprecated for clients.
-	legacy := admin.Group("/channels")
-	legacy.Use(deprecatedSellPricePolicyPath())
-	registerSellPricePolicyRoutes(legacy, h)
+	// Legacy path: still functional (deprecation headers applied at /admin group for /channels*).
+	registerSellPricePolicyRoutes(admin.Group("/channels"), h)
 }
 
 func registerSellPricePolicyRoutes(g *gin.RouterGroup, h *handler.Handlers) {
@@ -691,12 +693,16 @@ func registerSellPricePolicyRoutes(g *gin.RouterGroup, h *handler.Handlers) {
 }
 
 // deprecatedSellPricePolicyPath marks legacy /admin/channels* as sunset without breaking clients.
+// Installed before auth so 401 responses still carry deprecation headers.
 func deprecatedSellPricePolicyPath() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Header("Deprecation", "true")
-		c.Header("Sunset", "Sat, 01 Aug 2026 00:00:00 GMT")
-		c.Header("Link", "</api/v1/admin/sell-price-policies>; rel=\"successor-version\"")
-		c.Header("X-API-Warn", "Use /api/v1/admin/sell-price-policies instead of /api/v1/admin/channels")
+		path := c.Request.URL.Path
+		if strings.Contains(path, "/admin/channels") {
+			c.Header("Deprecation", "true")
+			c.Header("Sunset", "Sat, 01 Aug 2026 00:00:00 GMT")
+			c.Header("Link", "</api/v1/admin/sell-price-policies>; rel=\"successor-version\"")
+			c.Header("X-API-Warn", "Use /api/v1/admin/sell-price-policies instead of /api/v1/admin/channels")
+		}
 		c.Next()
 	}
 }
