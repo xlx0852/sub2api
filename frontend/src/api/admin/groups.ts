@@ -379,9 +379,7 @@ export async function getUsageSummary(
 	  hint: string
 	  billing_model_source?: string
 	  restrict_models: boolean
-	  apply_pricing_to_account_stats: boolean
-	  account_stats_rule_count: number
-	  models: GroupPricingModelPreview[]
+			  models: GroupPricingModelPreview[]
 	  available_policies: SellPricePolicyOption[]
 	}
 

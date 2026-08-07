@@ -567,7 +567,7 @@ type AdminUsageLog struct {
 
 	// AccountRateMultiplier 账号计费倍率快照（nil 表示按 1.0 处理）
 	AccountRateMultiplier *float64 `json:"account_rate_multiplier"`
-	// AccountStatsCost 自定义定价规则计算的账号统计费用（nil 表示使用默认公式）
+	// AccountStatsCost legacy field (nil for new writes; historical rows may still have values)
 	AccountStatsCost *float64 `json:"account_stats_cost,omitempty"`
 
 	// IPAddress 用户请求 IP

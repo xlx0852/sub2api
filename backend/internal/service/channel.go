@@ -45,35 +45,16 @@ type Channel struct {
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 
-	// 关联的分组 ID 列表
-	GroupIDs []int64
-	// 模型定价列表（每条含 Platform 字段）
-	ModelPricing []ChannelModelPricing
-	// 渠道级模型映射（按平台分组：platform → {src→dst}）
-	ModelMapping map[string]map[string]string
+// 关联的分组 ID 列表
+		GroupIDs []int64
+		// 模型定价列表（每条含 Platform 字段）
+		ModelPricing []ChannelModelPricing
+		// 渠道级模型映射（按平台分组：platform → {src→dst}）
+		ModelMapping map[string]map[string]string
+	}
 
-	// 账号统计定价
-	ApplyPricingToAccountStats bool                      // 是否应用渠道模型定价到账号统计
-	AccountStatsPricingRules   []AccountStatsPricingRule // 自定义账号统计定价规则（按 SortOrder 排序，先命中为准）
-}
-
-// AccountStatsPricingRule 账号统计定价规则
-// 每条规则包含匹配条件（分组/账号）和独立的模型定价。
-// 多条规则按 SortOrder 排序，先命中为准。
-type AccountStatsPricingRule struct {
-	ID         int64
-	ChannelID  int64
-	Name       string
-	GroupIDs   []int64
-	AccountIDs []int64
-	SortOrder  int
-	Pricing    []ChannelModelPricing // 规则内的模型定价（复用现有定价结构）
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-}
-
-// ChannelModelPricing 渠道模型定价条目
-type ChannelModelPricing struct {
+	// ChannelModelPricing 渠道模型定价条目
+	type ChannelModelPricing struct {
 	ID               int64
 	ChannelID        int64
 	Platform         string            // 所属平台（anthropic/openai/gemini/...）
@@ -212,26 +193,6 @@ func (c *Channel) Clone() *Channel {
 	}
 	if c.FeaturesConfig != nil {
 		cp.FeaturesConfig = deepCopyFeaturesConfig(c.FeaturesConfig)
-	}
-	if c.AccountStatsPricingRules != nil {
-		cp.AccountStatsPricingRules = make([]AccountStatsPricingRule, len(c.AccountStatsPricingRules))
-		for i, rule := range c.AccountStatsPricingRules {
-			cp.AccountStatsPricingRules[i] = rule
-			if rule.GroupIDs != nil {
-				cp.AccountStatsPricingRules[i].GroupIDs = make([]int64, len(rule.GroupIDs))
-				copy(cp.AccountStatsPricingRules[i].GroupIDs, rule.GroupIDs)
-			}
-			if rule.AccountIDs != nil {
-				cp.AccountStatsPricingRules[i].AccountIDs = make([]int64, len(rule.AccountIDs))
-				copy(cp.AccountStatsPricingRules[i].AccountIDs, rule.AccountIDs)
-			}
-			if rule.Pricing != nil {
-				cp.AccountStatsPricingRules[i].Pricing = make([]ChannelModelPricing, len(rule.Pricing))
-				for j := range rule.Pricing {
-					cp.AccountStatsPricingRules[i].Pricing[j] = rule.Pricing[j].Clone()
-				}
-			}
-		}
 	}
 	return &cp
 }

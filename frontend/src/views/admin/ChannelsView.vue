@@ -576,7 +576,6 @@ const form = reactive({
   restrict_models: false,
   billing_model_source: 'channel_mapped' as string,
   platforms: [] as PlatformSection[],
-  apply_pricing_to_account_stats: false,
 })
 
 let abortController: AbortController | null = null
@@ -1020,7 +1019,6 @@ function resetForm() {
   form.restrict_models = false
   form.billing_model_source = 'channel_mapped'
   form.platforms = []
-  form.apply_pricing_to_account_stats = false
   activeTab.value = 'basic'
 }
 
@@ -1038,7 +1036,6 @@ async function openEditDialog(channel: Channel) {
   form.status = channel.status
   form.restrict_models = channel.restrict_models || false
   form.billing_model_source = channel.billing_model_source || 'channel_mapped'
-  form.apply_pricing_to_account_stats = false
   // Must load groups first so apiToForm can map groupID → platform
   await Promise.all([loadGroups(), loadAllChannelsForConflict()])
   form.platforms = apiToForm(channel)
@@ -1153,10 +1150,7 @@ async function handleSubmit() {
         billing_model_source: form.billing_model_source,
         restrict_models: form.restrict_models,
         features_config,
-        // Product decision: sell-price policy account-cost overrides are disabled for this deployment.
-        apply_pricing_to_account_stats: false,
-        account_stats_pricing_rules: []
-      }
+            }
       await adminAPI.channels.update(editingChannel.value.id, req)
       appStore.showSuccess(t('admin.channels.updateSuccess', 'Channel updated'))
     } else {
@@ -1169,10 +1163,7 @@ async function handleSubmit() {
         billing_model_source: form.billing_model_source,
         restrict_models: form.restrict_models,
         features_config,
-        // Product decision: sell-price policy account-cost overrides are disabled for this deployment.
-        apply_pricing_to_account_stats: false,
-        account_stats_pricing_rules: []
-      }
+            }
       await adminAPI.channels.create(req)
       appStore.showSuccess(t('admin.channels.createSuccess', 'Channel created'))
     }
