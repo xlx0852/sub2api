@@ -45,12 +45,11 @@ func (s *UsageService) GetGroupTrafficAvailability(ctx context.Context, groupID 
 	if err != nil {
 		return nil, fmt.Errorf("get group 24h availability: %w", err)
 	}
-	week, err := s.usageRepo.GetGroupTrafficAvailability(ctx, groupID, end.Add(-7*24*time.Hour), end, 7*24*time.Hour)
+	// 7d summary: cheap aggregate without request_id dedup / buckets.
+	week, err := s.usageRepo.GetGroupTrafficAvailabilityRollup(ctx, groupID, end.Add(-7*24*time.Hour), end)
 	if err != nil {
 		return nil, fmt.Errorf("get group 7d availability: %w", err)
 	}
-	// 7d is a single rollup — drop bucket series to keep payload small.
-	week.Buckets = nil
 
 	return &GroupTrafficAvailabilitySummary{GroupID: groupID, Day: day, Week: week}, nil
 }

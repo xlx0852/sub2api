@@ -66,6 +66,8 @@ type UsageLogRepository interface {
 	GetTrafficAvailability(ctx context.Context, start, end time.Time, bucketSize time.Duration, userID *int64, platform string) (*TrafficAvailability, error)
 	// GetGroupTrafficAvailability aggregates real-traffic availability for a group.
 	GetGroupTrafficAvailability(ctx context.Context, groupID int64, start, end time.Time, bucketSize time.Duration) (*GroupTrafficAvailability, error)
+	// GetGroupTrafficAvailabilityRollup is a cheap single-window aggregate (no dedup/buckets) for long windows.
+	GetGroupTrafficAvailabilityRollup(ctx context.Context, groupID int64, start, end time.Time) (*GroupTrafficAvailability, error)
 	GetAPIKeyDashboardStats(ctx context.Context, apiKeyID int64) (*usagestats.UserDashboardStats, error)
 	GetUserUsageTrendByUserID(ctx context.Context, userID int64, startTime, endTime time.Time, granularity string) ([]usagestats.TrendDataPoint, error)
 	GetUserModelStats(ctx context.Context, userID int64, startTime, endTime time.Time) ([]usagestats.ModelStat, error)

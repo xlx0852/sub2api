@@ -113,3 +113,49 @@ FROM events GROUP BY bucket ORDER BY bucket`
 	}
 	return result, nil
 }
+
+// GetGroupTrafficAvailabilityRollup returns a single-window aggregate without
+// request_id-level dedup and without time buckets. Used for the 7d summary so
+// long windows don't pay for a huge DISTINCT ON sort.
+func (r *usageLogRepository) GetGroupTrafficAvailabilityRollup(ctx context.Context, groupID int64, start, end time.Time) (*service.GroupTrafficAvailability, error) {
+	if groupID <= 0 || !start.Before(end) {
+		return nil, fmt.Errorf("invalid group availability range")
+	}
+	query := `
+SELECT
+  (SELECT COUNT(*) FROM usage_logs ul
+     WHERE ul.created_at >= $1 AND ul.created_at < $2 AND ul.group_id = $3) AS success_count,
+  (SELECT COUNT(*) FROM ops_error_logs e
+     WHERE e.created_at >= $1 AND e.created_at < $2 AND e.group_id = $3
+       AND COALESCE(e.status_code, 0) >= 400
+       AND NOT COALESCE(e.is_business_limited, false)) AS failure_count,
+  (SELECT AVG(ul.duration_ms) FROM usage_logs ul
+     WHERE ul.created_at >= $1 AND ul.created_at < $2 AND ul.group_id = $3) AS avg_latency
+`
+	var success, failure int64
+	var latency *float64
+	if err := r.db.QueryRowContext(ctx, query, start.UTC(), end.UTC(), groupID).
+		Scan(&success, &failure, &latency); err != nil {
+		return nil, err
+	}
+	result := &service.GroupTrafficAvailability{
+		GroupID:      groupID,
+		StartAt:      start.UTC(),
+		EndAt:        end.UTC(),
+		SuccessCount: success,
+		FailureCount: failure,
+	}
+	result.SampleCount = success + failure
+	if result.SampleCount > 0 {
+		rate := float64(success) * 100 / float64(result.SampleCount)
+		result.SuccessRate = &rate
+		result.Status = trafficStatus(result.SampleCount, rate)
+	} else {
+		result.Status = "no_traffic"
+	}
+	if latency != nil {
+		avg := *latency
+		result.AverageLatencyMs = &avg
+	}
+	return result, nil
+}
