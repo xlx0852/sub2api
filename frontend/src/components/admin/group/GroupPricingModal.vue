@@ -104,7 +104,7 @@
             {{ t('admin.groups.pricing.followOfficial') }}
           </button>
           <a
-            href="/admin/channels/pricing"
+            href="/admin/sell-price-policies/pricing"
             class="btn btn-secondary btn-sm"
             @click="emit('close')"
           >

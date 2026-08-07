@@ -106,7 +106,8 @@ export async function list(
   },
   options?: { signal?: AbortSignal }
 ): Promise<PaginatedResponse<Channel>> {
-  const { data } = await apiClient.get<PaginatedResponse<Channel>>('/admin/channels', {
+  // P4 product path; /admin/channels remains as server-side alias.
+  const { data } = await apiClient.get<PaginatedResponse<Channel>>('/admin/sell-price-policies', {
     params: {
       page,
       page_size: pageSize,
@@ -121,7 +122,7 @@ export async function list(
  * Get channel by ID
  */
 export async function getById(id: number): Promise<Channel> {
-  const { data } = await apiClient.get<Channel>(`/admin/channels/${id}`)
+  const { data } = await apiClient.get<Channel>(`/admin/sell-price-policies/${id}`)
   return data
 }
 
@@ -129,7 +130,7 @@ export async function getById(id: number): Promise<Channel> {
  * Create a new channel
  */
 export async function create(req: CreateChannelRequest): Promise<Channel> {
-  const { data } = await apiClient.post<Channel>('/admin/channels', req)
+  const { data } = await apiClient.post<Channel>('/admin/sell-price-policies', req)
   return data
 }
 
@@ -137,7 +138,7 @@ export async function create(req: CreateChannelRequest): Promise<Channel> {
  * Update a channel
  */
 export async function update(id: number, req: UpdateChannelRequest): Promise<Channel> {
-  const { data } = await apiClient.put<Channel>(`/admin/channels/${id}`, req)
+  const { data } = await apiClient.put<Channel>(`/admin/sell-price-policies/${id}`, req)
   return data
 }
 
@@ -145,7 +146,7 @@ export async function update(id: number, req: UpdateChannelRequest): Promise<Cha
  * Delete a channel
  */
 export async function remove(id: number): Promise<void> {
-  await apiClient.delete(`/admin/channels/${id}`)
+  await apiClient.delete(`/admin/sell-price-policies/${id}`)
 }
 
 export interface ModelDefaultPricing {
@@ -158,7 +159,7 @@ export interface ModelDefaultPricing {
 }
 
 export async function getModelDefaultPricing(model: string): Promise<ModelDefaultPricing> {
-  const { data } = await apiClient.get<ModelDefaultPricing>('/admin/channels/model-pricing', {
+  const { data } = await apiClient.get<ModelDefaultPricing>('/admin/sell-price-policies/model-pricing', {
     params: { model }
   })
   return data
@@ -170,7 +171,7 @@ export interface BatchModelDefaultPricingResult {
 
 /** 批量查询官方/LiteLLM 默认定价（per-token） */
 export async function batchGetModelDefaultPricing(models: string[]): Promise<BatchModelDefaultPricingResult> {
-  const { data } = await apiClient.post<BatchModelDefaultPricingResult>('/admin/channels/model-pricing/batch', {
+  const { data } = await apiClient.post<BatchModelDefaultPricingResult>('/admin/sell-price-policies/model-pricing/batch', {
     models
   })
   return data
@@ -184,7 +185,7 @@ export interface SyncPricingModelsResult {
  * Fetch the latest model names from the LiteLLM pricing catalog for the given platform
  */
 export async function syncPricingModels(platform: string): Promise<SyncPricingModelsResult> {
-  const { data } = await apiClient.get<SyncPricingModelsResult>('/admin/channels/pricing/sync-models', {
+  const { data } = await apiClient.get<SyncPricingModelsResult>('/admin/sell-price-policies/pricing/sync-models', {
     params: { platform }
   })
   return data

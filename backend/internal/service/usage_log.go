@@ -114,10 +114,12 @@ type UsageLog struct {
 	// UpstreamModel is the actual model sent to the upstream provider after mapping.
 	// Nil means no mapping was applied (requested model was used as-is).
 	UpstreamModel *string
-	// ChannelID 渠道 ID
-	ChannelID *int64
-	// ModelMappingChain 模型映射链，如 "a→b→c"
-	ModelMappingChain *string
+// ChannelID 渠道/售价策略 ID（历史字段名；P4 起与 PricingPolicyID 同义）
+		ChannelID *int64
+		// PricingPolicyID 售价策略 ID（P4 别名；写入时若仅填此项会回填 ChannelID）
+		PricingPolicyID *int64
+		// ModelMappingChain 模型映射链，如 "a→b→c"
+		ModelMappingChain *string
 	// BillingTier 计费层级标签（per_request/image 模式）
 	BillingTier *string
 	// BillingMode 计费模式：token/image

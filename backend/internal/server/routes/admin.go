@@ -671,17 +671,21 @@ func registerTLSFingerprintProfileRoutes(admin *gin.RouterGroup, h *handler.Hand
 }
 
 func registerChannelRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
-	channels := admin.Group("/channels")
-	{
-channels.GET("", h.Admin.Channel.List)
-			channels.GET("/model-pricing", h.Admin.Channel.GetModelDefaultPricing)
-			channels.POST("/model-pricing/batch", h.Admin.Channel.BatchGetModelDefaultPricing)
-			channels.GET("/pricing/sync-models", h.Admin.Channel.SyncPricingModels)
-		channels.GET("/:id", h.Admin.Channel.GetByID)
-		channels.POST("", h.Admin.Channel.Create)
-		channels.PUT("/:id", h.Admin.Channel.Update)
-		channels.DELETE("/:id", h.Admin.Channel.Delete)
-	}
+	// Legacy path (kept for compatibility).
+	registerSellPricePolicyRoutes(admin.Group("/channels"), h)
+	// P4 product path alias — same handlers, no table rename.
+	registerSellPricePolicyRoutes(admin.Group("/sell-price-policies"), h)
+}
+
+func registerSellPricePolicyRoutes(g *gin.RouterGroup, h *handler.Handlers) {
+	g.GET("", h.Admin.Channel.List)
+	g.GET("/model-pricing", h.Admin.Channel.GetModelDefaultPricing)
+	g.POST("/model-pricing/batch", h.Admin.Channel.BatchGetModelDefaultPricing)
+	g.GET("/pricing/sync-models", h.Admin.Channel.SyncPricingModels)
+	g.GET("/:id", h.Admin.Channel.GetByID)
+	g.POST("", h.Admin.Channel.Create)
+	g.PUT("/:id", h.Admin.Channel.Update)
+	g.DELETE("/:id", h.Admin.Channel.Delete)
 }
 
 func registerChannelMonitorRoutes(admin *gin.RouterGroup, h *handler.Handlers) {

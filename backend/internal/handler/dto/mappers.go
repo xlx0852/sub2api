@@ -675,6 +675,7 @@ func UsageLogFromServiceAdmin(l *service.UsageLog) *AdminUsageLog {
 		UsageLog:              usageLog,
 		UpstreamModel:         l.UpstreamModel,
 		ChannelID:             l.ChannelID,
+		PricingPolicyID:       firstNonNilInt64(l.PricingPolicyID, l.ChannelID),
 		ModelMappingChain:     l.ModelMappingChain,
 		BillingTier:           l.BillingTier,
 		AccountRateMultiplier: l.AccountRateMultiplier,
@@ -833,4 +834,14 @@ func PromoCodeUsageFromService(u *service.PromoCodeUsage) *PromoCodeUsage {
 		UsedAt:      u.UsedAt,
 		User:        UserFromServiceShallow(u.User),
 	}
+}
+
+
+func firstNonNilInt64(vals ...*int64) *int64 {
+	for _, v := range vals {
+		if v != nil {
+			return v
+		}
+	}
+	return nil
 }

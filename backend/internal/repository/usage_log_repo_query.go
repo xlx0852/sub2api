@@ -690,13 +690,14 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 	if upstreamModel.Valid {
 		log.UpstreamModel = &upstreamModel.String
 	}
-	if channelID.Valid {
-		value := channelID.Int64
-		log.ChannelID = &value
-	}
-	if modelMappingChain.Valid {
-		log.ModelMappingChain = &modelMappingChain.String
-	}
+if channelID.Valid {
+			value := channelID.Int64
+			log.ChannelID = &value
+			log.PricingPolicyID = &value
+		}
+		if modelMappingChain.Valid {
+			log.ModelMappingChain = &modelMappingChain.String
+		}
 	if billingTier.Valid {
 		log.BillingTier = &billingTier.String
 	}

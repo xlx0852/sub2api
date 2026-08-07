@@ -556,8 +556,10 @@ type AdminUsageLog struct {
 	// Omitted when no mapping was applied (requested model was used as-is).
 	UpstreamModel *string `json:"upstream_model,omitempty"`
 
-	// ChannelID 渠道 ID
+	// ChannelID 渠道/售价策略 ID（历史字段名）
 	ChannelID *int64 `json:"channel_id,omitempty"`
+	// PricingPolicyID 售价策略 ID（P4 别名，与 channel_id 同值）
+	PricingPolicyID *int64 `json:"pricing_policy_id,omitempty"`
 	// ModelMappingChain 模型映射链，如 "a→b→c"
 	ModelMappingChain *string `json:"model_mapping_chain,omitempty"`
 	// BillingTier 计费层级标签（per_request/image 模式）

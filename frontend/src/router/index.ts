@@ -440,33 +440,47 @@ const routes: RouteRecordRaw[] = [
       descriptionKey: 'admin.groups.description'
     }
   },
+  // P4 product paths
   {
-    path: '/admin/channels',
-    redirect: '/admin/channels/pricing'
+    path: '/admin/sell-price-policies',
+    redirect: '/admin/sell-price-policies/pricing'
   },
   {
-    path: '/admin/channels/pricing',
-    name: 'AdminChannels',
+    path: '/admin/sell-price-policies/pricing',
+    name: 'AdminSellPricePolicies',
     component: () => import('@/views/admin/ChannelsView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
-      title: 'Channel Management',
+      title: 'Sell-Price Policies',
       titleKey: 'admin.channels.title',
       descriptionKey: 'admin.channels.description'
     }
   },
   {
-    path: '/admin/channels/monitor',
-    name: 'AdminChannelMonitor',
+    path: '/admin/endpoint-monitors',
+    name: 'AdminEndpointMonitors',
     component: () => import('@/views/admin/ChannelMonitorView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
-      title: 'Channel Monitor',
+      title: 'Endpoint Monitor',
       titleKey: 'admin.channelMonitor.title',
       descriptionKey: 'admin.channelMonitor.description'
     }
+  },
+  // Legacy channel paths → P4 aliases
+  {
+    path: '/admin/channels',
+    redirect: '/admin/sell-price-policies/pricing'
+  },
+  {
+    path: '/admin/channels/pricing',
+    redirect: '/admin/sell-price-policies/pricing'
+  },
+  {
+    path: '/admin/channels/monitor',
+    redirect: '/admin/endpoint-monitors'
   },
   {
     path: '/monitor',
@@ -475,7 +489,7 @@ const routes: RouteRecordRaw[] = [
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
-      title: 'Channel Status',
+      title: 'Endpoint Status',
       titleKey: 'nav.channelStatus'
     }
   },
