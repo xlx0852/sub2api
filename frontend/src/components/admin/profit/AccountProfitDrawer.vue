@@ -28,10 +28,10 @@
         </div>
         <p class="text-xs text-gray-400">
           #{{ account.account_id }} · {{ account.platform }} / {{ account.account_type }}
-          · {{ fmtNumber(account.requests) }} {{ t('admin.profit.requestsUnit') }}
+          · {{ fmtNumber(requestCount) }} {{ t('admin.profit.requestsUnit') }}
         </p>
-        <p v-if="cycleRangeLabel" class="text-xs text-gray-500 dark:text-dark-400">
-          {{ t('admin.profit.quotaWindowTitle') }}: {{ cycleRangeLabel }}
+        <p v-if="windowRangeLabel" class="text-xs text-gray-500 dark:text-dark-400">
+          {{ windowKindLabel }}: {{ windowRangeLabel }}
         </p>
         <div
           v-if="account.break_even_rate != null"
@@ -80,7 +80,7 @@
       </div>
 
       <p class="text-[11px] leading-4 text-gray-400">
-        {{ t('admin.profit.drawerCycleHint') }}
+        {{ drawerHint }}
       </p>
     </div>
   </BaseDialog>
@@ -100,31 +100,67 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
 
-const isCycle = computed(() => {
+/** Drawer always prefers account-own window economics when backend stamped them. */
+const hasOwnWindow = computed(() => {
   const a = props.account
-  return !!a && a.cost_type === 'subscription' && a.billing_window_revenue != null
+  return !!a && a.billing_window_revenue != null && a.billing_window_start != null
 })
 
 const revenue = computed(() =>
-  isCycle.value ? (props.account!.billing_window_revenue ?? 0) : (props.account?.revenue ?? 0),
+  hasOwnWindow.value ? (props.account!.billing_window_revenue ?? 0) : (props.account?.revenue ?? 0),
 )
 const cost = computed(() =>
-  isCycle.value ? (props.account!.billing_window_cost ?? 0) : (props.account?.cost ?? 0),
+  hasOwnWindow.value ? (props.account!.billing_window_cost ?? 0) : (props.account?.cost ?? 0),
 )
 const profit = computed(() =>
-  isCycle.value ? (props.account!.billing_window_profit ?? 0) : (props.account?.profit ?? 0),
+  hasOwnWindow.value ? (props.account!.billing_window_profit ?? 0) : (props.account?.profit ?? 0),
 )
+const requestCount = computed(() => {
+  const a = props.account
+  if (!a) return 0
+  if (hasOwnWindow.value && a.billing_window_requests != null) return a.billing_window_requests
+  return a.requests ?? 0
+})
 
 const marginLabel = computed(() => {
   if (revenue.value <= 0) return '—'
   return `${((profit.value / revenue.value) * 100).toFixed(1)}%`
 })
 
-const cycleRangeLabel = computed(() => {
+const windowRangeLabel = computed(() => {
   const a = props.account
-  if (!isCycle.value || !a) return ''
-  const fmtD = (v?: string) => (v ? new Date(v).toLocaleString() : '')
+  if (!hasOwnWindow.value || !a) return ''
+  const fmtD = (v?: string) => {
+    if (!v) return ''
+    const d = new Date(v)
+    if (Number.isNaN(d.getTime())) return v
+    return new Intl.DateTimeFormat(undefined, {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(d)
+  }
   return `${fmtD(a.billing_window_start)} → ${fmtD(a.billing_window_end)}`
+})
+
+const windowKindLabel = computed(() => {
+  const a = props.account
+  if (!a) return t('admin.profit.quotaWindowTitle')
+  if (a.billing_window_source === 'quota_window') {
+    const kind = a.billing_window_kind || ''
+    if (kind) return t('admin.profit.drawerQuotaWindow', { kind })
+    return t('admin.profit.quotaWindowTitle')
+  }
+  if (a.billing_window_source === 'cycle') return t('admin.profit.drawerBillingCycle')
+  return t('admin.profit.quotaWindowTitle')
+})
+
+const drawerHint = computed(() => {
+  if (hasOwnWindow.value && props.account?.billing_window_source === 'quota_window') {
+    return t('admin.profit.drawerQuotaHint')
+  }
+  return t('admin.profit.drawerCycleHint')
 })
 
 const breakEvenTitle = computed(() => {

@@ -531,13 +531,18 @@ func TestProfitService_GetOverviewUsesBoundedBatchQueries(t *testing.T) {
 		if repo.rangeStatsCalls != 1 {
 			t.Fatalf("rangeStatsCalls=%d, want 1 (break-even window only)", repo.rangeStatsCalls)
 		}
-		acc := overview.Summary.Accounts[0]
-		if acc.BillingWindowRevenue != nil || acc.WindowEfficiency != nil {
-			t.Fatalf("drawer-only fields must stay empty on list: %+v", acc)
-		}
-		if acc.BreakEvenRate == nil || *acc.BreakEvenRate < 0.13 || *acc.BreakEvenRate > 0.135 {
-			t.Fatalf("break_even_rate=%v, want ~0.132", acc.BreakEvenRate)
-		}
+acc := overview.Summary.Accounts[0]
+			// Window efficiency is drawer-only (best 5h scan); must stay empty on list.
+			// Quota-window billing_window_* is intentionally filled for the account drawer.
+			if acc.WindowEfficiency != nil {
+				t.Fatalf("window_efficiency must stay empty on list: %+v", acc)
+			}
+			if acc.BillingWindowSource != "quota_window" || acc.BillingWindowRevenue == nil {
+				t.Fatalf("expected quota_window economics on list for drawer, got source=%q rev=%v", acc.BillingWindowSource, acc.BillingWindowRevenue)
+			}
+			if acc.BreakEvenRate == nil || *acc.BreakEvenRate < 0.13 || *acc.BreakEvenRate > 0.135 {
+				t.Fatalf("break_even_rate=%v, want ~0.132", acc.BreakEvenRate)
+			}
 		if acc.BreakEvenCurrentRate == nil || *acc.BreakEvenCurrentRate < 0.11 || *acc.BreakEvenCurrentRate > 0.13 {
 			t.Fatalf("current_rate=%v, want ~0.12", acc.BreakEvenCurrentRate)
 		}

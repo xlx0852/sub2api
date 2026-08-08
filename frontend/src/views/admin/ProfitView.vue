@@ -104,10 +104,26 @@
                 <h3 class="text-sm font-semibold text-gray-800 dark:text-dark-100">{{ t('admin.profit.trendTitle') }}</h3>
                 <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">{{ t('admin.profit.globalTrendHint') }}</p>
               </div>
-              <LoadingSpinner v-if="trendLoading" size="sm" />
+              <div class="flex items-center gap-2">
+                <div class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
+                  <button
+                    v-for="metric in trendMetrics"
+                    :key="metric.key"
+                    type="button"
+                    class="rounded-md px-2.5 py-1 text-xs font-medium transition"
+                    :class="trendMetric === metric.key
+                      ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white'
+                      : 'text-gray-500 hover:text-gray-800 dark:text-dark-300 dark:hover:text-white'"
+                    @click="trendMetric = metric.key"
+                  >
+                    {{ metric.label }}
+                  </button>
+                </div>
+                <LoadingSpinner v-if="trendLoading" size="sm" />
+              </div>
             </div>
-            <div class="mt-4 h-72">
-              <Line v-if="chartData" :data="chartData" :options="chartOptions" />
+            <div class="mt-4 h-80" data-testid="profit-trend-chart">
+              <Bar v-if="chartData" :data="chartData" :options="chartOptions" />
               <div v-else-if="!trendLoading" class="flex h-full items-center justify-center text-sm text-gray-400">{{ t('admin.profit.empty') }}</div>
             </div>
           </section>
@@ -145,15 +161,17 @@ import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
-  PointElement,
-  LineElement,
+  BarElement,
   Tooltip,
-  Legend,
-  Filler
+  Legend
 } from 'chart.js'
-import { Line } from 'vue-chartjs'
+import type { ChartOptions, TooltipItem } from 'chart.js'
+import { Bar } from 'vue-chartjs'
+import type { ProfitTrendAccountSlice } from '@/api/admin/profit'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler)
+ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
+
+type TrendMetric = 'revenue' | 'cost' | 'profit'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -163,6 +181,7 @@ const activeView = ref<'review' | 'forecast'>('review')
 const data = ref<ProfitSummaryResponse | null>(null)
 const trendPoints = ref<ProfitTrendPoint[]>([])
 const snapshotGeneratedAt = ref('')
+const trendMetric = ref<TrendMetric>('revenue')
 const accountRows = computed(() => [...(data.value?.accounts || [])].sort((a, b) => b.profit - a.profit))
 const showAccountDrawer = ref(false)
 const drawerAccountId = ref<number | null>(null)
@@ -185,6 +204,19 @@ const presets = computed(() => [
   { key: 'month', label: t('admin.profit.currentMonth') }
 ])
 
+const trendMetrics = computed(() => [
+  { key: 'revenue' as const, label: t('admin.profit.trendMetricRevenue') },
+  { key: 'cost' as const, label: t('admin.profit.trendMetricCost') },
+  { key: 'profit' as const, label: t('admin.profit.trendMetricProfit') }
+])
+
+/** Stable palette for stacked account segments (readable on white/dark). */
+const accountPalette = [
+  '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444',
+  '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6',
+  '#a855f7', '#f97316'
+]
+
 function applyPreset(key: string) {
   activePreset.value = key
   const now = new Date()
@@ -197,27 +229,158 @@ function applyPreset(key: string) {
 }
 
 const isDark = computed(() => document.documentElement.classList.contains('dark'))
-const chartData = computed(() => {
-  if (!trendPoints.value.length) return null
-  return {
-    labels: trendPoints.value.map((point) => point.date.slice(5)),
-    datasets: [
-      { label: t('admin.profit.revenue'), data: trendPoints.value.map((point) => point.revenue), borderColor: '#10b981', backgroundColor: '#10b98120', fill: true, tension: 0.3 },
-      { label: t('admin.profit.amortizedCost'), data: trendPoints.value.map((point) => point.cost), borderColor: '#f59e0b', backgroundColor: '#f59e0b20', fill: true, tension: 0.3 },
-      { label: t('admin.profit.profit'), data: trendPoints.value.map((point) => point.profit), borderColor: '#3b82f6', backgroundColor: 'transparent', fill: false, tension: 0.3 }
-    ]
+
+const TOP_ACCOUNT_SERIES = 8
+
+function metricValue(slice: ProfitTrendAccountSlice | ProfitTrendPoint, metric: TrendMetric): number {
+  if (metric === 'cost') return Number(slice.cost) || 0
+  if (metric === 'profit') return Number(slice.profit) || 0
+  return Number(slice.revenue) || 0
+}
+
+const stackedSeries = computed(() => {
+  const points = trendPoints.value
+  if (!points.length) return null
+
+  // Rank accounts by absolute contribution on the active metric across the range.
+  const totals = new Map<number, { id: number; name: string; total: number }>()
+  for (const point of points) {
+    for (const acc of point.accounts || []) {
+      const prev = totals.get(acc.account_id)
+      const add = Math.abs(metricValue(acc, trendMetric.value))
+      if (prev) {
+        prev.total += add
+      } else {
+        totals.set(acc.account_id, {
+          id: acc.account_id,
+          name: acc.account_name || `#${acc.account_id}`,
+          total: add
+        })
+      }
+    }
   }
+  const ranked = [...totals.values()].sort((a, b) => b.total - a.total)
+  const top = ranked.slice(0, TOP_ACCOUNT_SERIES)
+  const topIds = new Set(top.map((a) => a.id))
+  const hasOthers = ranked.length > top.length
+
+  const labels = points.map((p) => p.date.slice(5))
+  const seriesDefs = top.map((a, idx) => ({
+    key: `acc-${a.id}`,
+    id: a.id,
+    label: a.name,
+    color: accountPalette[idx % accountPalette.length]
+  }))
+  if (hasOthers) {
+    seriesDefs.push({
+      key: 'others',
+      id: -1,
+      label: t('admin.profit.trendOthers'),
+      color: isDark.value ? '#6b7280' : '#9ca3af'
+    })
+  }
+
+  // Fallback: no per-account slices from older API → single total bar.
+  if (!seriesDefs.length) {
+    return {
+      labels,
+      datasets: [{
+        label: trendMetrics.value.find((m) => m.key === trendMetric.value)?.label || trendMetric.value,
+        data: points.map((p) => metricValue(p, trendMetric.value)),
+        backgroundColor: '#3b82f6',
+        borderRadius: 4,
+        stack: 'mix',
+        maxBarThickness: 48
+      }]
+    }
+  }
+
+  const datasets = seriesDefs.map((def) => ({
+    label: def.label,
+    data: points.map((point) => {
+      const accounts = point.accounts || []
+      if (def.id === -1) {
+        return accounts
+          .filter((a) => !topIds.has(a.account_id))
+          .reduce((sum, a) => sum + metricValue(a, trendMetric.value), 0)
+      }
+      const hit = accounts.find((a) => a.account_id === def.id)
+      return hit ? metricValue(hit, trendMetric.value) : 0
+    }),
+    backgroundColor: def.color,
+    borderColor: def.color,
+    borderWidth: 0,
+    borderSkipped: false,
+    borderRadius: 2,
+    stack: 'mix',
+    maxBarThickness: 48
+  }))
+
+  return { labels, datasets }
 })
 
-const chartOptions = computed(() => ({
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: { legend: { labels: { color: isDark.value ? '#e5e7eb' : '#374151' } } },
-  scales: {
-    x: { ticks: { color: isDark.value ? '#9ca3af' : '#6b7280' }, grid: { color: isDark.value ? '#374151' : '#e5e7eb' } },
-    y: { ticks: { color: isDark.value ? '#9ca3af' : '#6b7280' }, grid: { color: isDark.value ? '#374151' : '#e5e7eb' } }
+const chartData = computed(() => stackedSeries.value)
+
+const chartOptions = computed<ChartOptions<'bar'>>(() => {
+  const tick = isDark.value ? '#9ca3af' : '#6b7280'
+  const grid = isDark.value ? '#374151' : '#e5e7eb'
+  const labelColor = isDark.value ? '#e5e7eb' : '#374151'
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: {
+          color: labelColor,
+          boxWidth: 10,
+          boxHeight: 10,
+          usePointStyle: true,
+          pointStyle: 'rectRounded',
+          padding: 14
+        }
+      },
+      tooltip: {
+        callbacks: {
+          label(ctx: TooltipItem<'bar'>) {
+            const raw = Number(ctx.raw) || 0
+            const stacked = ctx.chart.data.datasets
+              .filter((ds) => !ds.hidden)
+              .reduce((sum, ds) => sum + (Number(ds.data[ctx.dataIndex]) || 0), 0)
+            const pct = stacked !== 0 ? Math.round((raw / stacked) * 1000) / 10 : 0
+            const money = `$${raw.toFixed(2)}`
+            return `${ctx.dataset.label}: ${money} (${t('admin.profit.trendShare', { pct })})`
+          },
+          footer(items: TooltipItem<'bar'>[]) {
+            if (!items.length) return ''
+            const total = items.reduce((sum, it) => sum + (Number(it.raw) || 0), 0)
+            return `Σ $${total.toFixed(2)}`
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        stacked: true,
+        ticks: { color: tick },
+        grid: { display: false }
+      },
+      y: {
+        stacked: true,
+        ticks: {
+          color: tick,
+          callback: (value) => {
+            const n = Number(value)
+            if (Number.isNaN(n)) return value
+            return n >= 1000 || n <= -1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n}`
+          }
+        },
+        grid: { color: grid }
+      }
+    }
   }
-}))
+})
 
 const fmt = (value?: number) => (value ?? 0).toFixed(2)
 const snapshotTimeLabel = computed(() => {

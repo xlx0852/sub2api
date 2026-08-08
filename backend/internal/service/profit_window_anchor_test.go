@@ -97,3 +97,44 @@ func TestEffectiveRecurringUntil_ActiveRenewKeepsRolling(t *testing.T) {
 		t.Fatalf("expected nil cutoff, got %v", got)
 	}
 }
+
+// Expired Grok-like window: live upstream end after subscription end must be
+// clipped, and recurring_until_at must be stamped for the frontend projector.
+func TestFillProfitQuotaWindows_ExpiredNoRenewClipsLiveGrokWindow(t *testing.T) {
+	now := time.Date(2026, 8, 9, 4, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	cycleStart := time.Date(2026, 7, 9, 0, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	cycleEnd := cycleStart.AddDate(0, 0, 30) // 2026-08-08
+	winStart := time.Date(2026, 8, 6, 13, 31, 0, 0, time.FixedZone("CST", 8*3600))
+	winEnd := time.Date(2026, 8, 13, 13, 31, 0, 0, time.FixedZone("CST", 8*3600))
+
+	cycle := &AccountSubscriptionCycle{AccountID: 84, StartsAt: cycleStart, PeriodDays: 30, PeriodFee: 699}
+	anchor := buildProfitWindowAnchor([]*AccountSubscriptionCycle{cycle}, &AccountCostConfig{AutoRenew: false}, now)
+
+	acc := &Account{
+		ID:       84,
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			"grok_billing_snapshot": map[string]any{
+				"period_start": winStart.Format(time.RFC3339),
+				"period_end":   winEnd.Format(time.RFC3339),
+				"used_percent": 56.0,
+			},
+		},
+	}
+	summary := &AccountProfitSummary{}
+	fillProfitQuotaWindowsWithAnchor(summary, acc, now, anchor)
+	if len(summary.QuotaWindows) == 0 {
+		t.Fatalf("expected clipped live window, got none")
+	}
+	w := summary.QuotaWindows[0]
+	if w.RecurringUntilAt == nil || !w.RecurringUntilAt.Equal(cycleEnd) {
+		t.Fatalf("RecurringUntilAt=%v want %v", w.RecurringUntilAt, cycleEnd)
+	}
+	if w.EndAt == nil || !w.EndAt.Equal(cycleEnd) {
+		t.Fatalf("EndAt=%v want clipped to %v", w.EndAt, cycleEnd)
+	}
+	if w.EndAt.After(cycleEnd) {
+		t.Fatalf("live end %v must not pass cycle end %v", w.EndAt, cycleEnd)
+	}
+}
