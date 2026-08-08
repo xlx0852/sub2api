@@ -560,6 +560,19 @@ func (h *AuthHandler) CompleteWeChatOAuthRegistration(c *gin.Context) {
 		"wechat",
 	)
 	if err != nil {
+		// 邮箱已存在但身份未绑定（service 层拒绝自动登录防接管）→ 转 choice state。
+		if errors.Is(err, service.ErrOAuthEmailOwnershipRequired) {
+			if ec := h.entClient(); ec != nil {
+				if existingUser, lookupErr := findUserByNormalizedEmail(c.Request.Context(), ec, email); lookupErr == nil && existingUser != nil {
+					if _, transitionErr := h.transitionPendingOAuthAccountToChoiceState(c, ec, session, existingUser, email); transitionErr != nil {
+						response.ErrorFrom(c, transitionErr)
+						return
+					}
+					c.JSON(http.StatusOK, buildPendingOAuthSessionStatusPayload(session))
+					return
+				}
+			}
+		}
 		response.ErrorFrom(c, err)
 		return
 	}

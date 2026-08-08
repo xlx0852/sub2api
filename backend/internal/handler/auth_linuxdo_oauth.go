@@ -594,6 +594,18 @@ func (h *AuthHandler) CompleteLinuxDoOAuthRegistration(c *gin.Context) {
 		"linuxdo",
 	)
 	if err != nil {
+		// 邮箱已存在但身份未绑定（service 层拒绝自动登录防接管）→ 转 choice state，
+		// 前端重新展示「绑定已有账号 / 创建新账号」选择，用户用密码/验证码证明所有权。
+		if errors.Is(err, service.ErrOAuthEmailOwnershipRequired) {
+			if existingUser, lookupErr := findUserByNormalizedEmail(c.Request.Context(), client, email); lookupErr == nil && existingUser != nil {
+				if _, transitionErr := h.transitionPendingOAuthAccountToChoiceState(c, client, session, existingUser, email); transitionErr != nil {
+					response.ErrorFrom(c, transitionErr)
+					return
+				}
+				c.JSON(http.StatusOK, buildPendingOAuthSessionStatusPayload(session))
+				return
+			}
+		}
 		response.ErrorFrom(c, err)
 		return
 	}
