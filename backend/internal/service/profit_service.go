@@ -320,11 +320,11 @@ func (s *ProfitService) summarizeAccountsWithData(accounts []Account, start, end
 			Currency:    "USD",
 		}
 		// 窗口利用率快照 + 时间轴窗口（OpenAI/Kimi/Grok/Claude session）
-		var quotaWindowCutoff *time.Time
+		var anchor profitWindowAnchor
 		if isSubscriptionAccountType(acc.Type) {
-			quotaWindowCutoff = quotaWindowCutoffForCycles(accounting.cyclesByAccount[acc.ID], accounting.now)
+			anchor = buildProfitWindowAnchor(accounting.cyclesByAccount[acc.ID], accounting.configsByAccount[acc.ID], accounting.now)
 		}
-		fillProfitQuotaWindows(summary, acc, accounting.now, quotaWindowCutoff)
+		fillProfitQuotaWindowsWithAnchor(summary, acc, accounting.now, anchor)
 
 		cost := stats.MeteredCost
 		if costType == AccountCostTypeSubscription {
@@ -467,9 +467,9 @@ func (s *ProfitService) loadProfitAccountingData(ctx context.Context, accounts [
 			if acc == nil {
 				continue
 			}
-			cutoff := quotaWindowCutoffForCycles(data.cyclesByAccount[accountID], data.now)
+			anchor := buildProfitWindowAnchor(data.cyclesByAccount[accountID], data.configsByAccount[accountID], data.now)
 			tmp := &AccountProfitSummary{}
-			fillProfitQuotaWindows(tmp, acc, data.now, cutoff)
+			fillProfitQuotaWindowsWithAnchor(tmp, acc, data.now, anchor)
 			win := pickPreferredBreakEvenWindow(tmp.QuotaWindows)
 			if win == nil || win.StartAt == nil {
 				continue
@@ -1456,6 +1456,14 @@ func roundMoney(v float64) float64 {
 }
 
 func fillProfitQuotaWindows(summary *AccountProfitSummary, acc *Account, now time.Time, cutoff ...*time.Time) {
+	anchor := profitWindowAnchor{}
+	if len(cutoff) > 0 {
+		anchor.recurringUntil = cutoff[0]
+	}
+	fillProfitQuotaWindowsWithAnchor(summary, acc, now, anchor)
+}
+
+func fillProfitQuotaWindowsWithAnchor(summary *AccountProfitSummary, acc *Account, now time.Time, anchor profitWindowAnchor) {
 	if summary == nil || acc == nil {
 		return
 	}
@@ -1515,11 +1523,21 @@ func fillProfitQuotaWindows(summary *AccountProfitSummary, acc *Account, now tim
 		}
 	}
 
-	var recurringUntil *time.Time
-	if len(cutoff) > 0 {
-		recurringUntil = cutoff[0]
+	// Drop windows whose start falls in a gap between cost-configured cycles,
+	// then cap projections at recurringUntil when set.
+	if len(anchor.spans) > 0 {
+		capped := windows[:0]
+		for i := range windows {
+			w := windows[i]
+			if w.StartAt != nil && !anchor.coversStart(*w.StartAt) {
+				continue
+			}
+			capped = append(capped, w)
+		}
+		windows = capped
 	}
-	if recurringUntil != nil {
+	if anchor.recurringUntil != nil {
+		recurringUntil := anchor.recurringUntil
 		capped := windows[:0]
 		for i := range windows {
 			w := windows[i]
@@ -1541,6 +1559,67 @@ func fillProfitQuotaWindows(summary *AccountProfitSummary, acc *Account, now tim
 	if len(windows) > 0 {
 		summary.QuotaWindows = windows
 	}
+}
+
+
+// profitWindowAnchor describes how far quota windows may be projected and the
+// covered span of the account's cost-configured subscription cycles.
+// Windows are anchored to the cost-config cycles (not the global time filter):
+// auto_renew=false stops projection at the current cycle end; auto_renew=true
+// lets the window roll on past period_days. Gaps between configured cycles are
+// left empty (no invented window).
+type profitWindowSpan struct {
+	start time.Time
+	end   time.Time
+}
+
+type profitWindowAnchor struct {
+	// spans are the cost-configured cycle coverage ranges. A window whose start
+	// falls outside every span (i.e. inside a gap between configured cycles) is
+	// dropped — no invented window in the gap. Empty spans = no constraint.
+	spans []profitWindowSpan
+	// recurringUntil caps projected occurrences. nil when auto_renew is on
+	// (roll on) or the account is not subscription-configured.
+	recurringUntil *time.Time
+}
+
+func buildProfitWindowAnchor(cycles []*AccountSubscriptionCycle, cfg *AccountCostConfig, now time.Time) profitWindowAnchor {
+	spans := make([]profitWindowSpan, 0, len(cycles))
+	for _, cycle := range cycles {
+		if cycle == nil || cycle.PeriodDays <= 0 {
+			continue
+		}
+		end := cycle.StartsAt.AddDate(0, 0, cycle.PeriodDays)
+		if termination := activeCycleTermination(cycle); termination != nil && termination.EffectiveAt.Before(end) {
+			end = termination.EffectiveAt
+		}
+		spans = append(spans, profitWindowSpan{start: cycle.StartsAt, end: end})
+	}
+	anchor := profitWindowAnchor{spans: spans}
+	// auto_renew=false → stop projecting at the active cycle end.
+	autoRenew := cfg != nil && cfg.AutoRenew
+	if !autoRenew {
+		if active := activeSubscriptionCycle(cycles, now); active != nil && active.PeriodDays > 0 {
+			end := active.StartsAt.AddDate(0, 0, active.PeriodDays)
+			if termination := activeCycleTermination(active); termination != nil && termination.EffectiveAt.Before(end) {
+				end = termination.EffectiveAt
+			}
+			anchor.recurringUntil = &end
+		}
+	}
+	return anchor
+}
+
+func (a profitWindowAnchor) coversStart(start time.Time) bool {
+	if len(a.spans) == 0 {
+		return true
+	}
+	for _, s := range a.spans {
+		if !start.Before(s.start) && start.Before(s.end) {
+			return true
+		}
+	}
+	return false
 }
 
 // quotaWindowCutoffForCycles returns the last instant at which future quota
