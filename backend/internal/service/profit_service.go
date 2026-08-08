@@ -117,6 +117,9 @@ type ProfitQuotaWindow struct {
 	// RecurringUntilAt caps projected occurrences at the subscription cycle or
 	// confirmed ban end; it is absent for non-subscription windows.
 	RecurringUntilAt *time.Time `json:"recurring_until_at,omitempty"`
+	// RecurringFromAt is the start of the active cost cycle; projections must
+	// not roll back before it (prevents painting the gap before the cycle).
+	RecurringFromAt *time.Time `json:"recurring_from_at,omitempty"`
 }
 
 // AccountProfitSummary 单账号周期利润汇总。
@@ -1556,6 +1559,12 @@ func fillProfitQuotaWindowsWithAnchor(summary *AccountProfitSummary, acc *Accoun
 		}
 		windows = capped
 	}
+	if anchor.coveredStart != nil {
+		for i := range windows {
+			from := *anchor.coveredStart
+			windows[i].RecurringFromAt = &from
+		}
+	}
 	if len(windows) > 0 {
 		summary.QuotaWindows = windows
 	}
@@ -1578,6 +1587,9 @@ type profitWindowAnchor struct {
 	// falls outside every span (i.e. inside a gap between configured cycles) is
 	// dropped — no invented window in the gap. Empty spans = no constraint.
 	spans []profitWindowSpan
+	// coveredStart is the start of the active span; projections must not roll
+	// back before it (prevents painting the gap before the current cycle).
+	coveredStart *time.Time
 	// recurringUntil caps projected occurrences. nil when auto_renew is on
 	// (roll on) or the account is not subscription-configured.
 	recurringUntil *time.Time
@@ -1596,6 +1608,10 @@ func buildProfitWindowAnchor(cycles []*AccountSubscriptionCycle, cfg *AccountCos
 		spans = append(spans, profitWindowSpan{start: cycle.StartsAt, end: end})
 	}
 	anchor := profitWindowAnchor{spans: spans}
+	if active := activeSubscriptionCycle(cycles, now); active != nil && active.PeriodDays > 0 {
+		start := active.StartsAt
+		anchor.coveredStart = &start
+	}
 	// auto_renew=false → stop projecting at the active cycle end.
 	autoRenew := cfg != nil && cfg.AutoRenew
 	if !autoRenew {

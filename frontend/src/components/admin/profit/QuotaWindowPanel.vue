@@ -344,6 +344,7 @@ function expandWindowOccurrences(
   let endMs = parseTime(window.end_at)
   let startMs = parseTime(window.start_at)
   const recurringUntilMs = parseTime(window.recurring_until_at)
+  const recurringFromMs = parseTime(window.recurring_from_at)
   if (endMs == null && startMs != null) endMs = startMs + durationMs
   if (startMs == null && endMs != null) startMs = endMs - durationMs
   if (startMs == null || endMs == null) return []
@@ -357,6 +358,8 @@ function expandWindowOccurrences(
   let cursorEnd = endMs
   while (cursorEnd >= earliest) {
     const cursorStart = cursorEnd - durationMs
+    // Don't project back past the active cycle start (gap before cycle stays empty).
+    if (recurringFromMs != null && cursorStart < recurringFromMs) break
     if (cursorEnd > viewStart.getTime() && cursorStart < viewEnd.getTime()) {
       out.push({ ...window, startMs: cursorStart, endMs: cursorEnd })
     }

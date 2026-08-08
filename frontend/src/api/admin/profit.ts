@@ -96,6 +96,7 @@ export interface ProfitQuotaWindow {
   end_at?: string
   window_minutes?: number
   recurring_until_at?: string
+  recurring_from_at?: string
 }
 
 export interface AccountProfitSummary {
