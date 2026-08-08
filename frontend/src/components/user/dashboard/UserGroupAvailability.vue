@@ -1,8 +1,8 @@
 <template>
   <div class="card">
-    <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+    <div class="border-b border-gray-100 px-4 py-4 dark:border-dark-700 sm:px-6">
       <div class="flex items-center justify-between gap-2">
-        <div>
+        <div class="min-w-0">
           <h2 class="text-base font-semibold text-gray-900 dark:text-white">
             {{ t('channelStatus.myGroupsTitle') }}
           </h2>
@@ -40,27 +40,27 @@
           :key="g.group_id"
           class="rounded-lg border border-gray-200 p-3 dark:border-dark-600"
         >
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <div class="flex min-w-0 items-center gap-2">
+          <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
+            <div class="flex min-w-0 flex-1 items-center gap-2">
               <PlatformIcon :platform="(g.platform as any)" size="xs" />
               <span class="truncate text-sm font-medium text-gray-900 dark:text-white">{{ g.group_name }}</span>
             </div>
-            <div class="flex items-center gap-2 text-xs">
+            <div class="flex shrink-0 items-center gap-1.5 text-xs">
               <span
-                class="rounded px-1.5 py-0.5 font-semibold"
+                class="whitespace-nowrap rounded px-1.5 py-0.5 font-semibold"
                 :class="badgeClass(g.day?.status)"
                 :title="t('channelStatus.last24h')"
               >24h {{ fmtRate(g.day?.success_rate) }}</span>
               <span
-                class="rounded px-1.5 py-0.5 font-semibold"
+                class="whitespace-nowrap rounded px-1.5 py-0.5 font-semibold"
                 :class="badgeClass(g.week?.status)"
                 :title="t('channelStatus.last7d')"
               >7d {{ fmtRate(g.week?.success_rate) }}</span>
             </div>
           </div>
 
-          <div v-if="g.day?.buckets?.length" class="mt-2">
-            <div class="flex h-4 w-full items-end gap-[2px]">
+          <div v-if="g.day?.buckets?.length" class="mt-2 overflow-hidden">
+            <div class="flex h-4 w-full items-end gap-px sm:gap-[2px]">
               <div
                 v-for="(b, i) in g.day.buckets"
                 :key="i"
