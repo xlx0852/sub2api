@@ -29,6 +29,7 @@ type openaiStreamingResult struct {
 	usage            *OpenAIUsage
 	firstTokenMs     *int
 	responseID       string
+	responseModel    string
 	imageCount       int
 	imageOutputSizes []string
 }
@@ -37,6 +38,7 @@ type openaiNonStreamingResult struct {
 	*OpenAIUsage
 	usage            *OpenAIUsage
 	responseID       string
+	responseModel    string
 	imageCount       int
 	imageOutputSizes []string
 }
@@ -75,6 +77,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 	imageCounter := newOpenAIImageOutputCounter()
 	var firstTokenMs *int
 	responseID := ""
+	responseModel := ""
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
 	if s.cfg != nil && s.cfg.Gateway.MaxLineSize > 0 {
@@ -163,6 +166,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			usage:            usage,
 			firstTokenMs:     firstTokenMs,
 			responseID:       responseID,
+			responseModel:    responseModel,
 			imageCount:       imageCounter.Count(),
 			imageOutputSizes: imageCounter.Sizes(),
 		}
@@ -379,6 +383,9 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 		eventType := strings.TrimSpace(gjson.GetBytes(dataBytes, "type").String())
 		if responseID == "" {
 			responseID = extractOpenAIResponseIDFromJSONBytes(dataBytes)
+		}
+		if responseModel == "" {
+			responseModel = extractOpenAIResponseModelFromJSONBytes(dataBytes)
 		}
 		forceFlushFailedEvent := false
 		if eventType == "response.failed" {
@@ -974,6 +981,19 @@ func extractOpenAIResponseIDFromJSONBytes(body []byte) string {
 	return strings.TrimSpace(gjson.GetBytes(body, "response.id").String())
 }
 
+// extractOpenAIResponseModelFromJSONBytes 提取上游响应回显的实际模型名
+// （Responses API 的 response.model 优先，兼容 chat.completions 的顶层 model）。
+// 必须在网关改写响应 model 之前调用，否则拿到的是已被替换回 originalModel 的值。
+func extractOpenAIResponseModelFromJSONBytes(body []byte) string {
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return ""
+	}
+	if model := strings.TrimSpace(gjson.GetBytes(body, "response.model").String()); model != "" {
+		return model
+	}
+	return strings.TrimSpace(gjson.GetBytes(body, "model").String())
+}
+
 func (s *OpenAIGatewayService) bindHTTPResponseAccount(ctx context.Context, c *gin.Context, account *Account, responseID string) {
 	if s == nil || account == nil || account.ID <= 0 {
 		return
@@ -1102,6 +1122,8 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 		return nil, fmt.Errorf("parse response: invalid json response")
 	}
 	usage := &usageValue
+	// 捕获上游响应回显的实际模型（改写前），用于上游模型不一致审计。
+	responseModel := extractOpenAIResponseModelFromJSONBytes(body)
 
 	// Replace model in response if needed
 	if originalModel != mappedModel {
@@ -1129,6 +1151,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 		OpenAIUsage:      usage,
 		usage:            usage,
 		responseID:       extractOpenAIResponseIDFromJSONBytes(body),
+		responseModel:    responseModel,
 		imageCount:       countOpenAIResponseImageOutputsFromJSONBytes(body),
 		imageOutputSizes: collectOpenAIResponseImageOutputSizesFromJSONBytes(body),
 	}, nil
