@@ -72,3 +72,28 @@ func TestFillProfitQuotaWindows_DropsWindowStartingInCycleGap(t *testing.T) {
 		t.Fatalf("expected gap window dropped, got %d", len(summary.QuotaWindows))
 	}
 }
+
+// Expired cycle + auto_renew=false → projection stops at the latest cycle end.
+func TestEffectiveRecurringUntil_ExpiredNoRenewStops(t *testing.T) {
+	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	cycle := anchorTestCycle(time.Date(2026, 7, 9, 0, 0, 0, 0, time.UTC), 30) // ends 8/8
+	a := buildProfitWindowAnchor([]*AccountSubscriptionCycle{cycle}, &AccountCostConfig{AutoRenew: false}, now)
+	got := a.effectiveRecurringUntil(now)
+	if got == nil {
+		t.Fatalf("expected cutoff at latest cycle end")
+	}
+	want := cycle.StartsAt.AddDate(0, 0, 30)
+	if !got.Equal(want) {
+		t.Fatalf("cutoff=%v want %v", got, want)
+	}
+}
+
+// Active cycle + auto_renew=true → no cutoff (keep rolling).
+func TestEffectiveRecurringUntil_ActiveRenewKeepsRolling(t *testing.T) {
+	now := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	cycle := anchorTestCycle(time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC), 30)
+	a := buildProfitWindowAnchor([]*AccountSubscriptionCycle{cycle}, &AccountCostConfig{AutoRenew: true}, now)
+	if got := a.effectiveRecurringUntil(now); got != nil {
+		t.Fatalf("expected nil cutoff, got %v", got)
+	}
+}

@@ -1539,8 +1539,8 @@ func fillProfitQuotaWindowsWithAnchor(summary *AccountProfitSummary, acc *Accoun
 		}
 		windows = capped
 	}
-	if anchor.recurringUntil != nil {
-		recurringUntil := anchor.recurringUntil
+	if eff := anchor.effectiveRecurringUntil(now); eff != nil {
+		recurringUntil := eff
 		capped := windows[:0]
 		for i := range windows {
 			w := windows[i]
@@ -1571,6 +1571,31 @@ func fillProfitQuotaWindowsWithAnchor(summary *AccountProfitSummary, acc *Accoun
 }
 
 
+// effectiveRecurringUntil: when the account has configured cycles but none is
+// active now and auto_renew is off, projection stops at the latest covered
+// cycle end (subscription ended). Auto-renew on keeps windows rolling.
+func (a profitWindowAnchor) effectiveRecurringUntil(now time.Time) *time.Time {
+	if a.recurringUntil != nil {
+		return a.recurringUntil
+	}
+	if len(a.spans) == 0 {
+		return nil
+	}
+	for _, s := range a.spans {
+		if !now.Before(s.start) && now.Before(s.end) {
+			return nil // active cycle, auto_renew=true → keep rolling
+		}
+	}
+	latest := a.spans[0].end
+	for _, s := range a.spans {
+		if s.end.After(latest) {
+			latest = s.end
+		}
+	}
+	return &latest
+}
+
+// profitWindowAnchor describes how far quota windows may be projected and the
 // profitWindowAnchor describes how far quota windows may be projected and the
 // covered span of the account's cost-configured subscription cycles.
 // Windows are anchored to the cost-config cycles (not the global time filter):
