@@ -191,6 +191,15 @@ func (h *AuthHandler) emailOAuthCallbackWithProfile(
 		readOAuthPromoCode(c),
 	)
 	if err != nil {
+		// 邮箱已存在但身份未绑定（service 层拒绝自动登录防接管）→ 转 pending choice 绑定流程。
+		if errors.Is(err, service.ErrOAuthEmailOwnershipRequired) {
+			if pendingErr := h.createEmailOAuthRegistrationPendingSession(c, provider, frontendCallback, redirectTo, profile); pendingErr != nil {
+				redirectOAuthError(c, frontendCallback, infraerrors.Reason(pendingErr), infraerrors.Message(pendingErr), "")
+				return
+			}
+			redirectToFrontendCallback(c, frontendCallback)
+			return
+		}
 		if errors.Is(err, service.ErrOAuthInvitationRequired) {
 			if pendingErr := h.createEmailOAuthRegistrationPendingSession(c, provider, frontendCallback, redirectTo, profile); pendingErr != nil {
 				redirectOAuthError(c, frontendCallback, infraerrors.Reason(pendingErr), infraerrors.Message(pendingErr), "")
@@ -242,7 +251,9 @@ func (h *AuthHandler) emailOAuthShouldCreatePendingRegistration(ctx context.Cont
 		}
 		return false, err
 	}
-	return false, nil
+	// 安全：身份未绑定 + 邮箱已存在 → 不能走自动登录（否则攻击者凭受害者邮箱即可接管账号）。
+	// 走 pending choice 流程，前端展示「绑定已有账号」，用户通过既有密码/邮箱验证码证明所有权。
+	return true, nil
 }
 
 func (h *AuthHandler) emailOAuthAffiliateCode(c *gin.Context) string {
@@ -304,19 +315,35 @@ func (h *AuthHandler) createEmailOAuthRegistrationPendingSession(
 		pendingError = "invitation_required"
 		choiceReason = "invitation_required"
 	}
+	// 安全：邮箱已存在但该 OAuth 身份未绑定 → 允许绑定到已有账号，
+	// 前端展示「绑定已有账号」choice，用户通过既有密码/邮箱验证码证明所有权（禁止自动登录接管）。
+	var existingUser *dbent.User
+	if client := h.entClient(); client != nil {
+		if u, err := findUserByNormalizedEmail(c.Request.Context(), client, email); err == nil {
+			existingUser = u
+		}
+	}
+	var targetUserID *int64
+	if existingUser != nil && existingUser.ID > 0 {
+		targetUserID = &existingUser.ID
+	}
 	completionResponse := map[string]any{
 		"step":                      oauthPendingChoiceStep,
 		"error":                     pendingError,
 		"choice_reason":             choiceReason,
 		"adoption_required":         false,
 		"create_account_allowed":    true,
-		"existing_account_bindable": false,
+		"existing_account_bindable": existingUser != nil,
 		"force_email_on_signup":     true,
 		"invitation_required":       invitationRequired,
 		"email":                     email,
 		"resolved_email":            email,
 		"provider":                  provider,
 		"redirect":                  redirectTo,
+	}
+	if existingUser != nil {
+		completionResponse["existing_account_email"] = strings.TrimSpace(existingUser.Email)
+		completionResponse["choice_reason"] = "email_taken"
 	}
 	if strings.TrimSpace(frontendCallback) != "" {
 		completionResponse["frontend_callback"] = strings.TrimSpace(frontendCallback)
@@ -325,6 +352,7 @@ func (h *AuthHandler) createEmailOAuthRegistrationPendingSession(
 	return h.createOAuthPendingSession(c, oauthPendingSessionPayload{
 		Intent:                 oauthIntentLogin,
 		Identity:               service.PendingAuthIdentityKey{ProviderType: provider, ProviderKey: provider, ProviderSubject: strings.TrimSpace(profile.Subject)},
+		TargetUserID:           targetUserID,
 		ResolvedEmail:          email,
 		RedirectTo:             redirectTo,
 		BrowserSessionKey:      browserSessionKey,

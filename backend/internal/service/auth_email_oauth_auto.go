@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/mail"
 	"strings"
 
@@ -100,6 +101,7 @@ func (s *AuthService) loginOrRegisterVerifiedEmailOAuth(
 	user := identityUser
 	created := false
 	if user == nil {
+		// 该第三方身份尚未绑定过任何本地账号。用第三方返回的 email 匹配本地账号。
 		user, err = s.userRepo.GetByEmail(ctx, email)
 		if err != nil {
 			if errors.Is(err, ErrUserNotFound) {
@@ -112,6 +114,13 @@ func (s *AuthService) loginOrRegisterVerifiedEmailOAuth(
 				logger.LegacyPrintf("service.auth", "[Auth] Database error during %s oauth login: %v", providerType, err)
 				return nil, nil, ErrServiceUnavailable
 			}
+		} else if !isOAuthSyntheticEmail(email) {
+			// 安全：身份未绑定 + 真实邮箱已属于本地已有账号 → 拒绝自动登录。
+			// 若此处直接绑定新身份并签发 token，攻击者仅凭受害者邮箱即可接管账号
+			// （漏洞：OAuth 首次登录邮箱直登）。必须走既有密码/邮箱验证码绑定流程。
+			// 合成邮箱（@*.invalid）基于 subject 生成不可伪造，命中既有账号 = 同一身份
+			// 再次登录，继续放行。
+			return nil, nil, ErrOAuthEmailOwnershipRequired
 		}
 	}
 
@@ -131,6 +140,16 @@ func (s *AuthService) loginOrRegisterVerifiedEmailOAuth(
 	}); err != nil {
 		return nil, nil, err
 	}
+	// 安全审计：OAuth 身份成功登录/绑定到账号（含首次绑定到已有账号的合法路径，
+	// 该路径已通过邮箱所有权校验——见 ErrOAuthEmailOwnershipRequired 拦截逻辑）。
+	slog.Info("auth.oauth_binding_success",
+		"provider", providerType,
+		"provider_key", providerKey,
+		"provider_subject", providerSubject,
+		"email", email,
+		"user_id", user.ID,
+		"created", created,
+	)
 
 	if user.Username == "" && strings.TrimSpace(input.Username) != "" {
 		user.Username = strings.TrimSpace(input.Username)

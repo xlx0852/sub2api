@@ -791,6 +791,17 @@ func (h *AuthHandler) CompleteDingTalkOAuthRegistration(c *gin.Context) {
 		"dingtalk",
 	)
 	if err != nil {
+		// 邮箱已存在但身份未绑定（service 层拒绝自动登录防接管）→ 转 choice state。
+		if errors.Is(err, service.ErrOAuthEmailOwnershipRequired) {
+			if existingUser, lookupErr := findUserByNormalizedEmail(c.Request.Context(), client, email); lookupErr == nil && existingUser != nil {
+				if _, transitionErr := h.transitionPendingOAuthAccountToChoiceState(c, client, session, existingUser, email); transitionErr != nil {
+					response.ErrorFrom(c, transitionErr)
+					return
+				}
+				c.JSON(http.StatusOK, buildPendingOAuthSessionStatusPayload(session))
+				return
+			}
+		}
 		response.ErrorFrom(c, err)
 		return
 	}
