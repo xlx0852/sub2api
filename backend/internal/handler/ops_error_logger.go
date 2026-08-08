@@ -1698,3 +1698,91 @@ func shouldSkipOpsErrorLog(ctx context.Context, ops *service.OpsService, message
 func shouldSkipOpsErrorLogForCyber(c *gin.Context) bool {
 	return service.GetOpsCyberPolicy(c) != nil
 }
+
+// auditUpstreamModelMismatch 记录「上游响应回显模型 ≠ 网关配置的上游模型」的审计事件。
+// 识别上游偷偷替换/降级模型的行为（只记录+进 ops 看板，不拦截，避免误杀合法别名/预览变体）。
+// 判定：ResponseModel 非空，且既不同于 UpstreamModel（配置发送值）也不同于 Model（客户端请求值）。
+func auditUpstreamModelMismatch(
+	ops *service.OpsService,
+	requestID string,
+	userID, apiKeyID, accountID int64,
+	platform, requestedModel, configuredUpstreamModel, responseModel, inboundEndpoint, upstreamEndpoint string,
+	stream bool,
+) {
+	if ops == nil || responseModel == "" {
+		return
+	}
+	if responseModel == configuredUpstreamModel || responseModel == requestedModel {
+		return
+	}
+	var uid, kid, acctID *int64
+	if userID > 0 {
+		uid = &userID
+	}
+	if apiKeyID > 0 {
+		kid = &apiKeyID
+	}
+	if accountID > 0 {
+		acctID = &accountID
+	}
+	msg := "upstream model mismatch: sent=" + configuredUpstreamModel + " responded=" + responseModel
+	entry := &service.OpsInsertErrorLogInput{
+		RequestID:        requestID,
+		UserID:           uid,
+		APIKeyID:         kid,
+		AccountID:        acctID,
+		Platform:         platform,
+		Model:            requestedModel,
+		RequestedModel:   requestedModel,
+		UpstreamModel:    configuredUpstreamModel,
+		InboundEndpoint:  inboundEndpoint,
+		UpstreamEndpoint: upstreamEndpoint,
+		Stream:           stream,
+		ErrorPhase:       "upstream",
+		ErrorType:        "model_mismatch",
+		Severity:         "warning",
+		StatusCode:       0,
+		ErrorMessage:     msg,
+		ErrorSource:      "gateway",
+	}
+	enqueueOpsErrorLog(ops, entry)
+}
+
+// auditOpenAIModelMismatch 在 OpenAI 请求记录用量时比对上游响应模型，发现不一致即写审计。
+// 仅在真实转发路径（Responses/Messages/WebSocket）调用；ResponseModel 为空（上游未回显）自动跳过。
+func (h *OpenAIGatewayHandler) auditOpenAIModelMismatch(
+	c *gin.Context,
+	apiKey *service.APIKey,
+	account *service.Account,
+	result *service.OpenAIForwardResult,
+	reqModel string,
+	inboundEndpoint, upstreamEndpoint string,
+) {
+	if h == nil || c == nil || result == nil || result.ResponseModel == "" || h.opsService == nil {
+		return
+	}
+	var userID, apiKeyID int64
+	if apiKey != nil {
+		userID = apiKey.UserID
+		apiKeyID = apiKey.ID
+	}
+	var accountID int64
+	if account != nil {
+		accountID = account.ID
+	}
+	requestID, _ := c.Request.Context().Value(ctxkey.RequestID).(string)
+	auditUpstreamModelMismatch(
+		h.opsService,
+		requestID,
+		userID,
+		apiKeyID,
+		accountID,
+		"openai",
+		reqModel,
+		result.UpstreamModel,
+		result.ResponseModel,
+		inboundEndpoint,
+		upstreamEndpoint,
+		result.Stream,
+	)
+}

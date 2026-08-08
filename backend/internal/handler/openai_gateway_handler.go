@@ -767,6 +767,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		upstreamEndpoint := resolveOpenAIUpstreamEndpoint(c, account, result)
 		quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 
+		// 上游响应模型审计：比对上游回显模型与网关配置的上游模型，不一致即记录（不拦截）。
+		h.auditOpenAIModelMismatch(c, apiKey, account, result, reqModel, inboundEndpoint, upstreamEndpoint)
+
 		// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
 		cyberBlocked := service.GetOpsCyberPolicy(c) != nil
 		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
@@ -1282,6 +1285,9 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		inboundEndpoint := GetInboundEndpoint(c)
 		upstreamEndpoint := resolveOpenAIUpstreamEndpoint(c, account, result)
 		quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
+
+		// 上游响应模型审计：比对上游回显模型与网关配置的上游模型，不一致即记录（不拦截）。
+		h.auditOpenAIModelMismatch(c, apiKey, account, result, reqModel, inboundEndpoint, upstreamEndpoint)
 
 		cyberBlocked := service.GetOpsCyberPolicy(c) != nil
 		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
@@ -2005,6 +2011,8 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				inboundEndpoint := GetInboundEndpoint(c)
 				upstreamEndpoint := resolveOpenAIUpstreamEndpoint(c, account, result)
 				quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
+				// 上游响应模型审计：比对上游回显模型与网关配置的上游模型，不一致即记录（不拦截）。
+				h.auditOpenAIModelMismatch(c, apiKey, account, result, reqModel, inboundEndpoint, upstreamEndpoint)
 				cyberBlocked := service.GetOpsCyberPolicy(c) != nil
 				h.submitOpenAIUsageRecordTask(ctx, result, func(taskCtx context.Context) {
 					if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{

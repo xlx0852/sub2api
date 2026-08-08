@@ -336,6 +336,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	imageCounter := newOpenAIImageOutputCounter()
 	var firstTokenMs *int
 	responseID := ""
+	responseModel := ""
 	var finalResponse []byte
 	wroteDownstream := false
 	needModelReplace := originalModel != mappedModel
@@ -503,6 +504,10 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		}
 
 		if !clientDisconnected {
+			// 捕获上游响应回显的实际模型（改写前），用于上游模型不一致审计。
+			if responseModel == "" {
+				responseModel = extractOpenAIResponseModelFromJSONBytes(message)
+			}
 			if needModelReplace && len(mappedModelBytes) > 0 && openAIWSEventMayContainModel(eventType) && bytes.Contains(message, mappedModelBytes) {
 				message = replaceOpenAIWSMessageModel(message, mappedModel, originalModel)
 			}
@@ -698,6 +703,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 
 	return &OpenAIForwardResult{
 		RequestID:        responseID,
+		ResponseModel:    responseModel,
 		Usage:            *usage,
 		Model:            originalModel,
 		UpstreamModel:    mappedModel,
