@@ -123,7 +123,9 @@ export interface AccountProfitSummary {
   billing_window_revenue?: number
   billing_window_cost?: number
   billing_window_profit?: number
-  billing_window_source?: 'cycle' | 'manual' | 'subscription_expiry'
+  billing_window_source?: 'cycle' | 'quota_window' | 'manual' | 'subscription_expiry' | string
+  billing_window_kind?: string
+  billing_window_requests?: number
   billing_window_terminated_at?: string
   billing_window_termination_reason?: string
   billing_window_original_cost?: number
@@ -155,11 +157,21 @@ export interface ProfitSummaryResponse {
   accounts: AccountProfitSummary[]
 }
 
+export interface ProfitTrendAccountSlice {
+  account_id: number
+  account_name: string
+  revenue: number
+  cost: number
+  profit: number
+}
+
 export interface ProfitTrendPoint {
   date: string
   revenue: number
   cost: number
   profit: number
+  /** Per-account contribution for stacked bar composition. */
+  accounts?: ProfitTrendAccountSlice[]
 }
 
 export interface ProfitOverviewResponse {

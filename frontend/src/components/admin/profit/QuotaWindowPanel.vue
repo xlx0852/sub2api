@@ -32,96 +32,107 @@
       {{ t('admin.profit.quotaWindowEmpty') }}
     </div>
 
-    <div v-else class="overflow-x-auto">
-      <div class="px-4 py-3 sm:px-5" :class="viewMode === 'month' ? 'min-w-[960px]' : 'min-w-[720px]'">
-        <div class="mb-2 grid gap-3" :style="gridTemplate">
-          <div />
-          <div class="relative h-7">
+    <div v-else class="px-3 py-3 sm:px-4">
+      <!-- Sticky short labels + independently scrollable gantt -->
+      <div class="flex min-w-0 items-stretch gap-2">
+        <div class="w-[6.75rem] shrink-0 sm:w-[7.5rem]">
+          <div class="mb-2 h-7" />
+          <div class="space-y-2.5">
             <div
-              v-for="tick in dayTicks"
-              :key="tick.key"
-              class="absolute top-0 flex -translate-x-1/2 flex-col items-center"
-              :style="{ left: `${tick.left}%` }"
+              v-for="lane in lanes"
+              :key="`label-${lane.accountId}`"
+              class="flex h-9 min-w-0 items-center gap-1.5"
+              data-testid="profit-quota-window-lane"
             >
-              <span class="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-dark-400">{{ tick.weekday }}</span>
-              <span class="text-[11px] font-semibold tabular-nums text-gray-600 dark:text-dark-200">{{ tick.day }}</span>
+              <span class="h-2 w-2 shrink-0 rounded-full" :class="lane.dotClass" />
+              <div class="min-w-0 flex-1">
+                <div
+                  class="truncate text-[11px] font-semibold leading-tight text-gray-800 dark:text-dark-100"
+                  :title="lane.fullTitle"
+                >
+                  {{ lane.shortName }}
+                </div>
+                <div class="truncate text-[10px] leading-tight text-gray-400 dark:text-dark-400" :title="lane.fullTitle">
+                  {{ lane.kindLabel }} · {{ lane.usedLabel }}
+                </div>
+              </div>
             </div>
-            <div
-              v-if="nowLeft != null"
-              class="pointer-events-none absolute bottom-0 top-0 w-px bg-rose-400/80"
-              :style="{ left: `${nowLeft}%` }"
-            />
           </div>
         </div>
 
-        <div class="space-y-2.5">
-          <div
-            v-for="lane in lanes"
-            :key="lane.accountId"
-            class="grid items-center gap-3"
-            :style="gridTemplate"
-            data-testid="profit-quota-window-lane"
-          >
-            <div class="min-w-0">
-              <div class="flex min-w-0 items-center gap-1.5">
-                <span class="h-2 w-2 shrink-0 rounded-full" :class="lane.dotClass" />
-                <div class="truncate text-xs font-semibold text-gray-800 dark:text-dark-100" :title="lane.accountName">
-                  {{ lane.accountName }}
-                </div>
-                <span class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-dark-700 dark:text-dark-300">
-                  {{ lane.kindLabel }}
-                </span>
-              </div>
-              <div class="mt-0.5 truncate text-[11px] text-gray-400 dark:text-dark-400">
-                {{ lane.meta }}
-              </div>
-            </div>
-
-            <div class="relative h-9 overflow-hidden rounded-lg bg-gray-50 ring-1 ring-inset ring-gray-100 dark:bg-dark-700/50 dark:ring-dark-600">
+        <div
+          class="min-w-0 flex-1 overflow-x-auto overscroll-x-contain"
+          data-testid="profit-quota-window-scroll"
+        >
+          <div :class="timelineMinWidthClass">
+            <div class="relative mb-2 h-7">
               <div
-                v-for="seg in dayTicks"
-                :key="`${lane.accountId}-${seg.key}`"
-                class="pointer-events-none absolute bottom-0 top-0 w-px bg-gray-200/70 dark:bg-dark-600/80"
-                :style="{ left: `${seg.left}%` }"
-              />
+                v-for="tick in dayTicks"
+                :key="tick.key"
+                class="absolute top-0 flex -translate-x-1/2 flex-col items-center"
+                :style="{ left: `${tick.left}%` }"
+              >
+                <span class="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-dark-400">{{ tick.weekday }}</span>
+                <span class="text-[11px] font-semibold tabular-nums text-gray-600 dark:text-dark-200">{{ tick.day }}</span>
+              </div>
               <div
                 v-if="nowLeft != null"
-                class="pointer-events-none absolute bottom-0 top-0 w-px bg-rose-400/50"
+                class="pointer-events-none absolute bottom-0 top-0 w-px bg-rose-400/80"
                 :style="{ left: `${nowLeft}%` }"
               />
+            </div>
 
-              <button
-                v-for="bar in lane.bars"
-                :key="bar.key"
-                type="button"
-                class="absolute top-1.5 h-6 cursor-pointer overflow-hidden rounded-md border text-[10px] font-semibold tabular-nums shadow-sm transition hover:brightness-95"
-                :class="bar.className"
-                :style="bar.style"
-                :title="bar.title"
-                @click="emit('select', lane.accountId)"
+            <div class="space-y-2.5">
+              <div
+                v-for="lane in lanes"
+                :key="`track-${lane.accountId}`"
+                class="relative h-9 overflow-hidden rounded-lg bg-gray-50 ring-1 ring-inset ring-gray-100 dark:bg-dark-700/50 dark:ring-dark-600"
               >
-                <div class="flex h-full items-center gap-1 px-1.5">
-                  <span class="truncate">{{ bar.label }}</span>
-                </div>
-              </button>
+                <div
+                  v-for="seg in dayTicks"
+                  :key="`${lane.accountId}-${seg.key}`"
+                  class="pointer-events-none absolute bottom-0 top-0 w-px bg-gray-200/70 dark:bg-dark-600/80"
+                  :style="{ left: `${seg.left}%` }"
+                />
+                <div
+                  v-if="nowLeft != null"
+                  class="pointer-events-none absolute bottom-0 top-0 w-px bg-rose-400/50"
+                  :style="{ left: `${nowLeft}%` }"
+                />
+
+                <button
+                  v-for="bar in lane.bars"
+                  :key="bar.key"
+                  type="button"
+                  class="absolute top-1.5 h-6 cursor-pointer overflow-hidden rounded-md border text-[10px] font-semibold tabular-nums shadow-sm transition hover:brightness-95"
+                  :class="bar.className"
+                  :style="bar.style"
+                  :title="bar.title"
+                  @click="emit('select', lane.accountId)"
+                >
+                  <div class="flex h-full items-center gap-1 px-1.5">
+                    <span class="truncate">{{ bar.label }}</span>
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
         </div>
+      </div>
 
-        <div class="mt-4 flex flex-wrap items-center gap-4 text-[11px] text-gray-500 dark:text-dark-400">
-          <span class="inline-flex items-center gap-1.5">
-            <span class="h-2.5 w-6 rounded-sm bg-slate-500/80" />
-            {{ t('admin.profit.quotaWindowCurrent') }}
-          </span>
-          <span class="inline-flex items-center gap-1.5">
-            <span class="h-2.5 w-6 rounded-sm border border-dashed border-slate-400 bg-transparent" />
-            {{ t('admin.profit.quotaWindowUpcoming') }}
-          </span>
-          <span class="inline-flex items-center gap-1.5">
-            <span class="h-2.5 w-6 rounded-sm bg-slate-300/80 dark:bg-dark-500" />
-            {{ t('admin.profit.quotaWindowEnded') }}
-          </span>
-        </div>
+      <div class="mt-4 flex flex-wrap items-center gap-4 text-[11px] text-gray-500 dark:text-dark-400">
+        <span class="inline-flex items-center gap-1.5">
+          <span class="h-2.5 w-6 rounded-sm bg-slate-500/80" />
+          {{ t('admin.profit.quotaWindowCurrent') }}
+        </span>
+        <span class="inline-flex items-center gap-1.5">
+          <span class="h-2.5 w-6 rounded-sm border border-dashed border-slate-400 bg-transparent" />
+          {{ t('admin.profit.quotaWindowUpcoming') }}
+        </span>
+        <span class="inline-flex items-center gap-1.5">
+          <span class="h-2.5 w-6 rounded-sm bg-slate-300/80 dark:bg-dark-500" />
+          {{ t('admin.profit.quotaWindowEnded') }}
+        </span>
       </div>
     </div>
   </section>
@@ -184,7 +195,11 @@ const palette = [
   }
 ]
 
-const gridTemplate = 'grid-template-columns: minmax(168px, 220px) minmax(0, 1fr)'
+const timelineMinWidthClass = computed(() => {
+  if (viewMode.value === 'month') return 'min-w-[1100px]'
+  if (viewMode.value === '5h') return 'min-w-[640px]'
+  return 'min-w-[860px]'
+})
 
 const viewRange = computed(() => {
   const start = new Date(anchor.value)
@@ -271,10 +286,15 @@ const lanes = computed(() => {
       const used = preferred.used_percent
       const usedLabel = used == null || Number.isNaN(Number(used)) ? '—' : `${Math.round(Number(used))}%`
       const colors = palette[index % palette.length]
+      const accountName = account.account_name || `#${account.account_id}`
       return {
         accountId: account.account_id,
-        accountName: account.account_name,
+        accountName,
+        // Narrow sticky column + CSS truncate; keep readable head of the name.
+        shortName: shortenAccountName(accountName),
         kindLabel: formatWindowKindLabel(preferred),
+        usedLabel,
+        fullTitle: `${accountName} · ${account.platform} · ${usedLabel}`,
         meta: `${account.platform} · ${usedLabel}`,
         dotClass: colors.dot,
         bars
@@ -349,9 +369,17 @@ function expandWindowOccurrences(
   if (startMs == null && endMs != null) startMs = endMs - durationMs
   if (startMs == null || endMs == null) return []
 
-  // Keep the live upstream snapshot intact. recurring_until only stops FUTURE
-  // projections (e.g. after ban / active cycle end), and must not shrink or drop
-  // the current bar when bookkeeping cycle end is earlier than upstream reset.
+  // When subscription already ended (live bar starts at/after recurring_until),
+  // drop the whole series — no dashed future and no leftover live bar past cutoff.
+  if (recurringUntilMs != null && startMs >= recurringUntilMs) return []
+
+  // Clip the live/current bar when bookkeeping cycle ends mid-window (expired no-renew).
+  // Future projections are also capped; history still rolls back within recurring_from.
+  if (recurringUntilMs != null && endMs > recurringUntilMs) {
+    endMs = recurringUntilMs
+  }
+  if (endMs <= startMs) return []
+
   const out: Array<ProfitQuotaWindow & { startMs: number; endMs: number }> = []
   const earliest = viewStart.getTime() - durationMs
   const latest = viewEnd.getTime() + durationMs
@@ -380,6 +408,20 @@ function expandWindowOccurrences(
   }
   out.sort((a, b) => a.startMs - b.startMs)
   return out
+}
+
+/** Compact lane label for the sticky column; CSS truncate is the final clip. */
+function shortenAccountName(name: string, max = 12): string {
+  const raw = (name || '').trim()
+  if (!raw) return '—'
+  if ([...raw].length <= max) return raw
+  // Prefer first two hyphen segments when that already fits (GPT-自有-4 → GPT-自有).
+  const parts = raw.split(/[-_·]+/).filter(Boolean)
+  if (parts.length >= 2) {
+    const two = `${parts[0]}-${parts[1]}`
+    if ([...two].length <= max) return two
+  }
+  return `${[...raw].slice(0, Math.max(1, max - 1)).join('')}…`
 }
 
 function buildBar(

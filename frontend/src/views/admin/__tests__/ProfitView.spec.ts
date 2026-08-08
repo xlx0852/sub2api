@@ -28,15 +28,13 @@ vi.mock('chart.js', () => ({
   Chart: { register: vi.fn() },
   CategoryScale: {},
   LinearScale: {},
-  PointElement: {},
-  LineElement: {},
+  BarElement: {},
   Tooltip: {},
-  Legend: {},
-  Filler: {}
+  Legend: {}
 }))
 
 vi.mock('vue-chartjs', () => ({
-  Line: { template: '<div data-testid="profit-chart" />' }
+  Bar: { template: '<div data-testid="profit-chart" />' }
 }))
 
 describe('ProfitView', () => {
@@ -110,7 +108,16 @@ describe('ProfitView', () => {
         }
         ]
       },
-      points: [{ date: '2026-07-22', revenue: 180, cost: 75, profit: 105 }]
+      points: [{
+        date: '2026-07-22',
+        revenue: 180,
+        cost: 75,
+        profit: 105,
+        accounts: [
+          { account_id: 69, account_name: 'GPT-自有 1', revenue: 120, cost: 50, profit: 70 },
+          { account_id: 90, account_name: 'GROK-外接', revenue: 60, cost: 25, profit: 35 }
+        ]
+      }]
     })
     supplyForecast.mockResolvedValue({
       generated_at: '2026-07-29T08:00:00Z',
@@ -157,6 +164,8 @@ describe('ProfitView', () => {
     // 账号明细已改为点配额窗口条 → 抽屉展示；不再内联渲染。
     expect(wrapper.text()).not.toContain('admin.profit.accountDetails')
     expect(wrapper.find('[data-testid="profit-quota-window-panel"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="profit-trend-chart"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="profit-chart"]').exists()).toBe(true)
     expect(wrapper.findAll('[data-testid="account-profit-item"]')).toHaveLength(0)
 
     await wrapper.find('[data-testid="profit-refresh"]').trigger('click')
