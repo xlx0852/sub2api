@@ -14,6 +14,7 @@ export default {
     trendTitle: '收入 / 摊销成本 / 利润趋势',
     accountDetails: '账号明细',
     accountDetailsHint: '按利润从高到低排列，横向对比所选区间的收入与摊销成本。',
+    drawerCycleHint: '订阅制账号按当前付费周期计算；计量制账号按所选区间。',
     quotaWindowTitle: '配额窗口',
     quotaWindowHint: '每条表示一个完整的配额窗口，从开启到重置。同种窗口会沿时间线滚动对齐到日期。',
     quotaWindowEmpty: '当前账号暂无可用的配额窗口快照',

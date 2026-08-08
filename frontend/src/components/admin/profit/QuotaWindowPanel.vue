@@ -90,18 +90,20 @@
                 :style="{ left: `${nowLeft}%` }"
               />
 
-              <div
+              <button
                 v-for="bar in lane.bars"
                 :key="bar.key"
-                class="absolute top-1.5 h-6 overflow-hidden rounded-md border text-[10px] font-semibold tabular-nums shadow-sm"
+                type="button"
+                class="absolute top-1.5 h-6 cursor-pointer overflow-hidden rounded-md border text-[10px] font-semibold tabular-nums shadow-sm transition hover:brightness-95"
                 :class="bar.className"
                 :style="bar.style"
                 :title="bar.title"
+                @click="emit('select', lane.accountId)"
               >
                 <div class="flex h-full items-center gap-1 px-1.5">
                   <span class="truncate">{{ bar.label }}</span>
                 </div>
-              </div>
+              </button>
             </div>
           </div>
         </div>
@@ -129,6 +131,8 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { AccountProfitSummary, ProfitQuotaWindow } from '@/api/admin/profit'
+
+const emit = defineEmits<{ select: [accountId: number] }>()
 
 type ViewMode = 'week' | 'month' | '5h'
 
