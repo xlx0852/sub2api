@@ -1,18 +1,18 @@
 package service
 
 import (
-		"context"
-		"encoding/json"
-		"fmt"
-		"math"
-		"sort"
-		"strconv"
-		"strings"
-		"time"
+	"context"
+	"encoding/json"
+	"fmt"
+	"math"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 
-		"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-		"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
-	)
+	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
+)
 
 // ProfitService 账号利润分析服务。
 //
@@ -27,12 +27,13 @@ import (
 // 订阅号的"重置"（官方 5h/7d 窗口重置 + 重置次数重置）不增加成本，
 // 体现为容量利用率与窗口变现效率：同一订阅费摊出更多收入。
 type ProfitService struct {
-	profitRepo  ProfitRepository
-	accountRepo AccountRepository
+	profitRepo      ProfitRepository
+	accountRepo     AccountRepository
+	quotaWindowRepo AccountQuotaWindowRepository
 }
 
-func NewProfitService(profitRepo ProfitRepository, accountRepo AccountRepository) *ProfitService {
-	return &ProfitService{profitRepo: profitRepo, accountRepo: accountRepo}
+func NewProfitService(profitRepo ProfitRepository, accountRepo AccountRepository, quotaWindowRepo AccountQuotaWindowRepository) *ProfitService {
+	return &ProfitService{profitRepo: profitRepo, accountRepo: accountRepo, quotaWindowRepo: quotaWindowRepo}
 }
 
 // listAccountsForProfit 返回利润复盘用账号集合：在用 + 回收站。
@@ -152,25 +153,36 @@ type AccountProfitSummary struct {
 	WindowEfficiency     *float64 `json:"window_efficiency,omitempty"`
 	WindowBaselineSource string   `json:"window_baseline_source,omitempty"` // "configured" / "learned" / ""
 
-// 当前计费/额度窗口（抽屉明细用；与顶部日期筛选无关）
-		// source: cycle | quota_window | manual | subscription_expiry
-		BillingWindowStart             *time.Time `json:"billing_window_start,omitempty"`
-		BillingWindowEnd               *time.Time `json:"billing_window_end,omitempty"`
-		BillingWindowProgress          *float64   `json:"billing_window_progress,omitempty"` // 0-100，窗口已过比例
-		BillingWindowRevenue           *float64   `json:"billing_window_revenue,omitempty"`  // 窗口内至今收入
-		BillingWindowCost              *float64   `json:"billing_window_cost,omitempty"`     // 窗口摊销/计量成本
-		BillingWindowProfit            *float64   `json:"billing_window_profit,omitempty"`
-		BillingWindowSource            string     `json:"billing_window_source,omitempty"`
-		BillingWindowKind              string     `json:"billing_window_kind,omitempty"` // 7d / 5h / cycle ...
-		BillingWindowRequests          *int64     `json:"billing_window_requests,omitempty"`
-		RequiresCycleStart             bool       `json:"requires_cycle_start,omitempty"`
-		BillingWindowTerminatedAt      *time.Time `json:"billing_window_terminated_at,omitempty"`
-		BillingWindowTerminationReason string     `json:"billing_window_termination_reason,omitempty"`
-		BillingWindowOriginalCost      *float64   `json:"billing_window_original_cost,omitempty"`
-		BillingWindowRefundTotal       *float64   `json:"billing_window_refund_total,omitempty"`
-		BillingWindowRecoveredAmount   *float64   `json:"billing_window_recovered_amount,omitempty"`
-		BillingWindowRecoveryProgress  *float64   `json:"billing_window_recovery_progress,omitempty"`
-		BillingWindowLoss              *float64   `json:"billing_window_loss,omitempty"`
+	// 当前计费/额度窗口（抽屉明细用；与顶部日期筛选无关）
+	// source: cycle | quota_window | manual | subscription_expiry
+	BillingWindowStart    *time.Time `json:"billing_window_start,omitempty"`
+	BillingWindowEnd      *time.Time `json:"billing_window_end,omitempty"`
+	BillingWindowProgress *float64   `json:"billing_window_progress,omitempty"` // 0-100，窗口已过比例
+	BillingWindowRevenue  *float64   `json:"billing_window_revenue,omitempty"`  // 窗口内至今收入
+	BillingWindowCost     *float64   `json:"billing_window_cost,omitempty"`     // 窗口摊销/计量成本
+	BillingWindowProfit   *float64   `json:"billing_window_profit,omitempty"`
+	BillingWindowSource   string     `json:"billing_window_source,omitempty"`
+	BillingWindowKind     string     `json:"billing_window_kind,omitempty"` // 7d / 5h / cycle ...
+	BillingWindowRequests *int64     `json:"billing_window_requests,omitempty"`
+	RequiresCycleStart    bool       `json:"requires_cycle_start,omitempty"`
+	// DrawerQuota* carries the live quota-window economics for the profit drawer,
+	// without overwriting billing_window_* used by pool financial summary (cycle).
+	DrawerQuotaStart    *time.Time `json:"drawer_quota_start,omitempty"`
+	DrawerQuotaEnd      *time.Time `json:"drawer_quota_end,omitempty"`
+	DrawerQuotaKind     string     `json:"drawer_quota_kind,omitempty"`
+	DrawerQuotaRevenue  *float64   `json:"drawer_quota_revenue,omitempty"`
+	DrawerQuotaCost     *float64   `json:"drawer_quota_cost,omitempty"`
+	DrawerQuotaProfit   *float64   `json:"drawer_quota_profit,omitempty"`
+	DrawerQuotaRequests *int64     `json:"drawer_quota_requests,omitempty"`
+	DrawerQuotaProgress *float64   `json:"drawer_quota_progress,omitempty"`
+
+	BillingWindowTerminatedAt      *time.Time `json:"billing_window_terminated_at,omitempty"`
+	BillingWindowTerminationReason string     `json:"billing_window_termination_reason,omitempty"`
+	BillingWindowOriginalCost      *float64   `json:"billing_window_original_cost,omitempty"`
+	BillingWindowRefundTotal       *float64   `json:"billing_window_refund_total,omitempty"`
+	BillingWindowRecoveredAmount   *float64   `json:"billing_window_recovered_amount,omitempty"`
+	BillingWindowRecoveryProgress  *float64   `json:"billing_window_recovery_progress,omitempty"`
+	BillingWindowLoss              *float64   `json:"billing_window_loss,omitempty"`
 
 	// 最低保本售卖倍率（仅订阅 OAuth/SetupToken）：
 	// break_even_rate = current_effective_rate × period_fee / (full_window_user_revenue × windows_per_period)
@@ -223,6 +235,38 @@ type ProfitTrendPoint struct {
 // ProfitTrendResponse 趋势响应。
 type ProfitTrendResponse struct {
 	Points []*ProfitTrendPoint `json:"points"`
+}
+
+// ProfitWindowEconomicsQuery 查询某账号若干配额窗口的收入/摊销成本/利润。
+type ProfitWindowEconomicsQuery struct {
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
+	Kind    string    `json:"kind,omitempty"`
+	Label   string    `json:"label,omitempty"`
+}
+
+// ProfitWindowEconomicsItem 单窗经济账（历史/当前/未来）。
+type ProfitWindowEconomicsItem struct {
+	StartAt  time.Time `json:"start_at"`
+	EndAt    time.Time `json:"end_at"`
+	Kind     string    `json:"kind,omitempty"`
+	Label    string    `json:"label,omitempty"`
+	Status   string    `json:"status"` // ended | current | upcoming
+	Requests int64     `json:"requests"`
+	Revenue  float64   `json:"revenue"`
+	Cost     float64   `json:"cost"`
+	Profit   float64   `json:"profit"`
+	// CostBasis is the range used for amortization/usage (may clip end to now for current).
+	CostStart *time.Time `json:"cost_start,omitempty"`
+	CostEnd   *time.Time `json:"cost_end,omitempty"`
+}
+
+// ProfitWindowEconomicsResponse 账号配额窗口历史经济账。
+type ProfitWindowEconomicsResponse struct {
+	AccountID   int64                       `json:"account_id"`
+	AccountName string                      `json:"account_name"`
+	CostType    string                      `json:"cost_type"`
+	Windows     []ProfitWindowEconomicsItem `json:"windows"`
 }
 
 // ProfitOverviewResponse 为利润页一次返回汇总与趋势，避免重复扫描相同时间范围。
@@ -311,10 +355,10 @@ func (s *ProfitService) summarizeAccounts(ctx context.Context, accounts []Accoun
 	if err != nil {
 		return nil, err
 	}
-	return s.summarizeAccountsWithData(accounts, start, end, statsByAccount, accounting), nil
+	return s.summarizeAccountsWithData(ctx, accounts, start, end, statsByAccount, accounting), nil
 }
 
-func (s *ProfitService) summarizeAccountsWithData(accounts []Account, start, end time.Time, statsByAccount map[int64]*ProfitUsageStats, accounting *profitAccountingData) *ProfitSummaryResponse {
+func (s *ProfitService) summarizeAccountsWithData(ctx context.Context, accounts []Account, start, end time.Time, statsByAccount map[int64]*ProfitUsageStats, accounting *profitAccountingData) *ProfitSummaryResponse {
 
 	periodDays := end.Sub(start).Hours() / 24
 	resp := &ProfitSummaryResponse{Start: start, End: end}
@@ -337,11 +381,11 @@ func (s *ProfitService) summarizeAccountsWithData(accounts []Account, start, end
 			Revenue:     roundMoney(stats.Revenue),
 			Currency:    "USD",
 		}
-// 窗口利用率快照 + 时间轴窗口（OpenAI/Kimi/Grok/Claude session）
-			// Always apply cost-config anchor when cycles/config exist — not only
-			// OAuth/SetupToken — so expired no-renew Grok (etc.) still caps projection.
-			anchor := buildProfitWindowAnchor(accounting.cyclesByAccount[acc.ID], accounting.configsByAccount[acc.ID], accounting.now)
-			fillProfitQuotaWindowsWithAnchor(summary, acc, accounting.now, anchor)
+		// 窗口利用率快照 + 时间轴窗口（OpenAI/Kimi/Grok/Claude session）
+		// Always apply cost-config anchor when cycles/config exist — not only
+		// OAuth/SetupToken — so expired no-renew Grok (etc.) still caps projection.
+		anchor := buildProfitWindowAnchor(accounting.cyclesByAccount[acc.ID], accounting.configsByAccount[acc.ID], accounting.now)
+		s.fillAccountQuotaWindows(ctx, summary, acc, accounting.now, anchor)
 
 		cost := stats.MeteredCost
 		if costType == AccountCostTypeSubscription {
@@ -352,48 +396,48 @@ func (s *ProfitService) summarizeAccountsWithData(accounts []Account, start, end
 			} else {
 				summary.Configured = true
 				cost = subscriptionCyclesCostForRange(cycles, start, end)
-if financialCycle := financialSubscriptionCycle(cycles, accounting.now); financialCycle != nil {
-						summary.Currency = financialCycle.Currency
-if accounting.opts.BillingWindow {
-								windowRevenue := 0.0
-								if windowStats := accounting.windowStatsByAccount[acc.ID]; windowStats != nil {
-									windowRevenue = windowStats.Revenue
-								}
-								fillBillingWindowFromRevenue(financialCycle, summary, windowRevenue, accounting.now)
-							}
-							if accounting.opts.BreakEven {
-								fillBreakEvenRate(
-									summary,
-									financialCycle,
-									accounting.breakEvenWindowByAccount[acc.ID],
-									accounting.breakEvenStatsByAccount[acc.ID],
-								)
-							}
+				if financialCycle := financialSubscriptionCycle(cycles, accounting.now); financialCycle != nil {
+					summary.Currency = financialCycle.Currency
+					if accounting.opts.BillingWindow {
+						windowRevenue := 0.0
+						if windowStats := accounting.windowStatsByAccount[acc.ID]; windowStats != nil {
+							windowRevenue = windowStats.Revenue
 						}
+						fillBillingWindowFromRevenue(financialCycle, summary, windowRevenue, accounting.now)
 					}
-					if accounting.opts.WindowEfficiency {
-						summary.WindowEfficiency, summary.WindowBaselineSource = windowEfficiencyFromBaseline(stats.Revenue, periodDays, accounting.bestWindowByAccount[acc.ID])
+					if accounting.opts.BreakEven {
+						fillBreakEvenRate(
+							summary,
+							financialCycle,
+							accounting.breakEvenWindowByAccount[acc.ID],
+							accounting.breakEvenStatsByAccount[acc.ID],
+						)
 					}
-			} else if cfg != nil {
-				// API Key 账号即使遗留了订阅配置，也必须按历史账号侧成本结算。
-				summary.Configured = true
-				summary.Currency = cfg.Currency
+				}
 			}
-			// Drawer economics: prefer the account's live quota window (7d/5h/…),
-			// not the page-level date filter. Overwrites cycle billing_window_* when present.
-			fillDrawerWindowFromQuota(
-				summary,
-				accounting.cyclesByAccount[acc.ID],
-				accounting.breakEvenWindowByAccount[acc.ID],
-				accounting.breakEvenStatsByAccount[acc.ID],
-				costType,
-				accounting.now,
-			)
-			summary.Cost = roundMoney(cost)
-			summary.Profit = roundMoney(summary.Revenue - summary.Cost)
-			if summary.Revenue > 0 {
-				summary.Margin = roundMoney(summary.Profit / summary.Revenue * 100)
+			if accounting.opts.WindowEfficiency {
+				summary.WindowEfficiency, summary.WindowBaselineSource = windowEfficiencyFromBaseline(stats.Revenue, periodDays, accounting.bestWindowByAccount[acc.ID])
 			}
+		} else if cfg != nil {
+			// API Key 账号即使遗留了订阅配置，也必须按历史账号侧成本结算。
+			summary.Configured = true
+			summary.Currency = cfg.Currency
+		}
+		// Drawer economics: prefer the account's live quota window (7d/5h/…),
+		// not the page-level date filter. Overwrites cycle billing_window_* when present.
+		fillDrawerWindowFromQuota(
+			summary,
+			accounting.cyclesByAccount[acc.ID],
+			accounting.breakEvenWindowByAccount[acc.ID],
+			accounting.breakEvenStatsByAccount[acc.ID],
+			costType,
+			accounting.now,
+		)
+		summary.Cost = roundMoney(cost)
+		summary.Profit = roundMoney(summary.Revenue - summary.Cost)
+		if summary.Revenue > 0 {
+			summary.Margin = roundMoney(summary.Profit / summary.Revenue * 100)
+		}
 		resp.TotalRevenue += summary.Revenue
 		resp.TotalCost += summary.Cost
 		resp.TotalProfit += summary.Profit
@@ -434,24 +478,24 @@ func (s *ProfitService) loadProfitAccountingData(ctx context.Context, accounts [
 		}
 	}
 
-// Load cycles for subscription auth types and any account with a cost config
-		// (apikey/self-hosted Grok may still book subscription periods).
-		subscriptionIDs := make([]int64, 0, len(accounts))
-		seenSubID := make(map[int64]struct{}, len(accounts))
-		for i := range accounts {
-			id := accounts[i].ID
-			if !isSubscriptionAccountType(accounts[i].Type) {
-				if _, ok := data.configsByAccount[id]; !ok {
-					continue
-				}
-			}
-			if _, dup := seenSubID[id]; dup {
+	// Load cycles for subscription auth types and any account with a cost config
+	// (apikey/self-hosted Grok may still book subscription periods).
+	subscriptionIDs := make([]int64, 0, len(accounts))
+	seenSubID := make(map[int64]struct{}, len(accounts))
+	for i := range accounts {
+		id := accounts[i].ID
+		if !isSubscriptionAccountType(accounts[i].Type) {
+			if _, ok := data.configsByAccount[id]; !ok {
 				continue
 			}
-			seenSubID[id] = struct{}{}
-			subscriptionIDs = append(subscriptionIDs, id)
 		}
-		cycles, err := s.profitRepo.ListSubscriptionCyclesBatch(ctx, subscriptionIDs)
+		if _, dup := seenSubID[id]; dup {
+			continue
+		}
+		seenSubID[id] = struct{}{}
+		subscriptionIDs = append(subscriptionIDs, id)
+	}
+	cycles, err := s.profitRepo.ListSubscriptionCyclesBatch(ctx, subscriptionIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -507,7 +551,7 @@ func (s *ProfitService) loadProfitAccountingData(ctx context.Context, accounts [
 			}
 			anchor := buildProfitWindowAnchor(data.cyclesByAccount[accountID], data.configsByAccount[accountID], data.now)
 			tmp := &AccountProfitSummary{}
-			fillProfitQuotaWindowsWithAnchor(tmp, acc, data.now, anchor)
+			s.fillAccountQuotaWindows(ctx, tmp, acc, data.now, anchor)
 			win := pickPreferredBreakEvenWindow(tmp.QuotaWindows)
 			if win == nil || win.StartAt == nil {
 				continue
@@ -742,73 +786,73 @@ func (s *ProfitService) fillBillingWindow(ctx context.Context, accountID int64, 
 }
 
 // pickPreferredBreakEvenWindow 选择用于保本测算的配额窗：
-	// 优先 7d（周额度），其次 5h / 24h；必须有 used_percent 与可解析时长。
-	func pickPreferredBreakEvenWindow(windows []ProfitQuotaWindow) *ProfitQuotaWindow {
-		return pickPreferredQuotaWindow(windows, true)
-	}
+// 优先 7d（周额度），其次 5h / 24h；必须有 used_percent 与可解析时长。
+func pickPreferredBreakEvenWindow(windows []ProfitQuotaWindow) *ProfitQuotaWindow {
+	return pickPreferredQuotaWindow(windows, true)
+}
 
-	// pickPreferredDrawerWindow 抽屉明细窗口：同样优先 7d/30d，但不要求 used%（0% 仍要展示窗内经济）。
-	func pickPreferredDrawerWindow(windows []ProfitQuotaWindow) *ProfitQuotaWindow {
-		return pickPreferredQuotaWindow(windows, false)
-	}
+// pickPreferredDrawerWindow 抽屉明细窗口：同样优先 7d/30d，但不要求 used%（0% 仍要展示窗内经济）。
+func pickPreferredDrawerWindow(windows []ProfitQuotaWindow) *ProfitQuotaWindow {
+	return pickPreferredQuotaWindow(windows, false)
+}
 
-	func pickPreferredQuotaWindow(windows []ProfitQuotaWindow, requireUsed bool) *ProfitQuotaWindow {
-		if len(windows) == 0 {
-			return nil
-		}
-		rank := func(kind string) int {
-			switch kind {
-			case "7d", "30d":
-				return 0
-			case "5h":
-				return 1
-			case "24h":
-				return 2
-			default:
-				return 3
-			}
-		}
-		var best *ProfitQuotaWindow
-		bestRank := 99
-		for i := range windows {
-			w := &windows[i]
-			if requireUsed && (w.UsedPercent == nil || *w.UsedPercent <= 0) {
-				continue
-			}
-			if w.StartAt == nil && w.EndAt == nil {
-				continue
-			}
-			mins := profitWindowMinutes(w)
-			if mins <= 0 && (w.StartAt == nil || w.EndAt == nil || !w.EndAt.After(*w.StartAt)) {
-				continue
-			}
-			r := rank(w.Kind)
-			if best == nil || r < bestRank {
-				best = w
-				bestRank = r
-			}
-		}
-		return best
+func pickPreferredQuotaWindow(windows []ProfitQuotaWindow, requireUsed bool) *ProfitQuotaWindow {
+	if len(windows) == 0 {
+		return nil
 	}
+	rank := func(kind string) int {
+		switch kind {
+		case "7d", "30d":
+			return 0
+		case "5h":
+			return 1
+		case "24h":
+			return 2
+		default:
+			return 3
+		}
+	}
+	var best *ProfitQuotaWindow
+	bestRank := 99
+	for i := range windows {
+		w := &windows[i]
+		if requireUsed && (w.UsedPercent == nil || *w.UsedPercent <= 0) {
+			continue
+		}
+		if w.StartAt == nil && w.EndAt == nil {
+			continue
+		}
+		mins := profitWindowMinutes(w)
+		if mins <= 0 && (w.StartAt == nil || w.EndAt == nil || !w.EndAt.After(*w.StartAt)) {
+			continue
+		}
+		r := rank(w.Kind)
+		if best == nil || r < bestRank {
+			best = w
+			bestRank = r
+		}
+	}
+	return best
+}
 
 func profitWindowMinutes(w *ProfitQuotaWindow) int {
-		if w == nil {
-			return 0
-		}
-		if w.WindowMinutes != nil && *w.WindowMinutes > 0 {
-			return *w.WindowMinutes
-		}
-		switch w.Kind {
-		case "5h":
-			return 300
-		case "7d":
-			return 10080
-		case "30d":
-			return 30 * 24 * 60
-		case "24h":
-			return 1440
-		case "session":
-			return 300
+	if w == nil {
+		return 0
+	}
+	if w.WindowMinutes != nil && *w.WindowMinutes > 0 {
+		return *w.WindowMinutes
+	}
+	switch w.Kind {
+	case "5h":
+		return 300
+	case "7d":
+		return 10080
+	case "30d":
+		return 30 * 24 * 60
+	case "24h":
+		return 1440
+	case "session":
+		return 300
 	default:
 		return 0
 	}
@@ -895,139 +939,157 @@ func fillBreakEvenRate(summary *AccountProfitSummary, cycle *AccountSubscription
 }
 
 func fillBillingWindowFromRevenue(cycle *AccountSubscriptionCycle, summary *AccountProfitSummary, revenue float64, now time.Time) {
-		wStart := cycle.StartsAt
-		wEnd := cycle.StartsAt.AddDate(0, 0, cycle.PeriodDays)
-		periodDays := cycle.PeriodDays
-		revenue = roundMoney(revenue)
-		effectiveNow := now
-		if termination := activeCycleTermination(cycle); termination != nil && termination.EffectiveAt.Before(effectiveNow) {
-			effectiveNow = termination.EffectiveAt
-		}
-		progress := effectiveNow.Sub(wStart).Hours() / (float64(periodDays) * 24) * 100
-		if progress < 0 {
-			progress = 0
-		}
-		if progress > 100 {
-			progress = 100
-		}
-		progress = roundMoney(progress)
+	wStart := cycle.StartsAt
+	wEnd := cycle.StartsAt.AddDate(0, 0, cycle.PeriodDays)
+	periodDays := cycle.PeriodDays
+	revenue = roundMoney(revenue)
+	effectiveNow := now
+	if termination := activeCycleTermination(cycle); termination != nil && termination.EffectiveAt.Before(effectiveNow) {
+		effectiveNow = termination.EffectiveAt
+	}
+	progress := effectiveNow.Sub(wStart).Hours() / (float64(periodDays) * 24) * 100
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 100 {
+		progress = 100
+	}
+	progress = roundMoney(progress)
 
-		summary.BillingWindowStart = &wStart
-		summary.BillingWindowEnd = &wEnd
-		summary.BillingWindowSource = "cycle"
-		summary.BillingWindowKind = "cycle"
-		summary.BillingWindowProgress = &progress
-		summary.BillingWindowRevenue = &revenue
-		// 周期费用允许为 0。是否存在有效周期由周期账本决定，不能用费用是否大于 0 判断。
-		cost := roundMoney(cycle.PeriodFee)
-		profit := roundMoney(revenue - cycle.PeriodFee)
-		if termination := activeCycleTermination(cycle); termination != nil {
-			loss := subscriptionLossSummary(cycle, revenue)
-			originalCost := loss.PurchaseCost
-			refundTotal := loss.RefundTotal
-			recoveredAmount := loss.RecoveredAmount
-			recoveryProgress := loss.RecoveryProgress
-			confirmedLoss := loss.RealizedLoss
-			summary.BillingWindowTerminatedAt = &termination.EffectiveAt
-			summary.BillingWindowTerminationReason = termination.Reason
-			summary.BillingWindowOriginalCost = &originalCost
-			summary.BillingWindowRefundTotal = &refundTotal
-			summary.BillingWindowRecoveredAmount = &recoveredAmount
-			summary.BillingWindowRecoveryProgress = &recoveryProgress
-			summary.BillingWindowLoss = &confirmedLoss
-			cost = loss.NetPurchaseCost
-			profit = loss.RealizedProfit
-		} else if refundTotal := subscriptionRefundTotal(cycle); refundTotal > 0 {
-			originalCost := roundMoney(cycle.PeriodFee)
-			netCost := roundMoney(math.Max(0, originalCost-refundTotal))
-			summary.BillingWindowOriginalCost = &originalCost
-			summary.BillingWindowRefundTotal = &refundTotal
-			cost = netCost
-			profit = roundMoney(revenue - netCost)
-		}
-		summary.BillingWindowCost = &cost
-		summary.BillingWindowProfit = &profit
+	summary.BillingWindowStart = &wStart
+	summary.BillingWindowEnd = &wEnd
+	summary.BillingWindowSource = "cycle"
+	summary.BillingWindowKind = "cycle"
+	summary.BillingWindowProgress = &progress
+	summary.BillingWindowRevenue = &revenue
+	// 周期费用允许为 0。是否存在有效周期由周期账本决定，不能用费用是否大于 0 判断。
+	cost := roundMoney(cycle.PeriodFee)
+	profit := roundMoney(revenue - cycle.PeriodFee)
+	if termination := activeCycleTermination(cycle); termination != nil {
+		loss := subscriptionLossSummary(cycle, revenue)
+		originalCost := loss.PurchaseCost
+		refundTotal := loss.RefundTotal
+		recoveredAmount := loss.RecoveredAmount
+		recoveryProgress := loss.RecoveryProgress
+		confirmedLoss := loss.RealizedLoss
+		summary.BillingWindowTerminatedAt = &termination.EffectiveAt
+		summary.BillingWindowTerminationReason = termination.Reason
+		summary.BillingWindowOriginalCost = &originalCost
+		summary.BillingWindowRefundTotal = &refundTotal
+		summary.BillingWindowRecoveredAmount = &recoveredAmount
+		summary.BillingWindowRecoveryProgress = &recoveryProgress
+		summary.BillingWindowLoss = &confirmedLoss
+		cost = loss.NetPurchaseCost
+		profit = loss.RealizedProfit
+	} else if refundTotal := subscriptionRefundTotal(cycle); refundTotal > 0 {
+		originalCost := roundMoney(cycle.PeriodFee)
+		netCost := roundMoney(math.Max(0, originalCost-refundTotal))
+		summary.BillingWindowOriginalCost = &originalCost
+		summary.BillingWindowRefundTotal = &refundTotal
+		cost = netCost
+		profit = roundMoney(revenue - netCost)
+	}
+	summary.BillingWindowCost = &cost
+	summary.BillingWindowProfit = &profit
+}
+
+// fillDrawerWindowFromQuota writes drawer revenue/cost/profit from the account's
+// preferred live quota window (7d/30d/5h/…), independent of the page date filter.
+// Cost for subscription accounts is fee amortized over the window elapsed range;
+// metered accounts use account-side metered cost in the same range.
+func fillDrawerWindowFromQuota(
+	summary *AccountProfitSummary,
+	cycles []*AccountSubscriptionCycle,
+	win *ProfitQuotaWindow,
+	stats *ProfitUsageStats,
+	costType string,
+	now time.Time,
+) {
+	if summary == nil {
+		return
+	}
+	// Fall back to windows already attached on the summary (prefer live 7d/30d).
+	if win == nil {
+		win = pickPreferredDrawerWindow(summary.QuotaWindows)
+	}
+	if win == nil || win.StartAt == nil {
+		return
+	}
+	start := *win.StartAt
+	fullEnd := start
+	if win.EndAt != nil {
+		fullEnd = *win.EndAt
+	} else if mins := profitWindowMinutes(win); mins > 0 {
+		fullEnd = start.Add(time.Duration(mins) * time.Minute)
+	} else {
+		return
+	}
+	if !fullEnd.After(start) {
+		return
+	}
+	// Economics cover elapsed portion of the live window.
+	effectiveEnd := fullEnd
+	if now.Before(effectiveEnd) {
+		effectiveEnd = now
+	}
+	if !effectiveEnd.After(start) {
+		return
 	}
 
-	// fillDrawerWindowFromQuota writes drawer revenue/cost/profit from the account's
-	// preferred live quota window (7d/30d/5h/…), independent of the page date filter.
-	// Cost for subscription accounts is fee amortized over the window elapsed range;
-	// metered accounts use account-side metered cost in the same range.
-	func fillDrawerWindowFromQuota(
-		summary *AccountProfitSummary,
-		cycles []*AccountSubscriptionCycle,
-		win *ProfitQuotaWindow,
-		stats *ProfitUsageStats,
-		costType string,
-		now time.Time,
-	) {
-		if summary == nil {
-			return
-		}
-		// Fall back to windows already attached on the summary (prefer live 7d/30d).
-		if win == nil {
-			win = pickPreferredDrawerWindow(summary.QuotaWindows)
-		}
-		if win == nil || win.StartAt == nil {
-			return
-		}
-		start := *win.StartAt
-		fullEnd := start
-		if win.EndAt != nil {
-			fullEnd = *win.EndAt
-		} else if mins := profitWindowMinutes(win); mins > 0 {
-			fullEnd = start.Add(time.Duration(mins) * time.Minute)
-		} else {
-			return
-		}
-		if !fullEnd.After(start) {
-			return
-		}
-		// Economics cover elapsed portion of the live window.
-		effectiveEnd := fullEnd
-		if now.Before(effectiveEnd) {
-			effectiveEnd = now
-		}
-		if !effectiveEnd.After(start) {
-			return
-		}
+	revenue := 0.0
+	requests := int64(0)
+	metered := 0.0
+	if stats != nil {
+		revenue = stats.Revenue
+		requests = stats.Requests
+		metered = stats.MeteredCost
+	}
+	var cost float64
+	if costType == AccountCostTypeSubscription {
+		cost = subscriptionCyclesCostForRange(cycles, start, effectiveEnd)
+	} else {
+		cost = metered
+	}
+	revenue = roundMoney(revenue)
+	cost = roundMoney(cost)
+	profit := roundMoney(revenue - cost)
 
-		revenue := 0.0
-		requests := int64(0)
-		metered := 0.0
-		if stats != nil {
-			revenue = stats.Revenue
-			requests = stats.Requests
-			metered = stats.MeteredCost
-		}
-		var cost float64
-		if costType == AccountCostTypeSubscription {
-			cost = subscriptionCyclesCostForRange(cycles, start, effectiveEnd)
-		} else {
-			cost = metered
-		}
-		revenue = roundMoney(revenue)
-		cost = roundMoney(cost)
-		profit := roundMoney(revenue - cost)
+	progress := effectiveEnd.Sub(start).Hours() / fullEnd.Sub(start).Hours() * 100
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 100 {
+		progress = 100
+	}
+	progress = roundMoney(progress)
 
-		progress := effectiveEnd.Sub(start).Hours() / fullEnd.Sub(start).Hours() * 100
-		if progress < 0 {
-			progress = 0
-		}
-		if progress > 100 {
-			progress = 100
-		}
-		progress = roundMoney(progress)
+	wStart := start
+	wEnd := fullEnd
+	kind := win.Kind
+	if kind == "" {
+		kind = win.Label
+	}
+	// Drawer-specific quota window economics (7d/5h…); must NOT overwrite the
+	// subscription-cycle billing_window_* that pool financial summary reads.
+	summary.DrawerQuotaStart = &wStart
+	summary.DrawerQuotaEnd = &wEnd
+	summary.DrawerQuotaKind = kind
+	summary.DrawerQuotaRevenue = &revenue
+	summary.DrawerQuotaCost = &cost
+	summary.DrawerQuotaProfit = &profit
+	summary.DrawerQuotaProgress = &progress
+	if requests > 0 || stats != nil {
+		req := requests
+		summary.DrawerQuotaRequests = &req
+	}
 
-		wStart := start
-		wEnd := fullEnd
+	// Back-compat for metered accounts / no subscription cycle yet: there is no
+	// cycle billing window, so still expose quota economics through billing_window_*.
+	hasCycleBilling := summary.BillingWindowSource == "cycle" || summary.BillingWindowSource == "manual" || summary.BillingWindowSource == "subscription_expiry"
+	if !hasCycleBilling {
 		summary.BillingWindowStart = &wStart
 		summary.BillingWindowEnd = &wEnd
 		summary.BillingWindowSource = "quota_window"
-		kind := win.Kind
-		if kind == "" {
-			kind = win.Label
-		}
 		summary.BillingWindowKind = kind
 		summary.BillingWindowProgress = &progress
 		summary.BillingWindowRevenue = &revenue
@@ -1038,6 +1100,7 @@ func fillBillingWindowFromRevenue(cycle *AccountSubscriptionCycle, summary *Acco
 			summary.BillingWindowRequests = &req
 		}
 	}
+}
 
 // windowEfficiency 窗口变现效率 = 平均每 5h 窗口收入 / 基准窗口收入。
 // 官方重置带来的额外容量会体现为更多窗口数或更高窗口收入，自动反映在效率上。
@@ -1276,34 +1339,168 @@ func (s *ProfitService) GetOverview(ctx context.Context, start, end time.Time, t
 	for i := range accounts {
 		accountIDs = append(accountIDs, accounts[i].ID)
 	}
-dailyByAccount, err := s.profitRepo.GetAccountDailyUsageStats(ctx, accountIDs, start, end, tzName)
-		if err != nil {
-			return nil, err
-		}
-		statsByAccount := make(map[int64]*ProfitUsageStats, len(accounts))
-		for _, point := range dailyByAccount {
-			stats := statsByAccount[point.AccountID]
-			if stats == nil {
-				stats = &ProfitUsageStats{}
-				statsByAccount[point.AccountID] = stats
-			}
-			stats.Requests += point.Requests
-			stats.Revenue += point.Revenue
-			stats.MeteredCost += point.MeteredCost
-		}
-		// 列表页只加载保本倍率所需查询（额度窗短区间），跳过最佳 5h 窗与整期计费窗聚合。
-		accounting, err := s.loadProfitAccountingData(ctx, accounts, listProfitAccountingOptions())
-		if err != nil {
-			return nil, err
-		}
-		summary := s.summarizeAccountsWithData(accounts, start, end, statsByAccount, accounting)
-		cycles := make([]*AccountSubscriptionCycle, 0)
-		for _, accountCycles := range accounting.cyclesByAccount {
-			cycles = append(cycles, accountCycles...)
-		}
-		trend := buildProfitTrendWithAccounts(dailyByAccount, accounts, cycles, tzName, start, end)
-		return &ProfitOverviewResponse{GeneratedAt: time.Now().UTC(), Summary: summary, Points: trend.Points}, nil
+	dailyByAccount, err := s.profitRepo.GetAccountDailyUsageStats(ctx, accountIDs, start, end, tzName)
+	if err != nil {
+		return nil, err
 	}
+	statsByAccount := make(map[int64]*ProfitUsageStats, len(accounts))
+	for _, point := range dailyByAccount {
+		stats := statsByAccount[point.AccountID]
+		if stats == nil {
+			stats = &ProfitUsageStats{}
+			statsByAccount[point.AccountID] = stats
+		}
+		stats.Requests += point.Requests
+		stats.Revenue += point.Revenue
+		stats.MeteredCost += point.MeteredCost
+	}
+	// 列表页只加载保本倍率所需查询（额度窗短区间），跳过最佳 5h 窗与整期计费窗聚合。
+	accounting, err := s.loadProfitAccountingData(ctx, accounts, listProfitAccountingOptions())
+	if err != nil {
+		return nil, err
+	}
+	summary := s.summarizeAccountsWithData(ctx, accounts, start, end, statsByAccount, accounting)
+	cycles := make([]*AccountSubscriptionCycle, 0)
+	for _, accountCycles := range accounting.cyclesByAccount {
+		cycles = append(cycles, accountCycles...)
+	}
+	trend := buildProfitTrendWithAccounts(dailyByAccount, accounts, cycles, tzName, start, end)
+	return &ProfitOverviewResponse{GeneratedAt: time.Now().UTC(), Summary: summary, Points: trend.Points}, nil
+}
+
+// GetAccountWindowEconomics returns revenue/amortized-cost/profit for explicit quota windows.
+// Ended windows use the full [start,end); current uses [start,now); upcoming is zeroed.
+func (s *ProfitService) GetAccountWindowEconomics(ctx context.Context, accountID int64, queries []ProfitWindowEconomicsQuery) (*ProfitWindowEconomicsResponse, error) {
+	if accountID <= 0 {
+		return nil, fmt.Errorf("invalid account_id")
+	}
+	if len(queries) == 0 {
+		return &ProfitWindowEconomicsResponse{AccountID: accountID, Windows: []ProfitWindowEconomicsItem{}}, nil
+	}
+	if len(queries) > 48 {
+		queries = queries[:48]
+	}
+	acc, err := s.getAccountForProfit(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	if acc == nil {
+		return nil, fmt.Errorf("account not found")
+	}
+	now := time.Now()
+	costType := costTypeForAccountType(acc.Type)
+	var cycles []*AccountSubscriptionCycle
+	if s.profitRepo != nil {
+		if isSubscriptionAccountType(acc.Type) {
+			cycles, err = s.profitRepo.ListSubscriptionCyclesBatch(ctx, []int64{accountID})
+			if err != nil {
+				return nil, err
+			}
+		} else if cfg, cfgErr := s.profitRepo.GetCostConfig(ctx, accountID); cfgErr == nil && cfg != nil {
+			// apikey with cost-config cycles still load
+			cycles, err = s.profitRepo.ListSubscriptionCyclesBatch(ctx, []int64{accountID})
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	type prep struct {
+		q          ProfitWindowEconomicsQuery
+		status     string
+		statsStart time.Time
+		statsEnd   time.Time
+		needStats  bool
+	}
+	preps := make([]prep, 0, len(queries))
+	ranges := make([]ProfitAccountUsageRange, 0, len(queries))
+	for _, q := range queries {
+		if q.EndAt.IsZero() || q.StartAt.IsZero() || !q.EndAt.After(q.StartAt) {
+			continue
+		}
+		st := "current"
+		statsStart, statsEnd := q.StartAt, q.EndAt
+		needStats := true
+		if !q.EndAt.After(now) {
+			st = "ended"
+		} else if q.StartAt.After(now) {
+			st = "upcoming"
+			needStats = false
+		} else {
+			// current live window: economics only through now
+			statsEnd = now
+		}
+		if needStats && statsEnd.After(statsStart) {
+			ranges = append(ranges, ProfitAccountUsageRange{AccountID: accountID, Start: statsStart, End: statsEnd})
+		}
+		preps = append(preps, prep{q: q, status: st, statsStart: statsStart, statsEnd: statsEnd, needStats: needStats && statsEnd.After(statsStart)})
+	}
+
+	statsByKey := map[string]*ProfitUsageStats{}
+	if len(ranges) > 0 && s.profitRepo != nil {
+		// GetAccountUsageStatsForRanges returns one stats per account; batching multiple
+		// ranges for the SAME account overwrites. Query sequentially per range.
+		for _, r := range ranges {
+			m, err := s.profitRepo.GetAccountUsageStatsForRanges(ctx, []ProfitAccountUsageRange{r})
+			if err != nil {
+				return nil, err
+			}
+			key := r.Start.UTC().Format(time.RFC3339Nano) + "|" + r.End.UTC().Format(time.RFC3339Nano)
+			if st := m[accountID]; st != nil {
+				statsByKey[key] = st
+			} else {
+				statsByKey[key] = &ProfitUsageStats{}
+			}
+		}
+	}
+
+	out := &ProfitWindowEconomicsResponse{
+		AccountID:   acc.ID,
+		AccountName: acc.Name,
+		CostType:    costType,
+		Windows:     make([]ProfitWindowEconomicsItem, 0, len(preps)),
+	}
+	for _, p := range preps {
+		item := ProfitWindowEconomicsItem{
+			StartAt: p.q.StartAt,
+			EndAt:   p.q.EndAt,
+			Kind:    p.q.Kind,
+			Label:   p.q.Label,
+			Status:  p.status,
+		}
+		if p.needStats {
+			cs, ce := p.statsStart, p.statsEnd
+			item.CostStart = &cs
+			item.CostEnd = &ce
+			key := cs.UTC().Format(time.RFC3339Nano) + "|" + ce.UTC().Format(time.RFC3339Nano)
+			st := statsByKey[key]
+			if st == nil {
+				st = &ProfitUsageStats{}
+			}
+			item.Requests = st.Requests
+			item.Revenue = roundMoney(st.Revenue)
+			if costType == AccountCostTypeSubscription {
+				item.Cost = roundMoney(subscriptionCyclesCostForRange(cycles, cs, ce))
+			} else {
+				item.Cost = roundMoney(st.MeteredCost)
+			}
+			item.Profit = roundMoney(item.Revenue - item.Cost)
+		} else if p.status == "upcoming" && costType == AccountCostTypeSubscription {
+			// Show planned amortized cost for the full future window; revenue stays 0.
+			cs, ce := p.q.StartAt, p.q.EndAt
+			item.CostStart = &cs
+			item.CostEnd = &ce
+			item.Cost = roundMoney(subscriptionCyclesCostForRange(cycles, cs, ce))
+			item.Profit = roundMoney(0 - item.Cost)
+		}
+		out.Windows = append(out.Windows, item)
+	}
+	// newest first for drawer history reading
+	sort.SliceStable(out.Windows, func(i, j int) bool {
+		return out.Windows[i].StartAt.After(out.Windows[j].StartAt)
+	})
+	return out, nil
+}
 
 // --- 配置 CRUD ---
 
@@ -1698,6 +1895,128 @@ func roundMoney(v float64) float64 {
 	return math.Round(v*10000) / 10000
 }
 
+// fillAccountQuotaWindows builds live windows from extra, then overlays the real
+// account_quota_windows ledger (reset-card / observed official resets).
+func (s *ProfitService) fillAccountQuotaWindows(ctx context.Context, summary *AccountProfitSummary, acc *Account, now time.Time, anchor profitWindowAnchor) {
+	fillProfitQuotaWindowsWithAnchor(summary, acc, now, anchor)
+	if s == nil || s.quotaWindowRepo == nil || summary == nil || acc == nil {
+		return
+	}
+	rows, err := s.quotaWindowRepo.ListByAccount(ctx, acc.ID, "", 36)
+	if err != nil || len(rows) == 0 {
+		return
+	}
+	// Replace projected same-kind series with ledger rows; keep other live kinds from extra.
+	byKindLive := map[string]ProfitQuotaWindow{}
+	for _, w := range summary.QuotaWindows {
+		byKindLive[w.Kind] = w
+	}
+	out := make([]ProfitQuotaWindow, 0, len(rows)+2)
+	seenKind := map[string]struct{}{}
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		seenKind[row.Kind] = struct{}{}
+		start := row.StartAt
+		end := row.EndAt
+		mins := 0
+		if row.WindowMinutes != nil {
+			mins = *row.WindowMinutes
+		} else {
+			mins = int(end.Sub(start).Minutes())
+		}
+		var used *float64
+		if row.IsOpen {
+			used = row.UsedPercentOpen
+			// Prefer fresher live used% from extra snapshot when present.
+			if live, ok := byKindLive[row.Kind]; ok && live.UsedPercent != nil {
+				used = live.UsedPercent
+			}
+			if live, ok := byKindLive[row.Kind]; ok && live.EndAt != nil {
+				// Keep open end aligned to latest upstream if slightly newer.
+				if live.EndAt.After(end) {
+					end = *live.EndAt
+				}
+			}
+		} else {
+			used = row.UsedPercentClose
+			if used == nil {
+				used = row.UsedPercentOpen
+			}
+		}
+		kind, label := classifyQuotaWindow(row.Kind, mins)
+		id := kind
+		if row.IsOpen {
+			id = kind + "-open"
+		} else {
+			id = fmt.Sprintf("%s-%d", kind, start.Unix())
+		}
+		wm := mins
+		out = append(out, ProfitQuotaWindow{
+			ID: id, Label: label, Kind: kind,
+			UsedPercent: used, StartAt: &start, EndAt: &end, WindowMinutes: &wm,
+		})
+	}
+	// Keep live kinds not present in ledger yet (first seed lag).
+	for kind, live := range byKindLive {
+		if _, ok := seenKind[kind]; ok {
+			continue
+		}
+		out = append(out, live)
+	}
+	// Re-apply anchor caps on the merged set.
+	summary.QuotaWindows = nil
+	tmp := &AccountProfitSummary{}
+	tmp.QuotaWindows = out
+	// reuse anchor capping by calling internal path with only post-process
+	capped := applyProfitWindowAnchor(tmp.QuotaWindows, anchor, now)
+	if len(capped) > 0 {
+		summary.QuotaWindows = capped
+	}
+}
+
+func applyProfitWindowAnchor(windows []ProfitQuotaWindow, anchor profitWindowAnchor, now time.Time) []ProfitQuotaWindow {
+	if len(anchor.spans) > 0 {
+		capped := windows[:0]
+		for i := range windows {
+			w := windows[i]
+			if w.StartAt != nil && !anchor.coversStart(*w.StartAt) {
+				continue
+			}
+			capped = append(capped, w)
+		}
+		windows = capped
+	}
+	if eff := anchor.effectiveRecurringUntil(now); eff != nil {
+		recurringUntil := eff
+		capped := windows[:0]
+		for i := range windows {
+			w := windows[i]
+			if w.StartAt != nil && !w.StartAt.Before(*recurringUntil) {
+				continue
+			}
+			if w.EndAt != nil && w.EndAt.After(*recurringUntil) {
+				end := *recurringUntil
+				w.EndAt = &end
+			}
+			until := *recurringUntil
+			w.RecurringUntilAt = &until
+			if w.StartAt == nil || w.EndAt == nil || w.EndAt.After(*w.StartAt) {
+				capped = append(capped, w)
+			}
+		}
+		windows = capped
+	}
+	if anchor.coveredStart != nil {
+		for i := range windows {
+			from := *anchor.coveredStart
+			windows[i].RecurringFromAt = &from
+		}
+	}
+	return windows
+}
+
 func fillProfitQuotaWindows(summary *AccountProfitSummary, acc *Account, now time.Time, cutoff ...*time.Time) {
 	anchor := profitWindowAnchor{}
 	if len(cutoff) > 0 {
@@ -1809,7 +2128,6 @@ func fillProfitQuotaWindowsWithAnchor(summary *AccountProfitSummary, acc *Accoun
 		summary.QuotaWindows = windows
 	}
 }
-
 
 // effectiveRecurringUntil: when the account has configured cycles but none is
 // active now and auto_renew is off, projection stops at the latest covered
@@ -1952,6 +2270,12 @@ func profitWindowFromExtra(extra map[string]any, prefix, id, kind string, defaul
 	}
 	end := resolveProfitWindowEnd(resetAt, resetAfter, now)
 	start := resolveProfitWindowStart(end, windowMinutes)
+	// 上游 reset_at 明显早于当前时间（如账号 error 后不再抓取，extra 陈旧）时，
+	// 不再渲染为"当前窗口"：否则前端会把一条已结束的条当作 live bar，
+	// 视觉上"窗口卡在过去"。容差取窗口的 10%（至少 30 分钟），容忍正常重置瞬间。
+	if end != nil && end.Before(now.Add(-profitWindowStaleTolerance(end, windowMinutes))) {
+		return nil
+	}
 	mins := defaultMinutes
 	if windowMinutes != nil && *windowMinutes > 0 {
 		mins = *windowMinutes
@@ -2405,6 +2729,21 @@ func resolveProfitWindowEnd(resetAt *time.Time, resetAfterSeconds *int, now time
 		return &t
 	}
 	return nil
+}
+
+// profitWindowStaleTolerance 返回判定"窗口已过期（extra 陈旧）"的容差。
+// 取窗口长度的 10%，下限 30 分钟——容忍正常重置瞬间的上游滞后，
+// 又不会把 error 号几天前的陈旧 reset_at 渲染成当前窗口。
+func profitWindowStaleTolerance(end *time.Time, windowMinutes *int) time.Duration {
+	mins := 300 // 默认按 5h 窗口
+	if windowMinutes != nil && *windowMinutes > 0 {
+		mins = *windowMinutes
+	}
+	tolerance := time.Duration(mins/10) * time.Minute
+	if tolerance < 30*time.Minute {
+		tolerance = 30 * time.Minute
+	}
+	return tolerance
 }
 
 func resolveProfitWindowStart(end *time.Time, windowMinutes *int) *time.Time {
