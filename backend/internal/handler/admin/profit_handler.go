@@ -109,6 +109,39 @@ func (h *ProfitHandler) GetTrend(c *gin.Context) {
 	response.Success(c, trend)
 }
 
+// GetAccountWindowEconomics 账号若干配额窗口的历史/当前/未来经济账。
+// POST /api/v1/admin/profit/accounts/:account_id/window-economics
+func (h *ProfitHandler) GetAccountWindowEconomics(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("account_id"), 10, 64)
+	if err != nil || accountID <= 0 {
+		response.Error(c, 400, "Invalid account_id")
+		return
+	}
+	var body struct {
+		Windows []service.ProfitWindowEconomicsQuery `json:"windows"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, 400, "Invalid request body")
+		return
+	}
+	if len(body.Windows) == 0 {
+		response.Error(c, 400, "windows required")
+		return
+	}
+	resp, err := h.profitService.GetAccountWindowEconomics(c.Request.Context(), accountID, body.Windows)
+	if err != nil {
+		msg := err.Error()
+		if strings.Contains(msg, "not found") {
+			response.Error(c, 404, "Account not found")
+			return
+		}
+		slog.Error("profit_window_economics_failed", "account_id", accountID, "error", err)
+		response.Error(c, 500, "Failed to get window economics")
+		return
+	}
+	response.Success(c, resp)
+}
+
 // GetOverview 利润页聚合数据。
 // GET /api/v1/admin/profit/overview?start_date=&end_date=&timezone=
 func (h *ProfitHandler) GetOverview(c *gin.Context) {

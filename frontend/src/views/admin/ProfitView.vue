@@ -137,7 +137,11 @@
     <AccountProfitDrawer
       :show="showAccountDrawer"
       :account="drawerAccount"
-      @close="showAccountDrawer = false"
+      :selected-window="drawerSelectedWindow"
+      :window-history="drawerWindowHistory"
+      :history-loading="drawerHistoryLoading"
+      @close="closeAccountDrawer"
+      @select-window="onDrawerSelectWindow"
     />
   </AppLayout>
 </template>
@@ -156,7 +160,9 @@ import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Icon from '@/components/icons/Icon.vue'
 import SupplyForecastPanel from '@/components/admin/profit/SupplyForecastPanel.vue'
 import QuotaWindowPanel from '@/components/admin/profit/QuotaWindowPanel.vue'
+import type { QuotaWindowSelectPayload } from '@/components/admin/profit/QuotaWindowPanel.vue'
 import AccountProfitDrawer from '@/components/admin/profit/AccountProfitDrawer.vue'
+import type { ProfitWindowEconomicsItem } from '@/api/admin/profit'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -186,9 +192,111 @@ const accountRows = computed(() => [...(data.value?.accounts || [])].sort((a, b)
 const showAccountDrawer = ref(false)
 const drawerAccountId = ref<number | null>(null)
 const drawerAccount = computed(() => accountRows.value.find((a) => a.account_id === drawerAccountId.value) || null)
-function openAccountDrawer(accountId: number) {
-  drawerAccountId.value = accountId
+const drawerSelectedWindow = ref<ProfitWindowEconomicsItem | null>(null)
+const drawerWindowHistory = ref<ProfitWindowEconomicsItem[]>([])
+const drawerHistoryLoading = ref(false)
+const drawerLaneWindows = ref<QuotaWindowSelectPayload['windows']>([])
+
+function closeAccountDrawer() {
+  showAccountDrawer.value = false
+}
+
+async function openAccountDrawer(payload: QuotaWindowSelectPayload) {
+  drawerAccountId.value = payload.accountId
+  drawerLaneWindows.value = payload.windows || []
   showAccountDrawer.value = true
+  drawerSelectedWindow.value = {
+    start_at: new Date(payload.startMs).toISOString(),
+    end_at: new Date(payload.endMs).toISOString(),
+    kind: payload.kind,
+    label: payload.label,
+    status: payload.status,
+    requests: 0,
+    revenue: 0,
+    cost: 0,
+    profit: 0
+  }
+  drawerWindowHistory.value = []
+  await loadDrawerWindowEconomics(payload.accountId, payload.startMs, payload.endMs, payload.windows, payload.kind, payload.label)
+}
+
+function onDrawerSelectWindow(item: ProfitWindowEconomicsItem) {
+  drawerSelectedWindow.value = item
+}
+
+function expandLedgerWindows(
+  windows: QuotaWindowSelectPayload['windows'],
+  selectedStartMs: number,
+  selectedEndMs: number,
+  kind?: string,
+  label?: string
+) {
+  const base = [...(windows || [])]
+  if (!base.length && selectedStartMs && selectedEndMs) {
+    base.push({ startMs: selectedStartMs, endMs: selectedEndMs, status: 'current', kind, label })
+  }
+  if (!base.length) return [] as QuotaWindowSelectPayload['windows']
+
+  // Prefer duration from selected bar.
+  let duration = Math.max(60_000, selectedEndMs - selectedStartMs)
+  if (!(duration > 0)) {
+    const sample = base[0]
+    duration = Math.max(60_000, sample.endMs - sample.startMs)
+  }
+  const byStart = new Map<number, QuotaWindowSelectPayload['windows'][number]>()
+  for (const w of base) byStart.set(w.startMs, w)
+
+  // Walk back/forward from selected occurrence so history is not limited to the painted viewport.
+  for (let i = 1; i <= 10; i += 1) {
+    const startMs = selectedStartMs - i * duration
+    const endMs = startMs + duration
+    if (!byStart.has(startMs)) {
+      byStart.set(startMs, { startMs, endMs, status: endMs <= Date.now() ? 'ended' : 'current', kind, label })
+    }
+  }
+  for (let i = 1; i <= 4; i += 1) {
+    const startMs = selectedStartMs + i * duration
+    const endMs = startMs + duration
+    if (!byStart.has(startMs)) {
+      const status = startMs > Date.now() ? 'upcoming' : (endMs <= Date.now() ? 'ended' : 'current')
+      byStart.set(startMs, { startMs, endMs, status, kind, label })
+    }
+  }
+  return [...byStart.values()].sort((a, b) => a.startMs - b.startMs)
+}
+
+async function loadDrawerWindowEconomics(
+  accountId: number,
+  selectedStartMs: number,
+  selectedEndMs: number,
+  windows: QuotaWindowSelectPayload['windows'],
+  kind?: string,
+  label?: string
+) {
+  drawerHistoryLoading.value = true
+  try {
+    const ledger = expandLedgerWindows(windows, selectedStartMs, selectedEndMs, kind, label)
+    const queries = ledger.map((w) => ({
+      start_at: new Date(w.startMs).toISOString(),
+      end_at: new Date(w.endMs).toISOString(),
+      kind: w.kind || kind,
+      label: w.label || label
+    }))
+    const resp = await adminAPI.profit.windowEconomics(accountId, queries)
+    drawerWindowHistory.value = resp.windows || []
+    const hit = drawerWindowHistory.value.find((w) => {
+      const ms = Date.parse(w.start_at)
+      return !Number.isNaN(ms) && Math.abs(ms - selectedStartMs) < 2000
+    })
+    if (hit) drawerSelectedWindow.value = hit
+    else if (drawerWindowHistory.value[0]) {
+      // keep click selection skeleton if exact miss
+    }
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error, t('admin.profit.loadFailed')))
+  } finally {
+    drawerHistoryLoading.value = false
+  }
 }
 
 const today = new Date()

@@ -117,13 +117,20 @@ type OpenAIQuotaResetResult struct {
 // for OpenAI OAuth accounts. It reuses the privacy client factory so all calls
 // flow through the impersonated HTTP client (Cloudflare-friendly TLS fingerprint).
 type OpenAIQuotaService struct {
-	accountRepo          AccountRepository
-	proxyRepo            ProxyRepository
-	tokenProvider        *OpenAITokenProvider
-	privacyClientFactory PrivacyClientFactory
-	agentIdentityTaskMu  sync.Mutex
-	agentIdentityWS      agentIdentityWSConnectionInvalidator
-}
+		accountRepo          AccountRepository
+		proxyRepo            ProxyRepository
+		tokenProvider        *OpenAITokenProvider
+		privacyClientFactory PrivacyClientFactory
+		quotaWindowLedger    *QuotaWindowLedger
+		agentIdentityTaskMu  sync.Mutex
+		agentIdentityWS      agentIdentityWSConnectionInvalidator
+	}
+
+	func (s *OpenAIQuotaService) SetQuotaWindowLedger(ledger *QuotaWindowLedger) {
+		if s != nil {
+			s.quotaWindowLedger = ledger
+		}
+	}
 
 // NewOpenAIQuotaService constructs a quota service. token provider is required —
 // it ensures we always invoke upstream with a valid (refreshed-if-needed)
@@ -308,15 +315,52 @@ func (s *OpenAIQuotaService) ResetCredit(ctx context.Context, accountID int64) (
 		return nil, infraerrors.Newf(mapUpstreamStatus(status), "OPENAI_QUOTA_RESET_UPSTREAM_ERROR", "upstream returned %d: %s", status, body)
 	}
 
-	slog.Info("openai_quota_reset_success",
-		"account_id", accountID,
-		"code", payload.Code,
-		"windows_reset", payload.WindowsReset,
-	)
-	return &payload, nil
-}
+slog.Info("openai_quota_reset_success",
+				"account_id", accountID,
+				"code", payload.Code,
+				"windows_reset", payload.WindowsReset,
+			)
+			// Close open ledger window(s) at now and open a fresh cycle starting now.
+			if s.accountRepo != nil {
+				if acc, err := s.accountRepo.GetByID(ctx, accountID); err == nil && acc != nil {
+					kinds := []string{"7d"}
+					if acc.Extra != nil {
+						if extraTime(acc.Extra, "codex_5h_reset_at") != nil || extraFloat(acc.Extra, "codex_5h_used_percent") != nil {
+							kinds = append(kinds, "5h")
+						}
+					}
+					ForceResetAccountWindows(ctx, s.quotaWindowLedger, acc, kinds)
+				}
+			}
+			// Best-effort: re-query usage so open-window end aligns to upstream reset_at.
+			s.calibrateQuotaWindowsAfterReset(accountID)
+			return &payload, nil
+		}
 
-// prepareUpstreamCall loads the account, validates it, obtains a fresh access
+	// calibrateQuotaWindowsAfterReset re-fetches /wham/usage and feeds the ledger.
+	// Runs async so the reset API stays fast; failures are non-fatal.
+	func (s *OpenAIQuotaService) calibrateQuotaWindowsAfterReset(accountID int64) {
+		if s == nil || s.quotaWindowLedger == nil || accountID <= 0 {
+			return
+		}
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), openaiQuotaUpstreamTimeout+3*time.Second)
+			defer cancel()
+			// Small delay: upstream sometimes lags right after consume.
+			time.Sleep(800 * time.Millisecond)
+			usage, err := s.QueryUsage(ctx, accountID)
+			if err != nil || usage == nil {
+				if err != nil {
+					slog.Warn("openai_quota_post_reset_calibrate_failed", "account_id", accountID, "error", err)
+				}
+				return
+			}
+			now := time.Now()
+			observeOpenAIQuotaUsage(ctx, s.quotaWindowLedger, accountID, usage, now)
+		}()
+	}
+
+	// prepareUpstreamCall loads the account, validates it, obtains a fresh access
 // token via the shared TokenProvider, and resolves the chatgpt-account-id and
 // proxy URL. Centralized so QueryUsage / ResetCredit share validation.
 func (s *OpenAIQuotaService) prepareUpstreamCall(ctx context.Context, accountID int64) (accessToken, chatGPTAccountID, proxyURL string, fedRAMP bool, err error) {

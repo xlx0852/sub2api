@@ -43,10 +43,11 @@ type GrokQuotaResetResult struct {
 }
 
 type GrokQuotaService struct {
-	accountRepo   AccountRepository
-	proxyRepo     ProxyRepository
-	tokenProvider *GrokTokenProvider
-	httpUpstream  HTTPUpstream
+	accountRepo       AccountRepository
+	proxyRepo         ProxyRepository
+	tokenProvider     *GrokTokenProvider
+	httpUpstream      HTTPUpstream
+	quotaWindowLedger *QuotaWindowLedger
 }
 
 func NewGrokQuotaService(
@@ -60,6 +61,12 @@ func NewGrokQuotaService(
 		proxyRepo:     proxyRepo,
 		tokenProvider: tokenProvider,
 		httpUpstream:  httpUpstream,
+	}
+}
+
+func (s *GrokQuotaService) SetQuotaWindowLedger(ledger *QuotaWindowLedger) {
+	if s != nil {
+		s.quotaWindowLedger = ledger
 	}
 }
 
@@ -114,14 +121,18 @@ func (s *GrokQuotaService) ProbeUsage(ctx context.Context, accountID int64) (*Gr
 	updates := map[string]any{
 		grokBillingSnapshotKey: billing,
 	}
-	if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
-		slog.Warn("grok_billing_persist_failed",
-			"account_id", account.ID,
-			"error", err,
-		)
-		return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_BILLING_PERSIST_FAILED", "billing fetched but failed to persist: %v", err)
-	}
-	syncGrokBillingSchedulingState(ctx, s.accountRepo, account, billing, time.Now())
+if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
+			slog.Warn("grok_billing_persist_failed",
+				"account_id", account.ID,
+				"error", err,
+			)
+			return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_BILLING_PERSIST_FAILED", "billing fetched but failed to persist: %v", err)
+		}
+		now := time.Now()
+		syncGrokBillingSchedulingState(ctx, s.accountRepo, account, billing, now)
+		if s.quotaWindowLedger != nil {
+			observePlatformQuotaWindowUpdates(ctx, s.quotaWindowLedger, account.ID, PlatformGrok, updates, now)
+		}
 
 	// Keep legacy rate-limit header snapshot if present (still useful for 429 UI).
 	legacy, _ := grokQuotaSnapshotFromExtra(account.Extra)

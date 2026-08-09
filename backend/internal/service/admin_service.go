@@ -591,6 +591,7 @@ type adminServiceImpl struct {
 	privacyClientFactory PrivacyClientFactory
 	affiliateService     affiliateRebateAccruer
 	runtimeBlocker       AccountRuntimeBlocker
+	quotaWindowLedger    *QuotaWindowLedger
 }
 
 type userGroupRateBatchReader interface {
@@ -618,6 +619,7 @@ func NewAdminService(
 	privacyClientFactory PrivacyClientFactory,
 	affiliateService *AffiliateService,
 	runtimeBlocker AccountRuntimeBlocker,
+	quotaWindowLedger *QuotaWindowLedger,
 ) AdminService {
 	return &adminServiceImpl{
 		userRepo:             userRepo,
@@ -639,5 +641,6 @@ func NewAdminService(
 		privacyClientFactory: privacyClientFactory,
 		affiliateService:     affiliateService,
 		runtimeBlocker:       runtimeBlocker,
+		quotaWindowLedger:    quotaWindowLedger,
 	}
 }

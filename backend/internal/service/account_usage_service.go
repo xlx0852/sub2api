@@ -369,12 +369,19 @@ type AccountUsageService struct {
 	openAIQuotaService      *OpenAIQuotaService
 	grokQuotaService        *GrokQuotaService
 	kimiQuotaService        KimiQuotaQuerier
+	quotaWindowLedger       *QuotaWindowLedger
 	cache                   *UsageCache
 	identityCache           IdentityCache
 	tlsFPProfileService     *TLSFingerprintProfileService
 	agentIdentityTaskMu     sync.Mutex
 	grokSnapshotMu          sync.Mutex
 	agentIdentityWS         agentIdentityWSConnectionInvalidator
+}
+
+func (s *AccountUsageService) SetQuotaWindowLedger(ledger *QuotaWindowLedger) {
+	if s != nil {
+		s.quotaWindowLedger = ledger
+	}
 }
 
 // NewAccountUsageService 创建AccountUsageService实例
@@ -666,6 +673,17 @@ func (s *AccountUsageService) syncActiveToPassive(ctx context.Context, accountID
 		if err := s.accountRepo.UpdateSessionWindowEnd(ctx, accountID, *usage.FiveHour.ResetsAt); err != nil {
 			slog.Warn("sync_active_to_passive_session_window_end_failed", "account_id", accountID, "error", err)
 		}
+		// Cross-platform ledger for Claude/Anthropic session windows.
+		if s.quotaWindowLedger != nil && s.accountRepo != nil {
+			if acc, err := s.accountRepo.GetByID(ctx, accountID); err == nil && acc != nil {
+				// Ensure start is present for ObserveAccountQuotaWindows.
+				if acc.SessionWindowEnd == nil {
+					end := *usage.FiveHour.ResetsAt
+					acc.SessionWindowEnd = &end
+				}
+				ObserveAccountQuotaWindows(ctx, s.quotaWindowLedger, acc, time.Now())
+			}
+		}
 	}
 }
 
@@ -876,14 +894,15 @@ func (s *AccountUsageService) persistOpenAICodexProbeSnapshot(accountID int64, u
 		return
 	}
 
-	go func() {
-		updateCtx, updateCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer updateCancel()
-		_ = s.accountRepo.UpdateExtra(updateCtx, accountID, updates)
-	}()
-}
+go func() {
+			updateCtx, updateCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer updateCancel()
+			_ = s.accountRepo.UpdateExtra(updateCtx, accountID, updates)
+			observeCodexQuotaWindowUpdates(updateCtx, s.quotaWindowLedger, accountID, updates, time.Now())
+		}()
+	}
 
-func extractOpenAICodexProbeUpdates(resp *http.Response) (map[string]any, error) {
+	func extractOpenAICodexProbeUpdates(resp *http.Response) (map[string]any, error) {
 	if resp == nil {
 		return nil, nil
 	}

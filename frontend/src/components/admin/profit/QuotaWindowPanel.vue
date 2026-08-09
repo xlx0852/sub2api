@@ -12,19 +12,48 @@
         <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">{{ t('admin.profit.quotaWindowHint') }}</p>
       </div>
 
-      <div class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
-        <button
-          v-for="mode in modes"
-          :key="mode.key"
-          type="button"
-          class="rounded-md px-2.5 py-1 text-xs font-medium transition"
-          :class="viewMode === mode.key
-            ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white'
-            : 'text-gray-500 hover:text-gray-800 dark:text-dark-300 dark:hover:text-white'"
-          @click="setMode(mode.key)"
-        >
-          {{ mode.label }}
-        </button>
+      <div class="flex items-center gap-1.5">
+        <div class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
+          <button
+            type="button"
+            class="rounded-md px-2 py-1 text-xs font-semibold text-gray-600 transition hover:text-gray-900 dark:text-dark-300 dark:hover:text-white"
+            :aria-label="t('admin.profit.quotaWindowPrev')"
+            :title="t('admin.profit.quotaWindowPrev')"
+            @click="shiftPeriod(-1)"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            class="rounded-md px-2 py-1 text-[10px] font-medium text-gray-600 transition hover:text-gray-900 dark:text-dark-300 dark:hover:text-white"
+            @click="jumpToCurrent()"
+          >
+            {{ t('admin.profit.quotaWindowToday') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-md px-2 py-1 text-xs font-semibold text-gray-600 transition hover:text-gray-900 dark:text-dark-300 dark:hover:text-white"
+            :aria-label="t('admin.profit.quotaWindowNext')"
+            :title="t('admin.profit.quotaWindowNext')"
+            @click="shiftPeriod(1)"
+          >
+            ›
+          </button>
+        </div>
+        <div class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
+          <button
+            v-for="mode in modes"
+            :key="mode.key"
+            type="button"
+            class="rounded-md px-2.5 py-1 text-xs font-medium transition"
+            :class="viewMode === mode.key
+              ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white'
+              : 'text-gray-500 hover:text-gray-800 dark:text-dark-300 dark:hover:text-white'"
+            @click="setMode(mode.key)"
+          >
+            {{ mode.label }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -61,10 +90,12 @@
         </div>
 
         <div
-          class="min-w-0 flex-1 overflow-x-auto overscroll-x-contain"
+          ref="scrollEl"
+          class="relative min-w-0 flex-1 overflow-x-auto overscroll-x-contain"
           data-testid="profit-quota-window-scroll"
+          @scroll.passive="onGanttScroll"
         >
-          <div :class="timelineMinWidthClass">
+          <div :style="{ width: `${timelineWidth}px` }">
             <div class="relative mb-2 h-7">
               <div
                 v-for="tick in dayTicks"
@@ -74,6 +105,17 @@
               >
                 <span class="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-dark-400">{{ tick.weekday }}</span>
                 <span class="text-[11px] font-semibold tabular-nums text-gray-600 dark:text-dark-200">{{ tick.day }}</span>
+              </div>
+              <div
+                v-for="mb in monthMarkers"
+                :key="`month-${mb.key}`"
+                class="pointer-events-none absolute -top-0.5 z-10 flex -translate-x-1/2 flex-col items-center"
+                :style="{ left: `${mb.left}%` }"
+                data-testid="quota-window-month-marker"
+              >
+                <span class="rounded-full border border-violet-300 bg-violet-50 px-1.5 py-px text-[9px] font-semibold text-violet-700 dark:border-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
+                  {{ mb.label }}
+                </span>
               </div>
               <div
                 v-if="nowLeft != null"
@@ -86,13 +128,19 @@
               <div
                 v-for="lane in lanes"
                 :key="`track-${lane.accountId}`"
-                class="relative h-9 overflow-hidden rounded-lg bg-gray-50 ring-1 ring-inset ring-gray-100 dark:bg-dark-700/50 dark:ring-dark-600"
+                class="relative h-9 rounded-lg bg-gray-50 ring-1 ring-inset ring-gray-100 dark:bg-dark-700/50 dark:ring-dark-600"
               >
                 <div
                   v-for="seg in dayTicks"
                   :key="`${lane.accountId}-${seg.key}`"
                   class="pointer-events-none absolute bottom-0 top-0 w-px bg-gray-200/70 dark:bg-dark-600/80"
                   :style="{ left: `${seg.left}%` }"
+                />
+                <div
+                  v-for="mb in monthMarkers"
+                  :key="`${lane.accountId}-month-${mb.key}`"
+                  class="pointer-events-none absolute bottom-0 top-0 z-10 w-px bg-violet-400/70"
+                  :style="{ left: `${mb.left}%` }"
                 />
                 <div
                   v-if="nowLeft != null"
@@ -108,7 +156,15 @@
                   :class="bar.className"
                   :style="bar.style"
                   :title="bar.title"
-                  @click="emit('select', lane.accountId)"
+                  @click="emit('select', {
+                    accountId: lane.accountId,
+                    startMs: bar.startMs,
+                    endMs: bar.endMs,
+                    status: bar.status,
+                    kind: bar.kind,
+                    label: bar.labelRaw,
+                    windows: lane.windowPayloads
+                  })"
                 >
                   <div class="flex h-full items-center gap-1 px-1.5">
                     <span class="truncate">{{ bar.label }}</span>
@@ -143,7 +199,18 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { AccountProfitSummary, ProfitQuotaWindow } from '@/api/admin/profit'
 
-const emit = defineEmits<{ select: [accountId: number] }>()
+export type QuotaWindowSelectPayload = {
+  accountId: number
+  startMs: number
+  endMs: number
+  status: 'current' | 'upcoming' | 'ended'
+  kind?: string
+  label?: string
+  /** All expanded occurrences currently painted for this lane (for history). */
+  windows: Array<{ startMs: number; endMs: number; status: 'current' | 'upcoming' | 'ended'; kind?: string; label?: string }>
+}
+
+const emit = defineEmits<{ select: [payload: QuotaWindowSelectPayload] }>()
 
 type ViewMode = 'week' | 'month' | '5h'
 
@@ -154,7 +221,11 @@ const props = defineProps<{
 const { t, locale } = useI18n()
 
 const viewMode = ref<ViewMode>('month')
-const anchor = ref(startOfLocalMonth(new Date()))
+// Continuous timeline: rangeStart/rangeEnd are the rendered horizon; viewport scrolls freely.
+const now0 = Date.now()
+const rangeStart = ref(startOfLocalDay(new Date(now0 - 30 * 86_400_000)))
+const rangeEnd = ref(new Date(now0 + 30 * 86_400_000))
+const scrollEl = ref<HTMLElement | null>(null)
 
 const modes = computed(() => [
   { key: 'week' as const, label: t('admin.profit.quotaWindowByWeek') },
@@ -195,22 +266,19 @@ const palette = [
   }
 ]
 
-const timelineMinWidthClass = computed(() => {
-  if (viewMode.value === 'month') return 'min-w-[1100px]'
-  if (viewMode.value === '5h') return 'min-w-[640px]'
-  return 'min-w-[860px]'
-})
+const viewRange = computed(() => ({ start: new Date(rangeStart.value), end: new Date(rangeEnd.value) }))
 
-const viewRange = computed(() => {
-  const start = new Date(anchor.value)
+// Fixed scale: ~36px per day (week/month), ~120px per hour in 5h mode.
+const PX_PER_DAY = 36
+const PX_PER_HOUR = 140
+const timelineWidth = computed(() => {
+  const span = Math.max(1, rangeEnd.value.getTime() - rangeStart.value.getTime())
   if (viewMode.value === '5h') {
-    return { start, end: new Date(start.getTime() + 5 * 3600_000) }
+    const hours = span / 3600_000
+    return Math.max(640, Math.round(hours * PX_PER_HOUR))
   }
-  if (viewMode.value === 'month') {
-    const monthStart = startOfLocalMonth(start)
-    return { start: monthStart, end: addMonths(monthStart, 1) }
-  }
-  return { start, end: new Date(start.getTime() + 14 * 86_400_000) }
+  const days = span / 86_400_000
+  return Math.max(860, Math.round(days * PX_PER_DAY))
 })
 
 const viewDurationMs = computed(() => Math.max(1, viewRange.value.end.getTime() - viewRange.value.start.getTime()))
@@ -264,12 +332,35 @@ const dayTicks = computed(() => {
   return ticks
 })
 
+const monthMarkers = computed(() => {
+  const { start, end } = viewRange.value
+  const markers: Array<{ key: string; left: number; label: string }> = []
+  // Include the first visible day's month, plus every 1st inside the range.
+  const first = startOfLocalDay(start)
+  const add = (date: Date, label: string) => {
+    const ms = date.getTime()
+    if (ms < start.getTime() || ms >= end.getTime()) return
+    const left = ((ms - start.getTime()) / viewDurationMs.value) * 100
+    if (markers.some((m) => Math.abs(m.left - left) < 0.01)) return
+    markers.push({ key: date.toISOString(), left, label })
+  }
+  add(startOfLocalMonth(start), formatMonthYearShort(start))
+  let cursor = startOfLocalMonth(first)
+  while (cursor < end) {
+    add(cursor, formatMonthYearShort(cursor))
+    cursor = addMonths(cursor, 1)
+  }
+  return markers
+})
+
 const nowLeft = computed(() => {
   const now = Date.now()
   const { start, end } = viewRange.value
   if (now < start.getTime() || now > end.getTime()) return null
   return ((now - start.getTime()) / viewDurationMs.value) * 100
 })
+
+setTimeout(() => scrollToNow(false), 0)
 
 const lanes = computed(() => {
   const now = Date.now()
@@ -278,11 +369,23 @@ const lanes = computed(() => {
     .map((account, index) => {
       const preferred = pickPreferredWindow(account)
       if (!preferred) return null
-      const expanded = expandWindowOccurrences(preferred, start, end)
+      // Real ledger: multiple same-kind windows with concrete start/end → paint as-is.
+      // Snapshot-only: single live window → expand calendar projections.
+      const ledgerSeries = pickLedgerSeries(account, preferred)
+      const expanded = ledgerSeries.length > 1
+        ? ledgerSeries
+        : expandWindowOccurrences(preferred, start, end)
       const bars = expanded
         .map((win, winIndex) => buildBar(win, start, end, now, index, winIndex))
         .filter((bar): bar is NonNullable<typeof bar> => bar != null)
       if (!bars.length) return null
+      const windowPayloads = bars.map((bar) => ({
+        startMs: bar.startMs,
+        endMs: bar.endMs,
+        status: bar.status,
+        kind: bar.kind,
+        label: bar.labelRaw
+      }))
       const used = preferred.used_percent
       const usedLabel = used == null || Number.isNaN(Number(used)) ? '—' : `${Math.round(Number(used))}%`
       const colors = palette[index % palette.length]
@@ -297,7 +400,8 @@ const lanes = computed(() => {
         fullTitle: `${accountName} · ${account.platform} · ${usedLabel}`,
         meta: `${account.platform} · ${usedLabel}`,
         dotClass: colors.dot,
-        bars
+        bars,
+        windowPayloads
       }
     })
     .filter((row): row is NonNullable<typeof row> => row != null)
@@ -305,15 +409,162 @@ const lanes = computed(() => {
   return rows.slice(0, 24)
 })
 
+function horizonCenter(): number {
+  return (rangeStart.value.getTime() + rangeEnd.value.getTime()) / 2
+}
+
+function setHorizon(centerMs: number, spanMs?: number) {
+  const span = spanMs ?? (rangeEnd.value.getTime() - rangeStart.value.getTime())
+  rangeStart.value = new Date(centerMs - span / 2)
+  rangeEnd.value = new Date(centerMs + span / 2)
+}
+
 function setMode(mode: ViewMode) {
   viewMode.value = mode
+  const now = Date.now()
   if (mode === '5h') {
-    anchor.value = alignTo5h(new Date())
+    setHorizon(now, 15 * 3600_000) // 5h ± around
   } else if (mode === 'month') {
-    anchor.value = startOfLocalMonth(new Date())
+    setHorizon(now, 60 * 86_400_000)
   } else {
-    anchor.value = startOfLocalDay(new Date())
+    setHorizon(now, 42 * 86_400_000)
   }
+  notifyPeriodChange(true)
+  scrollToNow(true)
+}
+
+/** Shift visible window forward/backward (month / 2-week / 5h step). */
+function shiftPeriod(dir: -1 | 1) {
+  const stepMs = viewMode.value === '5h'
+    ? 5 * 3600_000
+    : viewMode.value === 'week'
+      ? 14 * 86_400_000
+      : 30 * 86_400_000
+  setHorizon(horizonCenter() + dir * stepMs)
+  notifyPeriodChange()
+  scrollToCenter()
+}
+
+function scrollToCenter() {
+  requestAnimationFrame(() => {
+    const el = scrollEl.value
+    if (!el) return
+    const target = Math.max(0, (el.scrollWidth - el.clientWidth) / 2)
+    scrollToX(target, true)
+  })
+}
+
+function scrollToNow(smooth = true) {
+  requestAnimationFrame(() => {
+    const el = scrollEl.value
+    if (!el) return
+    const { start, end } = viewRange.value
+    const span = Math.max(1, end.getTime() - start.getTime())
+    const ratio = (Date.now() - start.getTime()) / span
+    const target = Math.max(0, ratio * el.scrollWidth - el.clientWidth / 2)
+    scrollToX(target, smooth)
+  })
+}
+
+function scrollToX(left: number, smooth: boolean) {
+  const el = scrollEl.value
+  if (!el) return
+  try {
+    if (typeof el.scrollTo === 'function') {
+      el.scrollTo({ left, behavior: smooth ? 'smooth' : 'auto' })
+    } else {
+      el.scrollLeft = left
+    }
+  } catch {
+    el.scrollLeft = left
+  }
+}
+
+function jumpToCurrent() {
+  const now = new Date()
+  if (viewMode.value === 'month') {
+    // Back to today = current calendar month (1st → month end).
+    const start = startOfLocalMonth(now)
+    rangeStart.value = start
+    rangeEnd.value = addMonths(start, 1)
+    notifyPeriodChange(true)
+    scrollToX(0, true)
+    return
+  }
+  const nowMs = now.getTime()
+  if (viewMode.value === '5h') setHorizon(nowMs, 15 * 3600_000)
+  else setHorizon(nowMs, 42 * 86_400_000)
+  notifyPeriodChange(true)
+  scrollToNow(true)
+}
+
+function notifyPeriodChange(_force = false) {
+  // No toast; month markers are the only cross-month signal.
+}
+
+function onGanttScroll() {
+  const el = scrollEl.value
+  if (!el) return
+  const pxPerMs = el.scrollWidth / Math.max(1, viewRange.value.end.getTime() - viewRange.value.start.getTime())
+  const bufferPx = Math.max(240, el.clientWidth * 0.6)
+  if (el.scrollLeft + el.clientWidth > el.scrollWidth - bufferPx) {
+    // extend right by ~30d (or 15h in 5h mode)
+    const addMs = viewMode.value === '5h' ? 15 * 3600_000 : 30 * 86_400_000
+    const newEnd = new Date(rangeEnd.value.getTime() + addMs)
+    rangeEnd.value = newEnd
+    detectMonthCross()
+  } else if (el.scrollLeft < bufferPx) {
+    const addMs = viewMode.value === '5h' ? 15 * 3600_000 : 30 * 86_400_000
+    const addedPx = addMs * pxPerMs
+    const oldLeft = el.scrollLeft
+    const newStart = new Date(rangeStart.value.getTime() - addMs)
+    rangeStart.value = newStart
+    requestAnimationFrame(() => {
+      el.scrollLeft = oldLeft + addedPx
+    })
+    detectMonthCross()
+  }
+}
+
+let lastVisibleMonth = ''
+function visibleCenterMs(): number {
+  const el = scrollEl.value
+  if (!el) return horizonCenter()
+  const { start, end } = viewRange.value
+  const span = Math.max(1, end.getTime() - start.getTime())
+  const ratio = (el.scrollLeft + el.clientWidth / 2) / Math.max(1, el.scrollWidth)
+  return start.getTime() + ratio * span
+}
+
+function detectMonthCross() {
+  const ms = visibleCenterMs()
+  const d = new Date(ms)
+  const key = `${d.getFullYear()}-${d.getMonth()}`
+  if (!lastVisibleMonth) {
+    lastVisibleMonth = key
+    return
+  }
+  if (key === lastVisibleMonth) return
+  lastVisibleMonth = key
+}
+
+
+
+function pickLedgerSeries(account: AccountProfitSummary, preferred: ProfitQuotaWindow): Array<ProfitQuotaWindow & { startMs: number; endMs: number }> {
+  const kind = preferred.kind
+  const rows = (account.quota_windows || []).filter((w) => w.kind === kind)
+  if (rows.length <= 1) return []
+  const out: Array<ProfitQuotaWindow & { startMs: number; endMs: number }> = []
+  for (const w of rows) {
+    const startMs = parseTime(w.start_at)
+    const endMs = parseTime(w.end_at)
+    if (startMs == null || endMs == null || endMs <= startMs) continue
+    out.push({ ...w, startMs, endMs })
+  }
+  // Need multiple concrete rows to treat as ledger.
+  if (out.length <= 1) return []
+  out.sort((a, b) => a.startMs - b.startMs)
+  return out
 }
 
 function pickPreferredWindow(account: AccountProfitSummary): ProfitQuotaWindow | null {
@@ -470,15 +721,29 @@ function buildBar(
       ? formatDateTime(new Date(win.startMs))
       : formatDateTime(new Date(win.endMs)))
 
+  const clippedLeft = win.startMs < viewStartMs
+  const clippedRight = win.endMs > viewEndMs
+  const radiusClass = clippedLeft && clippedRight
+    ? 'rounded-none'
+    : clippedLeft
+      ? 'rounded-l-none'
+      : clippedRight
+        ? 'rounded-r-none'
+        : ''
   return {
     key: `${win.id}-${win.startMs}-${winIndex}`,
-    className,
+    className: `${className} ${radiusClass}`.trim(),
     style: {
       left: `${left}%`,
       width: `${Math.max(width, 1.2)}%`
     },
     label,
-    title
+    title,
+    startMs: win.startMs,
+    endMs: win.endMs,
+    status,
+    kind: win.kind,
+    labelRaw: win.label || win.kind
   }
 }
 
@@ -532,10 +797,8 @@ function addMonths(date: Date, delta: number) {
   return new Date(date.getFullYear(), date.getMonth() + delta, 1)
 }
 
-function alignTo5h(date: Date) {
-  const ms = date.getTime()
-  const block = 5 * 3600_000
-  return new Date(Math.floor(ms / block) * block)
+function formatMonthYearShort(date: Date) {
+  return new Intl.DateTimeFormat(locale.value || undefined, { month: 'short', year: 'numeric' }).format(date)
 }
 
 function formatShortDate(date: Date) {
@@ -567,3 +830,6 @@ function formatDateTime(date: Date) {
   }).format(date)
 }
 </script>
+
+<style scoped>
+</style>
