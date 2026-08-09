@@ -2,14 +2,15 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProfitView from '../ProfitView.vue'
 
-const { overview, supplyForecast, showError } = vi.hoisted(() => ({
+const { overview, supplyForecast, windowEconomics, showError } = vi.hoisted(() => ({
   overview: vi.fn(),
   supplyForecast: vi.fn(),
+  windowEconomics: vi.fn(),
   showError: vi.fn()
 }))
 
 vi.mock('@/api/admin', () => ({
-  adminAPI: { profit: { overview, supplyForecast } }
+  adminAPI: { profit: { overview, supplyForecast, windowEconomics } }
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -41,7 +42,9 @@ describe('ProfitView', () => {
   beforeEach(() => {
     overview.mockReset()
     supplyForecast.mockReset()
+    windowEconomics.mockReset()
     showError.mockReset()
+    windowEconomics.mockResolvedValue({ account_id: 1, account_name: 'x', cost_type: 'subscription', windows: [] })
   })
 
   it('在全局趋势下方展示与汇总日期一致的账号明细', async () => {
@@ -150,7 +153,8 @@ describe('ProfitView', () => {
           },
           LoadingSpinner: true,
           Icon: true,
-          QuotaWindowPanel: { template: '<div data-testid="profit-quota-window-panel" />' }
+          QuotaWindowPanel: { template: '<div data-testid="profit-quota-window-panel" />' },
+          AccountProfitDrawer: { template: '<div data-testid="profit-account-drawer" />' }
         }
       }
     })

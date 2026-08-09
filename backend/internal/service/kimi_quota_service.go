@@ -51,11 +51,12 @@ type KimiQuotaUsage struct {
 }
 
 type KimiQuotaService struct {
-	accountRepo   AccountRepository
-	proxyRepo     ProxyRepository
-	tokenProvider KimiAccessTokenProvider
-	httpUpstream  HTTPUpstream
-	usageURL      string
+	accountRepo       AccountRepository
+	proxyRepo         ProxyRepository
+	tokenProvider     KimiAccessTokenProvider
+	httpUpstream      HTTPUpstream
+	usageURL          string
+	quotaWindowLedger *QuotaWindowLedger
 }
 
 func NewKimiQuotaService(
@@ -70,6 +71,12 @@ func NewKimiQuotaService(
 		tokenProvider: tokenProvider,
 		httpUpstream:  httpUpstream,
 		usageURL:      kimiUsageURL,
+	}
+}
+
+func (s *KimiQuotaService) SetQuotaWindowLedger(ledger *QuotaWindowLedger) {
+	if s != nil {
+		s.quotaWindowLedger = ledger
 	}
 }
 
@@ -121,11 +128,29 @@ func (s *KimiQuotaService) QueryUsage(ctx context.Context, accountID int64) (*Ki
 		if parseErr != nil {
 			return nil, infraerrors.Newf(http.StatusBadGateway, "KIMI_QUOTA_PARSE_FAILED", "failed to parse Kimi quota response: %v", parseErr)
 		}
-		usage.FetchedAt = time.Now().Unix()
-		syncKimiQuotaSchedulingState(ctx, s.accountRepo, account, usage, time.Now())
-		return usage, nil
+usage.FetchedAt = time.Now().Unix()
+			now := time.Now()
+			syncKimiQuotaSchedulingState(ctx, s.accountRepo, account, usage, now)
+			// Passive-observe ledger from the same updates written to Extra.
+			if s.quotaWindowLedger != nil {
+				updates := map[string]any{}
+				for _, window := range []struct {
+					name     string
+					progress *UsageProgress
+				}{{"5h", usage.FiveHour}, {"7d", usage.SevenDay}} {
+					if window.progress == nil {
+						continue
+					}
+					updates["kimi_quota_"+window.name+"_utilization"] = window.progress.Utilization
+					if window.progress.ResetsAt != nil {
+						updates["kimi_quota_"+window.name+"_reset_at"] = window.progress.ResetsAt.UTC().Format(time.RFC3339)
+					}
+				}
+				observePlatformQuotaWindowUpdates(ctx, s.quotaWindowLedger, account.ID, PlatformKimi, updates, now)
+			}
+			return usage, nil
+		}
 	}
-}
 
 func syncKimiQuotaSchedulingState(ctx context.Context, repo AccountRepository, account *Account, usage *KimiQuotaUsage, now time.Time) {
 	if repo == nil || account == nil || usage == nil {

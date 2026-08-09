@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import QuotaWindowPanel from '../QuotaWindowPanel.vue'
 
@@ -232,6 +232,94 @@ describe('QuotaWindowPanel', () => {
       expect(titles).not.toMatch(/08\/13/)
       expect(titles).not.toMatch(/08\/2[0-9]/)
       expect(wrapper.text()).not.toMatch(/08\/1[3-9]/)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('cross-month navigation', () => {
+  it('renders continuous timeline with month markers and period buttons', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-09T12:00:00+08:00'))
+    try {
+      const end = new Date(Date.now() + 2 * 24 * 3600_000).toISOString()
+      const start = new Date(Date.now() - 5 * 24 * 3600_000).toISOString()
+      const wrapper = mount(QuotaWindowPanel, {
+        props: {
+          accounts: [{
+            account_id: 1,
+            account_name: 'GPT-A',
+            platform: 'openai',
+            account_type: 'oauth',
+            cost_type: 'subscription',
+            configured: true,
+            requests: 1,
+            revenue: 1,
+            cost: 1,
+            profit: 0,
+            margin: 0,
+            currency: 'USD',
+            quota_windows: [{
+              id: '7d', label: '7d', kind: '7d', used_percent: 50,
+              start_at: start, end_at: end, window_minutes: 10080
+            }]
+          }]
+        }
+      })
+
+      // continuous horizon covers ~±30d → month markers present
+      expect(wrapper.findAll('[data-testid="quota-window-month-marker"]').length).toBeGreaterThanOrEqual(1)
+      // navigation buttons exist
+      const nextBtn = wrapper.findAll('button').find((b) => b.attributes('title') === 'admin.profit.quotaWindowNext')
+      const todayBtn = wrapper.findAll('button').find((b) => b.text() === 'admin.profit.quotaWindowToday')
+      expect(nextBtn).toBeTruthy()
+      expect(todayBtn).toBeTruthy()
+      await nextBtn!.trigger('click')
+      await todayBtn!.trigger('click')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('auto-shifts period when scrolled past the right edge', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-09T12:00:00+08:00'))
+    try {
+      const end = new Date(Date.now() + 2 * 24 * 3600_000).toISOString()
+      const start = new Date(Date.now() - 5 * 24 * 3600_000).toISOString()
+      const wrapper = mount(QuotaWindowPanel, {
+        props: {
+          accounts: [{
+            account_id: 2,
+            account_name: 'GROK-B',
+            platform: 'grok',
+            account_type: 'oauth',
+            cost_type: 'subscription',
+            configured: true,
+            requests: 1,
+            revenue: 1,
+            cost: 1,
+            profit: 0,
+            margin: 0,
+            currency: 'USD',
+            quota_windows: [{
+              id: '7d', label: '7d', kind: '7d', used_percent: 60,
+              start_at: start, end_at: end, window_minutes: 10080
+            }]
+          }]
+        }
+      })
+      const scroller = wrapper.find('[data-testid="profit-quota-window-scroll"]')
+      expect(scroller.exists()).toBe(true)
+      const el = scroller.element as HTMLElement
+      // jsdom has 0 sizes; stub metrics
+      Object.defineProperty(el, 'clientWidth', { value: 500, configurable: true })
+      Object.defineProperty(el, 'scrollWidth', { value: 2000, configurable: true })
+      el.scrollLeft = 1500
+      await scroller.trigger('scroll')
+      // seamless scroll: no forced cross-month toast from hitting edge
+      expect(wrapper.find('[data-testid="quota-window-cross-month"]').exists()).toBe(false)
     } finally {
       vi.useRealTimers()
     }

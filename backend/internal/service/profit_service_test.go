@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -27,29 +28,31 @@ func TestAccountCostConfigJSONContract(t *testing.T) {
 }
 
 type profitRepoStub struct {
-	configs          []*AccountCostConfig
-	cycles           map[int64][]*AccountSubscriptionCycle
-	stats            map[int64]*ProfitUsageStats
-	rangeStats       map[int64]*ProfitUsageStats
-	daily            []*ProfitDailyUsagePoint
-	dailyByAccount   []*ProfitAccountDailyUsagePoint
-	bestWindow       float64
-	bestWindows      map[int64]float64
-	upserted         *AccountCostConfig
-	batchInserted    []*AccountCostConfig
-	onUpsert         func(*AccountCostConfig)
-	listConfigsCalls int
-	cycleBatchCalls  int
-	rangeStatsCalls  int
-	dailyBatchCalls  int
-	bestBatchCalls   int
-	statsBatchCalls  int
-	storedValue      *StoredValueSnapshot
-	forecastSamples        []*SupplyForecastUsageSample
-	forecastSupply         map[string]int
-	forecastQuotaSnapshots []*SubscriptionQuotaSnapshot
-	cycleRevenues    map[int64]float64
-}
+		configs          []*AccountCostConfig
+		cycles           map[int64][]*AccountSubscriptionCycle
+		stats            map[int64]*ProfitUsageStats
+		rangeStats       map[int64]*ProfitUsageStats
+		// rangeStatsExact keys: "accountID|startRFC3339Nano|endRFC3339Nano"
+		rangeStatsExact  map[string]*ProfitUsageStats
+		daily            []*ProfitDailyUsagePoint
+		dailyByAccount   []*ProfitAccountDailyUsagePoint
+		bestWindow       float64
+		bestWindows      map[int64]float64
+		upserted         *AccountCostConfig
+		batchInserted    []*AccountCostConfig
+		onUpsert         func(*AccountCostConfig)
+		listConfigsCalls int
+		cycleBatchCalls  int
+		rangeStatsCalls  int
+		dailyBatchCalls  int
+		bestBatchCalls   int
+		statsBatchCalls  int
+		storedValue      *StoredValueSnapshot
+		forecastSamples        []*SupplyForecastUsageSample
+		forecastSupply         map[string]int
+		forecastQuotaSnapshots []*SubscriptionQuotaSnapshot
+		cycleRevenues    map[int64]float64
+	}
 
 func (s *profitRepoStub) UpsertCostConfig(_ context.Context, cfg *AccountCostConfig) (*AccountCostConfig, error) {
 	s.upserted = cfg
@@ -183,13 +186,25 @@ func (s *profitRepoStub) GetAccountUsageStatsBatch(_ context.Context, _ []int64,
 	s.statsBatchCalls++
 	return s.stats, nil
 }
-func (s *profitRepoStub) GetAccountUsageStatsForRanges(_ context.Context, _ []ProfitAccountUsageRange) (map[int64]*ProfitUsageStats, error) {
-	s.rangeStatsCalls++
-	if s.rangeStats != nil {
-		return s.rangeStats, nil
+func (s *profitRepoStub) GetAccountUsageStatsForRanges(_ context.Context, ranges []ProfitAccountUsageRange) (map[int64]*ProfitUsageStats, error) {
+		s.rangeStatsCalls++
+		if len(ranges) > 0 && s.rangeStatsExact != nil {
+			out := make(map[int64]*ProfitUsageStats, len(ranges))
+			for _, r := range ranges {
+				key := fmt.Sprintf("%d|%s|%s", r.AccountID, r.Start.UTC().Format(time.RFC3339Nano), r.End.UTC().Format(time.RFC3339Nano))
+				if st, ok := s.rangeStatsExact[key]; ok {
+					out[r.AccountID] = st
+				} else {
+					out[r.AccountID] = &ProfitUsageStats{}
+				}
+			}
+			return out, nil
+		}
+		if s.rangeStats != nil {
+			return s.rangeStats, nil
+		}
+		return s.stats, nil
 	}
-	return s.stats, nil
-}
 func (s *profitRepoStub) GetAccountDailyUsageStats(_ context.Context, _ []int64, _, _ time.Time, _ string) ([]*ProfitAccountDailyUsagePoint, error) {
 	s.dailyBatchCalls++
 	return s.dailyByAccount, nil
@@ -537,8 +552,8 @@ acc := overview.Summary.Accounts[0]
 			if acc.WindowEfficiency != nil {
 				t.Fatalf("window_efficiency must stay empty on list: %+v", acc)
 			}
-			if acc.BillingWindowSource != "quota_window" || acc.BillingWindowRevenue == nil {
-				t.Fatalf("expected quota_window economics on list for drawer, got source=%q rev=%v", acc.BillingWindowSource, acc.BillingWindowRevenue)
+			if acc.DrawerQuotaRevenue == nil {
+				t.Fatalf("expected drawer quota economics on list for drawer, got %+v", acc)
 			}
 			if acc.BreakEvenRate == nil || *acc.BreakEvenRate < 0.13 || *acc.BreakEvenRate > 0.135 {
 				t.Fatalf("break_even_rate=%v, want ~0.132", acc.BreakEvenRate)

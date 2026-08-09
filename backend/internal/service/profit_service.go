@@ -2191,9 +2191,18 @@ func buildProfitWindowAnchor(cycles []*AccountSubscriptionCycle, cfg *AccountCos
 		spans = append(spans, profitWindowSpan{start: cycle.StartsAt, end: end})
 	}
 	anchor := profitWindowAnchor{spans: spans}
-	if active := activeSubscriptionCycle(cycles, now); active != nil && active.PeriodDays > 0 {
-		start := active.StartsAt
-		anchor.coveredStart = &start
+	// coveredStart 是历史配额窗口投影可回溯的最早成本周期起点。
+	// 用户可能记了多笔账（多个连续成本周期），历史窗口应覆盖所有已记账周期，
+	// 而非只回当前活跃周期起点——否则当前周期之前的配额窗口全部不显示。
+	// 最早记账周期之前的 gap 仍由 spans 检查兜底（窗口 start 落在 gap 内会被丢弃）。
+	if len(cycles) > 0 {
+		earliest := cycles[0].StartsAt
+		for _, c := range cycles {
+			if c != nil && c.StartsAt.Before(earliest) {
+				earliest = c.StartsAt
+			}
+		}
+		anchor.coveredStart = &earliest
 	}
 	// auto_renew=false → stop projecting at the active cycle end.
 	autoRenew := cfg != nil && cfg.AutoRenew

@@ -422,9 +422,10 @@ type OpenAIGatewayService struct {
 	openAITokenProvider   *OpenAITokenProvider
 	grokTokenProvider     *GrokTokenProvider
 	kimiTokenProvider     *KimiTokenProvider
-	kimiQuotaService      KimiQuotaQuerier
-	grokQuotaService      GrokQuotaProber
-	toolCorrector         *CodexToolCorrector
+kimiQuotaService      KimiQuotaQuerier
+		grokQuotaService      GrokQuotaProber
+		quotaWindowLedger     *QuotaWindowLedger
+		toolCorrector         *CodexToolCorrector
 	openaiWSResolver      OpenAIWSProtocolResolver
 	resolver              *ModelPricingResolver
 	channelService        *ChannelService
@@ -462,10 +463,16 @@ func (s *OpenAIGatewayService) SetKimiQuotaService(service KimiQuotaQuerier) {
 }
 
 func (s *OpenAIGatewayService) SetGrokQuotaService(service GrokQuotaProber) {
-	if s != nil {
-		s.grokQuotaService = service
+		if s != nil {
+			s.grokQuotaService = service
+		}
 	}
-}
+
+	func (s *OpenAIGatewayService) SetQuotaWindowLedger(ledger *QuotaWindowLedger) {
+		if s != nil {
+			s.quotaWindowLedger = ledger
+		}
+	}
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
 func NewOpenAIGatewayService(

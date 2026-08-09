@@ -34,31 +34,31 @@ func TestFillDrawerWindowFromQuota_UsesQuotaWindowNotPageFilter(t *testing.T) {
 
 	fillDrawerWindowFromQuota(summary, cycles, win, stats, AccountCostTypeSubscription, now)
 
-	if summary.BillingWindowSource != "quota_window" {
-		t.Fatalf("source=%q want quota_window", summary.BillingWindowSource)
+	if summary.DrawerQuotaKind != "7d" || summary.DrawerQuotaStart == nil || summary.DrawerQuotaEnd == nil {
+		t.Fatalf("drawer quota missing: %+v", summary)
 	}
-	if summary.BillingWindowKind != "7d" {
-		t.Fatalf("kind=%q", summary.BillingWindowKind)
+	if summary.DrawerQuotaRevenue == nil || *summary.DrawerQuotaRevenue != 331.13 {
+		t.Fatalf("revenue=%v", summary.DrawerQuotaRevenue)
 	}
-	if summary.BillingWindowRevenue == nil || *summary.BillingWindowRevenue != 331.13 {
-		t.Fatalf("revenue=%v", summary.BillingWindowRevenue)
+	if summary.BillingWindowSource == "cycle" && summary.DrawerQuotaRevenue == nil {
+		t.Fatal("cycle should keep billing_window, drawer quota separate")
 	}
 	// Amortized: 200 * (elapsed days / 30). elapsed = now-start ≈ 2.41d → ~16.07
-	if summary.BillingWindowCost == nil || *summary.BillingWindowCost <= 0 || *summary.BillingWindowCost >= 200 {
-		t.Fatalf("cost=%v want amortized fraction of 200", summary.BillingWindowCost)
+	if summary.DrawerQuotaCost == nil || *summary.DrawerQuotaCost <= 0 || *summary.DrawerQuotaCost >= 200 {
+		t.Fatalf("cost=%v want amortized fraction of 200", summary.DrawerQuotaCost)
 	}
-	if summary.BillingWindowProfit == nil {
+	if summary.DrawerQuotaProfit == nil {
 		t.Fatal("profit nil")
 	}
-	wantProfit := roundMoney(331.13 - *summary.BillingWindowCost)
-	if *summary.BillingWindowProfit != wantProfit {
-		t.Fatalf("profit=%v want %v", *summary.BillingWindowProfit, wantProfit)
+	wantProfit := roundMoney(331.13 - *summary.DrawerQuotaCost)
+	if *summary.DrawerQuotaProfit != wantProfit {
+		t.Fatalf("profit=%v want %v", *summary.DrawerQuotaProfit, wantProfit)
 	}
-	if summary.BillingWindowRequests == nil || *summary.BillingWindowRequests != 1200 {
-		t.Fatalf("requests=%v want window 1200 not page 34000", summary.BillingWindowRequests)
+	if summary.DrawerQuotaRequests == nil || *summary.DrawerQuotaRequests != 1200 {
+		t.Fatalf("requests=%v want window 1200 not page 34000", summary.DrawerQuotaRequests)
 	}
-	if !summary.BillingWindowStart.Equal(winStart) || !summary.BillingWindowEnd.Equal(winEnd) {
-		t.Fatalf("range %v→%v", summary.BillingWindowStart, summary.BillingWindowEnd)
+	if !summary.DrawerQuotaStart.Equal(winStart) || !summary.DrawerQuotaEnd.Equal(winEnd) {
+		t.Fatalf("range %v→%v", summary.DrawerQuotaStart, summary.DrawerQuotaEnd)
 	}
 }
 
@@ -70,10 +70,10 @@ func TestFillDrawerWindowFromQuota_MeteredUsesWindowMeteredCost(t *testing.T) {
 	summary := &AccountProfitSummary{AccountID: 3, CostType: AccountCostTypeMetered}
 	stats := &ProfitUsageStats{Requests: 10, Revenue: 50, MeteredCost: 12.5}
 	fillDrawerWindowFromQuota(summary, nil, win, stats, AccountCostTypeMetered, now)
-	if summary.BillingWindowCost == nil || *summary.BillingWindowCost != 12.5 {
-		t.Fatalf("cost=%v", summary.BillingWindowCost)
+	if summary.DrawerQuotaCost == nil || *summary.DrawerQuotaCost != 12.5 {
+		t.Fatalf("cost=%v", summary.DrawerQuotaCost)
 	}
-	if summary.BillingWindowProfit == nil || *summary.BillingWindowProfit != 37.5 {
-		t.Fatalf("profit=%v", summary.BillingWindowProfit)
+	if summary.DrawerQuotaProfit == nil || *summary.DrawerQuotaProfit != 37.5 {
+		t.Fatalf("profit=%v", summary.DrawerQuotaProfit)
 	}
 }

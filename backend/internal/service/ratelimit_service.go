@@ -30,6 +30,7 @@ type RateLimitService struct {
 	settingService        *SettingService
 	tokenCacheInvalidator TokenCacheInvalidator
 	runtimeBlocker        AccountRuntimeBlocker
+	quotaWindowLedger     *QuotaWindowLedger
 	usageCacheMu          sync.RWMutex
 	usageCache            map[int64]*geminiUsageCacheEntry
 }
@@ -120,8 +121,14 @@ func (s *RateLimitService) SetTokenCacheInvalidator(invalidator TokenCacheInvali
 }
 
 func (s *RateLimitService) SetAccountRuntimeBlocker(blocker AccountRuntimeBlocker) {
-	s.runtimeBlocker = blocker
-}
+		s.runtimeBlocker = blocker
+	}
+
+	func (s *RateLimitService) SetQuotaWindowLedger(ledger *QuotaWindowLedger) {
+		if s != nil {
+			s.quotaWindowLedger = ledger
+		}
+	}
 
 func (s *RateLimitService) IsOpenAIAdvancedSchedulerStickyWeightedEnabled(ctx context.Context) bool {
 	if s == nil || s.settingService == nil {
@@ -1540,14 +1547,18 @@ func (s *RateLimitService) persistOpenAICodexSnapshot(ctx context.Context, accou
 	if snapshot == nil {
 		return
 	}
-	updates := buildCodexUsageExtraUpdates(snapshot, time.Now())
-	if len(updates) == 0 {
-		return
+now := time.Now()
+		updates := buildCodexUsageExtraUpdates(snapshot, now)
+		if len(updates) == 0 {
+			return
+		}
+		if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
+			slog.Warn("openai_codex_snapshot_persist_failed", "account_id", account.ID, "error", err)
+			return
+		}
+		// Same sensor as gateway/usage probe: feed ledger for passive official resets.
+		observeCodexQuotaWindowUpdates(ctx, s.quotaWindowLedger, account.ID, updates, now)
 	}
-	if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
-		slog.Warn("openai_codex_snapshot_persist_failed", "account_id", account.ID, "error", err)
-	}
-}
 
 // parseOpenAIRateLimitResetTime 解析 OpenAI 格式的 429 响应，返回重置时间的 Unix 时间戳
 // OpenAI 的 usage_limit_reached 错误格式：
@@ -1853,12 +1864,76 @@ func (s *RateLimitService) UpdateSessionWindow(ctx context.Context, account *Acc
 	// 被动采样：从响应头收集 5h + 7d + 7d_oi utilization，合并为一次 DB 写入
 	s.samplePassiveUsageFromHeaders(ctx, account, headers)
 
+	// Cross-platform ledger: Claude session + optional passive 7d from headers.
+	s.observeAnthropicQuotaWindows(ctx, account, windowStart, windowEnd, headers)
+
 	// 如果状态为allowed且之前有限流，说明窗口已重置，清除限流状态
 	if status == "allowed" && account.IsRateLimited() {
 		if err := s.ClearRateLimit(ctx, account.ID); err != nil {
 			slog.Warn("rate_limit_clear_failed", "account_id", account.ID, "error", err)
 		}
 	}
+}
+
+func (s *RateLimitService) observeAnthropicQuotaWindows(ctx context.Context, account *Account, windowStart, windowEnd *time.Time, headers http.Header) {
+	if s == nil || s.quotaWindowLedger == nil || account == nil {
+		return
+	}
+	now := time.Now()
+	acc := *account
+	if windowStart != nil {
+		acc.SessionWindowStart = windowStart
+	}
+	if windowEnd != nil {
+		acc.SessionWindowEnd = windowEnd
+	}
+	// Prefer header utilization for the open session observe.
+	if utilStr := headers.Get("anthropic-ratelimit-unified-5h-utilization"); utilStr != "" {
+		if util, err := strconv.ParseFloat(utilStr, 64); err == nil {
+			if acc.Extra == nil {
+				acc.Extra = map[string]any{}
+			} else {
+				// shallow copy so we don't mutate the live account pointer map unexpectedly
+				cp := make(map[string]any, len(acc.Extra)+1)
+				for k, v := range acc.Extra {
+					cp[k] = v
+				}
+				acc.Extra = cp
+			}
+			acc.Extra["session_window_utilization"] = util
+		}
+	}
+	ObserveAccountQuotaWindows(ctx, s.quotaWindowLedger, &acc, now)
+
+	// Anthropic unified 7d window (when present on headers).
+	if resetStr := headers.Get("anthropic-ratelimit-unified-7d-reset"); resetStr != "" {
+		if ts, err := strconv.ParseInt(resetStr, 10, 64); err == nil {
+			if ts > 1e11 {
+				ts = ts / 1000
+			}
+			endAt := time.Unix(ts, 0)
+			var used *float64
+			if utilStr := headers.Get("anthropic-ratelimit-unified-7d-utilization"); utilStr != "" {
+				if util, err := strconv.ParseFloat(utilStr, 64); err == nil {
+					pct := util * 100
+					used = &pct
+				}
+			}
+			_ = s.quotaWindowLedger.ObserveUpstream(ctx, QuotaWindowObservation{
+				AccountID: account.ID, Platform: firstNonEmptyPlatform(account.Platform, PlatformAnthropic),
+				Kind: "7d", EndAt: endAt, WindowMinutes: 10080, UsedPercent: used, ObservedAt: now,
+			})
+		}
+	}
+}
+
+func firstNonEmptyPlatform(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return PlatformAnthropic
 }
 
 // samplePassiveUsageFromHeaders 从 Anthropic 响应头收集 5h/7d/7d_oi 的

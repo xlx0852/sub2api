@@ -871,14 +871,23 @@ func (s *OpenAIGatewayService) updateCodexUsageSnapshot(ctx context.Context, acc
 		return
 	}
 
-	go func() {
-		updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = s.accountRepo.UpdateExtra(updateCtx, accountID, updates)
-	}()
+go func() {
+			updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = s.accountRepo.UpdateExtra(updateCtx, accountID, updates)
+			s.observeCodexQuotaWindows(updateCtx, accountID, updates, now)
+		}()
+	}
+
+	func (s *OpenAIGatewayService) observeCodexQuotaWindows(ctx context.Context, accountID int64, updates map[string]any, now time.Time) {
+	if s == nil {
+		return
+	}
+	observeCodexQuotaWindowUpdates(ctx, s.quotaWindowLedger, accountID, updates, now)
 }
 
-func (s *OpenAIGatewayService) UpdateCodexUsageSnapshotFromHeaders(ctx context.Context, accountID int64, headers http.Header) {
+
+	func (s *OpenAIGatewayService) UpdateCodexUsageSnapshotFromHeaders(ctx context.Context, accountID int64, headers http.Header) {
 	if accountID <= 0 || headers == nil {
 		return
 	}

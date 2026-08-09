@@ -130,9 +130,12 @@ func ProvideOpenAIQuotaService(
 	tokenProvider *OpenAITokenProvider,
 	privacyClientFactory PrivacyClientFactory,
 	openAIGatewayService *OpenAIGatewayService,
+	quotaWindowLedger *QuotaWindowLedger,
 ) *OpenAIQuotaService {
 	service := NewOpenAIQuotaService(accountRepo, proxyRepo, tokenProvider, privacyClientFactory)
 	service.agentIdentityWS = openAIGatewayService
+	service.SetQuotaWindowLedger(quotaWindowLedger)
+	openAIGatewayService.SetQuotaWindowLedger(quotaWindowLedger)
 	return service
 }
 
@@ -142,8 +145,11 @@ func ProvideKimiQuotaService(
 	proxyRepo ProxyRepository,
 	tokenProvider *KimiTokenProvider,
 	httpUpstream HTTPUpstream,
+	quotaWindowLedger *QuotaWindowLedger,
 ) *KimiQuotaService {
-	return NewKimiQuotaService(accountRepo, proxyRepo, tokenProvider, httpUpstream)
+	svc := NewKimiQuotaService(accountRepo, proxyRepo, tokenProvider, httpUpstream)
+	svc.SetQuotaWindowLedger(quotaWindowLedger)
+	return svc
 }
 
 func ProvideAccountUsageService(
@@ -158,28 +164,36 @@ func ProvideAccountUsageService(
 	kimiQuotaService *KimiQuotaService,
 	cache *UsageCache,
 	identityCache IdentityCache,
-	tlsFPProfileService *TLSFingerprintProfileService,
-	openAIGatewayService *OpenAIGatewayService,
-) *AccountUsageService {
-	service := NewAccountUsageService(
-		accountRepo,
-		usageLogRepo,
-		usageFetcher,
-		geminiQuotaService,
-		antigravityQuotaFetcher,
-		grokQuotaFetcher,
-		openAIQuotaService,
-		cache,
-		identityCache,
-		tlsFPProfileService,
-	)
-	service.SetKimiQuotaService(kimiQuotaService)
-	service.SetGrokQuotaService(grokQuotaService)
-	openAIGatewayService.SetKimiQuotaService(kimiQuotaService)
-	openAIGatewayService.SetGrokQuotaService(grokQuotaService)
-	service.agentIdentityWS = openAIGatewayService
-	return service
-}
+tlsFPProfileService *TLSFingerprintProfileService,
+		openAIGatewayService *OpenAIGatewayService,
+		quotaWindowLedger *QuotaWindowLedger,
+	) *AccountUsageService {
+		service := NewAccountUsageService(
+			accountRepo,
+			usageLogRepo,
+			usageFetcher,
+			geminiQuotaService,
+			antigravityQuotaFetcher,
+			grokQuotaFetcher,
+			openAIQuotaService,
+			cache,
+			identityCache,
+			tlsFPProfileService,
+		)
+		service.SetKimiQuotaService(kimiQuotaService)
+		service.SetGrokQuotaService(grokQuotaService)
+		service.SetQuotaWindowLedger(quotaWindowLedger)
+		if kimiQuotaService != nil {
+			kimiQuotaService.SetQuotaWindowLedger(quotaWindowLedger)
+		}
+		if grokQuotaService != nil {
+			grokQuotaService.SetQuotaWindowLedger(quotaWindowLedger)
+		}
+		openAIGatewayService.SetKimiQuotaService(kimiQuotaService)
+		openAIGatewayService.SetGrokQuotaService(grokQuotaService)
+		service.agentIdentityWS = openAIGatewayService
+		return service
+	}
 
 func ProvideAccountTestService(
 	accountRepo AccountRepository,
@@ -213,8 +227,11 @@ func ProvideGrokQuotaService(
 	proxyRepo ProxyRepository,
 	tokenProvider *GrokTokenProvider,
 	httpUpstream HTTPUpstream,
+	quotaWindowLedger *QuotaWindowLedger,
 ) *GrokQuotaService {
-	return NewGrokQuotaService(accountRepo, proxyRepo, tokenProvider, httpUpstream)
+	svc := NewGrokQuotaService(accountRepo, proxyRepo, tokenProvider, httpUpstream)
+	svc.SetQuotaWindowLedger(quotaWindowLedger)
+	return svc
 }
 
 // ProvideGeminiTokenProvider creates GeminiTokenProvider with OAuthRefreshAPI injection
@@ -383,12 +400,14 @@ func ProvideRateLimitService(
 	openAI403CounterCache OpenAI403CounterCache,
 	settingService *SettingService,
 	tokenCacheInvalidator TokenCacheInvalidator,
+	quotaWindowLedger *QuotaWindowLedger,
 ) *RateLimitService {
 	svc := NewRateLimitService(accountRepo, usageRepo, cfg, geminiQuotaService, tempUnschedCache)
 	svc.SetTimeoutCounterCache(timeoutCounterCache)
 	svc.SetOpenAI403CounterCache(openAI403CounterCache)
 	svc.SetSettingService(settingService)
 	svc.SetTokenCacheInvalidator(tokenCacheInvalidator)
+	svc.SetQuotaWindowLedger(quotaWindowLedger)
 	return svc
 }
 
@@ -766,7 +785,8 @@ var ProviderSet = wire.NewSet(
 	ProvideDashboardAggregationService,
 	ProvideUsageCleanupService,
 	ProvideDeferredService,
-	NewProfitService,
+	NewQuotaWindowLedger,
+		NewProfitService,
 	NewAntigravityQuotaFetcher,
 	NewGrokQuotaFetcher,
 	NewUserAttributeService,
