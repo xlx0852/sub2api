@@ -1919,10 +1919,12 @@ func (s *RateLimitService) observeAnthropicQuotaWindows(ctx context.Context, acc
 					used = &pct
 				}
 			}
-			_ = s.quotaWindowLedger.ObserveUpstream(ctx, QuotaWindowObservation{
+			if err := s.quotaWindowLedger.ObserveUpstream(ctx, QuotaWindowObservation{
 				AccountID: account.ID, Platform: firstNonEmptyPlatform(account.Platform, PlatformAnthropic),
 				Kind: "7d", EndAt: endAt, WindowMinutes: 10080, UsedPercent: used, ObservedAt: now,
-			})
+			}); err != nil {
+				slog.Warn("quota_window_ledger_failed", "op", "observe_anthropic_7d", "account_id", account.ID, "kind", "7d", "error", err)
+			}
 		}
 	}
 }

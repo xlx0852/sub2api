@@ -58,6 +58,18 @@ func TestSyncGrokBillingSchedulingStatePausesUntilWeeklyReset(t *testing.T) {
 	require.Contains(t, repo.updates[83], grokBillingRateLimitUntilKey)
 }
 
+func TestGrokBillingExhaustionDoesNotUseRetiredCalendarBillingPeriod(t *testing.T) {
+	now := time.Date(2026, 8, 9, 2, 0, 0, 0, time.UTC)
+	percent := 100.0
+	billing := &xai.BillingSnapshot{
+		PeriodType:       "weekly",
+		UsagePercent:     &percent,
+		BillingPeriodEnd: now.Add(20 * time.Hour).Format(time.RFC3339Nano),
+	}
+
+	require.True(t, grokBillingExhaustionResetAt(billing, now).IsZero())
+}
+
 func TestSyncGrokBillingSchedulingStateClearsRecoveredBillingPause(t *testing.T) {
 	percent := 42.0
 	account := &Account{

@@ -338,25 +338,31 @@ slog.Info("openai_quota_reset_success",
 		}
 
 	// calibrateQuotaWindowsAfterReset re-fetches /wham/usage and feeds the ledger.
-	// Runs async so the reset API stays fast; failures are non-fatal.
+	// Upstream sometimes lags right after a reset-card consume; poll briefly so the
+	// open window end aligns to the real new reset_at instead of now+period.
 	func (s *OpenAIQuotaService) calibrateQuotaWindowsAfterReset(accountID int64) {
 		if s == nil || s.quotaWindowLedger == nil || accountID <= 0 {
 			return
 		}
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), openaiQuotaUpstreamTimeout+3*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*openaiQuotaUpstreamTimeout+6*time.Second)
 			defer cancel()
-			// Small delay: upstream sometimes lags right after consume.
-			time.Sleep(800 * time.Millisecond)
-			usage, err := s.QueryUsage(ctx, accountID)
-			if err != nil || usage == nil {
-				if err != nil {
-					slog.Warn("openai_quota_post_reset_calibrate_failed", "account_id", accountID, "error", err)
+			for attempt := 0; attempt < 4; attempt++ {
+				if attempt > 0 {
+					time.Sleep(time.Duration(700+attempt*400) * time.Millisecond)
+				} else {
+					time.Sleep(700 * time.Millisecond)
 				}
+				usage, err := s.QueryUsage(ctx, accountID)
+				if err != nil || usage == nil {
+					if err != nil {
+						slog.Warn("openai_quota_post_reset_calibrate_failed", "account_id", accountID, "attempt", attempt, "error", err)
+					}
+					continue
+				}
+				observeOpenAIQuotaUsage(ctx, s.quotaWindowLedger, accountID, usage, time.Now())
 				return
 			}
-			now := time.Now()
-			observeOpenAIQuotaUsage(ctx, s.quotaWindowLedger, accountID, usage, now)
 		}()
 	}
 

@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"math"
+	"strconv"
+	"sync"
 	"time"
 )
 
@@ -13,6 +16,7 @@ const (
 	QuotaWindowSourceSeed      = "seed"
 
 	QuotaWindowCloseObserved  = "observed_reset"
+	QuotaWindowCloseCleared   = "provider_zero_reset"
 	QuotaWindowCloseResetCard = "reset_card"
 	QuotaWindowCloseReplaced  = "replaced"
 )
@@ -48,6 +52,32 @@ type AccountQuotaWindowRepository interface {
 	CloseOpen(ctx context.Context, accountID int64, kind string, endAt time.Time, reason string, used *float64) error
 }
 
+// AccountQuotaUsageObservation is one upstream utilization snapshot aligned
+// with local consumption ending at ObservedAt.
+type AccountQuotaUsageObservation struct {
+	ID            int64
+	QuotaWindowID int64
+	AccountID     int64
+	Platform      string
+	Kind          string
+	ObservedAt    time.Time
+	UsedPercent   float64
+	Requests      int64
+	Tokens        int64
+	AccountCost   float64
+	StandardCost  float64
+	UserCost      float64
+	CreatedAt     time.Time
+}
+
+// AccountQuotaObservationRepository is optional so existing window-ledger
+// fakes remain source compatible while the SQL repository provides samples.
+type AccountQuotaObservationRepository interface {
+	HasObservation(ctx context.Context, quotaWindowID int64, usedPercent float64) (bool, error)
+	InsertObservation(ctx context.Context, observation *AccountQuotaUsageObservation) (bool, error)
+	ListObservations(ctx context.Context, quotaWindowID int64, limit int) ([]*AccountQuotaUsageObservation, error)
+}
+
 // QuotaWindowObservation is a live upstream snapshot for one kind.
 type QuotaWindowObservation struct {
 	AccountID     int64
@@ -64,19 +94,129 @@ const quotaWindowSkew = 2 * time.Minute
 
 // QuotaWindowLedger records real windows from upstream snapshots and reset cards.
 type QuotaWindowLedger struct {
-	repo AccountQuotaWindowRepository
+	repo            AccountQuotaWindowRepository
+	observationRepo AccountQuotaObservationRepository
+	statsReader     accountWindowStatsRangeReader
+	// lockMu guards per account+kind mutexes so concurrent observe/reset on the
+	// same window cannot double-seed or interleave close/open.
+	lockMu sync.Mutex
+	locks  map[string]*sync.Mutex
+}
+
+func (l *QuotaWindowLedger) SetObservationStatsReader(reader accountWindowStatsRangeReader) {
+	if l == nil {
+		return
+	}
+	l.statsReader = reader
 }
 
 func NewQuotaWindowLedger(repo AccountQuotaWindowRepository) *QuotaWindowLedger {
 	if repo == nil {
 		return nil
 	}
-	return &QuotaWindowLedger{repo: repo}
+	ledger := &QuotaWindowLedger{repo: repo, locks: make(map[string]*sync.Mutex)}
+	if observationRepo, ok := repo.(AccountQuotaObservationRepository); ok {
+		ledger.observationRepo = observationRepo
+	}
+	return ledger
+}
+
+// RecordUsageObservation appends a sample only when this window has not
+// already recorded the same upstream percentage. Failures are returned to the
+// caller, which must keep quota refresh/request forwarding non-blocking.
+func (l *QuotaWindowLedger) RecordUsageObservation(ctx context.Context, accountID int64, kind string, observedAt time.Time, usedPercent float64, stats *WindowStats) error {
+	if l == nil || l.repo == nil || l.observationRepo == nil || stats == nil || accountID <= 0 || kind == "" {
+		return nil
+	}
+	if math.IsNaN(usedPercent) || math.IsInf(usedPercent, 0) || usedPercent < 0 || usedPercent > 100 {
+		return nil
+	}
+	window, err := l.repo.GetOpen(ctx, accountID, kind)
+	if err != nil || window == nil {
+		return err
+	}
+	if observedAt.IsZero() {
+		observedAt = time.Now()
+	}
+	if observedAt.Before(window.StartAt) {
+		return nil
+	}
+	if observedAt.After(window.EndAt) {
+		observedAt = window.EndAt
+	}
+	_, err = l.observationRepo.InsertObservation(ctx, &AccountQuotaUsageObservation{
+		QuotaWindowID: window.ID,
+		AccountID:     accountID,
+		Platform:      window.Platform,
+		Kind:          kind,
+		ObservedAt:    observedAt,
+		UsedPercent:   usedPercent,
+		Requests:      stats.Requests,
+		Tokens:        stats.Tokens,
+		AccountCost:   stats.Cost,
+		StandardCost:  stats.StandardCost,
+		UserCost:      stats.UserCost,
+	})
+	return err
+}
+
+func (l *QuotaWindowLedger) ListOpenWindowObservations(ctx context.Context, accountID int64, kind string, limit int) ([]*AccountQuotaUsageObservation, error) {
+	if l == nil || l.repo == nil || l.observationRepo == nil || accountID <= 0 || kind == "" {
+		return nil, nil
+	}
+	window, err := l.repo.GetOpen(ctx, accountID, kind)
+	if err != nil || window == nil {
+		return nil, err
+	}
+	return l.observationRepo.ListObservations(ctx, window.ID, limit)
+}
+
+func (l *QuotaWindowLedger) lockFor(accountID int64, kind string) *sync.Mutex {
+	key := strconv.FormatInt(accountID, 10) + "|" + kind
+	l.lockMu.Lock()
+	defer l.lockMu.Unlock()
+	m := l.locks[key]
+	if m == nil {
+		m = &sync.Mutex{}
+		l.locks[key] = m
+	}
+	return m
+}
+
+func (l *QuotaWindowLedger) logErr(op string, accountID int64, kind string, err error) {
+	if err == nil {
+		return
+	}
+	slog.Warn("quota_window_ledger_failed", "op", op, "account_id", accountID, "kind", kind, "error", err)
+}
+
+// IsWaitingActivation reports whether the last known period ended without a
+// successor. Callers use it to avoid inference probes that would themselves
+// start a lazy rolling window.
+func (l *QuotaWindowLedger) IsWaitingActivation(ctx context.Context, accountID int64, kind string, now time.Time) bool {
+	if l == nil || l.repo == nil || accountID <= 0 || kind == "" {
+		return false
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	open, err := l.repo.GetOpen(ctx, accountID, kind)
+	if err != nil {
+		return false
+	}
+	if open != nil {
+		return !open.EndAt.After(now)
+	}
+	rows, err := l.repo.ListByAccount(ctx, accountID, kind, 1)
+	if err != nil || len(rows) == 0 || rows[0] == nil {
+		return false
+	}
+	return rows[0].ClosedReason == QuotaWindowCloseCleared
 }
 
 // ObserveUpstream applies a live upstream window. Passive the open ledger row no longer
 // matches (new reset_at / start jumped), the open row is closed and a new one opened.
-func (l *QuotaWindowLedger) ObserveUpstream(ctx context.Context, obs QuotaWindowObservation) error {
+func (l *QuotaWindowLedger) ObserveUpstream(ctx context.Context, obs QuotaWindowObservation) (returnErr error) {
 	if l == nil || l.repo == nil {
 		return nil
 	}
@@ -98,12 +238,28 @@ func (l *QuotaWindowLedger) ObserveUpstream(ctx context.Context, obs QuotaWindow
 	if !obs.EndAt.After(start) {
 		return nil
 	}
+	defer func() {
+		if returnErr == nil {
+			l.captureObservation(ctx, obs, now)
+		}
+	}()
+
+	mu := l.lockFor(obs.AccountID, obs.Kind)
+	mu.Lock()
+	defer mu.Unlock()
 
 	open, err := l.repo.GetOpen(ctx, obs.AccountID, obs.Kind)
 	if err != nil {
 		return err
 	}
+	// Some providers clear usage first and only start the next rolling period on
+	// first real use. A zeroed observation whose countdown has elapsed closes the
+	// old period without inventing a replacement window.
+	dormant := !obs.EndAt.After(now.Add(quotaWindowSkew)) && quotaUsedNearZero(obs.UsedPercent)
 	if open == nil {
+		if dormant {
+			return nil
+		}
 		w := &AccountQuotaWindow{
 			AccountID:       obs.AccountID,
 			Platform:        obs.Platform,
@@ -118,6 +274,16 @@ func (l *QuotaWindowLedger) ObserveUpstream(ctx context.Context, obs QuotaWindow
 		_, err = l.repo.InsertOpen(ctx, w)
 		return err
 	}
+	if dormant {
+		closeEnd := obs.EndAt
+		if closeEnd.After(now) {
+			closeEnd = now
+		}
+		if closeEnd.Before(open.StartAt) {
+			closeEnd = open.StartAt.Add(time.Second)
+		}
+		return l.repo.CloseOpen(ctx, obs.AccountID, obs.Kind, closeEnd, QuotaWindowCloseCleared, obs.UsedPercent)
+	}
 
 	// Same cycle: upstream often reports a RELATIVE countdown (reset_after_seconds),
 	// so obs.end drifts with observation time even inside one window. Any overlap
@@ -128,9 +294,14 @@ func (l *QuotaWindowLedger) ObserveUpstream(ctx context.Context, obs QuotaWindow
 	if endDelta <= quotaWindowSkew.Seconds() {
 		return l.repo.UpsertOpenRefresh(ctx, obs.AccountID, obs.Kind, obs.EndAt, obs.UsedPercent, qwIntPtr(mins))
 	}
-	// No overlap only when the observed window starts at/after the open end.
+	// A provider can reset a period early, so the new seven-day interval may
+	// overlap the old interval's former expected range. A credible reset-at jump
+	// together with usage returning near zero is a new real window regardless of
+	// overlap. Used-percent alone is not enough because upstream can correct it.
+	earlyReset := obs.EndAt.After(open.EndAt.Add(quotaWindowSkew)) && quotaUsageReset(open.UsedPercentOpen, obs.UsedPercent)
+	// Otherwise, no overlap means the new period started after the old one ended.
 	nonOverlap := !start.Before(open.EndAt.Add(-quotaWindowSkew))
-	if !nonOverlap {
+	if !nonOverlap && !earlyReset {
 		return l.repo.UpsertOpenRefresh(ctx, obs.AccountID, obs.Kind, obs.EndAt, obs.UsedPercent, qwIntPtr(mins))
 	}
 
@@ -164,6 +335,44 @@ func (l *QuotaWindowLedger) ObserveUpstream(ctx context.Context, obs QuotaWindow
 	return err
 }
 
+func (l *QuotaWindowLedger) captureObservation(ctx context.Context, obs QuotaWindowObservation, observedAt time.Time) {
+	if l == nil || l.repo == nil || l.observationRepo == nil || l.statsReader == nil || obs.UsedPercent == nil {
+		return
+	}
+	window, err := l.repo.GetOpen(ctx, obs.AccountID, obs.Kind)
+	if err != nil || window == nil {
+		return
+	}
+	has, err := l.observationRepo.HasObservation(ctx, window.ID, *obs.UsedPercent)
+	if err != nil || has {
+		return
+	}
+	if observedAt.IsZero() {
+		observedAt = time.Now()
+	}
+	if observedAt.After(window.EndAt) {
+		observedAt = window.EndAt
+	}
+	stats, err := l.statsReader.GetAccountWindowStatsRange(ctx, obs.AccountID, window.StartAt, observedAt)
+	if err != nil || stats == nil {
+		return
+	}
+	err = l.RecordUsageObservation(ctx, obs.AccountID, obs.Kind, observedAt, *obs.UsedPercent, windowStatsFromAccountStats(stats))
+	l.logErr("capture_observation", obs.AccountID, obs.Kind, err)
+}
+
+func quotaUsedNearZero(used *float64) bool {
+	return used != nil && *used >= 0 && *used <= 1
+}
+
+func quotaUsageReset(previous, current *float64) bool {
+	if previous == nil || current == nil {
+		return false
+	}
+	lowWatermark := math.Max(5, *previous*0.25)
+	return *current >= 0 && *current <= lowWatermark && *previous-*current >= 5
+}
+
 // ForceResetCard closes the open window at now and opens a fresh cycle starting now.
 // Call after a successful upstream reset-card redeem (before or after re-query).
 func (l *QuotaWindowLedger) ForceResetCard(ctx context.Context, accountID int64, platform, kind string, windowMinutes int, usedAtClose *float64) error {
@@ -178,6 +387,10 @@ func (l *QuotaWindowLedger) ForceResetCard(ctx context.Context, accountID int64,
 	if mins <= 0 {
 		mins = 10080
 	}
+	mu := l.lockFor(accountID, kind)
+	mu.Lock()
+	defer mu.Unlock()
+
 	open, err := l.repo.GetOpen(ctx, accountID, kind)
 	if err != nil {
 		return err
@@ -230,7 +443,6 @@ func defaultMinutesForQuotaKind(kind string) int {
 
 func qwIntPtr(v int) *int { return &v }
 
-
 // quotaWindowFieldSpec maps one platform window kind onto extra/snapshot keys.
 type quotaWindowFieldSpec struct {
 	Kind        string
@@ -238,7 +450,7 @@ type quotaWindowFieldSpec struct {
 	UsedKey     string // percent 0-100 when available
 	MinutesKey  string
 	DefaultMins int
-	// UsedIsUtilization: Kimi stores 0-1 utilization; convert to percent.
+	// UsedIsUtilization marks providers that persist utilization as a 0-1 ratio.
 	UsedIsUtilization bool
 }
 
@@ -249,8 +461,8 @@ var platformQuotaWindowSpecs = map[string][]quotaWindowFieldSpec{
 		{Kind: "7d", EndKey: "codex_7d_reset_at", UsedKey: "codex_7d_used_percent", MinutesKey: "codex_7d_window_minutes", DefaultMins: 10080},
 	},
 	PlatformKimi: {
-		{Kind: "5h", EndKey: "kimi_quota_5h_reset_at", UsedKey: "kimi_quota_5h_utilization", DefaultMins: 300, UsedIsUtilization: true},
-		{Kind: "7d", EndKey: "kimi_quota_7d_reset_at", UsedKey: "kimi_quota_7d_utilization", DefaultMins: 10080, UsedIsUtilization: true},
+		{Kind: "5h", EndKey: "kimi_quota_5h_reset_at", UsedKey: "kimi_quota_5h_utilization", DefaultMins: 300},
+		{Kind: "7d", EndKey: "kimi_quota_7d_reset_at", UsedKey: "kimi_quota_7d_utilization", DefaultMins: 10080},
 	},
 	// Claude passive 7d sampled from response headers into extra (unix seconds).
 	PlatformAnthropic: {
@@ -273,12 +485,16 @@ func observePlatformQuotaWindowUpdates(ctx context.Context, ledger *QuotaWindowL
 		if obs == nil {
 			continue
 		}
-		_ = ledger.ObserveUpstream(ctx, *obs)
+		if err := ledger.ObserveUpstream(ctx, *obs); err != nil {
+			ledger.logErr("observe", accountID, spec.Kind, err)
+		}
 	}
 	// Grok nested billing snapshot may arrive as a whole object under grok_billing_snapshot.
 	if platform == PlatformGrok {
 		if obs := observationFromGrokBillingUpdate(accountID, updates, now); obs != nil {
-			_ = ledger.ObserveUpstream(ctx, *obs)
+			if err := ledger.ObserveUpstream(ctx, *obs); err != nil {
+				ledger.logErr("observe_grok", accountID, obs.Kind, err)
+			}
 		}
 	}
 }
@@ -303,7 +519,9 @@ func ObserveAccountQuotaWindows(ctx context.Context, ledger *QuotaWindowLedger, 
 	// Grok billing object.
 	if platform == PlatformGrok && acc.Extra != nil {
 		if obs := observationFromGrokBillingUpdate(acc.ID, acc.Extra, now); obs != nil {
-			_ = ledger.ObserveUpstream(ctx, *obs)
+			if err := ledger.ObserveUpstream(ctx, *obs); err != nil {
+				ledger.logErr("observe_grok_account", acc.ID, obs.Kind, err)
+			}
 		}
 	}
 	// Claude / Anthropic session rolling window on account columns.
@@ -329,10 +547,12 @@ func ObserveAccountQuotaWindows(ctx context.Context, ledger *QuotaWindowLedger, 
 					used = &v
 				}
 			}
-			_ = ledger.ObserveUpstream(ctx, QuotaWindowObservation{
+			if err := ledger.ObserveUpstream(ctx, QuotaWindowObservation{
 				AccountID: acc.ID, Platform: platform, Kind: "session",
 				EndAt: end, WindowMinutes: mins, UsedPercent: used, ObservedAt: now,
-			})
+			}); err != nil {
+				ledger.logErr("observe_session", acc.ID, "session", err)
+			}
 			// Also pin start via Observe: ledger derives start=end-mins; if session length
 			// differs, WindowMinutes carries the true span.
 			_ = mins
@@ -394,21 +614,17 @@ func ForceResetAccountWindows(ctx context.Context, ledger *QuotaWindowLedger, ac
 				}
 				used = extraFloat(acc.Extra, "codex_5h_used_percent")
 			case platform == PlatformKimi && kind == "7d":
-				if u := extraFloat(acc.Extra, "kimi_quota_7d_utilization"); u != nil {
-					v := *u * 100
-					used = &v
-				}
+				used = extraFloat(acc.Extra, "kimi_quota_7d_utilization")
 			case platform == PlatformKimi && kind == "5h":
-				if u := extraFloat(acc.Extra, "kimi_quota_5h_utilization"); u != nil {
-					v := *u * 100
-					used = &v
-				}
+				used = extraFloat(acc.Extra, "kimi_quota_5h_utilization")
 			}
 		}
 		if mins <= 0 {
 			mins = defaultMinutesForQuotaKind(kind)
 		}
-		_ = ledger.ForceResetCard(ctx, acc.ID, platform, kind, mins, used)
+		if err := ledger.ForceResetCard(ctx, acc.ID, platform, kind, mins, used); err != nil {
+			ledger.logErr("force_reset", acc.ID, kind, err)
+		}
 	}
 }
 
@@ -464,31 +680,19 @@ func observationFromGrokBillingUpdate(accountID int64, updates map[string]any, n
 	if m == nil {
 		return nil
 	}
-	endAt := anyToTimeFlexible(firstNonNil(m["period_end"], m["billing_period_end"]))
-	startAt := anyToTimeFlexible(firstNonNil(m["period_start"], m["billing_period_start"]))
-	if endAt == nil {
+	// billing_period_* was the retired calendar-month accounting period. Only
+	// the official current period may create a quota ledger window now.
+	endAt := anyToTimeFlexible(m["period_end"])
+	startAt := anyToTimeFlexible(m["period_start"])
+	if startAt == nil || endAt == nil || !endAt.After(*startAt) {
 		return nil
 	}
-	mins := 7 * 24 * 60
-	if startAt != nil && endAt.After(*startAt) {
-		mins = int(endAt.Sub(*startAt).Minutes())
-		if mins <= 0 {
-			mins = 7 * 24 * 60
-		}
+	mins := int(endAt.Sub(*startAt).Minutes())
+	if mins <= 0 {
+		return nil
 	}
-	kind := "7d"
-	if mins >= 20*24*60 {
-		kind = "30d"
-	} else if mins >= 20 && mins <= 30*60 {
-		// 20h-30h → 24h free-style
-		if mins <= 36*60 {
-			kind = "24h"
-		}
-	}
-	var used *float64
-	if p := anyToFloat64(firstNonNil(m["usage_percent"], m["used_percent"])); p != nil {
-		used = p
-	}
+	kind, _ := classifyQuotaWindow("7d", mins)
+	used := grokBillingUsedPercent(m)
 	return &QuotaWindowObservation{
 		AccountID: accountID, Platform: PlatformGrok, Kind: kind,
 		EndAt: *endAt, WindowMinutes: mins, UsedPercent: used, ObservedAt: now,
@@ -564,7 +768,6 @@ func anyToFloatValue(v any) (float64, bool) {
 		return 0, false
 	}
 }
-
 
 // observeOpenAIQuotaUsage maps /wham/usage rate_limit envelopes into ledger observations.
 func observeOpenAIQuotaUsage(ctx context.Context, ledger *QuotaWindowLedger, accountID int64, usage *OpenAIQuotaUsage, now time.Time) {

@@ -97,14 +97,13 @@ func (r *accountQuotaWindowRepository) InsertOpen(ctx context.Context, w *servic
 }
 
 func (r *accountQuotaWindowRepository) UpsertOpenRefresh(ctx context.Context, accountID int64, kind string, endAt time.Time, used *float64, windowMinutes *int) error {
-	// start_at 必须随 end_at 同步平移（start_at = end_at − window_minutes），
-	// 否则上游 reset_at 在同一窗口内漂移（相对倒计时/校准）时窗口长度失真，
-	// 前端 live bar 会与历史投影（按 window_minutes 步长）不一致。
+	// Refresh only end/used on the open window. start_at is NOT moved: it is the
+	// real cycle boundary (set at observe/reset time); sliding it with end would
+	// corrupt the anchor used by history projection and later close logic.
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE account_quota_windows
 		SET end_at = $3,
 		    window_minutes = COALESCE($4, window_minutes),
-		    start_at = $3 - (COALESCE($4, window_minutes) * INTERVAL '1 minute'),
 		    used_percent_open = COALESCE($5, used_percent_open),
 		    updated_at = NOW()
 		WHERE account_id = $1 AND kind = $2 AND is_open = TRUE`,
@@ -177,6 +176,74 @@ func (r *accountQuotaWindowRepository) CloseAndOpen(
 		return nil, err
 	}
 	return out, nil
+}
+
+func (r *accountQuotaWindowRepository) InsertObservation(ctx context.Context, observation *service.AccountQuotaUsageObservation) (bool, error) {
+	if observation == nil {
+		return false, fmt.Errorf("nil observation")
+	}
+	result, err := r.db.ExecContext(ctx, `
+		INSERT INTO account_quota_usage_observations (
+			quota_window_id, account_id, platform, kind, observed_at, used_percent,
+			requests, tokens, account_cost, standard_cost, user_cost
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		ON CONFLICT (quota_window_id, used_percent) DO NOTHING`,
+		observation.QuotaWindowID, observation.AccountID, observation.Platform, observation.Kind,
+		observation.ObservedAt, observation.UsedPercent, observation.Requests, observation.Tokens,
+		observation.AccountCost, observation.StandardCost, observation.UserCost,
+	)
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	return rows > 0, err
+}
+
+func (r *accountQuotaWindowRepository) HasObservation(ctx context.Context, quotaWindowID int64, usedPercent float64) (bool, error) {
+	var exists bool
+	err := r.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM account_quota_usage_observations
+			WHERE quota_window_id = $1 AND used_percent = $2
+		)`, quotaWindowID, usedPercent).Scan(&exists)
+	return exists, err
+}
+
+func (r *accountQuotaWindowRepository) ListObservations(ctx context.Context, quotaWindowID int64, limit int) ([]*service.AccountQuotaUsageObservation, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 120
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, quota_window_id, account_id, platform, kind, observed_at, used_percent,
+		       requests, tokens, account_cost, standard_cost, user_cost, created_at
+		FROM (
+			SELECT id, quota_window_id, account_id, platform, kind, observed_at, used_percent,
+			       requests, tokens, account_cost, standard_cost, user_cost, created_at
+			FROM account_quota_usage_observations
+			WHERE quota_window_id = $1
+			ORDER BY observed_at DESC
+			LIMIT $2
+		) recent
+		ORDER BY observed_at ASC`, quotaWindowID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]*service.AccountQuotaUsageObservation, 0)
+	for rows.Next() {
+		observation := &service.AccountQuotaUsageObservation{}
+		if err := rows.Scan(
+			&observation.ID, &observation.QuotaWindowID, &observation.AccountID,
+			&observation.Platform, &observation.Kind, &observation.ObservedAt,
+			&observation.UsedPercent, &observation.Requests, &observation.Tokens,
+			&observation.AccountCost, &observation.StandardCost, &observation.UserCost,
+			&observation.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		result = append(result, observation)
+	}
+	return result, rows.Err()
 }
 
 type aqScan interface {

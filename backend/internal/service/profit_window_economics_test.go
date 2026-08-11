@@ -43,6 +43,8 @@ func TestGetAccountWindowEconomics_HistoryCurrentUpcoming(t *testing.T) {
 		{StartAt: pastStart, EndAt: pastEnd, Kind: "7d", Label: "7d"},
 		{StartAt: curStart, EndAt: curEnd, Kind: "7d", Label: "7d"},
 		{StartAt: futureStart, EndAt: futureEnd, Kind: "7d", Label: "7d"},
+		// Same visible minute from a second projection anchor must not produce a duplicate row.
+		{StartAt: futureStart.Add(20 * time.Second), EndAt: futureEnd.Add(20 * time.Second), Kind: "7d", Label: "7d"},
 	})
 	if err != nil {
 		t.Fatal(err)

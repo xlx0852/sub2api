@@ -18,11 +18,9 @@ import (
 
 // ProfitHandler 账号利润分析
 type ProfitHandler struct {
-	profitService      *service.ProfitService
-	overviewCache      *snapshotCache
-	forecastCache      *snapshotCache
-	loadOverview       func(context.Context, time.Time, time.Time, string) (*service.ProfitOverviewResponse, error)
-	loadSupplyForecast func(context.Context, int, float64, string) (*service.SupplyForecastResponse, error)
+	profitService *service.ProfitService
+	overviewCache *snapshotCache
+	loadOverview  func(context.Context, time.Time, time.Time, string) (*service.ProfitOverviewResponse, error)
 }
 
 // NewProfitHandler creates a new admin profit handler
@@ -30,19 +28,11 @@ func NewProfitHandler(profitService *service.ProfitService) *ProfitHandler {
 	h := &ProfitHandler{
 		profitService: profitService,
 		overviewCache: newSnapshotCache(5 * time.Minute).WithMaxEntries(64),
-		forecastCache: newSnapshotCache(15 * time.Minute).WithMaxEntries(32),
 	}
 	if profitService != nil {
 		h.loadOverview = profitService.GetOverview
-		h.loadSupplyForecast = profitService.GetSupplyForecast
 	}
 	return h
-}
-
-type supplyForecastCacheKey struct {
-	HorizonDays  int     `json:"horizon_days"`
-	SafetyMargin float64 `json:"safety_margin"`
-	Timezone     string  `json:"timezone"`
 }
 
 type profitOverviewCacheKey struct {
@@ -181,76 +171,6 @@ func (h *ProfitHandler) GetOverview(c *gin.Context) {
 		return
 	}
 	c.Header("X-Profit-Snapshot-Cache", cacheStatusValue(hit))
-	if cached.ETag != "" {
-		c.Header("ETag", cached.ETag)
-		c.Header("Vary", "If-None-Match")
-		if ifNoneMatchMatched(c.GetHeader("If-None-Match"), cached.ETag) {
-			c.Status(http.StatusNotModified)
-			return
-		}
-	}
-	response.Success(c, cached.Payload)
-}
-
-// GetSupplyForecast returns a cached operational estimate of stored-value demand and upstream supply.
-// GET /api/v1/admin/profit/supply-forecast?horizon_days=30&safety_margin=0.2&timezone=
-func (h *ProfitHandler) GetSupplyForecast(c *gin.Context) {
-	if h.loadSupplyForecast == nil {
-		response.Error(c, 500, "Supply forecast is unavailable")
-		return
-	}
-	horizonDays := service.SupplyForecastDefaultHorizonDays
-	if raw := strings.TrimSpace(c.Query("horizon_days")); raw != "" {
-		parsed, err := strconv.Atoi(raw)
-		if err != nil || (parsed != 7 && parsed != 30 && parsed != 60 && parsed != 90) {
-			response.Error(c, 400, "horizon_days must be one of 7, 30, 60, 90")
-			return
-		}
-		horizonDays = parsed
-	}
-	safetyMargin := service.SupplyForecastDefaultSafetyMargin
-	if raw := strings.TrimSpace(c.Query("safety_margin")); raw != "" {
-		parsed, err := strconv.ParseFloat(raw, 64)
-		if err != nil || parsed < 0 || parsed > 1 {
-			response.Error(c, 400, "safety_margin must be between 0 and 1")
-			return
-		}
-		safetyMargin = parsed
-	}
-	tzName := timezone.Name()
-	if userTZ := c.Query("timezone"); userTZ != "" {
-		tz, err := time.LoadLocation(userTZ)
-		if err != nil {
-			response.Error(c, 400, "Invalid timezone")
-			return
-		}
-		tzName = tz.String()
-	}
-	cacheKey := mustMarshalDashboardCacheKey(supplyForecastCacheKey{
-		HorizonDays:  horizonDays,
-		SafetyMargin: safetyMargin,
-		Timezone:     tzName,
-	})
-	load := func() (any, error) {
-		return h.loadSupplyForecast(c.Request.Context(), horizonDays, safetyMargin, tzName)
-	}
-	forceRefresh := parseBoolQueryWithDefault(c.Query("refresh"), false)
-	var (
-		cached snapshotCacheEntry
-		hit    bool
-		err    error
-	)
-	if forceRefresh {
-		cached, err = h.forecastCache.Refresh(cacheKey, load)
-	} else {
-		cached, hit, err = h.forecastCache.GetOrLoad(cacheKey, load)
-	}
-	if err != nil {
-		slog.Error("supply_forecast_failed", "error", err)
-		response.Error(c, 500, "Failed to get supply forecast")
-		return
-	}
-	c.Header("X-Supply-Forecast-Cache", cacheStatusValue(hit))
 	if cached.ETag != "" {
 		c.Header("ETag", cached.ETag)
 		c.Header("Vary", "If-None-Match")

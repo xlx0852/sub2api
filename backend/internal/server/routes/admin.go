@@ -117,10 +117,9 @@ func RegisterAdminRoutes(
 func registerProfitRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	profit := admin.Group("/profit")
 	profit.GET("/overview", h.Admin.Profit.GetOverview)
-	profit.GET("/supply-forecast", h.Admin.Profit.GetSupplyForecast)
 	profit.GET("/summary", h.Admin.Profit.GetSummary)
 	profit.GET("/trend", h.Admin.Profit.GetTrend)
-		profit.POST("/accounts/:account_id/window-economics", h.Admin.Profit.GetAccountWindowEconomics)
+	profit.POST("/accounts/:account_id/window-economics", h.Admin.Profit.GetAccountWindowEconomics)
 	profit.GET("/configs", h.Admin.Profit.ListCostConfigs)
 	profit.GET("/configs/:account_id/cycles", h.Admin.Profit.ListSubscriptionCycles)
 	profit.POST("/configs/:account_id/cycles", h.Admin.Profit.CreateSubscriptionCycle)
@@ -173,6 +172,8 @@ func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		ops.GET("/user-concurrency", h.Admin.Ops.GetUserConcurrencyStats)
 		ops.GET("/account-availability", h.Admin.Ops.GetAccountAvailability)
 		ops.GET("/realtime-traffic", h.Admin.Ops.GetRealtimeTrafficSummary)
+		ops.GET("/provider-status/:provider", h.Admin.Ops.GetProviderStatus)
+		ops.GET("/provider-status/:provider/history", h.Admin.Ops.ListProviderStatusHistory)
 
 		// Alerts (rules + events)
 		ops.GET("/alert-rules", h.Admin.Ops.ListAlertRules)
