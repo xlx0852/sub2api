@@ -43,8 +43,11 @@
         data-testid="usage-full-estimate"
         class="mt-1 rounded-md border border-dashed border-gray-200 bg-white/70 p-1.5 dark:border-dark-600 dark:bg-dark-800/40"
       >
-        <div class="mb-1 text-[9px] font-medium text-gray-400 dark:text-gray-500">
-          {{ t('usage.fullUtilizationEstimate') }}
+        <div class="mb-1 flex items-center gap-1 text-[9px] font-medium text-gray-400 dark:text-gray-500">
+          <span>{{ t('usage.fullUtilizationEstimate') }}</span>
+          <span v-if="estimateConfidenceLabel" data-testid="usage-estimate-confidence" class="rounded bg-gray-100 px-1 py-0.5 dark:bg-dark-700">
+            {{ estimateConfidenceLabel }}
+          </span>
         </div>
         <UsageStatLine
           :requests="formatEstimatedRequests"
@@ -53,6 +56,16 @@
           :user-cost="displayedFullEstimate?.user_cost != null ? formatEstimatedUserCost : null"
           stacked
         />
+        <div v-if="estimateRange" data-testid="usage-estimate-range" class="mt-1 text-[9px] tabular-nums text-gray-400 dark:text-gray-500">
+          {{ t('usage.fullEstimateRange', { range: estimateRange, span: estimateSpan }) }}
+        </div>
+      </div>
+      <div
+        v-else-if="estimateInsufficient"
+        data-testid="usage-estimate-insufficient"
+        class="mt-1 rounded-md border border-dashed border-gray-200 bg-white/70 p-1.5 text-[9px] text-gray-400 dark:border-dark-600 dark:bg-dark-800/40 dark:text-gray-500"
+      >
+        {{ t('usage.fullEstimateInsufficient') }}
       </div>
       <div
         v-if="visibleExtraStats.length > 0"
@@ -150,6 +163,7 @@ function computeRawFullEstimate(
 ): WindowStats | null {
   if (!stats) return null
   if (!(stats.requests > 0 || stats.tokens > 0)) return null
+  if (stats.full_estimate?.confidence === 'insufficient') return null
 
   const hasBackendFull =
     stats.full_requests != null ||
@@ -167,7 +181,7 @@ function computeRawFullEstimate(
   }
 
   // Legacy fallback for older backends without full_*.
-  if (utilization <= 0 || utilization > 100) return null
+  if (utilization < 5 || utilization > 100) return null
   const factor = 100 / utilization
   return {
     requests: stats.requests * factor,
@@ -266,11 +280,23 @@ onBeforeUnmount(() => {
 })
 
 const showFullUtilizationEstimate = computed(() => displayedFullEstimate.value != null)
+const estimateInsufficient = computed(() => props.windowStats?.full_estimate?.confidence === 'insufficient')
+const estimateConfidenceLabel = computed(() => {
+  const confidence = props.windowStats?.full_estimate?.confidence
+  if (!confidence || confidence === 'insufficient') return ''
+  return t(`usage.fullEstimateConfidence.${confidence}`)
+})
+const estimateRange = computed(() => {
+  const estimate = props.windowStats?.full_estimate
+  if (estimate?.lower_cost == null || estimate.upper_cost == null) return ''
+  return `$${estimate.lower_cost.toFixed(2)}–$${estimate.upper_cost.toFixed(2)}`
+})
+const estimateSpan = computed(() => props.windowStats?.full_estimate?.used_percent_span?.toFixed(1) ?? '0.0')
 
 const visibleExtraStats = computed(() => props.extraStats ?? [])
 
 const hasStatsRow = computed(() => {
-  return showWindowStats.value || visibleExtraStats.value.length > 0
+  return showWindowStats.value || estimateInsufficient.value || visibleExtraStats.value.length > 0
 })
 
 const colorClasses = computed(() => ({

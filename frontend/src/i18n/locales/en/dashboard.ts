@@ -54,7 +54,13 @@ export default {
     viewUsage: 'View Usage',
     checkDetailedLogs: 'Check detailed usage logs',
     redeemCode: 'Redeem Code',
-    addBalanceWithCode: 'Add balance with a code'
+    addBalanceWithCode: 'Add balance with a code',
+    affiliateCta: {
+      title: 'Invite friends, earn rebates',
+      badge: 'Earn on recharges',
+      description: 'Share your invite link and earn a rebate when your friends sign up and recharge.',
+      action: 'Invite now'
+    }
   },
 
   // Groups (shared)
@@ -286,7 +292,14 @@ export default {
     accountBilled: 'Account billed',
     resetNow: 'Now',
     resetPending: 'Pending refresh',
-    fullUtilizationEstimate: 'Estimated at 100% (current usage mix)',
+    fullUtilizationEstimate: 'API list-price-equivalent estimate',
+    fullEstimateRange: 'Range {range} · sample span {span}%',
+    fullEstimateInsufficient: 'Below 5% utilization; more samples are required before estimating a full-window amount',
+    fullEstimateConfidence: {
+      low: 'Low confidence',
+      medium: 'Medium confidence',
+      high: 'High confidence'
+    },
     accountMultiplier: 'Account rate',
     avgDuration: 'Avg Duration',
     inSelectedRange: 'in selected range',

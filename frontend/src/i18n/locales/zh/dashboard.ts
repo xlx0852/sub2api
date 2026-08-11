@@ -54,7 +54,13 @@ export default {
     viewUsage: '查看使用记录',
     checkDetailedLogs: '查看详细的使用日志',
     redeemCode: '兑换码',
-    addBalanceWithCode: '使用兑换码充值'
+    addBalanceWithCode: '使用兑换码充值',
+    affiliateCta: {
+      title: '邀请好友赚返利',
+      badge: '充值有提成',
+      description: '分享专属邀请链接，好友注册并充值后，你可按比例获得返利并转入账户余额。',
+      action: '立即邀请'
+    }
   },
 
   // Groups (shared)
@@ -290,7 +296,14 @@ export default {
     accountBilled: '账号计费',
     resetNow: '现在',
     resetPending: '待刷新',
-    fullUtilizationEstimate: '满额预估（按当前消耗结构）',
+    fullUtilizationEstimate: 'API 标价等值满额预估',
+    fullEstimateRange: '区间 {range} · 样本跨度 {span}%',
+    fullEstimateInsufficient: '当前利用率低于 5%，样本不足，暂不显示满额金额',
+    fullEstimateConfidence: {
+      low: '低置信度',
+      medium: '中置信度',
+      high: '高置信度'
+    },
     accountMultiplier: '账号倍率',
     avgDuration: '平均耗时',
     inSelectedRange: '所选范围内',

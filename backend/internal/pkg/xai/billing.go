@@ -227,13 +227,7 @@ func parseBillingConfig(cfg map[string]any) *BillingSnapshot {
 		creditUsagePercent = &zero
 	}
 	periodStart := firstString(currentPeriod, "start")
-	if periodStart == "" {
-		periodStart = firstString(cfg, "billingPeriodStart", "billing_period_start")
-	}
 	periodEnd := firstString(currentPeriod, "end")
-	if periodEnd == "" {
-		periodEnd = firstString(cfg, "billingPeriodEnd", "billing_period_end")
-	}
 
 	products := parseProductUsage(firstAny(cfg, "productUsage", "product_usage"))
 	monthlyLimit := parseCents(firstAny(cfg, "monthlyLimit", "monthly_limit"))
@@ -295,8 +289,6 @@ func parseBillingConfig(cfg map[string]any) *BillingSnapshot {
 	case hasMonthly:
 		out.PeriodType = "monthly"
 		out.UsagePercent = monthlyUsedPercent
-		out.PeriodStart = billingStart
-		out.PeriodEnd = billingEnd
 	default:
 		// Product-only payload (no weekly % / monthly dollars).
 		out.PeriodType = "unknown"

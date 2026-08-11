@@ -7,7 +7,8 @@ vi.mock('vue-i18n', async () => {
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: string) => key
+      t: (key: string, params?: Record<string, unknown>) =>
+        params ? `${key} ${Object.values(params).join(' ')}` : key
     })
   }
 })
@@ -101,7 +102,7 @@ describe('UsageProgressBar', () => {
     const wrapper = mount(UsageProgressBar, {
       props: {
         label: '5h',
-        utilization: 4,
+        utilization: 5,
         resetsAt: '2026-03-17T04:26:00Z',
         color: 'indigo',
         windowStats: {
@@ -177,6 +178,59 @@ describe('UsageProgressBar', () => {
     })
 
     expect(wrapper.find('[data-testid="usage-full-estimate"]').exists()).toBe(false)
+  })
+
+  it('低于 5% 时展示样本不足且不展示金额', () => {
+    const wrapper = mount(UsageProgressBar, {
+      props: {
+        label: '7d',
+        utilization: 4,
+        color: 'emerald',
+        windowStats: {
+          requests: 900,
+          tokens: 30_000_000,
+          cost: 94,
+          full_estimate: {
+            method: 'insufficient',
+            confidence: 'insufficient',
+            sample_count: 1,
+            used_percent_span: 0
+          }
+        }
+      }
+    })
+
+    expect(wrapper.find('[data-testid="usage-full-estimate"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="usage-estimate-insufficient"]').text()).toContain('usage.fullEstimateInsufficient')
+  })
+
+  it('展示后端增量估算的置信度和区间', () => {
+    const wrapper = mount(UsageProgressBar, {
+      props: {
+        label: '7d',
+        utilization: 20,
+        color: 'emerald',
+        windowStats: {
+          requests: 300,
+          tokens: 3_000,
+          cost: 50,
+          full_requests: 2_000,
+          full_tokens: 20_000,
+          full_cost: 300,
+          full_estimate: {
+            method: 'incremental',
+            confidence: 'medium',
+            sample_count: 2,
+            used_percent_span: 10,
+            lower_cost: 272.73,
+            upper_cost: 333.33
+          }
+        }
+      }
+    })
+
+    expect(wrapper.get('[data-testid="usage-estimate-confidence"]').text()).toContain('usage.fullEstimateConfidence.medium')
+    expect(wrapper.get('[data-testid="usage-estimate-range"]').text()).toContain('$272.73–$333.33')
   })
 
   it('满额预估对利用率小抖动防抖，不立刻改展示', async () => {
