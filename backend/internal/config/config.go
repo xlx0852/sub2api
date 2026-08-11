@@ -1337,6 +1337,17 @@ type OpsConfig struct {
 
 	// Pre-aggregation configuration.
 	Aggregation OpsAggregationConfig `mapstructure:"aggregation"`
+
+	// ProviderStatus controls best-effort collection of public provider status data.
+	ProviderStatus OpsProviderStatusConfig `mapstructure:"provider_status"`
+}
+
+type OpsProviderStatusConfig struct {
+	Enabled               bool `mapstructure:"enabled"`
+	PollIntervalSeconds   int  `mapstructure:"poll_interval_seconds"`
+	StaleAfterSeconds     int  `mapstructure:"stale_after_seconds"`
+	RequestTimeoutSeconds int  `mapstructure:"request_timeout_seconds"`
+	MaxBodyBytes          int  `mapstructure:"max_body_bytes"`
 }
 
 type OpsCleanupConfig struct {
@@ -1921,6 +1932,11 @@ func setDefaults() {
 	viper.SetDefault("ops.metrics_collector_cache.enabled", true)
 	// TTL should be slightly larger than collection interval (1m) to maximize cross-replica cache hits.
 	viper.SetDefault("ops.metrics_collector_cache.ttl", 65*time.Second)
+	viper.SetDefault("ops.provider_status.enabled", true)
+	viper.SetDefault("ops.provider_status.poll_interval_seconds", 60)
+	viper.SetDefault("ops.provider_status.stale_after_seconds", 180)
+	viper.SetDefault("ops.provider_status.request_timeout_seconds", 5)
+	viper.SetDefault("ops.provider_status.max_body_bytes", 512*1024)
 
 	// JWT
 	viper.SetDefault("jwt.secret", "")
