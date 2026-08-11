@@ -1026,6 +1026,14 @@ export interface WindowStats {
   full_cost?: number
   full_standard_cost?: number
   full_user_cost?: number
+  full_estimate?: {
+    method: 'insufficient' | 'cumulative' | 'incremental'
+    confidence: 'insufficient' | 'low' | 'medium' | 'high'
+    sample_count: number
+    used_percent_span: number
+    lower_cost?: number
+    upper_cost?: number
+  }
 }
 
 export interface UsageProgress {

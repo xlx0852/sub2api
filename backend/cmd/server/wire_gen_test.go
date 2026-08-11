@@ -55,6 +55,7 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		&service.OpsMetricsCollector{},
 		&service.OpsAggregationService{},
 		&service.OpsAlertEvaluatorService{},
+		nil, // openAIStatusCollector
 		&service.OpsCleanupService{},
 		&service.OpsScheduledReportService{},
 		opsSystemLogSinkSvc,
@@ -65,6 +66,7 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		subscriptionExpirySvc,
 		&service.UsageCleanupService{},
 		idempotencyCleanupSvc,
+		nil, // subscriptionAutoRenew
 		&service.BatchImageCleanupService{},
 		nil, // batchImageWorker
 		pricingSvc,
@@ -81,9 +83,9 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		nil, // scheduledTestRunner
 		nil, // backupSvc
 		nil, // paymentOrderExpiry
-		nil, // channelMonitorRunner
 		nil, // quotaFlusher
 		nil, // upstreamBillingProbe
+		nil, // quotaWindowSweep
 	)
 
 	require.NotPanics(t, func() {

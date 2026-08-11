@@ -696,6 +696,13 @@ dashboard_cache:
   # Enable dashboard cache
   # 启用仪表盘缓存
   enabled: true
+  provider_status:
+    # Best-effort OpenAI official status collection; never affects gateway routing.
+    enabled: true
+    poll_interval_seconds: 60
+    stale_after_seconds: 180
+    request_timeout_seconds: 5
+    max_body_bytes: 524288
   # Redis key prefix for multi-environment isolation
   # Redis key 前缀，用于多环境隔离
   key_prefix: "sub2api:"
