@@ -280,6 +280,7 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 	}
 
 	cmd := buildUsageBillingCommand(requestID, usageLog, p)
+	applyCanonicalUsageBillingAmounts(usageLog, p, cmd)
 	if cmd == nil || cmd.RequestID == "" || repo == nil {
 		postUsageBilling(ctx, p, deps)
 		return true, nil
@@ -306,6 +307,25 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 
 	finalizePostUsageBilling(billingCtx, p, deps, result)
 	return true, nil
+}
+
+// applyCanonicalUsageBillingAmounts makes the persisted customer charge and
+// every post-billing cache update consume the same six-decimal amount already
+// normalized on the billing command. AccountQuotaCost remains a separately
+// derived account-side monetary fact and is normalized independently.
+func applyCanonicalUsageBillingAmounts(usageLog *UsageLog, p *postUsageBillingParams, cmd *UsageBillingCommand) {
+	if p == nil || p.Cost == nil || cmd == nil {
+		return
+	}
+
+	canonicalActualCost := cmd.BalanceCost
+	if cmd.SubscriptionCost > 0 {
+		canonicalActualCost = cmd.SubscriptionCost
+	}
+	p.Cost.ActualCost = canonicalActualCost
+	if usageLog != nil {
+		usageLog.ActualCost = canonicalActualCost
+	}
 }
 
 func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, deps *billingDeps, result *UsageBillingApplyResult) {
