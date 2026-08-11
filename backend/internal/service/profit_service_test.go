@@ -28,31 +28,29 @@ func TestAccountCostConfigJSONContract(t *testing.T) {
 }
 
 type profitRepoStub struct {
-		configs          []*AccountCostConfig
-		cycles           map[int64][]*AccountSubscriptionCycle
-		stats            map[int64]*ProfitUsageStats
-		rangeStats       map[int64]*ProfitUsageStats
-		// rangeStatsExact keys: "accountID|startRFC3339Nano|endRFC3339Nano"
-		rangeStatsExact  map[string]*ProfitUsageStats
-		daily            []*ProfitDailyUsagePoint
-		dailyByAccount   []*ProfitAccountDailyUsagePoint
-		bestWindow       float64
-		bestWindows      map[int64]float64
-		upserted         *AccountCostConfig
-		batchInserted    []*AccountCostConfig
-		onUpsert         func(*AccountCostConfig)
-		listConfigsCalls int
-		cycleBatchCalls  int
-		rangeStatsCalls  int
-		dailyBatchCalls  int
-		bestBatchCalls   int
-		statsBatchCalls  int
-		storedValue      *StoredValueSnapshot
-		forecastSamples        []*SupplyForecastUsageSample
-		forecastSupply         map[string]int
-		forecastQuotaSnapshots []*SubscriptionQuotaSnapshot
-		cycleRevenues    map[int64]float64
-	}
+	currentUserBalance float64
+	userBalanceCalls   int
+	configs            []*AccountCostConfig
+	cycles             map[int64][]*AccountSubscriptionCycle
+	stats              map[int64]*ProfitUsageStats
+	rangeStats         map[int64]*ProfitUsageStats
+	// rangeStatsExact keys: "accountID|startRFC3339Nano|endRFC3339Nano"
+	rangeStatsExact  map[string]*ProfitUsageStats
+	daily            []*ProfitDailyUsagePoint
+	dailyByAccount   []*ProfitAccountDailyUsagePoint
+	bestWindow       float64
+	bestWindows      map[int64]float64
+	upserted         *AccountCostConfig
+	batchInserted    []*AccountCostConfig
+	onUpsert         func(*AccountCostConfig)
+	listConfigsCalls int
+	cycleBatchCalls  int
+	rangeStatsCalls  int
+	dailyBatchCalls  int
+	bestBatchCalls   int
+	statsBatchCalls  int
+	cycleRevenues    map[int64]float64
+}
 
 func (s *profitRepoStub) UpsertCostConfig(_ context.Context, cfg *AccountCostConfig) (*AccountCostConfig, error) {
 	s.upserted = cfg
@@ -60,6 +58,11 @@ func (s *profitRepoStub) UpsertCostConfig(_ context.Context, cfg *AccountCostCon
 		s.onUpsert(cfg)
 	}
 	return cfg, nil
+}
+
+func (s *profitRepoStub) GetCurrentUserBalanceTotal(context.Context) (float64, error) {
+	s.userBalanceCalls++
+	return s.currentUserBalance, nil
 }
 func (s *profitRepoStub) GetCostConfig(_ context.Context, accountID int64) (*AccountCostConfig, error) {
 	for _, c := range s.configs {
@@ -187,24 +190,24 @@ func (s *profitRepoStub) GetAccountUsageStatsBatch(_ context.Context, _ []int64,
 	return s.stats, nil
 }
 func (s *profitRepoStub) GetAccountUsageStatsForRanges(_ context.Context, ranges []ProfitAccountUsageRange) (map[int64]*ProfitUsageStats, error) {
-		s.rangeStatsCalls++
-		if len(ranges) > 0 && s.rangeStatsExact != nil {
-			out := make(map[int64]*ProfitUsageStats, len(ranges))
-			for _, r := range ranges {
-				key := fmt.Sprintf("%d|%s|%s", r.AccountID, r.Start.UTC().Format(time.RFC3339Nano), r.End.UTC().Format(time.RFC3339Nano))
-				if st, ok := s.rangeStatsExact[key]; ok {
-					out[r.AccountID] = st
-				} else {
-					out[r.AccountID] = &ProfitUsageStats{}
-				}
+	s.rangeStatsCalls++
+	if len(ranges) > 0 && s.rangeStatsExact != nil {
+		out := make(map[int64]*ProfitUsageStats, len(ranges))
+		for _, r := range ranges {
+			key := fmt.Sprintf("%d|%s|%s", r.AccountID, r.Start.UTC().Format(time.RFC3339Nano), r.End.UTC().Format(time.RFC3339Nano))
+			if st, ok := s.rangeStatsExact[key]; ok {
+				out[r.AccountID] = st
+			} else {
+				out[r.AccountID] = &ProfitUsageStats{}
 			}
-			return out, nil
 		}
-		if s.rangeStats != nil {
-			return s.rangeStats, nil
-		}
-		return s.stats, nil
+		return out, nil
 	}
+	if s.rangeStats != nil {
+		return s.rangeStats, nil
+	}
+	return s.stats, nil
+}
 func (s *profitRepoStub) GetAccountDailyUsageStats(_ context.Context, _ []int64, _, _ time.Time, _ string) ([]*ProfitAccountDailyUsagePoint, error) {
 	s.dailyBatchCalls++
 	return s.dailyByAccount, nil
@@ -227,19 +230,6 @@ func (s *profitRepoStub) GetBestWindowRevenueBatch(_ context.Context, accountIDs
 	}
 	return result, nil
 }
-func (s *profitRepoStub) GetStoredValueSnapshot(context.Context) (*StoredValueSnapshot, error) {
-	return s.storedValue, nil
-}
-func (s *profitRepoStub) GetSupplyForecastUsageSamples(context.Context, time.Time, time.Time, string) ([]*SupplyForecastUsageSample, error) {
-	return s.forecastSamples, nil
-}
-func (s *profitRepoStub) GetSchedulableSubscriptionSupply(context.Context) (map[string]int, error) {
-	return s.forecastSupply, nil
-}
-func (s *profitRepoStub) GetSubscriptionQuotaSnapshots(context.Context) ([]*SubscriptionQuotaSnapshot, error) {
-	return s.forecastQuotaSnapshots, nil
-}
-
 func TestProfitService_AmortizedSubscriptionCost(t *testing.T) {
 	cycle := &AccountSubscriptionCycle{PeriodFee: 200, PeriodDays: 30}
 	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
@@ -446,6 +436,7 @@ func TestProfitService_GetOverviewUsesBoundedBatchQueries(t *testing.T) {
 	start := time.Date(2026, 7, 28, 0, 0, 0, 0, time.UTC)
 	cycleStart := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	repo := &profitRepoStub{
+		currentUserBalance: 4321.09,
 		cycles: map[int64][]*AccountSubscriptionCycle{
 			1: {{AccountID: 1, StartsAt: cycleStart, PeriodFee: 300, PeriodDays: 30}},
 			2: {{AccountID: 2, StartsAt: cycleStart, PeriodFee: 150, PeriodDays: 30}},
@@ -478,90 +469,93 @@ func TestProfitService_GetOverviewUsesBoundedBatchQueries(t *testing.T) {
 	if overview.Summary.TotalRevenue != 220 || overview.Summary.TotalCost != 35 || overview.Summary.TotalProfit != 185 {
 		t.Fatalf("summary = %+v, want revenue/cost/profit 220/35/185", overview.Summary)
 	}
+	if overview.CurrentUserBalance != 4321.09 || repo.userBalanceCalls != 1 {
+		t.Fatalf("current user balance/calls = %v/%d, want 4321.09/1", overview.CurrentUserBalance, repo.userBalanceCalls)
+	}
 	if len(overview.Points) != 1 || overview.Points[0].Cost != 35 || overview.Points[0].Profit != 185 {
 		t.Fatalf("points = %+v, want cost/profit 35/185", overview.Points)
 	}
 	if repo.dailyBatchCalls != 1 || repo.listConfigsCalls != 1 || repo.cycleBatchCalls != 1 {
 		t.Fatalf("batch calls daily/config/cycle = %d/%d/%d, want all 1", repo.dailyBatchCalls, repo.listConfigsCalls, repo.cycleBatchCalls)
 	}
-// 列表只允许保本用的额度窗聚合；无额度窗快照时连 range 查询也应跳过。
-		// 禁止 best 5h 窗与整期计费窗（抽屉专用）。
-		if repo.bestBatchCalls != 0 {
-			t.Fatalf("overview loaded drawer-only best-window batch: %d", repo.bestBatchCalls)
-		}
-		if repo.rangeStatsCalls != 0 {
-			t.Fatalf("overview without quota windows should skip range stats, got %d", repo.rangeStatsCalls)
-		}
-		if repo.statsBatchCalls != 0 {
-			t.Fatalf("overview performed duplicate account stats query: %d", repo.statsBatchCalls)
-		}
-		if overview.GeneratedAt.IsZero() {
-			t.Fatal("overview generated_at must be set")
-		}
-		if overview.Summary.Accounts[0].WindowEfficiency != nil || overview.Summary.Accounts[0].BillingWindowRevenue != nil {
-			t.Fatalf("overview returned drawer-only metrics: %+v", overview.Summary.Accounts[0])
-		}
+	// 列表只允许保本用的额度窗聚合；无额度窗快照时连 range 查询也应跳过。
+	// 禁止 best 5h 窗与整期计费窗（抽屉专用）。
+	if repo.bestBatchCalls != 0 {
+		t.Fatalf("overview loaded drawer-only best-window batch: %d", repo.bestBatchCalls)
 	}
+	if repo.rangeStatsCalls != 0 {
+		t.Fatalf("overview without quota windows should skip range stats, got %d", repo.rangeStatsCalls)
+	}
+	if repo.statsBatchCalls != 0 {
+		t.Fatalf("overview performed duplicate account stats query: %d", repo.statsBatchCalls)
+	}
+	if overview.GeneratedAt.IsZero() {
+		t.Fatal("overview generated_at must be set")
+	}
+	if overview.Summary.Accounts[0].WindowEfficiency != nil || overview.Summary.Accounts[0].BillingWindowRevenue != nil {
+		t.Fatalf("overview returned drawer-only metrics: %+v", overview.Summary.Accounts[0])
+	}
+}
 
-	func TestProfitService_GetOverviewComputesBreakEvenWithoutDrawerQueries(t *testing.T) {
-		start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-		cycleStart := time.Date(2026, 6, 7, 0, 0, 0, 0, time.UTC)
-		winStart := start.Add(-3 * 24 * time.Hour)
-		winEnd := start.Add(4 * 24 * time.Hour)
-		repo := &profitRepoStub{
-			cycles: map[int64][]*AccountSubscriptionCycle{
-				83: {{AccountID: 83, StartsAt: cycleStart, PeriodFee: 65, PeriodDays: 90}},
-			},
-			dailyByAccount: []*ProfitAccountDailyUsagePoint{
-				{AccountID: 83, Date: "2026-08-01", Requests: 10, Revenue: 1},
-			},
-			// 额度窗内 U/A → 有效倍率 0.12；满窗外推后保本 ~0.13
-			rangeStats: map[int64]*ProfitUsageStats{
-				83: {Revenue: 4.60, MeteredCost: 38.31},
-			},
-			bestWindows: map[int64]float64{83: 999}, // 若误触发 best 查询会污染
-		}
-		svc := &ProfitService{
-			profitRepo: repo,
-			accountRepo: &profitAccountRepoStub{accounts: []Account{{
-				ID: 83, Name: "GROK-自建", Platform: PlatformGrok, Type: AccountTypeOAuth,
-				Extra: map[string]any{
-					"grok_billing_snapshot": map[string]any{
-						"period_type":   "weekly",
-						"period_start":  winStart.Format(time.RFC3339),
-						"period_end":    winEnd.Format(time.RFC3339),
-						"usage_percent": 100,
-					},
+func TestProfitService_GetOverviewComputesBreakEvenWithoutDrawerQueries(t *testing.T) {
+	start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	cycleStart := time.Date(2026, 6, 7, 0, 0, 0, 0, time.UTC)
+	winStart := start.Add(-3 * 24 * time.Hour)
+	winEnd := start.Add(4 * 24 * time.Hour)
+	repo := &profitRepoStub{
+		cycles: map[int64][]*AccountSubscriptionCycle{
+			83: {{AccountID: 83, StartsAt: cycleStart, PeriodFee: 65, PeriodDays: 90}},
+		},
+		dailyByAccount: []*ProfitAccountDailyUsagePoint{
+			{AccountID: 83, Date: "2026-08-01", Requests: 10, Revenue: 1},
+		},
+		// 额度窗内 U/A → 有效倍率 0.12；满窗外推后保本 ~0.13
+		rangeStats: map[int64]*ProfitUsageStats{
+			83: {Revenue: 4.60, MeteredCost: 38.31},
+		},
+		bestWindows: map[int64]float64{83: 999}, // 若误触发 best 查询会污染
+	}
+	svc := &ProfitService{
+		profitRepo: repo,
+		accountRepo: &profitAccountRepoStub{accounts: []Account{{
+			ID: 83, Name: "GROK-自建", Platform: PlatformGrok, Type: AccountTypeOAuth,
+			Extra: map[string]any{
+				"grok_billing_snapshot": map[string]any{
+					"period_type":   "weekly",
+					"period_start":  winStart.Format(time.RFC3339),
+					"period_end":    winEnd.Format(time.RFC3339),
+					"usage_percent": 100,
 				},
-			}}},
-		}
-
-		overview, err := svc.GetOverview(context.Background(), start, start.AddDate(0, 0, 1), "UTC")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if repo.bestBatchCalls != 0 {
-			t.Fatalf("bestBatchCalls=%d, want 0 (list skips window efficiency)", repo.bestBatchCalls)
-		}
-		if repo.rangeStatsCalls != 1 {
-			t.Fatalf("rangeStatsCalls=%d, want 1 (break-even window only)", repo.rangeStatsCalls)
-		}
-acc := overview.Summary.Accounts[0]
-			// Window efficiency is drawer-only (best 5h scan); must stay empty on list.
-			// Quota-window billing_window_* is intentionally filled for the account drawer.
-			if acc.WindowEfficiency != nil {
-				t.Fatalf("window_efficiency must stay empty on list: %+v", acc)
-			}
-			if acc.DrawerQuotaRevenue == nil {
-				t.Fatalf("expected drawer quota economics on list for drawer, got %+v", acc)
-			}
-			if acc.BreakEvenRate == nil || *acc.BreakEvenRate < 0.13 || *acc.BreakEvenRate > 0.135 {
-				t.Fatalf("break_even_rate=%v, want ~0.132", acc.BreakEvenRate)
-			}
-		if acc.BreakEvenCurrentRate == nil || *acc.BreakEvenCurrentRate < 0.11 || *acc.BreakEvenCurrentRate > 0.13 {
-			t.Fatalf("current_rate=%v, want ~0.12", acc.BreakEvenCurrentRate)
-		}
+			},
+		}}},
 	}
+
+	overview, err := svc.GetOverview(context.Background(), start, start.AddDate(0, 0, 1), "UTC")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.bestBatchCalls != 0 {
+		t.Fatalf("bestBatchCalls=%d, want 0 (list skips window efficiency)", repo.bestBatchCalls)
+	}
+	if repo.rangeStatsCalls != 1 {
+		t.Fatalf("rangeStatsCalls=%d, want 1 (break-even window only)", repo.rangeStatsCalls)
+	}
+	acc := overview.Summary.Accounts[0]
+	// Window efficiency is drawer-only (best 5h scan); must stay empty on list.
+	// Quota-window billing_window_* is intentionally filled for the account drawer.
+	if acc.WindowEfficiency != nil {
+		t.Fatalf("window_efficiency must stay empty on list: %+v", acc)
+	}
+	if acc.DrawerQuotaRevenue == nil {
+		t.Fatalf("expected drawer quota economics on list for drawer, got %+v", acc)
+	}
+	if acc.BreakEvenRate == nil || *acc.BreakEvenRate < 0.13 || *acc.BreakEvenRate > 0.135 {
+		t.Fatalf("break_even_rate=%v, want ~0.132", acc.BreakEvenRate)
+	}
+	if acc.BreakEvenCurrentRate == nil || *acc.BreakEvenCurrentRate < 0.11 || *acc.BreakEvenCurrentRate > 0.13 {
+		t.Fatalf("current_rate=%v, want ~0.12", acc.BreakEvenCurrentRate)
+	}
+}
 
 func TestProfitService_UpsertDefaults(t *testing.T) {
 	repo := &profitRepoStub{}
@@ -806,6 +800,9 @@ func TestProfitService_BillingWindow(t *testing.T) {
 	if summary.BillingWindowProfit == nil || *summary.BillingWindowProfit != -400 {
 		t.Fatalf("window profit = %v, want -400", summary.BillingWindowProfit)
 	}
+	if summary.BillingWindowRequests == nil || *summary.BillingWindowRequests != 5 {
+		t.Fatalf("window requests = %v, want 5", summary.BillingWindowRequests)
+	}
 
 	// 零成本周期仍然是有效周期，成本为 0，利润等于周期收入。
 	zeroFeeSummary := &AccountProfitSummary{CostType: AccountCostTypeSubscription}
@@ -840,7 +837,6 @@ func TestProfitService_UpsertDerivesCostTypeFromAccountAuth(t *testing.T) {
 		t.Fatalf("API Key config = %+v, want metered with no subscription fields", repo.upserted)
 	}
 }
-
 
 func TestDeriveAccountExpiresAtFromCycles(t *testing.T) {
 	now := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
@@ -946,7 +942,7 @@ func TestProfitService_IncludesBannedTrashAccounts(t *testing.T) {
 	bannedAt := time.Date(2026, 7, 11, 0, 0, 0, 0, time.UTC)
 	repo := &profitRepoStub{
 		stats: map[int64]*ProfitUsageStats{
-			1: {Requests: 10, Revenue: 50, MeteredCost: 0},
+			1:   {Requests: 10, Revenue: 50, MeteredCost: 0},
 			103: {Requests: 20, Revenue: 200, MeteredCost: 0},
 		},
 		cycles: map[int64][]*AccountSubscriptionCycle{

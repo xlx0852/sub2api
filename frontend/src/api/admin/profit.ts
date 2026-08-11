@@ -97,6 +97,15 @@ export interface ProfitQuotaWindow {
   window_minutes?: number
   recurring_until_at?: string
   recurring_from_at?: string
+  is_open?: boolean
+  source?: string
+  closed_reason?: string
+  status?: 'waiting_activation' | string
+}
+
+export interface ProfitQuotaAvailabilitySpan {
+  start_at: string
+  end_at: string
 }
 
 export interface AccountProfitSummary {
@@ -115,6 +124,7 @@ export interface AccountProfitSummary {
   five_hour_utilization?: number
   seven_day_utilization?: number
   quota_windows?: ProfitQuotaWindow[]
+  quota_availability_spans?: ProfitQuotaAvailabilitySpan[]
   window_efficiency?: number
   window_baseline_source?: string
   billing_window_start?: string
@@ -185,60 +195,9 @@ export interface ProfitTrendPoint {
 
 export interface ProfitOverviewResponse {
   generated_at: string
+  current_user_balance: number
   summary: ProfitSummaryResponse
   points: ProfitTrendPoint[]
-}
-
-export type SupplyForecastConfidence = 'high' | 'medium' | 'low'
-
-export interface PlatformSupplyForecast {
-  platform: string
-  demand_share: number
-  projected_consumption: number
-  planning_consumption: number
-  subscription_share: number
-  subscription_planning_daily: number
-  account_daily_capacity_p75?: number
-  required_subscription_accounts?: number
-  current_subscription_accounts: number
-  subscription_account_gap?: number
-  subscription_account_surplus?: number
-  sample_accounts: number
-  sample_account_days: number
-  confidence: SupplyForecastConfidence
-  subscription_unavailable_reason?: string
-  metered_share: number
-  metered_cost_ratio?: number
-  metered_procurement_budget?: number
-  metered_unavailable_reason?: string
-  // 额度驱动的订阅号供给（账号自身额度视角）
-  quota_accounts: number
-  quota_remaining_pct?: number
-  quota_exhausted: boolean
-  quota_snapshot_stale: boolean
-  account_daily_capacity_quota?: number
-}
-
-export interface SupplyForecastResponse {
-  generated_at: string
-  history_start: string
-  history_end: string
-  timezone: string
-  horizon_days: number
-  safety_margin: number
-  spendable_balance: number
-  frozen_balance: number
-  eligible_users: number
-  daily_burn_7: number
-  daily_burn_30: number
-  base_daily_demand: number
-  planning_daily_demand: number
-  projected_consumption: number
-  planning_consumption: number
-  runway_days?: number
-  available: boolean
-  unavailable_reason?: string
-  platforms: PlatformSupplyForecast[]
 }
 
 export interface UpsertCostConfigRequest {
@@ -264,18 +223,6 @@ function rangeParams(startDate: string, endDate: string) {
 export async function overview(startDate: string, endDate: string, refresh = false): Promise<ProfitOverviewResponse> {
   const { data } = await apiClient.get<ProfitOverviewResponse>('/admin/profit/overview', {
     params: { ...rangeParams(startDate, endDate), ...(refresh ? { refresh: true } : {}) }
-  })
-  return data
-}
-
-export async function supplyForecast(horizonDays = 30, safetyMargin = 0.2, refresh = false): Promise<SupplyForecastResponse> {
-  const { data } = await apiClient.get<SupplyForecastResponse>('/admin/profit/supply-forecast', {
-    params: {
-      horizon_days: horizonDays,
-      safety_margin: safetyMargin,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      ...(refresh ? { refresh: true } : {})
-    }
   })
   return data
 }
@@ -425,7 +372,7 @@ export async function batchConfigureSubscription(req: BatchSubscriptionConfigReq
 }
 
 export default {
-  overview, supplyForecast, summary, trend, listConfigs, upsertConfig, setSubscriptionAutoRenew, deleteConfig,
+  overview, summary, trend, listConfigs, upsertConfig, setSubscriptionAutoRenew, deleteConfig,
   listSubscriptionCycles, createSubscriptionCycle, deleteSubscriptionCycle,
   previewSubscriptionTermination, terminateSubscriptionCycle, addSubscriptionRefund, voidSubscriptionRefund,
   reverseSubscriptionTermination, batchConfigureSubscription, windowEconomics

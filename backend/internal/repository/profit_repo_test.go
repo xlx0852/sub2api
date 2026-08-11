@@ -10,6 +10,30 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
+func TestProfitRepositoryGetCurrentUserBalanceTotalIncludesFrozenBalance(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectQuery(`(?s)` + regexp.QuoteMeta("SUM(balance + COALESCE(frozen_balance, 0))") + `.*` +
+		regexp.QuoteMeta("WHERE deleted_at IS NULL AND role = 'user'")).
+		WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow(3210.45))
+
+	repo := &profitRepository{db: db}
+	total, err := repo.GetCurrentUserBalanceTotal(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 3210.45 {
+		t.Fatalf("total = %v, want 3210.45", total)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestProfitRepositoryGetDailyUsageStatsOnlyIncludesAPIKeyMeteredCost(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
 	if err != nil {
@@ -124,72 +148,6 @@ func TestProfitRepositoryGetAccountUsageStatsForRangesBatchesIndependentWindows(
 	}
 	if stats[1] == nil || stats[1].Revenue != 500 || stats[2] == nil || stats[2].Revenue != 200 {
 		t.Fatalf("unexpected range stats: %+v", stats)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestProfitRepositoryGetStoredValueSnapshotUsesCurrentPositiveUserBalance(t *testing.T) {
-	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = db.Close() }()
-	mock.ExpectQuery(`(?s)` + regexp.QuoteMeta("SUM(GREATEST(balance, 0))") + `.*` + regexp.QuoteMeta("role <> 'admin'")).
-		WillReturnRows(sqlmock.NewRows([]string{"spendable_balance", "frozen_balance", "eligible_users"}).AddRow(500.0, 20.0, int64(4)))
-
-	repo := &profitRepository{db: db}
-	snapshot, err := repo.GetStoredValueSnapshot(context.Background())
-	if err != nil || snapshot.SpendableBalance != 500 || snapshot.FrozenBalance != 20 || snapshot.EligibleUsers != 4 {
-		t.Fatalf("snapshot=%+v err=%v", snapshot, err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestProfitRepositoryGetSupplyForecastUsageSamplesUsesBalanceBilledAccountDays(t *testing.T) {
-	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = db.Close() }()
-	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-	end := start.AddDate(0, 0, 30)
-	mock.ExpectQuery(`(?s)`+regexp.QuoteMeta("a.type NOT IN ('oauth', 'setup-token')")+`.*`+
-		regexp.QuoteMeta("ul.subscription_id IS NULL")+`.*`+
-		regexp.QuoteMeta("GROUP BY usage_day, a.platform, ul.account_id, a.type")).
-		WithArgs(start, end, "UTC").
-		WillReturnRows(sqlmock.NewRows([]string{"usage_day", "platform", "account_id", "type", "revenue", "metered_cost"}).
-			AddRow("2026-07-28", "openai", int64(1), "apikey", 100.0, 20.0))
-
-	repo := &profitRepository{db: db}
-	samples, err := repo.GetSupplyForecastUsageSamples(context.Background(), start, end, "UTC")
-	if err != nil || len(samples) != 1 || samples[0].MeteredCost != 20 {
-		t.Fatalf("samples=%+v err=%v", samples, err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestProfitRepositoryGetSchedulableSubscriptionSupplyDeduplicatesByAccount(t *testing.T) {
-	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = db.Close() }()
-	mock.ExpectQuery(`(?s)` + regexp.QuoteMeta("COUNT(DISTINCT id)") + `.*` +
-		regexp.QuoteMeta("type IN ('oauth', 'setup-token')") + `.*` +
-		regexp.QuoteMeta("schedulable = TRUE") + `.*` +
-		regexp.QuoteMeta("GROUP BY platform")).
-		WillReturnRows(sqlmock.NewRows([]string{"platform", "count"}).AddRow("openai", 5).AddRow("grok", 2))
-
-	repo := &profitRepository{db: db}
-	supply, err := repo.GetSchedulableSubscriptionSupply(context.Background())
-	if err != nil || supply["openai"] != 5 || supply["grok"] != 2 {
-		t.Fatalf("supply=%+v err=%v", supply, err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

@@ -67,6 +67,58 @@ func TestFillProfitQuotaWindows_KimiAndSession(t *testing.T) {
 	require.GreaterOrEqual(t, len(summary.QuotaWindows), 2)
 }
 
+func TestFillProfitQuotaWindows_AnthropicPassiveSevenDayFallback(t *testing.T) {
+	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	reset := now.Add(5 * 24 * time.Hour)
+	acc := &Account{
+		ID: 3, Platform: PlatformAnthropic,
+		Extra: map[string]any{
+			"passive_usage_7d_utilization": 0.42,
+			"passive_usage_7d_reset":       reset.Unix(),
+		},
+	}
+	summary := &AccountProfitSummary{}
+	fillProfitQuotaWindows(summary, acc, now)
+	require.NotNil(t, summary.SevenDayUtilization)
+	require.InDelta(t, 42, *summary.SevenDayUtilization, 0.01)
+	require.Len(t, summary.QuotaWindows, 1)
+	require.Equal(t, "7d", summary.QuotaWindows[0].Kind)
+	require.WithinDuration(t, reset, *summary.QuotaWindows[0].EndAt, time.Second)
+}
+
+func TestFillProfitQuotaWindows_GrokUsesTopLevelUsagePercent(t *testing.T) {
+	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	acc := &Account{ID: 84, Platform: PlatformGrok, Extra: map[string]any{
+		"grok_billing_snapshot": map[string]any{
+			"period_type":   "unknown",
+			"period_start":  now.Add(-10 * 24 * time.Hour).Format(time.RFC3339),
+			"period_end":    now.Add(20 * 24 * time.Hour).Format(time.RFC3339),
+			"usage_percent": 100.0,
+			"product_usage": []any{map[string]any{"product": "GrokBuild", "usage_percent": 86.0}},
+		},
+	}}
+	summary := &AccountProfitSummary{}
+	fillProfitQuotaWindows(summary, acc, now)
+	require.Len(t, summary.QuotaWindows, 1)
+	require.Equal(t, "30d", summary.QuotaWindows[0].Kind)
+	require.InDelta(t, 100, *summary.QuotaWindows[0].UsedPercent, 0.01)
+}
+
+func TestFillProfitQuotaWindows_GrokIgnoresRetiredCalendarMonthFields(t *testing.T) {
+	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	acc := &Account{ID: 84, Platform: PlatformGrok, Extra: map[string]any{
+		"grok_billing_snapshot": map[string]any{
+			"period_type":          "monthly",
+			"billing_period_start": "2026-08-01T00:00:00Z",
+			"billing_period_end":   "2026-09-01T00:00:00Z",
+			"used_percent":         42.0,
+		},
+	}}
+	summary := &AccountProfitSummary{}
+	fillProfitQuotaWindows(summary, acc, now)
+	require.Empty(t, summary.QuotaWindows)
+}
+
 func TestFillProfitQuotaWindows_RejectsPathlessEmpty(t *testing.T) {
 	summary := &AccountProfitSummary{}
 	fillProfitQuotaWindows(summary, &Account{ID: 3, Extra: map[string]any{}}, time.Now().UTC())
@@ -106,7 +158,7 @@ func TestFillProfitQuotaWindows_GrokBilling(t *testing.T) {
 	require.Equal(t, "grok-billing", w.ID)
 	require.Equal(t, "7d", w.Kind)
 	require.NotNil(t, w.UsedPercent)
-	require.InDelta(t, 46.0, *w.UsedPercent, 0.01)
+	require.InDelta(t, 68.0, *w.UsedPercent, 0.01)
 	require.NotNil(t, w.StartAt)
 	require.NotNil(t, w.EndAt)
 	require.Equal(t, 2026, w.StartAt.Year())
@@ -298,9 +350,9 @@ func TestFillProfitQuotaWindows_CodexFree30d(t *testing.T) {
 		ID:       69,
 		Platform: PlatformOpenAI,
 		Extra: map[string]any{
-			"codex_7d_used_percent":   100.0,
-			"codex_7d_reset_at":       reset30d.Format(time.RFC3339),
-			"codex_7d_window_minutes": 43200,
+			"codex_7d_used_percent":        100.0,
+			"codex_7d_reset_at":            reset30d.Format(time.RFC3339),
+			"codex_7d_window_minutes":      43200,
 			"codex_primary_window_minutes": 43200,
 		},
 	}

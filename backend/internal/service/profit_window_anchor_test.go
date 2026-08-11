@@ -11,27 +11,26 @@ func anchorTestCycle(start time.Time, days int) *AccountSubscriptionCycle {
 	return &AccountSubscriptionCycle{StartsAt: start, PeriodDays: days, PeriodFee: 100}
 }
 
-func TestBuildProfitWindowAnchor_AutoRenewOffStopsAtCycleEnd(t *testing.T) {
+func TestBuildProfitWindowAnchor_ActiveCycleStopsAtRecordedEnd(t *testing.T) {
 	now := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	cycle := anchorTestCycle(time.Date(2026, 8, 5, 15, 36, 0, 0, time.UTC), 30)
-	cfg := &AccountCostConfig{AutoRenew: false}
-	a := buildProfitWindowAnchor([]*AccountSubscriptionCycle{cycle}, cfg, now)
+	a := buildProfitWindowAnchor([]*AccountSubscriptionCycle{cycle}, &AccountCostConfig{AutoRenew: false}, now)
+	want := cycle.StartsAt.AddDate(0, 0, cycle.PeriodDays)
+	if a.recurringUntil == nil || !a.recurringUntil.Equal(want) {
+		t.Fatalf("active cycle must stop at recorded end %v, got %v", want, a.recurringUntil)
+	}
+}
+
+func TestBuildProfitWindowAnchor_ExpiredStopsAtLatestCycleEnd(t *testing.T) {
+	now := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	cycle := anchorTestCycle(time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), 30) // ended 7/31
+	a := buildProfitWindowAnchor([]*AccountSubscriptionCycle{cycle}, &AccountCostConfig{AutoRenew: true}, now)
 	if a.recurringUntil == nil {
-		t.Fatalf("expected recurringUntil set when auto_renew=false")
+		t.Fatalf("expired cycle must cap projection at latest cycle end even if auto_renew=true")
 	}
 	want := cycle.StartsAt.AddDate(0, 0, 30)
 	if !a.recurringUntil.Equal(want) {
 		t.Fatalf("recurringUntil=%v want %v", a.recurringUntil, want)
-	}
-}
-
-func TestBuildProfitWindowAnchor_AutoRenewOnRollsOn(t *testing.T) {
-	now := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
-	cycle := anchorTestCycle(time.Date(2026, 8, 5, 15, 36, 0, 0, time.UTC), 30)
-	cfg := &AccountCostConfig{AutoRenew: true}
-	a := buildProfitWindowAnchor([]*AccountSubscriptionCycle{cycle}, cfg, now)
-	if a.recurringUntil != nil {
-		t.Fatalf("expected no recurringUntil when auto_renew=true, got %v", a.recurringUntil)
 	}
 }
 
@@ -55,21 +54,45 @@ func TestBuildProfitWindowAnchor_CoveredEndUsesLatestCycle(t *testing.T) {
 	}
 }
 
-// Gap: window starting in the unconfigured gap (8/3→8/5) must be dropped.
-func TestFillProfitQuotaWindows_DropsWindowStartingInCycleGap(t *testing.T) {
+func TestBuildProfitWindowAnchor_MergesOverlappingAndAdjacentCycles(t *testing.T) {
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	first := anchorTestCycle(time.Date(2026, 7, 26, 8, 0, 0, 0, time.UTC), 30)
+	overlapping := anchorTestCycle(time.Date(2026, 8, 20, 8, 0, 0, 0, time.UTC), 30)
+	adjacent := anchorTestCycle(time.Date(2026, 9, 19, 8, 0, 0, 0, time.UTC), 30)
+
+	a := buildProfitWindowAnchor([]*AccountSubscriptionCycle{adjacent, first, overlapping}, &AccountCostConfig{}, now)
+
+	if len(a.spans) != 1 {
+		t.Fatalf("overlapping paid coverage must be one canonical span, got %+v", a.spans)
+	}
+	if !a.spans[0].start.Equal(first.StartsAt) {
+		t.Fatalf("merged start=%v want %v", a.spans[0].start, first.StartsAt)
+	}
+	wantEnd := adjacent.StartsAt.AddDate(0, 0, adjacent.PeriodDays)
+	if !a.spans[0].end.Equal(wantEnd) {
+		t.Fatalf("merged end=%v want %v", a.spans[0].end, wantEnd)
+	}
+}
+
+// A provider window can cross from an unconfigured gap into a paid cycle. Only
+// the paid intersection is usable.
+func TestFillProfitQuotaWindows_ClipsWindowCrossingIntoCycle(t *testing.T) {
 	now := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	old := anchorTestCycle(time.Date(2026, 7, 4, 0, 0, 0, 0, time.UTC), 30) // ends 8/3
 	cur := anchorTestCycle(time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC), 30) // starts 8/5
 	anchor := buildProfitWindowAnchor([]*AccountSubscriptionCycle{old, cur}, &AccountCostConfig{AutoRenew: false}, now)
 
-	// A window anchored at 8/4 (inside the gap) should be dropped.
+	// Window starts in the gap but overlaps the current cycle from 8/5 onward.
 	start := time.Date(2026, 8, 4, 0, 0, 0, 0, time.UTC)
 	end := start.Add(7 * 24 * time.Hour)
 	summary := &AccountProfitSummary{}
 	acc := &Account{ID: 1, SessionWindowStart: &start, SessionWindowEnd: &end}
 	fillProfitQuotaWindowsWithAnchor(summary, acc, now, anchor)
-	if len(summary.QuotaWindows) != 0 {
-		t.Fatalf("expected gap window dropped, got %d", len(summary.QuotaWindows))
+	if len(summary.QuotaWindows) != 1 {
+		t.Fatalf("expected one clipped intersection, got %d", len(summary.QuotaWindows))
+	}
+	if summary.QuotaWindows[0].StartAt == nil || !summary.QuotaWindows[0].StartAt.Equal(cur.StartsAt) {
+		t.Fatalf("clipped start=%v want %v", summary.QuotaWindows[0].StartAt, cur.StartsAt)
 	}
 }
 
@@ -88,13 +111,14 @@ func TestEffectiveRecurringUntil_ExpiredNoRenewStops(t *testing.T) {
 	}
 }
 
-// Active cycle + auto_renew=true → no cutoff (keep rolling).
-func TestEffectiveRecurringUntil_ActiveRenewKeepsRolling(t *testing.T) {
+// Active cycle + auto_renew=true still stops at the latest recorded paid end.
+func TestEffectiveRecurringUntil_ActiveRenewRequiresRecordedNextCycle(t *testing.T) {
 	now := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	cycle := anchorTestCycle(time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC), 30)
 	a := buildProfitWindowAnchor([]*AccountSubscriptionCycle{cycle}, &AccountCostConfig{AutoRenew: true}, now)
-	if got := a.effectiveRecurringUntil(now); got != nil {
-		t.Fatalf("expected nil cutoff, got %v", got)
+	want := cycle.StartsAt.AddDate(0, 0, cycle.PeriodDays)
+	if got := a.effectiveRecurringUntil(now); got == nil || !got.Equal(want) {
+		t.Fatalf("cutoff=%v want %v", got, want)
 	}
 }
 
@@ -136,5 +160,25 @@ func TestFillProfitQuotaWindows_ExpiredNoRenewClipsLiveGrokWindow(t *testing.T) 
 	}
 	if w.EndAt.After(cycleEnd) {
 		t.Fatalf("live end %v must not pass cycle end %v", w.EndAt, cycleEnd)
+	}
+}
+
+func TestDeriveWaitingActivationGaps_BetweenRealWindows(t *testing.T) {
+	firstStart := time.Date(2026, 8, 1, 1, 0, 0, 0, time.UTC)
+	firstEnd := time.Date(2026, 8, 8, 1, 0, 0, 0, time.UTC)
+	secondStart := time.Date(2026, 8, 8, 9, 0, 0, 0, time.UTC)
+	secondEnd := secondStart.Add(7 * 24 * time.Hour)
+	closed := false
+	open := true
+	gaps := deriveWaitingActivationGaps([]ProfitQuotaWindow{
+		{ID: "7d-1", Kind: "7d", StartAt: &firstStart, EndAt: &firstEnd, IsOpen: &closed},
+		{ID: "7d-open", Kind: "7d", StartAt: &secondStart, EndAt: &secondEnd, IsOpen: &open},
+	}, secondStart.Add(time.Hour))
+	if len(gaps) != 1 {
+		t.Fatalf("gaps=%d want 1", len(gaps))
+	}
+	if gaps[0].Status != "waiting_activation" || gaps[0].StartAt == nil || gaps[0].EndAt == nil ||
+		!gaps[0].StartAt.Equal(firstEnd) || !gaps[0].EndAt.Equal(secondStart) {
+		t.Fatalf("gap=%+v", gaps[0])
 	}
 }

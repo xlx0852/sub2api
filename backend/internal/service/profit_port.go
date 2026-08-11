@@ -152,25 +152,10 @@ type ProfitAccountUsageRange struct {
 	End       time.Time
 }
 
-// StoredValueSnapshot is the current customer balance pool used by the supply forecast.
-type StoredValueSnapshot struct {
-	SpendableBalance float64
-	FrozenBalance    float64
-	EligibleUsers    int64
-}
-
-// SupplyForecastUsageSample is one platform/account/day balance-billed aggregate.
-type SupplyForecastUsageSample struct {
-	Date        string
-	Platform    string
-	AccountID   int64
-	AccountType string
-	Revenue     float64
-	MeteredCost float64
-}
-
 // ProfitRepository 利润分析数据访问端口。
 type ProfitRepository interface {
+	// GetCurrentUserBalanceTotal 返回当前未删除普通用户持有的总余额（可用余额 + 冻结余额）。
+	GetCurrentUserBalanceTotal(ctx context.Context) (float64, error)
 	UpsertCostConfig(ctx context.Context, cfg *AccountCostConfig) (*AccountCostConfig, error)
 	GetCostConfig(ctx context.Context, accountID int64) (*AccountCostConfig, error)
 	ListCostConfigs(ctx context.Context) ([]*AccountCostConfig, error)
@@ -201,22 +186,4 @@ type ProfitRepository interface {
 	// GetBestWindowRevenue 返回账号自 since 以来最佳固定长度窗口的收入（用于自动学习窗口基准）。
 	GetBestWindowRevenue(ctx context.Context, accountID int64, since time.Time, windowSeconds int64) (float64, error)
 	GetBestWindowRevenueBatch(ctx context.Context, accountIDs []int64, since time.Time, windowSeconds int64) (map[int64]float64, error)
-
-	GetStoredValueSnapshot(ctx context.Context) (*StoredValueSnapshot, error)
-	GetSupplyForecastUsageSamples(ctx context.Context, start, end time.Time, tzName string) ([]*SupplyForecastUsageSample, error)
-	GetSchedulableSubscriptionSupply(ctx context.Context) (map[string]int, error)
-	// GetSubscriptionQuotaSnapshots 返回所有可调度订阅号的额度快照（账号自己的
-	// 额度视角，不是按量用户烧的钱），用于供给预测的产能折算。
-	// 只返回有额度数据的号（codex/grok/kimi 等），无额度数据的号会被跳过。
-	GetSubscriptionQuotaSnapshots(ctx context.Context) ([]*SubscriptionQuotaSnapshot, error)
-}
-
-// SubscriptionQuotaSnapshot 订阅号额度快照（账号自己的额度，非按量消耗）。
-type SubscriptionQuotaSnapshot struct {
-	AccountID     int64
-	Platform      string
-	RemainingPct  float64   // 剩余额度百分比（0-100）
-	WindowDays    float64   // 窗口总天数（如 7 天、24h=1 天）
-	UpdatedAt     time.Time // 快照更新时间
-	HasValidData  bool      // 是否有有效额度数据（无则跳过）
 }
