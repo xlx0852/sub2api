@@ -92,6 +92,10 @@ type accountWindowStatsBatchReader interface {
 	GetAccountWindowStatsBatch(ctx context.Context, accountIDs []int64, startTime time.Time) (map[int64]*usagestats.AccountStats, error)
 }
 
+type accountWindowStatsRangeReader interface {
+	GetAccountWindowStatsRange(ctx context.Context, accountID int64, startTime, endTime time.Time) (*usagestats.AccountStats, error)
+}
+
 type accountPerformanceStatsBatchReader interface {
 	GetAccountPerformanceStatsBatch(ctx context.Context, accountIDs []int64, startTime time.Time) (map[int64]*AccountPerformanceStats, error)
 }
@@ -177,11 +181,21 @@ type WindowStats struct {
 	StandardCost float64 `json:"standard_cost"`
 	UserCost     float64 `json:"user_cost"`
 
-	FullRequests     *int64   `json:"full_requests,omitempty"`
-	FullTokens       *int64   `json:"full_tokens,omitempty"`
-	FullCost         *float64 `json:"full_cost,omitempty"`
-	FullStandardCost *float64 `json:"full_standard_cost,omitempty"`
-	FullUserCost     *float64 `json:"full_user_cost,omitempty"`
+	FullRequests     *int64                  `json:"full_requests,omitempty"`
+	FullTokens       *int64                  `json:"full_tokens,omitempty"`
+	FullCost         *float64                `json:"full_cost,omitempty"`
+	FullStandardCost *float64                `json:"full_standard_cost,omitempty"`
+	FullUserCost     *float64                `json:"full_user_cost,omitempty"`
+	FullEstimate     *FullWindowEstimateMeta `json:"full_estimate,omitempty"`
+}
+
+type FullWindowEstimateMeta struct {
+	Method          string   `json:"method"`
+	Confidence      string   `json:"confidence"`
+	SampleCount     int      `json:"sample_count"`
+	UsedPercentSpan float64  `json:"used_percent_span"`
+	LowerCost       *float64 `json:"lower_cost,omitempty"`
+	UpperCost       *float64 `json:"upper_cost,omitempty"`
 }
 
 // AccountRequestTypePerformanceStats is a per-account latency summary grouped by request type.
@@ -215,15 +229,15 @@ type AccountPerformanceStats struct {
 
 // UsageProgress 使用量进度
 type UsageProgress struct {
-		Utilization      float64      `json:"utilization"`            // 使用率百分比 (0-100+，100表示100%)
-		ResetsAt         *time.Time   `json:"resets_at"`              // 重置时间
-		RemainingSeconds int          `json:"remaining_seconds"`      // 距重置剩余秒数
-		WindowMinutes    *int         `json:"window_minutes,omitempty"` // 实际上游窗口长度（分钟）；Codex free 可能是 30 天
-		WindowLabel      string       `json:"window_label,omitempty"`   // 展示标签，如 7d / 30d / 5h
-		WindowStats      *WindowStats `json:"window_stats,omitempty"` // 窗口期统计（从窗口开始到当前的使用量）
-		UsedRequests     int64        `json:"used_requests,omitempty"`
-		LimitRequests    int64        `json:"limit_requests,omitempty"`
-	}
+	Utilization      float64      `json:"utilization"`              // 使用率百分比 (0-100+，100表示100%)
+	ResetsAt         *time.Time   `json:"resets_at"`                // 重置时间
+	RemainingSeconds int          `json:"remaining_seconds"`        // 距重置剩余秒数
+	WindowMinutes    *int         `json:"window_minutes,omitempty"` // 实际上游窗口长度（分钟）；Codex free 可能是 30 天
+	WindowLabel      string       `json:"window_label,omitempty"`   // 展示标签，如 7d / 30d / 5h
+	WindowStats      *WindowStats `json:"window_stats,omitempty"`   // 窗口期统计（从窗口开始到当前的使用量）
+	UsedRequests     int64        `json:"used_requests,omitempty"`
+	LimitRequests    int64        `json:"limit_requests,omitempty"`
+}
 
 // AntigravityModelQuota Antigravity 单个模型的配额信息
 type AntigravityModelQuota struct {
@@ -696,6 +710,8 @@ func (s *AccountUsageService) getOpenAIUsage(ctx context.Context, account *Accou
 	}
 
 	applyExtraToUsage(usage, account.Extra, now)
+	observedAt := codexUsageObservedAt(account.Extra, now)
+	usage.UpdatedAt = &observedAt
 
 	if (force || shouldRefreshOpenAICodexSnapshot(account, usage, now)) && s.shouldProbeOpenAICodexSnapshot(account.ID, now, force) {
 		if account.IsShadow() {
@@ -716,34 +732,82 @@ func (s *AccountUsageService) getOpenAIUsage(ctx context.Context, account *Accou
 				}
 			}
 		} else {
-			if updates, err := s.probeOpenAICodexSnapshot(ctx, account); err == nil && len(updates) > 0 {
-				mergeAccountExtra(account, updates)
-				if usage.UpdatedAt == nil {
-					usage.UpdatedAt = &now
+			// A /responses probe consumes model capability and can start a lazy
+			// weekly window. While quota is waiting for first use, only real gateway
+			// traffic may activate it; keep showing the last read-only snapshot.
+			waitingActivation := s.quotaWindowLedger != nil && s.quotaWindowLedger.IsWaitingActivation(ctx, account.ID, "7d", now)
+			if !waitingActivation {
+				if updates, err := s.probeOpenAICodexSnapshot(ctx, account); err == nil && len(updates) > 0 {
+					mergeAccountExtra(account, updates)
+					if usage.UpdatedAt == nil {
+						usage.UpdatedAt = &now
+					}
+					applyExtraToUsage(usage, account.Extra, now)
 				}
-				applyExtraToUsage(usage, account.Extra, now)
 			}
 		}
 	}
+	observedAt = codexUsageObservedAt(account.Extra, now)
+	usage.UpdatedAt = &observedAt
 
 	if s.usageLogRepo == nil {
 		return usage, nil
 	}
 
-	if usage.FiveHour != nil {
-		if stats, err := s.usageLogRepo.GetAccountWindowStats(ctx, account.ID, codexWindowStatsStart(usage.FiveHour, 5*time.Hour, now)); err == nil {
-			usage.FiveHour.WindowStats = windowStatsFromAccountStats(stats)
-		}
-	}
-
-	if usage.SevenDay != nil {
-		if stats, err := s.usageLogRepo.GetAccountWindowStats(ctx, account.ID, codexWindowStatsStart(usage.SevenDay, 7*24*time.Hour, now)); err == nil {
-			usage.SevenDay.WindowStats = windowStatsFromAccountStats(stats)
-		}
-	}
-	attachFullWindowEstimates(usage)
+	s.attachOpenAIObservedWindowStats(ctx, account.ID, "5h", usage.FiveHour, 5*time.Hour, observedAt, now)
+	s.attachOpenAIObservedWindowStats(ctx, account.ID, "7d", usage.SevenDay, 7*24*time.Hour, observedAt, now)
 
 	return usage, nil
+}
+
+func codexUsageObservedAt(extra map[string]any, fallback time.Time) time.Time {
+	if raw, ok := extra["codex_usage_updated_at"]; ok {
+		if observedAt, err := parseTime(fmt.Sprint(raw)); err == nil && !observedAt.After(fallback) {
+			return observedAt
+		}
+	}
+	return fallback
+}
+
+func (s *AccountUsageService) attachOpenAIObservedWindowStats(ctx context.Context, accountID int64, kind string, progress *UsageProgress, fallbackWindow time.Duration, observedAt, now time.Time) {
+	if s == nil || s.usageLogRepo == nil || progress == nil {
+		return
+	}
+	start := codexWindowStatsStart(progress, fallbackWindow, now)
+	end := observedAt
+	if end.IsZero() || end.After(now) {
+		end = now
+	}
+	if end.Before(start) {
+		end = now
+	}
+	var (
+		stats *usagestats.AccountStats
+		err   error
+	)
+	if rangeReader, ok := s.usageLogRepo.(accountWindowStatsRangeReader); ok {
+		stats, err = rangeReader.GetAccountWindowStatsRange(ctx, accountID, start, end)
+	} else {
+		stats, err = s.usageLogRepo.GetAccountWindowStats(ctx, accountID, start)
+	}
+	if err != nil {
+		return
+	}
+	progress.WindowStats = windowStatsFromAccountStats(stats)
+	if s.quotaWindowLedger == nil {
+		attachFullWindowEstimate(progress.WindowStats, progress.Utilization)
+		return
+	}
+	if err := s.quotaWindowLedger.RecordUsageObservation(ctx, accountID, kind, end, progress.Utilization, progress.WindowStats); err != nil {
+		slog.Warn("quota_usage_observation_failed", "account_id", accountID, "kind", kind, "error", err)
+	}
+	observations, err := s.quotaWindowLedger.ListOpenWindowObservations(ctx, accountID, kind, 120)
+	if err != nil {
+		slog.Warn("quota_usage_observation_list_failed", "account_id", accountID, "kind", kind, "error", err)
+		attachFullWindowEstimate(progress.WindowStats, progress.Utilization)
+		return
+	}
+	attachFullWindowEstimateFromObservations(progress.WindowStats, progress.Utilization, observations)
 }
 
 func shouldRefreshOpenAICodexSnapshot(account *Account, usage *UsageInfo, now time.Time) bool {
@@ -894,15 +958,15 @@ func (s *AccountUsageService) persistOpenAICodexProbeSnapshot(accountID int64, u
 		return
 	}
 
-go func() {
-			updateCtx, updateCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer updateCancel()
-			_ = s.accountRepo.UpdateExtra(updateCtx, accountID, updates)
-			observeCodexQuotaWindowUpdates(updateCtx, s.quotaWindowLedger, accountID, updates, time.Now())
-		}()
-	}
+	go func() {
+		updateCtx, updateCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer updateCancel()
+		_ = s.accountRepo.UpdateExtra(updateCtx, accountID, updates)
+		observeCodexQuotaWindowUpdates(updateCtx, s.quotaWindowLedger, accountID, updates, time.Now())
+	}()
+}
 
-	func extractOpenAICodexProbeUpdates(resp *http.Response) (map[string]any, error) {
+func extractOpenAICodexProbeUpdates(resp *http.Response) (map[string]any, error) {
 	if resp == nil {
 		return nil, nil
 	}
@@ -1830,9 +1894,8 @@ func windowStatsFromAccountStats(stats *usagestats.AccountStats) *WindowStats {
 	}
 }
 
-// attachFullWindowEstimate 按 utilization 线性外推满额预估。
-// utilization 须在 (0,100]；≤0 或 >100 不写 full_*（与前端旧语义一致）。
-// 结果就地写回 stats，供额度抽屉直接展示，避免前端 100/util 放大抖动。
+// attachFullWindowEstimate is the low-confidence compatibility fallback used
+// until enough window-aligned observations exist.
 func attachFullWindowEstimate(stats *WindowStats, utilization float64) {
 	if stats == nil {
 		return
@@ -1843,8 +1906,10 @@ func attachFullWindowEstimate(stats *WindowStats, utilization float64) {
 	stats.FullCost = nil
 	stats.FullStandardCost = nil
 	stats.FullUserCost = nil
+	stats.FullEstimate = nil
 
-	if utilization <= 0 || utilization > 100 {
+	if utilization < 5 || utilization > 100 {
+		stats.FullEstimate = &FullWindowEstimateMeta{Method: "insufficient", Confidence: "insufficient"}
 		return
 	}
 	if stats.Requests <= 0 && stats.Tokens <= 0 {
@@ -1861,6 +1926,88 @@ func attachFullWindowEstimate(stats *WindowStats, utilization float64) {
 	stats.FullCost = &cost
 	stats.FullStandardCost = &std
 	stats.FullUserCost = &user
+	lower, upper := estimateCostBounds(stats.Cost, utilization, 0.5)
+	stats.FullEstimate = &FullWindowEstimateMeta{
+		Method:          "cumulative",
+		Confidence:      "low",
+		SampleCount:     1,
+		UsedPercentSpan: utilization,
+		LowerCost:       &lower,
+		UpperCost:       &upper,
+	}
+}
+
+func attachFullWindowEstimateFromObservations(stats *WindowStats, utilization float64, observations []*AccountQuotaUsageObservation) {
+	attachFullWindowEstimate(stats, utilization)
+	if stats == nil || utilization < 5 || len(observations) < 2 {
+		if stats != nil && stats.FullEstimate != nil {
+			stats.FullEstimate.SampleCount = len(observations)
+		}
+		return
+	}
+	latest := observations[len(observations)-1]
+	if latest == nil {
+		return
+	}
+	var baseline *AccountQuotaUsageObservation
+	for _, candidate := range observations[:len(observations)-1] {
+		if candidate == nil || !candidate.ObservedAt.Before(latest.ObservedAt) {
+			continue
+		}
+		span := latest.UsedPercent - candidate.UsedPercent
+		if span < 5 || latest.AccountCost < candidate.AccountCost || latest.StandardCost < candidate.StandardCost || latest.UserCost < candidate.UserCost || latest.Requests < candidate.Requests || latest.Tokens < candidate.Tokens {
+			continue
+		}
+		if baseline == nil || candidate.UsedPercent < baseline.UsedPercent {
+			baseline = candidate
+		}
+	}
+	if baseline == nil {
+		if stats.FullEstimate != nil {
+			stats.FullEstimate.SampleCount = len(observations)
+		}
+		return
+	}
+	span := latest.UsedPercent - baseline.UsedPercent
+	factor := 100 / span
+	req := int64(math.Round(float64(latest.Requests-baseline.Requests) * factor))
+	tok := int64(math.Round(float64(latest.Tokens-baseline.Tokens) * factor))
+	costDelta := latest.AccountCost - baseline.AccountCost
+	cost := math.Round(costDelta*factor*100) / 100
+	std := math.Round((latest.StandardCost-baseline.StandardCost)*factor*100) / 100
+	user := math.Round((latest.UserCost-baseline.UserCost)*factor*100) / 100
+	stats.FullRequests = &req
+	stats.FullTokens = &tok
+	stats.FullCost = &cost
+	stats.FullStandardCost = &std
+	stats.FullUserCost = &user
+	confidence := "medium"
+	if span >= 20 {
+		confidence = "high"
+	}
+	lower, upper := estimateCostBounds(costDelta, span, 1)
+	stats.FullEstimate = &FullWindowEstimateMeta{
+		Method:          "incremental",
+		Confidence:      confidence,
+		SampleCount:     len(observations),
+		UsedPercentSpan: span,
+		LowerCost:       &lower,
+		UpperCost:       &upper,
+	}
+}
+
+func estimateCostBounds(costDelta, usedSpan, quantizationError float64) (float64, float64) {
+	if costDelta < 0 || usedSpan <= 0 {
+		return 0, 0
+	}
+	lowerDenominator := usedSpan + quantizationError
+	upperDenominator := usedSpan - quantizationError
+	if upperDenominator <= 0 {
+		upperDenominator = usedSpan
+	}
+	lower := math.Round(costDelta*100/lowerDenominator*100) / 100
+	upper := math.Round(costDelta*100/upperDenominator*100) / 100
+	return lower, upper
 }
 
 // attachFullWindowEstimates 给 UsageInfo 各进度条的 window_stats 填满额预估。

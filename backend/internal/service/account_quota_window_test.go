@@ -7,12 +7,67 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 )
 
 type memQuotaWindowRepo struct {
-	mu   sync.Mutex
-	seq  int64
-	rows []*AccountQuotaWindow
+	mu           sync.Mutex
+	seq          int64
+	rows         []*AccountQuotaWindow
+	observations []*AccountQuotaUsageObservation
+}
+
+func (m *memQuotaWindowRepo) HasObservation(_ context.Context, quotaWindowID int64, usedPercent float64) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, observation := range m.observations {
+		if observation.QuotaWindowID == quotaWindowID && observation.UsedPercent == usedPercent {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (m *memQuotaWindowRepo) InsertObservation(_ context.Context, observation *AccountQuotaUsageObservation) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, existing := range m.observations {
+		if existing.QuotaWindowID == observation.QuotaWindowID && existing.UsedPercent == observation.UsedPercent {
+			return false, nil
+		}
+	}
+	cp := *observation
+	m.observations = append(m.observations, &cp)
+	return true, nil
+}
+
+func (m *memQuotaWindowRepo) ListObservations(_ context.Context, quotaWindowID int64, limit int) ([]*AccountQuotaUsageObservation, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make([]*AccountQuotaUsageObservation, 0)
+	for _, observation := range m.observations {
+		if observation.QuotaWindowID != quotaWindowID {
+			continue
+		}
+		cp := *observation
+		result = append(result, &cp)
+		if limit > 0 && len(result) >= limit {
+			break
+		}
+	}
+	return result, nil
+}
+
+type quotaObservationStatsStub struct {
+	calls int
+	stats *usagestats.AccountStats
+}
+
+func (s *quotaObservationStatsStub) GetAccountWindowStatsRange(_ context.Context, _ int64, _, _ time.Time) (*usagestats.AccountStats, error) {
+	s.calls++
+	return s.stats, nil
 }
 
 func (m *memQuotaWindowRepo) ListByAccount(_ context.Context, accountID int64, kind string, limit int) ([]*AccountQuotaWindow, error) {
@@ -124,6 +179,37 @@ func (m *memQuotaWindowRepo) CloseAndOpen(_ context.Context, closeID int64, clos
 	return &out, nil
 }
 
+func TestQuotaWindowLedger_CapturesOnlyChangedUtilization(t *testing.T) {
+	repo := &memQuotaWindowRepo{}
+	ledger := NewQuotaWindowLedger(repo)
+	statsReader := &quotaObservationStatsStub{stats: &usagestats.AccountStats{
+		Requests: 100, Tokens: 1000, Cost: 20, StandardCost: 20, UserCost: 2,
+	}}
+	ledger.SetObservationStatsReader(statsReader)
+	ctx := context.Background()
+	t0 := time.Date(2026, 8, 9, 10, 0, 0, 0, time.UTC)
+	used := 10.0
+	observe := func(at time.Time, percent *float64) {
+		if err := ledger.ObserveUpstream(ctx, QuotaWindowObservation{
+			AccountID: 69, Platform: PlatformOpenAI, Kind: "7d",
+			EndAt: at.Add(7 * 24 * time.Hour), WindowMinutes: 10080,
+			UsedPercent: percent, ObservedAt: at,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	observe(t0, &used)
+	observe(t0.Add(time.Minute), &used)
+	if statsReader.calls != 1 || len(repo.observations) != 1 {
+		t.Fatalf("duplicate percentage should not be aggregated: calls=%d observations=%d", statsReader.calls, len(repo.observations))
+	}
+	used = 11
+	observe(t0.Add(2*time.Minute), &used)
+	if statsReader.calls != 2 || len(repo.observations) != 2 {
+		t.Fatalf("changed percentage should be sampled: calls=%d observations=%d", statsReader.calls, len(repo.observations))
+	}
+}
+
 func TestQuotaWindowLedger_ObserveDetectsPassiveReset(t *testing.T) {
 	repo := &memQuotaWindowRepo{}
 	l := NewQuotaWindowLedger(repo)
@@ -214,8 +300,8 @@ func TestObservePlatformQuotaWindowUpdates_KimiAndGrok(t *testing.T) {
 
 	// Kimi 7d
 	observePlatformQuotaWindowUpdates(ctx, l, 10, PlatformKimi, map[string]any{
-		"kimi_quota_7d_reset_at":      now.Add(7 * 24 * time.Hour).Format(time.RFC3339),
-		"kimi_quota_7d_utilization":   0.42,
+		"kimi_quota_7d_reset_at":    now.Add(7 * 24 * time.Hour).Format(time.RFC3339),
+		"kimi_quota_7d_utilization": 42.0,
 	}, now)
 	open, _ := repo.GetOpen(ctx, 10, "7d")
 	if open == nil || open.Platform != PlatformKimi {
@@ -239,12 +325,54 @@ func TestObservePlatformQuotaWindowUpdates_KimiAndGrok(t *testing.T) {
 	}
 }
 
+func TestObservePlatformQuotaWindowUpdates_GrokStructUsesBuildPercentAndExplicitDuration(t *testing.T) {
+	repo := &memQuotaWindowRepo{}
+	ledger := NewQuotaWindowLedger(repo)
+	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	total := 100.0
+	build := 86.0
+	snapshot := &xai.BillingSnapshot{
+		PeriodType: "unknown", UsagePercent: &total,
+		PeriodStart:  now.Add(-10 * 24 * time.Hour).Format(time.RFC3339),
+		PeriodEnd:    now.Add(20 * 24 * time.Hour).Format(time.RFC3339),
+		ProductUsage: []xai.BillingProductUsage{{Product: "GrokBuild", UsagePercent: &build}},
+	}
+	observePlatformQuotaWindowUpdates(context.Background(), ledger, 83, PlatformGrok, map[string]any{
+		grokBillingSnapshotKey: snapshot,
+	}, now)
+	open, _ := repo.GetOpen(context.Background(), 83, "30d")
+	if open == nil {
+		t.Fatal("monthly Grok struct snapshot must create a 30d ledger window")
+	}
+	if open.UsedPercentOpen == nil || *open.UsedPercentOpen != 86 {
+		t.Fatalf("used_percent_open=%v want GrokBuild 86", open.UsedPercentOpen)
+	}
+}
+
+func TestObservePlatformQuotaWindowUpdates_GrokIgnoresRetiredCalendarBillingPeriod(t *testing.T) {
+	repo := &memQuotaWindowRepo{}
+	ledger := NewQuotaWindowLedger(repo)
+	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	observePlatformQuotaWindowUpdates(context.Background(), ledger, 83, PlatformGrok, map[string]any{
+		grokBillingSnapshotKey: map[string]any{
+			"period_type":          "monthly",
+			"billing_period_start": "2026-08-01T00:00:00Z",
+			"billing_period_end":   "2026-09-01T00:00:00Z",
+			"used_percent":         42.0,
+		},
+	}, now)
+	rows, _ := repo.ListByAccount(context.Background(), 83, "", 10)
+	if len(rows) != 0 {
+		t.Fatalf("retired calendar billing period must not create quota windows: %+v", rows)
+	}
+}
+
 func TestForceResetAccountWindows_Generic(t *testing.T) {
 	repo := &memQuotaWindowRepo{}
 	l := NewQuotaWindowLedger(repo)
 	ctx := context.Background()
 	acc := &Account{ID: 22, Platform: PlatformKimi, Extra: map[string]any{
-		"kimi_quota_7d_utilization": 0.9,
+		"kimi_quota_7d_utilization": 90.0,
 	}}
 	// seed
 	_, _ = repo.InsertOpen(ctx, &AccountQuotaWindow{
@@ -258,7 +386,6 @@ func TestForceResetAccountWindows_Generic(t *testing.T) {
 		t.Fatalf("open after force=%+v", open)
 	}
 }
-
 
 func TestQuotaWindowLedger_BackwardEndDoesNotCut(t *testing.T) {
 	repo := &memQuotaWindowRepo{}
@@ -332,7 +459,7 @@ func TestQuotaWindowLedger_DriftSameCycleRefreshes(t *testing.T) {
 		obsEnd := end.Add(time.Duration(i*7) * time.Minute)
 		if err := l.ObserveUpstream(ctx, QuotaWindowObservation{
 			AccountID: 80, Platform: PlatformOpenAI, Kind: "7d",
-			EndAt: obsEnd, WindowMinutes: 10080, ObservedAt: start.Add(time.Duration(i*7)*time.Minute),
+			EndAt: obsEnd, WindowMinutes: 10080, ObservedAt: start.Add(time.Duration(i*7) * time.Minute),
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -348,5 +475,108 @@ func TestQuotaWindowLedger_DriftSameCycleRefreshes(t *testing.T) {
 	// end should track latest observation, not stick
 	if !open.EndAt.After(end) {
 		t.Fatalf("open end not refreshed: %+v", open)
+	}
+}
+
+func TestQuotaWindowLedger_EarlyResetCutsEvenWhenPeriodsOverlap(t *testing.T) {
+	repo := &memQuotaWindowRepo{}
+	l := NewQuotaWindowLedger(repo)
+	ctx := context.Background()
+	start := time.Date(2026, 8, 1, 10, 0, 0, 0, time.UTC)
+	end := start.Add(7 * 24 * time.Hour)
+	oldUsed := 72.0
+	_, _ = repo.InsertOpen(ctx, &AccountQuotaWindow{
+		AccountID: 91, Platform: PlatformOpenAI, Kind: "7d",
+		StartAt: start, EndAt: end, WindowMinutes: qwIntPtr(10080),
+		UsedPercentOpen: &oldUsed, Source: QuotaWindowSourceObserved, IsOpen: true,
+	})
+
+	activatedAt := start.Add(4 * 24 * time.Hour)
+	newEnd := activatedAt.Add(7 * 24 * time.Hour)
+	newUsed := 1.0
+	if err := l.ObserveUpstream(ctx, QuotaWindowObservation{
+		AccountID: 91, Platform: PlatformOpenAI, Kind: "7d",
+		EndAt: newEnd, WindowMinutes: 10080, UsedPercent: &newUsed, ObservedAt: activatedAt,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, _ := repo.ListByAccount(ctx, 91, "7d", 10)
+	if len(rows) != 2 {
+		t.Fatalf("early overlapping reset must create two real windows, got %d", len(rows))
+	}
+	open, _ := repo.GetOpen(ctx, 91, "7d")
+	if open == nil || !open.StartAt.Equal(activatedAt) || !open.EndAt.Equal(newEnd) {
+		t.Fatalf("new open=%+v", open)
+	}
+	var closed *AccountQuotaWindow
+	for _, row := range rows {
+		if !row.IsOpen {
+			closed = row
+			break
+		}
+	}
+	if closed == nil || !closed.EndAt.Equal(activatedAt) || closed.ClosedReason != QuotaWindowCloseObserved {
+		t.Fatalf("closed=%+v", closed)
+	}
+}
+
+func TestQuotaWindowLedger_FirstUseAfterExpiredWindowLeavesActivationGap(t *testing.T) {
+	repo := &memQuotaWindowRepo{}
+	l := NewQuotaWindowLedger(repo)
+	ctx := context.Background()
+	start := time.Date(2026, 8, 1, 1, 0, 0, 0, time.UTC)
+	end := start.Add(7 * 24 * time.Hour)
+	oldUsed := 85.0
+	_, _ = repo.InsertOpen(ctx, &AccountQuotaWindow{
+		AccountID: 92, Platform: PlatformOpenAI, Kind: "7d",
+		StartAt: start, EndAt: end, WindowMinutes: qwIntPtr(10080),
+		UsedPercentOpen: &oldUsed, Source: QuotaWindowSourceObserved, IsOpen: true,
+	})
+
+	zero := 0.0
+	if err := l.ObserveUpstream(ctx, QuotaWindowObservation{
+		AccountID: 92, Platform: PlatformOpenAI, Kind: "7d",
+		EndAt: end, WindowMinutes: 10080, UsedPercent: &zero, ObservedAt: end,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if open, _ := repo.GetOpen(ctx, 92, "7d"); open != nil {
+		t.Fatalf("provider clear must leave the account waiting without an open row: %+v", open)
+	}
+	if !l.IsWaitingActivation(ctx, 92, "7d", end.Add(time.Minute)) {
+		t.Fatal("cleared quota must suppress inference probes until first use")
+	}
+
+	activatedAt := end.Add(8 * time.Hour)
+	newEnd := activatedAt.Add(7 * 24 * time.Hour)
+	newUsed := 0.5
+	if err := l.ObserveUpstream(ctx, QuotaWindowObservation{
+		AccountID: 92, Platform: PlatformOpenAI, Kind: "7d",
+		EndAt: newEnd, WindowMinutes: 10080, UsedPercent: &newUsed, ObservedAt: activatedAt,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, _ := repo.ListByAccount(ctx, 92, "7d", 10)
+	if len(rows) != 2 {
+		t.Fatalf("first use after expiry must create a new row, got %d", len(rows))
+	}
+	var closed *AccountQuotaWindow
+	for _, row := range rows {
+		if !row.IsOpen {
+			closed = row
+			break
+		}
+	}
+	if closed == nil || !closed.EndAt.Equal(end) {
+		t.Fatalf("old window must close at its known provider reset, got %+v", closed)
+	}
+	open, _ := repo.GetOpen(ctx, 92, "7d")
+	if open == nil || !open.StartAt.Equal(activatedAt) {
+		t.Fatalf("new window must start on first use, got %+v", open)
+	}
+	if l.IsWaitingActivation(ctx, 92, "7d", activatedAt.Add(time.Minute)) {
+		t.Fatal("active successor must leave waiting-activation state")
 	}
 }

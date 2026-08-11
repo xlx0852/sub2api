@@ -139,6 +139,19 @@ func ProvideOpenAIQuotaService(
 	return service
 }
 
+// ProvideQuotaWindowSweepService builds and starts the low-frequency quota ledger sweeper.
+func ProvideQuotaWindowSweepService(
+	accountRepo AccountRepository,
+	openAI *OpenAIQuotaService,
+	kimi KimiQuotaQuerier,
+	grok GrokQuotaProber,
+	settingRepo SettingRepository,
+) *QuotaWindowSweepService {
+	svc := NewQuotaWindowSweepService(accountRepo, openAI, kimi, grok, settingRepo)
+	svc.Start()
+	return svc
+}
+
 // ProvideKimiQuotaService wires the Kimi official quota query service.
 func ProvideKimiQuotaService(
 	accountRepo AccountRepository,
@@ -164,36 +177,41 @@ func ProvideAccountUsageService(
 	kimiQuotaService *KimiQuotaService,
 	cache *UsageCache,
 	identityCache IdentityCache,
-tlsFPProfileService *TLSFingerprintProfileService,
-		openAIGatewayService *OpenAIGatewayService,
-		quotaWindowLedger *QuotaWindowLedger,
-	) *AccountUsageService {
-		service := NewAccountUsageService(
-			accountRepo,
-			usageLogRepo,
-			usageFetcher,
-			geminiQuotaService,
-			antigravityQuotaFetcher,
-			grokQuotaFetcher,
-			openAIQuotaService,
-			cache,
-			identityCache,
-			tlsFPProfileService,
-		)
-		service.SetKimiQuotaService(kimiQuotaService)
-		service.SetGrokQuotaService(grokQuotaService)
-		service.SetQuotaWindowLedger(quotaWindowLedger)
-		if kimiQuotaService != nil {
-			kimiQuotaService.SetQuotaWindowLedger(quotaWindowLedger)
+	tlsFPProfileService *TLSFingerprintProfileService,
+	openAIGatewayService *OpenAIGatewayService,
+	quotaWindowLedger *QuotaWindowLedger,
+) *AccountUsageService {
+	service := NewAccountUsageService(
+		accountRepo,
+		usageLogRepo,
+		usageFetcher,
+		geminiQuotaService,
+		antigravityQuotaFetcher,
+		grokQuotaFetcher,
+		openAIQuotaService,
+		cache,
+		identityCache,
+		tlsFPProfileService,
+	)
+	service.SetKimiQuotaService(kimiQuotaService)
+	service.SetGrokQuotaService(grokQuotaService)
+	service.SetQuotaWindowLedger(quotaWindowLedger)
+	if quotaWindowLedger != nil {
+		if rangeReader, ok := usageLogRepo.(accountWindowStatsRangeReader); ok {
+			quotaWindowLedger.SetObservationStatsReader(rangeReader)
 		}
-		if grokQuotaService != nil {
-			grokQuotaService.SetQuotaWindowLedger(quotaWindowLedger)
-		}
-		openAIGatewayService.SetKimiQuotaService(kimiQuotaService)
-		openAIGatewayService.SetGrokQuotaService(grokQuotaService)
-		service.agentIdentityWS = openAIGatewayService
-		return service
 	}
+	if kimiQuotaService != nil {
+		kimiQuotaService.SetQuotaWindowLedger(quotaWindowLedger)
+	}
+	if grokQuotaService != nil {
+		grokQuotaService.SetQuotaWindowLedger(quotaWindowLedger)
+	}
+	openAIGatewayService.SetKimiQuotaService(kimiQuotaService)
+	openAIGatewayService.SetGrokQuotaService(grokQuotaService)
+	service.agentIdentityWS = openAIGatewayService
+	return service
+}
 
 func ProvideAccountTestService(
 	accountRepo AccountRepository,
@@ -762,6 +780,7 @@ var ProviderSet = wire.NewSet(
 	ProvideOpsMetricsCollector,
 	ProvideOpsAggregationService,
 	ProvideOpsAlertEvaluatorService,
+	ProvideOpenAIStatusCollectorService,
 	ProvideOpsCleanupService,
 	ProvideOpsScheduledReportService,
 	NewEmailService,
@@ -786,7 +805,8 @@ var ProviderSet = wire.NewSet(
 	ProvideUsageCleanupService,
 	ProvideDeferredService,
 	NewQuotaWindowLedger,
-		NewProfitService,
+	ProvideQuotaWindowSweepService,
+	NewProfitService,
 	NewAntigravityQuotaFetcher,
 	NewGrokQuotaFetcher,
 	NewUserAttributeService,

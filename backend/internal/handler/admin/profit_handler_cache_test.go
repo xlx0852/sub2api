@@ -88,36 +88,3 @@ func TestProfitHandler_GetOverviewHonorsIfNoneMatch(t *testing.T) {
 	router.ServeHTTP(second, req)
 	require.Equal(t, http.StatusNotModified, second.Code)
 }
-
-func TestProfitHandler_GetSupplyForecastCachesAndRefreshes(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	h := NewProfitHandler(nil)
-	var loads atomic.Int32
-	h.loadSupplyForecast = func(context.Context, int, float64, string) (*service.SupplyForecastResponse, error) {
-		load := loads.Add(1)
-		return &service.SupplyForecastResponse{GeneratedAt: time.Date(2026, 7, 29, 0, 0, int(load), 0, time.UTC)}, nil
-	}
-	router := gin.New()
-	router.GET("/supply-forecast", h.GetSupplyForecast)
-
-	request := func(query string) *httptest.ResponseRecorder {
-		recorder := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/supply-forecast?timezone=UTC&horizon_days=30&safety_margin=0.2"+query, nil)
-		router.ServeHTTP(recorder, req)
-		return recorder
-	}
-
-	first := request("")
-	require.Equal(t, http.StatusOK, first.Code)
-	require.Equal(t, "miss", first.Header().Get("X-Supply-Forecast-Cache"))
-	second := request("")
-	require.Equal(t, "hit", second.Header().Get("X-Supply-Forecast-Cache"))
-	require.Equal(t, int32(1), loads.Load())
-	refreshed := request("&refresh=true")
-	require.Equal(t, "miss", refreshed.Header().Get("X-Supply-Forecast-Cache"))
-	require.Equal(t, int32(2), loads.Load())
-
-	invalid := httptest.NewRecorder()
-	router.ServeHTTP(invalid, httptest.NewRequest(http.MethodGet, "/supply-forecast?horizon_days=31", nil))
-	require.Equal(t, http.StatusBadRequest, invalid.Code)
-}

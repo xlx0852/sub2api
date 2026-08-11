@@ -201,9 +201,6 @@ func grokBillingExhaustionResetAt(billing *xai.BillingSnapshot, now time.Time) t
 	}
 	endRaw := strings.TrimSpace(billing.PeriodEnd)
 	if endRaw == "" {
-		endRaw = strings.TrimSpace(billing.BillingPeriodEnd)
-	}
-	if endRaw == "" {
 		return time.Time{}
 	}
 	parsed, ok := parseGrokBillingTime(endRaw)
