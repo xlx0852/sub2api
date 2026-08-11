@@ -3,37 +3,7 @@
     <TablePageLayout transparent compact>
       <template #filters>
         <div class="flex flex-wrap items-center gap-3">
-          <div class="flex items-center gap-2">
-            <div class="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
-              <button
-                data-testid="profit-review-tab"
-                type="button"
-                class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-                :class="activeView === 'review' ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-dark-300 dark:hover:text-white'"
-                @click="activeView = 'review'"
-              >
-                {{ t('admin.profit.reviewTab') }}
-              </button>
-              <button
-                data-testid="profit-forecast-tab"
-                type="button"
-                class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-                :class="activeView === 'forecast' ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-600 dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-dark-300 dark:hover:text-white'"
-                @click="activeView = 'forecast'"
-              >
-                {{ t('admin.profit.supplyForecastTab') }}
-              </button>
-            </div>
-            <HelpTooltip
-              v-if="activeView === 'forecast'"
-              :content="t('admin.profit.supplyForecastHint')"
-              width-class="w-72"
-            >
-              <Icon name="infoCircle" size="xs" class="text-gray-400 dark:text-dark-400" />
-            </HelpTooltip>
-          </div>
-
-          <div v-if="activeView === 'review'" class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">
+          <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">
             <div class="flex flex-wrap items-center gap-2">
               <button
                 v-for="preset in presets"
@@ -79,9 +49,8 @@
       </template>
 
       <template #table>
-        <SupplyForecastPanel v-if="activeView === 'forecast'" />
-        <div v-else class="flex flex-col space-y-5">
-          <section class="grid grid-cols-1 gap-4 sm:grid-cols-3" :class="loading ? 'opacity-60' : ''">
+        <div class="flex flex-col space-y-5">
+          <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" :class="loading ? 'opacity-60' : ''">
             <div class="rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-700 dark:bg-dark-800">
               <div class="text-sm text-gray-500 dark:text-dark-400">{{ t('admin.profit.totalRevenue') }}</div>
               <div class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">${{ fmt(data?.total_revenue) }}</div>
@@ -95,6 +64,14 @@
               <div class="mt-1 text-2xl font-bold" :class="(data?.total_profit ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">
                 ${{ fmt(data?.total_profit) }}
               </div>
+            </div>
+            <div
+              class="rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-700 dark:bg-dark-800"
+              :title="t('admin.profit.currentUserBalanceHint')"
+              data-testid="profit-current-user-balance"
+            >
+              <div class="text-sm text-gray-500 dark:text-dark-400">{{ t('admin.profit.currentUserBalance') }}</div>
+              <div class="mt-1 text-2xl font-bold text-sky-600 dark:text-sky-400">${{ fmt(currentUserBalance) }}</div>
             </div>
           </section>
 
@@ -156,13 +133,12 @@ import type { ProfitSummaryResponse, ProfitTrendPoint } from '@/api/admin/profit
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
-import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Icon from '@/components/icons/Icon.vue'
-import SupplyForecastPanel from '@/components/admin/profit/SupplyForecastPanel.vue'
 import QuotaWindowPanel from '@/components/admin/profit/QuotaWindowPanel.vue'
 import type { QuotaWindowSelectPayload } from '@/components/admin/profit/QuotaWindowPanel.vue'
+import { windowsForDrawerSelection } from '@/components/admin/profit/quotaTimeline'
 import AccountProfitDrawer from '@/components/admin/profit/AccountProfitDrawer.vue'
-import type { ProfitWindowEconomicsItem } from '@/api/admin/profit'
+import type { AccountProfitSummary, ProfitWindowEconomicsItem } from '@/api/admin/profit'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -183,19 +159,22 @@ const { t } = useI18n()
 const appStore = useAppStore()
 const loading = ref(false)
 const trendLoading = ref(false)
-const activeView = ref<'review' | 'forecast'>('review')
 const data = ref<ProfitSummaryResponse | null>(null)
 const trendPoints = ref<ProfitTrendPoint[]>([])
 const snapshotGeneratedAt = ref('')
+const currentUserBalance = ref(0)
 const trendMetric = ref<TrendMetric>('revenue')
 const accountRows = computed(() => [...(data.value?.accounts || [])].sort((a, b) => b.profit - a.profit))
 const showAccountDrawer = ref(false)
 const drawerAccountId = ref<number | null>(null)
-const drawerAccount = computed(() => accountRows.value.find((a) => a.account_id === drawerAccountId.value) || null)
+const drawerAccountDetail = ref<AccountProfitSummary | null>(null)
+const drawerAccount = computed(() => {
+  if (drawerAccountDetail.value?.account_id === drawerAccountId.value) return drawerAccountDetail.value
+  return accountRows.value.find((a) => a.account_id === drawerAccountId.value) || null
+})
 const drawerSelectedWindow = ref<ProfitWindowEconomicsItem | null>(null)
 const drawerWindowHistory = ref<ProfitWindowEconomicsItem[]>([])
 const drawerHistoryLoading = ref(false)
-const drawerLaneWindows = ref<QuotaWindowSelectPayload['windows']>([])
 
 function closeAccountDrawer() {
   showAccountDrawer.value = false
@@ -203,7 +182,7 @@ function closeAccountDrawer() {
 
 async function openAccountDrawer(payload: QuotaWindowSelectPayload) {
   drawerAccountId.value = payload.accountId
-  drawerLaneWindows.value = payload.windows || []
+  drawerAccountDetail.value = null
   showAccountDrawer.value = true
   drawerSelectedWindow.value = {
     start_at: new Date(payload.startMs).toISOString(),
@@ -217,7 +196,23 @@ async function openAccountDrawer(payload: QuotaWindowSelectPayload) {
     profit: 0
   }
   drawerWindowHistory.value = []
-  await loadDrawerWindowEconomics(payload.accountId, payload.startMs, payload.endMs, payload.windows, payload.kind, payload.label)
+  await Promise.all([
+    loadDrawerAccountSummary(payload.accountId),
+    loadDrawerWindowEconomics(payload.accountId, payload.startMs, payload.endMs, payload.windows, payload.kind, payload.label)
+  ])
+}
+
+async function loadDrawerAccountSummary(accountId: number) {
+  try {
+    const response = await adminAPI.profit.summary(startDate.value, endDate.value, accountId)
+    if (drawerAccountId.value === accountId) {
+      drawerAccountDetail.value = response.accounts?.[0] || null
+    }
+  } catch (error) {
+    if (drawerAccountId.value === accountId) {
+      appStore.showError(extractApiErrorMessage(error, t('admin.profit.loadFailed')))
+    }
+  }
 }
 
 function onDrawerSelectWindow(item: ProfitWindowEconomicsItem) {
@@ -225,44 +220,24 @@ function onDrawerSelectWindow(item: ProfitWindowEconomicsItem) {
 }
 
 function expandLedgerWindows(
+  accountId: number,
   windows: QuotaWindowSelectPayload['windows'],
   selectedStartMs: number,
   selectedEndMs: number,
   kind?: string,
   label?: string
 ) {
-  const base = [...(windows || [])]
-  if (!base.length && selectedStartMs && selectedEndMs) {
-    base.push({ startMs: selectedStartMs, endMs: selectedEndMs, status: 'current', kind, label })
+  const account = accountRows.value.find((row) => row.account_id === accountId)
+  if (!account) {
+    return selectedStartMs && selectedEndMs
+      ? [{ startMs: selectedStartMs, endMs: selectedEndMs, status: 'current' as const, kind, label }]
+      : [...(windows || [])]
   }
-  if (!base.length) return [] as QuotaWindowSelectPayload['windows']
 
-  // Prefer duration from selected bar.
-  let duration = Math.max(60_000, selectedEndMs - selectedStartMs)
-  if (!(duration > 0)) {
-    const sample = base[0]
-    duration = Math.max(60_000, sample.endMs - sample.startMs)
-  }
-  const byStart = new Map<number, QuotaWindowSelectPayload['windows'][number]>()
-  for (const w of base) byStart.set(w.startMs, w)
-
-  // Walk back/forward from selected occurrence so history is not limited to the painted viewport.
-  for (let i = 1; i <= 10; i += 1) {
-    const startMs = selectedStartMs - i * duration
-    const endMs = startMs + duration
-    if (!byStart.has(startMs)) {
-      byStart.set(startMs, { startMs, endMs, status: endMs <= Date.now() ? 'ended' : 'current', kind, label })
-    }
-  }
-  for (let i = 1; i <= 4; i += 1) {
-    const startMs = selectedStartMs + i * duration
-    const endMs = startMs + duration
-    if (!byStart.has(startMs)) {
-      const status = startMs > Date.now() ? 'upcoming' : (endMs <= Date.now() ? 'ended' : 'current')
-      byStart.set(startMs, { startMs, endMs, status, kind, label })
-    }
-  }
-  return [...byStart.values()].sort((a, b) => a.startMs - b.startMs)
+  // The drawer and gantt must consume the same ledger/projection engine. The
+  // clicked bar only selects the range; it must never become a second recurrence
+  // anchor because observed ledger boundaries can drift by a few seconds.
+  return windowsForDrawerSelection(account, Date.now(), selectedStartMs, selectedEndMs, kind)
 }
 
 async function loadDrawerWindowEconomics(
@@ -275,7 +250,7 @@ async function loadDrawerWindowEconomics(
 ) {
   drawerHistoryLoading.value = true
   try {
-    const ledger = expandLedgerWindows(windows, selectedStartMs, selectedEndMs, kind, label)
+    const ledger = expandLedgerWindows(accountId, windows, selectedStartMs, selectedEndMs, kind, label)
     const queries = ledger.map((w) => ({
       start_at: new Date(w.startMs).toISOString(),
       end_at: new Date(w.endMs).toISOString(),
@@ -504,6 +479,7 @@ async function loadAll(forceRefresh = false) {
   try {
     const overview = await adminAPI.profit.overview(startDate.value, endDate.value, forceRefresh)
     data.value = overview.summary
+    currentUserBalance.value = overview.current_user_balance ?? 0
     trendPoints.value = overview.points || []
     snapshotGeneratedAt.value = overview.generated_at || ''
   } catch (error) {

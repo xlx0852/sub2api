@@ -106,8 +106,8 @@ func (s *ProfitService) getAccountForProfit(ctx context.Context, accountID int64
 	return nil, fmt.Errorf("account %d not found", accountID)
 }
 
-// ProfitQuotaWindow 是利润页时间轴用的滚动配额窗口快照。
-// Start/End 由 reset_at 与 window 时长反推；历史轮次不持久化，仅展示当前窗口。
+// ProfitQuotaWindow is either a persisted provider window or a derived
+// waiting-activation interval used by the profit timeline.
 type ProfitQuotaWindow struct {
 	ID            string     `json:"id"`
 	Label         string     `json:"label"`
@@ -116,22 +116,34 @@ type ProfitQuotaWindow struct {
 	StartAt       *time.Time `json:"start_at,omitempty"`
 	EndAt         *time.Time `json:"end_at,omitempty"`
 	WindowMinutes *int       `json:"window_minutes,omitempty"`
+	Source        string     `json:"source,omitempty"`
+	ClosedReason  string     `json:"closed_reason,omitempty"`
+	Status        string     `json:"status,omitempty"` // waiting_activation for a real no-window gap
 	// RecurringUntilAt caps projected occurrences at the subscription cycle or
 	// confirmed ban end; it is absent for non-subscription windows.
 	RecurringUntilAt *time.Time `json:"recurring_until_at,omitempty"`
+	// IsOpen marks ledger rows that are still open (not closed). Used by the
+	// frontend to distinguish drifting (open but end passed) from ended.
+	IsOpen *bool `json:"is_open,omitempty"`
 	// RecurringFromAt is the start of the active cost cycle; projections must
 	// not roll back before it (prevents painting the gap before the cycle).
 	RecurringFromAt *time.Time `json:"recurring_from_at,omitempty"`
 }
 
+type ProfitQuotaAvailabilitySpan struct {
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
+}
+
 // AccountProfitSummary 单账号周期利润汇总。
 type AccountProfitSummary struct {
-	AccountID   int64  `json:"account_id"`
-	AccountName string `json:"account_name"`
-	Platform    string `json:"platform"`
-	AccountType string `json:"account_type"`
-	CostType    string `json:"cost_type"`
-	Configured  bool   `json:"configured"` // 是否已绑定成本配置
+	AccountID              int64                         `json:"account_id"`
+	AccountName            string                        `json:"account_name"`
+	Platform               string                        `json:"platform"`
+	AccountType            string                        `json:"account_type"`
+	QuotaAvailabilitySpans []ProfitQuotaAvailabilitySpan `json:"quota_availability_spans,omitempty"`
+	CostType               string                        `json:"cost_type"`
+	Configured             bool                          `json:"configured"` // 是否已绑定成本配置
 	// Deleted 为 true 表示账号当前在回收站（软删除或结算封禁），历史 usage/亏损仍计入利润复盘。
 	Deleted bool `json:"deleted"`
 
@@ -271,9 +283,10 @@ type ProfitWindowEconomicsResponse struct {
 
 // ProfitOverviewResponse 为利润页一次返回汇总与趋势，避免重复扫描相同时间范围。
 type ProfitOverviewResponse struct {
-	GeneratedAt time.Time              `json:"generated_at"`
-	Summary     *ProfitSummaryResponse `json:"summary"`
-	Points      []*ProfitTrendPoint    `json:"points"`
+	GeneratedAt        time.Time              `json:"generated_at"`
+	CurrentUserBalance float64                `json:"current_user_balance"`
+	Summary            *ProfitSummaryResponse `json:"summary"`
+	Points             []*ProfitTrendPoint    `json:"points"`
 }
 
 // profitAccountingOptions 控制 loadProfitAccountingData 额外加载哪些运营指标。
@@ -404,6 +417,10 @@ func (s *ProfitService) summarizeAccountsWithData(ctx context.Context, accounts 
 							windowRevenue = windowStats.Revenue
 						}
 						fillBillingWindowFromRevenue(financialCycle, summary, windowRevenue, accounting.now)
+						if windowStats := accounting.windowStatsByAccount[acc.ID]; windowStats != nil {
+							requests := windowStats.Requests
+							summary.BillingWindowRequests = &requests
+						}
 					}
 					if accounting.opts.BreakEven {
 						fillBreakEvenRate(
@@ -776,13 +793,16 @@ func (s *ProfitService) fillBillingWindow(ctx context.Context, accountID int64, 
 		effectiveEnd = now
 	}
 	var revenue float64
+	var requests int64
 	if effectiveEnd.After(wStart) {
 		stats, err := s.profitRepo.GetAccountUsageStatsBatch(ctx, []int64{accountID}, wStart, effectiveEnd)
 		if err == nil && stats[accountID] != nil {
 			revenue = stats[accountID].Revenue
+			requests = stats[accountID].Requests
 		}
 	}
 	fillBillingWindowFromRevenue(cycle, summary, revenue, now)
+	summary.BillingWindowRequests = &requests
 }
 
 // pickPreferredBreakEvenWindow 选择用于保本测算的配额窗：
@@ -1335,6 +1355,10 @@ func (s *ProfitService) GetOverview(ctx context.Context, start, end time.Time, t
 	if err != nil {
 		return nil, err
 	}
+	currentUserBalance, err := s.profitRepo.GetCurrentUserBalanceTotal(ctx)
+	if err != nil {
+		return nil, err
+	}
 	accountIDs := make([]int64, 0, len(accounts))
 	for i := range accounts {
 		accountIDs = append(accountIDs, accounts[i].ID)
@@ -1365,7 +1389,12 @@ func (s *ProfitService) GetOverview(ctx context.Context, start, end time.Time, t
 		cycles = append(cycles, accountCycles...)
 	}
 	trend := buildProfitTrendWithAccounts(dailyByAccount, accounts, cycles, tzName, start, end)
-	return &ProfitOverviewResponse{GeneratedAt: time.Now().UTC(), Summary: summary, Points: trend.Points}, nil
+	return &ProfitOverviewResponse{
+		GeneratedAt:        time.Now().UTC(),
+		CurrentUserBalance: roundMoney(currentUserBalance),
+		Summary:            summary,
+		Points:             trend.Points,
+	}, nil
 }
 
 // GetAccountWindowEconomics returns revenue/amortized-cost/profit for explicit quota windows.
@@ -1898,6 +1927,7 @@ func roundMoney(v float64) float64 {
 // fillAccountQuotaWindows builds live windows from extra, then overlays the real
 // account_quota_windows ledger (reset-card / observed official resets).
 func (s *ProfitService) fillAccountQuotaWindows(ctx context.Context, summary *AccountProfitSummary, acc *Account, now time.Time, anchor profitWindowAnchor) {
+	summary.QuotaAvailabilitySpans = profitAvailabilitySpans(anchor)
 	fillProfitQuotaWindowsWithAnchor(summary, acc, now, anchor)
 	if s == nil || s.quotaWindowRepo == nil || summary == nil || acc == nil {
 		return
@@ -1934,8 +1964,9 @@ func (s *ProfitService) fillAccountQuotaWindows(ctx context.Context, summary *Ac
 				used = live.UsedPercent
 			}
 			if live, ok := byKindLive[row.Kind]; ok && live.EndAt != nil {
-				// Keep open end aligned to latest upstream if slightly newer.
-				if live.EndAt.After(end) {
+				// Only absorb small countdown calibration here. A large jump is a
+				// possible new period and must pass through the ledger state machine.
+				if live.EndAt.After(end) && live.EndAt.Sub(end) <= quotaWindowSkew {
 					end = *live.EndAt
 				}
 			}
@@ -1953,9 +1984,15 @@ func (s *ProfitService) fillAccountQuotaWindows(ctx context.Context, summary *Ac
 			id = fmt.Sprintf("%s-%d", kind, start.Unix())
 		}
 		wm := mins
+		isOpen := row.IsOpen && end.After(now)
+		closedReason := row.ClosedReason
+		if row.IsOpen && !end.After(now) {
+			closedReason = QuotaWindowCloseCleared
+		}
 		out = append(out, ProfitQuotaWindow{
 			ID: id, Label: label, Kind: kind,
 			UsedPercent: used, StartAt: &start, EndAt: &end, WindowMinutes: &wm,
+			Source: row.Source, ClosedReason: closedReason, IsOpen: &isOpen,
 		})
 	}
 	// Keep live kinds not present in ledger yet (first seed lag).
@@ -1965,6 +2002,7 @@ func (s *ProfitService) fillAccountQuotaWindows(ctx context.Context, summary *Ac
 		}
 		out = append(out, live)
 	}
+	out = append(out, deriveWaitingActivationGaps(out, now)...)
 	// Re-apply anchor caps on the merged set.
 	summary.QuotaWindows = nil
 	tmp := &AccountProfitSummary{}
@@ -1976,15 +2014,86 @@ func (s *ProfitService) fillAccountQuotaWindows(ctx context.Context, summary *Ac
 	}
 }
 
-func applyProfitWindowAnchor(windows []ProfitQuotaWindow, anchor profitWindowAnchor, now time.Time) []ProfitQuotaWindow {
-	if len(anchor.spans) > 0 {
-		capped := windows[:0]
-		for i := range windows {
-			w := windows[i]
-			if w.StartAt != nil && !anchor.coversStart(*w.StartAt) {
+func deriveWaitingActivationGaps(windows []ProfitQuotaWindow, now time.Time) []ProfitQuotaWindow {
+	byKind := make(map[string][]ProfitQuotaWindow)
+	for _, w := range windows {
+		if w.Status != "" || w.StartAt == nil || w.EndAt == nil || !w.EndAt.After(*w.StartAt) {
+			continue
+		}
+		byKind[w.Kind] = append(byKind[w.Kind], w)
+	}
+	var gaps []ProfitQuotaWindow
+	for kind, rows := range byKind {
+		sort.Slice(rows, func(i, j int) bool { return rows[i].StartAt.Before(*rows[j].StartAt) })
+		for i := 0; i+1 < len(rows); i++ {
+			start := *rows[i].EndAt
+			end := *rows[i+1].StartAt
+			if end.Sub(start) <= quotaWindowSkew {
 				continue
 			}
-			capped = append(capped, w)
+			gaps = append(gaps, waitingActivationWindow(kind, start, end))
+		}
+		latest := rows[len(rows)-1]
+		if latest.EndAt != nil && latest.EndAt.Before(now) &&
+			((latest.IsOpen != nil && *latest.IsOpen) || latest.ClosedReason == QuotaWindowCloseCleared) {
+			gaps = append(gaps, waitingActivationWindow(kind, *latest.EndAt, now))
+		}
+	}
+	return gaps
+}
+
+func waitingActivationWindow(kind string, start, end time.Time) ProfitQuotaWindow {
+	isOpen := false
+	return ProfitQuotaWindow{
+		ID: fmt.Sprintf("%s-waiting-%d", kind, start.Unix()), Label: kind, Kind: kind,
+		StartAt: &start, EndAt: &end, Status: "waiting_activation", Source: "derived",
+		IsOpen: &isOpen,
+	}
+}
+
+func profitAvailabilitySpans(anchor profitWindowAnchor) []ProfitQuotaAvailabilitySpan {
+	if len(anchor.spans) == 0 {
+		return nil
+	}
+	spans := make([]ProfitQuotaAvailabilitySpan, 0, len(anchor.spans))
+	for _, span := range anchor.spans {
+		if span.end.After(span.start) {
+			spans = append(spans, ProfitQuotaAvailabilitySpan{StartAt: span.start, EndAt: span.end})
+		}
+	}
+	sort.Slice(spans, func(i, j int) bool { return spans[i].StartAt.Before(spans[j].StartAt) })
+	return spans
+}
+
+func applyProfitWindowAnchor(windows []ProfitQuotaWindow, anchor profitWindowAnchor, now time.Time) []ProfitQuotaWindow {
+	if len(anchor.spans) > 0 {
+		capped := make([]ProfitQuotaWindow, 0, len(windows))
+		for i := range windows {
+			w := windows[i]
+			if w.StartAt == nil || w.EndAt == nil {
+				capped = append(capped, w)
+				continue
+			}
+			for spanIndex, span := range anchor.spans {
+				start := *w.StartAt
+				end := *w.EndAt
+				if start.Before(span.start) {
+					start = span.start
+				}
+				if end.After(span.end) {
+					end = span.end
+				}
+				if !end.After(start) {
+					continue
+				}
+				part := w
+				part.StartAt = &start
+				part.EndAt = &end
+				if start.After(*w.StartAt) || end.Before(*w.EndAt) {
+					part.ID = fmt.Sprintf("%s-span-%d", w.ID, spanIndex)
+				}
+				capped = append(capped, part)
+			}
 		}
 		windows = capped
 	}
@@ -2060,6 +2169,17 @@ func fillProfitQuotaWindowsWithAnchor(summary *AccountProfitSummary, acc *Accoun
 		}
 	}
 
+	// Claude passive weekly headers are a live fallback before the first ledger
+	// row is persisted. The ledger replaces this same kind once available.
+	if acc.Platform == PlatformAnthropic || acc.Platform == "claude" {
+		if w := profitWindowFromAnthropicPassive(acc.Extra, now); w != nil && !hasProfitWindowKind(windows, "7d") {
+			windows = append(windows, *w)
+			if summary.SevenDayUtilization == nil {
+				summary.SevenDayUtilization = w.UsedPercent
+			}
+		}
+	}
+
 	// Grok quota window: prefer billing period; Free 24h fallback only for
 	// official xAI hosts (not third-party apikey relays).
 	if w := profitWindowFromGrok(acc, now); w != nil {
@@ -2085,53 +2205,14 @@ func fillProfitQuotaWindowsWithAnchor(summary *AccountProfitSummary, acc *Accoun
 		}
 	}
 
-	// Drop windows whose start falls in a gap between cost-configured cycles,
-	// then cap projections at recurringUntil when set.
-	if len(anchor.spans) > 0 {
-		capped := windows[:0]
-		for i := range windows {
-			w := windows[i]
-			if w.StartAt != nil && !anchor.coversStart(*w.StartAt) {
-				continue
-			}
-			capped = append(capped, w)
-		}
-		windows = capped
-	}
-	if eff := anchor.effectiveRecurringUntil(now); eff != nil {
-		recurringUntil := eff
-		capped := windows[:0]
-		for i := range windows {
-			w := windows[i]
-			if w.StartAt != nil && !w.StartAt.Before(*recurringUntil) {
-				continue
-			}
-			if w.EndAt != nil && w.EndAt.After(*recurringUntil) {
-				end := *recurringUntil
-				w.EndAt = &end
-			}
-			until := *recurringUntil
-			w.RecurringUntilAt = &until
-			if w.StartAt == nil || w.EndAt == nil || w.EndAt.After(*w.StartAt) {
-				capped = append(capped, w)
-			}
-		}
-		windows = capped
-	}
-	if anchor.coveredStart != nil {
-		for i := range windows {
-			from := *anchor.coveredStart
-			windows[i].RecurringFromAt = &from
-		}
-	}
+	windows = applyProfitWindowAnchor(windows, anchor, now)
 	if len(windows) > 0 {
 		summary.QuotaWindows = windows
 	}
 }
 
-// effectiveRecurringUntil: when the account has configured cycles but none is
-// active now and auto_renew is off, projection stops at the latest covered
-// cycle end (subscription ended). Auto-renew on keeps windows rolling.
+// effectiveRecurringUntil caps projection at the latest paid cycle that has
+// actually been recorded. Auto-renew intent alone never creates future supply.
 func (a profitWindowAnchor) effectiveRecurringUntil(now time.Time) *time.Time {
 	if a.recurringUntil != nil {
 		return a.recurringUntil
@@ -2139,11 +2220,7 @@ func (a profitWindowAnchor) effectiveRecurringUntil(now time.Time) *time.Time {
 	if len(a.spans) == 0 {
 		return nil
 	}
-	for _, s := range a.spans {
-		if !now.Before(s.start) && now.Before(s.end) {
-			return nil // active cycle, auto_renew=true → keep rolling
-		}
-	}
+	_ = now
 	latest := a.spans[0].end
 	for _, s := range a.spans {
 		if s.end.After(latest) {
@@ -2154,31 +2231,25 @@ func (a profitWindowAnchor) effectiveRecurringUntil(now time.Time) *time.Time {
 }
 
 // profitWindowAnchor describes how far quota windows may be projected and the
-// profitWindowAnchor describes how far quota windows may be projected and the
 // covered span of the account's cost-configured subscription cycles.
-// Windows are anchored to the cost-config cycles (not the global time filter):
-// auto_renew=false stops projection at the current cycle end; auto_renew=true
-// lets the window roll on past period_days. Gaps between configured cycles are
-// left empty (no invented window).
+// Windows are intersected with these cycles; gaps remain empty.
 type profitWindowSpan struct {
 	start time.Time
 	end   time.Time
 }
 
 type profitWindowAnchor struct {
-	// spans are the cost-configured cycle coverage ranges. A window whose start
-	// falls outside every span (i.e. inside a gap between configured cycles) is
-	// dropped — no invented window in the gap. Empty spans = no constraint.
+	// spans are the cost-configured cycle coverage ranges. Empty spans mean no
+	// subscription constraint (for example a metered account).
 	spans []profitWindowSpan
 	// coveredStart is the start of the active span; projections must not roll
 	// back before it (prevents painting the gap before the current cycle).
 	coveredStart *time.Time
-	// recurringUntil caps projected occurrences. nil when auto_renew is on
-	// (roll on) or the account is not subscription-configured.
+	// recurringUntil caps projections at the latest recorded paid-cycle end.
 	recurringUntil *time.Time
 }
 
-func buildProfitWindowAnchor(cycles []*AccountSubscriptionCycle, cfg *AccountCostConfig, now time.Time) profitWindowAnchor {
+func buildProfitWindowAnchor(cycles []*AccountSubscriptionCycle, _ *AccountCostConfig, _ time.Time) profitWindowAnchor {
 	spans := make([]profitWindowSpan, 0, len(cycles))
 	for _, cycle := range cycles {
 		if cycle == nil || cycle.PeriodDays <= 0 {
@@ -2190,32 +2261,55 @@ func buildProfitWindowAnchor(cycles []*AccountSubscriptionCycle, cfg *AccountCos
 		}
 		spans = append(spans, profitWindowSpan{start: cycle.StartsAt, end: end})
 	}
+	spans = mergeProfitWindowSpans(spans)
 	anchor := profitWindowAnchor{spans: spans}
 	// coveredStart 是历史配额窗口投影可回溯的最早成本周期起点。
 	// 用户可能记了多笔账（多个连续成本周期），历史窗口应覆盖所有已记账周期，
 	// 而非只回当前活跃周期起点——否则当前周期之前的配额窗口全部不显示。
 	// 最早记账周期之前的 gap 仍由 spans 检查兜底（窗口 start 落在 gap 内会被丢弃）。
-	if len(cycles) > 0 {
-		earliest := cycles[0].StartsAt
-		for _, c := range cycles {
-			if c != nil && c.StartsAt.Before(earliest) {
-				earliest = c.StartsAt
-			}
-		}
+	if len(spans) > 0 {
+		earliest := spans[0].start
 		anchor.coveredStart = &earliest
 	}
-	// auto_renew=false → stop projecting at the active cycle end.
-	autoRenew := cfg != nil && cfg.AutoRenew
-	if !autoRenew {
-		if active := activeSubscriptionCycle(cycles, now); active != nil && active.PeriodDays > 0 {
-			end := active.StartsAt.AddDate(0, 0, active.PeriodDays)
-			if termination := activeCycleTermination(active); termination != nil && termination.EffectiveAt.Before(end) {
-				end = termination.EffectiveAt
+	// Projection never extends beyond cycles that have actually been recorded.
+	// auto_renew expresses intent; the auto-renew service must create the next
+	// cycle before future quota supply becomes available.
+	if len(spans) > 0 {
+		latest := spans[0].end
+		for _, s := range spans {
+			if s.end.After(latest) {
+				latest = s.end
 			}
-			anchor.recurringUntil = &end
 		}
+		anchor.recurringUntil = &latest
 	}
 	return anchor
+}
+
+func mergeProfitWindowSpans(spans []profitWindowSpan) []profitWindowSpan {
+	if len(spans) < 2 {
+		return spans
+	}
+	sort.Slice(spans, func(i, j int) bool {
+		if spans[i].start.Equal(spans[j].start) {
+			return spans[i].end.Before(spans[j].end)
+		}
+		return spans[i].start.Before(spans[j].start)
+	})
+	merged := make([]profitWindowSpan, 0, len(spans))
+	for _, span := range spans {
+		if !span.end.After(span.start) {
+			continue
+		}
+		if len(merged) == 0 || span.start.After(merged[len(merged)-1].end) {
+			merged = append(merged, span)
+			continue
+		}
+		if span.end.After(merged[len(merged)-1].end) {
+			merged[len(merged)-1].end = span.end
+		}
+	}
+	return merged
 }
 
 func (a profitWindowAnchor) coversStart(start time.Time) bool {
@@ -2391,6 +2485,32 @@ func profitWindowFromKimi(extra map[string]any, name, kind string, defaultMinute
 	}
 }
 
+func profitWindowFromAnthropicPassive(extra map[string]any, now time.Time) *ProfitQuotaWindow {
+	usedRatio := extraFloat(extra, "passive_usage_7d_utilization")
+	resetRaw, hasReset := extra["passive_usage_7d_reset"]
+	resetAt, resetOK := anyToTimeValue(resetRaw)
+	if usedRatio == nil && (!hasReset || !resetOK) {
+		return nil
+	}
+	var used *float64
+	if usedRatio != nil {
+		value := math.Max(0, math.Min(100, *usedRatio*100))
+		used = &value
+	}
+	mins := 10080
+	var end *time.Time
+	if resetOK {
+		end = &resetAt
+	}
+	if end != nil && end.Before(now.Add(-profitWindowStaleTolerance(end, &mins))) {
+		return nil
+	}
+	return &ProfitQuotaWindow{
+		ID: "anthropic-7d", Label: "7d", Kind: "7d", UsedPercent: used,
+		StartAt: resolveProfitWindowStart(end, &mins), EndAt: end, WindowMinutes: &mins,
+	}
+}
+
 func profitWindowFromGrok(acc *Account, now time.Time) *ProfitQuotaWindow {
 	if acc == nil || acc.Extra == nil {
 		return nil
@@ -2427,81 +2547,19 @@ func profitWindowFromGrokBilling(extra map[string]any, now time.Time) *ProfitQuo
 		return nil
 	}
 
-	startAt := anyToTimeFlexible(firstNonNil(billing["period_start"], billing["billing_period_start"]))
-	endAt := anyToTimeFlexible(firstNonNil(billing["period_end"], billing["billing_period_end"]))
-	if startAt == nil && endAt == nil {
+	// billing_period_* belongs to the retired calendar-month accounting rule.
+	// Timeline windows are based only on the official current period. Future
+	// supply is capped separately by subscription start + period_days.
+	startAt := anyToTimeFlexible(billing["period_start"])
+	endAt := anyToTimeFlexible(billing["period_end"])
+	if startAt == nil || endAt == nil || !endAt.After(*startAt) {
 		return nil
 	}
 
-	used := anyToFloat64(firstNonNil(billing["usage_percent"], billing["used_percent"]))
-	// Prefer product-specific percent when present (GrokBuild matches the screenshot).
-	if products, ok := billing["product_usage"].([]any); ok {
-		for _, raw := range products {
-			item := asStringAnyMap(raw)
-			if item == nil {
-				continue
-			}
-			product := strings.ToLower(strings.TrimSpace(fmt.Sprint(item["product"])))
-			if product == "" {
-				continue
-			}
-			if p := anyToFloat64(item["usage_percent"]); p != nil {
-				if strings.Contains(product, "grokbuild") || strings.Contains(product, "build") {
-					used = p
-					break
-				}
-				if used == nil {
-					used = p
-				}
-			}
-		}
-	}
-
-	kind := "7d"
-	label := "7d"
-	periodType := strings.ToLower(strings.TrimSpace(fmt.Sprint(billing["period_type"])))
-	switch {
-	case strings.Contains(periodType, "month"):
-		kind = "other"
-		label = "30d"
-	case strings.Contains(periodType, "week"):
-		kind = "7d"
-		label = "7d"
-	case startAt != nil && endAt != nil:
-		hours := endAt.Sub(*startAt).Hours()
-		if hours >= 20*24 && hours <= 40*24 {
-			kind = "other"
-			label = "30d"
-		} else if hours >= 5*24 && hours <= 10*24 {
-			kind = "7d"
-			label = "7d"
-		} else if hours >= 20 && hours <= 30 {
-			kind = "24h"
-			label = "24h"
-		}
-	}
-
-	var windowMinutes *int
-	if startAt != nil && endAt != nil && endAt.After(*startAt) {
-		m := int(endAt.Sub(*startAt).Minutes())
-		if m > 0 {
-			windowMinutes = &m
-		}
-	} else if endAt != nil && windowMinutes == nil {
-		// Fallback duration for weekly billing when only end is known.
-		m := 7 * 24 * 60
-		windowMinutes = &m
-		startAt = resolveProfitWindowStart(endAt, windowMinutes)
-	} else if startAt != nil && endAt == nil && windowMinutes == nil {
-		m := 7 * 24 * 60
-		windowMinutes = &m
-		tmp := startAt.Add(time.Duration(m) * time.Minute)
-		endAt = &tmp
-	}
-
-	if used == nil && startAt == nil && endAt == nil {
-		return nil
-	}
+	used := grokBillingUsedPercent(billing)
+	minutes := int(endAt.Sub(*startAt).Minutes())
+	kind, label := classifyQuotaWindow("7d", minutes)
+	windowMinutes := &minutes
 	return &ProfitQuotaWindow{
 		ID:            "grok-billing",
 		Label:         label,
@@ -2511,6 +2569,15 @@ func profitWindowFromGrokBilling(extra map[string]any, now time.Time) *ProfitQuo
 		EndAt:         endAt,
 		WindowMinutes: windowMinutes,
 	}
+}
+
+func grokBillingUsedPercent(billing map[string]any) *float64 {
+	if billing == nil {
+		return nil
+	}
+	// Keep the profit timeline aligned with the account usage view: both show
+	// the provider's top-level quota-window utilization, not a product slice.
+	return anyToFloat64(billing["usage_percent"])
 }
 
 func profitWindowFromGrokUsageSnapshot(extra map[string]any, now time.Time, allowFree24hFallback bool) *ProfitQuotaWindow {
@@ -2610,6 +2677,13 @@ func asStringAnyMap(v any) map[string]any {
 				out[fmt.Sprint(k)] = val
 			}
 			return out
+		}
+		encoded, err := json.Marshal(v)
+		if err == nil {
+			var out map[string]any
+			if json.Unmarshal(encoded, &out) == nil {
+				return out
+			}
 		}
 	}
 	return nil

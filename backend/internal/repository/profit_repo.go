@@ -20,6 +20,16 @@ func NewProfitRepository(db *sql.DB) service.ProfitRepository {
 	return &profitRepository{db: db}
 }
 
+func (r *profitRepository) GetCurrentUserBalanceTotal(ctx context.Context) (float64, error) {
+	var total float64
+	err := r.db.QueryRowContext(ctx, `
+		SELECT COALESCE(SUM(balance + COALESCE(frozen_balance, 0)), 0)
+		FROM users
+		WHERE deleted_at IS NULL AND role = 'user'
+	`).Scan(&total)
+	return total, err
+}
+
 func (r *profitRepository) UpsertCostConfig(ctx context.Context, cfg *service.AccountCostConfig) (*service.AccountCostConfig, error) {
 	row := r.db.QueryRowContext(ctx, `
 		INSERT INTO account_cost_configs (account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, auto_renew, notes, created_at, updated_at)
@@ -495,4 +505,3 @@ func (r *profitRepository) HasSubscriptionCycleStartingAt(ctx context.Context, a
 	`, accountID, startsAt.UTC()).Scan(&exists)
 	return exists, err
 }
-

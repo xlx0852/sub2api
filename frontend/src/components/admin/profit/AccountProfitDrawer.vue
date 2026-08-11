@@ -35,7 +35,7 @@
           #{{ account.account_id }} · {{ account.platform }} / {{ account.account_type }}
           · {{ fmtNumber(requestCount) }} {{ t('admin.profit.requestsUnit') }}
         </p>
-        <p v-if="windowRangeLabel" class="text-xs text-gray-500 dark:text-dark-400">
+        <p v-if="windowRangeLabel" class="text-xs text-gray-500 dark:text-dark-400" data-testid="drawer-primary-range">
           {{ windowKindLabel }}: {{ windowRangeLabel }}
         </p>
         <div
@@ -52,19 +52,33 @@
         </div>
       </div>
 
-      <!-- Selected window economics -->
-      <div class="space-y-2.5 rounded-lg border border-gray-100 p-3 dark:border-dark-700">
+      <!-- Primary subscription-cycle economics with per-window composition -->
+      <div class="space-y-2.5 rounded-lg border border-gray-100 p-3 dark:border-dark-700" data-testid="drawer-primary-economics">
         <div class="grid grid-cols-[3.25rem_minmax(80px,1fr)_5.5rem] items-center gap-2 text-xs">
           <span class="text-gray-500 dark:text-dark-400">{{ t('admin.profit.revenue') }}</span>
-          <div class="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-600">
-            <div class="h-full rounded-full bg-emerald-500 transition-all" :style="{ width: barWidth(revenue) }" />
+          <div class="flex h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-600" data-testid="drawer-revenue-composition">
+            <span
+              v-for="segment in revenueSegments"
+              :key="`revenue-${segment.key}`"
+              class="h-full shrink-0 transition-all"
+              :style="{ width: `${segment.width}%`, backgroundColor: segment.color }"
+              :title="segmentTitle(segment)"
+              data-testid="drawer-revenue-segment"
+            />
           </div>
           <span class="text-right font-medium tabular-nums text-gray-800 dark:text-dark-100">${{ fmt(revenue) }}</span>
         </div>
         <div class="grid grid-cols-[3.25rem_minmax(80px,1fr)_5.5rem] items-center gap-2 text-xs">
-          <span class="text-gray-500 dark:text-dark-400">{{ t('admin.profit.amortizedCost') }}</span>
-          <div class="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-600">
-            <div class="h-full rounded-full bg-amber-400 transition-all" :style="{ width: barWidth(cost) }" />
+          <span class="text-gray-500 dark:text-dark-400">{{ primaryCostLabel }}</span>
+          <div class="flex h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-600" data-testid="drawer-cost-composition">
+            <span
+              v-for="segment in costSegments"
+              :key="`cost-${segment.key}`"
+              class="h-full shrink-0 transition-all"
+              :style="{ width: `${segment.width}%`, backgroundColor: segment.color }"
+              :title="segmentTitle(segment)"
+              data-testid="drawer-cost-segment"
+            />
           </div>
           <span class="text-right font-medium tabular-nums text-gray-600 dark:text-dark-300">${{ fmt(cost) }}</span>
         </div>
@@ -97,7 +111,7 @@
 
         <div v-else class="max-h-72 space-y-1.5 overflow-y-auto pr-0.5">
           <button
-            v-for="item in historyRows"
+            v-for="(item, index) in historyRows"
             :key="`${item.start_at}-${item.end_at}`"
             type="button"
             class="w-full rounded-lg border px-2.5 py-2 text-left transition"
@@ -108,8 +122,15 @@
           >
             <div class="flex items-center justify-between gap-2">
               <div class="min-w-0">
-                <div class="truncate text-[11px] font-semibold text-gray-800 dark:text-dark-100">
-                  {{ formatRange(item.start_at, item.end_at) }}
+                <div class="flex min-w-0 items-center gap-1.5">
+                  <span
+                    class="h-2 w-2 shrink-0 rounded-full"
+                    :style="{ backgroundColor: windowColor(index) }"
+                    data-testid="drawer-window-color-marker"
+                  />
+                  <div class="truncate text-[11px] font-semibold text-gray-800 dark:text-dark-100">
+                    {{ formatRange(item.start_at, item.end_at) }}
+                  </div>
                 </div>
                 <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-400">
                   <span class="rounded px-1 py-0.5 font-medium" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</span>
@@ -163,8 +184,16 @@ const { t } = useI18n()
 
 const active = computed(() => props.selectedWindow || null)
 const historyRows = computed(() => props.windowHistory || [])
+const windowPalette = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316']
+const usesRecordedSubscriptionCycle = computed(() => {
+  const a = props.account
+  return a?.cost_type === 'subscription'
+    && Boolean(a.billing_window_start && a.billing_window_end)
+    && ['cycle', 'manual', 'subscription_expiry'].includes(a.billing_window_source || '')
+})
 
 const revenue = computed(() => {
+  if (usesRecordedSubscriptionCycle.value) return Number(props.account?.billing_window_revenue) || 0
   if (active.value) return Number(active.value.revenue) || 0
   // Prefer drawer quota window (7d/5h); never the pool cycle billing window.
   const a = props.account
@@ -173,6 +202,7 @@ const revenue = computed(() => {
   return a?.revenue ?? 0
 })
 const cost = computed(() => {
+  if (usesRecordedSubscriptionCycle.value) return Number(props.account?.billing_window_cost) || 0
   if (active.value) return Number(active.value.cost) || 0
   const a = props.account
   if (a?.drawer_quota_cost != null) return a.drawer_quota_cost
@@ -180,6 +210,7 @@ const cost = computed(() => {
   return a?.cost ?? 0
 })
 const profit = computed(() => {
+  if (usesRecordedSubscriptionCycle.value) return Number(props.account?.billing_window_profit) || 0
   if (active.value) return Number(active.value.profit) || 0
   const a = props.account
   if (a?.drawer_quota_profit != null) return a.drawer_quota_profit
@@ -187,20 +218,35 @@ const profit = computed(() => {
   return a?.profit ?? 0
 })
 const requestCount = computed(() => {
+  if (usesRecordedSubscriptionCycle.value) return Number(props.account?.billing_window_requests) || 0
   if (active.value) return Number(active.value.requests) || 0
   const a = props.account
   if (a?.drawer_quota_requests != null) return a.drawer_quota_requests
   if (a?.billing_window_requests != null && a.billing_window_source === 'quota_window') return a.billing_window_requests
   return a?.requests ?? 0
 })
-const activeStatus = computed(() => active.value?.status || '')
+const activeStatus = computed(() => {
+  if (!usesRecordedSubscriptionCycle.value) return active.value?.status || ''
+  const start = Date.parse(props.account?.billing_window_start || '')
+  const end = Date.parse(props.account?.billing_window_end || '')
+  const now = Date.now()
+  if (!Number.isNaN(start) && now < start) return 'upcoming'
+  if (!Number.isNaN(end) && now >= end) return 'ended'
+  return 'current'
+})
 
 const marginLabel = computed(() => {
   if (revenue.value <= 0) return '—'
   return `${((profit.value / revenue.value) * 100).toFixed(1)}%`
 })
+const primaryCostLabel = computed(() => usesRecordedSubscriptionCycle.value
+  ? t('admin.profit.currentCyclePurchaseCost')
+  : t('admin.profit.amortizedCost'))
 
 const windowRangeLabel = computed(() => {
+  if (usesRecordedSubscriptionCycle.value) {
+    return formatRange(props.account?.billing_window_start, props.account?.billing_window_end)
+  }
   if (active.value) return formatRange(active.value.start_at, active.value.end_at)
   const a = props.account
   if (a?.drawer_quota_start) return formatRange(a.drawer_quota_start, a.drawer_quota_end)
@@ -209,6 +255,7 @@ const windowRangeLabel = computed(() => {
 })
 
 const windowKindLabel = computed(() => {
+  if (usesRecordedSubscriptionCycle.value) return t('admin.profit.drawerBillingCycle')
   const kind = active.value?.kind || props.account?.drawer_quota_kind || ''
   if (kind) return t('admin.profit.drawerQuotaWindow', { kind })
   if (props.account?.billing_window_source === 'cycle') return t('admin.profit.drawerBillingCycle')
@@ -219,9 +266,58 @@ const windowKindLabel = computed(() => {
 })
 
 const drawerHint = computed(() => {
+  if (usesRecordedSubscriptionCycle.value) return t('admin.profit.drawerCycleHint')
   if (active.value) return t('admin.profit.drawerSelectedWindowHint')
   return t('admin.profit.drawerQuotaHint')
 })
+
+type WindowMetric = 'revenue' | 'cost'
+type WindowSegment = {
+  key: string
+  color: string
+  width: number
+  value: number
+  share: number
+  range: string
+}
+
+function windowColor(index: number) {
+  return windowPalette[index % windowPalette.length]
+}
+
+function windowInsidePrimaryCycle(item: ProfitWindowEconomicsItem) {
+  if (!usesRecordedSubscriptionCycle.value) return true
+  const cycleStart = Date.parse(props.account?.billing_window_start || '')
+  const cycleEnd = Date.parse(props.account?.billing_window_end || '')
+  const itemStart = Date.parse(item.start_at)
+  const itemEnd = Date.parse(item.end_at)
+  if ([cycleStart, cycleEnd, itemStart, itemEnd].some(Number.isNaN)) return false
+  return itemEnd > cycleStart && itemStart < cycleEnd
+}
+
+function buildMetricSegments(metric: WindowMetric, primaryTotal: number): WindowSegment[] {
+  const rows = historyRows.value
+    .map((item, index) => ({ item, index, value: Math.max(0, Number(item[metric]) || 0) }))
+    .filter(({ item, value }) => value > 0 && windowInsidePrimaryCycle(item))
+  const visibleTotal = rows.reduce((sum, row) => sum + row.value, 0)
+  const denominator = Math.max(Math.abs(primaryTotal), visibleTotal)
+  if (denominator <= 0) return []
+  return rows.map(({ item, index, value }) => ({
+    key: `${item.start_at}-${item.end_at}-${index}`,
+    color: windowColor(index),
+    width: value / denominator * 100,
+    value,
+    share: value / denominator * 100,
+    range: formatRange(item.start_at, item.end_at)
+  }))
+}
+
+const revenueSegments = computed(() => buildMetricSegments('revenue', revenue.value))
+const costSegments = computed(() => buildMetricSegments('cost', cost.value))
+
+function segmentTitle(segment: WindowSegment) {
+  return `${segment.range} · $${fmt(segment.value)} · ${segment.share.toFixed(1)}%`
+}
 
 function isActive(item: ProfitWindowEconomicsItem) {
   if (!active.value) return false
@@ -275,12 +371,6 @@ const breakEvenTitle = computed(() => {
   }
   return parts.join('\n')
 })
-
-function barWidth(value: number) {
-  const maximum = Math.max(Math.abs(revenue.value), Math.abs(cost.value))
-  if (maximum <= 0 || value === 0) return '0%'
-  return `${Math.max(2, Math.min(100, (Math.abs(value) / maximum) * 100))}%`
-}
 
 const fmt = (value?: number) => (value ?? 0).toFixed(2)
 const fmtNumber = (value?: number) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value ?? 0)

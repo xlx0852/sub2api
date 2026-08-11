@@ -62,10 +62,10 @@
     </div>
 
     <div v-else class="px-3 py-3 sm:px-4">
-      <!-- Sticky short labels + independently scrollable gantt -->
       <div class="flex min-w-0 items-stretch gap-2">
+        <!-- Left labels column -->
         <div class="w-[6.75rem] shrink-0 sm:w-[7.5rem]">
-          <div class="mb-2 h-7" />
+          <div class="mb-2 h-12" />
           <div class="space-y-2.5">
             <div
               v-for="lane in lanes"
@@ -89,28 +89,40 @@
           </div>
         </div>
 
+        <!-- Virtualized continuous timeline -->
         <div
           ref="scrollEl"
           class="relative min-w-0 flex-1 overflow-x-auto overscroll-x-contain"
           data-testid="profit-quota-window-scroll"
           @scroll.passive="onGanttScroll"
         >
-          <div :style="{ width: `${timelineWidth}px` }">
-            <div class="relative mb-2 h-7">
+          <div
+            data-testid="profit-quota-window-content"
+            :style="{ width: `${contentWidth}px` }"
+          >
+            <!-- Day / hour ticks -->
+            <div data-testid="quota-window-axis-header" class="relative mb-2 h-12">
               <div
-                v-for="tick in dayTicks"
+                v-for="tick in visibleTicks"
                 :key="tick.key"
                 class="absolute top-0 flex -translate-x-1/2 flex-col items-center"
-                :style="{ left: `${tick.left}%` }"
+                :style="{ left: `${tick.left}px` }"
+                data-testid="quota-window-axis-tick"
+                :data-minor="tick.isMinor ? 'true' : 'false'"
               >
                 <span class="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-dark-400">{{ tick.weekday }}</span>
-                <span class="text-[11px] font-semibold tabular-nums text-gray-600 dark:text-dark-200">{{ tick.day }}</span>
+                <span
+                  class="tabular-nums"
+                  :class="tick.isMinor
+                    ? 'text-[8px] font-medium text-gray-400 dark:text-dark-500'
+                    : 'text-[11px] font-semibold text-gray-600 dark:text-dark-200'"
+                >{{ tick.day }}</span>
               </div>
               <div
-                v-for="mb in monthMarkers"
+                v-for="mb in visibleMonthMarkers"
                 :key="`month-${mb.key}`"
-                class="pointer-events-none absolute -top-0.5 z-10 flex -translate-x-1/2 flex-col items-center"
-                :style="{ left: `${mb.left}%` }"
+                class="pointer-events-none absolute top-7 z-10 flex -translate-x-1/2 flex-col items-center"
+                :style="{ left: `${mb.left}px` }"
                 data-testid="quota-window-month-marker"
               >
                 <span class="rounded-full border border-violet-300 bg-violet-50 px-1.5 py-px text-[9px] font-semibold text-violet-700 dark:border-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
@@ -118,58 +130,64 @@
                 </span>
               </div>
               <div
-                v-if="nowLeft != null"
+                v-if="nowLeftPx != null"
                 class="pointer-events-none absolute bottom-0 top-0 w-px bg-rose-400/80"
-                :style="{ left: `${nowLeft}%` }"
+                :style="{ left: `${nowLeftPx}px` }"
               />
             </div>
 
-            <div class="space-y-2.5">
-              <div
-                v-for="lane in lanes"
-                :key="`track-${lane.accountId}`"
-                class="relative h-9 rounded-lg bg-gray-50 ring-1 ring-inset ring-gray-100 dark:bg-dark-700/50 dark:ring-dark-600"
-              >
+            <!-- Lanes with one shared grid instead of one grid per account. -->
+            <div class="relative">
+              <div class="pointer-events-none absolute inset-0 z-10" aria-hidden="true">
                 <div
-                  v-for="seg in dayTicks"
-                  :key="`${lane.accountId}-${seg.key}`"
+                  v-for="seg in visibleTicks"
+                  :key="`grid-${seg.key}`"
                   class="pointer-events-none absolute bottom-0 top-0 w-px bg-gray-200/70 dark:bg-dark-600/80"
-                  :style="{ left: `${seg.left}%` }"
+                  :style="{ left: `${seg.left}px` }"
+                  data-testid="quota-window-grid-line"
                 />
                 <div
-                  v-for="mb in monthMarkers"
-                  :key="`${lane.accountId}-month-${mb.key}`"
+                  v-for="mb in visibleMonthMarkers"
+                  :key="`grid-month-${mb.key}`"
                   class="pointer-events-none absolute bottom-0 top-0 z-10 w-px bg-violet-400/70"
-                  :style="{ left: `${mb.left}%` }"
+                  :style="{ left: `${mb.left}px` }"
                 />
                 <div
-                  v-if="nowLeft != null"
+                  v-if="nowLeftPx != null"
                   class="pointer-events-none absolute bottom-0 top-0 w-px bg-rose-400/50"
-                  :style="{ left: `${nowLeft}%` }"
+                  :style="{ left: `${nowLeftPx}px` }"
                 />
+              </div>
 
-                <button
-                  v-for="bar in lane.bars"
-                  :key="bar.key"
-                  type="button"
-                  class="absolute top-1.5 h-6 cursor-pointer overflow-hidden rounded-md border text-[10px] font-semibold tabular-nums shadow-sm transition hover:brightness-95"
-                  :class="bar.className"
-                  :style="bar.style"
-                  :title="bar.title"
-                  @click="emit('select', {
-                    accountId: lane.accountId,
-                    startMs: bar.startMs,
-                    endMs: bar.endMs,
-                    status: bar.status,
-                    kind: bar.kind,
-                    label: bar.labelRaw,
-                    windows: lane.windowPayloads
-                  })"
+              <div class="relative space-y-2.5">
+                <div
+                  v-for="lane in lanes"
+                  :key="`track-${lane.accountId}`"
+                  class="relative h-9 rounded-lg bg-gray-50/75 ring-1 ring-inset ring-gray-100 dark:bg-dark-700/40 dark:ring-dark-600"
                 >
-                  <div class="flex h-full items-center gap-1 px-1.5">
-                    <span class="truncate">{{ bar.label }}</span>
-                  </div>
-                </button>
+                  <button
+                    v-for="bar in lane.bars"
+                    :key="bar.key"
+                    type="button"
+                    class="absolute top-1.5 z-20 h-6 cursor-pointer overflow-hidden rounded-md border text-[10px] font-semibold tabular-nums shadow-sm transition hover:brightness-95"
+                    :class="bar.className"
+                    :style="{ left: `${bar.left}px`, width: `${bar.width}px` }"
+                    :title="bar.title"
+                    @click="emit('select', {
+                      accountId: lane.accountId,
+                      startMs: bar.startMs,
+                      endMs: bar.endMs,
+                      status: bar.status,
+                      kind: bar.kind,
+                      label: bar.labelRaw,
+                      windows: lane.windowPayloads
+                    })"
+                  >
+                    <div class="flex h-full items-center gap-1 px-1.5">
+                      <span class="truncate">{{ bar.label }}</span>
+                    </div>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -195,20 +213,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { AccountProfitSummary, ProfitQuotaWindow } from '@/api/admin/profit'
+import type { AccountProfitSummary } from '@/api/admin/profit'
+import {
+  inferWindowMinutes,
+  prepareQuotaAccounts,
+  windowsForRange,
+  type TimelineWindow
+} from './quotaTimeline'
 
 export type QuotaWindowSelectPayload = {
   accountId: number
   startMs: number
   endMs: number
-  status: 'current' | 'upcoming' | 'ended'
+  status: WindowBarStatus
   kind?: string
   label?: string
-  /** All expanded occurrences currently painted for this lane (for history). */
-  windows: Array<{ startMs: number; endMs: number; status: 'current' | 'upcoming' | 'ended'; kind?: string; label?: string }>
+  windows: Array<{ startMs: number; endMs: number; status: WindowBarStatus; kind?: string; label?: string }>
 }
+
+type WindowBarStatus = 'current' | 'upcoming' | 'ended' | 'drifting' | 'waiting_activation'
 
 const emit = defineEmits<{ select: [payload: QuotaWindowSelectPayload] }>()
 
@@ -221,171 +246,221 @@ const props = defineProps<{
 const { t, locale } = useI18n()
 
 const viewMode = ref<ViewMode>('month')
-// Continuous timeline: rangeStart/rangeEnd are the rendered horizon; viewport scrolls freely.
-const now0 = Date.now()
-const rangeStart = ref(startOfLocalDay(new Date(now0 - 30 * 86_400_000)))
-const rangeEnd = ref(new Date(now0 + 30 * 86_400_000))
 const scrollEl = ref<HTMLElement | null>(null)
 
-const modes = computed(() => [
-  { key: 'week' as const, label: t('admin.profit.quotaWindowByWeek') },
-  { key: 'month' as const, label: t('admin.profit.quotaWindowByMonth') },
-  { key: '5h' as const, label: t('admin.profit.quotaWindowBy5h') }
-])
-
-const palette = [
-  {
-    solid: 'bg-slate-600/85 border-slate-700 text-white dark:bg-slate-500/80 dark:border-slate-400',
-    soft: 'bg-slate-200/80 border-slate-300 text-slate-700 dark:bg-dark-600 dark:border-dark-500 dark:text-dark-100',
-    upcoming: 'border-dashed border-slate-400 bg-white/40 text-slate-500 dark:bg-transparent dark:text-dark-300',
-    dot: 'bg-slate-500'
-  },
-  {
-    solid: 'bg-sky-600/85 border-sky-700 text-white dark:bg-sky-500/80 dark:border-sky-400',
-    soft: 'bg-sky-100 border-sky-200 text-sky-800 dark:bg-sky-950/50 dark:border-sky-800 dark:text-sky-200',
-    upcoming: 'border-dashed border-sky-400 bg-white/40 text-sky-600 dark:bg-transparent dark:text-sky-300',
-    dot: 'bg-sky-500'
-  },
-  {
-    solid: 'bg-violet-600/85 border-violet-700 text-white dark:bg-violet-500/80 dark:border-violet-400',
-    soft: 'bg-violet-100 border-violet-200 text-violet-800 dark:bg-violet-950/50 dark:border-violet-800 dark:text-violet-200',
-    upcoming: 'border-dashed border-violet-400 bg-white/40 text-violet-600 dark:bg-transparent dark:text-violet-300',
-    dot: 'bg-violet-500'
-  },
-  {
-    solid: 'bg-emerald-600/85 border-emerald-700 text-white dark:bg-emerald-500/80 dark:border-emerald-400',
-    soft: 'bg-emerald-100 border-emerald-200 text-emerald-800 dark:bg-emerald-950/50 dark:border-emerald-800 dark:text-emerald-200',
-    upcoming: 'border-dashed border-emerald-400 bg-white/40 text-emerald-600 dark:bg-transparent dark:text-emerald-300',
-    dot: 'bg-emerald-500'
-  },
-  {
-    solid: 'bg-amber-500/90 border-amber-600 text-white dark:bg-amber-500/80 dark:border-amber-400',
-    soft: 'bg-amber-100 border-amber-200 text-amber-900 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-200',
-    upcoming: 'border-dashed border-amber-400 bg-white/40 text-amber-700 dark:bg-transparent dark:text-amber-300',
-    dot: 'bg-amber-500'
-  }
-]
-
-const viewRange = computed(() => ({ start: new Date(rangeStart.value), end: new Date(rangeEnd.value) }))
-
-// Fixed scale: ~36px per day (week/month), ~120px per hour in 5h mode.
+// ---- Virtual continuous timeline ----
+// All times are absolute ms since epoch; content width is fixed per day/hour.
 const PX_PER_DAY = 36
 const PX_PER_HOUR = 140
-const timelineWidth = computed(() => {
-  const span = Math.max(1, rangeEnd.value.getTime() - rangeStart.value.getTime())
+
+const DAY_MS = 86_400_000
+const HOUR_MS = 3_600_000
+const initialSpanMs = 180 * DAY_MS
+const rangeStart = ref(Date.now() - initialSpanMs / 2)
+const rangeEnd = ref(Date.now() + initialSpanMs / 2)
+const viewportWidth = ref(1024)
+const viewLeft = ref(Math.max(0, (180 * PX_PER_DAY - viewportWidth.value) / 2))
+
+const viewDurationMs = computed(() => Math.max(1, rangeEnd.value - rangeStart.value))
+
+const contentWidth = computed(() => {
   if (viewMode.value === '5h') {
-    const hours = span / 3600_000
-    return Math.max(640, Math.round(hours * PX_PER_HOUR))
+    const hours = viewDurationMs.value / 3600_000
+    return Math.max(640, Math.ceil(hours * PX_PER_HOUR))
   }
-  const days = span / 86_400_000
-  return Math.max(860, Math.round(days * PX_PER_DAY))
+  const days = viewDurationMs.value / 86_400_000
+  return Math.max(860, Math.ceil(days * PX_PER_DAY))
 })
 
-const viewDurationMs = computed(() => Math.max(1, viewRange.value.end.getTime() - viewRange.value.start.getTime()))
+function msToPx(ms: number): number {
+  const span = viewDurationMs.value
+  if (contentWidth.value <= 0 || span <= 0) return 0
+  return ((ms - rangeStart.value) / span) * contentWidth.value
+}
+
+function resetHorizon(mode: ViewMode) {
+  const now = Date.now()
+  const span = mode === 'month'
+    ? 180 * DAY_MS
+    : mode === 'week'
+      ? 84 * DAY_MS
+      : 48 * HOUR_MS
+  rangeStart.value = now - span / 2
+  rangeEnd.value = now + span / 2
+  const width = mode === '5h'
+    ? (span / HOUR_MS) * PX_PER_HOUR
+    : (span / DAY_MS) * PX_PER_DAY
+  viewLeft.value = Math.max(0, (width - viewportWidth.value) / 2)
+}
 
 const rangeLabel = computed(() => {
-  const { start, end } = viewRange.value
   const scope = viewMode.value === '5h'
     ? t('admin.profit.quotaWindowBy5h')
     : viewMode.value === 'month'
       ? t('admin.profit.quotaWindowByMonth')
       : t('admin.profit.quotaWindowByWeek')
   return t('admin.profit.quotaWindowRange', {
-    start: formatShortDate(start),
-    end: formatShortDate(new Date(end.getTime() - 1)),
+    start: formatShortDate(new Date(rangeStart.value)),
+    end: formatShortDate(new Date(rangeEnd.value - 1)),
     scope
   })
 })
 
-const dayTicks = computed(() => {
-  const ticks: Array<{ key: string; left: number; weekday: string; day: string }> = []
-  const { start, end } = viewRange.value
+const nowLeftPx = computed(() => {
+  const now = Date.now()
+  if (now < rangeStart.value || now > rangeEnd.value) return null
+  return msToPx(now)
+})
+
+// Visible window in ms (viewport + overscan)
+const visibleMs = computed(() => {
+  const span = viewDurationMs.value
+  if (viewportWidth.value <= 0 || span <= 0 || contentWidth.value <= 0) {
+    return { start: rangeStart.value, end: rangeEnd.value }
+  }
+  const ratioStart = viewLeft.value / contentWidth.value
+  const ratioEnd = (viewLeft.value + viewportWidth.value) / contentWidth.value
+  const overscanPx = Math.min(320, Math.max(120, viewportWidth.value / 3))
+  const overscanMs = (overscanPx / contentWidth.value) * span
+  return {
+    start: Math.max(rangeStart.value, rangeStart.value + ratioStart * span - overscanMs),
+    end: Math.min(rangeEnd.value, rangeStart.value + ratioEnd * span + overscanMs)
+  }
+})
+
+type Tick = {
+  key: string
+  left: number
+  weekday: string
+  day: string
+  isMonthStart: boolean
+  isMinor: boolean
+}
+
+const visibleTicks = computed<Tick[]>(() => {
+  const { start, end } = visibleMs.value
+  const ticks: Tick[] = []
   if (viewMode.value === '5h') {
-    for (let i = 0; i <= 5; i += 1) {
-      const ts = new Date(start.getTime() + i * 3600_000)
+    // hourly ticks
+    let cursor = Math.ceil(start / 3600_000) * 3600_000
+    while (cursor < end) {
+      const d = new Date(cursor)
       ticks.push({
-        key: `h-${i}`,
-        left: (i / 5) * 100,
+        key: `h-${cursor}`,
+        left: msToPx(cursor),
         weekday: '',
-        day: formatHour(ts)
+        day: formatHour(d),
+        isMonthStart: false,
+        isMinor: false
       })
+      cursor += 3600_000
     }
     return ticks
   }
-  let cursor = startOfLocalDay(start)
+  let cursor = startOfLocalDay(new Date(start)).getTime()
+  if (cursor < start) cursor += 86_400_000
   while (cursor < end) {
-    const left = ((cursor.getTime() - start.getTime()) / viewDurationMs.value) * 100
-    // 月视图格线仍按天，标签隔天显示（1 号必显），避免 30 个 weekday 挤成一团
-    const showLabel = viewMode.value !== 'month'
-      || cursor.getDate() === 1
-      || cursor.getDate() % 2 === 1
+    const d = new Date(cursor)
+    const isMonthStart = d.getDate() === 1
+    const showLabel = viewMode.value !== 'month' || isMonthStart || d.getDate() % 2 === 1
+    const isMinor = viewMode.value === 'month' && !showLabel
     ticks.push({
-      key: cursor.toISOString(),
-      left,
-      weekday: viewMode.value === 'month' ? '' : formatWeekday(cursor),
-      day: showLabel
-        ? (viewMode.value === 'month' ? formatMonthDay(cursor) : formatDay(cursor))
-        : ''
+      key: `d-${cursor}`,
+      left: msToPx(cursor),
+      weekday: viewMode.value === 'month' ? '' : formatWeekday(d),
+      day: viewMode.value === 'month' ? formatMonthDay(d) : formatDay(d),
+      isMonthStart,
+      isMinor
     })
-    cursor = new Date(cursor.getTime() + 86_400_000)
+    cursor += 86_400_000
   }
   return ticks
 })
 
-const monthMarkers = computed(() => {
-  const { start, end } = viewRange.value
-  const markers: Array<{ key: string; left: number; label: string }> = []
-  // Include the first visible day's month, plus every 1st inside the range.
-  const first = startOfLocalDay(start)
-  const add = (date: Date, label: string) => {
-    const ms = date.getTime()
-    if (ms < start.getTime() || ms >= end.getTime()) return
-    const left = ((ms - start.getTime()) / viewDurationMs.value) * 100
-    if (markers.some((m) => Math.abs(m.left - left) < 0.01)) return
-    markers.push({ key: date.toISOString(), left, label })
-  }
-  add(startOfLocalMonth(start), formatMonthYearShort(start))
-  let cursor = startOfLocalMonth(first)
+const visibleMonthMarkers = computed(() => {
+  const { start, end } = visibleMs.value
+  const out: Array<{ key: string; left: number; label: string }> = []
+  let cursor = startOfLocalMonth(new Date(start)).getTime()
+  if (cursor < start) cursor = addMonths(new Date(cursor), 1).getTime()
   while (cursor < end) {
-    add(cursor, formatMonthYearShort(cursor))
-    cursor = addMonths(cursor, 1)
+    out.push({
+      key: String(cursor),
+      left: msToPx(cursor),
+      label: formatMonthYearShort(new Date(cursor))
+    })
+    cursor = addMonths(new Date(cursor), 1).getTime()
   }
-  return markers
+  // ensure first visible month label even when mid-month
+  if (!out.length) {
+    out.push({ key: `m-${start}`, left: msToPx(start), label: formatMonthYearShort(new Date(start)) })
+  }
+  return out
 })
 
-const nowLeft = computed(() => {
-  const now = Date.now()
-  const { start, end } = viewRange.value
-  if (now < start.getTime() || now > end.getTime()) return null
-  return ((now - start.getTime()) / viewDurationMs.value) * 100
-})
+// ---- Lane windows (ledger + projection, clipped per visible range) ----
+type LaneWindow = TimelineWindow
+type Bar = {
+  key: string
+  className: string
+  label: string
+  title: string
+  left: number
+  width: number
+  startMs: number
+  endMs: number
+  status: WindowBarStatus
+  kind?: string
+  labelRaw?: string
+}
 
-setTimeout(() => scrollToNow(false), 0)
+const palette = [
+  {
+    solid: 'bg-slate-600/85 border-slate-700 text-white dark:bg-slate-500/80 dark:border-slate-400',
+    soft: 'bg-slate-200/80 border-slate-300 text-slate-700 dark:bg-dark-600 dark:border-dark-500 dark:text-dark-100',
+    upcoming: 'border-dashed border-slate-400 bg-white/40 text-slate-500 dark:bg-transparent dark:text-dark-300',
+    drifting: 'border border-dashed border-slate-400 bg-slate-100/60 text-slate-600 dark:border-dark-400 dark:bg-dark-700/50 dark:text-dark-200',
+    dot: 'bg-slate-500'
+  },
+  {
+    solid: 'bg-sky-600/85 border-sky-700 text-white dark:bg-sky-500/80 dark:border-sky-400',
+    soft: 'bg-sky-100 border-sky-200 text-sky-800 dark:bg-sky-950/50 dark:border-sky-800 dark:text-sky-200',
+    upcoming: 'border-dashed border-sky-400 bg-white/40 text-sky-600 dark:bg-transparent dark:text-sky-300',
+    drifting: 'border border-dashed border-sky-400 bg-sky-50/60 text-sky-600 dark:border-sky-700 dark:bg-sky-950/50 dark:text-sky-200',
+    dot: 'bg-sky-500'
+  },
+  {
+    solid: 'bg-violet-600/85 border-violet-700 text-white dark:bg-violet-500/80 dark:border-violet-400',
+    soft: 'bg-violet-100 border-violet-200 text-violet-800 dark:bg-violet-950/50 dark:border-violet-800 dark:text-violet-200',
+    upcoming: 'border-dashed border-violet-400 bg-white/40 text-violet-600 dark:bg-transparent dark:text-violet-300',
+    drifting: 'border border-dashed border-violet-400 bg-violet-50/60 text-violet-600 dark:border-violet-700 dark:bg-violet-950/50 dark:text-violet-200',
+    dot: 'bg-violet-500'
+  },
+  {
+    solid: 'bg-emerald-600/85 border-emerald-700 text-white dark:bg-emerald-500/80 dark:border-emerald-400',
+    soft: 'bg-emerald-100 border-emerald-200 text-emerald-800 dark:bg-emerald-950/50 dark:border-emerald-800 dark:text-emerald-200',
+    upcoming: 'border-dashed border-emerald-400 bg-white/40 text-emerald-600 dark:bg-transparent dark:text-emerald-300',
+    drifting: 'border border-dashed border-emerald-400 bg-emerald-50/60 text-emerald-600 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200',
+    dot: 'bg-emerald-500'
+  },
+  {
+    solid: 'bg-amber-500/90 border-amber-600 text-white dark:bg-amber-500/80 dark:border-amber-400',
+    soft: 'bg-amber-100 border-amber-200 text-amber-900 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-200',
+    upcoming: 'border-dashed border-amber-400 bg-white/40 text-amber-700 dark:bg-transparent dark:text-amber-300',
+    drifting: 'border border-dashed border-amber-400 bg-amber-50/60 text-amber-700 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-200',
+    dot: 'bg-amber-500'
+  }
+]
 
-const lanes = computed(() => {
+const preparedAccounts = computed(() => prepareQuotaAccounts(props.accounts || [], Date.now()))
+
+// Only materialize ledger rows or projections intersecting the viewport overscan.
+const laneSeries = computed(() => {
   const now = Date.now()
-  const { start, end } = viewRange.value
-  const rows = (props.accounts || [])
-    .map((account, index) => {
-      const preferred = pickPreferredWindow(account)
-      if (!preferred) return null
-      // Real ledger: multiple same-kind windows with concrete start/end → paint as-is.
-      // Snapshot-only: single live window → expand calendar projections.
-      const ledgerSeries = pickLedgerSeries(account, preferred)
-      const expanded = ledgerSeries.length > 1
-        ? ledgerSeries
-        : expandWindowOccurrences(preferred, start, end)
-      const bars = expanded
-        .map((win, winIndex) => buildBar(win, start, end, now, index, winIndex))
-        .filter((bar): bar is NonNullable<typeof bar> => bar != null)
-      if (!bars.length) return null
-      const windowPayloads = bars.map((bar) => ({
-        startMs: bar.startMs,
-        endMs: bar.endMs,
-        status: bar.status,
-        kind: bar.kind,
-        label: bar.labelRaw
-      }))
+  const { start, end } = visibleMs.value
+  return preparedAccounts.value
+    .map((prepared, index) => {
+      const { account, preferred } = prepared
+      const windows = windowsForRange(prepared, start, end)
       const used = preferred.used_percent
       const usedLabel = used == null || Number.isNaN(Number(used)) ? '—' : `${Math.round(Number(used))}%`
       const colors = palette[index % palette.length]
@@ -393,317 +468,64 @@ const lanes = computed(() => {
       return {
         accountId: account.account_id,
         accountName,
-        // Narrow sticky column + CSS truncate; keep readable head of the name.
         shortName: shortenAccountName(accountName),
         kindLabel: formatWindowKindLabel(preferred),
         usedLabel,
         fullTitle: `${accountName} · ${account.platform} · ${usedLabel}`,
         meta: `${account.platform} · ${usedLabel}`,
         dotClass: colors.dot,
-        bars,
-        windowPayloads
+        windows,
+        paletteIndex: index,
+        now
       }
     })
     .filter((row): row is NonNullable<typeof row> => row != null)
-
-  return rows.slice(0, 24)
 })
 
-function horizonCenter(): number {
-  return (rangeStart.value.getTime() + rangeEnd.value.getTime()) / 2
-}
-
-function setHorizon(centerMs: number, spanMs?: number) {
-  const span = spanMs ?? (rangeEnd.value.getTime() - rangeStart.value.getTime())
-  rangeStart.value = new Date(centerMs - span / 2)
-  rangeEnd.value = new Date(centerMs + span / 2)
-}
-
-function setMode(mode: ViewMode) {
-  viewMode.value = mode
-  const now = Date.now()
-  if (mode === '5h') {
-    setHorizon(now, 15 * 3600_000) // 5h ± around
-  } else if (mode === 'month') {
-    setHorizon(now, 60 * 86_400_000)
-  } else {
-    setHorizon(now, 42 * 86_400_000)
-  }
-  notifyPeriodChange(true)
-  scrollToNow(true)
-}
-
-/** Shift visible window forward/backward (month / 2-week / 5h step). */
-function shiftPeriod(dir: -1 | 1) {
-  const stepMs = viewMode.value === '5h'
-    ? 5 * 3600_000
-    : viewMode.value === 'week'
-      ? 14 * 86_400_000
-      : 30 * 86_400_000
-  setHorizon(horizonCenter() + dir * stepMs)
-  notifyPeriodChange()
-  scrollToCenter()
-}
-
-function scrollToCenter() {
-  requestAnimationFrame(() => {
-    const el = scrollEl.value
-    if (!el) return
-    const target = Math.max(0, (el.scrollWidth - el.clientWidth) / 2)
-    scrollToX(target, true)
+const lanes = computed(() => {
+  return laneSeries.value.map((lane) => {
+    const colors = palette[lane.paletteIndex % palette.length]
+    const bars: Bar[] = lane.windows
+      .map((win, winIndex) => buildBar(win, lane.now, colors, winIndex))
+      .filter((bar): bar is Bar => bar != null)
+    const windowPayloads = bars.map((bar) => ({
+      startMs: bar.startMs,
+      endMs: bar.endMs,
+      status: bar.status,
+      kind: bar.kind,
+      label: bar.labelRaw
+    }))
+    return { ...lane, bars, windowPayloads }
   })
-}
-
-function scrollToNow(smooth = true) {
-  requestAnimationFrame(() => {
-    const el = scrollEl.value
-    if (!el) return
-    const { start, end } = viewRange.value
-    const span = Math.max(1, end.getTime() - start.getTime())
-    const ratio = (Date.now() - start.getTime()) / span
-    const target = Math.max(0, ratio * el.scrollWidth - el.clientWidth / 2)
-    scrollToX(target, smooth)
-  })
-}
-
-function scrollToX(left: number, smooth: boolean) {
-  const el = scrollEl.value
-  if (!el) return
-  try {
-    if (typeof el.scrollTo === 'function') {
-      el.scrollTo({ left, behavior: smooth ? 'smooth' : 'auto' })
-    } else {
-      el.scrollLeft = left
-    }
-  } catch {
-    el.scrollLeft = left
-  }
-}
-
-function jumpToCurrent() {
-  const now = new Date()
-  if (viewMode.value === 'month') {
-    // Back to today = current calendar month (1st → month end).
-    const start = startOfLocalMonth(now)
-    rangeStart.value = start
-    rangeEnd.value = addMonths(start, 1)
-    notifyPeriodChange(true)
-    scrollToX(0, true)
-    return
-  }
-  const nowMs = now.getTime()
-  if (viewMode.value === '5h') setHorizon(nowMs, 15 * 3600_000)
-  else setHorizon(nowMs, 42 * 86_400_000)
-  notifyPeriodChange(true)
-  scrollToNow(true)
-}
-
-function notifyPeriodChange(_force = false) {
-  // No toast; month markers are the only cross-month signal.
-}
-
-function onGanttScroll() {
-  const el = scrollEl.value
-  if (!el) return
-  const pxPerMs = el.scrollWidth / Math.max(1, viewRange.value.end.getTime() - viewRange.value.start.getTime())
-  const bufferPx = Math.max(240, el.clientWidth * 0.6)
-  if (el.scrollLeft + el.clientWidth > el.scrollWidth - bufferPx) {
-    // extend right by ~30d (or 15h in 5h mode)
-    const addMs = viewMode.value === '5h' ? 15 * 3600_000 : 30 * 86_400_000
-    const newEnd = new Date(rangeEnd.value.getTime() + addMs)
-    rangeEnd.value = newEnd
-    detectMonthCross()
-  } else if (el.scrollLeft < bufferPx) {
-    const addMs = viewMode.value === '5h' ? 15 * 3600_000 : 30 * 86_400_000
-    const addedPx = addMs * pxPerMs
-    const oldLeft = el.scrollLeft
-    const newStart = new Date(rangeStart.value.getTime() - addMs)
-    rangeStart.value = newStart
-    requestAnimationFrame(() => {
-      el.scrollLeft = oldLeft + addedPx
-    })
-    detectMonthCross()
-  }
-}
-
-let lastVisibleMonth = ''
-function visibleCenterMs(): number {
-  const el = scrollEl.value
-  if (!el) return horizonCenter()
-  const { start, end } = viewRange.value
-  const span = Math.max(1, end.getTime() - start.getTime())
-  const ratio = (el.scrollLeft + el.clientWidth / 2) / Math.max(1, el.scrollWidth)
-  return start.getTime() + ratio * span
-}
-
-function detectMonthCross() {
-  const ms = visibleCenterMs()
-  const d = new Date(ms)
-  const key = `${d.getFullYear()}-${d.getMonth()}`
-  if (!lastVisibleMonth) {
-    lastVisibleMonth = key
-    return
-  }
-  if (key === lastVisibleMonth) return
-  lastVisibleMonth = key
-}
-
-
-
-function pickLedgerSeries(account: AccountProfitSummary, preferred: ProfitQuotaWindow): Array<ProfitQuotaWindow & { startMs: number; endMs: number }> {
-  const kind = preferred.kind
-  const rows = (account.quota_windows || []).filter((w) => w.kind === kind)
-  if (rows.length <= 1) return []
-  const out: Array<ProfitQuotaWindow & { startMs: number; endMs: number }> = []
-  for (const w of rows) {
-    const startMs = parseTime(w.start_at)
-    const endMs = parseTime(w.end_at)
-    if (startMs == null || endMs == null || endMs <= startMs) continue
-    out.push({ ...w, startMs, endMs })
-  }
-  // Need multiple concrete rows to treat as ledger.
-  if (out.length <= 1) return []
-  out.sort((a, b) => a.startMs - b.startMs)
-  return out
-}
-
-function pickPreferredWindow(account: AccountProfitSummary): ProfitQuotaWindow | null {
-  const windows = [...(account.quota_windows || [])]
-  if (!windows.length) {
-    if (account.seven_day_utilization != null) {
-      return synthesizeFromUtil('7d', account.seven_day_utilization, 10080)
-    }
-    if (account.five_hour_utilization != null) {
-      return synthesizeFromUtil('5h', account.five_hour_utilization, 300)
-    }
-    return null
-  }
-  const rank = (kind?: string) => {
-    if (kind === '7d' || kind === '30d') return 0
-    if (kind === '5h') return 1
-    if (kind === '24h') return 2
-    if (kind === 'session') return 3
-    return 4
-  }
-  windows.sort((a, b) => rank(a.kind) - rank(b.kind))
-  return windows[0] || null
-}
-
-function synthesizeFromUtil(kind: string, used: number, minutes: number): ProfitQuotaWindow {
-  const end = new Date(Date.now() + minutes * 60_000)
-  const start = new Date(end.getTime() - minutes * 60_000)
-  return {
-    id: kind,
-    label: kind,
-    kind,
-    used_percent: used,
-    start_at: start.toISOString(),
-    end_at: end.toISOString(),
-    window_minutes: minutes
-  }
-}
-
-function expandWindowOccurrences(
-  window: ProfitQuotaWindow,
-  viewStart: Date,
-  viewEnd: Date
-): Array<ProfitQuotaWindow & { startMs: number; endMs: number }> {
-  const minutes = window.window_minutes && window.window_minutes > 0
-    ? window.window_minutes
-    : inferMinutes(window.kind)
-  const durationMs = Math.max(60_000, minutes * 60_000)
-  let endMs = parseTime(window.end_at)
-  let startMs = parseTime(window.start_at)
-  const recurringUntilMs = parseTime(window.recurring_until_at)
-  const recurringFromMs = parseTime(window.recurring_from_at)
-  if (endMs == null && startMs != null) endMs = startMs + durationMs
-  if (startMs == null && endMs != null) startMs = endMs - durationMs
-  if (startMs == null || endMs == null) return []
-
-  // When subscription already ended (live bar starts at/after recurring_until),
-  // drop the whole series — no dashed future and no leftover live bar past cutoff.
-  if (recurringUntilMs != null && startMs >= recurringUntilMs) return []
-
-  // Clip the live/current bar when bookkeeping cycle ends mid-window (expired no-renew).
-  // Future projections are also capped; history still rolls back within recurring_from.
-  if (recurringUntilMs != null && endMs > recurringUntilMs) {
-    endMs = recurringUntilMs
-  }
-  if (endMs <= startMs) return []
-
-  const out: Array<ProfitQuotaWindow & { startMs: number; endMs: number }> = []
-  const earliest = viewStart.getTime() - durationMs
-  const latest = viewEnd.getTime() + durationMs
-  let cursorEnd = endMs
-  while (cursorEnd >= earliest) {
-    const cursorStart = cursorEnd - durationMs
-    // Don't project back past the active cycle start (gap before cycle stays empty).
-    if (recurringFromMs != null && cursorStart < recurringFromMs) break
-    if (cursorEnd > viewStart.getTime() && cursorStart < viewEnd.getTime()) {
-      out.push({ ...window, startMs: cursorStart, endMs: cursorEnd })
-    }
-    cursorEnd -= durationMs
-    if (out.length > 40) break
-  }
-  cursorEnd = endMs + durationMs
-  while (cursorEnd <= latest) {
-    const cursorStart = cursorEnd - durationMs
-    if (recurringUntilMs != null && cursorStart >= recurringUntilMs) break
-    const cappedEnd = recurringUntilMs != null ? Math.min(cursorEnd, recurringUntilMs) : cursorEnd
-    if (cappedEnd <= cursorStart) break
-    if (cappedEnd > viewStart.getTime() && cursorStart < viewEnd.getTime()) {
-      out.push({ ...window, startMs: cursorStart, endMs: cappedEnd })
-    }
-    cursorEnd += durationMs
-    if (out.length > 40) break
-  }
-  out.sort((a, b) => a.startMs - b.startMs)
-  return out
-}
-
-/** Compact lane label for the sticky column; CSS truncate is the final clip. */
-function shortenAccountName(name: string, max = 12): string {
-  const raw = (name || '').trim()
-  if (!raw) return '—'
-  if ([...raw].length <= max) return raw
-  // Prefer first two hyphen segments when that already fits (GPT-自有-4 → GPT-自有).
-  const parts = raw.split(/[-_·]+/).filter(Boolean)
-  if (parts.length >= 2) {
-    const two = `${parts[0]}-${parts[1]}`
-    if ([...two].length <= max) return two
-  }
-  return `${[...raw].slice(0, Math.max(1, max - 1)).join('')}…`
-}
+})
 
 function buildBar(
-  win: ProfitQuotaWindow & { startMs: number; endMs: number },
-  viewStart: Date,
-  viewEnd: Date,
+  win: LaneWindow,
   now: number,
-  paletteIndex: number,
+  colors: (typeof palette)[number],
   winIndex: number
-) {
-  const viewStartMs = viewStart.getTime()
-  const viewEndMs = viewEnd.getTime()
-  const clippedStart = Math.max(win.startMs, viewStartMs)
-  const clippedEnd = Math.min(win.endMs, viewEndMs)
+): Bar | null {
+  const clippedStart = Math.max(win.startMs, rangeStart.value)
+  const clippedEnd = Math.min(win.endMs, rangeEnd.value)
   if (clippedEnd <= clippedStart) return null
+  const left = msToPx(clippedStart)
+  const widthPx = Math.max(8, msToPx(clippedEnd) - left)
 
-  const left = ((clippedStart - viewStartMs) / (viewEndMs - viewStartMs)) * 100
-  const width = ((clippedEnd - clippedStart) / (viewEndMs - viewStartMs)) * 100
-  if (width <= 0.2) return null
+  let status: WindowBarStatus = win.status === 'waiting_activation' ? 'waiting_activation' : 'current'
+  if (status !== 'waiting_activation' && win.startMs > now) {
+    status = 'upcoming'
+  } else if (status !== 'waiting_activation' && win.endMs <= now) {
+    // Drifting only for ledger rows that are still open but past end (vacuum).
+    const isOpen = win.is_open === true || String(win.id || '').endsWith('-open')
+    status = isOpen ? 'drifting' : 'ended'
+  }
 
-  let status: 'current' | 'upcoming' | 'ended' = 'current'
-  if (win.endMs <= now) status = 'ended'
-  else if (win.startMs > now) status = 'upcoming'
-
-  const colors = palette[paletteIndex % palette.length]
   const className =
     status === 'current' ? colors.solid
       : status === 'ended' ? colors.soft
-        : colors.upcoming
+        : status === 'drifting' || status === 'waiting_activation' ? colors.drifting
+          : colors.upcoming
 
-  // Only the live (current) snapshot has a trustworthy used%; projected history/future bars show time only.
   const used = win.used_percent
   const percentLabel = status === 'current' && used != null && !Number.isNaN(Number(used))
     ? `${Math.round(Number(used))}%`
@@ -719,10 +541,14 @@ function buildBar(
   const label = percentLabel
     || (status === 'upcoming'
       ? formatDateTime(new Date(win.startMs))
-      : formatDateTime(new Date(win.endMs)))
+      : status === 'waiting_activation'
+        ? t('admin.profit.quotaWindowWaitingActivation')
+        : status === 'drifting'
+          ? t('admin.profit.quotaWindowDrifting')
+          : formatDateTime(new Date(win.endMs)))
 
-  const clippedLeft = win.startMs < viewStartMs
-  const clippedRight = win.endMs > viewEndMs
+  const clippedLeft = win.startMs < rangeStart.value
+  const clippedRight = win.endMs > rangeEnd.value
   const radiusClass = clippedLeft && clippedRight
     ? 'rounded-none'
     : clippedLeft
@@ -730,15 +556,14 @@ function buildBar(
       : clippedRight
         ? 'rounded-r-none'
         : ''
+
   return {
     key: `${win.id}-${win.startMs}-${winIndex}`,
     className: `${className} ${radiusClass}`.trim(),
-    style: {
-      left: `${left}%`,
-      width: `${Math.max(width, 1.2)}%`
-    },
     label,
     title,
+    left,
+    width: widthPx,
     startMs: win.startMs,
     endMs: win.endMs,
     status,
@@ -747,22 +572,152 @@ function buildBar(
   }
 }
 
-function inferMinutes(kind?: string) {
-  if (kind === '5h') return 300
-  if (kind === '7d') return 10080
-  if (kind === '30d') return 30 * 24 * 60
-  if (kind === '24h') return 1440
-  if (kind === 'session') return 300
-  return 300
+// ---- Interactions ----
+const modes = computed(() => [
+  { key: 'week' as const, label: t('admin.profit.quotaWindowByWeek') },
+  { key: 'month' as const, label: t('admin.profit.quotaWindowByMonth') },
+  { key: '5h' as const, label: t('admin.profit.quotaWindowBy5h') }
+])
+
+function setMode(mode: ViewMode) {
+  viewMode.value = mode
+  resetHorizon(mode)
+  requestAnimationFrame(() => scrollToNow(false))
 }
 
-/** Prefer server label; otherwise derive from window_minutes so free 30d is not stuck as 7d. */
+function shiftPeriod(dir: -1 | 1) {
+  const stepMs = viewMode.value === '5h'
+    ? 5 * 3600_000
+    : viewMode.value === 'week'
+      ? 14 * 86_400_000
+      : 30 * 86_400_000
+  const center = (rangeStart.value + rangeEnd.value) / 2 + dir * stepMs
+  const span = viewDurationMs.value
+  rangeStart.value = center - span / 2
+  rangeEnd.value = center + span / 2
+  requestAnimationFrame(() => scrollToCenter())
+}
+
+function jumpToCurrent() {
+  resetHorizon(viewMode.value)
+  requestAnimationFrame(() => scrollToNow(false))
+}
+
+function scrollToCenter() {
+  const el = scrollEl.value
+  if (!el) return
+  scrollToX(Math.max(0, (el.scrollWidth - el.clientWidth) / 2), true)
+}
+
+function scrollToNow(smooth: boolean) {
+  const el = scrollEl.value
+  if (!el) return
+  const width = el.clientWidth > 0 ? el.clientWidth : viewportWidth.value
+  const target = Math.max(0, msToPx(Date.now()) - width / 2)
+  scrollToX(target, smooth)
+}
+
+function scrollToX(left: number, smooth: boolean) {
+  const el = scrollEl.value
+  if (!el) return
+  try {
+    if (typeof el.scrollTo === 'function') {
+      el.scrollTo({ left, behavior: smooth ? 'smooth' : 'auto' })
+    } else {
+      el.scrollLeft = left
+    }
+  } catch {
+    el.scrollLeft = left
+  }
+  viewLeft.value = left
+}
+
+let scrollRaf: number | null = null
+let initialPositionRaf: number | null = null
+let resizeObserver: ResizeObserver | null = null
+let rebasing = false
+let initialTodayPositioned = false
+
+function onGanttScroll() {
+  const el = scrollEl.value
+  if (!el) return
+  if (scrollRaf != null) return
+  scrollRaf = requestAnimationFrame(() => {
+    scrollRaf = null
+    viewLeft.value = el.scrollLeft
+    if (el.clientWidth > 0) viewportWidth.value = el.clientWidth
+    if (rebasing) return
+    const bufferPx = Math.max(320, el.clientWidth * 0.7)
+    let direction: -1 | 1 | 0 = 0
+    if (el.scrollLeft + el.clientWidth > el.scrollWidth - bufferPx) {
+      direction = 1
+    } else if (el.scrollLeft < bufferPx) {
+      direction = -1
+    }
+    if (direction !== 0) rebaseHorizon(direction, el)
+  })
+}
+
+function rebaseHorizon(direction: -1 | 1, el: HTMLElement) {
+  const shiftMs = viewMode.value === '5h'
+    ? 12 * HOUR_MS
+    : viewMode.value === 'week'
+      ? 14 * DAY_MS
+      : 30 * DAY_MS
+  const shiftPx = shiftMs * (contentWidth.value / viewDurationMs.value)
+  const previousLeft = el.scrollLeft
+  rebasing = true
+  rangeStart.value += direction * shiftMs
+  rangeEnd.value += direction * shiftMs
+  requestAnimationFrame(() => {
+    const nextLeft = previousLeft - direction * shiftPx
+    el.scrollLeft = Math.max(0, Math.min(nextLeft, el.scrollWidth - el.clientWidth))
+    viewLeft.value = el.scrollLeft
+    if (el.clientWidth > 0) viewportWidth.value = el.clientWidth
+    rebasing = false
+  })
+}
+
+watch(scrollEl, (el) => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
+  if (initialPositionRaf != null) {
+    cancelAnimationFrame(initialPositionRaf)
+    initialPositionRaf = null
+  }
+  if (!el) return
+
+  if (el.clientWidth > 0) viewportWidth.value = el.clientWidth
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width || scrollEl.value?.clientWidth || 0
+      if (width > 0) viewportWidth.value = width
+    })
+    resizeObserver.observe(el)
+  }
+  if (initialTodayPositioned) return
+
+  initialPositionRaf = requestAnimationFrame(() => {
+    initialPositionRaf = null
+    if (scrollEl.value !== el) return
+    resetHorizon(viewMode.value)
+    scrollToNow(false)
+    initialTodayPositioned = true
+  })
+}, { flush: 'post' })
+
+onBeforeUnmount(() => {
+  if (scrollRaf != null) cancelAnimationFrame(scrollRaf)
+  if (initialPositionRaf != null) cancelAnimationFrame(initialPositionRaf)
+  resizeObserver?.disconnect()
+})
+
 function formatWindowKindLabel(window?: { label?: string; kind?: string; window_minutes?: number | null } | null): string {
   if (!window) return 'window'
   if (window.label && window.label !== '7d' && window.label !== 'window') return window.label
   const minutes = window.window_minutes && window.window_minutes > 0
     ? window.window_minutes
-    : inferMinutes(window.kind)
+    : inferWindowMinutes(window.kind)
   if (minutes >= 20 * 24 * 60) {
     const days = Math.round(minutes / (24 * 60))
     return `${days}d`
@@ -779,12 +734,6 @@ function formatWindowKindLabel(window?: { label?: string; kind?: string; window_
   return window.label || window.kind || 'window'
 }
 
-function parseTime(value?: string) {
-  if (!value) return null
-  const ms = Date.parse(value)
-  return Number.isNaN(ms) ? null : ms
-}
-
 function startOfLocalDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
 }
@@ -797,16 +746,28 @@ function addMonths(date: Date, delta: number) {
   return new Date(date.getFullYear(), date.getMonth() + delta, 1)
 }
 
-function formatMonthYearShort(date: Date) {
-  return new Intl.DateTimeFormat(locale.value || undefined, { month: 'short', year: 'numeric' }).format(date)
-}
+const dateFormatters = computed(() => {
+  const language = locale.value || undefined
+  return {
+    shortDate: new Intl.DateTimeFormat(language, { month: '2-digit', day: '2-digit' }),
+    weekday: new Intl.DateTimeFormat(language, { weekday: 'short' }),
+    monthYear: new Intl.DateTimeFormat(language, { month: 'short', year: 'numeric' }),
+    hour: new Intl.DateTimeFormat(language, { hour: '2-digit', minute: '2-digit' }),
+    dateTime: new Intl.DateTimeFormat(language, {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+})
 
 function formatShortDate(date: Date) {
-  return new Intl.DateTimeFormat(locale.value || undefined, { month: '2-digit', day: '2-digit' }).format(date)
+  return dateFormatters.value.shortDate.format(date)
 }
 
 function formatDay(date: Date) {
-  return new Intl.DateTimeFormat(locale.value || undefined, { month: '2-digit', day: '2-digit' }).format(date)
+  return dateFormatters.value.shortDate.format(date)
 }
 
 function formatMonthDay(date: Date) {
@@ -814,22 +775,30 @@ function formatMonthDay(date: Date) {
 }
 
 function formatWeekday(date: Date) {
-  return new Intl.DateTimeFormat(locale.value || undefined, { weekday: 'short' }).format(date)
+  return dateFormatters.value.weekday.format(date)
+}
+
+function formatMonthYearShort(date: Date) {
+  return dateFormatters.value.monthYear.format(date)
 }
 
 function formatHour(date: Date) {
-  return new Intl.DateTimeFormat(locale.value || undefined, { hour: '2-digit', minute: '2-digit' }).format(date)
+  return dateFormatters.value.hour.format(date)
 }
 
 function formatDateTime(date: Date) {
-  return new Intl.DateTimeFormat(locale.value || undefined, {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(date)
+  return dateFormatters.value.dateTime.format(date)
+}
+
+function shortenAccountName(name: string, max = 12): string {
+  const raw = (name || '').trim()
+  if (!raw) return '—'
+  if ([...raw].length <= max) return raw
+  const parts = raw.split(/[-_·]+/).filter(Boolean)
+  if (parts.length >= 2) {
+    const two = `${parts[0]}-${parts[1]}`
+    if ([...two].length <= max) return two
+  }
+  return `${[...raw].slice(0, Math.max(1, max - 1)).join('')}…`
 }
 </script>
-
-<style scoped>
-</style>
