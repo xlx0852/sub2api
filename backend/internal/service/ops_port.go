@@ -38,6 +38,10 @@ type OpsRepository interface {
 	UpsertJobHeartbeat(ctx context.Context, input *OpsUpsertJobHeartbeatInput) error
 	ListJobHeartbeats(ctx context.Context) ([]*OpsJobHeartbeat, error)
 
+	InsertProviderStatusSnapshot(ctx context.Context, input *ProviderStatusSnapshotRecord) (bool, error)
+	GetLatestProviderStatusSnapshot(ctx context.Context, provider string) (*ProviderStatusSnapshotRecord, error)
+	ListProviderStatusSnapshots(ctx context.Context, filter *ProviderStatusHistoryFilter) ([]*ProviderStatusSnapshotRecord, error)
+
 	// Alerts (rules + events)
 	ListAlertRules(ctx context.Context) ([]*OpsAlertRule, error)
 	CreateAlertRule(ctx context.Context, input *OpsAlertRule) (*OpsAlertRule, error)

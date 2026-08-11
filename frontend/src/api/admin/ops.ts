@@ -1059,6 +1059,69 @@ export async function getOpenAITokenStats(
   return data
 }
 
+export interface ProviderStatusComponent {
+  id: string
+  name: string
+  status: string
+  updated_at?: string
+}
+
+export interface ProviderStatusIncidentUpdate {
+  id: string
+  status: string
+  body: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ProviderStatusIncident {
+  id: string
+  name: string
+  status: string
+  impact: string
+  created_at: string
+  updated_at: string
+  resolved_at?: string
+  monitoring_at?: string
+  updates: ProviderStatusIncidentUpdate[]
+}
+
+export interface ProviderStatusSnapshot {
+  id: number
+  provider: string
+  source_url: string
+  overall_indicator: string
+  overall_description: string
+  components: ProviderStatusComponent[]
+  incidents: ProviderStatusIncident[]
+  source_updated_at?: string
+  fetched_at: string
+}
+
+export interface ProviderStatusCurrent {
+  provider: string
+  freshness: 'fresh' | 'stale' | 'unavailable'
+  snapshot?: ProviderStatusSnapshot
+  last_attempt_at?: string
+  last_success_at?: string
+  last_error_at?: string
+  last_error?: string
+}
+
+export async function getProviderStatus(provider = 'openai', signal?: AbortSignal): Promise<ProviderStatusCurrent> {
+  const { data } = await apiClient.get<ProviderStatusCurrent>(`/admin/ops/provider-status/${provider}`, { signal })
+  return data
+}
+
+export async function listProviderStatusHistory(
+  provider = 'openai',
+  params: { start_time?: string; end_time?: string; limit?: number } = {},
+  signal?: AbortSignal
+): Promise<ProviderStatusSnapshot[]> {
+  const { data } = await apiClient.get<{ items: ProviderStatusSnapshot[] }>(`/admin/ops/provider-status/${provider}/history`, { params, signal })
+  return data.items ?? []
+}
+
 export type OpsErrorListView = 'errors' | 'excluded' | 'all'
 
 export type OpsErrorListQueryParams = {
@@ -1294,6 +1357,8 @@ export const opsAPI = {
   getErrorTrend,
   getErrorDistribution,
   getOpenAITokenStats,
+  getProviderStatus,
+  listProviderStatusHistory,
   getConcurrencyStats,
   getUserConcurrencyStats,
   getAccountAvailabilityStats,

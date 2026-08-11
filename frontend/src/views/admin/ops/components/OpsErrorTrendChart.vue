@@ -13,7 +13,7 @@ import {
   Tooltip
 } from 'chart.js'
 import { Line } from 'vue-chartjs'
-import type { OpsErrorTrendPoint } from '@/api/admin/ops'
+import type { OpsErrorTrendPoint, ProviderStatusSnapshot } from '@/api/admin/ops'
 import type { ChartState } from '../types'
 import { formatHistoryLabel, sumNumbers } from '../utils/opsFormatters'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
@@ -26,6 +26,7 @@ interface Props {
   points: OpsErrorTrendPoint[]
   loading: boolean
   timeRange: string
+  providerHistory?: ProviderStatusSnapshot[]
 }
 
 const props = defineProps<Props>()
@@ -60,6 +61,7 @@ const totalDisplayed = computed(() =>
 
 const hasRequestErrors = computed(() => totalRequestErrors.value > 0)
 const hasUpstreamErrors = computed(() => totalUpstreamErrors.value > 0)
+const officialDegradations = computed(() => (props.providerHistory ?? []).filter((item) => item.overall_indicator !== 'none'))
 
 const chartData = computed(() => {
   if (!props.points.length || totalDisplayed.value <= 0) return null
@@ -179,6 +181,13 @@ const options = computed(() => {
           {{ t('admin.ops.errorDetails.upstreamErrors') }}
         </button>
       </div>
+    </div>
+
+    <div v-if="officialDegradations.length" class="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+      <span class="font-bold">{{ t('admin.ops.providerStatus.correlationLabel') }}</span>
+      <span v-for="item in officialDegradations" :key="item.id" class="rounded-full bg-white/70 px-2 py-1 dark:bg-black/20">
+        {{ new Date(item.fetched_at).toLocaleString() }} · {{ item.overall_description }}
+      </span>
     </div>
 
     <div class="min-h-0 flex-1">
