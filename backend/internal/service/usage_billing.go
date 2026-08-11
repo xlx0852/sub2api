@@ -6,7 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
+
+	"github.com/shopspring/decimal"
 )
 
 var ErrUsageBillingRequestIDRequired = errors.New("usage billing request_id is required")
@@ -49,6 +52,41 @@ func (c *UsageBillingCommand) Normalize() {
 	if strings.TrimSpace(c.RequestFingerprint) == "" {
 		c.RequestFingerprint = buildUsageBillingFingerprint(c)
 	}
+	// Keep the fingerprint based on the raw amounts for retry compatibility,
+	// then normalize every monetary effect before it reaches a ledger.
+	c.quantizeMonetaryFields()
+}
+
+// UsageBillingMonetaryScale is the canonical precision for positive usage charges.
+const UsageBillingMonetaryScale = 6
+
+// usageBillingSourceScale matches usage_logs.actual_cost DECIMAL(20,10). Cost
+// arithmetic happens in float64, so values that are exact at the persisted
+// source scale can otherwise acquire a tiny positive binary tail and be
+// incorrectly advanced by a whole billing quantum.
+const usageBillingSourceScale = 10
+
+// QuantizeUsageBillingAmount rounds a positive usage amount upward to the next
+// 0.000001 USD quantum. Non-positive and non-finite values are left unchanged;
+// callers retain their existing validation and zero-cost behavior.
+func QuantizeUsageBillingAmount(v float64) float64 {
+	if v <= 0 || math.IsNaN(v) || math.IsInf(v, 0) {
+		return v
+	}
+	normalized := decimal.NewFromFloat(v).Round(usageBillingSourceScale)
+	if normalized.IsZero() {
+		return 0.000001
+	}
+	quantized, _ := normalized.RoundCeil(UsageBillingMonetaryScale).Float64()
+	return quantized
+}
+
+func (c *UsageBillingCommand) quantizeMonetaryFields() {
+	c.BalanceCost = QuantizeUsageBillingAmount(c.BalanceCost)
+	c.SubscriptionCost = QuantizeUsageBillingAmount(c.SubscriptionCost)
+	c.APIKeyQuotaCost = QuantizeUsageBillingAmount(c.APIKeyQuotaCost)
+	c.APIKeyRateLimitCost = QuantizeUsageBillingAmount(c.APIKeyRateLimitCost)
+	c.AccountQuotaCost = QuantizeUsageBillingAmount(c.AccountQuotaCost)
 }
 
 func buildUsageBillingFingerprint(c *UsageBillingCommand) string {
