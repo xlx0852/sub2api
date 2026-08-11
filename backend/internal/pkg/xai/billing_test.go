@@ -81,6 +81,8 @@ func TestParseBillingResponseMonthlyCreditsObjectVal(t *testing.T) {
 	require.EqualValues(t, 7473, *snapshot.UsedCents)
 	require.NotNil(t, snapshot.UsedPercent)
 	require.InDelta(t, 49.82, *snapshot.UsedPercent, 0.1)
+	require.Empty(t, snapshot.PeriodStart, "retired calendar billing period must not become a quota window")
+	require.Empty(t, snapshot.PeriodEnd, "retired calendar billing period must not become a quota window")
 	require.Equal(t, "2026-08-01T00:00:00Z", snapshot.BillingPeriodEnd)
 }
 

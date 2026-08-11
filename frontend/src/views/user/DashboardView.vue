@@ -1,16 +1,22 @@
 <template>
   <AppLayout>
-    <div class="space-y-6">
+    <div class="space-y-5">
       <div v-if="loading" class="flex items-center justify-center py-12"><LoadingSpinner /></div>
       <template v-else-if="stats">
         <UserDashboardStats :stats="stats" :balance="user?.balance || 0" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
-        <UserDashboardCharts v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" :models="modelStats" @dateRangeChange="loadCharts" @granularityChange="loadCharts" @refresh="refreshAll" />
-        <UserDashboardAvailability :data="availability" :loading="availabilityLoading" :platform="availabilityPlatform" @update:platform="changeAvailabilityPlatform" @refresh="loadAvailability" />
-        <UserGroupAvailability />
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div class="lg:col-span-2"><UserDashboardRecentUsage :data="recentUsage" :loading="loadingUsage" /></div>
-          <div class="lg:col-span-1"><UserDashboardQuickActions /></div>
+          <div class="min-w-0 lg:col-span-2">
+            <UserDashboardCharts v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" :models="modelStats" @dateRangeChange="loadCharts" @granularityChange="loadCharts" @refresh="refreshAll" />
+          </div>
+          <div class="lg:col-span-1">
+            <UserDashboardQuickActions :show-affiliate="affiliateEnabled" />
+          </div>
         </div>
+        <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <UserDashboardAvailability :data="availability" :loading="availabilityLoading" :platform="availabilityPlatform" @update:platform="changeAvailabilityPlatform" @refresh="loadAvailability" />
+          <UserGroupAvailability />
+        </div>
+        <UserDashboardRecentUsage :data="recentUsage" :loading="loadingUsage" />
       </template>
     </div>
   </AppLayout>
@@ -27,8 +33,10 @@ import type { TrafficAvailability } from '@/api/usage'
 import type { UsageLog, TrendDataPoint, ModelStat, PlatformQuotaItem } from '@/types'
 import { getMyPlatformQuotas } from '@/api/user'
 import { formatDateLocalInput } from '@/utils/format'
+import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 
 const authStore = useAuthStore(); const user = computed(() => authStore.user)
+const affiliateEnabled = computed(() => !authStore.isSimpleMode && isFeatureFlagEnabled(FeatureFlags.affiliate))
 const stats = ref<UserStatsType | null>(null); const loading = ref(false); const loadingUsage = ref(false); const loadingCharts = ref(false)
 const trendData = ref<TrendDataPoint[]>([]); const modelStats = ref<ModelStat[]>([]); const recentUsage = ref<UsageLog[]>([])
 const platformQuotas = ref<PlatformQuotaItem[] | null>(null)
