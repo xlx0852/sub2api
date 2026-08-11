@@ -7,13 +7,19 @@ import (
 
 // opsRepoMock is a test-only OpsRepository implementation with optional function hooks.
 type opsRepoMock struct {
-	InsertErrorLogFn              func(ctx context.Context, input *OpsInsertErrorLogInput) (int64, error)
-	BatchInsertErrorLogsFn        func(ctx context.Context, inputs []*OpsInsertErrorLogInput) (int64, error)
-	BatchInsertSystemLogsFn       func(ctx context.Context, inputs []*OpsInsertSystemLogInput) (int64, error)
-	ListSystemLogsFn              func(ctx context.Context, filter *OpsSystemLogFilter) (*OpsSystemLogList, error)
-	DeleteSystemLogsFn            func(ctx context.Context, filter *OpsSystemLogCleanupFilter) (int64, error)
-	InsertSystemLogCleanupAuditFn func(ctx context.Context, input *OpsSystemLogCleanupAudit) error
-	LookupDeletedKeyAuditFn       func(ctx context.Context, key string) (*DeletedKeyAuditResult, error)
+	InsertErrorLogFn                  func(ctx context.Context, input *OpsInsertErrorLogInput) (int64, error)
+	BatchInsertErrorLogsFn            func(ctx context.Context, inputs []*OpsInsertErrorLogInput) (int64, error)
+	BatchInsertSystemLogsFn           func(ctx context.Context, inputs []*OpsInsertSystemLogInput) (int64, error)
+	ListSystemLogsFn                  func(ctx context.Context, filter *OpsSystemLogFilter) (*OpsSystemLogList, error)
+	DeleteSystemLogsFn                func(ctx context.Context, filter *OpsSystemLogCleanupFilter) (int64, error)
+	InsertSystemLogCleanupAuditFn     func(ctx context.Context, input *OpsSystemLogCleanupAudit) error
+	LookupDeletedKeyAuditFn           func(ctx context.Context, key string) (*DeletedKeyAuditResult, error)
+	InsertProviderStatusSnapshotFn    func(ctx context.Context, input *ProviderStatusSnapshotRecord) (bool, error)
+	GetLatestProviderStatusSnapshotFn func(ctx context.Context, provider string) (*ProviderStatusSnapshotRecord, error)
+	ListProviderStatusSnapshotsFn     func(ctx context.Context, filter *ProviderStatusHistoryFilter) ([]*ProviderStatusSnapshotRecord, error)
+	ListAlertEventsFn                 func(ctx context.Context, filter *OpsAlertEventFilter) ([]*OpsAlertEvent, error)
+	CreateAlertEventFn                func(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error)
+	UpdateAlertEventStatusFn          func(ctx context.Context, eventID int64, status string, resolvedAt *time.Time) error
 }
 
 func (m *opsRepoMock) InsertErrorLog(ctx context.Context, input *OpsInsertErrorLogInput) (int64, error) {
@@ -122,6 +128,27 @@ func (m *opsRepoMock) ListJobHeartbeats(ctx context.Context) ([]*OpsJobHeartbeat
 	return []*OpsJobHeartbeat{}, nil
 }
 
+func (m *opsRepoMock) InsertProviderStatusSnapshot(ctx context.Context, input *ProviderStatusSnapshotRecord) (bool, error) {
+	if m.InsertProviderStatusSnapshotFn != nil {
+		return m.InsertProviderStatusSnapshotFn(ctx, input)
+	}
+	return false, nil
+}
+
+func (m *opsRepoMock) GetLatestProviderStatusSnapshot(ctx context.Context, provider string) (*ProviderStatusSnapshotRecord, error) {
+	if m.GetLatestProviderStatusSnapshotFn != nil {
+		return m.GetLatestProviderStatusSnapshotFn(ctx, provider)
+	}
+	return nil, nil
+}
+
+func (m *opsRepoMock) ListProviderStatusSnapshots(ctx context.Context, filter *ProviderStatusHistoryFilter) ([]*ProviderStatusSnapshotRecord, error) {
+	if m.ListProviderStatusSnapshotsFn != nil {
+		return m.ListProviderStatusSnapshotsFn(ctx, filter)
+	}
+	return nil, nil
+}
+
 func (m *opsRepoMock) ListAlertRules(ctx context.Context) ([]*OpsAlertRule, error) {
 	return []*OpsAlertRule{}, nil
 }
@@ -139,6 +166,9 @@ func (m *opsRepoMock) DeleteAlertRule(ctx context.Context, id int64) error {
 }
 
 func (m *opsRepoMock) ListAlertEvents(ctx context.Context, filter *OpsAlertEventFilter) ([]*OpsAlertEvent, error) {
+	if m.ListAlertEventsFn != nil {
+		return m.ListAlertEventsFn(ctx, filter)
+	}
 	return []*OpsAlertEvent{}, nil
 }
 
@@ -155,10 +185,16 @@ func (m *opsRepoMock) GetLatestAlertEvent(ctx context.Context, ruleID int64) (*O
 }
 
 func (m *opsRepoMock) CreateAlertEvent(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error) {
+	if m.CreateAlertEventFn != nil {
+		return m.CreateAlertEventFn(ctx, event)
+	}
 	return event, nil
 }
 
 func (m *opsRepoMock) UpdateAlertEventStatus(ctx context.Context, eventID int64, status string, resolvedAt *time.Time) error {
+	if m.UpdateAlertEventStatusFn != nil {
+		return m.UpdateAlertEventStatusFn(ctx, eventID, status, resolvedAt)
+	}
 	return nil
 }
 

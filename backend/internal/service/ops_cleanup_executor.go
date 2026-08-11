@@ -25,18 +25,19 @@ type opsCleanupTarget struct {
 }
 
 type opsCleanupDeletedCounts struct {
-	errorLogs     int64
-	alertEvents   int64
-	systemLogs    int64
-	logAudits     int64
-	systemMetrics int64
-	hourlyPreagg  int64
-	dailyPreagg   int64
+	errorLogs      int64
+	alertEvents    int64
+	systemLogs     int64
+	logAudits      int64
+	systemMetrics  int64
+	hourlyPreagg   int64
+	dailyPreagg    int64
+	providerStatus int64
 }
 
 func (c opsCleanupDeletedCounts) String() string {
 	return fmt.Sprintf(
-		"error_logs=%d alert_events=%d system_logs=%d log_audits=%d system_metrics=%d hourly_preagg=%d daily_preagg=%d",
+		"error_logs=%d alert_events=%d system_logs=%d log_audits=%d system_metrics=%d hourly_preagg=%d daily_preagg=%d provider_status=%d",
 		c.errorLogs,
 		c.alertEvents,
 		c.systemLogs,
@@ -44,7 +45,46 @@ func (c opsCleanupDeletedCounts) String() string {
 		c.systemMetrics,
 		c.hourlyPreagg,
 		c.dailyPreagg,
+		c.providerStatus,
 	)
+}
+
+func deleteOldProviderStatusSnapshots(ctx context.Context, db *sql.DB, cutoff time.Time, batchSize int) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	if batchSize <= 0 {
+		batchSize = opsCleanupBatchSize
+	}
+	var total int64
+	for {
+		result, err := db.ExecContext(ctx, `
+WITH latest AS (
+  SELECT DISTINCT ON (provider) id
+  FROM provider_status_snapshots
+  ORDER BY provider, fetched_at DESC, id DESC
+), doomed AS (
+  SELECT id
+  FROM provider_status_snapshots
+  WHERE fetched_at < $1 AND id NOT IN (SELECT id FROM latest)
+  ORDER BY id
+  LIMIT $2
+)
+DELETE FROM provider_status_snapshots p
+USING doomed d
+WHERE p.id = d.id`, cutoff, batchSize)
+		if err != nil {
+			return total, err
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return total, err
+		}
+		total += affected
+		if affected < int64(batchSize) {
+			return total, nil
+		}
+	}
 }
 
 // opsCleanupPlan 把"保留天数"翻译成具体的清理动作。

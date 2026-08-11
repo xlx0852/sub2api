@@ -313,6 +313,18 @@ func (s *OpsCleanupService) runCleanupOnce(ctx context.Context) (opsCleanupDelet
 		*t.counter = n
 	}
 
+	if effective.ErrorLogRetentionDays >= 0 {
+		cutoff := now
+		if effective.ErrorLogRetentionDays > 0 {
+			cutoff = now.AddDate(0, 0, -effective.ErrorLogRetentionDays)
+		}
+		deleted, err := deleteOldProviderStatusSnapshots(ctx, s.db, cutoff, opsCleanupBatchSize)
+		if err != nil {
+			return out, err
+		}
+		out.providerStatus = deleted
+	}
+
 	return out, nil
 }
 

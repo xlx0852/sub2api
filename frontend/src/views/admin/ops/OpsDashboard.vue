@@ -62,6 +62,13 @@
         @exit-fullscreen="exitFullscreen"
       />
 
+      <OpsProviderStatusCard
+        v-if="opsEnabled && !(loading && !hasLoadedOnce) && (isFullscreen || activeSection === 'overview')"
+        :current="providerStatus"
+        :history="providerStatusHistory"
+        :loading="loadingProviderStatus"
+      />
+
       <!-- Overview: capacity + primary traffic -->
       <div
         v-if="opsEnabled && !(loading && !hasLoadedOnce) && (isFullscreen || activeSection === 'overview')"
@@ -108,6 +115,7 @@
           :points="errorTrend?.points ?? []"
           :loading="loadingErrorTrend"
           :time-range="timeRange"
+          :provider-history="providerStatusHistory"
           @open-request-errors="openErrorDetails('request')"
           @open-upstream-errors="openErrorDetails('upstream')"
         />
@@ -184,7 +192,9 @@ import {
   type OpsLatencyHistogramResponse,
   type OpsRequestType,
   type OpsThroughputTrendResponse,
-  type OpsMetricThresholds
+  type OpsMetricThresholds,
+  type ProviderStatusCurrent,
+  type ProviderStatusSnapshot
 } from '@/api/admin/ops'
 import { useAdminSettingsStore, useAppStore } from '@/stores'
 import OpsDashboardHeader from './components/OpsDashboardHeader.vue'
@@ -201,6 +211,7 @@ import OpsAlertEventsCard from './components/OpsAlertEventsCard.vue'
 import OpsOpenAITokenStatsCard from './components/OpsOpenAITokenStatsCard.vue'
 import OpsSystemLogTable from './components/OpsSystemLogTable.vue'
 import OpsRequestDetailsModal, { type OpsRequestDetailsPreset } from './components/OpsRequestDetailsModal.vue'
+import OpsProviderStatusCard from './components/OpsProviderStatusCard.vue'
 import OpsSettingsDialog from './components/OpsSettingsDialog.vue'
 import OpsAlertRulesCard from './components/OpsAlertRulesCard.vue'
 
@@ -415,6 +426,10 @@ const loadingErrorTrend = ref(false)
 const errorDistribution = ref<OpsErrorDistributionResponse | null>(null)
 const loadingErrorDistribution = ref(false)
 
+const providerStatus = ref<ProviderStatusCurrent | null>(null)
+const providerStatusHistory = ref<ProviderStatusSnapshot[]>([])
+const loadingProviderStatus = ref(false)
+
 const selectedErrorId = ref<number | null>(null)
 const showErrorModal = ref(false)
 
@@ -610,6 +625,48 @@ function buildSwitchTrendParams() {
   return params
 }
 
+function buildProviderHistoryParams() {
+  if (timeRange.value === 'custom' && customStartTime.value && customEndTime.value) {
+    return { start_time: customStartTime.value, end_time: customEndTime.value, limit: 200 }
+  }
+  const durationMs: Record<Exclude<TimeRange, 'custom'>, number> = {
+    '5m': 5 * 60_000,
+    '30m': 30 * 60_000,
+    '1h': 60 * 60_000,
+    '6h': 6 * 60 * 60_000,
+    '24h': 24 * 60 * 60_000
+  }
+  const end = new Date()
+  const selected = timeRange.value === 'custom' ? '1h' : timeRange.value
+  return {
+    start_time: new Date(end.getTime() - durationMs[selected]).toISOString(),
+    end_time: end.toISOString(),
+    limit: 200
+  }
+}
+
+async function refreshProviderStatusWithCancel(fetchSeq: number, signal: AbortSignal) {
+  if (!opsEnabled.value) return
+  loadingProviderStatus.value = true
+  try {
+    const [current, history] = await Promise.all([
+      opsAPI.getProviderStatus('openai', signal),
+      opsAPI.listProviderStatusHistory('openai', buildProviderHistoryParams(), signal)
+    ])
+    if (fetchSeq !== dashboardFetchSeq) return
+    providerStatus.value = current
+    const currentSnapshot = current.snapshot
+    providerStatusHistory.value = currentSnapshot && !history.some((item) => item.id === currentSnapshot.id)
+      ? [currentSnapshot, ...history]
+      : history
+  } catch (err) {
+    if (fetchSeq !== dashboardFetchSeq || isCanceledRequest(err)) return
+    console.error('[OpsDashboard] Failed to load provider status', err)
+  } finally {
+    if (fetchSeq === dashboardFetchSeq) loadingProviderStatus.value = false
+  }
+}
+
 async function refreshOverviewWithCancel(fetchSeq: number, signal: AbortSignal) {
   if (!opsEnabled.value) return
   try {
@@ -771,6 +828,7 @@ async function fetchData() {
     await Promise.all([
       refreshCoreSnapshotWithCancel(fetchSeq, dashboardFetchController.signal),
       refreshSwitchTrendWithCancel(fetchSeq, dashboardFetchController.signal),
+      refreshProviderStatusWithCancel(fetchSeq, dashboardFetchController.signal),
     ])
     if (fetchSeq !== dashboardFetchSeq) return
 

@@ -34,6 +34,21 @@ export default {
       loadingText: '加载中...',
       ready: '就绪',
       autoRefreshRemaining: '剩余 {seconds}s',
+      providerStatus: {
+        title: 'OpenAI 官方状态',
+        description: '官方聚合状态仅作为运维证据，与 Sub2API 本地实测分开判断。',
+        operational: '全部正常',
+        stale: '数据已过期',
+        unavailable: '暂无官方状态',
+        viewSource: '打开官方状态页',
+        activeIncidents: '活跃事件',
+        noActiveIncidents: '暂无活跃事件',
+        sourceUpdated: '官方更新：',
+        fetchedAt: '本地采集：',
+        changesInRange: '当前时间窗 {count} 次状态变化',
+        noData: '无数据',
+        correlationLabel: '官方事件时间窗（不代表已确认因果）'
+      },
       systemLogs: {
         title: '系统日志',
         description: '优先显示最新日志，可按条件筛选、搜索和清理。',

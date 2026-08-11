@@ -33,6 +33,21 @@ export default {
       loadingText: 'loading',
       ready: 'ready',
       autoRefreshRemaining: 'Remaining {seconds}s',
+      providerStatus: {
+        title: 'OpenAI Official Status',
+        description: 'Official aggregate status is supporting evidence and remains separate from Sub2API local measurements.',
+        operational: 'Fully operational',
+        stale: 'Status data is stale',
+        unavailable: 'Official status unavailable',
+        viewSource: 'Open official status',
+        activeIncidents: 'Active incidents',
+        noActiveIncidents: 'No active incidents',
+        sourceUpdated: 'Official update:',
+        fetchedAt: 'Collected:',
+        changesInRange: '{count} status changes in this range',
+        noData: 'No data',
+        correlationLabel: 'Official incident window (temporal overlap does not prove causation)'
+      },
       systemLogs: {
         title: 'System Logs',
         description: 'Newest logs are shown first. Filter, search, and clean up by condition.',
