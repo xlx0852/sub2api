@@ -110,7 +110,7 @@ describe('AccountCostConfigDialog', () => {
     expect(wrapper.find('[data-testid="save-cost-config"]').exists()).toBe(false)
   })
 
-  it('Grok 账号明确区分真实付款周期和自然月额度重置', async () => {
+  it('Grok 账号与其他订阅平台使用相同的开始时间、时长和价格模式', async () => {
     createSubscriptionCycle.mockResolvedValue({})
     const wrapper = mount(AccountCostConfigDialog, {
       props: {
@@ -132,16 +132,16 @@ describe('AccountCostConfigDialog', () => {
     })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('admin.profit.grokCycleHint')
-    await wrapper.get('input[type="number"][min="1"]').setValue(31)
+    await wrapper.get('input[type="number"][step="0.01"]').setValue(299)
+    await wrapper.get('input[type="number"][min="1"]').setValue(45)
     await wrapper.get('input[type="date"]').setValue('2026-07-17')
     await wrapper.get('[data-testid="save-cost-config"]').trigger('click')
     await flushPromises()
 
     expect(createSubscriptionCycle).toHaveBeenCalledWith(104, {
       starts_at: '2026-07-17',
-      period_fee: 0,
-      period_days: 31,
+      period_fee: 299,
+      period_days: 45,
       currency: 'USD',
       notes: '',
     })

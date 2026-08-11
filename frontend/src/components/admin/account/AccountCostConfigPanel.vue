@@ -31,11 +31,6 @@
       </div>
     </div>
 
-    <div v-if="isGrokSubscription" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-900/60 dark:bg-amber-900/10 dark:text-amber-300">
-      <div class="font-semibold">{{ t('admin.profit.grokCycleTitle') }}</div>
-      <p>{{ t('admin.profit.grokCycleHint') }}</p>
-    </div>
-
     <template v-if="isSubscription">
       <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
         <div class="mb-3 flex items-center justify-between">
@@ -206,7 +201,6 @@ const hints = ref<SubscriptionCycleListResponse | null>(null)
 const inferenceNote = ref('')
 const inferenceRisky = ref(false)
 const isSubscription = computed(() => props.accountType === 'oauth' || props.accountType === 'setup-token')
-const isGrokSubscription = computed(() => isSubscription.value && props.accountPlatform === 'grok')
 const form = ref({ period_fee: 0, period_days: 30, starts_at: '', notes: '' })
 const terminationCycle = ref<AccountSubscriptionCycle | null>(null)
 const terminationPreview = ref<AccountSubscriptionLossSummary | null>(null)
@@ -253,7 +247,7 @@ watch(() => [props.active, props.accountId, props.accountType, props.accountPlat
   autoRenew.value = false
   hints.value = null
   inferenceNote.value = ''
-  form.value = { period_fee: 0, period_days: isGrokSubscription.value ? 31 : 30, starts_at: '', notes: '' }
+  form.value = { period_fee: 0, period_days: 30, starts_at: '', notes: '' }
   terminationCycle.value = null
   refundCycle.value = null
   closeConfirmation()
