@@ -716,9 +716,9 @@ function generateGrokCodexFiles(baseUrl: string, apiKey: string): FileConfig[] {
   const providerBase = normalizeCodexBaseUrl(baseUrl)
 
   const configContent = `model_provider = "Grok"
-model = "grok-4.5"
-review_model = "grok-4.5"
-# Optional: grok-build-0.1 / grok-composer-2.5-fast / grok-4.3
+model = "grok-4.6"
+review_model = "grok-4.6"
+# Optional: grok-4.5 / grok-build-0.1 / grok-composer-2.5-fast / grok-4.3
 model_reasoning_effort = "high"
 disable_response_storage = true
 network_access = "enabled"
@@ -761,12 +761,12 @@ default = "grok"
 web_search = "grok"
 
 [model."grok"]
-model = "grok-4.5"
+model = "grok-4.6"
 base_url = "${providerBase}"
-name = "Grok 4.5"
+name = "Grok 4.6"
 api_key = "${apiKey}"
 api_backend = "responses"
-context_window = 1000000
+context_window = 500000
 supports_backend_search = true`
 
   return [
@@ -780,7 +780,7 @@ supports_backend_search = true`
 
 /** Claude Code env pointing model aliases at Grok via Sub2API Messages-compatible endpoint. */
 function generateGrokClaudeFiles(baseUrl: string, apiKey: string): FileConfig[] {
-  const model = 'grok-4.5'
+  const model = 'grok-4.6'
   let path: string
   let content: string
 
@@ -1034,6 +1034,25 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
     }
   }
   const grokModels = {
+    'grok-4.6': {
+      name: 'Grok 4.6',
+      limit: {
+        context: 500000
+      },
+      modalities: {
+        input: ['text', 'image'],
+        output: ['text']
+      },
+      options: {
+        store: false
+      },
+      variants: {
+        low: {},
+        medium: {},
+        high: {},
+        xhigh: {}
+      }
+    },
     'grok-4.5': {
       name: 'Grok 4.5',
       limit: {

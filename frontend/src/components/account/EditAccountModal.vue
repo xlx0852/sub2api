@@ -2469,9 +2469,8 @@
           </div>
         </div>
 
-        <GroupSelector
-          v-if="!authStore.isSimpleMode"
-          v-model="form.group_ids"
+		<GroupSelector
+			v-model="form.group_ids"
           :groups="groups"
           :platform="account?.platform"
           :mixed-scheduling="mixedScheduling"
@@ -2664,7 +2663,6 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
-import { useAuthStore } from '@/stores/auth'
 import { adminAPI } from '@/api/admin'
 import { useQuotaNotifyState } from '@/composables/useQuotaNotifyState'
 import type {
@@ -2769,7 +2767,6 @@ watch(
 )
 
 const appStore = useAppStore()
-const authStore = useAuthStore()
 
 // Spark 影子账号(parent_account_id 非空):代理恒继承母账号,不可独立编辑(外审 B/P1),
 // 故隐藏代理选择器。

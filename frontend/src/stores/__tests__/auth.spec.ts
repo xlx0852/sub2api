@@ -366,25 +366,4 @@ describe('useAuthStore', () => {
     })
   })
 
-  // --- isSimpleMode ---
-
-  describe('isSimpleMode', () => {
-    it('run_mode 为 simple 时返回 true', async () => {
-      const simpleResponse = {
-        ...fakeAuthResponse,
-        user: { ...fakeUser, run_mode: 'simple' as const },
-      }
-      mockLogin.mockResolvedValue(simpleResponse)
-      const store = useAuthStore()
-
-      await store.login({ email: 'test@example.com', password: '123456' })
-
-      expect(store.isSimpleMode).toBe(true)
-    })
-
-    it('默认为 standard 模式', () => {
-      const store = useAuthStore()
-      expect(store.isSimpleMode).toBe(false)
-    })
-  })
 })

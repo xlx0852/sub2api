@@ -176,9 +176,9 @@ func newTestGatewayHandler(t *testing.T, group *service.Group, accounts []*servi
 		nil, // userPlatformQuotaRepo
 	)
 
-	// RunModeSimple：跳过计费检查，避免引入 repo/cache 依赖。
-	cfg := &config.Config{RunMode: config.RunModeSimple}
-	billingCacheSvc := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
+	// 标准模式会执行计费预检，测试使用固定充足余额的 repository。
+	cfg := &config.Config{RunMode: config.RunModeStandard}
+	billingCacheSvc := newBillingEligibleCache(t, cfg)
 
 	concurrencySvc := service.NewConcurrencyService(&fakeConcurrencyCache{})
 	concurrencyHelper := NewConcurrencyHelper(concurrencySvc, SSEPingFormatClaude, 0)

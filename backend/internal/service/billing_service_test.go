@@ -1040,7 +1040,7 @@ func TestCalculateCostWithLongContext_PropagatesError(t *testing.T) {
 func TestGetModelPricing_Grok45OfficialFallback(t *testing.T) {
 	svc := newTestBillingService()
 
-	for _, model := range []string{"grok", "grok-latest", "grok-4.5", "grok-4.5-latest", "grok-build-latest"} {
+	for _, model := range []string{"grok-4.5", "grok-4.5-latest"} {
 		model := model
 		t.Run(model, func(t *testing.T) {
 			pricing, err := svc.GetModelPricing(model)
@@ -1051,6 +1051,45 @@ func TestGetModelPricing_Grok45OfficialFallback(t *testing.T) {
 			require.True(t, pricing.SupportsCacheBreakdown)
 		})
 	}
+}
+
+func TestGetModelPricing_Grok46OfficialFallback(t *testing.T) {
+	svc := newTestBillingService()
+
+	for _, model := range []string{"grok", "grok-latest", "grok-4.6", "grok-build-latest"} {
+		model := model
+		t.Run(model, func(t *testing.T) {
+			pricing, err := svc.GetModelPricing(model)
+			require.NoError(t, err)
+			require.InDelta(t, 2e-6, pricing.InputPricePerToken, 1e-12)
+			require.InDelta(t, 6e-6, pricing.OutputPricePerToken, 1e-12)
+			require.InDelta(t, 0.5e-6, pricing.CacheReadPricePerToken, 1e-12)
+			require.InDelta(t, 4e-6, pricing.InputPricePerTokenPriority, 1e-12)
+			require.InDelta(t, 12e-6, pricing.OutputPricePerTokenPriority, 1e-12)
+			require.InDelta(t, 1e-6, pricing.CacheReadPricePerTokenPriority, 1e-12)
+			require.Equal(t, 200000, pricing.LongContextInputThreshold)
+			require.InDelta(t, 2.0, pricing.LongContextInputMultiplier, 1e-12)
+			require.InDelta(t, 2.0, pricing.LongContextOutputMultiplier, 1e-12)
+			require.True(t, pricing.SupportsCacheBreakdown)
+		})
+	}
+}
+
+func TestCalculateCost_Grok46LongContextAndPriorityPricing(t *testing.T) {
+	svc := newTestBillingService()
+	tokens := UsageTokens{InputTokens: 200000, OutputTokens: 1000, CacheReadTokens: 100000}
+
+	standard, err := svc.CalculateCostWithServiceTier("grok-4.6", tokens, 1, "")
+	require.NoError(t, err)
+	require.InDelta(t, 0.8, standard.InputCost, 1e-9)
+	require.InDelta(t, 0.012, standard.OutputCost, 1e-9)
+	require.InDelta(t, 0.1, standard.CacheReadCost, 1e-9)
+
+	priority, err := svc.CalculateCostWithServiceTier("grok-4.6", tokens, 1, "priority")
+	require.NoError(t, err)
+	require.InDelta(t, 1.6, priority.InputCost, 1e-9)
+	require.InDelta(t, 0.024, priority.OutputCost, 1e-9)
+	require.InDelta(t, 0.2, priority.CacheReadCost, 1e-9)
 }
 
 func TestCalculateCost_SupportsCacheBreakdown(t *testing.T) {

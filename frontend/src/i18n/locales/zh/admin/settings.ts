@@ -481,7 +481,7 @@ export default {
         title: '充值/订阅页面',
         description: '在侧边栏展示“充值/订阅”入口，并在页面内通过 iframe 打开指定链接',
         enabled: '显示充值/订阅入口',
-        enabledHint: '仅在标准模式（非简单模式）下展示',
+		enabledHint: '启用后在侧边栏展示入口',
         url: '充值/订阅页面 URL',
         urlPlaceholder: 'https://example.com/purchase',
         urlHint: '必须是完整的 http(s) 链接',

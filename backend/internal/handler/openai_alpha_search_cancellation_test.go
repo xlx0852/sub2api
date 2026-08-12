@@ -91,7 +91,7 @@ func TestOpenAIGatewayHandlerAlphaSearch_ContextCanceledDoesNotFailOverOrPenaliz
 	}
 	accountRepo := alphaSearchCancellationAccountRepo{accounts: accounts}
 	upstream := &alphaSearchCancellationUpstream{}
-	cfg := &config.Config{RunMode: config.RunModeSimple}
+	cfg := &config.Config{RunMode: config.RunModeStandard}
 	gatewayService := service.NewOpenAIGatewayService(
 		accountRepo,
 		nil,
@@ -117,8 +117,7 @@ func TestOpenAIGatewayHandlerAlphaSearch_ContextCanceledDoesNotFailOverOrPenaliz
 		nil,
 		nil,
 	)
-	billingService := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
-	t.Cleanup(billingService.Stop)
+	billingService := newBillingEligibleCache(t, cfg)
 	concurrencyService := service.NewConcurrencyService(nil)
 	h := NewOpenAIGatewayHandler(
 		gatewayService,

@@ -803,16 +803,6 @@ func TestHasUserPlatformQuotaLimit(t *testing.T) {
 			},
 			want: true, // fail-safe
 		},
-		{
-			name: "simple_mode",
-			setup: func() *BillingCacheService {
-				entry := &UserPlatformQuotaCacheEntry{DailyLimitUSD: &daily}
-				svc := newServiceForPreflight(t, &fakeQuotaRepo{}, &fakeFullCache{entry: entry})
-				svc.cfg.RunMode = config.RunModeSimple
-				return svc
-			},
-			want: false, // simple 模式始终跳过
-		},
 	}
 
 	for _, tt := range tests {

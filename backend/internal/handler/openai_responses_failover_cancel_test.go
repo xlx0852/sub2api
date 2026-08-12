@@ -76,7 +76,7 @@ func newOpenAIResponsesFailoverTestHandler(t *testing.T, upstream service.HTTPUp
 		},
 	}
 	accountRepo := openAIImagesFailoverAccountRepo{accounts: accounts}
-	cfg := &config.Config{RunMode: config.RunModeSimple}
+	cfg := &config.Config{RunMode: config.RunModeStandard}
 	gatewayService := service.NewOpenAIGatewayService(
 		accountRepo,
 		nil,
@@ -102,8 +102,7 @@ func newOpenAIResponsesFailoverTestHandler(t *testing.T, upstream service.HTTPUp
 		nil,
 		nil,
 	)
-	billingService := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
-	t.Cleanup(billingService.Stop)
+	billingService := newBillingEligibleCache(t, cfg)
 	concurrencyService := service.NewConcurrencyService(nil)
 	handler := NewOpenAIGatewayHandler(
 		gatewayService,

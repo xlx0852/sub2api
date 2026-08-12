@@ -1040,6 +1040,25 @@ func TestAnthropicToResponses_ThinkingAdaptive(t *testing.T) {
 	assert.NotContains(t, resp.Include, "reasoning.summary")
 }
 
+func TestAnthropicToResponses_ThinkingAdaptiveSummarized(t *testing.T) {
+	var req AnthropicRequest
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"model":"grok-4.6",
+		"max_tokens":1024,
+		"messages":[{"role":"user","content":"Hello"}],
+		"thinking":{"type":"adaptive","display":"summarized"},
+		"output_config":{"effort":"xhigh"}
+	}`), &req))
+	require.NotNil(t, req.Thinking)
+	assert.Equal(t, "summarized", req.Thinking.Display)
+
+	resp, err := AnthropicToResponses(&req)
+	require.NoError(t, err)
+	require.NotNil(t, resp.Reasoning)
+	assert.Equal(t, "xhigh", resp.Reasoning.Effort)
+	assert.Equal(t, "concise", resp.Reasoning.Summary)
+}
+
 func TestAnthropicToResponses_ThinkingDisabled(t *testing.T) {
 	req := &AnthropicRequest{
 		Model:     "gpt-5.2",

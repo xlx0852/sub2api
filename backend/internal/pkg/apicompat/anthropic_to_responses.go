@@ -67,6 +67,14 @@ func AnthropicToResponses(req *AnthropicRequest) (*ResponsesRequest, error) {
 		Effort:  mapAnthropicEffortToResponses(effort),
 		Summary: "auto",
 	}
+	// Grok Build sends adaptive thinking with display="summarized" for
+	// newer Grok models. Preserve that intent when bridging Messages to
+	// Responses, whose equivalent wire value is reasoning.summary="concise".
+	if req.Thinking != nil &&
+		strings.EqualFold(strings.TrimSpace(req.Thinking.Type), "adaptive") &&
+		strings.EqualFold(strings.TrimSpace(req.Thinking.Display), "summarized") {
+		out.Reasoning.Summary = "concise"
+	}
 
 	// Convert tool_choice
 	if len(req.ToolChoice) > 0 {

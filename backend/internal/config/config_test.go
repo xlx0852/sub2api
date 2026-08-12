@@ -35,8 +35,8 @@ func TestNormalizeRunMode(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"simple", "simple"},
-		{"SIMPLE", "simple"},
+		{"simple", "standard"},
+		{"SIMPLE", "standard"},
 		{"standard", "standard"},
 		{"invalid", "standard"},
 		{"", "standard"},
@@ -48,6 +48,20 @@ func TestNormalizeRunMode(t *testing.T) {
 			t.Errorf("NormalizeRunMode(%q) = %q, want %q", tt.input, result, tt.expected)
 		}
 	}
+}
+
+func TestValidateRunModeRejectsRemovedAndUnknownModes(t *testing.T) {
+	require.NoError(t, ValidateRunMode(""))
+	require.NoError(t, ValidateRunMode("standard"))
+	require.ErrorContains(t, ValidateRunMode("simple"), "has been removed")
+	require.ErrorContains(t, ValidateRunMode("legacy"), "only \"standard\" is supported")
+}
+
+func TestLoadRejectsRemovedSimpleMode(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("RUN_MODE", "simple")
+	_, err := Load()
+	require.ErrorContains(t, err, "run_mode=simple has been removed")
 }
 
 func TestLoadDefaultSchedulingConfig(t *testing.T) {

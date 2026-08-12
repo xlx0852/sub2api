@@ -131,6 +131,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 	clientDisconnected := false // 客户端断开后继续 drain 上游以收集 usage
 	sawTerminalEvent := false
 	sawFailedEvent := false
+	responsesSemanticOutputSeen := false
 	failedMessage := ""
 	clientOutputStarted := false
 	upstreamRequestID := strings.TrimSpace(resp.Header.Get("x-request-id"))
@@ -481,9 +482,21 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			outputLines = replaceFrameDataLines(outputLines, data)
 		}
 		startsClientOutput := forceFlushFailedEvent || openAIStreamDataStartsClientOutput(data, eventType)
+		if startsClientOutput && !openAIStreamEventTypeIsTerminal(eventType) {
+			responsesSemanticOutputSeen = true
+		}
+		if account != nil && account.Platform == PlatformOpenAI &&
+			(eventType == "response.completed" || eventType == "response.done") &&
+			!sawFailedEvent && !responsesSemanticOutputSeen && !clientOutputStarted &&
+			openAIResponsesCompletedEventIsEmpty(dataBytes, usage) {
+			sawTerminalEvent = true
+			streamEarlyErr = newOpenAIResponsesEmptyCompletedFailoverError(c, account, upstreamRequestID)
+			return
+		}
 		writeLines(outputLines, queueDrained, startsClientOutput)
 
-		if firstTokenMs == nil && startsClientOutput {
+		startsVisibleOutput := openAIStreamDataStartsVisibleOutput(data, eventType)
+		if firstTokenMs == nil && startsVisibleOutput {
 			ms := int(time.Since(startTime).Milliseconds())
 			firstTokenMs = &ms
 		}
@@ -909,6 +922,34 @@ func (s *OpenAIGatewayService) parseSSEUsageBytes(data []byte, usage *OpenAIUsag
 	}
 }
 
+func openAIResponsesCompletedEventIsEmpty(data []byte, usage *OpenAIUsage) bool {
+	if len(data) == 0 || !gjson.ValidBytes(data) {
+		return false
+	}
+	if usage != nil && (usage.InputTokens > 0 || usage.OutputTokens > 0 ||
+		usage.ImageInputTokens > 0 || usage.ImageOutputTokens > 0 ||
+		usage.CacheCreationInputTokens > 0 || usage.CacheReadInputTokens > 0) {
+		return false
+	}
+	if gjson.GetBytes(data, "usage").Exists() || gjson.GetBytes(data, "response.usage").Exists() ||
+		gjson.GetBytes(data, "error").Exists() || gjson.GetBytes(data, "response.error").Exists() {
+		return false
+	}
+	if output := gjson.GetBytes(data, "response.output"); output.Exists() && output.IsArray() && len(output.Array()) > 0 {
+		return false
+	}
+	return true
+}
+
+func openAIStreamEventTypeIsTerminal(eventType string) bool {
+	switch strings.TrimSpace(eventType) {
+	case "response.completed", "response.done", "response.failed", "response.incomplete", "response.cancelled", "response.canceled":
+		return true
+	default:
+		return false
+	}
+}
+
 // dumpUpstreamUsageRaw writes raw upstream usage payloads when
 // SUB2API_UPSTREAM_USAGE_DUMP is set to a directory path. Used for local
 // cache_write_tokens packet investigation only.
@@ -960,15 +1001,14 @@ func extractOpenAIUsageFromJSONBytes(body []byte) (OpenAIUsage, bool) {
 	if len(body) == 0 || !gjson.ValidBytes(body) {
 		return OpenAIUsage{}, false
 	}
-	if usage, ok := openAIUsageFromGJSON(gjson.GetBytes(body, "usage")); ok {
-		dumpUpstreamUsageRaw("json.usage", body, usage)
-		return usage, true
+	// Keep native path precedence, then accept common compatibility envelopes.
+	for _, path := range []string{"usage", "response.usage", "data.usage", "data.response.usage"} {
+		if usage, ok := openAIUsageFromGJSON(gjson.GetBytes(body, path)); ok {
+			dumpUpstreamUsageRaw("json."+path, body, usage)
+			return usage, true
+		}
 	}
-	usage, ok := openAIUsageFromGJSON(gjson.GetBytes(body, "response.usage"))
-	if ok {
-		dumpUpstreamUsageRaw("json.response.usage", body, usage)
-	}
-	return usage, ok
+	return OpenAIUsage{}, false
 }
 
 func extractOpenAIResponseIDFromJSONBytes(body []byte) string {

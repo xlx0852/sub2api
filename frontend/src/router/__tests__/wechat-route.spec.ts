@@ -4,7 +4,6 @@ const authStore = vi.hoisted(() => ({
   checkAuth: vi.fn(),
   isAuthenticated: false,
   isAdmin: false,
-  isSimpleMode: false,
 }))
 
 const appStore = vi.hoisted(() => ({

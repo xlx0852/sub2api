@@ -208,7 +208,7 @@ func (s *BillingService) initFallbackPricing() {
 	// Ensure grok flagship key is always addressable via live DefaultChatModel string.
 	if p, ok := s.fallbackPrices[xai.CurrentDefaultChatModel()]; ok {
 		s.fallbackPrices[xai.CurrentDefaultChatModel()] = p
-	} else if p, ok := s.fallbackPrices["grok-4.5"]; ok {
+	} else if p, ok := s.fallbackPrices["grok-4.6"]; ok {
 		s.fallbackPrices[xai.CurrentDefaultChatModel()] = p
 	}
 }
@@ -427,8 +427,10 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	}
 
 	switch modelLower {
-	case "grok", "grok-latest", "grok-4.5", "grok-4.5-latest", "grok-build-latest":
+	case "grok", "grok-latest", "grok-4.6", "grok-build-latest":
 		return s.fallbackPrice(xai.CurrentDefaultChatModel())
+	case "grok-4.5", "grok-4.5-latest":
+		return s.fallbackPrice("grok-4.5")
 	case "grok-4.3":
 		return s.fallbackPrice("grok-4.3")
 	case "grok-build", "grok-build-0.1":

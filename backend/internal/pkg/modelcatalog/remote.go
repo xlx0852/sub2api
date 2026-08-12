@@ -234,6 +234,18 @@ func loadLastKnownGood(opts RemoteOptions) {
 		if err != nil {
 			continue
 		}
+		// A persisted last-known-good snapshot may outlive the binary that
+		// created it. Never let an older snapshot downgrade a newer embedded
+		// or resource catalog during startup. The regular remote refresh path
+		// applies the same monotonic-version rule.
+		if active := Get(); active != nil && cat.Version < active.Version {
+			slog.Warn("ignoring older local model catalog snapshot",
+				"snapshot_version", cat.Version,
+				"active_version", active.Version,
+				"source", candidate.source,
+			)
+			continue
+		}
 		digest := sha256.Sum256(raw)
 		setCatalog(cat)
 		remoteState.Lock()

@@ -140,6 +140,7 @@ func TestAccountHandlerGetAvailableModels_GrokDefaultsToXAIModelsWithoutMapping(
 		require.NotContains(t, strings.ToLower(id), "claude")
 	}
 	require.Contains(t, ids, "grok-4.5")
+	require.Contains(t, ids, "grok-4.6")
 	require.Contains(t, ids, "grok-4.3")
 	require.Contains(t, ids, "grok-build-0.1")
 }

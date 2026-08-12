@@ -1,11 +1,20 @@
 import { describe, expect, it, vi } from 'vitest'
 
+const { getModelCatalogMock } = vi.hoisted(() => ({
+	getModelCatalogMock: vi.fn()
+}))
+
 vi.mock('@/api/admin/accounts', () => ({
   getAntigravityDefaultModelMapping: vi.fn()
 }))
 
+vi.mock('@/api/admin/modelCatalog', () => ({
+	getModelCatalog: getModelCatalogMock
+}))
+
 import {
   buildModelMappingObject,
+	ensureModelCatalogLoaded,
   getModelsByPlatform,
   replaceExactModelsWithUpstream,
   replaceIdentityModelMappingsWithUpstream,
@@ -66,12 +75,33 @@ describe('useModelWhitelist', () => {
     expect(models).not.toContain('gemini-3-pro-preview')
   })
 
-  it('xAI 模型列表包含 Grok 4.5 官方别名', () => {
+  it('xAI 模型列表包含 Grok 4.6 和官方别名', () => {
     const models = getModelsByPlatform('grok')
+    expect(models).toContain('grok-4.6')
     expect(models).toContain('grok-4.5')
     expect(models).toContain('grok-4.5-latest')
     expect(models).toContain('grok-build-latest')
   })
+
+  it('DeepSeek 默认列表仅包含当前官方 V4 模型', () => {
+    const models = getModelsByPlatform('deepseek')
+    expect(models).toEqual(['deepseek-v4-pro', 'deepseek-v4-flash'])
+    expect(models).not.toContain('deepseek-chat')
+    expect(models).not.toContain('deepseek-reasoner')
+  })
+
+	it('强制刷新会重新请求模型目录并替换旧 Grok 快照', async () => {
+		getModelCatalogMock
+			.mockResolvedValueOnce({ platforms: { grok: { models: [{ id: 'grok-4.5' }] } } })
+			.mockResolvedValueOnce({ platforms: { grok: { models: [{ id: 'grok-4.6' }, { id: 'grok-4.5' }] } } })
+
+		await ensureModelCatalogLoaded({ force: true })
+		expect(getModelsByPlatform('grok')).toEqual(['grok-4.5'])
+		await ensureModelCatalogLoaded({ force: true })
+
+		expect(getModelCatalogMock).toHaveBeenCalledTimes(2)
+		expect(getModelsByPlatform('grok')).toEqual(['grok-4.6', 'grok-4.5'])
+	})
 
   it('antigravity 模型列表会把图片模型排在前面', () => {
     const models = getModelsByPlatform('antigravity')

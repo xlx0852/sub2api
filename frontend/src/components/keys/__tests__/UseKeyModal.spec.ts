@@ -195,12 +195,12 @@ describe('UseKeyModal', () => {
 
     expect(configToml).toBeDefined()
     expect(configToml).toContain('default = "grok"')
-    expect(configToml).toContain('model = "grok-4.5"')
+    expect(configToml).toContain('model = "grok-4.6"')
     expect(configToml).toContain('base_url = "https://code.sicts.shop/v1"')
     expect(configToml).toContain('api_key = "sk-grok-test"')
     expect(configToml).toContain('api_backend = "responses"')
     expect(configToml).toContain('supports_backend_search = true')
-    expect(configToml).toContain('context_window = 1000000')
+    expect(configToml).toContain('context_window = 500000')
 
     const tabLabels = wrapper.findAll('button').map((b) => b.text())
     expect(tabLabels.some((label) => label.includes('keys.useKeyModal.cliTabs.grokCli'))).toBe(true)
@@ -209,7 +209,7 @@ describe('UseKeyModal', () => {
     expect(tabLabels.some((label) => label.includes('keys.useKeyModal.cliTabs.codexCliWs'))).toBe(false)
   })
 
-  it('renders Grok Codex CLI config with grok-4.5', async () => {
+  it('renders Grok Codex CLI config with grok-4.6', async () => {
     const wrapper = mount(UseKeyModal, {
       props: {
         show: true,
@@ -242,8 +242,8 @@ describe('UseKeyModal', () => {
     const authJson = codeBlocks.find((content) => content.includes('OPENAI_API_KEY'))
 
     expect(configToml).toBeDefined()
-    expect(configToml).toContain('model = "grok-4.5"')
-    expect(configToml).toContain('review_model = "grok-4.5"')
+    expect(configToml).toContain('model = "grok-4.6"')
+    expect(configToml).toContain('review_model = "grok-4.6"')
     expect(configToml).toContain('base_url = "https://code.sicts.shop/v1"')
     expect(configToml).toContain('wire_api = "responses"')
     expect(configToml).toContain('[features]\ngoals = true')
@@ -252,7 +252,7 @@ describe('UseKeyModal', () => {
     expect(configToml).not.toContain('responses_websockets_v2')
   })
 
-  it('renders Grok Claude Code config with grok-4.5 model aliases', async () => {
+  it('renders Grok Claude Code config with grok-4.6 model aliases', async () => {
     const wrapper = mount(UseKeyModal, {
       props: {
         show: true,
@@ -284,12 +284,12 @@ describe('UseKeyModal', () => {
     const settings = codeBlocks.find((content) => content.includes('claude-code-settings.json'))
 
     expect(terminal).toBeDefined()
-    expect(terminal).toContain('ANTHROPIC_MODEL="grok-4.5"')
-    expect(terminal).toContain('ANTHROPIC_DEFAULT_OPUS_MODEL="grok-4.5"')
-    expect(terminal).toContain('ANTHROPIC_DEFAULT_FABLE_MODEL="grok-4.5"')
-    expect(terminal).toContain('CLAUDE_CODE_SUBAGENT_MODEL="grok-4.5"')
+    expect(terminal).toContain('ANTHROPIC_MODEL="grok-4.6"')
+    expect(terminal).toContain('ANTHROPIC_DEFAULT_OPUS_MODEL="grok-4.6"')
+    expect(terminal).toContain('ANTHROPIC_DEFAULT_FABLE_MODEL="grok-4.6"')
+    expect(terminal).toContain('CLAUDE_CODE_SUBAGENT_MODEL="grok-4.6"')
     expect(settings).toContain('"ANTHROPIC_AUTH_TOKEN": "sk-grok-test"')
-    expect(settings).toContain('"ANTHROPIC_DEFAULT_SONNET_MODEL": "grok-4.5"')
+    expect(settings).toContain('"ANTHROPIC_DEFAULT_SONNET_MODEL": "grok-4.6"')
   })
 
   it('does not advertise WebSocket transport for Grok', () => {
@@ -348,6 +348,7 @@ describe('UseKeyModal', () => {
 
     const codeBlock = wrapper.find('pre code').text()
     expect(codeBlock).toContain('"grok"')
+    expect(codeBlock).toContain('grok-4.6')
     expect(codeBlock).toContain('grok-4.5')
     expect(codeBlock).toContain('grok-build-0.1')
   })

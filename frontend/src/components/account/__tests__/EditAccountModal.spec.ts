@@ -1,11 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 
-const { updateAccountMock, checkMixedChannelRiskMock, authIsSimpleMode } = vi.hoisted(() => ({
+const { updateAccountMock, checkMixedChannelRiskMock } = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
-  checkMixedChannelRiskMock: vi.fn(),
-  authIsSimpleMode: { value: true }
+  checkMixedChannelRiskMock: vi.fn()
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -13,14 +12,6 @@ vi.mock('@/stores/app', () => ({
     showError: vi.fn(),
     showSuccess: vi.fn(),
     showInfo: vi.fn()
-  })
-}))
-
-vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({
-    get isSimpleMode() {
-      return authIsSimpleMode.value
-    }
   })
 }))
 
@@ -300,10 +291,6 @@ function mountModal(account = buildAccount()) {
 }
 
 describe('EditAccountModal', () => {
-  beforeEach(() => {
-    authIsSimpleMode.value = true
-  })
-
   it('reopening the same account rehydrates the OpenAI whitelist from props', async () => {
     const account = buildAccount()
     updateAccountMock.mockReset()
@@ -413,7 +400,6 @@ describe('EditAccountModal', () => {
   })
 
   it('only submits model mapping credentials when saving an OpenAI spark shadow account', async () => {
-    authIsSimpleMode.value = false
     const account = buildOpenAISparkShadowAccount()
     updateAccountMock.mockReset()
     checkMixedChannelRiskMock.mockReset()

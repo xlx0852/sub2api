@@ -109,8 +109,8 @@
           </template>
         </div>
 
-        <!-- Personal Section for Admin (hidden in simple mode) -->
-        <div v-if="!authStore.isSimpleMode" class="sidebar-section">
+		<!-- Personal Section for Admin -->
+		<div class="sidebar-section">
           <div class="sidebar-section-title" :class="{ 'sidebar-section-title-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
             <span class="sidebar-section-title-text" :class="{ 'sidebar-section-title-text-collapsed': sidebarCollapsed }">
               {{ t('nav.myAccount') }}
@@ -209,7 +209,6 @@ interface NavItem {
   label: string
   icon: unknown
   iconSvg?: string
-  hideInSimpleMode?: boolean
   children?: NavItem[]
   /**
    * When true, the parent item only toggles the expand/collapse state and
@@ -664,11 +663,11 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
   }
   items.push(
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
-    { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
-    { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
-    { path: '/purchase', label: t('nav.rechargeRedeem'), icon: RechargeIcon, hideInSimpleMode: true },
-    { path: '/orders', label: t('nav.myOrders'), icon: OrderListIcon, hideInSimpleMode: true, featureFlag: flagPayment },
-    { path: '/affiliate', label: t('nav.affiliate'), icon: UsersIcon, hideInSimpleMode: true, featureFlag: flagAffiliate },
+		{ path: '/usage', label: t('nav.usage'), icon: ChartIcon },
+		{ path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, featureFlag: flagAvailableChannels },
+		{ path: '/purchase', label: t('nav.rechargeRedeem'), icon: RechargeIcon },
+		{ path: '/orders', label: t('nav.myOrders'), icon: OrderListIcon, featureFlag: flagPayment },
+		{ path: '/affiliate', label: t('nav.affiliate'), icon: UsersIcon, featureFlag: flagAffiliate },
     { path: '/profile', label: t('nav.profile'), icon: UserIcon },
     ...customMenuItemsForUser.value.map((item): NavItem => ({
       path: `/custom/${item.id}`,
@@ -680,10 +679,8 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
   return items
 }
 
-// finalizeNav 合并三重过滤：featureFlag 过滤 + simple 模式过滤。
 function finalizeNav(items: NavItem[]): NavItem[] {
-  const visible = applyFeatureFlags(items)
-  return authStore.isSimpleMode ? visible.filter(item => !item.hideInSimpleMode) : visible
+	return applyFeatureFlags(items)
 }
 
 // User navigation items (for regular users)
@@ -713,21 +710,20 @@ const adminNavItems = computed((): NavItem[] => {
   const baseItems: NavItem[] = [
     { path: '/admin/dashboard', label: t('nav.dashboard'), icon: DashboardIcon },
     { path: '/admin/ops', label: t('nav.ops'), icon: ChartIcon, featureFlag: flagOpsMonitoring },
-    { path: '/admin/users', label: t('nav.users'), icon: UsersIcon, hideInSimpleMode: true },
-    { path: '/admin/groups', label: t('nav.groups'), icon: FolderIcon, hideInSimpleMode: true },
+		{ path: '/admin/users', label: t('nav.users'), icon: UsersIcon },
+		{ path: '/admin/groups', label: t('nav.groups'), icon: FolderIcon },
     // Sell pricing lives inside Groups → Pricing (GroupSellPriceEditor); no standalone nav page.
     { path: '/admin/accounts', label: t('nav.accounts'), icon: GlobeIcon },
-    { path: '/admin/profit', label: t('nav.profit'), icon: ProfitIcon, hideInSimpleMode: true },
+		{ path: '/admin/profit', label: t('nav.profit'), icon: ProfitIcon },
     { path: '/admin/announcements', label: t('nav.announcements'), icon: BellIcon },
     { path: '/admin/proxies', label: t('nav.proxies'), icon: ServerIcon },
-    { path: '/admin/risk-control', label: t('nav.riskControl'), icon: ShieldIcon, hideInSimpleMode: true, featureFlag: flagRiskControl },
-    { path: '/admin/redeem', label: t('nav.redeemCodes'), icon: TicketIcon, hideInSimpleMode: true },
-    { path: '/admin/promo-codes', label: t('nav.promoCodes'), icon: GiftIcon, hideInSimpleMode: true },
+		{ path: '/admin/risk-control', label: t('nav.riskControl'), icon: ShieldIcon, featureFlag: flagRiskControl },
+		{ path: '/admin/redeem', label: t('nav.redeemCodes'), icon: TicketIcon },
+		{ path: '/admin/promo-codes', label: t('nav.promoCodes'), icon: GiftIcon },
     {
       path: '/admin/affiliates',
       label: t('nav.affiliateManagement'),
       icon: UsersIcon,
-      hideInSimpleMode: true,
       expandOnly: true,
       featureFlag: flagAffiliate,
       children: [
@@ -740,7 +736,6 @@ const adminNavItems = computed((): NavItem[] => {
       path: '/admin/orders',
       label: t('nav.orderManagement'),
       icon: OrderIcon,
-      hideInSimpleMode: true,
       featureFlag: flagAdminPayment,
     },
     { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon }
@@ -748,18 +743,7 @@ const adminNavItems = computed((): NavItem[] => {
 
   const visible = applyFeatureFlags(baseItems)
 
-  // 简单模式下，在系统设置前插入 API密钥
-  if (authStore.isSimpleMode) {
-    const filtered = visible.filter(item => !item.hideInSimpleMode)
-    filtered.push({ path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon })
-    filtered.push({ path: '/admin/settings', label: t('nav.settings'), icon: CogIcon })
-    for (const cm of customMenuItemsForAdmin.value) {
-      filtered.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
-    }
-    return filtered
-  }
-
-  visible.push({ path: '/admin/settings', label: t('nav.settings'), icon: CogIcon })
+	visible.push({ path: '/admin/settings', label: t('nav.settings'), icon: CogIcon })
   for (const cm of customMenuItemsForAdmin.value) {
     visible.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
   }

@@ -216,6 +216,12 @@
                     {{ formatUserAgent(row.user_agent) }}
                   </span>
                 </div>
+                <div v-if="isColumnVisible('request_id') && row.request_id" class="flex items-start justify-between gap-3 text-sm">
+                  <span class="shrink-0 text-xs text-gray-400 dark:text-dark-500">{{ t('admin.usage.requestId') }}</span>
+                  <button type="button" class="min-w-0 break-all text-right font-mono text-xs text-primary-600 dark:text-primary-400" @click="copyToClipboard(row.request_id)">
+                    {{ row.request_id }}
+                  </button>
+                </div>
               </section>
             </div>
           </article>
@@ -453,6 +459,19 @@
 
         <template #cell-user_agent="{ row }">
           <span v-if="row.user_agent" class="text-sm text-gray-600 dark:text-gray-400 block max-w-[320px] truncate" :title="row.user_agent">{{ formatUserAgent(row.user_agent) }}</span>
+          <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
+        </template>
+
+        <template #cell-request_id="{ row }">
+          <button
+            v-if="row.request_id"
+            type="button"
+            class="block max-w-[180px] truncate font-mono text-xs text-primary-600 dark:text-primary-400"
+            :title="row.request_id"
+            @click="copyToClipboard(row.request_id)"
+          >
+            {{ row.request_id }}
+          </button>
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
         </template>
 
@@ -742,6 +761,7 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import IpGeoCell from '@/components/common/IpGeoCell.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { fetchBatch, getEntry } from '@/utils/ipGeoLookup'
+import { useClipboard } from '@/composables/useClipboard'
 import type { AdminUsageLog } from '@/types'
 import type { Column } from '@/components/common/types'
 
@@ -770,6 +790,7 @@ const emit = defineEmits<{
   ipGeoBatchFailed: []
 }>()
 const { t } = useI18n()
+const { copyToClipboard } = useClipboard()
 const showAccountBilling = props.showAccountBilling
 const showUpstreamEndpoint = props.showUpstreamEndpoint
 const ipGeoBatchLoading = ref(false)
@@ -802,6 +823,7 @@ const hasMobileMeta = (row: AdminUsageLog) => {
     isColumnVisible('account') ||
     isColumnVisible('reasoning_effort') ||
     isColumnVisible('endpoint') ||
+		(isColumnVisible('request_id') && Boolean(row.request_id)) ||
     (isColumnVisible('ip_address') && Boolean(row.ip_address)) ||
     (isColumnVisible('user_agent') && Boolean(row.user_agent))
   )

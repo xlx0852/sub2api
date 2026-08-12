@@ -316,10 +316,10 @@ func TestApiKeyAuthWithSubscriptionGoogleSetsGroupContext(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		&config.Config{RunMode: config.RunModeSimple},
+		&config.Config{RunMode: config.RunModeStandard},
 	)
 
-	cfg := &config.Config{RunMode: config.RunModeSimple}
+	cfg := &config.Config{RunMode: config.RunModeStandard}
 	r := gin.New()
 	r.Use(APIKeyAuthWithSubscriptionGoogle(apiKeyService, nil, cfg))
 	r.GET("/v1beta/test", func(c *gin.Context) {
@@ -356,7 +356,7 @@ func TestApiKeyAuthWithSubscriptionGoogle_QueryKeyAllowedOnV1Beta(t *testing.T) 
 			}, nil
 		},
 	})
-	cfg := &config.Config{RunMode: config.RunModeSimple}
+	cfg := &config.Config{RunMode: config.RunModeStandard}
 	r.Use(APIKeyAuthWithSubscriptionGoogle(apiKeyService, nil, cfg))
 	r.GET("/v1beta/test", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 
@@ -438,7 +438,7 @@ func TestApiKeyAuthWithSubscriptionGoogle_MarksUnavailableGroupBusinessLimited(t
 			return &clone, nil
 		},
 	})
-	r.Use(APIKeyAuthWithSubscriptionGoogle(apiKeyService, nil, &config.Config{RunMode: config.RunModeSimple}))
+	r.Use(APIKeyAuthWithSubscriptionGoogle(apiKeyService, nil, &config.Config{RunMode: config.RunModeStandard}))
 	r.GET("/v1beta/test", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 
 	req := httptest.NewRequest(http.MethodGet, "/v1beta/test", nil)
@@ -649,7 +649,7 @@ func TestApiKeyAuthWithSubscriptionGoogle_TouchesLastUsedOnSuccess(t *testing.T)
 			return nil
 		},
 	})
-	cfg := &config.Config{RunMode: config.RunModeSimple}
+	cfg := &config.Config{RunMode: config.RunModeStandard}
 	r.Use(APIKeyAuthWithSubscriptionGoogle(apiKeyService, nil, cfg))
 	r.GET("/v1beta/test", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 
@@ -696,7 +696,7 @@ func TestApiKeyAuthWithSubscriptionGoogle_TouchFailureDoesNotBlock(t *testing.T)
 			return errors.New("write failed")
 		},
 	})
-	cfg := &config.Config{RunMode: config.RunModeSimple}
+	cfg := &config.Config{RunMode: config.RunModeStandard}
 	r.Use(APIKeyAuthWithSubscriptionGoogle(apiKeyService, nil, cfg))
 	r.GET("/v1beta/test", func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) })
 

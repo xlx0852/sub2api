@@ -166,7 +166,7 @@ func TestOpenAIGatewayHandlerChatCompletions_GrokRetryPinsAccountThenFailsOver(t
 	require.True(t, accounts[0].IsModelSupported("grok-4.3"))
 	require.True(t, accounts[0].SupportsOpenAIEndpointCapability(service.OpenAIEndpointCapabilityChatCompletions))
 	cfg := testGrokRetryConfig()
-	cfg.RunMode = config.RunModeSimple
+	cfg.RunMode = config.RunModeStandard
 	cfg.Gateway.GrokSameAccountRetry.FallbackDelayMS = 0
 	cfg.Gateway.MaxAccountSwitches = 3
 
@@ -185,11 +185,10 @@ func TestOpenAIGatewayHandlerChatCompletions_GrokRetryPinsAccountThenFailsOver(t
 	}
 	concurrencyService := service.NewConcurrencyService(cache)
 	gatewayService := service.NewOpenAIGatewayService(
-		accountRepo, nil, nil, nil, nil, nil, nil, cfg, nil, concurrencyService, nil, nil, nil,
+		accountRepo, nil, nil, billingEligibleUserRepository{}, nil, nil, nil, cfg, nil, concurrencyService, nil, nil, nil,
 		upstream, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)
-	billingService := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
-	t.Cleanup(billingService.Stop)
+	billingService := newBillingEligibleCache(t, cfg)
 	handler := NewOpenAIGatewayHandler(
 		gatewayService,
 		concurrencyService,
@@ -213,7 +212,7 @@ func TestOpenAIGatewayHandlerChatCompletions_GrokRetryPinsAccountThenFailsOver(t
 	c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: apiKey.User.ID, Concurrency: 1})
 
 	handler.ChatCompletions(c)
-	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	require.Contains(t, rec.Body.String(), `"content":"ok"`)
 	require.Equal(t, []int64{101, 101, 102}, upstream.accountIDs())
 	require.Equal(t,

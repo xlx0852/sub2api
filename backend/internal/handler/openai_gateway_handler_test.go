@@ -1383,6 +1383,10 @@ func (s *openAIWSUsageHandlerChannelRepoStub) GetGroupPlatforms(ctx context.Cont
 	return out, nil
 }
 
+func (s *openAIWSUsageHandlerChannelRepoStub) ListGroupIDsWithSellPricePolicy(context.Context) (map[int64]int64, error) {
+	return map[int64]int64{}, nil
+}
+
 func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -1471,7 +1475,7 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
 	}
 
 	cfg := &config.Config{}
-	cfg.RunMode = config.RunModeSimple
+	cfg.RunMode = config.RunModeStandard
 	cfg.Default.RateMultiplier = 1
 	cfg.Security.URLAllowlist.Enabled = false
 	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
@@ -1486,7 +1490,7 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
 
 	accountRepo := &openAIWSFailoverHandlerAccountRepoStub{accounts: accounts}
 	rateLimitSvc := service.NewRateLimitService(accountRepo, nil, cfg, nil, nil)
-	billingCacheSvc := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
+	billingCacheSvc := newBillingEligibleCache(t, cfg)
 	gatewaySvc := service.NewOpenAIGatewayService(
 		accountRepo,
 		nil,
@@ -1645,7 +1649,7 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 	}
 
 	cfg := &config.Config{}
-	cfg.RunMode = config.RunModeSimple
+	cfg.RunMode = config.RunModeStandard
 	cfg.Default.RateMultiplier = 1
 	cfg.Security.URLAllowlist.Enabled = false
 	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
@@ -1674,12 +1678,12 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		}, nil, nil, nil)
 	}
 
-	billingCacheSvc := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
+	billingCacheSvc := newBillingEligibleCache(t, cfg)
 	gatewaySvc := service.NewOpenAIGatewayService(
 		accountRepo,
 		usageRepo,
 		nil,
-		nil,
+		billingEligibleUserRepository{},
 		nil,
 		nil,
 		nil,

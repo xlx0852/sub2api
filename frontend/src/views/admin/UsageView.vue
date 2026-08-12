@@ -579,7 +579,7 @@ const exportToExcel = async () => {
 // Column visibility
 const ALWAYS_VISIBLE = ['user', 'created_at']
 // service_tier 不再单独成列：Fast 以模型徽章旁霓虹闪电图标展示
-const DEFAULT_HIDDEN_COLUMNS = ['reasoning_effort', 'user_agent']
+const DEFAULT_HIDDEN_COLUMNS = ['reasoning_effort', 'request_id', 'user_agent']
 const HIDDEN_COLUMNS_KEY = 'usage-hidden-columns'
 
 const allColumns = computed(() => [
@@ -597,6 +597,7 @@ const allColumns = computed(() => [
   { key: 'latency', label: t('usage.latency'), sortable: false },
   { key: 'output_rate', label: t('usage.outputRate'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
+  { key: 'request_id', label: t('admin.usage.requestId'), sortable: false },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },
   { key: 'ip_address', label: t('admin.usage.ipAddress'), sortable: false }
 ])

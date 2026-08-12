@@ -643,13 +643,16 @@ go generate ./cmd/server
 
 ---
 
-## Simple Mode
+## Runtime Mode Migration
 
-Simple Mode is designed for individual developers or internal teams who want quick access without full SaaS features.
+Simple mode has been removed. Sub2API now runs only with standard billing, quota, grouping, and scheduling semantics. Before upgrading an installation that previously used `RUN_MODE=simple`, complete this checklist on the previous version:
 
-- Enable: Set environment variable `RUN_MODE=simple`
-- Difference: Hides SaaS-related features and skips billing process
-- Security note: In production, you must also set `SIMPLE_MODE_CONFIRM=true` to allow startup
+- Verify user balances and billing expectations.
+- Assign every API key to the intended group and confirm group permissions.
+- Verify channels, model pricing, and platform quotas.
+- Remove `RUN_MODE` or set it to `standard` only after these checks pass.
+
+New versions reject `simple` at startup instead of silently enabling standard billing behavior.
 
 ---
 

@@ -150,10 +150,6 @@ func runMainServer() {
 		MaxBodyBytes:      cfg.ModelCatalog.MaxBodyBytes,
 	})
 	defer modelcatalog.Stop()
-	if cfg.RunMode == config.RunModeSimple {
-		log.Println("⚠️  WARNING: Running in SIMPLE mode - billing and quota checks are DISABLED")
-	}
-
 	buildInfo := handler.BuildInfo{
 		Version:   Version,
 		BuildType: BuildType,

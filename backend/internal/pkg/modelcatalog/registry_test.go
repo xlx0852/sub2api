@@ -37,6 +37,21 @@ func TestEmbeddedCatalogLoads(t *testing.T) {
 	if !ok || entry.InputCostPerToken <= 0 {
 		t.Fatalf("expected grok-4.5 fallback pricing, got %+v ok=%v", entry, ok)
 	}
+	entry, ok = ResolvePriceEntry("grok-4.6")
+	if !ok || entry.InputCostPerToken != 2e-6 || entry.OutputCostPerToken != 6e-6 || entry.CacheReadInputTokenCost != 0.5e-6 {
+		t.Fatalf("expected official grok-4.6 fallback pricing, got %+v ok=%v", entry, ok)
+	}
+	if entry.LongContextInputTokenThreshold != 200000 || entry.LongContextInputCostMultiplier != 2 || entry.LongContextOutputCostMultiplier != 2 {
+		t.Fatalf("expected grok-4.6 long-context pricing, got %+v", entry)
+	}
+	deepseek := Get().Platforms["deepseek"]
+	if deepseek.DefaultChatModel != "deepseek-v4-pro" || len(deepseek.Models) != 2 || deepseek.Models[0].ID != "deepseek-v4-pro" {
+		t.Fatalf("expected current DeepSeek V4 catalog, got %+v", deepseek)
+	}
+	entry, ok = ResolvePriceEntry("deepseek-v4-pro")
+	if !ok || entry.InputCostPerToken != 0.435e-6 || entry.OutputCostPerToken != 0.87e-6 || entry.CacheReadInputTokenCost != 0.003625e-6 {
+		t.Fatalf("expected official deepseek-v4-pro fallback pricing, got %+v ok=%v", entry, ok)
+	}
 	// alias chain
 	entry, ok = ResolvePriceEntry("gpt-5.5")
 	if !ok || entry.InputCostPerToken <= 0 {

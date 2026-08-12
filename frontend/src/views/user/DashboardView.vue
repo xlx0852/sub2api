@@ -3,7 +3,7 @@
     <div class="space-y-5">
       <div v-if="loading" class="flex items-center justify-center py-12"><LoadingSpinner /></div>
       <template v-else-if="stats">
-        <UserDashboardStats :stats="stats" :balance="user?.balance || 0" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
+		<UserDashboardStats :stats="stats" :balance="user?.balance || 0" :platform-quotas="platformQuotas" />
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div class="min-w-0 lg:col-span-2">
             <UserDashboardCharts v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" :models="modelStats" @dateRangeChange="loadCharts" @granularityChange="loadCharts" @refresh="refreshAll" />
@@ -36,7 +36,7 @@ import { formatDateLocalInput } from '@/utils/format'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 
 const authStore = useAuthStore(); const user = computed(() => authStore.user)
-const affiliateEnabled = computed(() => !authStore.isSimpleMode && isFeatureFlagEnabled(FeatureFlags.affiliate))
+const affiliateEnabled = computed(() => isFeatureFlagEnabled(FeatureFlags.affiliate))
 const stats = ref<UserStatsType | null>(null); const loading = ref(false); const loadingUsage = ref(false); const loadingCharts = ref(false)
 const trendData = ref<TrendDataPoint[]>([]); const modelStats = ref<ModelStat[]>([]); const recentUsage = ref<UsageLog[]>([])
 const platformQuotas = ref<PlatformQuotaItem[] | null>(null)

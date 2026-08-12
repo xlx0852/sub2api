@@ -1291,10 +1291,12 @@ func ApplyThinkingEnabledFallback(effort *string, body []byte, mappedModel strin
 }
 
 // NormalizeGLMOpenAIReasoningEffort rewrites OpenAI Chat Completions
-// reasoning_effort values to the GLM native scale used by z.ai: high/max.
-// It only applies to glm-* mapped models and leaves all other providers untouched.
+// reasoning_effort values to the native high/max scale shared by GLM and
+// DeepSeek V4. DeepSeek officially maps low/medium to high and xhigh to max.
+// Other providers remain untouched.
 func NormalizeGLMOpenAIReasoningEffort(body []byte, mappedModel string) ([]byte, bool) {
-	if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(mappedModel)), "glm-") {
+	normalizedModel := strings.ToLower(strings.TrimSpace(mappedModel))
+	if !strings.HasPrefix(normalizedModel, "glm-") && !strings.HasPrefix(normalizedModel, "deepseek-v4-") {
 		return body, false
 	}
 

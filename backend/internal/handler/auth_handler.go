@@ -421,20 +421,7 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 		return
 	}
 
-	type UserResponse struct {
-		userProfileResponse
-		RunMode string `json:"run_mode"`
-	}
-
-	runMode := config.RunModeStandard
-	if h.cfg != nil {
-		runMode = h.cfg.RunMode
-	}
-
-	response.Success(c, UserResponse{
-		userProfileResponse: userProfileResponseFromService(user, identities),
-		RunMode:             runMode,
-	})
+	response.Success(c, userProfileResponseFromService(user, identities))
 }
 
 // ValidatePromoCodeRequest 验证优惠码请求

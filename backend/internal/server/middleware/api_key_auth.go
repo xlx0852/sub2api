@@ -128,25 +128,10 @@ func apiKeyAuthWithBalance(apiKeyService *service.APIKeyService, cfg *config.Con
 			return
 		}
 
-		// ── 4. SimpleMode → early return ─────────────────────────────
-
-		if cfg.RunMode == config.RunModeSimple {
-			c.Set(string(ContextKeyAPIKey), apiKey)
-			c.Set(string(ContextKeyUser), AuthSubject{
-				UserID:      apiKey.User.ID,
-				Concurrency: apiKey.User.Concurrency,
-			})
-			c.Set(string(ContextKeyUserRole), apiKey.User.Role)
-			setGroupContext(c, apiKey.Group)
-			_ = apiKeyService.TouchLastUsed(c.Request.Context(), apiKey.ID)
-			c.Next()
-			return
-		}
-
 		// skipBilling: /v1/usage 只需鉴权，跳过所有计费执行
 		skipBilling := c.Request.URL.Path == "/v1/usage"
 
-		// ── 5. 计费执行（skipBilling 时整块跳过） ────────────────────
+		// ── 4. 计费执行（skipBilling 时整块跳过） ────────────────────
 
 		if !skipBilling {
 			// Key 状态检查

@@ -3,6 +3,7 @@ package modelcatalog
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sync"
@@ -51,6 +52,31 @@ func TestPersistSnapshotWritesMatchingLastKnownGood(t *testing.T) {
 	}
 	if string(hash) != digest+"  catalog.json\n" {
 		t.Fatalf("persisted checksum = %q", hash)
+	}
+}
+
+func TestLoadLastKnownGoodDoesNotDowngradeActiveCatalog(t *testing.T) {
+	original := Get()
+	defer setCatalog(original)
+
+	active := cloneCatalog(original)
+	active.Version = original.Version + 1
+	setCatalog(active)
+
+	older := cloneCatalog(original)
+	older.Version = active.Version - 1
+	raw, err := json.Marshal(older)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "catalog.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	loadLastKnownGood(RemoteOptions{DataDir: dir})
+	if got := Get().Version; got != active.Version {
+		t.Fatalf("active catalog version = %d, want %d; older snapshot must not downgrade it", got, active.Version)
 	}
 }
 

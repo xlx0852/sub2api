@@ -82,13 +82,7 @@ const qwenModels = [
 ]
 
 // DeepSeek
-const deepseekModels = [
-  'deepseek-chat', 'deepseek-coder', 'deepseek-reasoner',
-  'deepseek-v3', 'deepseek-v3-0324',
-  'deepseek-r1', 'deepseek-r1-0528',
-  'deepseek-r1-distill-qwen-32b', 'deepseek-r1-distill-qwen-14b', 'deepseek-r1-distill-qwen-7b',
-  'deepseek-r1-distill-llama-70b', 'deepseek-r1-distill-llama-8b'
-]
+let deepseekModels = ['deepseek-v4-pro', 'deepseek-v4-flash']
 
 // Mistral
 const mistralModels = [
@@ -110,6 +104,7 @@ const metaModels = [
 
 // xAI Grok
 let xaiModels = [
+  'grok-4.6',
   'grok-4.5',
   'grok-4.5-latest',
   'grok-4.3',
@@ -270,11 +265,12 @@ let geminiPresetMappings = [
 ]
 
 let grokPresetMappings = [
+  { label: 'Grok 4.6', from: 'grok-4.6', to: 'grok-4.6', color: 'bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-400' },
   { label: 'Grok 4.5', from: 'grok-4.5', to: 'grok-4.5', color: 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800/50 dark:text-slate-300' },
-  { label: 'Grok Latest', from: 'grok-latest', to: 'grok-4.5', color: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  { label: 'Grok Latest', from: 'grok-latest', to: 'grok-4.6', color: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400' },
   { label: 'Grok 4.3', from: 'grok-4.3', to: 'grok-4.3', color: 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800/50 dark:text-zinc-300' },
   { label: 'Build 0.1', from: 'grok-build', to: 'grok-build-0.1', color: 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400' },
-  { label: 'Build Latest', from: 'grok-build-latest', to: 'grok-4.5', color: 'bg-teal-100 text-teal-700 hover:bg-teal-200 dark:bg-teal-900/30 dark:text-teal-400' },
+  { label: 'Build Latest', from: 'grok-build-latest', to: 'grok-4.6', color: 'bg-teal-100 text-teal-700 hover:bg-teal-200 dark:bg-teal-900/30 dark:text-teal-400' },
   { label: 'Composer 2.5', from: 'grok-composer', to: 'grok-composer-2.5-fast', color: 'bg-teal-100 text-teal-700 hover:bg-teal-200 dark:bg-teal-900/30 dark:text-teal-400' },
   { label: 'Composer legacy', from: 'composer-2.5', to: 'grok-composer-2.5-fast', color: 'bg-teal-100 text-teal-700 hover:bg-teal-200 dark:bg-teal-900/30 dark:text-teal-400' },
   { label: '4.20 Reasoning', from: 'grok-4.20-reasoning', to: 'grok-4.20-0309-reasoning', color: 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400' },
@@ -282,6 +278,11 @@ let grokPresetMappings = [
   { label: 'Imagine Image', from: 'grok-imagine', to: 'grok-imagine-image-quality', color: 'bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-900/30 dark:text-sky-400' },
   { label: 'Imagine Edit', from: 'grok-imagine-edit', to: 'grok-imagine-edit', color: 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-400' },
   { label: 'Imagine Video', from: 'grok-imagine-video-1.5', to: 'grok-imagine-video-1.5', color: 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400' }
+]
+
+let deepseekPresetMappings = [
+  { label: 'DeepSeek V4 Pro', from: 'deepseek-v4-pro', to: 'deepseek-v4-pro', color: 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400' },
+  { label: 'DeepSeek V4 Flash', from: 'deepseek-v4-flash', to: 'deepseek-v4-flash', color: 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400' }
 ]
 
 let kimiPresetMappings = [
@@ -411,6 +412,7 @@ export function getPresetMappingsByPlatform(platform: string) {
   if (platform === 'openai') return openaiPresetMappings
   if (platform === 'gemini') return geminiPresetMappings
   if (platform === 'grok' || platform === 'xai') return grokPresetMappings
+	if (platform === 'deepseek') return deepseekPresetMappings
 	if (platform === 'kimi' || platform === 'moonshot') return kimiPresetMappings
   if (platform === 'antigravity') return antigravityPresetMappings
   if (platform === 'bedrock') return bedrockPresetMappings
@@ -624,11 +626,15 @@ function mapPresets(presets?: CatalogUIPreset[]) {
  * Load first-party model lists / presets from GET /admin/model-catalog.
  * Falls back to local TS seed lists when the API is unavailable (tests / offline).
  */
-export async function ensureModelCatalogLoaded(): Promise<void> {
-  if (_modelCatalogLoaded) return
-  if (_modelCatalogPromise) return _modelCatalogPromise
+export async function ensureModelCatalogLoaded(options?: { force?: boolean }): Promise<void> {
+	const force = options?.force === true
+	if (!force && _modelCatalogLoaded) return
+	if (_modelCatalogPromise) {
+		await _modelCatalogPromise
+		if (!force) return
+	}
 
-  _modelCatalogPromise = (async () => {
+	_modelCatalogPromise = (async () => {
     try {
       const catalog = await getModelCatalog()
       const openai = platformModelIDs(catalog, 'openai')
@@ -636,6 +642,7 @@ export async function ensureModelCatalogLoaded(): Promise<void> {
       const gemini = platformModelIDs(catalog, 'gemini')
       const antigravity = platformModelIDs(catalog, 'antigravity')
       const grok = platformModelIDs(catalog, 'grok')
+		  const deepseek = platformModelIDs(catalog, 'deepseek')
 	  const kimi = platformModelIDs(catalog, 'kimi')
 
       if (openai.length) openaiModels = openai
@@ -643,6 +650,7 @@ export async function ensureModelCatalogLoaded(): Promise<void> {
       if (gemini.length) geminiModels = gemini
       if (antigravity.length) antigravityModels = antigravity
       if (grok.length) xaiModels = grok
+		  if (deepseek.length) deepseekModels = deepseek
 	  if (kimi.length) moonshotModels = kimi
 
       const presets = catalog.ui_presets || {}
@@ -650,6 +658,7 @@ export async function ensureModelCatalogLoaded(): Promise<void> {
       const a = mapPresets(presets.anthropic)
       const g = mapPresets(presets.gemini)
       const gr = mapPresets(presets.grok)
+		  const ds = mapPresets(presets.deepseek)
 	  const k = mapPresets(presets.kimi)
       const ag = mapPresets(presets.antigravity)
       const b = mapPresets(presets.bedrock)
@@ -657,15 +666,23 @@ export async function ensureModelCatalogLoaded(): Promise<void> {
       if (a) anthropicPresetMappings = a
       if (g) geminiPresetMappings = g
       if (gr) grokPresetMappings = gr
+		  if (ds) deepseekPresetMappings = ds
 	  if (k) kimiPresetMappings = k
       if (ag) antigravityPresetMappings = ag
       if (b) bedrockPresetMappings = b
 
       _modelCatalogLoaded = true
     } catch (e) {
-      console.warn('[ensureModelCatalogLoaded] API failed, using local seed lists', e)
-    }
-  })()
+		console.warn('[ensureModelCatalogLoaded] API failed, using local seed lists', e)
+	}
+	})()
 
-  return _modelCatalogPromise
+	const pending = _modelCatalogPromise
+	try {
+		await pending
+	} finally {
+		if (_modelCatalogPromise === pending) {
+			_modelCatalogPromise = null
+		}
+	}
 }

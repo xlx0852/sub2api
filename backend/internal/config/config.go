@@ -18,7 +18,6 @@ import (
 
 const (
 	RunModeStandard = "standard"
-	RunModeSimple   = "simple"
 )
 
 // 使用量记录队列溢出策略
@@ -1490,14 +1489,19 @@ type UsageCleanupConfig struct {
 	TaskTimeoutSeconds int `mapstructure:"task_timeout_seconds"`
 }
 
-func NormalizeRunMode(value string) string {
+func NormalizeRunMode(_ string) string {
+	return RunModeStandard
+}
+
+func ValidateRunMode(value string) error {
 	normalized := strings.ToLower(strings.TrimSpace(value))
-	switch normalized {
-	case RunModeStandard, RunModeSimple:
-		return normalized
-	default:
-		return RunModeStandard
+	if normalized == "" || normalized == RunModeStandard {
+		return nil
 	}
+	if normalized == "simple" {
+		return fmt.Errorf("run_mode=simple has been removed; migrate billing, quota, and group configuration, then set run_mode=standard or remove RUN_MODE")
+	}
+	return fmt.Errorf("unsupported run_mode %q; only %q is supported", value, RunModeStandard)
 }
 
 // Load 读取并校验完整配置（要求 jwt.secret 已显式提供）。
@@ -1567,6 +1571,9 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		cfg.Gateway.OpenAIWS.SchedulerScoreWeights.CompactLatency = 0.5
 	}
 
+	if err := ValidateRunMode(cfg.RunMode); err != nil {
+		return nil, err
+	}
 	cfg.RunMode = NormalizeRunMode(cfg.RunMode)
 	cfg.Server.Mode = strings.ToLower(strings.TrimSpace(cfg.Server.Mode))
 	if cfg.Server.Mode == "" {

@@ -37,7 +37,6 @@ vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     isAuthenticated: true,
     isAdmin: false,
-    isSimpleMode: false,
     checkAuth: vi.fn()
   })
 }))

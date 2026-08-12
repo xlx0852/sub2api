@@ -1,6 +1,6 @@
 {
-  "version": 5,
-  "updated_at": "2026-07-31T00:30:30Z",
+  "version": 7,
+  "updated_at": "2026-08-12T16:35:00Z",
   "platforms": {
     "openai": {
       "default_test_model": "gpt-5.4",
@@ -330,10 +330,46 @@
         "tab_flash_lite_preview": "tab_flash_lite_preview"
       }
     },
-    "grok": {
-      "default_chat_model": "grok-4.5",
-      "default_test_model": "grok-4.5",
+    "deepseek": {
+      "default_chat_model": "deepseek-v4-pro",
+      "default_test_model": "deepseek-v4-pro",
       "models": [
+        {
+          "id": "deepseek-v4-pro",
+          "display_name": "DeepSeek V4 Pro",
+          "object": "model",
+          "owned_by": "deepseek",
+          "family": "deepseek-v4",
+          "is_reasoning": true
+        },
+        {
+          "id": "deepseek-v4-flash",
+          "display_name": "DeepSeek V4 Flash",
+          "object": "model",
+          "owned_by": "deepseek",
+          "family": "deepseek-v4",
+          "is_reasoning": true
+        }
+      ],
+      "retired_ids": [
+        "deepseek-chat",
+        "deepseek-reasoner"
+      ],
+      "default_mapping": {
+        "deepseek-v4-pro": "deepseek-v4-pro",
+        "deepseek-v4-flash": "deepseek-v4-flash"
+      }
+    },
+    "grok": {
+      "default_chat_model": "grok-4.6",
+      "default_test_model": "grok-4.6",
+      "models": [
+        {
+          "id": "grok-4.6",
+          "display_name": "Grok 4.6",
+          "object": "model",
+          "owned_by": "xai"
+        },
         {
           "id": "grok-4.5",
           "display_name": "Grok 4.5",
@@ -432,11 +468,12 @@
         }
       ],
       "default_mapping": {
-        "grok": "grok-4.5",
-        "grok-latest": "grok-4.5",
+        "grok": "grok-4.6",
+        "grok-latest": "grok-4.6",
+        "grok-4.6": "grok-4.6",
         "grok-4.5-latest": "grok-4.5",
         "grok-build": "grok-build-0.1",
-        "grok-build-latest": "grok-4.5",
+        "grok-build-latest": "grok-4.6",
         "grok-composer": "grok-composer-2.5-fast",
         "composer-2.5": "grok-composer-2.5-fast",
         "grok-4.20-reasoning": "grok-4.20-0309-reasoning",
@@ -809,6 +846,18 @@
       "image_input_cost_per_token": 2.52e-07,
       "output_cost_per_token": 0
     },
+    "grok-4.6": {
+      "input_cost_per_token": 2e-06,
+      "input_cost_per_token_priority": 4e-06,
+      "output_cost_per_token": 6e-06,
+      "output_cost_per_token_priority": 1.2e-05,
+      "cache_read_input_token_cost": 5e-07,
+      "cache_read_input_token_cost_priority": 1e-06,
+      "supports_cache_breakdown": true,
+      "long_context_input_token_threshold": 200000,
+      "long_context_input_cost_multiplier": 2,
+      "long_context_output_cost_multiplier": 2
+    },
     "grok-4.5": {
       "input_cost_per_token": 2e-06,
       "output_cost_per_token": 6e-06,
@@ -922,7 +971,24 @@
         "to": "gemini-3.1-flash-image"
       }
     ],
+    "deepseek": [
+      {
+        "label": "DeepSeek V4 Pro",
+        "from": "deepseek-v4-pro",
+        "to": "deepseek-v4-pro"
+      },
+      {
+        "label": "DeepSeek V4 Flash",
+        "from": "deepseek-v4-flash",
+        "to": "deepseek-v4-flash"
+      }
+    ],
     "grok": [
+      {
+        "label": "Grok 4.6",
+        "from": "grok-4.6",
+        "to": "grok-4.6"
+      },
       {
         "label": "Grok 4.5",
         "from": "grok-4.5",
@@ -931,7 +997,7 @@
       {
         "label": "Grok Latest",
         "from": "grok-latest",
-        "to": "grok-4.5"
+        "to": "grok-4.6"
       },
       {
         "label": "Build 0.1",

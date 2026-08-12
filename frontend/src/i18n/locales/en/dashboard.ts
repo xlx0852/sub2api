@@ -154,7 +154,7 @@ export default {
         description:
           'Add the following configuration files to your Codex CLI config directory to use Grok models via this Sub2API Grok group (OpenAI Responses compatible).',
         configTomlHint:
-          'Make sure the following content is at the beginning of the config.toml file. Default model is grok-4.5.',
+          'Make sure the following content is at the beginning of the config.toml file. Default model is grok-4.6.',
         note: 'Make sure the config directory exists. macOS/Linux users can run mkdir -p ~/.codex to create it. Put this site API key in auth.json as OPENAI_API_KEY.',
         noteWindows:
           'Press Win+R and enter %userprofile%\\.codex to open the config directory. Create it manually if it does not exist. Put this site API key in auth.json as OPENAI_API_KEY.',

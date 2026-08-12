@@ -5,7 +5,6 @@ vi.mock('@/stores/auth', () => ({
     checkAuth: vi.fn(),
     isAuthenticated: false,
     isAdmin: false,
-    isSimpleMode: false,
     hasPendingAuthSession: false,
   }),
 }))

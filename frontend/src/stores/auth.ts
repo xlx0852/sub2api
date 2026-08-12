@@ -75,7 +75,6 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(null)
   const refreshTokenValue = ref<string | null>(null)
   const tokenExpiresAt = ref<number | null>(null) // 过期时间戳（毫秒）
-  const runMode = ref<'standard' | 'simple'>('standard')
   const pendingAuthSession = ref<PendingAuthSessionSummary | null>(null)
   let refreshIntervalId: ReturnType<typeof setInterval> | null = null
   let tokenRefreshTimeoutId: ReturnType<typeof setTimeout> | null = null
@@ -90,7 +89,6 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value?.role === 'admin'
   })
 
-  const isSimpleMode = computed(() => runMode.value === 'simple')
   const hasPendingAuthSession = computed(() => pendingAuthSession.value !== null)
 
   // ==================== Actions ====================
@@ -289,16 +287,11 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.setItem(REFRESH_TOKEN_KEY, response.refresh_token)
     }
 
-    // Extract run_mode if present
-    if (response.user.run_mode) {
-      runMode.value = response.user.run_mode
-    }
-    const { run_mode: _run_mode, ...userData } = response.user
-    user.value = userData
+		user.value = response.user
 
     // Persist to localStorage
     localStorage.setItem(AUTH_TOKEN_KEY, response.access_token)
-    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(userData))
+		localStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.user))
     clearPendingAuthSession()
 
     // Start auto-refresh interval for user data
@@ -422,16 +415,12 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       const response = await authAPI.getCurrentUser()
-      if (response.data.run_mode) {
-        runMode.value = response.data.run_mode
-      }
-      const { run_mode: _run_mode, ...userData } = response.data
-      user.value = userData
+			user.value = response.data
 
       // Update localStorage
-      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(userData))
+			localStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.data))
 
-      return userData
+			return response.data
     } catch (error) {
       // If refresh fails with 401, clear auth state
       if ((error as { status?: number }).status === 401) {
@@ -475,13 +464,11 @@ export const useAuthStore = defineStore('auth', () => {
     // State
     user,
     token,
-    runMode: readonly(runMode),
     pendingAuthSession: readonly(pendingAuthSession),
 
     // Computed
     isAuthenticated,
     isAdmin,
-    isSimpleMode,
     hasPendingAuthSession,
 
     // Actions

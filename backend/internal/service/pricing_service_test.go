@@ -217,6 +217,67 @@ func TestDefaultPricingIncludesOfficialGPT56Rates(t *testing.T) {
 	}
 }
 
+func TestDefaultPricingIncludesOfficialGrok46Rates(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "resources", "model-pricing", "model_prices_and_context_window.json"))
+	require.NoError(t, err)
+
+	pricingSvc := &PricingService{}
+	pricingData, err := pricingSvc.parsePricingData(data)
+	require.NoError(t, err)
+	pricingSvc.pricingData = pricingData
+	billingSvc := NewBillingService(&config.Config{}, pricingSvc)
+
+	pricing, err := billingSvc.GetModelPricing("grok-4.6")
+	require.NoError(t, err)
+	require.InDelta(t, 2e-6, pricing.InputPricePerToken, 1e-12)
+	require.InDelta(t, 0.5e-6, pricing.CacheReadPricePerToken, 1e-12)
+	require.InDelta(t, 6e-6, pricing.OutputPricePerToken, 1e-12)
+	require.InDelta(t, 4e-6, pricing.InputPricePerTokenPriority, 1e-12)
+	require.InDelta(t, 1e-6, pricing.CacheReadPricePerTokenPriority, 1e-12)
+	require.InDelta(t, 12e-6, pricing.OutputPricePerTokenPriority, 1e-12)
+	require.Equal(t, 200000, pricing.LongContextInputThreshold)
+	require.InDelta(t, 2.0, pricing.LongContextInputMultiplier, 1e-12)
+	require.InDelta(t, 2.0, pricing.LongContextOutputMultiplier, 1e-12)
+}
+
+func TestDefaultPricingIncludesOfficialDeepSeekV4RatesAndLimits(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "resources", "model-pricing", "model_prices_and_context_window.json"))
+	require.NoError(t, err)
+
+	pricingSvc := &PricingService{}
+	pricingData, err := pricingSvc.parsePricingData(data)
+	require.NoError(t, err)
+	var raw map[string]struct {
+		MaxInputTokens          int  `json:"max_input_tokens"`
+		MaxOutputTokens         int  `json:"max_output_tokens"`
+		SupportsReasoning       bool `json:"supports_reasoning"`
+		SupportsFunctionCalling bool `json:"supports_function_calling"`
+	}
+	require.NoError(t, json.Unmarshal(data, &raw))
+
+	tests := []struct {
+		model                 string
+		input, cached, output float64
+	}{
+		{model: "deepseek-v4-pro", input: 0.435e-6, cached: 0.003625e-6, output: 0.87e-6},
+		{model: "deepseek-v4-flash", input: 0.14e-6, cached: 0.0028e-6, output: 0.28e-6},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			pricing := pricingData[tt.model]
+			require.NotNil(t, pricing)
+			require.InDelta(t, tt.input, pricing.InputCostPerToken, 1e-12)
+			require.InDelta(t, tt.cached, pricing.CacheReadInputTokenCost, 1e-12)
+			require.InDelta(t, tt.output, pricing.OutputCostPerToken, 1e-12)
+			metadata := raw[tt.model]
+			require.Equal(t, 1_000_000, metadata.MaxInputTokens)
+			require.Equal(t, 384_000, metadata.MaxOutputTokens)
+			require.True(t, metadata.SupportsReasoning)
+			require.True(t, metadata.SupportsFunctionCalling)
+		})
+	}
+}
+
 func TestGPT56DedicatedFallbacksUseOfficialRates(t *testing.T) {
 	tests := []struct {
 		model                             string
