@@ -4,10 +4,10 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,7 +21,7 @@ func TestGetErrorLogByID_DeletedKeyOwner(t *testing.T) {
 	repo := NewOpsRepository(integrationDB).(*opsRepository)
 
 	// ── Case 1: 带 deleted_key_owner 信息的记录 ──────────────────────────────
-	owner := mustCreateUser(t, integrationEntClient, &service.User{
+	owner := mustCreateUser(t, integrationEntClient, &domain.User{
 		Email: "deleted-key-owner-" + time.Now().Format("150405.000000000") + "@example.com",
 	})
 
@@ -73,7 +73,7 @@ func TestGetErrorLogByID_DeletedKeyOwner(t *testing.T) {
 
 	// ── Case 3: 有效(未删除)key 报错,经 InsertErrorLog 快照 api_key_prefix ──────
 	// 走真实 InsertErrorLog 写入路径(覆盖新列 + $41 占位符),再 GetErrorLogByID 读回。
-	validID, err := repo.InsertErrorLog(ctx, &service.OpsInsertErrorLogInput{
+	validID, err := repo.InsertErrorLog(ctx, &domain.OpsInsertErrorLogInput{
 		ErrorPhase:   "request",
 		ErrorType:    "api_error",
 		Severity:     "error",

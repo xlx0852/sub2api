@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"context"
 	"fmt"
 	"log/slog"
@@ -23,36 +24,7 @@ var (
 )
 
 // ChannelRepository 渠道数据访问接口
-type ChannelRepository interface {
-	Create(ctx context.Context, channel *Channel) error
-	GetByID(ctx context.Context, id int64) (*Channel, error)
-	Update(ctx context.Context, channel *Channel) error
-	Delete(ctx context.Context, id int64) error
-	List(ctx context.Context, params pagination.PaginationParams, status, search string) ([]Channel, *pagination.PaginationResult, error)
-	ListAll(ctx context.Context) ([]Channel, error)
-	ExistsByName(ctx context.Context, name string) (bool, error)
-	ExistsByNameExcluding(ctx context.Context, name string, excludeID int64) (bool, error)
-
-	// 分组关联
-	GetGroupIDs(ctx context.Context, channelID int64) ([]int64, error)
-	SetGroupIDs(ctx context.Context, channelID int64, groupIDs []int64) error
-	GetChannelIDByGroupID(ctx context.Context, groupID int64) (int64, error)
-	// GetChannelIDsByGroupIDs batch resolves group → policy/channel id (0 = none).
-	GetChannelIDsByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]int64, error)
-	// ListGroupIDsWithSellPricePolicy returns groupID → policyID for all groups with explicit binding.
-	ListGroupIDsWithSellPricePolicy(ctx context.Context) (map[int64]int64, error)
-	GetGroupsInOtherChannels(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error)
-
-	// 分组平台查询
-	GetGroupPlatforms(ctx context.Context, groupIDs []int64) (map[int64]string, error)
-
-	// 模型定价
-	ListModelPricing(ctx context.Context, channelID int64) ([]ChannelModelPricing, error)
-	CreateModelPricing(ctx context.Context, pricing *ChannelModelPricing) error
-	UpdateModelPricing(ctx context.Context, pricing *ChannelModelPricing) error
-	DeleteModelPricing(ctx context.Context, id int64) error
-	ReplaceModelPricing(ctx context.Context, channelID int64, pricingList []ChannelModelPricing) error
-}
+type ChannelRepository = ports.ChannelRepository
 
 // channelModelKey 渠道缓存复合键（显式包含 platform 防止跨平台同名模型冲突）
 type channelModelKey struct {
@@ -347,7 +319,7 @@ func populateChannelCache(channels []Channel, groupPlatforms map[int64]string, g
 	cache.loadedAt = time.Now()
 
 	for i := range channels {
-		channels[i].normalizeBillingModelSource()
+		channels[i].NormalizeBillingModelSource()
 		ch := &channels[i]
 		cache.byID[ch.ID] = ch
 	}
@@ -761,7 +733,7 @@ func (s *ChannelService) Create(ctx context.Context, input *CreateChannelInput) 
 		Features:           "",
 		FeaturesConfig:     nil,
 	}
-	channel.normalizeBillingModelSource()
+	channel.NormalizeBillingModelSource()
 
 	if err := validateChannelConfig(channel.ModelPricing, channel.ModelMapping); err != nil {
 		return nil, err
@@ -776,7 +748,7 @@ func (s *ChannelService) Create(ctx context.Context, input *CreateChannelInput) 
 	if err != nil {
 		return nil, err
 	}
-	created.normalizeBillingModelSource()
+	created.NormalizeBillingModelSource()
 	stripNonPricingPolicyFields(created)
 	return created, nil
 }
@@ -788,7 +760,7 @@ func (s *ChannelService) GetByID(ctx context.Context, id int64) (*Channel, error
 	if err != nil {
 		return nil, err
 	}
-	ch.normalizeBillingModelSource()
+	ch.NormalizeBillingModelSource()
 	stripNonPricingPolicyFields(ch)
 	return ch, nil
 }
@@ -821,7 +793,7 @@ func (s *ChannelService) Update(ctx context.Context, id int64, input *UpdateChan
 	if err != nil {
 		return nil, err
 	}
-	updated.normalizeBillingModelSource()
+	updated.NormalizeBillingModelSource()
 	stripNonPricingPolicyFields(updated)
 	return updated, nil
 }
@@ -931,7 +903,7 @@ func (s *ChannelService) List(ctx context.Context, params pagination.PaginationP
 		return nil, nil, err
 	}
 	for i := range channels {
-		channels[i].normalizeBillingModelSource()
+		channels[i].NormalizeBillingModelSource()
 	}
 	return channels, res, nil
 }

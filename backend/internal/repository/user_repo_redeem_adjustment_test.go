@@ -2,11 +2,11 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dbent "github.com/Wei-Shaw/sub2api/ent"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 
 	"entgo.io/ent/dialect"
@@ -51,6 +51,6 @@ func TestApplyRedeemAdjustment_MissingUser(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	err := repo.ApplyRedeemBalanceAdjustment(context.Background(), 404, -1)
-	require.ErrorIs(t, err, service.ErrUserNotFound)
+	require.ErrorIs(t, err, domain.ErrUserNotFound)
 	require.NoError(t, mock.ExpectationsWereMet())
 }

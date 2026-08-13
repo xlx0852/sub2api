@@ -2,11 +2,11 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 
 	"github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/tlsfingerprintprofile"
 	"github.com/Wei-Shaw/sub2api/internal/model"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 type tlsFingerprintProfileRepository struct {
@@ -14,7 +14,7 @@ type tlsFingerprintProfileRepository struct {
 }
 
 // NewTLSFingerprintProfileRepository 创建 TLS 指纹模板仓库
-func NewTLSFingerprintProfileRepository(client *ent.Client) service.TLSFingerprintProfileRepository {
+func NewTLSFingerprintProfileRepository(client *ent.Client) ports.TLSFingerprintProfileRepository {
 	return &tlsFingerprintProfileRepository{client: client}
 }
 

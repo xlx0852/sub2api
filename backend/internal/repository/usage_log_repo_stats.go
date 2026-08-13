@@ -411,7 +411,7 @@ func (r *usageLogRepository) GetAccountWindowStatsBatch(ctx context.Context, acc
 }
 
 // GetGeminiUsageTotalsBatch 批量聚合 Gemini 账号在窗口内的 Pro/Flash 请求与用量。
-// 模型分类规则与 service.geminiModelClassFromName 一致：model 包含 flash/lite 视为 flash，其余视为 pro。
+// 模型分类规则与 domain.geminiModelClassFromName 一致：model 包含 flash/lite 视为 flash，其余视为 pro。
 // 分类走 model_class 生成列(迁移 189), 避免 LOWER(COALESCE(model,”)) LIKE '%flash%' 前导通配符
 // 使 model 索引失效、逐行表达式计算。
 func (r *usageLogRepository) GetGeminiUsageTotalsBatch(ctx context.Context, accountIDs []int64, startTime, endTime time.Time) (map[int64]domain.GeminiUsageTotals, error) {

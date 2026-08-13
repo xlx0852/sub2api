@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"log/slog"
 	"strconv"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -77,11 +77,11 @@ type schedulerCache struct {
 	writeChunkSize int
 }
 
-func NewSchedulerCache(rdb *redis.Client) service.SchedulerCache {
+func NewSchedulerCache(rdb *redis.Client) ports.SchedulerCache {
 	return newSchedulerCacheWithChunkSizes(rdb, defaultSchedulerSnapshotMGetChunkSize, defaultSchedulerSnapshotWriteChunkSize)
 }
 
-func newSchedulerCacheWithChunkSizes(rdb *redis.Client, mgetChunkSize, writeChunkSize int) service.SchedulerCache {
+func newSchedulerCacheWithChunkSizes(rdb *redis.Client, mgetChunkSize, writeChunkSize int) ports.SchedulerCache {
 	if mgetChunkSize <= 0 {
 		mgetChunkSize = defaultSchedulerSnapshotMGetChunkSize
 	}
@@ -95,7 +95,7 @@ func newSchedulerCacheWithChunkSizes(rdb *redis.Client, mgetChunkSize, writeChun
 	}
 }
 
-func (c *schedulerCache) GetSnapshot(ctx context.Context, bucket domain.SchedulerBucket) ([]*service.Account, bool, error) {
+func (c *schedulerCache) GetSnapshot(ctx context.Context, bucket domain.SchedulerBucket) ([]*domain.Account, bool, error) {
 	readyKey := schedulerBucketKey(schedulerReadyPrefix, bucket)
 	readyVal, err := c.rdb.Get(ctx, readyKey).Result()
 	if err == redis.Nil {
@@ -137,7 +137,7 @@ func (c *schedulerCache) GetSnapshot(ctx context.Context, bucket domain.Schedule
 		return nil, false, err
 	}
 
-	accounts := make([]*service.Account, 0, len(values))
+	accounts := make([]*domain.Account, 0, len(values))
 	for _, val := range values {
 		if val == nil {
 			return nil, false, nil
@@ -152,7 +152,7 @@ func (c *schedulerCache) GetSnapshot(ctx context.Context, bucket domain.Schedule
 	return accounts, true, nil
 }
 
-func (c *schedulerCache) SetSnapshot(ctx context.Context, bucket domain.SchedulerBucket, accounts []service.Account) error {
+func (c *schedulerCache) SetSnapshot(ctx context.Context, bucket domain.SchedulerBucket, accounts []domain.Account) error {
 	// Phase 1: 分配新版本号并写入快照数据。
 	// INCR 保证每个调用方获得唯一递增版本号。
 	// 写入的 snapshotKey 是新的版本化 key，reader 尚不知晓，因此无竞态。
@@ -211,7 +211,7 @@ func (c *schedulerCache) SetSnapshot(ctx context.Context, bucket domain.Schedule
 	return nil
 }
 
-func (c *schedulerCache) GetAccount(ctx context.Context, accountID int64) (*service.Account, error) {
+func (c *schedulerCache) GetAccount(ctx context.Context, accountID int64) (*domain.Account, error) {
 	key := schedulerAccountKey(strconv.FormatInt(accountID, 10))
 	val, err := c.rdb.Get(ctx, key).Result()
 	if err == redis.Nil {
@@ -223,11 +223,11 @@ func (c *schedulerCache) GetAccount(ctx context.Context, accountID int64) (*serv
 	return decodeCachedAccount(val)
 }
 
-func (c *schedulerCache) SetAccount(ctx context.Context, account *service.Account) error {
+func (c *schedulerCache) SetAccount(ctx context.Context, account *domain.Account) error {
 	if account == nil || account.ID <= 0 {
 		return nil
 	}
-	cacheableAccounts, err := c.writeAccounts(ctx, []service.Account{*account})
+	cacheableAccounts, err := c.writeAccounts(ctx, []domain.Account{*account})
 	if err != nil {
 		return err
 	}
@@ -353,7 +353,7 @@ func ptrTime(t time.Time) *time.Time {
 	return &t
 }
 
-func decodeCachedAccount(val any) (*service.Account, error) {
+func decodeCachedAccount(val any) (*domain.Account, error) {
 	var payload []byte
 	switch raw := val.(type) {
 	case string:
@@ -363,20 +363,20 @@ func decodeCachedAccount(val any) (*service.Account, error) {
 	default:
 		return nil, fmt.Errorf("unexpected account cache type: %T", val)
 	}
-	var account service.Account
+	var account domain.Account
 	if err := json.Unmarshal(payload, &account); err != nil {
 		return nil, err
 	}
 	return &account, nil
 }
 
-func (c *schedulerCache) writeAccounts(ctx context.Context, accounts []service.Account) ([]service.Account, error) {
+func (c *schedulerCache) writeAccounts(ctx context.Context, accounts []domain.Account) ([]domain.Account, error) {
 	if len(accounts) == 0 {
 		return nil, nil
 	}
 
 	pipe := c.rdb.Pipeline()
-	cacheableAccounts := make([]service.Account, 0, len(accounts))
+	cacheableAccounts := make([]domain.Account, 0, len(accounts))
 	pending := 0
 	flush := func() error {
 		if pending == 0 {
@@ -426,7 +426,7 @@ func (c *schedulerCache) writeAccounts(ctx context.Context, accounts []service.A
 	return cacheableAccounts, nil
 }
 
-func marshalSchedulerCacheAccount(account service.Account) ([]byte, []byte, error) {
+func marshalSchedulerCacheAccount(account domain.Account) ([]byte, []byte, error) {
 	fullPayload, err := json.Marshal(account)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal account: %w", err)
@@ -462,8 +462,8 @@ func (c *schedulerCache) mgetChunked(ctx context.Context, keys []string) ([]any,
 	return out, nil
 }
 
-func buildSchedulerMetadataAccount(account service.Account) service.Account {
-	return service.Account{
+func buildSchedulerMetadataAccount(account domain.Account) domain.Account {
+	return domain.Account{
 		ID:                      account.ID,
 		Name:                    account.Name,
 		Platform:                account.Platform,
@@ -494,17 +494,17 @@ func buildSchedulerMetadataAccount(account service.Account) service.Account {
 	}
 }
 
-func filterSchedulerAccountGroups(accountGroups []service.AccountGroup) []service.AccountGroup {
+func filterSchedulerAccountGroups(accountGroups []domain.AccountGroup) []domain.AccountGroup {
 	if len(accountGroups) == 0 {
 		return nil
 	}
 
-	filtered := make([]service.AccountGroup, 0, len(accountGroups))
+	filtered := make([]domain.AccountGroup, 0, len(accountGroups))
 	for _, ag := range accountGroups {
 		if ag.GroupID <= 0 {
 			continue
 		}
-		filtered = append(filtered, service.AccountGroup{
+		filtered = append(filtered, domain.AccountGroup{
 			AccountID: ag.AccountID,
 			GroupID:   ag.GroupID,
 			Priority:  ag.Priority,
@@ -517,7 +517,7 @@ func filterSchedulerAccountGroups(accountGroups []service.AccountGroup) []servic
 	return filtered
 }
 
-func filterSchedulerGroupIDs(groupIDs []int64, accountGroups []service.AccountGroup) []int64 {
+func filterSchedulerGroupIDs(groupIDs []int64, accountGroups []domain.AccountGroup) []int64 {
 	if len(groupIDs) == 0 && len(accountGroups) == 0 {
 		return nil
 	}

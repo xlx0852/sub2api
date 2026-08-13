@@ -4,10 +4,11 @@ package repository
 
 import (
 	"errors"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -15,7 +16,7 @@ import (
 
 type EmailCacheSuite struct {
 	IntegrationRedisSuite
-	cache service.EmailCache
+	cache ports.EmailCache
 }
 
 func (s *EmailCacheSuite) SetupTest() {
@@ -31,7 +32,7 @@ func (s *EmailCacheSuite) TestGetVerificationCode_Missing() {
 func (s *EmailCacheSuite) TestSetAndGetVerificationCode() {
 	email := "a@example.com"
 	emailTTL := 2 * time.Minute
-	data := &service.VerificationCodeData{Code: "123456", Attempts: 1, CreatedAt: time.Now()}
+	data := &domain.VerificationCodeData{Code: "123456", Attempts: 1, CreatedAt: time.Now()}
 
 	require.NoError(s.T(), s.cache.SetVerificationCode(s.ctx, email, data, emailTTL), "SetVerificationCode")
 
@@ -44,7 +45,7 @@ func (s *EmailCacheSuite) TestSetAndGetVerificationCode() {
 func (s *EmailCacheSuite) TestVerificationCode_TTL() {
 	email := "ttl@example.com"
 	emailTTL := 2 * time.Minute
-	data := &service.VerificationCodeData{Code: "654321", Attempts: 0, CreatedAt: time.Now()}
+	data := &domain.VerificationCodeData{Code: "654321", Attempts: 0, CreatedAt: time.Now()}
 
 	require.NoError(s.T(), s.cache.SetVerificationCode(s.ctx, email, data, emailTTL), "SetVerificationCode")
 
@@ -56,7 +57,7 @@ func (s *EmailCacheSuite) TestVerificationCode_TTL() {
 
 func (s *EmailCacheSuite) TestDeleteVerificationCode() {
 	email := "delete@example.com"
-	data := &service.VerificationCodeData{Code: "999999", Attempts: 0, CreatedAt: time.Now()}
+	data := &domain.VerificationCodeData{Code: "999999", Attempts: 0, CreatedAt: time.Now()}
 
 	require.NoError(s.T(), s.cache.SetVerificationCode(s.ctx, email, data, 2*time.Minute), "SetVerificationCode")
 

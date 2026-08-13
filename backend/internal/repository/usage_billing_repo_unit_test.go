@@ -5,12 +5,11 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/require"
-
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 const (
@@ -86,8 +85,8 @@ func TestApplyUsageBillingEffects_FlagsBalanceOverdraft(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"balance"}).AddRow(-5.0))
 	mock.ExpectCommit()
 
-	result := &service.UsageBillingApplyResult{Applied: true}
-	err = (&usageBillingRepository{}).applyUsageBillingEffects(ctx, tx, &service.UsageBillingCommand{
+	result := &domain.UsageBillingApplyResult{Applied: true}
+	err = (&usageBillingRepository{}).applyUsageBillingEffects(ctx, tx, &domain.UsageBillingCommand{
 		UserID:      42,
 		BalanceCost: 10,
 	}, result)
@@ -117,7 +116,7 @@ func TestDeductUsageBillingBalance_ReturnsUserNotFoundWhenNoUserUpdated(t *testi
 	mock.ExpectRollback()
 
 	_, _, err = deductUsageBillingBalance(ctx, tx, 42, 10)
-	require.ErrorIs(t, err, service.ErrUserNotFound)
+	require.ErrorIs(t, err, domain.ErrUserNotFound)
 	require.NoError(t, tx.Rollback())
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -136,7 +135,7 @@ func TestReserveUsageBillingBatchImageBalance_MovesAvailableToFrozen(t *testing.
 		WillReturnRows(sqlmock.NewRows([]string{"balance", "frozen_balance"}).AddRow(7.5, 2.5))
 	mock.ExpectCommit()
 
-	result, err := reserveUsageBillingBatchImageBalance(ctx, tx, &service.BatchImageBalanceHoldCommand{UserID: 42, HoldAmount: 2.5})
+	result, err := reserveUsageBillingBatchImageBalance(ctx, tx, &domain.BatchImageBalanceHoldCommand{UserID: 42, HoldAmount: 2.5})
 	require.NoError(t, err)
 	require.NotNil(t, result.NewBalance)
 	require.NotNil(t, result.FrozenBalance)
@@ -163,8 +162,8 @@ func TestReserveUsageBillingBatchImageBalance_InsufficientBalance(t *testing.T) 
 		WillReturnRows(sqlmock.NewRows([]string{"?column?"}).AddRow(1))
 	mock.ExpectRollback()
 
-	_, err = reserveUsageBillingBatchImageBalance(ctx, tx, &service.BatchImageBalanceHoldCommand{UserID: 42, HoldAmount: 10})
-	require.ErrorIs(t, err, service.ErrBatchImageInsufficientBalance)
+	_, err = reserveUsageBillingBatchImageBalance(ctx, tx, &domain.BatchImageBalanceHoldCommand{UserID: 42, HoldAmount: 10})
+	require.ErrorIs(t, err, domain.ErrBatchImageInsufficientBalance)
 	require.NoError(t, tx.Rollback())
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -183,7 +182,7 @@ func TestCaptureUsageBillingBatchImageBalance_ReleasesRemainder(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"balance", "frozen_balance"}).AddRow(9.75, 0.0))
 	mock.ExpectCommit()
 
-	result, err := captureUsageBillingBatchImageBalance(ctx, tx, &service.BatchImageBalanceHoldCommand{UserID: 42, HoldAmount: 1, ActualAmount: 0.25})
+	result, err := captureUsageBillingBatchImageBalance(ctx, tx, &domain.BatchImageBalanceHoldCommand{UserID: 42, HoldAmount: 1, ActualAmount: 0.25})
 	require.NoError(t, err)
 	require.InDelta(t, 9.75, *result.NewBalance, 0.000001)
 	require.InDelta(t, 0.0, *result.FrozenBalance, 0.000001)
@@ -202,8 +201,8 @@ func TestCaptureUsageBillingBatchImageBalance_RejectsActualCostOverHold(t *testi
 	require.NoError(t, err)
 	mock.ExpectRollback()
 
-	_, err = captureUsageBillingBatchImageBalance(ctx, tx, &service.BatchImageBalanceHoldCommand{UserID: 42, HoldAmount: 0.5, ActualAmount: 1})
-	require.ErrorIs(t, err, service.ErrBatchImageSettlementCostExceedsHold)
+	_, err = captureUsageBillingBatchImageBalance(ctx, tx, &domain.BatchImageBalanceHoldCommand{UserID: 42, HoldAmount: 0.5, ActualAmount: 1})
+	require.ErrorIs(t, err, domain.ErrBatchImageSettlementCostExceedsHold)
 	require.NoError(t, tx.Rollback())
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -218,14 +217,14 @@ func TestReleaseUsageBillingBatchImageBalance_ReturnsFrozenToAvailable(t *testin
 	tx, err := db.BeginTx(ctx, nil)
 	require.NoError(t, err)
 	mock.ExpectQuery(`SELECT 1\s+FROM usage_billing_dedup\s+WHERE request_id = \$1 AND api_key_id = \$2`).
-		WithArgs(service.BatchImageHoldRequestID("imgbatch_release"), int64(7)).
+		WithArgs(domain.BatchImageHoldRequestID("imgbatch_release"), int64(7)).
 		WillReturnRows(sqlmock.NewRows([]string{"?column?"}).AddRow(1))
 	mock.ExpectQuery(releaseBatchImageHoldSQL).
 		WithArgs(1.0, int64(42)).
 		WillReturnRows(sqlmock.NewRows([]string{"balance", "frozen_balance"}).AddRow(10.0, 0.0))
 	mock.ExpectCommit()
 
-	result, err := releaseUsageBillingBatchImageBalance(ctx, tx, &service.BatchImageBalanceHoldCommand{UserID: 42, APIKeyID: 7, BatchID: "imgbatch_release", HoldAmount: 1})
+	result, err := releaseUsageBillingBatchImageBalance(ctx, tx, &domain.BatchImageBalanceHoldCommand{UserID: 42, APIKeyID: 7, BatchID: "imgbatch_release", HoldAmount: 1})
 	require.NoError(t, err)
 	require.InDelta(t, 10.0, *result.NewBalance, 0.000001)
 	require.InDelta(t, 0.0, *result.FrozenBalance, 0.000001)
@@ -245,14 +244,14 @@ func TestReleaseUsageBillingBatchImageBalance_SkipsWhenHoldNeverReserved(t *test
 	// dedup 与归档表均无 hold claim：说明该 job 从未成功冻结，
 	// 释放必须跳过，不得从他人冻结资金池中凭空生成余额。
 	mock.ExpectQuery(`SELECT 1\s+FROM usage_billing_dedup\s+WHERE request_id = \$1 AND api_key_id = \$2`).
-		WithArgs(service.BatchImageHoldRequestID("imgbatch_phantom"), int64(7)).
+		WithArgs(domain.BatchImageHoldRequestID("imgbatch_phantom"), int64(7)).
 		WillReturnError(sql.ErrNoRows)
 	mock.ExpectQuery(`SELECT 1\s+FROM usage_billing_dedup_archive\s+WHERE request_id = \$1 AND api_key_id = \$2`).
-		WithArgs(service.BatchImageHoldRequestID("imgbatch_phantom"), int64(7)).
+		WithArgs(domain.BatchImageHoldRequestID("imgbatch_phantom"), int64(7)).
 		WillReturnError(sql.ErrNoRows)
 	mock.ExpectCommit()
 
-	result, err := releaseUsageBillingBatchImageBalance(ctx, tx, &service.BatchImageBalanceHoldCommand{UserID: 42, APIKeyID: 7, BatchID: "imgbatch_phantom", HoldAmount: 1})
+	result, err := releaseUsageBillingBatchImageBalance(ctx, tx, &domain.BatchImageBalanceHoldCommand{UserID: 42, APIKeyID: 7, BatchID: "imgbatch_phantom", HoldAmount: 1})
 	require.NoError(t, err)
 	require.Nil(t, result.NewBalance)
 	require.Nil(t, result.FrozenBalance)

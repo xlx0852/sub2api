@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"sync"
 	"testing"
 	"time"
@@ -10,7 +11,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/authidentity"
 	"github.com/Wei-Shaw/sub2api/ent/authidentitychannel"
 	"github.com/Wei-Shaw/sub2api/ent/identityadoptiondecision"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,12 +18,12 @@ func TestUserRepositoryBindAuthIdentityToUserCanonicalizesLegacyWeChatAlias(t *t
 	repo, client := newUserEntRepo(t)
 	ctx := context.Background()
 
-	user := &service.User{
+	user := &domain.User{
 		Email:        "wechat-legacy@example.com",
 		Username:     "wechat-legacy",
 		PasswordHash: "hash",
-		Role:         service.RoleUser,
-		Status:       service.StatusActive,
+		Role:         domain.RoleUser,
+		Status:       domain.StatusActive,
 	}
 	require.NoError(t, repo.Create(ctx, user))
 
@@ -109,12 +109,12 @@ func TestUserRepositoryUpsertIdentityAdoptionDecisionIsIdempotentUnderConcurrenc
 	repo, client := newUserEntRepo(t)
 	ctx := context.Background()
 
-	user := &service.User{
+	user := &domain.User{
 		Email:        "repo-adoption@example.com",
 		Username:     "repo-adoption",
 		PasswordHash: "hash",
-		Role:         service.RoleUser,
-		Status:       service.StatusActive,
+		Role:         domain.RoleUser,
+		Status:       domain.StatusActive,
 	}
 	require.NoError(t, repo.Create(ctx, user))
 

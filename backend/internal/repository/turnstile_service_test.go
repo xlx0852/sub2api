@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -45,7 +45,7 @@ func (s *TurnstileServiceSuite) TestVerifyToken_SendsFormAndDecodesJSON() {
 		s.received <- values
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(service.TurnstileVerifyResponse{Success: true})
+		_ = json.NewEncoder(w).Encode(domain.TurnstileVerifyResponse{Success: true})
 	}))
 
 	resp, err := s.verifier.VerifyToken(s.ctx, "sk", "token", "1.1.1.1")
@@ -69,7 +69,7 @@ func (s *TurnstileServiceSuite) TestVerifyToken_ContentType() {
 	s.setupTransport(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		contentType = r.Header.Get("Content-Type")
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(service.TurnstileVerifyResponse{Success: true})
+		_ = json.NewEncoder(w).Encode(domain.TurnstileVerifyResponse{Success: true})
 	}))
 
 	_, err := s.verifier.VerifyToken(s.ctx, "sk", "token", "1.1.1.1")
@@ -84,7 +84,7 @@ func (s *TurnstileServiceSuite) TestVerifyToken_EmptyRemoteIP_NotSent() {
 		s.received <- values
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(service.TurnstileVerifyResponse{Success: true})
+		_ = json.NewEncoder(w).Encode(domain.TurnstileVerifyResponse{Success: true})
 	}))
 
 	_, err := s.verifier.VerifyToken(s.ctx, "sk", "token", "")
@@ -123,7 +123,7 @@ func (s *TurnstileServiceSuite) TestVerifyToken_InvalidJSON() {
 func (s *TurnstileServiceSuite) TestVerifyToken_SuccessFalse() {
 	s.setupTransport(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(service.TurnstileVerifyResponse{
+		_ = json.NewEncoder(w).Encode(domain.TurnstileVerifyResponse{
 			Success:    false,
 			ErrorCodes: []string{"invalid-input-response"},
 		})

@@ -109,7 +109,7 @@ func (s *AntigravityGatewayService) handleSmartRetry(p antigravityRetryLoopParam
 	if resp.StatusCode == http.StatusTooManyRequests &&
 		category == antigravity429QuotaExhausted &&
 		p.account.IsOveragesEnabled() &&
-		!p.account.isCreditsExhausted() {
+		!p.account.IsCreditsExhausted() {
 		result := s.attemptCreditsOveragesRetry(p, baseURL, modelName, waitDuration, resp.StatusCode, respBody)
 		if result.handled && result.resp != nil {
 			return &smartRetryResult{
@@ -452,8 +452,8 @@ func (s *AntigravityGatewayService) antigravityRetryLoop(p antigravityRetryLoopP
 	// 预检查：模型限流 + overages 启用 + 积分未耗尽 → 直接注入 AI Credits
 	overagesInjected := false
 	if p.requestedModel != "" && p.account.Platform == PlatformAntigravity &&
-		p.account.IsOveragesEnabled() && !p.account.isCreditsExhausted() &&
-		p.account.isModelRateLimitedWithContext(p.ctx, p.requestedModel) {
+		p.account.IsOveragesEnabled() && !p.account.IsCreditsExhausted() &&
+		p.account.IsModelRateLimitedWithContext(p.ctx, p.requestedModel) {
 		if creditsBody := injectEnabledCreditTypes(p.body); creditsBody != nil {
 			p.body = creditsBody
 			overagesInjected = true

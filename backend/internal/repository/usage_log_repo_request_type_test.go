@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"reflect"
 	"testing"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,7 +21,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 	repo := &usageLogRepository{sql: db}
 
 	createdAt := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
-	log := &service.UsageLog{
+	log := &domain.UsageLog{
 		UserID:         1,
 		APIKeyID:       2,
 		AccountID:      3,
@@ -32,8 +32,8 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 		OutputTokens:   20,
 		TotalCost:      1,
 		ActualCost:     1,
-		BillingType:    service.BillingTypeBalance,
-		RequestType:    service.RequestTypeWSV2,
+		BillingType:    domain.BillingTypeBalance,
+		RequestType:    domain.RequestTypeWSV2,
 		Stream:         false,
 		OpenAIWSMode:   false,
 		CreatedAt:      createdAt,
@@ -67,7 +67,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			log.RateMultiplier,
 			log.AccountRateMultiplier,
 			log.BillingType,
-			int16(service.RequestTypeWSV2),
+			int16(domain.RequestTypeWSV2),
 			true,
 			true,
 			sqlmock.AnyArg(), // duration_ms
@@ -111,7 +111,7 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 	require.True(t, inserted)
 	require.Equal(t, int64(99), log.ID)
 	require.Nil(t, log.ServiceTier)
-	require.Equal(t, service.RequestTypeWSV2, log.RequestType)
+	require.Equal(t, domain.RequestTypeWSV2, log.RequestType)
 	require.True(t, log.Stream)
 	require.True(t, log.OpenAIWSMode)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -123,7 +123,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 
 	createdAt := time.Date(2025, 1, 2, 12, 0, 0, 0, time.UTC)
 	serviceTier := "priority"
-	log := &service.UsageLog{
+	log := &domain.UsageLog{
 		UserID:         1,
 		APIKeyID:       2,
 		AccountID:      3,
@@ -162,7 +162,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			log.RateMultiplier,
 			log.AccountRateMultiplier,
 			log.BillingType,
-			int16(service.RequestTypeSync),
+			int16(domain.RequestTypeSync),
 			false,
 			false,
 			sqlmock.AnyArg(),
@@ -208,7 +208,7 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 }
 
 func TestBuildUsageLogBestEffortInsertQuery_IncludesRequestedModelColumn(t *testing.T) {
-	prepared := prepareUsageLogInsert(&service.UsageLog{
+	prepared := prepareUsageLogInsert(&domain.UsageLog{
 		UserID:         1,
 		APIKeyID:       2,
 		AccountID:      3,
@@ -229,7 +229,7 @@ func TestBuildUsageLogBestEffortInsertQuery_IncludesRequestedModelColumn(t *test
 
 func TestExecUsageLogInsertNoResult_PersistsRequestedModel(t *testing.T) {
 	db, mock := newSQLMock(t)
-	prepared := prepareUsageLogInsert(&service.UsageLog{
+	prepared := prepareUsageLogInsert(&domain.UsageLog{
 		UserID:         1,
 		APIKeyID:       2,
 		AccountID:      3,
@@ -249,7 +249,7 @@ func TestExecUsageLogInsertNoResult_PersistsRequestedModel(t *testing.T) {
 }
 
 func TestPrepareUsageLogInsert_ArgCountMatchesTypes(t *testing.T) {
-	prepared := prepareUsageLogInsert(&service.UsageLog{
+	prepared := prepareUsageLogInsert(&domain.UsageLog{
 		UserID:         1,
 		APIKeyID:       2,
 		AccountID:      3,
@@ -267,7 +267,7 @@ func TestPrepareUsageLogInsert_PersistsImageSizeMetadata(t *testing.T) {
 	inputSize := "1024x1024"
 	outputSize := "3840x2160"
 	source := "output"
-	prepared := prepareUsageLogInsert(&service.UsageLog{
+	prepared := prepareUsageLogInsert(&domain.UsageLog{
 		UserID:             1,
 		APIKeyID:           2,
 		AccountID:          3,
@@ -308,17 +308,17 @@ func TestAppendUsageLogBillingModeWhereCondition(t *testing.T) {
 	}{
 		{
 			name:          "image includes legacy image rows",
-			billingMode:   string(service.BillingModeImage),
+			billingMode:   string(domain.BillingModeImage),
 			wantCondition: "(billing_mode = $1 OR COALESCE(image_count, 0) > 0)",
 		},
 		{
 			name:          "token includes legacy non-image rows",
-			billingMode:   string(service.BillingModeToken),
+			billingMode:   string(domain.BillingModeToken),
 			wantCondition: "(billing_mode = $1 OR ((billing_mode IS NULL OR billing_mode = '') AND COALESCE(image_count, 0) <= 0))",
 		},
 		{
 			name:          "per request remains exact",
-			billingMode:   string(service.BillingModePerRequest),
+			billingMode:   string(domain.BillingModePerRequest),
 			wantCondition: "billing_mode = $1",
 		},
 	}
@@ -333,17 +333,17 @@ func TestAppendUsageLogBillingModeWhereCondition(t *testing.T) {
 }
 
 func TestAppendUsageLogBillingModeWhereConditionWithAlias(t *testing.T) {
-	conditions, args := appendUsageLogBillingModeWhereConditionWithAlias(nil, nil, string(service.BillingModeImage), "ul")
+	conditions, args := appendUsageLogBillingModeWhereConditionWithAlias(nil, nil, string(domain.BillingModeImage), "ul")
 
 	require.Equal(t, []string{"(ul.billing_mode = $1 OR COALESCE(ul.image_count, 0) > 0)"}, conditions)
-	require.Equal(t, []any{string(service.BillingModeImage)}, args)
+	require.Equal(t, []any{string(domain.BillingModeImage)}, args)
 }
 
 func TestAppendUsageLogBillingModeQueryFilter(t *testing.T) {
-	query, args := appendUsageLogBillingModeQueryFilter("SELECT * FROM usage_logs WHERE user_id = $1", []any{int64(42)}, string(service.BillingModeToken), "")
+	query, args := appendUsageLogBillingModeQueryFilter("SELECT * FROM usage_logs WHERE user_id = $1", []any{int64(42)}, string(domain.BillingModeToken), "")
 
 	require.Equal(t, "SELECT * FROM usage_logs WHERE user_id = $1 AND (billing_mode = $2 OR ((billing_mode IS NULL OR billing_mode = '') AND COALESCE(image_count, 0) <= 0))", query)
-	require.Equal(t, []any{int64(42), string(service.BillingModeToken)}, args)
+	require.Equal(t, []any{int64(42), string(domain.BillingModeToken)}, args)
 }
 
 func anySliceToDriverValues(values []any) []driver.Value {
@@ -358,7 +358,7 @@ func TestUsageLogRepositoryListWithFiltersRequestTypePriority(t *testing.T) {
 	db, mock := newSQLMock(t)
 	repo := &usageLogRepository{sql: db}
 
-	requestType := int16(service.RequestTypeWSV2)
+	requestType := int16(domain.RequestTypeWSV2)
 	stream := false
 	filters := usagestats.UsageLogFilters{
 		RequestType: &requestType,
@@ -407,7 +407,7 @@ func TestUsageLogRepositoryGetUsageTrendWithFiltersRequestTypePriority(t *testin
 
 	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := start.Add(24 * time.Hour)
-	requestType := int16(service.RequestTypeStream)
+	requestType := int16(domain.RequestTypeStream)
 	stream := true
 
 	mock.ExpectQuery("AND \\(request_type = \\$3 OR \\(request_type = 0 AND stream = TRUE AND openai_ws_mode = FALSE\\)\\)").
@@ -447,7 +447,7 @@ func TestUsageLogRepositoryGetModelStatsWithFiltersRequestTypePriority(t *testin
 
 	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := start.Add(24 * time.Hour)
-	requestType := int16(service.RequestTypeWSV2)
+	requestType := int16(domain.RequestTypeWSV2)
 	stream := false
 
 	mock.ExpectQuery("AND \\(request_type = \\$3 OR \\(request_type = 0 AND openai_ws_mode = TRUE\\)\\)").
@@ -525,7 +525,7 @@ func TestUsageLogRepositoryGetStatsWithFiltersRequestTypePriority(t *testing.T) 
 	db, mock := newSQLMock(t)
 	repo := &usageLogRepository{sql: db}
 
-	requestType := int16(service.RequestTypeSync)
+	requestType := int16(domain.RequestTypeSync)
 	stream := true
 	filters := usagestats.UsageLogFilters{
 		RequestType: &requestType,
@@ -736,27 +736,27 @@ func TestBuildRequestTypeFilterConditionLegacyFallback(t *testing.T) {
 	}{
 		{
 			name:      "sync_with_legacy_fallback",
-			request:   int16(service.RequestTypeSync),
+			request:   int16(domain.RequestTypeSync),
 			wantWhere: "(request_type = $3 OR (request_type = 0 AND stream = FALSE AND openai_ws_mode = FALSE))",
-			wantArg:   int16(service.RequestTypeSync),
+			wantArg:   int16(domain.RequestTypeSync),
 		},
 		{
 			name:      "stream_with_legacy_fallback",
-			request:   int16(service.RequestTypeStream),
+			request:   int16(domain.RequestTypeStream),
 			wantWhere: "(request_type = $3 OR (request_type = 0 AND stream = TRUE AND openai_ws_mode = FALSE))",
-			wantArg:   int16(service.RequestTypeStream),
+			wantArg:   int16(domain.RequestTypeStream),
 		},
 		{
 			name:      "ws_v2_with_legacy_fallback",
-			request:   int16(service.RequestTypeWSV2),
+			request:   int16(domain.RequestTypeWSV2),
 			wantWhere: "(request_type = $3 OR (request_type = 0 AND openai_ws_mode = TRUE))",
-			wantArg:   int16(service.RequestTypeWSV2),
+			wantArg:   int16(domain.RequestTypeWSV2),
 		},
 		{
 			name:      "invalid_request_type_normalized_to_unknown",
 			request:   int16(99),
 			wantWhere: "request_type = $3",
-			wantArg:   int16(service.RequestTypeUnknown),
+			wantArg:   int16(domain.RequestTypeUnknown),
 		},
 	}
 
@@ -850,8 +850,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			0.0, 0.0, 0.0, 0.0, 0.8, 0.8,
 			1.0,
 			sql.NullFloat64{},
-			int16(service.BillingTypeBalance),
-			int16(service.RequestTypeSync),
+			int16(domain.BillingTypeBalance),
+			int16(domain.RequestTypeSync),
 			false,
 			false,
 			sql.NullInt64{}, // duration_ms
@@ -907,8 +907,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			0.9,               // actual_cost
 			1.0,               // rate_multiplier
 			sql.NullFloat64{}, // account_rate_multiplier
-			int16(service.BillingTypeBalance),
-			int16(service.RequestTypeWSV2),
+			int16(domain.BillingTypeBalance),
+			int16(domain.RequestTypeWSV2),
 			false, // legacy stream
 			false, // legacy openai ws
 			sql.NullInt64{},
@@ -925,7 +925,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
 		require.Equal(t, "priority", *log.ServiceTier)
-		require.Equal(t, service.RequestTypeWSV2, log.RequestType)
+		require.Equal(t, domain.RequestTypeWSV2, log.RequestType)
 		require.True(t, log.Stream)
 		require.True(t, log.OpenAIWSMode)
 	})
@@ -948,8 +948,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			0.1, 0.2, 0.3, 0.4, 1.0, 0.9,
 			1.0,
 			sql.NullFloat64{},
-			int16(service.BillingTypeBalance),
-			int16(service.RequestTypeUnknown),
+			int16(domain.BillingTypeBalance),
+			int16(domain.RequestTypeUnknown),
 			true,
 			false,
 			sql.NullInt64{},
@@ -966,7 +966,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
 		require.Equal(t, "flex", *log.ServiceTier)
-		require.Equal(t, service.RequestTypeStream, log.RequestType)
+		require.Equal(t, domain.RequestTypeStream, log.RequestType)
 		require.True(t, log.Stream)
 		require.False(t, log.OpenAIWSMode)
 	})
@@ -989,8 +989,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			0.1, 0.2, 0.3, 0.4, 1.0, 0.9,
 			1.0,
 			sql.NullFloat64{},
-			int16(service.BillingTypeBalance),
-			int16(service.RequestTypeSync),
+			int16(domain.BillingTypeBalance),
+			int16(domain.RequestTypeSync),
 			false,
 			false,
 			sql.NullInt64{},
@@ -1007,6 +1007,6 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
 		require.Equal(t, "priority", *log.ServiceTier)
-		require.Equal(t, service.RequestTypeSync, log.RequestType)
+		require.Equal(t, domain.RequestTypeSync, log.RequestType)
 	})
 }

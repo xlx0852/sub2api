@@ -3,12 +3,12 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/model"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -25,7 +25,7 @@ type errorPassthroughCache struct {
 }
 
 // NewErrorPassthroughCache 创建错误透传规则缓存
-func NewErrorPassthroughCache(rdb *redis.Client) service.ErrorPassthroughCache {
+func NewErrorPassthroughCache(rdb *redis.Client) ports.ErrorPassthroughCache {
 	return &errorPassthroughCache{
 		rdb: rdb,
 	}

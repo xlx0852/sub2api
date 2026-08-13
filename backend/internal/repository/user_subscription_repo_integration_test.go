@@ -5,12 +5,12 @@ package repository
 import (
 	"context"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -32,29 +32,29 @@ func TestUserSubscriptionRepoSuite(t *testing.T) {
 	suite.Run(t, new(UserSubscriptionRepoSuite))
 }
 
-func (s *UserSubscriptionRepoSuite) mustCreateUser(email string, role string) *service.User {
+func (s *UserSubscriptionRepoSuite) mustCreateUser(email string, role string) *domain.User {
 	s.T().Helper()
 
 	if role == "" {
-		role = service.RoleUser
+		role = domain.RoleUser
 	}
 
 	u, err := s.client.User.Create().
 		SetEmail(email).
 		SetPasswordHash("test-password-hash").
-		SetStatus(service.StatusActive).
+		SetStatus(domain.StatusActive).
 		SetRole(role).
 		Save(s.ctx)
 	s.Require().NoError(err, "create user")
 	return userEntityToService(u)
 }
 
-func (s *UserSubscriptionRepoSuite) mustCreateGroup(name string) *service.Group {
+func (s *UserSubscriptionRepoSuite) mustCreateGroup(name string) *domain.Group {
 	s.T().Helper()
 
 	g, err := s.client.Group.Create().
 		SetName(name).
-		SetStatus(service.StatusActive).
+		SetStatus(domain.StatusActive).
 		Save(s.ctx)
 	s.Require().NoError(err, "create group")
 	return groupEntityToService(g)
@@ -69,7 +69,7 @@ func (s *UserSubscriptionRepoSuite) mustCreateSubscription(userID, groupID int64
 		SetGroupID(groupID).
 		SetStartsAt(now.Add(-1 * time.Hour)).
 		SetExpiresAt(now.Add(24 * time.Hour)).
-		SetStatus(service.SubscriptionStatusActive).
+		SetStatus(domain.SubscriptionStatusActive).
 		SetAssignedAt(now).
 		SetNotes("")
 
@@ -85,13 +85,13 @@ func (s *UserSubscriptionRepoSuite) mustCreateSubscription(userID, groupID int64
 // --- Create / GetByID / Update / Delete ---
 
 func (s *UserSubscriptionRepoSuite) TestCreate() {
-	user := s.mustCreateUser("sub-create@test.com", service.RoleUser)
+	user := s.mustCreateUser("sub-create@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-create")
 
-	sub := &service.UserSubscription{
+	sub := &domain.UserSubscription{
 		UserID:    user.ID,
 		GroupID:   group.ID,
-		Status:    service.SubscriptionStatusActive,
+		Status:    domain.SubscriptionStatusActive,
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	}
 
@@ -106,9 +106,9 @@ func (s *UserSubscriptionRepoSuite) TestCreate() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestGetByID_WithPreloads() {
-	user := s.mustCreateUser("preload@test.com", service.RoleUser)
+	user := s.mustCreateUser("preload@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-preload")
-	admin := s.mustCreateUser("admin@test.com", service.RoleAdmin)
+	admin := s.mustCreateUser("admin@test.com", domain.RoleAdmin)
 
 	sub := s.mustCreateSubscription(user.ID, group.ID, func(c *dbent.UserSubscriptionCreate) {
 		c.SetAssignedBy(admin.ID)
@@ -130,7 +130,7 @@ func (s *UserSubscriptionRepoSuite) TestGetByID_NotFound() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestUpdate() {
-	user := s.mustCreateUser("update@test.com", service.RoleUser)
+	user := s.mustCreateUser("update@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-update")
 	created := s.mustCreateSubscription(user.ID, group.ID, nil)
 
@@ -146,7 +146,7 @@ func (s *UserSubscriptionRepoSuite) TestUpdate() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestDelete() {
-	user := s.mustCreateUser("delete@test.com", service.RoleUser)
+	user := s.mustCreateUser("delete@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-delete")
 	sub := s.mustCreateSubscription(user.ID, group.ID, nil)
 
@@ -158,38 +158,38 @@ func (s *UserSubscriptionRepoSuite) TestDelete() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestGetByIDIncludeDeleted_PreservesPersistedStatus() {
-	user := s.mustCreateUser("include-deleted@test.com", service.RoleUser)
+	user := s.mustCreateUser("include-deleted@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-include-deleted")
 	sub := s.mustCreateSubscription(user.ID, group.ID, func(c *dbent.UserSubscriptionCreate) {
-		c.SetStatus(service.SubscriptionStatusActive)
+		c.SetStatus(domain.SubscriptionStatusActive)
 	})
 
 	s.Require().NoError(s.repo.Delete(s.ctx, sub.ID), "Delete")
 
 	got, err := s.repo.GetByIDIncludeDeleted(s.ctx, sub.ID)
 	s.Require().NoError(err, "GetByIDIncludeDeleted")
-	s.Require().Equal(service.SubscriptionStatusActive, got.Status)
+	s.Require().Equal(domain.SubscriptionStatusActive, got.Status)
 	s.Require().NotNil(got.DeletedAt)
 	s.Require().NotNil(got.User)
 	s.Require().NotNil(got.Group)
 }
 
 func (s *UserSubscriptionRepoSuite) TestRestore() {
-	user := s.mustCreateUser("restore@test.com", service.RoleUser)
+	user := s.mustCreateUser("restore@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-restore")
 	sub := s.mustCreateSubscription(user.ID, group.ID, nil)
 
 	s.Require().NoError(s.repo.Delete(s.ctx, sub.ID), "Delete")
 
-	restored, err := s.repo.Restore(s.ctx, sub.ID, service.SubscriptionStatusExpired)
+	restored, err := s.repo.Restore(s.ctx, sub.ID, domain.SubscriptionStatusExpired)
 	s.Require().NoError(err, "Restore")
-	s.Require().Equal(service.SubscriptionStatusExpired, restored.Status)
+	s.Require().Equal(domain.SubscriptionStatusExpired, restored.Status)
 	s.Require().Nil(restored.DeletedAt)
 
 	got, err := s.repo.GetByID(s.ctx, sub.ID)
 	s.Require().NoError(err, "GetByID after restore")
 	s.Require().Nil(got.DeletedAt)
-	s.Require().Equal(service.SubscriptionStatusExpired, got.Status)
+	s.Require().Equal(domain.SubscriptionStatusExpired, got.Status)
 }
 
 func (s *UserSubscriptionRepoSuite) TestDelete_Idempotent() {
@@ -199,7 +199,7 @@ func (s *UserSubscriptionRepoSuite) TestDelete_Idempotent() {
 // --- GetByUserIDAndGroupID / GetActiveByUserIDAndGroupID ---
 
 func (s *UserSubscriptionRepoSuite) TestGetByUserIDAndGroupID() {
-	user := s.mustCreateUser("byuser@test.com", service.RoleUser)
+	user := s.mustCreateUser("byuser@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-byuser")
 	sub := s.mustCreateSubscription(user.ID, group.ID, nil)
 
@@ -215,7 +215,7 @@ func (s *UserSubscriptionRepoSuite) TestGetByUserIDAndGroupID_NotFound() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestGetActiveByUserIDAndGroupID() {
-	user := s.mustCreateUser("active@test.com", service.RoleUser)
+	user := s.mustCreateUser("active@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-active")
 
 	active := s.mustCreateSubscription(user.ID, group.ID, func(c *dbent.UserSubscriptionCreate) {
@@ -228,7 +228,7 @@ func (s *UserSubscriptionRepoSuite) TestGetActiveByUserIDAndGroupID() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestGetActiveByUserIDAndGroupID_ExpiredIgnored() {
-	user := s.mustCreateUser("expired@test.com", service.RoleUser)
+	user := s.mustCreateUser("expired@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-expired")
 
 	s.mustCreateSubscription(user.ID, group.ID, func(c *dbent.UserSubscriptionCreate) {
@@ -242,13 +242,13 @@ func (s *UserSubscriptionRepoSuite) TestGetActiveByUserIDAndGroupID_ExpiredIgnor
 // --- ListByUserID / ListActiveByUserID ---
 
 func (s *UserSubscriptionRepoSuite) TestListByUserID() {
-	user := s.mustCreateUser("listby@test.com", service.RoleUser)
+	user := s.mustCreateUser("listby@test.com", domain.RoleUser)
 	g1 := s.mustCreateGroup("g-list1")
 	g2 := s.mustCreateGroup("g-list2")
 
 	s.mustCreateSubscription(user.ID, g1.ID, nil)
 	s.mustCreateSubscription(user.ID, g2.ID, func(c *dbent.UserSubscriptionCreate) {
-		c.SetStatus(service.SubscriptionStatusExpired)
+		c.SetStatus(domain.SubscriptionStatusExpired)
 		c.SetExpiresAt(time.Now().Add(-24 * time.Hour))
 	})
 
@@ -261,7 +261,7 @@ func (s *UserSubscriptionRepoSuite) TestListByUserID() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestListActiveByUserID() {
-	user := s.mustCreateUser("listactive@test.com", service.RoleUser)
+	user := s.mustCreateUser("listactive@test.com", domain.RoleUser)
 	g1 := s.mustCreateGroup("g-act1")
 	g2 := s.mustCreateGroup("g-act2")
 
@@ -269,21 +269,21 @@ func (s *UserSubscriptionRepoSuite) TestListActiveByUserID() {
 		c.SetExpiresAt(time.Now().Add(24 * time.Hour))
 	})
 	s.mustCreateSubscription(user.ID, g2.ID, func(c *dbent.UserSubscriptionCreate) {
-		c.SetStatus(service.SubscriptionStatusExpired)
+		c.SetStatus(domain.SubscriptionStatusExpired)
 		c.SetExpiresAt(time.Now().Add(-24 * time.Hour))
 	})
 
 	subs, err := s.repo.ListActiveByUserID(s.ctx, user.ID)
 	s.Require().NoError(err, "ListActiveByUserID")
 	s.Require().Len(subs, 1)
-	s.Require().Equal(service.SubscriptionStatusActive, subs[0].Status)
+	s.Require().Equal(domain.SubscriptionStatusActive, subs[0].Status)
 }
 
 // --- ListByGroupID ---
 
 func (s *UserSubscriptionRepoSuite) TestListByGroupID() {
-	user1 := s.mustCreateUser("u1@test.com", service.RoleUser)
-	user2 := s.mustCreateUser("u2@test.com", service.RoleUser)
+	user1 := s.mustCreateUser("u1@test.com", domain.RoleUser)
+	user2 := s.mustCreateUser("u2@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-listgrp")
 
 	s.mustCreateSubscription(user1.ID, group.ID, nil)
@@ -302,7 +302,7 @@ func (s *UserSubscriptionRepoSuite) TestListByGroupID() {
 // --- List with filters ---
 
 func (s *UserSubscriptionRepoSuite) TestList_NoFilters() {
-	user := s.mustCreateUser("list@test.com", service.RoleUser)
+	user := s.mustCreateUser("list@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-list")
 	s.mustCreateSubscription(user.ID, group.ID, nil)
 
@@ -313,8 +313,8 @@ func (s *UserSubscriptionRepoSuite) TestList_NoFilters() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestList_FilterByUserID() {
-	user1 := s.mustCreateUser("filter1@test.com", service.RoleUser)
-	user2 := s.mustCreateUser("filter2@test.com", service.RoleUser)
+	user1 := s.mustCreateUser("filter1@test.com", domain.RoleUser)
+	user2 := s.mustCreateUser("filter2@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-filter")
 
 	s.mustCreateSubscription(user1.ID, group.ID, nil)
@@ -327,7 +327,7 @@ func (s *UserSubscriptionRepoSuite) TestList_FilterByUserID() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestList_FilterByGroupID() {
-	user := s.mustCreateUser("grpfilter@test.com", service.RoleUser)
+	user := s.mustCreateUser("grpfilter@test.com", domain.RoleUser)
 	g1 := s.mustCreateGroup("g-f1")
 	g2 := s.mustCreateGroup("g-f2")
 
@@ -341,37 +341,37 @@ func (s *UserSubscriptionRepoSuite) TestList_FilterByGroupID() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestList_FilterByStatus() {
-	user1 := s.mustCreateUser("statfilter1@test.com", service.RoleUser)
-	user2 := s.mustCreateUser("statfilter2@test.com", service.RoleUser)
+	user1 := s.mustCreateUser("statfilter1@test.com", domain.RoleUser)
+	user2 := s.mustCreateUser("statfilter2@test.com", domain.RoleUser)
 	group1 := s.mustCreateGroup("g-stat-1")
 	group2 := s.mustCreateGroup("g-stat-2")
 
 	s.mustCreateSubscription(user1.ID, group1.ID, func(c *dbent.UserSubscriptionCreate) {
-		c.SetStatus(service.SubscriptionStatusActive)
+		c.SetStatus(domain.SubscriptionStatusActive)
 		c.SetExpiresAt(time.Now().Add(24 * time.Hour))
 	})
 	s.mustCreateSubscription(user2.ID, group2.ID, func(c *dbent.UserSubscriptionCreate) {
-		c.SetStatus(service.SubscriptionStatusExpired)
+		c.SetStatus(domain.SubscriptionStatusExpired)
 		c.SetExpiresAt(time.Now().Add(-24 * time.Hour))
 	})
 
-	subs, _, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, nil, nil, service.SubscriptionStatusExpired, "", "", "")
+	subs, _, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, nil, nil, domain.SubscriptionStatusExpired, "", "", "")
 	s.Require().NoError(err)
 	s.Require().Len(subs, 1)
-	s.Require().Equal(service.SubscriptionStatusExpired, subs[0].Status)
+	s.Require().Equal(domain.SubscriptionStatusExpired, subs[0].Status)
 }
 
 func (s *UserSubscriptionRepoSuite) TestList_IncludesRevokedWhenStatusEmpty() {
-	user1 := s.mustCreateUser("allstatus1@test.com", service.RoleUser)
-	user2 := s.mustCreateUser("allstatus2@test.com", service.RoleUser)
-	user3 := s.mustCreateUser("allstatus3@test.com", service.RoleUser)
+	user1 := s.mustCreateUser("allstatus1@test.com", domain.RoleUser)
+	user2 := s.mustCreateUser("allstatus2@test.com", domain.RoleUser)
+	user3 := s.mustCreateUser("allstatus3@test.com", domain.RoleUser)
 	group1 := s.mustCreateGroup("g-allstatus-1")
 	group2 := s.mustCreateGroup("g-allstatus-2")
 	group3 := s.mustCreateGroup("g-allstatus-3")
 
 	s.mustCreateSubscription(user1.ID, group1.ID, nil)
 	s.mustCreateSubscription(user2.ID, group2.ID, func(c *dbent.UserSubscriptionCreate) {
-		c.SetStatus(service.SubscriptionStatusExpired)
+		c.SetStatus(domain.SubscriptionStatusExpired)
 		c.SetExpiresAt(time.Now().Add(-24 * time.Hour))
 	})
 	revoked := s.mustCreateSubscription(user3.ID, group3.ID, nil)
@@ -382,7 +382,7 @@ func (s *UserSubscriptionRepoSuite) TestList_IncludesRevokedWhenStatusEmpty() {
 	s.Require().Len(subs, 3)
 	s.Require().Equal(int64(3), pag.Total)
 
-	var gotRevoked *service.UserSubscription
+	var gotRevoked *domain.UserSubscription
 	for i := range subs {
 		if subs[i].ID == revoked.ID {
 			gotRevoked = &subs[i]
@@ -390,15 +390,15 @@ func (s *UserSubscriptionRepoSuite) TestList_IncludesRevokedWhenStatusEmpty() {
 		}
 	}
 	s.Require().NotNil(gotRevoked, "all status should include soft-deleted subscription")
-	s.Require().Equal(service.SubscriptionStatusRevoked, gotRevoked.Status)
+	s.Require().Equal(domain.SubscriptionStatusRevoked, gotRevoked.Status)
 	s.Require().NotNil(gotRevoked.DeletedAt)
 	s.Require().NotNil(gotRevoked.User)
 	s.Require().NotNil(gotRevoked.Group)
 }
 
 func (s *UserSubscriptionRepoSuite) TestList_FilterByRevokedStatus() {
-	user1 := s.mustCreateUser("revokedfilter1@test.com", service.RoleUser)
-	user2 := s.mustCreateUser("revokedfilter2@test.com", service.RoleUser)
+	user1 := s.mustCreateUser("revokedfilter1@test.com", domain.RoleUser)
+	user2 := s.mustCreateUser("revokedfilter2@test.com", domain.RoleUser)
 	group1 := s.mustCreateGroup("g-revoked-1")
 	group2 := s.mustCreateGroup("g-revoked-2")
 
@@ -406,20 +406,20 @@ func (s *UserSubscriptionRepoSuite) TestList_FilterByRevokedStatus() {
 	revoked := s.mustCreateSubscription(user2.ID, group2.ID, nil)
 	s.Require().NoError(s.repo.Delete(s.ctx, revoked.ID))
 
-	subs, pag, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, nil, nil, service.SubscriptionStatusRevoked, "", "", "")
+	subs, pag, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, nil, nil, domain.SubscriptionStatusRevoked, "", "", "")
 	s.Require().NoError(err)
 	s.Require().Len(subs, 1)
 	s.Require().Equal(int64(1), pag.Total)
 	s.Require().Equal(revoked.ID, subs[0].ID)
 	s.Require().NotEqual(active.ID, subs[0].ID)
-	s.Require().Equal(service.SubscriptionStatusRevoked, subs[0].Status)
+	s.Require().Equal(domain.SubscriptionStatusRevoked, subs[0].Status)
 	s.Require().NotNil(subs[0].DeletedAt)
 }
 
 // --- Usage tracking ---
 
 func (s *UserSubscriptionRepoSuite) TestIncrementUsage() {
-	user := s.mustCreateUser("usage@test.com", service.RoleUser)
+	user := s.mustCreateUser("usage@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-usage")
 	sub := s.mustCreateSubscription(user.ID, group.ID, nil)
 
@@ -434,7 +434,7 @@ func (s *UserSubscriptionRepoSuite) TestIncrementUsage() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestIncrementUsage_Accumulates() {
-	user := s.mustCreateUser("accum@test.com", service.RoleUser)
+	user := s.mustCreateUser("accum@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-accum")
 	sub := s.mustCreateSubscription(user.ID, group.ID, nil)
 
@@ -447,7 +447,7 @@ func (s *UserSubscriptionRepoSuite) TestIncrementUsage_Accumulates() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestActivateWindows() {
-	user := s.mustCreateUser("activate@test.com", service.RoleUser)
+	user := s.mustCreateUser("activate@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-activate")
 	sub := s.mustCreateSubscription(user.ID, group.ID, nil)
 
@@ -464,7 +464,7 @@ func (s *UserSubscriptionRepoSuite) TestActivateWindows() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestResetDailyUsage() {
-	user := s.mustCreateUser("resetd@test.com", service.RoleUser)
+	user := s.mustCreateUser("resetd@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-resetd")
 	sub := s.mustCreateSubscription(user.ID, group.ID, func(c *dbent.UserSubscriptionCreate) {
 		c.SetDailyUsageUsd(10.0)
@@ -484,7 +484,7 @@ func (s *UserSubscriptionRepoSuite) TestResetDailyUsage() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestResetDailyUsage_StaleResetDoesNotClearNewWindowUsage() {
-	user := s.mustCreateUser("resetd-cas@test.com", service.RoleUser)
+	user := s.mustCreateUser("resetd-cas@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-resetd-cas")
 	oldWindowStart := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	sub := s.mustCreateSubscription(user.ID, group.ID, func(c *dbent.UserSubscriptionCreate) {
@@ -505,7 +505,7 @@ func (s *UserSubscriptionRepoSuite) TestResetDailyUsage_StaleResetDoesNotClearNe
 }
 
 func (s *UserSubscriptionRepoSuite) TestResetUsageWindows_ClearsUsageAfterAutomaticWindowAdvance() {
-	user := s.mustCreateUser("admin-reset-current@test.com", service.RoleUser)
+	user := s.mustCreateUser("admin-reset-current@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-admin-reset-current")
 	oldWindowStart := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	sub := s.mustCreateSubscription(user.ID, group.ID, func(c *dbent.UserSubscriptionCreate) {
@@ -525,7 +525,7 @@ func (s *UserSubscriptionRepoSuite) TestResetUsageWindows_ClearsUsageAfterAutoma
 }
 
 func (s *UserSubscriptionRepoSuite) TestResetWeeklyUsage() {
-	user := s.mustCreateUser("resetw@test.com", service.RoleUser)
+	user := s.mustCreateUser("resetw@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-resetw")
 	sub := s.mustCreateSubscription(user.ID, group.ID, func(c *dbent.UserSubscriptionCreate) {
 		c.SetWeeklyUsageUsd(15.0)
@@ -545,7 +545,7 @@ func (s *UserSubscriptionRepoSuite) TestResetWeeklyUsage() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestResetMonthlyUsage() {
-	user := s.mustCreateUser("resetm@test.com", service.RoleUser)
+	user := s.mustCreateUser("resetm@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-resetm")
 	sub := s.mustCreateSubscription(user.ID, group.ID, func(c *dbent.UserSubscriptionCreate) {
 		c.SetMonthlyUsageUsd(25.0)
@@ -565,20 +565,20 @@ func (s *UserSubscriptionRepoSuite) TestResetMonthlyUsage() {
 // --- UpdateStatus / ExtendExpiry / UpdateNotes ---
 
 func (s *UserSubscriptionRepoSuite) TestUpdateStatus() {
-	user := s.mustCreateUser("status@test.com", service.RoleUser)
+	user := s.mustCreateUser("status@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-status")
 	sub := s.mustCreateSubscription(user.ID, group.ID, nil)
 
-	err := s.repo.UpdateStatus(s.ctx, sub.ID, service.SubscriptionStatusExpired)
+	err := s.repo.UpdateStatus(s.ctx, sub.ID, domain.SubscriptionStatusExpired)
 	s.Require().NoError(err, "UpdateStatus")
 
 	got, err := s.repo.GetByID(s.ctx, sub.ID)
 	s.Require().NoError(err)
-	s.Require().Equal(service.SubscriptionStatusExpired, got.Status)
+	s.Require().Equal(domain.SubscriptionStatusExpired, got.Status)
 }
 
 func (s *UserSubscriptionRepoSuite) TestExtendExpiry() {
-	user := s.mustCreateUser("extend@test.com", service.RoleUser)
+	user := s.mustCreateUser("extend@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-extend")
 	sub := s.mustCreateSubscription(user.ID, group.ID, nil)
 
@@ -592,7 +592,7 @@ func (s *UserSubscriptionRepoSuite) TestExtendExpiry() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestUpdateNotes() {
-	user := s.mustCreateUser("notes@test.com", service.RoleUser)
+	user := s.mustCreateUser("notes@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-notes")
 	sub := s.mustCreateSubscription(user.ID, group.ID, nil)
 
@@ -607,7 +607,7 @@ func (s *UserSubscriptionRepoSuite) TestUpdateNotes() {
 // --- ListExpired / BatchUpdateExpiredStatus ---
 
 func (s *UserSubscriptionRepoSuite) TestListExpired() {
-	user := s.mustCreateUser("listexp@test.com", service.RoleUser)
+	user := s.mustCreateUser("listexp@test.com", domain.RoleUser)
 	groupActive := s.mustCreateGroup("g-listexp-active")
 	groupExpired := s.mustCreateGroup("g-listexp-expired")
 
@@ -624,7 +624,7 @@ func (s *UserSubscriptionRepoSuite) TestListExpired() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestBatchUpdateExpiredStatus() {
-	user := s.mustCreateUser("batch@test.com", service.RoleUser)
+	user := s.mustCreateUser("batch@test.com", domain.RoleUser)
 	groupFuture := s.mustCreateGroup("g-batch-future")
 	groupPast := s.mustCreateGroup("g-batch-past")
 
@@ -640,16 +640,16 @@ func (s *UserSubscriptionRepoSuite) TestBatchUpdateExpiredStatus() {
 	s.Require().Equal(int64(1), affected)
 
 	gotActive, _ := s.repo.GetByID(s.ctx, active.ID)
-	s.Require().Equal(service.SubscriptionStatusActive, gotActive.Status)
+	s.Require().Equal(domain.SubscriptionStatusActive, gotActive.Status)
 
 	gotExpired, _ := s.repo.GetByID(s.ctx, expiredActive.ID)
-	s.Require().Equal(service.SubscriptionStatusExpired, gotExpired.Status)
+	s.Require().Equal(domain.SubscriptionStatusExpired, gotExpired.Status)
 }
 
 // --- ExistsByUserIDAndGroupID ---
 
 func (s *UserSubscriptionRepoSuite) TestExistsByUserIDAndGroupID() {
-	user := s.mustCreateUser("exists@test.com", service.RoleUser)
+	user := s.mustCreateUser("exists@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-exists")
 
 	s.mustCreateSubscription(user.ID, group.ID, nil)
@@ -664,7 +664,7 @@ func (s *UserSubscriptionRepoSuite) TestExistsByUserIDAndGroupID() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestExistsActiveByUserIDAndGroupID_IgnoresSoftDeletedRows() {
-	user := s.mustCreateUser("exists-active@test.com", service.RoleUser)
+	user := s.mustCreateUser("exists-active@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-exists-active")
 	sub := s.mustCreateSubscription(user.ID, group.ID, nil)
 
@@ -682,13 +682,13 @@ func (s *UserSubscriptionRepoSuite) TestExistsActiveByUserIDAndGroupID_IgnoresSo
 // --- CountByGroupID / CountActiveByGroupID ---
 
 func (s *UserSubscriptionRepoSuite) TestCountByGroupID() {
-	user1 := s.mustCreateUser("cnt1@test.com", service.RoleUser)
-	user2 := s.mustCreateUser("cnt2@test.com", service.RoleUser)
+	user1 := s.mustCreateUser("cnt1@test.com", domain.RoleUser)
+	user2 := s.mustCreateUser("cnt2@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-count")
 
 	s.mustCreateSubscription(user1.ID, group.ID, nil)
 	s.mustCreateSubscription(user2.ID, group.ID, func(c *dbent.UserSubscriptionCreate) {
-		c.SetStatus(service.SubscriptionStatusExpired)
+		c.SetStatus(domain.SubscriptionStatusExpired)
 		c.SetExpiresAt(time.Now().Add(-24 * time.Hour))
 	})
 
@@ -698,8 +698,8 @@ func (s *UserSubscriptionRepoSuite) TestCountByGroupID() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestCountActiveByGroupID() {
-	user1 := s.mustCreateUser("cntact1@test.com", service.RoleUser)
-	user2 := s.mustCreateUser("cntact2@test.com", service.RoleUser)
+	user1 := s.mustCreateUser("cntact1@test.com", domain.RoleUser)
+	user2 := s.mustCreateUser("cntact2@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-cntact")
 
 	s.mustCreateSubscription(user1.ID, group.ID, func(c *dbent.UserSubscriptionCreate) {
@@ -717,8 +717,8 @@ func (s *UserSubscriptionRepoSuite) TestCountActiveByGroupID() {
 // --- DeleteByGroupID ---
 
 func (s *UserSubscriptionRepoSuite) TestDeleteByGroupID() {
-	user1 := s.mustCreateUser("delgrp1@test.com", service.RoleUser)
-	user2 := s.mustCreateUser("delgrp2@test.com", service.RoleUser)
+	user1 := s.mustCreateUser("delgrp1@test.com", domain.RoleUser)
+	user2 := s.mustCreateUser("delgrp2@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-delgrp")
 
 	s.mustCreateSubscription(user1.ID, group.ID, nil)
@@ -735,7 +735,7 @@ func (s *UserSubscriptionRepoSuite) TestDeleteByGroupID() {
 // --- Combined scenario ---
 
 func (s *UserSubscriptionRepoSuite) TestActiveExpiredBoundaries_UsageAndReset_BatchUpdateExpiredStatus() {
-	user := s.mustCreateUser("subr@example.com", service.RoleUser)
+	user := s.mustCreateUser("subr@example.com", domain.RoleUser)
 	groupActive := s.mustCreateGroup("g-subr-active")
 	groupExpired := s.mustCreateGroup("g-subr-expired")
 
@@ -777,13 +777,13 @@ func (s *UserSubscriptionRepoSuite) TestActiveExpiredBoundaries_UsageAndReset_Ba
 
 	updated, err := s.repo.GetByID(s.ctx, expiredActive.ID)
 	s.Require().NoError(err, "GetByID expired")
-	s.Require().Equal(service.SubscriptionStatusExpired, updated.Status, "expected status expired")
+	s.Require().Equal(domain.SubscriptionStatusExpired, updated.Status, "expected status expired")
 }
 
 // --- 软删除过滤测试 ---
 
 func (s *UserSubscriptionRepoSuite) TestIncrementUsage_SoftDeletedGroup() {
-	user := s.mustCreateUser("softdeleted@test.com", service.RoleUser)
+	user := s.mustCreateUser("softdeleted@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-softdeleted")
 	sub := s.mustCreateSubscription(user.ID, group.ID, nil)
 
@@ -794,13 +794,13 @@ func (s *UserSubscriptionRepoSuite) TestIncrementUsage_SoftDeletedGroup() {
 	// IncrementUsage 应该失败，因为分组已软删除
 	err = s.repo.IncrementUsage(s.ctx, sub.ID, 1.0)
 	s.Require().Error(err, "should fail for soft-deleted group")
-	s.Require().ErrorIs(err, service.ErrSubscriptionNotFound)
+	s.Require().ErrorIs(err, domain.ErrSubscriptionNotFound)
 }
 
 func (s *UserSubscriptionRepoSuite) TestIncrementUsage_NotFound() {
 	err := s.repo.IncrementUsage(s.ctx, 999999, 1.0)
 	s.Require().Error(err, "should fail for non-existent subscription")
-	s.Require().ErrorIs(err, service.ErrSubscriptionNotFound)
+	s.Require().ErrorIs(err, domain.ErrSubscriptionNotFound)
 }
 
 // --- nil 入参测试 ---
@@ -808,19 +808,19 @@ func (s *UserSubscriptionRepoSuite) TestIncrementUsage_NotFound() {
 func (s *UserSubscriptionRepoSuite) TestCreate_NilInput() {
 	err := s.repo.Create(s.ctx, nil)
 	s.Require().Error(err, "Create should fail with nil input")
-	s.Require().ErrorIs(err, service.ErrSubscriptionNilInput)
+	s.Require().ErrorIs(err, domain.ErrSubscriptionNilInput)
 }
 
 func (s *UserSubscriptionRepoSuite) TestUpdate_NilInput() {
 	err := s.repo.Update(s.ctx, nil)
 	s.Require().Error(err, "Update should fail with nil input")
-	s.Require().ErrorIs(err, service.ErrSubscriptionNilInput)
+	s.Require().ErrorIs(err, domain.ErrSubscriptionNilInput)
 }
 
 // --- 并发用量更新测试 ---
 
 func (s *UserSubscriptionRepoSuite) TestIncrementUsage_Concurrent() {
-	user := s.mustCreateUser("concurrent@test.com", service.RoleUser)
+	user := s.mustCreateUser("concurrent@test.com", domain.RoleUser)
 	group := s.mustCreateGroup("g-concurrent")
 	sub := s.mustCreateSubscription(user.ID, group.ID, nil)
 
@@ -875,11 +875,11 @@ func (s *UserSubscriptionRepoSuite) TestTxContext_RollbackIsolation() {
 	s.Require().NoError(err, "create group in tx")
 
 	repo := NewUserSubscriptionRepository(baseClient)
-	sub := &service.UserSubscription{
+	sub := &domain.UserSubscription{
 		UserID:     userEnt.ID,
 		GroupID:    groupEnt.ID,
 		ExpiresAt:  time.Now().AddDate(0, 0, 30),
-		Status:     service.SubscriptionStatusActive,
+		Status:     domain.SubscriptionStatusActive,
 		AssignedAt: time.Now(),
 		Notes:      "tx",
 	}
@@ -890,5 +890,5 @@ func (s *UserSubscriptionRepoSuite) TestTxContext_RollbackIsolation() {
 	tx = nil
 
 	_, err = repo.GetByID(context.Background(), sub.ID)
-	s.Require().ErrorIs(err, service.ErrSubscriptionNotFound)
+	s.Require().ErrorIs(err, domain.ErrSubscriptionNotFound)
 }

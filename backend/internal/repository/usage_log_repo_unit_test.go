@@ -3,11 +3,11 @@
 package repository
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +44,7 @@ func TestSafeDateFormat(t *testing.T) {
 }
 
 func TestBuildUsageLogBatchInsertQuery_UsesConflictDoNothing(t *testing.T) {
-	log := &service.UsageLog{
+	log := &domain.UsageLog{
 		UserID:       1,
 		APIKeyID:     2,
 		AccountID:    3,

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,7 +16,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ttlcache"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/lib/pq"
 
 	entsql "entgo.io/ent/dialect/sql"
@@ -34,20 +34,20 @@ type groupRepository struct {
 	// liteCache 缓存 GetByIDLite 结果（30s TTL）。网关热路径(调度 RequirePrivacySet 检查)
 	// 每请求读取同一 group，短 TTL 进程内缓存避免每请求 4 条 SQL(1 主查 + 3 个 AccountCount)。
 	// 变更时在 Update/Delete/绑定账号等写路径主动失效；30s 容忍度对低频管理操作可接受。
-	liteCache *ttlcache.Cache[*service.Group]
+	liteCache *ttlcache.Cache[*domain.Group]
 }
 
 const groupLiteCacheTTL = 30 * time.Second
 
-func NewGroupRepository(client *dbent.Client, sqlDB *sql.DB) service.GroupRepository {
+func NewGroupRepository(client *dbent.Client, sqlDB *sql.DB) ports.GroupRepository {
 	return newGroupRepositoryWithSQL(client, sqlDB)
 }
 
 func newGroupRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor) *groupRepository {
-	return &groupRepository{client: client, sql: sqlq, liteCache: ttlcache.New[*service.Group](groupLiteCacheTTL)}
+	return &groupRepository{client: client, sql: sqlq, liteCache: ttlcache.New[*domain.Group](groupLiteCacheTTL)}
 }
 
-func (r *groupRepository) Create(ctx context.Context, groupIn *service.Group) error {
+func (r *groupRepository) Create(ctx context.Context, groupIn *domain.Group) error {
 	builder := r.client.Group.Create().
 		SetName(groupIn.Name).
 		SetDescription(groupIn.Description).
@@ -112,7 +112,7 @@ func (r *groupRepository) Create(ctx context.Context, groupIn *service.Group) er
 	return translatePersistenceError(err, nil, domain.ErrGroupExists)
 }
 
-func (r *groupRepository) GetByID(ctx context.Context, id int64) (*service.Group, error) {
+func (r *groupRepository) GetByID(ctx context.Context, id int64) (*domain.Group, error) {
 	out, err := r.GetByIDLite(ctx, id)
 	if err != nil {
 		return nil, err
@@ -127,13 +127,13 @@ func (r *groupRepository) GetByID(ctx context.Context, id int64) (*service.Group
 	return out, nil
 }
 
-func (r *groupRepository) GetByIDLite(ctx context.Context, id int64) (*service.Group, error) {
+func (r *groupRepository) GetByIDLite(ctx context.Context, id int64) (*domain.Group, error) {
 	// AccountCount is intentionally not loaded here; use GetByID when needed.
 	if r.liteCache != nil {
 		if cached, ok := r.liteCache.Get(cacheKeyForGroupID(id)); ok && cached != nil {
 			return cached, nil
 		}
-		group, err := r.liteCache.Load(ctx, cacheKeyForGroupID(id), func(ctx context.Context) (*service.Group, error) {
+		group, err := r.liteCache.Load(ctx, cacheKeyForGroupID(id), func(ctx context.Context) (*domain.Group, error) {
 			m, err := r.client.Group.Query().
 				Where(group.IDEQ(id)).
 				Only(ctx)
@@ -169,7 +169,7 @@ func (r *groupRepository) invalidateGroupLiteCache(id int64) {
 	r.liteCache.Delete(cacheKeyForGroupID(id))
 }
 
-func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) error {
+func (r *groupRepository) Update(ctx context.Context, groupIn *domain.Group) error {
 	builder := r.client.Group.UpdateOneID(groupIn.ID).
 		SetName(groupIn.Name).
 		SetDescription(groupIn.Description).
@@ -305,11 +305,11 @@ func (r *groupRepository) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (r *groupRepository) List(ctx context.Context, params pagination.PaginationParams) ([]service.Group, *pagination.PaginationResult, error) {
+func (r *groupRepository) List(ctx context.Context, params pagination.PaginationParams) ([]domain.Group, *pagination.PaginationResult, error) {
 	return r.ListWithFilters(ctx, params, "", "", "", nil)
 }
 
-func (r *groupRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, platform, status, search string, isExclusive *bool) ([]service.Group, *pagination.PaginationResult, error) {
+func (r *groupRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, platform, status, search string, isExclusive *bool) ([]domain.Group, *pagination.PaginationResult, error) {
 	q := r.client.Group.Query()
 
 	if platform != "" {
@@ -350,7 +350,7 @@ func (r *groupRepository) ListWithFilters(ctx context.Context, params pagination
 	}
 
 	groupIDs := make([]int64, 0, len(groups))
-	outGroups := make([]service.Group, 0, len(groups))
+	outGroups := make([]domain.Group, 0, len(groups))
 	for i := range groups {
 		g := groupEntityToService(groups[i])
 		outGroups = append(outGroups, *g)
@@ -370,7 +370,7 @@ func (r *groupRepository) ListWithFilters(ctx context.Context, params pagination
 	return outGroups, paginationResultFromTotal(int64(total), params), nil
 }
 
-func (r *groupRepository) listWithAccountCountSort(ctx context.Context, q *dbent.GroupQuery, params pagination.PaginationParams, total int) ([]service.Group, *pagination.PaginationResult, error) {
+func (r *groupRepository) listWithAccountCountSort(ctx context.Context, q *dbent.GroupQuery, params pagination.PaginationParams, total int) ([]domain.Group, *pagination.PaginationResult, error) {
 	// 第一步：只查 ID + sort_order（轻量，不做分页 — 需要全量排序 account_count）。
 	rows, err := q.Clone().
 		Select(group.FieldID, group.FieldSortOrder).
@@ -442,7 +442,7 @@ func (r *groupRepository) listWithAccountCountSort(ctx context.Context, q *dbent
 		return nil, nil, err
 	}
 
-	outGroups := make([]service.Group, len(page))
+	outGroups := make([]domain.Group, len(page))
 	for i := range groups {
 		g := groupEntityToService(groups[i])
 		c := counts[g.ID]
@@ -511,7 +511,7 @@ func groupListOrder(params pagination.PaginationParams) []func(*entsql.Selector)
 	return []func(*entsql.Selector){dbent.Asc(field), dbent.Asc(tieField)}
 }
 
-func (r *groupRepository) ListActive(ctx context.Context) ([]service.Group, error) {
+func (r *groupRepository) ListActive(ctx context.Context) ([]domain.Group, error) {
 	groups, err := r.client.Group.Query().
 		Where(group.StatusEQ(domain.StatusActive)).
 		Order(dbent.Asc(group.FieldSortOrder), dbent.Asc(group.FieldID)).
@@ -521,7 +521,7 @@ func (r *groupRepository) ListActive(ctx context.Context) ([]service.Group, erro
 	}
 
 	groupIDs := make([]int64, 0, len(groups))
-	outGroups := make([]service.Group, 0, len(groups))
+	outGroups := make([]domain.Group, 0, len(groups))
 	for i := range groups {
 		g := groupEntityToService(groups[i])
 		outGroups = append(outGroups, *g)
@@ -584,7 +584,7 @@ func (r *groupRepository) ListActiveIDs(ctx context.Context) ([]int64, error) {
 	return ids, nil
 }
 
-func (r *groupRepository) ListActiveByPlatform(ctx context.Context, platform string) ([]service.Group, error) {
+func (r *groupRepository) ListActiveByPlatform(ctx context.Context, platform string) ([]domain.Group, error) {
 	groups, err := r.client.Group.Query().
 		Where(group.StatusEQ(domain.StatusActive), group.PlatformEQ(platform)).
 		Order(dbent.Asc(group.FieldSortOrder), dbent.Asc(group.FieldID)).
@@ -594,7 +594,7 @@ func (r *groupRepository) ListActiveByPlatform(ctx context.Context, platform str
 	}
 
 	groupIDs := make([]int64, 0, len(groups))
-	outGroups := make([]service.Group, 0, len(groups))
+	outGroups := make([]domain.Group, 0, len(groups))
 	for i := range groups {
 		g := groupEntityToService(groups[i])
 		outGroups = append(outGroups, *g)

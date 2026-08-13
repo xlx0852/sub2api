@@ -4,10 +4,10 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ttlcache"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +16,7 @@ import (
 func TestGroupRepo_GetByIDLite_CacheHitSkipsDB(t *testing.T) {
 	repo := newGroupRepositoryWithSQL(nil, nil) // client 为 nil: 任何 DB 访问都会 panic
 	groupID := int64(9901)
-	cached := &service.Group{ID: groupID, Name: "cached-group", RequirePrivacySet: true}
+	cached := &domain.Group{ID: groupID, Name: "cached-group", RequirePrivacySet: true}
 	repo.liteCache = newTestGroupLiteCacheWith(groupID, cached)
 
 	got, err := repo.GetByIDLite(context.Background(), groupID)
@@ -31,7 +31,7 @@ func TestGroupRepo_GetByIDLite_CacheHitSkipsDB(t *testing.T) {
 func TestGroupRepo_GetByIDLite_Invalidate(t *testing.T) {
 	repo := newGroupRepositoryWithSQL(nil, nil)
 	groupID := int64(9902)
-	cached := &service.Group{ID: groupID, Name: "before"}
+	cached := &domain.Group{ID: groupID, Name: "before"}
 	repo.liteCache = newTestGroupLiteCacheWith(groupID, cached)
 
 	_, ok := repo.liteCache.Get(cacheKeyForGroupID(groupID))
@@ -43,9 +43,9 @@ func TestGroupRepo_GetByIDLite_Invalidate(t *testing.T) {
 }
 
 // newTestGroupLiteCacheWith 构造一个已预置指定 group 的 liteCache(经 Load 回填, 不走 DB)。
-func newTestGroupLiteCacheWith(groupID int64, g *service.Group) *ttlcache.Cache[*service.Group] {
-	c := ttlcache.New[*service.Group](groupLiteCacheTTL)
-	_, _ = c.Load(context.Background(), cacheKeyForGroupID(groupID), func(ctx context.Context) (*service.Group, error) {
+func newTestGroupLiteCacheWith(groupID int64, g *domain.Group) *ttlcache.Cache[*domain.Group] {
+	c := ttlcache.New[*domain.Group](groupLiteCacheTTL)
+	_, _ = c.Load(context.Background(), cacheKeyForGroupID(groupID), func(ctx context.Context) (*domain.Group, error) {
 		return g, nil
 	})
 	return c

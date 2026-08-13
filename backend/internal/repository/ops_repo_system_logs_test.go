@@ -1,11 +1,10 @@
 package repository
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 func TestBuildOpsSystemLogsWhere_WithClientRequestIDAndUserID(t *testing.T) {
@@ -15,7 +14,7 @@ func TestBuildOpsSystemLogsWhere_WithClientRequestIDAndUserID(t *testing.T) {
 	apiKeyID := int64(56)
 	accountID := int64(34)
 
-	filter := &service.OpsSystemLogFilter{
+	filter := &domain.OpsSystemLogFilter{
 		StartTime:       &start,
 		EndTime:         &end,
 		Level:           "warn",
@@ -52,7 +51,7 @@ func TestBuildOpsSystemLogsWhere_WithClientRequestIDAndUserID(t *testing.T) {
 }
 
 func TestBuildOpsSystemLogsCleanupWhere_RequireConstraint(t *testing.T) {
-	where, args, hasConstraint := buildOpsSystemLogsCleanupWhere(&service.OpsSystemLogCleanupFilter{})
+	where, args, hasConstraint := buildOpsSystemLogsCleanupWhere(&domain.OpsSystemLogCleanupFilter{})
 	if hasConstraint {
 		t.Fatalf("expected hasConstraint=false")
 	}
@@ -67,7 +66,7 @@ func TestBuildOpsSystemLogsCleanupWhere_RequireConstraint(t *testing.T) {
 func TestBuildOpsSystemLogsCleanupWhere_WithClientRequestIDAndUserID(t *testing.T) {
 	userID := int64(9)
 	apiKeyID := int64(10)
-	filter := &service.OpsSystemLogCleanupFilter{
+	filter := &domain.OpsSystemLogCleanupFilter{
 		ClientRequestID: "creq-9",
 		UserID:          &userID,
 		APIKeyID:        &apiKeyID,

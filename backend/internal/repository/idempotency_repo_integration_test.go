@@ -6,10 +6,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,11 +26,11 @@ func TestIdempotencyRepo_CreateProcessing_CompeteSameKey(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now().UTC()
-	record := &service.IdempotencyRecord{
+	record := &domain.IdempotencyRecord{
 		Scope:              uniqueTestValue(t, "idem-scope-create"),
 		IdempotencyKeyHash: hashedTestValue(t, "idem-hash"),
 		RequestFingerprint: hashedTestValue(t, "idem-fp"),
-		Status:             service.IdempotencyStatusProcessing,
+		Status:             domain.IdempotencyStatusProcessing,
 		LockedUntil:        ptrTime(now.Add(30 * time.Second)),
 		ExpiresAt:          now.Add(24 * time.Hour),
 	}
@@ -39,11 +39,11 @@ func TestIdempotencyRepo_CreateProcessing_CompeteSameKey(t *testing.T) {
 	require.True(t, owner)
 	require.NotZero(t, record.ID)
 
-	duplicate := &service.IdempotencyRecord{
+	duplicate := &domain.IdempotencyRecord{
 		Scope:              record.Scope,
 		IdempotencyKeyHash: record.IdempotencyKeyHash,
 		RequestFingerprint: hashedTestValue(t, "idem-fp-other"),
-		Status:             service.IdempotencyStatusProcessing,
+		Status:             domain.IdempotencyStatusProcessing,
 		LockedUntil:        ptrTime(now.Add(30 * time.Second)),
 		ExpiresAt:          now.Add(24 * time.Hour),
 	}
@@ -58,11 +58,11 @@ func TestIdempotencyRepo_TryReclaim_StatusAndLockWindow(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now().UTC()
-	record := &service.IdempotencyRecord{
+	record := &domain.IdempotencyRecord{
 		Scope:              uniqueTestValue(t, "idem-scope-reclaim"),
 		IdempotencyKeyHash: hashedTestValue(t, "idem-hash-reclaim"),
 		RequestFingerprint: hashedTestValue(t, "idem-fp-reclaim"),
-		Status:             service.IdempotencyStatusProcessing,
+		Status:             domain.IdempotencyStatusProcessing,
 		LockedUntil:        ptrTime(now.Add(10 * time.Second)),
 		ExpiresAt:          now.Add(24 * time.Hour),
 	}
@@ -82,7 +82,7 @@ func TestIdempotencyRepo_TryReclaim_StatusAndLockWindow(t *testing.T) {
 	reclaimed, err := repo.TryReclaim(
 		ctx,
 		record.ID,
-		service.IdempotencyStatusFailedRetryable,
+		domain.IdempotencyStatusFailedRetryable,
 		now,
 		newLockedUntil,
 		now.Add(24*time.Hour),
@@ -93,7 +93,7 @@ func TestIdempotencyRepo_TryReclaim_StatusAndLockWindow(t *testing.T) {
 	got, err := repo.GetByScopeAndKeyHash(ctx, record.Scope, record.IdempotencyKeyHash)
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	require.Equal(t, service.IdempotencyStatusProcessing, got.Status)
+	require.Equal(t, domain.IdempotencyStatusProcessing, got.Status)
 	require.NotNil(t, got.LockedUntil)
 	require.True(t, got.LockedUntil.After(now))
 
@@ -108,7 +108,7 @@ func TestIdempotencyRepo_TryReclaim_StatusAndLockWindow(t *testing.T) {
 	reclaimed, err = repo.TryReclaim(
 		ctx,
 		record.ID,
-		service.IdempotencyStatusFailedRetryable,
+		domain.IdempotencyStatusFailedRetryable,
 		now,
 		now.Add(40*time.Second),
 		now.Add(24*time.Hour),
@@ -123,11 +123,11 @@ func TestIdempotencyRepo_StatusTransition_ToSucceeded(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now().UTC()
-	record := &service.IdempotencyRecord{
+	record := &domain.IdempotencyRecord{
 		Scope:              uniqueTestValue(t, "idem-scope-success"),
 		IdempotencyKeyHash: hashedTestValue(t, "idem-hash-success"),
 		RequestFingerprint: hashedTestValue(t, "idem-fp-success"),
-		Status:             service.IdempotencyStatusProcessing,
+		Status:             domain.IdempotencyStatusProcessing,
 		LockedUntil:        ptrTime(now.Add(10 * time.Second)),
 		ExpiresAt:          now.Add(24 * time.Hour),
 	}
@@ -140,7 +140,7 @@ func TestIdempotencyRepo_StatusTransition_ToSucceeded(t *testing.T) {
 	got, err := repo.GetByScopeAndKeyHash(ctx, record.Scope, record.IdempotencyKeyHash)
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	require.Equal(t, service.IdempotencyStatusSucceeded, got.Status)
+	require.Equal(t, domain.IdempotencyStatusSucceeded, got.Status)
 	require.NotNil(t, got.ResponseStatus)
 	require.Equal(t, 200, *got.ResponseStatus)
 	require.NotNil(t, got.ResponseBody)

@@ -2,12 +2,12 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"regexp"
 	"testing"
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 func TestProfitRepositoryListSubscriptionCyclesEnrichesBanAndRefund(t *testing.T) {
@@ -61,7 +61,7 @@ func TestProfitRepositoryGetSubscriptionCycleRevenueBatchUsesOneQuery(t *testing
 		WillReturnRows(sqlmock.NewRows([]string{"cycle_id", "revenue"}).AddRow(int64(8), 300.0))
 
 	repo := &profitRepository{db: db}
-	revenues, err := repo.GetSubscriptionCycleRevenueBatch(context.Background(), []service.SubscriptionCycleUsageRange{{
+	revenues, err := repo.GetSubscriptionCycleRevenueBatch(context.Background(), []domain.SubscriptionCycleUsageRange{{
 		CycleID: 8, AccountID: 91, Start: start, End: start.AddDate(0, 0, 10),
 	}})
 	if err != nil {
@@ -90,7 +90,7 @@ func TestProfitRepositoryDeleteSettledCycleReturnsConflict(t *testing.T) {
 
 	repo := &profitRepository{db: db}
 	err = repo.DeleteSubscriptionCycle(context.Background(), 8)
-	if err != service.ErrSubscriptionCycleSettled {
+	if err != domain.ErrSubscriptionCycleSettled {
 		t.Fatalf("error = %v, want settled conflict", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

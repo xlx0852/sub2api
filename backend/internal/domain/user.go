@@ -8,6 +8,7 @@ import (
 )
 
 var ErrUserNotFound = infraerrors.NotFound("USER_NOT_FOUND", "user not found")
+var ErrEmailExists = infraerrors.Conflict("EMAIL_EXISTS", "email already exists")
 
 var ErrIdentityProviderInvalid = infraerrors.BadRequest("IDENTITY_PROVIDER_INVALID", "identity provider is invalid")
 

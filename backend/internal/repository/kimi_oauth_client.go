@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"net/http"
 	"net/url"
 	"strings"
@@ -9,14 +10,13 @@ import (
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/kimi"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
 	"github.com/imroc/req/v3"
 )
 
 type kimiOAuthClient struct{}
 
-func NewKimiOAuthClient() service.KimiOAuthClient { return &kimiOAuthClient{} }
+func NewKimiOAuthClient() ports.KimiOAuthClient { return &kimiOAuthClient{} }
 
 func (c *kimiOAuthClient) StartDeviceFlow(ctx context.Context, proxyURL string, headers kimi.DeviceHeaders) (*kimi.DeviceCodeResponse, error) {
 	client, err := createKimiReqClient(proxyURL)

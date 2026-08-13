@@ -1,11 +1,10 @@
 package repository
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 var (
@@ -14,7 +13,7 @@ var (
 )
 
 func TestBuildOpsErrorLogsWhere_QueryUsesQualifiedColumns(t *testing.T) {
-	filter := &service.OpsErrorLogFilter{
+	filter := &domain.OpsErrorLogFilter{
 		Query: "ACCESS_DENIED",
 	}
 
@@ -37,7 +36,7 @@ func TestBuildOpsErrorLogsWhere_QueryUsesQualifiedColumns(t *testing.T) {
 }
 
 func TestBuildOpsErrorLogsWhere_UserQueryUsesExistsSubquery(t *testing.T) {
-	filter := &service.OpsErrorLogFilter{
+	filter := &domain.OpsErrorLogFilter{
 		UserQuery: "admin@",
 	}
 
@@ -54,8 +53,8 @@ func TestBuildOpsErrorLogsWhere_UserQueryUsesExistsSubquery(t *testing.T) {
 }
 
 func TestBuildOpsErrorLogsWhere_RequestTypeUsesQualifiedColumns(t *testing.T) {
-	requestType := int16(service.RequestTypeStream)
-	filter := &service.OpsErrorLogFilter{
+	requestType := int16(domain.RequestTypeStream)
+	filter := &domain.OpsErrorLogFilter{
 		RequestType: &requestType,
 	}
 

@@ -14,6 +14,7 @@ import (
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/kimi"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/google/uuid"
 )
 
@@ -26,11 +27,7 @@ const (
 	kimiDevicePollLeaseTTL = 90 * time.Second
 )
 
-type KimiOAuthClient interface {
-	StartDeviceFlow(ctx context.Context, proxyURL string, headers kimi.DeviceHeaders) (*kimi.DeviceCodeResponse, error)
-	PollDeviceToken(ctx context.Context, deviceCode, proxyURL string, headers kimi.DeviceHeaders) (*kimi.TokenResponse, error)
-	RefreshToken(ctx context.Context, refreshToken, proxyURL string, headers kimi.DeviceHeaders) (*kimi.TokenResponse, error)
-}
+type KimiOAuthClient = ports.KimiOAuthClient
 
 type KimiDeviceAuthorizationResult struct {
 	SessionID               string `json:"session_id"`

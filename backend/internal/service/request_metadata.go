@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 )
 
@@ -78,12 +79,13 @@ func WithIsMaxTokensOneHaikuRequest(ctx context.Context, value bool, bridgeOldKe
 }
 
 func WithThinkingEnabled(ctx context.Context, value bool, bridgeOldKeys bool) context.Context {
-	return updateRequestMetadata(ctx, bridgeOldKeys, func(md *RequestMetadata) {
+	ctx = updateRequestMetadata(ctx, bridgeOldKeys, func(md *RequestMetadata) {
 		v := value
 		md.ThinkingEnabled = &v
 	}, func(base context.Context) context.Context {
 		return context.WithValue(base, ctxkey.ThinkingEnabled, value)
 	})
+	return domain.WithThinkingEnabledValue(ctx, value)
 }
 
 func WithPrefetchedStickySession(ctx context.Context, accountID, groupID int64, bridgeOldKeys bool) context.Context {

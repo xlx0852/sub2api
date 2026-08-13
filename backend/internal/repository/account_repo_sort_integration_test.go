@@ -3,13 +3,13 @@
 package repository
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 func (s *AccountRepoSuite) TestList_DefaultSortByNameAsc() {
-	mustCreateAccount(s.T(), s.client, &service.Account{Name: "z-account"})
-	mustCreateAccount(s.T(), s.client, &service.Account{Name: "a-account"})
+	mustCreateAccount(s.T(), s.client, &domain.Account{Name: "z-account"})
+	mustCreateAccount(s.T(), s.client, &domain.Account{Name: "a-account"})
 
 	accounts, _, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10})
 	s.Require().NoError(err)
@@ -19,8 +19,8 @@ func (s *AccountRepoSuite) TestList_DefaultSortByNameAsc() {
 }
 
 func (s *AccountRepoSuite) TestListWithFilters_SortByPriorityDesc() {
-	mustCreateAccount(s.T(), s.client, &service.Account{Name: "low-priority", Priority: 10})
-	mustCreateAccount(s.T(), s.client, &service.Account{Name: "high-priority", Priority: 90})
+	mustCreateAccount(s.T(), s.client, &domain.Account{Name: "low-priority", Priority: 10})
+	mustCreateAccount(s.T(), s.client, &domain.Account{Name: "high-priority", Priority: 90})
 
 	accounts, _, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{
 		Page:      1,

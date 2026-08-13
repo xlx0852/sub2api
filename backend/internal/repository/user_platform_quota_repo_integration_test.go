@@ -6,18 +6,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
 // mustCreateUserForQuota 在指定 client 上创建测试用户（满足 FK 约束）。
 func mustCreateUserForQuota(t *testing.T, client *dbent.Client) int64 {
 	t.Helper()
-	u := mustCreateUser(t, client, &service.User{
+	u := mustCreateUser(t, client, &domain.User{
 		Email: fmt.Sprintf("quota-test-%d@example.com", time.Now().UnixNano()),
 	})
 	return u.ID

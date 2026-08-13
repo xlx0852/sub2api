@@ -5,10 +5,11 @@ package repository
 import (
 	"context"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -21,18 +22,18 @@ type BillingCacheSuite struct {
 func (s *BillingCacheSuite) TestUserBalance() {
 	tests := []struct {
 		name string
-		fn   func(ctx context.Context, rdb *redis.Client, cache service.BillingCache)
+		fn   func(ctx context.Context, rdb *redis.Client, cache ports.BillingCache)
 	}{
 		{
 			name: "missing_key_returns_redis_nil",
-			fn: func(ctx context.Context, rdb *redis.Client, cache service.BillingCache) {
+			fn: func(ctx context.Context, rdb *redis.Client, cache ports.BillingCache) {
 				_, err := cache.GetUserBalance(ctx, 1)
 				require.ErrorIs(s.T(), err, redis.Nil, "expected redis.Nil for missing balance key")
 			},
 		},
 		{
 			name: "deduct_on_nonexistent_is_noop",
-			fn: func(ctx context.Context, rdb *redis.Client, cache service.BillingCache) {
+			fn: func(ctx context.Context, rdb *redis.Client, cache ports.BillingCache) {
 				userID := int64(1)
 				balanceKey := fmt.Sprintf("%s%d", billingBalanceKeyPrefix, userID)
 
@@ -44,7 +45,7 @@ func (s *BillingCacheSuite) TestUserBalance() {
 		},
 		{
 			name: "set_and_get_with_ttl",
-			fn: func(ctx context.Context, rdb *redis.Client, cache service.BillingCache) {
+			fn: func(ctx context.Context, rdb *redis.Client, cache ports.BillingCache) {
 				userID := int64(2)
 				balanceKey := fmt.Sprintf("%s%d", billingBalanceKeyPrefix, userID)
 
@@ -61,7 +62,7 @@ func (s *BillingCacheSuite) TestUserBalance() {
 		},
 		{
 			name: "deduct_reduces_balance",
-			fn: func(ctx context.Context, rdb *redis.Client, cache service.BillingCache) {
+			fn: func(ctx context.Context, rdb *redis.Client, cache ports.BillingCache) {
 				userID := int64(3)
 
 				require.NoError(s.T(), cache.SetUserBalance(ctx, userID, 10.5), "SetUserBalance")
@@ -74,7 +75,7 @@ func (s *BillingCacheSuite) TestUserBalance() {
 		},
 		{
 			name: "invalidate_removes_key",
-			fn: func(ctx context.Context, rdb *redis.Client, cache service.BillingCache) {
+			fn: func(ctx context.Context, rdb *redis.Client, cache ports.BillingCache) {
 				userID := int64(100)
 				balanceKey := fmt.Sprintf("%s%d", billingBalanceKeyPrefix, userID)
 
@@ -96,7 +97,7 @@ func (s *BillingCacheSuite) TestUserBalance() {
 		},
 		{
 			name: "deduct_refreshes_ttl",
-			fn: func(ctx context.Context, rdb *redis.Client, cache service.BillingCache) {
+			fn: func(ctx context.Context, rdb *redis.Client, cache ports.BillingCache) {
 				userID := int64(103)
 				balanceKey := fmt.Sprintf("%s%d", billingBalanceKeyPrefix, userID)
 
@@ -133,11 +134,11 @@ func (s *BillingCacheSuite) TestUserBalance() {
 func (s *BillingCacheSuite) TestSubscriptionCache() {
 	tests := []struct {
 		name string
-		fn   func(ctx context.Context, rdb *redis.Client, cache service.BillingCache)
+		fn   func(ctx context.Context, rdb *redis.Client, cache ports.BillingCache)
 	}{
 		{
 			name: "missing_key_returns_redis_nil",
-			fn: func(ctx context.Context, rdb *redis.Client, cache service.BillingCache) {
+			fn: func(ctx context.Context, rdb *redis.Client, cache ports.BillingCache) {
 				userID := int64(10)
 				groupID := int64(20)
 
@@ -147,7 +148,7 @@ func (s *BillingCacheSuite) TestSubscriptionCache() {
 		},
 		{
 			name: "update_usage_on_nonexistent_is_noop",
-			fn: func(ctx context.Context, rdb *redis.Client, cache service.BillingCache) {
+			fn: func(ctx context.Context, rdb *redis.Client, cache ports.BillingCache) {
 				userID := int64(11)
 				groupID := int64(21)
 				subKey := fmt.Sprintf("%s%d:%d", billingSubKeyPrefix, userID, groupID)
@@ -161,12 +162,12 @@ func (s *BillingCacheSuite) TestSubscriptionCache() {
 		},
 		{
 			name: "set_and_get_with_ttl",
-			fn: func(ctx context.Context, rdb *redis.Client, cache service.BillingCache) {
+			fn: func(ctx context.Context, rdb *redis.Client, cache ports.BillingCache) {
 				userID := int64(12)
 				groupID := int64(22)
 				subKey := fmt.Sprintf("%s%d:%d", billingSubKeyPrefix, userID, groupID)
 
-				data := &service.SubscriptionCacheData{
+				data := &domain.SubscriptionCacheData{
 					Status:       "active",
 					ExpiresAt:    time.Now().Add(1 * time.Hour),
 					DailyUsage:   1.0,
@@ -189,11 +190,11 @@ func (s *BillingCacheSuite) TestSubscriptionCache() {
 		},
 		{
 			name: "update_usage_increments_all_fields",
-			fn: func(ctx context.Context, rdb *redis.Client, cache service.BillingCache) {
+			fn: func(ctx context.Context, rdb *redis.Client, cache ports.BillingCache) {
 				userID := int64(13)
 				groupID := int64(23)
 
-				data := &service.SubscriptionCacheData{
+				data := &domain.SubscriptionCacheData{
 					Status:       "active",
 					ExpiresAt:    time.Now().Add(1 * time.Hour),
 					DailyUsage:   1.0,
@@ -214,12 +215,12 @@ func (s *BillingCacheSuite) TestSubscriptionCache() {
 		},
 		{
 			name: "invalidate_removes_key",
-			fn: func(ctx context.Context, rdb *redis.Client, cache service.BillingCache) {
+			fn: func(ctx context.Context, rdb *redis.Client, cache ports.BillingCache) {
 				userID := int64(101)
 				groupID := int64(10)
 				subKey := fmt.Sprintf("%s%d:%d", billingSubKeyPrefix, userID, groupID)
 
-				data := &service.SubscriptionCacheData{
+				data := &domain.SubscriptionCacheData{
 					Status:       "active",
 					ExpiresAt:    time.Now().Add(1 * time.Hour),
 					DailyUsage:   1.0,
@@ -245,7 +246,7 @@ func (s *BillingCacheSuite) TestSubscriptionCache() {
 		},
 		{
 			name: "missing_status_returns_parsing_error",
-			fn: func(ctx context.Context, rdb *redis.Client, cache service.BillingCache) {
+			fn: func(ctx context.Context, rdb *redis.Client, cache ports.BillingCache) {
 				userID := int64(102)
 				groupID := int64(11)
 				subKey := fmt.Sprintf("%s%d:%d", billingSubKeyPrefix, userID, groupID)
@@ -283,12 +284,12 @@ func (s *BillingCacheSuite) TestSubscriptionCache() {
 func (s *BillingCacheSuite) TestDeductUserBalance_ErrorPropagation() {
 	tests := []struct {
 		name      string
-		fn        func(ctx context.Context, cache service.BillingCache)
+		fn        func(ctx context.Context, cache ports.BillingCache)
 		expectErr bool
 	}{
 		{
 			name: "key_not_exists_returns_nil",
-			fn: func(ctx context.Context, cache service.BillingCache) {
+			fn: func(ctx context.Context, cache ports.BillingCache) {
 				// key 不存在时，Lua 脚本返回 0（redis.Nil），应返回 nil 而非错误
 				err := cache.DeductUserBalance(ctx, 99999, 1.0)
 				require.NoError(s.T(), err, "DeductUserBalance on non-existent key should return nil")
@@ -296,7 +297,7 @@ func (s *BillingCacheSuite) TestDeductUserBalance_ErrorPropagation() {
 		},
 		{
 			name: "existing_key_deducts_successfully",
-			fn: func(ctx context.Context, cache service.BillingCache) {
+			fn: func(ctx context.Context, cache ports.BillingCache) {
 				require.NoError(s.T(), cache.SetUserBalance(ctx, 200, 50.0))
 				err := cache.DeductUserBalance(ctx, 200, 10.0)
 				require.NoError(s.T(), err, "DeductUserBalance should succeed")
@@ -308,7 +309,7 @@ func (s *BillingCacheSuite) TestDeductUserBalance_ErrorPropagation() {
 		},
 		{
 			name: "cancelled_context_propagates_error",
-			fn: func(ctx context.Context, cache service.BillingCache) {
+			fn: func(ctx context.Context, cache ports.BillingCache) {
 				require.NoError(s.T(), cache.SetUserBalance(ctx, 201, 50.0))
 
 				cancelCtx, cancel := context.WithCancel(ctx)
@@ -347,7 +348,7 @@ func (s *BillingCacheSuite) TestUpdateSubscriptionUsage_ErrorPropagation() {
 		cache := NewBillingCache(rdb)
 		ctx := context.Background()
 
-		data := &service.SubscriptionCacheData{
+		data := &domain.SubscriptionCacheData{
 			Status:    "active",
 			ExpiresAt: time.Now().Add(1 * time.Hour),
 			Version:   1,

@@ -3,18 +3,18 @@
 package repository
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 func (s *UserRepoSuite) mustInsertUsageLog(userID int64, createdAt time.Time) {
 	s.T().Helper()
 
-	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "usage-log-account"})
-	apiKey := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: userID})
+	account := mustCreateAccount(s.T(), s.client, &domain.Account{Name: "usage-log-account"})
+	apiKey := mustCreateApiKey(s.T(), s.client, &domain.APIKey{UserID: userID})
 
 	_, err := integrationDB.ExecContext(
 		s.ctx,
@@ -29,15 +29,15 @@ func (s *UserRepoSuite) mustInsertUsageLog(userID int64, createdAt time.Time) {
 }
 
 func (s *UserRepoSuite) TestListWithFilters_SortByEmailAsc() {
-	s.mustCreateUser(&service.User{Email: "z-last@example.com", Username: "z-user"})
-	s.mustCreateUser(&service.User{Email: "a-first@example.com", Username: "a-user"})
+	s.mustCreateUser(&domain.User{Email: "z-last@example.com", Username: "z-user"})
+	s.mustCreateUser(&domain.User{Email: "a-first@example.com", Username: "a-user"})
 
 	users, _, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{
 		Page:      1,
 		PageSize:  10,
 		SortBy:    "email",
 		SortOrder: "asc",
-	}, service.UserListFilters{})
+	}, domain.UserListFilters{})
 	s.Require().NoError(err)
 	s.Require().Len(users, 2)
 	s.Require().Equal("a-first@example.com", users[0].Email)
@@ -45,8 +45,8 @@ func (s *UserRepoSuite) TestListWithFilters_SortByEmailAsc() {
 }
 
 func (s *UserRepoSuite) TestList_DefaultSortByNewestFirst() {
-	first := s.mustCreateUser(&service.User{Email: "first@example.com"})
-	second := s.mustCreateUser(&service.User{Email: "second@example.com"})
+	first := s.mustCreateUser(&domain.User{Email: "first@example.com"})
+	second := s.mustCreateUser(&domain.User{Email: "second@example.com"})
 
 	users, _, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10})
 	s.Require().NoError(err)
@@ -59,7 +59,7 @@ func (s *UserRepoSuite) TestCreateAndRead_PreservesSignupSourceAndActivityTimest
 	lastLoginAt := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Microsecond)
 	lastActiveAt := time.Now().Add(-30 * time.Minute).UTC().Truncate(time.Microsecond)
 
-	created := s.mustCreateUser(&service.User{
+	created := s.mustCreateUser(&domain.User{
 		Email:        "identity-meta@example.com",
 		SignupSource: "linuxdo",
 		LastLoginAt:  &lastLoginAt,
@@ -76,7 +76,7 @@ func (s *UserRepoSuite) TestCreateAndRead_PreservesSignupSourceAndActivityTimest
 }
 
 func (s *UserRepoSuite) TestUpdate_PersistsSignupSourceAndActivityTimestamps() {
-	created := s.mustCreateUser(&service.User{Email: "identity-update@example.com"})
+	created := s.mustCreateUser(&domain.User{Email: "identity-update@example.com"})
 	lastLoginAt := time.Now().Add(-90 * time.Minute).UTC().Truncate(time.Microsecond)
 	lastActiveAt := time.Now().Add(-15 * time.Minute).UTC().Truncate(time.Microsecond)
 
@@ -99,16 +99,16 @@ func (s *UserRepoSuite) TestListWithFilters_SortByLastActiveAtAsc() {
 	earlier := time.Now().Add(-3 * time.Hour).UTC().Truncate(time.Microsecond)
 	later := time.Now().Add(-45 * time.Minute).UTC().Truncate(time.Microsecond)
 
-	s.mustCreateUser(&service.User{Email: "nil-active@example.com"})
-	s.mustCreateUser(&service.User{Email: "later-active@example.com", LastActiveAt: &later})
-	s.mustCreateUser(&service.User{Email: "earlier-active@example.com", LastActiveAt: &earlier})
+	s.mustCreateUser(&domain.User{Email: "nil-active@example.com"})
+	s.mustCreateUser(&domain.User{Email: "later-active@example.com", LastActiveAt: &later})
+	s.mustCreateUser(&domain.User{Email: "earlier-active@example.com", LastActiveAt: &earlier})
 
 	users, _, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{
 		Page:      1,
 		PageSize:  10,
 		SortBy:    "last_active_at",
 		SortOrder: "asc",
-	}, service.UserListFilters{})
+	}, domain.UserListFilters{})
 	s.Require().NoError(err)
 	s.Require().Len(users, 3)
 	s.Require().Equal("earlier-active@example.com", users[0].Email)
@@ -120,8 +120,8 @@ func (s *UserRepoSuite) TestGetLatestUsedAtByUserIDs_UsesUsageLogs() {
 	older := time.Now().Add(-4 * time.Hour).UTC().Truncate(time.Second)
 	newer := time.Now().Add(-90 * time.Minute).UTC().Truncate(time.Second)
 
-	userWithUsage := s.mustCreateUser(&service.User{Email: "usage-source@example.com"})
-	userWithoutUsage := s.mustCreateUser(&service.User{Email: "usage-missing@example.com"})
+	userWithUsage := s.mustCreateUser(&domain.User{Email: "usage-source@example.com"})
+	userWithoutUsage := s.mustCreateUser(&domain.User{Email: "usage-missing@example.com"})
 	s.mustInsertUsageLog(userWithUsage.ID, older)
 	s.mustInsertUsageLog(userWithUsage.ID, newer)
 
@@ -138,12 +138,12 @@ func (s *UserRepoSuite) TestListWithFilters_SortByLastUsedAtDesc_UsesUsageLogsNo
 	lastUsedNewer := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
 	lastActiveVeryRecent := time.Now().Add(-10 * time.Minute).UTC().Truncate(time.Second)
 
-	nilUsage := s.mustCreateUser(&service.User{Email: "nil-last-used@example.com"})
-	wrongSource := s.mustCreateUser(&service.User{
+	nilUsage := s.mustCreateUser(&domain.User{Email: "nil-last-used@example.com"})
+	wrongSource := s.mustCreateUser(&domain.User{
 		Email:        "active-not-usage@example.com",
 		LastActiveAt: &lastActiveVeryRecent,
 	})
-	rightSource := s.mustCreateUser(&service.User{Email: "usage-wins@example.com"})
+	rightSource := s.mustCreateUser(&domain.User{Email: "usage-wins@example.com"})
 
 	s.mustInsertUsageLog(wrongSource.ID, lastUsedOlder)
 	s.mustInsertUsageLog(rightSource.ID, lastUsedNewer)
@@ -153,7 +153,7 @@ func (s *UserRepoSuite) TestListWithFilters_SortByLastUsedAtDesc_UsesUsageLogsNo
 		PageSize:  10,
 		SortBy:    "last_used_at",
 		SortOrder: "desc",
-	}, service.UserListFilters{})
+	}, domain.UserListFilters{})
 	s.Require().NoError(err)
 	s.Require().Len(users, 3)
 	s.Require().Equal(rightSource.ID, users[0].ID)

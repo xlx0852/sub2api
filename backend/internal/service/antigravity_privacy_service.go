@@ -9,10 +9,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 )
 
-const (
-	AntigravityPrivacySet    = "privacy_set"
-	AntigravityPrivacyFailed = "privacy_set_failed"
-)
 
 // setAntigravityPrivacy 调用 Antigravity API 设置隐私并验证结果。
 // 流程：

@@ -5,11 +5,11 @@ package repository
 import (
 	"context"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,9 +33,9 @@ func TestUserRepository_DeleteUser_AtomicWithAPIKeys(t *testing.T) {
 	apiKeyRepo := NewAPIKeyRepository(client, integrationDB)
 
 	// 已提交的初始数据：1 个用户 + 2 个 active API Key。
-	user := mustCreateUser(t, client, &service.User{})
-	key1 := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: fmt.Sprintf("sk-atomic-a-%d", user.ID)})
-	key2 := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: fmt.Sprintf("sk-atomic-b-%d", user.ID)})
+	user := mustCreateUser(t, client, &domain.User{})
+	key1 := mustCreateApiKey(t, client, &domain.APIKey{UserID: user.ID, Key: fmt.Sprintf("sk-atomic-a-%d", user.ID)})
+	key2 := mustCreateApiKey(t, client, &domain.APIKey{UserID: user.ID, Key: fmt.Sprintf("sk-atomic-b-%d", user.ID)})
 
 	t.Cleanup(func() {
 		// testEntClient 的写入不会自动回滚，best-effort 清理避免污染共享库。
@@ -62,7 +62,7 @@ func TestUserRepository_DeleteUser_AtomicWithAPIKeys(t *testing.T) {
 	require.NoError(t, err, "回滚后用户必须仍然存在（未被独立事务提前删除）")
 	require.Equal(t, user.ID, gotUser.ID)
 
-	keys, _, err := apiKeyRepo.ListByUserID(ctx, user.ID, listParams, service.APIKeyListFilters{})
+	keys, _, err := apiKeyRepo.ListByUserID(ctx, user.ID, listParams, domain.APIKeyListFilters{})
 	require.NoError(t, err, "ListByUserID")
 	require.Len(t, keys, 2, "回滚后 2 个 API Key 必须仍为 active")
 
@@ -85,7 +85,7 @@ func TestUserRepository_DeleteUser_AtomicWithAPIKeys(t *testing.T) {
 	_, err = userRepo.GetByID(ctx, user.ID)
 	require.Error(t, err, "提交后用户应被软删除，GetByID 应返回未找到")
 
-	keysAfter, _, err := apiKeyRepo.ListByUserID(ctx, user.ID, listParams, service.APIKeyListFilters{})
+	keysAfter, _, err := apiKeyRepo.ListByUserID(ctx, user.ID, listParams, domain.APIKeyListFilters{})
 	require.NoError(t, err, "ListByUserID")
 	require.Empty(t, keysAfter, "提交后 API Key 应全部被软删除")
 

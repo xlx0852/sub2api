@@ -343,7 +343,17 @@ func (s *TokenRefreshService) refreshWithRetry(ctx context.Context, account *Acc
 		if attempt < s.cfg.MaxRetries {
 			// 指数退避：2^(attempt-1) * baseSeconds
 			backoff := time.Duration(s.cfg.RetryBackoffSeconds) * time.Second * time.Duration(1<<(attempt-1))
-			time.Sleep(backoff)
+			// 可中断退避：停机或 context 取消时立即退出，避免 Stop() 在退避窗口内长时间阻塞。
+			timer := time.NewTimer(backoff)
+			select {
+			case <-timer.C:
+			case <-s.stopCh:
+				timer.Stop()
+				return fmt.Errorf("token refresh interrupted by shutdown: %w", err)
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			}
 		}
 	}
 

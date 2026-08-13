@@ -7,30 +7,12 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/oauth"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 )
 
-// OpenAIOAuthClient interface for OpenAI OAuth operations
-type OpenAIOAuthClient interface {
-	ExchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string) (*openai.TokenResponse, error)
-	RefreshToken(ctx context.Context, refreshToken, proxyURL string) (*openai.TokenResponse, error)
-	RefreshTokenWithClientID(ctx context.Context, refreshToken, proxyURL string, clientID string) (*openai.TokenResponse, error)
-}
-
-type OpenAIDeviceOAuthClient interface {
-	RequestDeviceCode(ctx context.Context, proxyURL, clientID string) (*openai.DeviceCodeResponse, error)
-	PollDeviceAuthorization(ctx context.Context, deviceAuthID, userCode, proxyURL string) (*openai.DeviceAuthorizationResponse, error)
-}
-
-// GrokOAuthClient interface for xAI/Grok OAuth operations.
-type GrokOAuthClient interface {
-	ExchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string) (*xai.TokenResponse, error)
-	RefreshToken(ctx context.Context, refreshToken, proxyURL, clientID string) (*xai.TokenResponse, error)
-	RefreshTokenAtEndpoint(ctx context.Context, refreshToken, tokenEndpoint, proxyURL, clientID string) (*xai.TokenResponse, error)
-	StartDeviceFlow(ctx context.Context, proxyURL, clientID, scope string) (*xai.DeviceCodeResponse, error)
-	PollDeviceToken(ctx context.Context, deviceCode, tokenEndpoint, proxyURL, clientID string) (*xai.DeviceTokenResponse, error)
-}
+type OpenAIOAuthClient = ports.OpenAIOAuthClient
+type OpenAIDeviceOAuthClient = ports.OpenAIDeviceOAuthClient
+type GrokOAuthClient = ports.GrokOAuthClient
 
 // GrokOAuthTokenService is the narrow refresh port used by Grok token providers.
 type GrokOAuthTokenService interface {
@@ -38,13 +20,7 @@ type GrokOAuthTokenService interface {
 	BuildAccountCredentials(tokenInfo *GrokTokenInfo) map[string]any
 }
 
-// ClaudeOAuthClient handles HTTP requests for Claude OAuth flows
-type ClaudeOAuthClient interface {
-	GetOrganizationUUID(ctx context.Context, sessionKey, proxyURL string) (string, error)
-	GetAuthorizationCode(ctx context.Context, sessionKey, orgUUID, scope, codeChallenge, state, proxyURL string) (string, error)
-	ExchangeCodeForToken(ctx context.Context, code, codeVerifier, state, proxyURL string, isSetupToken bool) (*oauth.TokenResponse, error)
-	RefreshToken(ctx context.Context, refreshToken, proxyURL string) (*oauth.TokenResponse, error)
-}
+type ClaudeOAuthClient = ports.ClaudeOAuthClient
 
 // OAuthService handles OAuth authentication flows
 type OAuthService struct {

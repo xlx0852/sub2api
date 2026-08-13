@@ -4,13 +4,13 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/json"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"reflect"
 	"regexp"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,7 +42,7 @@ func TestAutoPauseExpiredAccountsEnqueuesAffectedAccounts(t *testing.T) {
 		WithArgs(now).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(11)).AddRow(int64(29)))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)")).
-		WithArgs(service.SchedulerOutboxEventAccountBulkChanged, nil, nil, accountIDsPayloadMatcher{want: []int64{11, 29}}).
+		WithArgs(domain.SchedulerOutboxEventAccountBulkChanged, nil, nil, accountIDsPayloadMatcher{want: []int64{11, 29}}).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	repo := newAccountRepositoryWithSQL(nil, db, nil)

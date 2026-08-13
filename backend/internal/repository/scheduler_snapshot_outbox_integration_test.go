@@ -4,11 +4,11 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,11 +34,11 @@ func TestSchedulerSnapshotOutboxReplay(t *testing.T) {
 		},
 	}
 
-	account := &service.Account{
+	account := &domain.Account{
 		Name:        "outbox-replay-" + time.Now().Format("150405.000000"),
-		Platform:    service.PlatformOpenAI,
-		Type:        service.AccountTypeAPIKey,
-		Status:      service.StatusActive,
+		Platform:    domain.PlatformOpenAI,
+		Type:        domain.AccountTypeAPIKey,
+		Status:      domain.StatusActive,
 		Schedulable: true,
 		Concurrency: 3,
 		Priority:    1,
@@ -48,7 +48,7 @@ func TestSchedulerSnapshotOutboxReplay(t *testing.T) {
 	require.NoError(t, accountRepo.Create(ctx, account))
 	require.NoError(t, cache.SetAccount(ctx, account))
 
-	svc := service.NewSchedulerSnapshotService(cache, outboxRepo, accountRepo, nil, cfg)
+	svc := domain.NewSchedulerSnapshotService(cache, outboxRepo, accountRepo, nil, cfg)
 	svc.Start()
 	t.Cleanup(svc.Stop)
 

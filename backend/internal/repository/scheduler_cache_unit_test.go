@@ -4,10 +4,10 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
@@ -27,12 +27,12 @@ func TestSchedulerCacheWriteAccountsSkipsUnencodableTimes(t *testing.T) {
 	ctx := context.Background()
 	cache := newSchedulerCacheUnit(t)
 	invalidTime := time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	stale := service.Account{ID: 112, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey}
+	stale := domain.Account{ID: 112, Platform: domain.PlatformOpenAI, Type: domain.AccountTypeAPIKey}
 	require.NoError(t, cache.SetAccount(ctx, &stale))
 
-	cacheable, err := cache.writeAccounts(ctx, []service.Account{
-		{ID: 111, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey},
-		{ID: 112, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, ExpiresAt: &invalidTime},
+	cacheable, err := cache.writeAccounts(ctx, []domain.Account{
+		{ID: 111, Platform: domain.PlatformOpenAI, Type: domain.AccountTypeAPIKey},
+		{ID: 112, Platform: domain.PlatformOpenAI, Type: domain.AccountTypeAPIKey, ExpiresAt: &invalidTime},
 	})
 	require.NoError(t, err)
 	require.Len(t, cacheable, 1)
@@ -51,7 +51,7 @@ func TestSchedulerCacheSetAccountClearsUnencodablePayload(t *testing.T) {
 	ctx := context.Background()
 	cache := newSchedulerCacheUnit(t)
 
-	account := service.Account{ID: 113, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey}
+	account := domain.Account{ID: 113, Platform: domain.PlatformOpenAI, Type: domain.AccountTypeAPIKey}
 	require.NoError(t, cache.SetAccount(ctx, &account))
 
 	invalidTime := time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -66,7 +66,7 @@ func TestSchedulerCacheSetAccountClearsUnencodablePayload(t *testing.T) {
 func TestSchedulerCacheUpdateLastUsedClearsUnencodablePayload(t *testing.T) {
 	ctx := context.Background()
 	cache := newSchedulerCacheUnit(t)
-	account := service.Account{ID: 114, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey}
+	account := domain.Account{ID: 114, Platform: domain.PlatformOpenAI, Type: domain.AccountTypeAPIKey}
 	require.NoError(t, cache.SetAccount(ctx, &account))
 
 	invalidTime := time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -78,13 +78,13 @@ func TestSchedulerCacheUpdateLastUsedClearsUnencodablePayload(t *testing.T) {
 }
 
 func TestBuildSchedulerMetadataAccount_KeepsOpenAIWSFlags(t *testing.T) {
-	account := service.Account{
+	account := domain.Account{
 		ID:       42,
-		Platform: service.PlatformOpenAI,
-		Type:     service.AccountTypeOAuth,
+		Platform: domain.PlatformOpenAI,
+		Type:     domain.AccountTypeOAuth,
 		Extra: map[string]any{
 			"openai_oauth_responses_websockets_v2_enabled": true,
-			"openai_oauth_responses_websockets_v2_mode":    service.OpenAIWSIngressModePassthrough,
+			"openai_oauth_responses_websockets_v2_mode":    domain.OpenAIWSIngressModePassthrough,
 			"openai_ws_force_http":                         true,
 			"openai_responses_mode":                        "force_chat_completions",
 			"openai_responses_supported":                   false,
@@ -96,7 +96,7 @@ func TestBuildSchedulerMetadataAccount_KeepsOpenAIWSFlags(t *testing.T) {
 	got := buildSchedulerMetadataAccount(account)
 
 	require.Equal(t, true, got.Extra["openai_oauth_responses_websockets_v2_enabled"])
-	require.Equal(t, service.OpenAIWSIngressModePassthrough, got.Extra["openai_oauth_responses_websockets_v2_mode"])
+	require.Equal(t, domain.OpenAIWSIngressModePassthrough, got.Extra["openai_oauth_responses_websockets_v2_mode"])
 	require.Equal(t, true, got.Extra["openai_ws_force_http"])
 	require.Equal(t, "force_chat_completions", got.Extra["openai_responses_mode"])
 	require.Equal(t, false, got.Extra["openai_responses_supported"])
@@ -105,23 +105,23 @@ func TestBuildSchedulerMetadataAccount_KeepsOpenAIWSFlags(t *testing.T) {
 }
 
 func TestBuildSchedulerMetadataAccount_KeepsSlimGroupMembership(t *testing.T) {
-	account := service.Account{
+	account := domain.Account{
 		ID:       42,
-		Platform: service.PlatformAnthropic,
+		Platform: domain.PlatformAnthropic,
 		GroupIDs: []int64{7, 9, 7, 0},
-		AccountGroups: []service.AccountGroup{
+		AccountGroups: []domain.AccountGroup{
 			{
 				AccountID: 42,
 				GroupID:   7,
 				Priority:  2,
-				Account:   &service.Account{ID: 42, Name: "drop-from-metadata"},
-				Group:     &service.Group{ID: 7, Name: "drop-from-metadata"},
+				Account:   &domain.Account{ID: 42, Name: "drop-from-metadata"},
+				Group:     &domain.Group{ID: 7, Name: "drop-from-metadata"},
 			},
 			{
 				AccountID: 42,
 				GroupID:   11,
 				Priority:  3,
-				Group:     &service.Group{ID: 11, Name: "drop-from-metadata"},
+				Group:     &domain.Group{ID: 11, Name: "drop-from-metadata"},
 			},
 			{
 				AccountID: 42,
@@ -145,7 +145,7 @@ func TestBuildSchedulerMetadataAccount_KeepsSlimGroupMembership(t *testing.T) {
 }
 
 func TestBuildSchedulerMetadataAccount_KeepsQuotaAutoPauseFields(t *testing.T) {
-	account := service.Account{
+	account := domain.Account{
 		ID: 88,
 		Extra: map[string]any{
 			"codex_5h_used_percent":        12.34,
@@ -178,9 +178,9 @@ func TestBuildSchedulerMetadataAccount_KeepsQuotaAutoPauseFields(t *testing.T) {
 }
 
 func TestBuildSchedulerMetadataAccount_KeepsModelRateLimits(t *testing.T) {
-	account := service.Account{
+	account := domain.Account{
 		ID:       90,
-		Platform: service.PlatformAntigravity,
+		Platform: domain.PlatformAntigravity,
 		Extra: map[string]any{
 			"model_rate_limits": map[string]any{
 				"gemini-3-flash": map[string]any{
@@ -205,12 +205,12 @@ func TestBuildSchedulerMetadataAccount_KeepsModelRateLimits(t *testing.T) {
 
 func TestBuildSchedulerMetadataAccount_KeepsSparkShadowRoutingIdentity(t *testing.T) {
 	parentID := int64(100)
-	account := service.Account{
+	account := domain.Account{
 		ID:              200,
-		Platform:        service.PlatformOpenAI,
-		Type:            service.AccountTypeOAuth,
+		Platform:        domain.PlatformOpenAI,
+		Type:            domain.AccountTypeOAuth,
 		ParentAccountID: &parentID,
-		QuotaDimension:  service.QuotaDimensionSpark,
+		QuotaDimension:  domain.QuotaDimensionSpark,
 		Credentials: map[string]any{
 			"model_mapping": map[string]any{
 				"gpt-5.3-codex-spark": "gpt-5.3-codex-spark",
@@ -226,7 +226,7 @@ func TestBuildSchedulerMetadataAccount_KeepsSparkShadowRoutingIdentity(t *testin
 
 	require.NotNil(t, got.ParentAccountID)
 	require.Equal(t, parentID, *got.ParentAccountID)
-	require.Equal(t, service.QuotaDimensionSpark, got.QuotaDimension)
+	require.Equal(t, domain.QuotaDimensionSpark, got.QuotaDimension)
 	require.Equal(t, map[string]any{"gpt-5.3-codex-spark": "gpt-5.3-codex-spark"}, got.Credentials["model_mapping"])
 	require.Equal(t, map[string]any{"gpt-5.4": "gpt-5.4-openai-compact"}, got.Credentials["compact_model_mapping"])
 	require.Nil(t, got.Credentials["access_token"])

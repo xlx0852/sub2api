@@ -5,10 +5,11 @@ package repository
 import (
 	"context"
 	"errors"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
@@ -22,7 +23,7 @@ func TestBatchImageQueue_DuplicateEnqueueReturnsAlreadyQueued(t *testing.T) {
 	require.NoError(t, queue.Enqueue(ctx, batchID))
 	err := queue.Enqueue(ctx, batchID)
 	require.Error(t, err)
-	require.True(t, errors.Is(err, service.ErrBatchImageAlreadyQueued))
+	require.True(t, errors.Is(err, domain.ErrBatchImageAlreadyQueued))
 }
 
 func TestBatchImageQueue_RequeueAfterMovesJobFromActiveToDelayed(t *testing.T) {
@@ -131,7 +132,7 @@ func TestBatchImageQueue_ReserveReturnsEmptyAfterTimeout(t *testing.T) {
 
 	start := time.Now()
 	_, err := queue.Reserve(ctx, 50*time.Millisecond)
-	require.ErrorIs(t, err, service.ErrBatchImageQueueEmpty)
+	require.ErrorIs(t, err, domain.ErrBatchImageQueueEmpty)
 	require.Less(t, time.Since(start), 5*time.Second)
 }
 
@@ -141,7 +142,7 @@ func TestBatchImageQueue_ReserveDropsInvalidPayload(t *testing.T) {
 	require.NoError(t, queue.rdb.LPush(ctx, queue.readyKey, "not-a-batch-id").Err())
 
 	_, err := queue.Reserve(ctx, 10*time.Millisecond)
-	require.ErrorIs(t, err, service.ErrInvalidBatchImageQueuePayload)
+	require.ErrorIs(t, err, domain.ErrInvalidBatchImageQueuePayload)
 	// 非法 payload 不得残留在 active zset，否则 stale 恢复会无限重投。
 	require.ErrorIs(t, queue.rdb.ZScore(ctx, queue.activeKey, "not-a-batch-id").Err(), redis.Nil)
 }
@@ -170,7 +171,7 @@ func TestBatchImageQueue_JobLockRefreshExtendsTTLOnlyForHolder(t *testing.T) {
 	lock, ok, err := queue.TryAcquireJobLock(ctx, batchID, time.Minute)
 	require.NoError(t, err)
 	require.True(t, ok)
-	refresher, isRefresher := lock.(service.BatchImageJobLockRefresher)
+	refresher, isRefresher := lock.(ports.BatchImageJobLockRefresher)
 	require.True(t, isRefresher)
 
 	require.NoError(t, refresher.Refresh(ctx, 10*time.Minute))

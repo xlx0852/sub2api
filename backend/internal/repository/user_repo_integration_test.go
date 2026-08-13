@@ -4,6 +4,7 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"sync"
 	"testing"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/authidentity"
 	"github.com/Wei-Shaw/sub2api/ent/authidentitychannel"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -40,7 +40,7 @@ func TestUserRepoSuite(t *testing.T) {
 	suite.Run(t, new(UserRepoSuite))
 }
 
-func (s *UserRepoSuite) mustCreateUser(u *service.User) *service.User {
+func (s *UserRepoSuite) mustCreateUser(u *domain.User) *domain.User {
 	s.T().Helper()
 
 	if u.Email == "" {
@@ -50,10 +50,10 @@ func (s *UserRepoSuite) mustCreateUser(u *service.User) *service.User {
 		u.PasswordHash = "test-password-hash"
 	}
 	if u.Role == "" {
-		u.Role = service.RoleUser
+		u.Role = domain.RoleUser
 	}
 	if u.Status == "" {
-		u.Status = service.StatusActive
+		u.Status = domain.StatusActive
 	}
 	if u.Concurrency == 0 {
 		u.Concurrency = 5
@@ -63,12 +63,12 @@ func (s *UserRepoSuite) mustCreateUser(u *service.User) *service.User {
 	return u
 }
 
-func (s *UserRepoSuite) mustCreateGroup(name string) *service.Group {
+func (s *UserRepoSuite) mustCreateGroup(name string) *domain.Group {
 	s.T().Helper()
 
 	g, err := s.client.Group.Create().
 		SetName(name).
-		SetStatus(service.StatusActive).
+		SetStatus(domain.StatusActive).
 		Save(s.ctx)
 	s.Require().NoError(err, "create group")
 	return groupEntityToService(g)
@@ -83,7 +83,7 @@ func (s *UserRepoSuite) mustCreateSubscription(userID, groupID int64, mutate fun
 		SetGroupID(groupID).
 		SetStartsAt(now.Add(-1 * time.Hour)).
 		SetExpiresAt(now.Add(24 * time.Hour)).
-		SetStatus(service.SubscriptionStatusActive).
+		SetStatus(domain.SubscriptionStatusActive).
 		SetAssignedAt(now).
 		SetNotes("")
 
@@ -99,12 +99,12 @@ func (s *UserRepoSuite) mustCreateSubscription(userID, groupID int64, mutate fun
 // --- Create / GetByID / GetByEmail / Update / Delete ---
 
 func (s *UserRepoSuite) TestCreate() {
-	user := s.mustCreateUser(&service.User{
+	user := s.mustCreateUser(&domain.User{
 		Email:        "create@test.com",
 		Username:     "testuser",
 		PasswordHash: "test-password-hash",
-		Role:         service.RoleUser,
-		Status:       service.StatusActive,
+		Role:         domain.RoleUser,
+		Status:       domain.StatusActive,
 	})
 
 	s.Require().NotZero(user.ID, "expected ID to be set")
@@ -120,7 +120,7 @@ func (s *UserRepoSuite) TestGetByID_NotFound() {
 }
 
 func (s *UserRepoSuite) TestGetByEmail() {
-	user := s.mustCreateUser(&service.User{Email: "byemail@test.com"})
+	user := s.mustCreateUser(&domain.User{Email: "byemail@test.com"})
 
 	got, err := s.repo.GetByEmail(s.ctx, user.Email)
 	s.Require().NoError(err, "GetByEmail")
@@ -128,7 +128,7 @@ func (s *UserRepoSuite) TestGetByEmail() {
 }
 
 func (s *UserRepoSuite) TestGetByEmail_NormalizesSpacingAndCaseOnPostgres() {
-	user := s.mustCreateUser(&service.User{Email: " Legacy@Example.com "})
+	user := s.mustCreateUser(&domain.User{Email: " Legacy@Example.com "})
 
 	got, err := s.repo.GetByEmail(s.ctx, "  legacy@example.com  ")
 	s.Require().NoError(err, "GetByEmail normalized lookup")
@@ -141,7 +141,7 @@ func (s *UserRepoSuite) TestGetByEmail_NotFound() {
 }
 
 func (s *UserRepoSuite) TestExistsByEmail_NormalizesSpacingAndCaseOnPostgres() {
-	s.mustCreateUser(&service.User{Email: " Legacy@Example.com "})
+	s.mustCreateUser(&domain.User{Email: " Legacy@Example.com "})
 
 	exists, err := s.repo.ExistsByEmail(s.ctx, "  LEGACY@example.com  ")
 	s.Require().NoError(err, "ExistsByEmail normalized lookup")
@@ -149,7 +149,7 @@ func (s *UserRepoSuite) TestExistsByEmail_NormalizesSpacingAndCaseOnPostgres() {
 }
 
 func (s *UserRepoSuite) TestUpdate() {
-	user := s.mustCreateUser(&service.User{Email: "update@test.com", Username: "original"})
+	user := s.mustCreateUser(&domain.User{Email: "update@test.com", Username: "original"})
 
 	got, err := s.repo.GetByID(s.ctx, user.ID)
 	s.Require().NoError(err)
@@ -162,7 +162,7 @@ func (s *UserRepoSuite) TestUpdate() {
 }
 
 func (s *UserRepoSuite) TestUpdateIgnoresNoRowsFromConflictingEmailIdentityUpsert() {
-	user := s.mustCreateUser(&service.User{Email: "update-existing-identity@test.com", Username: "original"})
+	user := s.mustCreateUser(&domain.User{Email: "update-existing-identity@test.com", Username: "original"})
 
 	identityCount, err := s.client.AuthIdentity.Query().
 		Where(
@@ -186,7 +186,7 @@ func (s *UserRepoSuite) TestUpdateIgnoresNoRowsFromConflictingEmailIdentityUpser
 }
 
 func (s *UserRepoSuite) TestDelete() {
-	user := s.mustCreateUser(&service.User{Email: "delete@test.com"})
+	user := s.mustCreateUser(&domain.User{Email: "delete@test.com"})
 
 	err := s.repo.Delete(s.ctx, user.ID)
 	s.Require().NoError(err, "Delete")
@@ -196,7 +196,7 @@ func (s *UserRepoSuite) TestDelete() {
 }
 
 func (s *UserRepoSuite) TestDeleteRemovesAuthIdentitiesAndChannels() {
-	user := s.mustCreateUser(&service.User{Email: "delete-oauth@test.com"})
+	user := s.mustCreateUser(&domain.User{Email: "delete-oauth@test.com"})
 
 	identity, err := s.client.AuthIdentity.Create().
 		SetUserID(user.ID).
@@ -231,8 +231,8 @@ func (s *UserRepoSuite) TestDeleteRemovesAuthIdentitiesAndChannels() {
 // --- List / ListWithFilters ---
 
 func (s *UserRepoSuite) TestList() {
-	s.mustCreateUser(&service.User{Email: "list1@test.com"})
-	s.mustCreateUser(&service.User{Email: "list2@test.com"})
+	s.mustCreateUser(&domain.User{Email: "list1@test.com"})
+	s.mustCreateUser(&domain.User{Email: "list2@test.com"})
 
 	users, page, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10})
 	s.Require().NoError(err, "List")
@@ -241,60 +241,60 @@ func (s *UserRepoSuite) TestList() {
 }
 
 func (s *UserRepoSuite) TestListWithFilters_Status() {
-	s.mustCreateUser(&service.User{Email: "active@test.com", Status: service.StatusActive})
-	s.mustCreateUser(&service.User{Email: "disabled@test.com", Status: service.StatusDisabled})
+	s.mustCreateUser(&domain.User{Email: "active@test.com", Status: domain.StatusActive})
+	s.mustCreateUser(&domain.User{Email: "disabled@test.com", Status: domain.StatusDisabled})
 
-	users, _, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, service.UserListFilters{Status: service.StatusActive})
+	users, _, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, domain.UserListFilters{Status: domain.StatusActive})
 	s.Require().NoError(err)
 	s.Require().Len(users, 1)
-	s.Require().Equal(service.StatusActive, users[0].Status)
+	s.Require().Equal(domain.StatusActive, users[0].Status)
 }
 
 func (s *UserRepoSuite) TestListWithFilters_Role() {
-	s.mustCreateUser(&service.User{Email: "user@test.com", Role: service.RoleUser})
-	s.mustCreateUser(&service.User{Email: "admin@test.com", Role: service.RoleAdmin})
+	s.mustCreateUser(&domain.User{Email: "user@test.com", Role: domain.RoleUser})
+	s.mustCreateUser(&domain.User{Email: "admin@test.com", Role: domain.RoleAdmin})
 
-	users, _, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, service.UserListFilters{Role: service.RoleAdmin})
+	users, _, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, domain.UserListFilters{Role: domain.RoleAdmin})
 	s.Require().NoError(err)
 	s.Require().Len(users, 1)
-	s.Require().Equal(service.RoleAdmin, users[0].Role)
+	s.Require().Equal(domain.RoleAdmin, users[0].Role)
 }
 
 func (s *UserRepoSuite) TestListWithFilters_Search() {
-	s.mustCreateUser(&service.User{Email: "alice@test.com", Username: "Alice"})
-	s.mustCreateUser(&service.User{Email: "bob@test.com", Username: "Bob"})
+	s.mustCreateUser(&domain.User{Email: "alice@test.com", Username: "Alice"})
+	s.mustCreateUser(&domain.User{Email: "bob@test.com", Username: "Bob"})
 
-	users, _, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, service.UserListFilters{Search: "alice"})
+	users, _, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, domain.UserListFilters{Search: "alice"})
 	s.Require().NoError(err)
 	s.Require().Len(users, 1)
 	s.Require().Contains(users[0].Email, "alice")
 }
 
 func (s *UserRepoSuite) TestListWithFilters_SearchByUsername() {
-	s.mustCreateUser(&service.User{Email: "u1@test.com", Username: "JohnDoe"})
-	s.mustCreateUser(&service.User{Email: "u2@test.com", Username: "JaneSmith"})
+	s.mustCreateUser(&domain.User{Email: "u1@test.com", Username: "JohnDoe"})
+	s.mustCreateUser(&domain.User{Email: "u2@test.com", Username: "JaneSmith"})
 
-	users, _, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, service.UserListFilters{Search: "john"})
+	users, _, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, domain.UserListFilters{Search: "john"})
 	s.Require().NoError(err)
 	s.Require().Len(users, 1)
 	s.Require().Equal("JohnDoe", users[0].Username)
 }
 
 func (s *UserRepoSuite) TestListWithFilters_LoadsActiveSubscriptions() {
-	user := s.mustCreateUser(&service.User{Email: "sub@test.com", Status: service.StatusActive})
+	user := s.mustCreateUser(&domain.User{Email: "sub@test.com", Status: domain.StatusActive})
 	groupActive := s.mustCreateGroup("g-sub-active")
 	groupExpired := s.mustCreateGroup("g-sub-expired")
 
 	_ = s.mustCreateSubscription(user.ID, groupActive.ID, func(c *dbent.UserSubscriptionCreate) {
-		c.SetStatus(service.SubscriptionStatusActive)
+		c.SetStatus(domain.SubscriptionStatusActive)
 		c.SetExpiresAt(time.Now().Add(1 * time.Hour))
 	})
 	_ = s.mustCreateSubscription(user.ID, groupExpired.ID, func(c *dbent.UserSubscriptionCreate) {
-		c.SetStatus(service.SubscriptionStatusExpired)
+		c.SetStatus(domain.SubscriptionStatusExpired)
 		c.SetExpiresAt(time.Now().Add(-1 * time.Hour))
 	})
 
-	users, _, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, service.UserListFilters{Search: "sub@"})
+	users, _, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, domain.UserListFilters{Search: "sub@"})
 	s.Require().NoError(err, "ListWithFilters")
 	s.Require().Len(users, 1, "expected 1 user")
 	s.Require().Len(users[0].Subscriptions, 1, "expected 1 active subscription")
@@ -303,27 +303,27 @@ func (s *UserRepoSuite) TestListWithFilters_LoadsActiveSubscriptions() {
 }
 
 func (s *UserRepoSuite) TestListWithFilters_CombinedFilters() {
-	s.mustCreateUser(&service.User{
+	s.mustCreateUser(&domain.User{
 		Email:    "a@example.com",
 		Username: "Alice",
-		Role:     service.RoleUser,
-		Status:   service.StatusActive,
+		Role:     domain.RoleUser,
+		Status:   domain.StatusActive,
 		Balance:  10,
 	})
-	target := s.mustCreateUser(&service.User{
+	target := s.mustCreateUser(&domain.User{
 		Email:    "b@example.com",
 		Username: "Bob",
-		Role:     service.RoleAdmin,
-		Status:   service.StatusActive,
+		Role:     domain.RoleAdmin,
+		Status:   domain.StatusActive,
 		Balance:  1,
 	})
-	s.mustCreateUser(&service.User{
+	s.mustCreateUser(&domain.User{
 		Email:  "c@example.com",
-		Role:   service.RoleAdmin,
-		Status: service.StatusDisabled,
+		Role:   domain.RoleAdmin,
+		Status: domain.StatusDisabled,
 	})
 
-	users, page, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, service.UserListFilters{Status: service.StatusActive, Role: service.RoleAdmin, Search: "b@"})
+	users, page, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, domain.UserListFilters{Status: domain.StatusActive, Role: domain.RoleAdmin, Search: "b@"})
 	s.Require().NoError(err, "ListWithFilters")
 	s.Require().Equal(int64(1), page.Total, "ListWithFilters total mismatch")
 	s.Require().Len(users, 1, "ListWithFilters len mismatch")
@@ -333,7 +333,7 @@ func (s *UserRepoSuite) TestListWithFilters_CombinedFilters() {
 // --- Balance operations ---
 
 func (s *UserRepoSuite) TestUpdateBalance() {
-	user := s.mustCreateUser(&service.User{Email: "bal@test.com", Balance: 10})
+	user := s.mustCreateUser(&domain.User{Email: "bal@test.com", Balance: 10})
 
 	err := s.repo.UpdateBalance(s.ctx, user.ID, 2.5)
 	s.Require().NoError(err, "UpdateBalance")
@@ -344,7 +344,7 @@ func (s *UserRepoSuite) TestUpdateBalance() {
 }
 
 func (s *UserRepoSuite) TestUpdateBalance_Negative() {
-	user := s.mustCreateUser(&service.User{Email: "balneg@test.com", Balance: 10})
+	user := s.mustCreateUser(&domain.User{Email: "balneg@test.com", Balance: 10})
 
 	err := s.repo.UpdateBalance(s.ctx, user.ID, -3)
 	s.Require().NoError(err, "UpdateBalance with negative")
@@ -355,7 +355,7 @@ func (s *UserRepoSuite) TestUpdateBalance_Negative() {
 }
 
 func (s *UserRepoSuite) TestApplyRedeemBalanceAdjustment_ConcurrentNeverNegative() {
-	user := s.mustCreateUser(&service.User{Email: "redeem-bal-concurrent@test.com", Balance: 10})
+	user := s.mustCreateUser(&domain.User{Email: "redeem-bal-concurrent@test.com", Balance: 10})
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
@@ -378,7 +378,7 @@ func (s *UserRepoSuite) TestApplyRedeemBalanceAdjustment_ConcurrentNeverNegative
 }
 
 func (s *UserRepoSuite) TestDeductBalance() {
-	user := s.mustCreateUser(&service.User{Email: "deduct@test.com", Balance: 10})
+	user := s.mustCreateUser(&domain.User{Email: "deduct@test.com", Balance: 10})
 
 	err := s.repo.DeductBalance(s.ctx, user.ID, 5)
 	s.Require().NoError(err, "DeductBalance")
@@ -389,7 +389,7 @@ func (s *UserRepoSuite) TestDeductBalance() {
 }
 
 func (s *UserRepoSuite) TestDeductBalance_InsufficientFunds() {
-	user := s.mustCreateUser(&service.User{Email: "insuf@test.com", Balance: 5})
+	user := s.mustCreateUser(&domain.User{Email: "insuf@test.com", Balance: 5})
 
 	// 透支策略：允许扣除超过余额的金额
 	err := s.repo.DeductBalance(s.ctx, user.ID, 999)
@@ -402,7 +402,7 @@ func (s *UserRepoSuite) TestDeductBalance_InsufficientFunds() {
 }
 
 func (s *UserRepoSuite) TestDeductBalance_ExactAmount() {
-	user := s.mustCreateUser(&service.User{Email: "exact@test.com", Balance: 10})
+	user := s.mustCreateUser(&domain.User{Email: "exact@test.com", Balance: 10})
 
 	err := s.repo.DeductBalance(s.ctx, user.ID, 10)
 	s.Require().NoError(err, "DeductBalance exact amount")
@@ -413,7 +413,7 @@ func (s *UserRepoSuite) TestDeductBalance_ExactAmount() {
 }
 
 func (s *UserRepoSuite) TestDeductBalance_AllowsOverdraft() {
-	user := s.mustCreateUser(&service.User{Email: "overdraft@test.com", Balance: 5.0})
+	user := s.mustCreateUser(&domain.User{Email: "overdraft@test.com", Balance: 5.0})
 
 	// 扣除超过余额的金额 - 应该成功
 	err := s.repo.DeductBalance(s.ctx, user.ID, 10.0)
@@ -428,7 +428,7 @@ func (s *UserRepoSuite) TestDeductBalance_AllowsOverdraft() {
 // --- Concurrency ---
 
 func (s *UserRepoSuite) TestUpdateConcurrency() {
-	user := s.mustCreateUser(&service.User{Email: "conc@test.com", Concurrency: 5})
+	user := s.mustCreateUser(&domain.User{Email: "conc@test.com", Concurrency: 5})
 
 	err := s.repo.UpdateConcurrency(s.ctx, user.ID, 3)
 	s.Require().NoError(err, "UpdateConcurrency")
@@ -439,7 +439,7 @@ func (s *UserRepoSuite) TestUpdateConcurrency() {
 }
 
 func (s *UserRepoSuite) TestUpdateConcurrency_Negative() {
-	user := s.mustCreateUser(&service.User{Email: "concneg@test.com", Concurrency: 5})
+	user := s.mustCreateUser(&domain.User{Email: "concneg@test.com", Concurrency: 5})
 
 	err := s.repo.UpdateConcurrency(s.ctx, user.ID, -2)
 	s.Require().NoError(err, "UpdateConcurrency negative")
@@ -450,7 +450,7 @@ func (s *UserRepoSuite) TestUpdateConcurrency_Negative() {
 }
 
 func (s *UserRepoSuite) TestApplyRedeemConcurrencyAdjustment_ConcurrentNeverNegative() {
-	user := s.mustCreateUser(&service.User{Email: "redeem-concurrency-concurrent@test.com", Concurrency: 10})
+	user := s.mustCreateUser(&domain.User{Email: "redeem-concurrency-concurrent@test.com", Concurrency: 10})
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
@@ -475,7 +475,7 @@ func (s *UserRepoSuite) TestApplyRedeemConcurrencyAdjustment_ConcurrentNeverNega
 // --- ExistsByEmail ---
 
 func (s *UserRepoSuite) TestExistsByEmail() {
-	s.mustCreateUser(&service.User{Email: "exists@test.com"})
+	s.mustCreateUser(&domain.User{Email: "exists@test.com"})
 
 	exists, err := s.repo.ExistsByEmail(s.ctx, "exists@test.com")
 	s.Require().NoError(err, "ExistsByEmail")
@@ -492,11 +492,11 @@ func (s *UserRepoSuite) TestRemoveGroupFromAllowedGroups() {
 	target := s.mustCreateGroup("target-42")
 	other := s.mustCreateGroup("other-7")
 
-	userA := s.mustCreateUser(&service.User{
+	userA := s.mustCreateUser(&domain.User{
 		Email:         "a1@example.com",
 		AllowedGroups: []int64{target.ID, other.ID},
 	})
-	s.mustCreateUser(&service.User{
+	s.mustCreateUser(&domain.User{
 		Email:         "a2@example.com",
 		AllowedGroups: []int64{other.ID},
 	})
@@ -515,7 +515,7 @@ func (s *UserRepoSuite) TestRemoveGroupFromAllowedGroups_NoMatch() {
 	groupA := s.mustCreateGroup("nomatch-a")
 	groupB := s.mustCreateGroup("nomatch-b")
 
-	s.mustCreateUser(&service.User{
+	s.mustCreateUser(&domain.User{
 		Email:         "nomatch@test.com",
 		AllowedGroups: []int64{groupA.ID, groupB.ID},
 	})
@@ -528,15 +528,15 @@ func (s *UserRepoSuite) TestRemoveGroupFromAllowedGroups_NoMatch() {
 // --- GetFirstAdmin ---
 
 func (s *UserRepoSuite) TestGetFirstAdmin() {
-	admin1 := s.mustCreateUser(&service.User{
+	admin1 := s.mustCreateUser(&domain.User{
 		Email:  "admin1@example.com",
-		Role:   service.RoleAdmin,
-		Status: service.StatusActive,
+		Role:   domain.RoleAdmin,
+		Status: domain.StatusActive,
 	})
-	s.mustCreateUser(&service.User{
+	s.mustCreateUser(&domain.User{
 		Email:  "admin2@example.com",
-		Role:   service.RoleAdmin,
-		Status: service.StatusActive,
+		Role:   domain.RoleAdmin,
+		Status: domain.StatusActive,
 	})
 
 	got, err := s.repo.GetFirstAdmin(s.ctx)
@@ -545,10 +545,10 @@ func (s *UserRepoSuite) TestGetFirstAdmin() {
 }
 
 func (s *UserRepoSuite) TestGetFirstAdmin_NoAdmin() {
-	s.mustCreateUser(&service.User{
+	s.mustCreateUser(&domain.User{
 		Email:  "user@example.com",
-		Role:   service.RoleUser,
-		Status: service.StatusActive,
+		Role:   domain.RoleUser,
+		Status: domain.StatusActive,
 	})
 
 	_, err := s.repo.GetFirstAdmin(s.ctx)
@@ -556,15 +556,15 @@ func (s *UserRepoSuite) TestGetFirstAdmin_NoAdmin() {
 }
 
 func (s *UserRepoSuite) TestGetFirstAdmin_DisabledAdminIgnored() {
-	s.mustCreateUser(&service.User{
+	s.mustCreateUser(&domain.User{
 		Email:  "disabled@example.com",
-		Role:   service.RoleAdmin,
-		Status: service.StatusDisabled,
+		Role:   domain.RoleAdmin,
+		Status: domain.StatusDisabled,
 	})
-	activeAdmin := s.mustCreateUser(&service.User{
+	activeAdmin := s.mustCreateUser(&domain.User{
 		Email:  "active@example.com",
-		Role:   service.RoleAdmin,
-		Status: service.StatusActive,
+		Role:   domain.RoleAdmin,
+		Status: domain.StatusActive,
 	})
 
 	got, err := s.repo.GetFirstAdmin(s.ctx)
@@ -575,24 +575,24 @@ func (s *UserRepoSuite) TestGetFirstAdmin_DisabledAdminIgnored() {
 // --- Combined ---
 
 func (s *UserRepoSuite) TestCRUD_And_Filters_And_AtomicUpdates() {
-	user1 := s.mustCreateUser(&service.User{
+	user1 := s.mustCreateUser(&domain.User{
 		Email:    "a@example.com",
 		Username: "Alice",
-		Role:     service.RoleUser,
-		Status:   service.StatusActive,
+		Role:     domain.RoleUser,
+		Status:   domain.StatusActive,
 		Balance:  10,
 	})
-	user2 := s.mustCreateUser(&service.User{
+	user2 := s.mustCreateUser(&domain.User{
 		Email:    "b@example.com",
 		Username: "Bob",
-		Role:     service.RoleAdmin,
-		Status:   service.StatusActive,
+		Role:     domain.RoleAdmin,
+		Status:   domain.StatusActive,
 		Balance:  1,
 	})
-	s.mustCreateUser(&service.User{
+	s.mustCreateUser(&domain.User{
 		Email:  "c@example.com",
-		Role:   service.RoleAdmin,
-		Status: service.StatusDisabled,
+		Role:   domain.RoleAdmin,
+		Status: domain.StatusDisabled,
 	})
 
 	got, err := s.repo.GetByID(s.ctx, user1.ID)
@@ -632,7 +632,7 @@ func (s *UserRepoSuite) TestCRUD_And_Filters_And_AtomicUpdates() {
 	s.Require().Equal(user1.Concurrency+3, got5.Concurrency)
 
 	params := pagination.PaginationParams{Page: 1, PageSize: 10}
-	users, page, err := s.repo.ListWithFilters(s.ctx, params, service.UserListFilters{Status: service.StatusActive, Role: service.RoleAdmin, Search: "b@"})
+	users, page, err := s.repo.ListWithFilters(s.ctx, params, domain.UserListFilters{Status: domain.StatusActive, Role: domain.RoleAdmin, Search: "b@"})
 	s.Require().NoError(err, "ListWithFilters")
 	s.Require().Equal(int64(1), page.Total, "ListWithFilters total mismatch")
 	s.Require().Len(users, 1, "ListWithFilters len mismatch")
@@ -644,18 +644,18 @@ func (s *UserRepoSuite) TestCRUD_And_Filters_And_AtomicUpdates() {
 func (s *UserRepoSuite) TestUpdateBalance_NotFound() {
 	err := s.repo.UpdateBalance(s.ctx, 999999, 10.0)
 	s.Require().Error(err, "expected error for non-existent user")
-	s.Require().ErrorIs(err, service.ErrUserNotFound)
+	s.Require().ErrorIs(err, domain.ErrUserNotFound)
 }
 
 func (s *UserRepoSuite) TestUpdateConcurrency_NotFound() {
 	err := s.repo.UpdateConcurrency(s.ctx, 999999, 5)
 	s.Require().Error(err, "expected error for non-existent user")
-	s.Require().ErrorIs(err, service.ErrUserNotFound)
+	s.Require().ErrorIs(err, domain.ErrUserNotFound)
 }
 
 func (s *UserRepoSuite) TestDeductBalance_NotFound() {
 	err := s.repo.DeductBalance(s.ctx, 999999, 5)
 	s.Require().Error(err, "expected error for non-existent user")
 	// DeductBalance 在用户不存在时返回 ErrUserNotFound
-	s.Require().ErrorIs(err, service.ErrUserNotFound)
+	s.Require().ErrorIs(err, domain.ErrUserNotFound)
 }

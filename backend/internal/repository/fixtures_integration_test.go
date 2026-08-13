@@ -4,16 +4,16 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	dbaccount "github.com/Wei-Shaw/sub2api/ent/account"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
-func mustCreateUser(t *testing.T, client *dbent.Client, u *service.User) *service.User {
+func mustCreateUser(t *testing.T, client *dbent.Client, u *domain.User) *domain.User {
 	t.Helper()
 	ctx := context.Background()
 
@@ -24,10 +24,10 @@ func mustCreateUser(t *testing.T, client *dbent.Client, u *service.User) *servic
 		u.PasswordHash = "test-password-hash"
 	}
 	if u.Role == "" {
-		u.Role = service.RoleUser
+		u.Role = domain.RoleUser
 	}
 	if u.Status == "" {
-		u.Status = service.StatusActive
+		u.Status = domain.StatusActive
 	}
 	if u.Concurrency == 0 {
 		u.Concurrency = 5
@@ -69,18 +69,18 @@ func mustCreateUser(t *testing.T, client *dbent.Client, u *service.User) *servic
 	return u
 }
 
-func mustCreateGroup(t *testing.T, client *dbent.Client, g *service.Group) *service.Group {
+func mustCreateGroup(t *testing.T, client *dbent.Client, g *domain.Group) *domain.Group {
 	t.Helper()
 	ctx := context.Background()
 
 	if g.Platform == "" {
-		g.Platform = service.PlatformAnthropic
+		g.Platform = domain.PlatformAnthropic
 	}
 	if g.Status == "" {
-		g.Status = service.StatusActive
+		g.Status = domain.StatusActive
 	}
 	if g.SubscriptionType == "" {
-		g.SubscriptionType = service.SubscriptionTypeStandard
+		g.SubscriptionType = domain.SubscriptionTypeStandard
 	}
 
 	create := client.Group.Create().
@@ -118,7 +118,7 @@ func mustCreateGroup(t *testing.T, client *dbent.Client, g *service.Group) *serv
 	return g
 }
 
-func mustCreateProxy(t *testing.T, client *dbent.Client, p *service.Proxy) *service.Proxy {
+func mustCreateProxy(t *testing.T, client *dbent.Client, p *domain.Proxy) *domain.Proxy {
 	t.Helper()
 	ctx := context.Background()
 
@@ -132,7 +132,7 @@ func mustCreateProxy(t *testing.T, client *dbent.Client, p *service.Proxy) *serv
 		p.Port = 8080
 	}
 	if p.Status == "" {
-		p.Status = service.StatusActive
+		p.Status = domain.StatusActive
 	}
 
 	create := client.Proxy.Create().
@@ -163,18 +163,18 @@ func mustCreateProxy(t *testing.T, client *dbent.Client, p *service.Proxy) *serv
 	return p
 }
 
-func mustCreateAccount(t *testing.T, client *dbent.Client, a *service.Account) *service.Account {
+func mustCreateAccount(t *testing.T, client *dbent.Client, a *domain.Account) *domain.Account {
 	t.Helper()
 	ctx := context.Background()
 
 	if a.Platform == "" {
-		a.Platform = service.PlatformAnthropic
+		a.Platform = domain.PlatformAnthropic
 	}
 	if a.Type == "" {
-		a.Type = service.AccountTypeOAuth
+		a.Type = domain.AccountTypeOAuth
 	}
 	if a.Status == "" {
-		a.Status = service.StatusActive
+		a.Status = domain.StatusActive
 	}
 	if a.Concurrency == 0 {
 		a.Concurrency = 3
@@ -250,12 +250,12 @@ func mustCreateAccount(t *testing.T, client *dbent.Client, a *service.Account) *
 	return a
 }
 
-func mustCreateApiKey(t *testing.T, client *dbent.Client, k *service.APIKey) *service.APIKey {
+func mustCreateApiKey(t *testing.T, client *dbent.Client, k *domain.APIKey) *domain.APIKey {
 	t.Helper()
 	ctx := context.Background()
 
 	if k.Status == "" {
-		k.Status = service.StatusActive
+		k.Status = domain.StatusActive
 	}
 	if k.Key == "" {
 		k.Key = "sk-" + time.Now().Format("150405.000000")
@@ -324,15 +324,15 @@ func mustCreateApiKey(t *testing.T, client *dbent.Client, k *service.APIKey) *se
 	return k
 }
 
-func mustCreateRedeemCode(t *testing.T, client *dbent.Client, c *service.RedeemCode) *service.RedeemCode {
+func mustCreateRedeemCode(t *testing.T, client *dbent.Client, c *domain.RedeemCode) *domain.RedeemCode {
 	t.Helper()
 	ctx := context.Background()
 
 	if c.Status == "" {
-		c.Status = service.StatusUnused
+		c.Status = domain.StatusUnused
 	}
 	if c.Type == "" {
-		c.Type = service.RedeemTypeBalance
+		c.Type = domain.RedeemTypeBalance
 	}
 	if c.Code == "" {
 		c.Code = "rc-" + time.Now().Format("150405.000000")
@@ -366,12 +366,12 @@ func mustCreateRedeemCode(t *testing.T, client *dbent.Client, c *service.RedeemC
 	return c
 }
 
-func mustCreateSubscription(t *testing.T, client *dbent.Client, s *service.UserSubscription) *service.UserSubscription {
+func mustCreateSubscription(t *testing.T, client *dbent.Client, s *domain.UserSubscription) *domain.UserSubscription {
 	t.Helper()
 	ctx := context.Background()
 
 	if s.Status == "" {
-		s.Status = service.SubscriptionStatusActive
+		s.Status = domain.SubscriptionStatusActive
 	}
 	now := time.Now()
 	if s.StartsAt.IsZero() {

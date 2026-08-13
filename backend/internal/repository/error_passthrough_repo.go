@@ -2,11 +2,11 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 
 	"github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/internal/model"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 type errorPassthroughRepository struct {
@@ -14,7 +14,7 @@ type errorPassthroughRepository struct {
 }
 
 // NewErrorPassthroughRepository 创建错误透传规则仓库
-func NewErrorPassthroughRepository(client *ent.Client) service.ErrorPassthroughRepository {
+func NewErrorPassthroughRepository(client *ent.Client) ports.ErrorPassthroughRepository {
 	return &errorPassthroughRepository{client: client}
 }
 

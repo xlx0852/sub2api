@@ -4,9 +4,8 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
-
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 func TestAccountRepoSparkShadowRoundTrip(t *testing.T) {
@@ -14,23 +13,23 @@ func TestAccountRepoSparkShadowRoundTrip(t *testing.T) {
 	tx := testEntTx(t)
 	repo := newAccountRepositoryWithSQL(tx.Client(), tx, nil)
 
-	parent := &service.Account{
+	parent := &domain.Account{
 		Name:     "parent",
-		Platform: service.PlatformOpenAI,
-		Type:     service.AccountTypeOAuth,
-		Status:   service.StatusActive,
+		Platform: domain.PlatformOpenAI,
+		Type:     domain.AccountTypeOAuth,
+		Status:   domain.StatusActive,
 	}
 	if err := repo.Create(ctx, parent); err != nil {
 		t.Fatalf("create parent: %v", err)
 	}
 	pid := parent.ID
-	shadow := &service.Account{
+	shadow := &domain.Account{
 		Name:            "shadow",
-		Platform:        service.PlatformOpenAI,
-		Type:            service.AccountTypeOAuth,
-		Status:          service.StatusActive,
+		Platform:        domain.PlatformOpenAI,
+		Type:            domain.AccountTypeOAuth,
+		Status:          domain.StatusActive,
 		ParentAccountID: &pid,
-		QuotaDimension:  service.QuotaDimensionSpark,
+		QuotaDimension:  domain.QuotaDimensionSpark,
 	}
 	if err := repo.Create(ctx, shadow); err != nil {
 		t.Fatalf("create shadow: %v", err)
@@ -42,7 +41,7 @@ func TestAccountRepoSparkShadowRoundTrip(t *testing.T) {
 	if got.ParentAccountID == nil || *got.ParentAccountID != pid {
 		t.Fatalf("ParentAccountID round-trip: %v", got.ParentAccountID)
 	}
-	if got.QuotaDimension != service.QuotaDimensionSpark {
+	if got.QuotaDimension != domain.QuotaDimensionSpark {
 		t.Fatalf("QuotaDimension: %q", got.QuotaDimension)
 	}
 }
@@ -57,59 +56,59 @@ func TestListShadowsByParent(t *testing.T) {
 	repo := newAccountRepositoryWithSQL(tx.Client(), tx, nil)
 
 	// Create parent1 and its spark shadow
-	parent1 := &service.Account{
+	parent1 := &domain.Account{
 		Name:     "list-parent1",
-		Platform: service.PlatformOpenAI,
-		Type:     service.AccountTypeOAuth,
-		Status:   service.StatusActive,
+		Platform: domain.PlatformOpenAI,
+		Type:     domain.AccountTypeOAuth,
+		Status:   domain.StatusActive,
 	}
 	if err := repo.Create(ctx, parent1); err != nil {
 		t.Fatalf("create parent1: %v", err)
 	}
 	pid1 := parent1.ID
 
-	shadow1 := &service.Account{
+	shadow1 := &domain.Account{
 		Name:            "shadow1",
-		Platform:        service.PlatformOpenAI,
-		Type:            service.AccountTypeOAuth,
-		Status:          service.StatusActive,
+		Platform:        domain.PlatformOpenAI,
+		Type:            domain.AccountTypeOAuth,
+		Status:          domain.StatusActive,
 		ParentAccountID: &pid1,
-		QuotaDimension:  service.QuotaDimensionSpark,
+		QuotaDimension:  domain.QuotaDimensionSpark,
 	}
 	if err := repo.Create(ctx, shadow1); err != nil {
 		t.Fatalf("create shadow1: %v", err)
 	}
 
 	// Create parent2 and its spark shadow (must NOT appear in parent1's list)
-	parent2 := &service.Account{
+	parent2 := &domain.Account{
 		Name:     "list-parent2",
-		Platform: service.PlatformOpenAI,
-		Type:     service.AccountTypeOAuth,
-		Status:   service.StatusActive,
+		Platform: domain.PlatformOpenAI,
+		Type:     domain.AccountTypeOAuth,
+		Status:   domain.StatusActive,
 	}
 	if err := repo.Create(ctx, parent2); err != nil {
 		t.Fatalf("create parent2: %v", err)
 	}
 	pid2 := parent2.ID
 
-	shadow2 := &service.Account{
+	shadow2 := &domain.Account{
 		Name:            "shadow2",
-		Platform:        service.PlatformOpenAI,
-		Type:            service.AccountTypeOAuth,
-		Status:          service.StatusActive,
+		Platform:        domain.PlatformOpenAI,
+		Type:            domain.AccountTypeOAuth,
+		Status:          domain.StatusActive,
 		ParentAccountID: &pid2,
-		QuotaDimension:  service.QuotaDimensionSpark,
+		QuotaDimension:  domain.QuotaDimensionSpark,
 	}
 	if err := repo.Create(ctx, shadow2); err != nil {
 		t.Fatalf("create shadow2: %v", err)
 	}
 
 	// Create 1 unrelated normal account (no parent, global dimension)
-	unrelated := &service.Account{
+	unrelated := &domain.Account{
 		Name:     "unrelated",
-		Platform: service.PlatformOpenAI,
-		Type:     service.AccountTypeOAuth,
-		Status:   service.StatusActive,
+		Platform: domain.PlatformOpenAI,
+		Type:     domain.AccountTypeOAuth,
+		Status:   domain.StatusActive,
 	}
 	if err := repo.Create(ctx, unrelated); err != nil {
 		t.Fatalf("create unrelated: %v", err)
@@ -127,7 +126,7 @@ func TestListShadowsByParent(t *testing.T) {
 	if acc.ParentAccountID == nil || *acc.ParentAccountID != pid1 {
 		t.Errorf("unexpected ParentAccountID: %v", acc.ParentAccountID)
 	}
-	if acc.QuotaDimension != service.QuotaDimensionSpark {
+	if acc.QuotaDimension != domain.QuotaDimensionSpark {
 		t.Errorf("unexpected QuotaDimension: %q", acc.QuotaDimension)
 	}
 	if acc.ID != shadow1.ID {

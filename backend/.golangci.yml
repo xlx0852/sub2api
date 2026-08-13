@@ -48,11 +48,10 @@ linters:
         # P0 边界冻结（OpenSpec change: refactor-architecture, design.md D1/D10）
         #
         # 以下规则编码"当前已成立"的依赖不变量，防止迁移期间架构回退腐化；
-        # 已存在的历史违例（repository→service 拆包死锁、domain→pkg/*）
-        # 不在此硬禁（会立即红），由 internal/archtest 基线测试按
-        # "现状白名单 + 禁止新增"管理。
-        # 目标分层 domain/ports/app/infra/transport 的规则对未来包预先生效
-        # （arch-future-* 规则当前不匹配任何文件，包创建后自动激活）。
+        # 已存在的历史违例（domain→pkg/*、domain→model）由 internal/archtest
+        # 基线测试按"现状白名单 + 禁止新增"管理。
+        # P1 已清零 repository→service；目标分层 domain/ports/app/infra/transport
+        # 的规则对未来包预先生效（arch-future-* 当前不匹配任何文件，包创建后自动激活）。
         # ---------------------------------------------------------------
         arch-config-standalone:
           list-mode: original
@@ -116,8 +115,8 @@ linters:
             - pkg: github.com/Wei-Shaw/sub2api/internal/util
               desc: "model may only import internal/pkg"
         arch-domain-no-business-imports:
-          # domain 的目标是零 internal 依赖（design.md D1）；现存 domain→pkg/errors、
-          # domain→pkg/modelcatalog 由 internal/archtest 基线管理，此处不禁 pkg。
+          # domain 的目标是零 internal 依赖（design.md D1）；P1 过渡期 domain→pkg/*
+          # 与 domain→model（TLS 指纹/错误透传类型别名）由 internal/archtest 基线管理。
           list-mode: original
           files:
             - "**/internal/domain/**"
@@ -133,8 +132,6 @@ linters:
             - pkg: github.com/Wei-Shaw/sub2api/internal/middleware
               desc: "domain must stay dependency-free (design.md D1)"
             - pkg: github.com/Wei-Shaw/sub2api/internal/config
-              desc: "domain must stay dependency-free (design.md D1)"
-            - pkg: github.com/Wei-Shaw/sub2api/internal/model
               desc: "domain must stay dependency-free (design.md D1)"
             - pkg: github.com/Wei-Shaw/sub2api/internal/payment
               desc: "domain must stay dependency-free (design.md D1)"
@@ -204,12 +201,14 @@ linters:
             - pkg: github.com/Wei-Shaw/sub2api/internal/web
               desc: "payment protocol lib must not import business/transport layers"
         arch-repository-no-transport:
-          # repository→service 为已知拆包死锁（P1 ports 下沉后清零），
-          # 由 internal/archtest 基线管理，此处不禁；禁止的是向接入层扩散。
+          # P1 已清零 repository→service 生产代码依赖；测试文件（opt-in 外部测试）除外。
           list-mode: original
           files:
             - "**/internal/repository/**"
+            - "!**/*_test.go"
           deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/service
+              desc: "repository must not import service (P1 ports sink)"
             - pkg: github.com/Wei-Shaw/sub2api/internal/handler
               desc: "repository must not import transport/assembly layers"
             - pkg: github.com/Wei-Shaw/sub2api/internal/server

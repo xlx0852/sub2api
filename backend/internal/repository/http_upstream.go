@@ -29,7 +29,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyurl"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyutil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 )
 
@@ -156,8 +156,8 @@ type httpUpstreamService struct {
 //   - cfg: 全局配置，包含连接池参数和隔离策略
 //
 // 返回:
-//   - service.HTTPUpstream 接口实现
-func NewHTTPUpstream(cfg *config.Config) service.HTTPUpstream {
+//   - domain.HTTPUpstream 接口实现
+func NewHTTPUpstream(cfg *config.Config) ports.HTTPUpstream {
 	return &httpUpstreamService{
 		cfg:     cfg,
 		clients: make(map[string]*upstreamClientEntry),

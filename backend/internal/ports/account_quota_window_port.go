@@ -20,3 +20,9 @@ type AccountQuotaWindowRepository interface {
 	InsertOpen(ctx context.Context, w *domain.AccountQuotaWindow) (*domain.AccountQuotaWindow, error)
 	CloseOpen(ctx context.Context, accountID int64, kind string, endAt time.Time, reason string, used *float64) error
 }
+
+type AccountQuotaObservationRepository interface {
+	HasObservation(ctx context.Context, quotaWindowID int64, usedPercent float64) (bool, error)
+	InsertObservation(ctx context.Context, observation *domain.AccountQuotaUsageObservation) (bool, error)
+	ListObservations(ctx context.Context, quotaWindowID int64, limit int) ([]*domain.AccountQuotaUsageObservation, error)
+}

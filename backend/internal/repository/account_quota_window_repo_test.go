@@ -4,12 +4,12 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"regexp"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,7 +43,7 @@ func TestInsertObservation_IsIdempotentByWindowAndPercent(t *testing.T) {
 	db, mock := newSQLMock(t)
 	repo := &accountQuotaWindowRepository{db: db}
 	observedAt := time.Date(2026, 8, 9, 10, 0, 0, 0, time.UTC)
-	observation := &service.AccountQuotaUsageObservation{
+	observation := &domain.AccountQuotaUsageObservation{
 		QuotaWindowID: 1, AccountID: 69, Platform: "openai", Kind: "7d",
 		ObservedAt: observedAt, UsedPercent: 10, Requests: 100, Tokens: 1000,
 		AccountCost: 20, StandardCost: 20, UserCost: 2,

@@ -2,12 +2,12 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"regexp"
 	"testing"
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 func TestProfitRepositoryGetCurrentUserBalanceTotalIncludesFrozenBalance(t *testing.T) {
@@ -108,7 +108,7 @@ func TestProfitRepositoryInsertCostConfigsIfAbsentUsesSingleStatement(t *testing
 		WillReturnRows(sqlmock.NewRows([]string{"account_id"}).AddRow(int64(1)).AddRow(int64(2)))
 
 	repo := &profitRepository{db: db}
-	inserted, err := repo.InsertCostConfigsIfAbsent(context.Background(), []*service.AccountCostConfig{
+	inserted, err := repo.InsertCostConfigsIfAbsent(context.Background(), []*domain.AccountCostConfig{
 		{AccountID: 1, CostType: "subscription", PeriodFee: 200, PeriodDays: 30, Currency: "USD"},
 		{AccountID: 2, CostType: "subscription", PeriodFee: 200, PeriodDays: 30, Currency: "USD"},
 	})
@@ -139,7 +139,7 @@ func TestProfitRepositoryGetAccountUsageStatsForRangesBatchesIndependentWindows(
 			AddRow(int64(2), int64(5), 200.0, 40.0))
 
 	repo := &profitRepository{db: db}
-	stats, err := repo.GetAccountUsageStatsForRanges(context.Background(), []service.ProfitAccountUsageRange{
+	stats, err := repo.GetAccountUsageStatsForRanges(context.Background(), []domain.ProfitAccountUsageRange{
 		{AccountID: 1, Start: start, End: start.AddDate(0, 0, 30)},
 		{AccountID: 2, Start: start.AddDate(0, 0, 5), End: start.AddDate(0, 0, 20)},
 	})

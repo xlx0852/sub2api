@@ -7,15 +7,19 @@
 #
 # 迁移计划见 openspec/changes/refactor-architecture/design.md（Migration Plan）。
 
-# 拆包死锁根因：约 151 个 Repository/Cache 接口定义在 service 内，
-# repository 反向 import service 来实现它们；P1 ports 下沉后应清零。
-internal/repository -> internal/service
-
-# 现有 internal/domain 尚依赖 pkg 的错误与模型目录库；P2 domain 拆分时收敛为零依赖。
+# 现有 internal/domain 尚依赖 pkg 的错误、模型目录与若干协议/工具类型；
+# P2 domain 拆分时收敛为零依赖。P1 为打破 repository→service 拆包死锁，
+# 将仓储签名与 Account 方法所需类型机械下沉，引入下列过渡边。
+internal/domain -> internal/model
+internal/domain -> internal/pkg/ctxkey
 internal/domain -> internal/pkg/errors
+internal/domain -> internal/pkg/ip
+internal/domain -> internal/pkg/kimi
 internal/domain -> internal/pkg/modelcatalog
-
-# P1 ports 下沉：仓储接口签名普遍携带分页参数（13 个接口），ports 不得 import pkg，
-# 故在 domain 以类型别名再导出 pagination 类型（domain/pagination.go），
-# 引入本条过渡边；P2 分页类型正式迁入 domain 后移除。
+internal/domain -> internal/pkg/oauth
+internal/domain -> internal/pkg/openai
 internal/domain -> internal/pkg/pagination
+internal/domain -> internal/pkg/timezone
+internal/domain -> internal/pkg/tlsfingerprint
+internal/domain -> internal/pkg/usagestats
+internal/domain -> internal/pkg/xai

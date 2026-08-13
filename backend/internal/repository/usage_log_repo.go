@@ -3,13 +3,13 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"strings"
 	"sync"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	gocache "github.com/patrickmn/go-cache"
 )
 
@@ -147,7 +147,7 @@ type usageLogRepository struct {
 	bestEffortRecent    *gocache.Cache
 }
 
-func NewUsageLogRepository(client *dbent.Client, sqlDB *sql.DB) service.UsageLogRepository {
+func NewUsageLogRepository(client *dbent.Client, sqlDB *sql.DB) ports.UsageLogRepository {
 	return newUsageLogRepositoryWithSQL(client, sqlDB)
 }
 

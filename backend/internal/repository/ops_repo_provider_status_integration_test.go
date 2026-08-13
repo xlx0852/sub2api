@@ -5,10 +5,10 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,8 +18,8 @@ func TestOpsRepositoryProviderStatusSnapshots(t *testing.T) {
 	require.NoError(t, err)
 	repo := NewOpsRepository(integrationDB)
 	now := time.Now().UTC().Truncate(time.Second)
-	first := &service.ProviderStatusSnapshotRecord{
-		Provider: service.ProviderStatusOpenAI, SourceURL: service.OpenAIStatusSummaryURL,
+	first := &domain.ProviderStatusSnapshotRecord{
+		Provider: domain.ProviderStatusOpenAI, SourceURL: domain.OpenAIStatusSummaryURL,
 		OverallIndicator: "none", OverallDescription: "Fully operational",
 		ComponentsJSON: json.RawMessage(`[]`), IncidentsJSON: json.RawMessage(`[]`),
 		FetchedAt: now, ContentHash: "hash-1",
@@ -40,11 +40,11 @@ func TestOpsRepositoryProviderStatusSnapshots(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, inserted)
 
-	latest, err := repo.GetLatestProviderStatusSnapshot(ctx, service.ProviderStatusOpenAI)
+	latest, err := repo.GetLatestProviderStatusSnapshot(ctx, domain.ProviderStatusOpenAI)
 	require.NoError(t, err)
 	require.Equal(t, "minor", latest.OverallIndicator)
-	history, err := repo.ListProviderStatusSnapshots(ctx, &service.ProviderStatusHistoryFilter{
-		Provider: service.ProviderStatusOpenAI, StartTime: &now, Limit: 10,
+	history, err := repo.ListProviderStatusSnapshots(ctx, &domain.ProviderStatusHistoryFilter{
+		Provider: domain.ProviderStatusOpenAI, StartTime: &now, Limit: 10,
 	})
 	require.NoError(t, err)
 	require.Len(t, history, 2)

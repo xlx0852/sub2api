@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -62,44 +63,7 @@ var (
 	avatarQualitySteps = []int{88, 80, 72, 64, 56, 48, 40, 32}
 )
 
-type UserRepository interface {
-	Create(ctx context.Context, user *User) error
-	GetByID(ctx context.Context, id int64) (*User, error)
-	// GetByIDIncludeDeleted 绕过软删除过滤按 ID 取用户（含已删）。仅供管理员审计/usage 点击使用。
-	GetByIDIncludeDeleted(ctx context.Context, id int64) (*User, error)
-	GetByEmail(ctx context.Context, email string) (*User, error)
-	GetFirstAdmin(ctx context.Context) (*User, error)
-	Update(ctx context.Context, user *User) error
-	Delete(ctx context.Context, id int64) error
-	GetUserAvatar(ctx context.Context, userID int64) (*UserAvatar, error)
-	UpsertUserAvatar(ctx context.Context, userID int64, input UpsertUserAvatarInput) (*UserAvatar, error)
-	DeleteUserAvatar(ctx context.Context, userID int64) error
-
-	List(ctx context.Context, params pagination.PaginationParams) ([]User, *pagination.PaginationResult, error)
-	ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters UserListFilters) ([]User, *pagination.PaginationResult, error)
-	GetLatestUsedAtByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*time.Time, error)
-	GetLatestUsedAtByUserID(ctx context.Context, userID int64) (*time.Time, error)
-	UpdateUserLastActiveAt(ctx context.Context, userID int64, activeAt time.Time) error
-
-	UpdateBalance(ctx context.Context, id int64, amount float64) error
-	DeductBalance(ctx context.Context, id int64, amount float64) error
-	UpdateConcurrency(ctx context.Context, id int64, amount int) error
-	BatchSetConcurrency(ctx context.Context, userIDs []int64, value int) (int, error)
-	BatchAddConcurrency(ctx context.Context, userIDs []int64, delta int) (int, error)
-	ExistsByEmail(ctx context.Context, email string) (bool, error)
-	RemoveGroupFromAllowedGroups(ctx context.Context, groupID int64) (int64, error)
-	// AddGroupToAllowedGroups 将指定分组增量添加到用户的 allowed_groups（幂等，冲突忽略）
-	AddGroupToAllowedGroups(ctx context.Context, userID int64, groupID int64) error
-	// RemoveGroupFromUserAllowedGroups 移除单个用户的指定分组权限
-	RemoveGroupFromUserAllowedGroups(ctx context.Context, userID int64, groupID int64) error
-	ListUserAuthIdentities(ctx context.Context, userID int64) ([]UserAuthIdentityRecord, error)
-	UnbindUserAuthProvider(ctx context.Context, userID int64, provider string) error
-
-	// TOTP 双因素认证
-	UpdateTotpSecret(ctx context.Context, userID int64, encryptedSecret *string) error
-	EnableTotp(ctx context.Context, userID int64) error
-	DisableTotp(ctx context.Context, userID int64) error
-}
+type UserRepository = ports.UserRepository
 
 type UserIdentitySummary struct {
 	Provider      string     `json:"provider"`

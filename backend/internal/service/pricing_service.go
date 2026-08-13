@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -134,10 +135,7 @@ type LiteLLMModelPricing struct {
 }
 
 // PricingRemoteClient 远程价格数据获取接口
-type PricingRemoteClient interface {
-	FetchPricingJSON(ctx context.Context, url string) ([]byte, error)
-	FetchHashText(ctx context.Context, url string) (string, error)
-}
+type PricingRemoteClient = ports.PricingRemoteClient
 
 // LiteLLMRawEntry 用于解析原始JSON数据
 type LiteLLMRawEntry struct {
@@ -171,8 +169,9 @@ type PricingService struct {
 	localHash    string
 
 	// 停止信号
-	stopCh chan struct{}
-	wg     sync.WaitGroup
+	stopCh   chan struct{}
+	stopOnce sync.Once
+	wg       sync.WaitGroup
 }
 
 // NewPricingService 创建价格服务
@@ -208,11 +207,13 @@ func (s *PricingService) Initialize() error {
 	return nil
 }
 
-// Stop 停止价格服务
+// Stop 停止价格服务（幂等，重复调用不会 panic）
 func (s *PricingService) Stop() {
-	close(s.stopCh)
-	s.wg.Wait()
-	logger.LegacyPrintf("service.pricing", "%s", "[Pricing] Service stopped")
+	s.stopOnce.Do(func() {
+		close(s.stopCh)
+		s.wg.Wait()
+		logger.LegacyPrintf("service.pricing", "%s", "[Pricing] Service stopped")
+	})
 }
 
 // startUpdateScheduler 启动定时更新调度器

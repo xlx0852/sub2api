@@ -24,7 +24,7 @@ const (
 	billingCacheJitter        = 30 * time.Second
 	rateLimitCacheTTL         = 7 * 24 * time.Hour // 7 days matches the longest window
 
-	// Rate limit window durations — must match service.RateLimitWindow* constants.
+	// Rate limit window durations — must match domain.RateLimitWindow* constants.
 	rateLimitWindow5h = 5 * time.Hour
 	rateLimitWindow1d = 24 * time.Hour
 	rateLimitWindow7d = 7 * 24 * time.Hour

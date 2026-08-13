@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"strings"
 	"time"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
@@ -19,11 +19,11 @@ type redeemCodeRepository struct {
 	client *dbent.Client
 }
 
-func NewRedeemCodeRepository(client *dbent.Client) service.RedeemCodeRepository {
+func NewRedeemCodeRepository(client *dbent.Client) ports.RedeemCodeRepository {
 	return &redeemCodeRepository{client: client}
 }
 
-func (r *redeemCodeRepository) Create(ctx context.Context, code *service.RedeemCode) error {
+func (r *redeemCodeRepository) Create(ctx context.Context, code *domain.RedeemCode) error {
 	created, err := r.client.RedeemCode.Create().
 		SetCode(code.Code).
 		SetType(code.Type).
@@ -43,7 +43,7 @@ func (r *redeemCodeRepository) Create(ctx context.Context, code *service.RedeemC
 	return err
 }
 
-func (r *redeemCodeRepository) CreateBatch(ctx context.Context, codes []service.RedeemCode) error {
+func (r *redeemCodeRepository) CreateBatch(ctx context.Context, codes []domain.RedeemCode) error {
 	if len(codes) == 0 {
 		return nil
 	}
@@ -68,7 +68,7 @@ func (r *redeemCodeRepository) CreateBatch(ctx context.Context, codes []service.
 	return r.client.RedeemCode.CreateBulk(builders...).Exec(ctx)
 }
 
-func (r *redeemCodeRepository) GetByID(ctx context.Context, id int64) (*service.RedeemCode, error) {
+func (r *redeemCodeRepository) GetByID(ctx context.Context, id int64) (*domain.RedeemCode, error) {
 	m, err := r.client.RedeemCode.Query().
 		Where(redeemcode.IDEQ(id)).
 		Only(ctx)
@@ -81,7 +81,7 @@ func (r *redeemCodeRepository) GetByID(ctx context.Context, id int64) (*service.
 	return redeemCodeEntityToService(m), nil
 }
 
-func (r *redeemCodeRepository) GetByCode(ctx context.Context, code string) (*service.RedeemCode, error) {
+func (r *redeemCodeRepository) GetByCode(ctx context.Context, code string) (*domain.RedeemCode, error) {
 	m, err := r.client.RedeemCode.Query().
 		Where(redeemcode.CodeEQ(code)).
 		Only(ctx)
@@ -99,11 +99,11 @@ func (r *redeemCodeRepository) Delete(ctx context.Context, id int64) error {
 	return err
 }
 
-func (r *redeemCodeRepository) List(ctx context.Context, params pagination.PaginationParams) ([]service.RedeemCode, *pagination.PaginationResult, error) {
+func (r *redeemCodeRepository) List(ctx context.Context, params pagination.PaginationParams) ([]domain.RedeemCode, *pagination.PaginationResult, error) {
 	return r.ListWithFilters(ctx, params, "", "", "")
 }
 
-func (r *redeemCodeRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, codeType, status, search string) ([]service.RedeemCode, *pagination.PaginationResult, error) {
+func (r *redeemCodeRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, codeType, status, search string) ([]domain.RedeemCode, *pagination.PaginationResult, error) {
 	q := r.client.RedeemCode.Query()
 
 	if codeType != "" {
@@ -196,7 +196,7 @@ func redeemCodeListOrder(params pagination.PaginationParams) []func(*entsql.Sele
 	return []func(*entsql.Selector){dbent.Desc(field), dbent.Desc(redeemcode.FieldID)}
 }
 
-func (r *redeemCodeRepository) Update(ctx context.Context, code *service.RedeemCode) error {
+func (r *redeemCodeRepository) Update(ctx context.Context, code *domain.RedeemCode) error {
 	up := r.client.RedeemCode.UpdateOneID(code.ID).
 		SetCode(code.Code).
 		SetType(code.Type).
@@ -340,7 +340,7 @@ func (r *redeemCodeRepository) Use(ctx context.Context, id, userID int64) error 
 	return nil
 }
 
-func (r *redeemCodeRepository) ListByUser(ctx context.Context, userID int64, limit int) ([]service.RedeemCode, error) {
+func (r *redeemCodeRepository) ListByUser(ctx context.Context, userID int64, limit int) ([]domain.RedeemCode, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -360,7 +360,7 @@ func (r *redeemCodeRepository) ListByUser(ctx context.Context, userID int64, lim
 
 // ListByUserPaginated returns paginated balance/concurrency history for a user.
 // Supports optional type filter (e.g. "balance", "admin_balance", "concurrency", "admin_concurrency", "subscription").
-func (r *redeemCodeRepository) ListByUserPaginated(ctx context.Context, userID int64, params pagination.PaginationParams, codeType string) ([]service.RedeemCode, *pagination.PaginationResult, error) {
+func (r *redeemCodeRepository) ListByUserPaginated(ctx context.Context, userID int64, params pagination.PaginationParams, codeType string) ([]domain.RedeemCode, *pagination.PaginationResult, error) {
 	q := r.client.RedeemCode.Query().
 		Where(redeemcode.UsedByEQ(userID))
 
@@ -409,11 +409,11 @@ func (r *redeemCodeRepository) SumPositiveBalanceByUser(ctx context.Context, use
 	return result[0].Sum, nil
 }
 
-func redeemCodeEntityToService(m *dbent.RedeemCode) *service.RedeemCode {
+func redeemCodeEntityToService(m *dbent.RedeemCode) *domain.RedeemCode {
 	if m == nil {
 		return nil
 	}
-	out := &service.RedeemCode{
+	out := &domain.RedeemCode{
 		ID:           m.ID,
 		Code:         m.Code,
 		Type:         m.Type,
@@ -436,8 +436,8 @@ func redeemCodeEntityToService(m *dbent.RedeemCode) *service.RedeemCode {
 	return out
 }
 
-func redeemCodeEntitiesToService(models []*dbent.RedeemCode) []service.RedeemCode {
-	out := make([]service.RedeemCode, 0, len(models))
+func redeemCodeEntitiesToService(models []*dbent.RedeemCode) []domain.RedeemCode {
+	out := make([]domain.RedeemCode, 0, len(models))
 	for i := range models {
 		if s := redeemCodeEntityToService(models[i]); s != nil {
 			out = append(out, *s)

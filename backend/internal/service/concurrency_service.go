@@ -7,12 +7,14 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
@@ -20,63 +22,19 @@ import (
 
 // ConcurrencyCache 定义并发控制的缓存接口
 // 使用有序集合存储槽位，按时间戳清理过期条目
-type ConcurrencyCache interface {
-	// 账号槽位管理
-	// 键格式: concurrency:account:{accountID}（有序集合，成员为 requestID）
-	AcquireAccountSlot(ctx context.Context, accountID int64, maxConcurrency int, requestID string) (bool, error)
-	ReleaseAccountSlot(ctx context.Context, accountID int64, requestID string) error
-	GetAccountConcurrency(ctx context.Context, accountID int64) (int, error)
-	GetAccountConcurrencyBatch(ctx context.Context, accountIDs []int64) (map[int64]int, error)
+type ConcurrencyCache = ports.ConcurrencyCache
 
-	// 账号等待队列（账号级）
-	IncrementAccountWaitCount(ctx context.Context, accountID int64, maxWait int) (bool, error)
-	DecrementAccountWaitCount(ctx context.Context, accountID int64) error
-	GetAccountWaitingCount(ctx context.Context, accountID int64) (int, error)
-
-	// 用户槽位管理
-	// 键格式: concurrency:user:{userID}（有序集合，成员为 requestID）
-	AcquireUserSlot(ctx context.Context, userID int64, maxConcurrency int, requestID string) (bool, error)
-	ReleaseUserSlot(ctx context.Context, userID int64, requestID string) error
-	GetUserConcurrency(ctx context.Context, userID int64) (int, error)
-
-	// 等待队列计数（每次入队都会刷新 TTL，避免长时间排队时计数提前过期）
-	IncrementWaitCount(ctx context.Context, userID int64, maxWait int) (bool, error)
-	DecrementWaitCount(ctx context.Context, userID int64) error
-
-	// 批量负载查询（只读）
-	GetAccountsLoadBatch(ctx context.Context, accounts []AccountWithConcurrency) (map[int64]*AccountLoadInfo, error)
-	GetUsersLoadBatch(ctx context.Context, users []UserWithConcurrency) (map[int64]*UserLoadInfo, error)
-
-	// 清理过期槽位（后台任务）
-	CleanupExpiredAccountSlots(ctx context.Context, accountID int64) error
-	CleanupExpiredAccountSlotKeys(ctx context.Context) error
-
-	// 启动时清理旧进程遗留槽位与等待计数
-	CleanupStaleProcessSlots(ctx context.Context, activeRequestPrefix string) error
-}
-
-type APIKeyConcurrencyCache interface {
-	TrackAPIKeySlot(ctx context.Context, apiKeyID int64, requestID string) error
-	ReleaseAPIKeySlot(ctx context.Context, apiKeyID int64, requestID string) error
-	GetAPIKeyConcurrencyBatch(ctx context.Context, apiKeyIDs []int64) (map[int64]int, error)
-}
+type APIKeyConcurrencyCache = ports.APIKeyConcurrencyCache
 
 // OpenAIWSIngressLeaseCache owns the short-lived distributed lease used to
 // bound live client WebSocket sessions. It is deliberately independent of the
 // request-slot namespace: idle ingress connections do not occupy turn slots.
-type OpenAIWSIngressLeaseCache interface {
-	AcquireOpenAIWSIngressLease(ctx context.Context, apiKeyID int64, maxConnections int, leaseID string) (bool, error)
-	RefreshOpenAIWSIngressLease(ctx context.Context, apiKeyID int64, leaseID string) (bool, error)
-	ReleaseOpenAIWSIngressLease(ctx context.Context, apiKeyID int64, leaseID string) error
-}
+type OpenAIWSIngressLeaseCache = ports.OpenAIWSIngressLeaseCache
 
 // ModelConcurrencyCache owns the model-level global concurrency budget slots
 // (concurrency:model:{canonicalModel}). It is optional: when the backing Redis
 // implementation does not expose it, model budgets are skipped (fail-open).
-type ModelConcurrencyCache interface {
-	AcquireModelSlot(ctx context.Context, modelKey string, maxConcurrency int, requestID string) (bool, error)
-	ReleaseModelSlot(ctx context.Context, modelKey string, requestID string) error
-}
+type ModelConcurrencyCache = ports.ModelConcurrencyCache
 
 const (
 	openAIWSIngressLeaseTTL             = 60 * time.Second
@@ -248,6 +206,9 @@ type ConcurrencyService struct {
 	// 由 SettingService 注入，热路径经 60s 进程内缓存读取，避免每次请求访问 DB。
 	// 为 nil 或 map 为空时表示未启用模型预算，所有模型行为不变。
 	modelConcurrencyLimitProvider atomic.Value // func(context.Context) map[string]int
+
+	// slotCleanupOnce 保证槽位清理 worker 只启动一次，避免重复调用叠加多个永不退出的 goroutine。
+	slotCleanupOnce sync.Once
 }
 
 type cachedAccountLoadBatch struct {
@@ -439,29 +400,10 @@ type AcquireResult struct {
 	ModelLimited bool
 }
 
-type AccountWithConcurrency struct {
-	ID             int64
-	MaxConcurrency int
-}
-
-type UserWithConcurrency struct {
-	ID             int64
-	MaxConcurrency int
-}
-
-type AccountLoadInfo struct {
-	AccountID          int64
-	CurrentConcurrency int
-	WaitingCount       int
-	LoadRate           int // 0-100+ (percent)
-}
-
-type UserLoadInfo struct {
-	UserID             int64
-	CurrentConcurrency int
-	WaitingCount       int
-	LoadRate           int // 0-100+ (percent)
-}
+type AccountWithConcurrency = domain.AccountWithConcurrency
+type UserWithConcurrency = domain.UserWithConcurrency
+type AccountLoadInfo = domain.AccountLoadInfo
+type UserLoadInfo = domain.UserLoadInfo
 
 // AcquireAccountSlot attempts to acquire a concurrency slot for an account.
 // If the account is at max concurrency, it waits until a slot is available or timeout.
@@ -863,15 +805,17 @@ func (s *ConcurrencyService) StartSlotCleanupWorker(_ AccountRepository, interva
 		}
 	}
 
-	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
+	s.slotCleanupOnce.Do(func() {
+		go func() {
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
 
-		runCleanup()
-		for range ticker.C {
 			runCleanup()
-		}
-	}()
+			for range ticker.C {
+				runCleanup()
+			}
+		}()
+	})
 }
 
 // GetAccountConcurrencyBatch gets current concurrency counts for multiple accounts.

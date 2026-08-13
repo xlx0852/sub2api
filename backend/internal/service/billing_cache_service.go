@@ -25,6 +25,8 @@ var errBillingCacheUnavailable = fmt.Errorf("billing cache unavailable")
 var (
 	ErrSubscriptionInvalid       = infraerrors.Forbidden("SUBSCRIPTION_INVALID", "subscription is invalid or expired")
 	ErrBillingServiceUnavailable = infraerrors.ServiceUnavailable("BILLING_SERVICE_ERROR", "Billing service temporarily unavailable. Please retry later.")
+	// ErrRateLimitBackendUnavailable 在 fail-closed 模式下，限流/RPM/配额依赖故障时返回，映射为 HTTP 503。
+	ErrRateLimitBackendUnavailable = infraerrors.ServiceUnavailable("RATE_LIMIT_BACKEND_UNAVAILABLE", "Rate limit backend temporarily unavailable. Please retry later.")
 	// RPM 超限错误。gateway_handler 负责映射为 HTTP 429。
 	ErrGroupRPMExceeded = infraerrors.TooManyRequests("GROUP_RPM_EXCEEDED", "group requests-per-minute limit exceeded")
 	ErrUserRPMExceeded  = infraerrors.TooManyRequests("USER_RPM_EXCEEDED", "user requests-per-minute limit exceeded")
@@ -568,6 +570,12 @@ func (s *BillingCacheService) InvalidateAPIKeyRateLimit(ctx context.Context, key
 // API Key 限速缓存方法
 // ============================================
 
+// rateLimitFailClosed 报告限流/RPM/配额依赖故障时是否应拒绝请求（fail-closed）。
+// 默认 false（fail-open，优先可用性）；由 security.rate_limit_fail_closed 配置开启。
+func (s *BillingCacheService) rateLimitFailClosed() bool {
+	return s != nil && s.cfg != nil && s.cfg.Security.RateLimitFailClosed
+}
+
 // checkAPIKeyRateLimits checks rate limit windows for an API key.
 // It loads usage from Redis cache (falling back to DB on cache miss),
 // resets expired windows in-memory and triggers async DB reset,
@@ -580,6 +588,9 @@ func (s *BillingCacheService) checkAPIKeyRateLimits(ctx context.Context, apiKey 
 		}
 		data, err := s.apiKeyRateLimitLoader.GetRateLimitData(ctx, apiKey.ID)
 		if err != nil {
+			if s.rateLimitFailClosed() {
+				return ErrRateLimitBackendUnavailable
+			}
 			return nil // Don't block requests on DB errors
 		}
 		return s.evaluateRateLimits(ctx, apiKey, data.Usage5h, data.Usage1d, data.Usage7d,
@@ -594,6 +605,9 @@ func (s *BillingCacheService) checkAPIKeyRateLimits(ctx context.Context, apiKey 
 		}
 		dbData, dbErr := s.apiKeyRateLimitLoader.GetRateLimitData(ctx, apiKey.ID)
 		if dbErr != nil {
+			if s.rateLimitFailClosed() {
+				return ErrRateLimitBackendUnavailable
+			}
 			return nil // Don't block requests on DB errors
 		}
 		// Build cache entry from DB data
@@ -802,6 +816,9 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 						"Warning: rpm increment (override) failed for user=%d group=%d: %v",
 						user.ID, group.ID, incErr,
 					)
+					if s.rateLimitFailClosed() {
+						return ErrRateLimitBackendUnavailable
+					}
 					// fail-open
 				} else if count > *override {
 					return ErrGroupRPMExceeded
@@ -817,6 +834,9 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 					"Warning: rpm increment (group) failed for user=%d group=%d: %v",
 					user.ID, group.ID, err,
 				)
+				if s.rateLimitFailClosed() {
+					return ErrRateLimitBackendUnavailable
+				}
 				// fail-open
 			} else if count > group.RPMLimit {
 				return ErrGroupRPMExceeded
@@ -833,6 +853,9 @@ func (s *BillingCacheService) checkRPM(ctx context.Context, user *User, group *G
 				"Warning: rpm increment (user) failed for user=%d: %v",
 				user.ID, err,
 			)
+			if s.rateLimitFailClosed() {
+				return ErrRateLimitBackendUnavailable
+			}
 			return nil // fail-open
 		}
 		if count > user.RPMLimit {
@@ -1185,6 +1208,10 @@ func (s *BillingCacheService) checkUserPlatformQuotaEligibility(
 		return nil
 	}
 	if dbErr != nil {
+		if s.rateLimitFailClosed() {
+			logger.LegacyPrintf("service.billing_cache", "Warning: load user platform quota failed user=%d platform=%s: %v (fail-closed)", userID, platform, dbErr)
+			return ErrRateLimitBackendUnavailable
+		}
 		logger.LegacyPrintf("service.billing_cache", "Warning: load user platform quota failed user=%d platform=%s: %v (fail-open)", userID, platform, dbErr)
 		return nil
 	}

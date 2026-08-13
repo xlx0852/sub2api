@@ -1,27 +1,26 @@
 package repository
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"strings"
 	"testing"
-
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 func TestResolveOpsDashboardQueryMode_RequestTypeForcesRaw(t *testing.T) {
-	requestType := int16(service.RequestTypeWSV2)
-	filter := &service.OpsDashboardFilter{
-		QueryMode:   service.OpsQueryModePreagg,
+	requestType := int16(domain.RequestTypeWSV2)
+	filter := &domain.OpsDashboardFilter{
+		QueryMode:   domain.OpsQueryModePreagg,
 		RequestType: &requestType,
 	}
 
-	if got := resolveOpsDashboardQueryMode(filter); got != service.OpsQueryModeRaw {
-		t.Fatalf("resolveOpsDashboardQueryMode() = %s, want %s", got, service.OpsQueryModeRaw)
+	if got := resolveOpsDashboardQueryMode(filter); got != domain.OpsQueryModeRaw {
+		t.Fatalf("resolveOpsDashboardQueryMode() = %s, want %s", got, domain.OpsQueryModeRaw)
 	}
 }
 
 func TestBuildUsageWhere_RequestTypeUsesLegacyCompatibleCondition(t *testing.T) {
-	requestType := int16(service.RequestTypeWSV2)
-	filter := &service.OpsDashboardFilter{RequestType: &requestType}
+	requestType := int16(domain.RequestTypeWSV2)
+	filter := &domain.OpsDashboardFilter{RequestType: &requestType}
 
 	_, where, args, _ := buildUsageWhere(filter, testTimeA, testTimeB, 1)
 	if !strings.Contains(where, "ul.request_type") {
@@ -36,8 +35,8 @@ func TestBuildUsageWhere_RequestTypeUsesLegacyCompatibleCondition(t *testing.T) 
 }
 
 func TestBuildErrorWhere_RequestTypeUsesQualifiedCondition(t *testing.T) {
-	requestType := int16(service.RequestTypeStream)
-	filter := &service.OpsDashboardFilter{RequestType: &requestType}
+	requestType := int16(domain.RequestTypeStream)
+	filter := &domain.OpsDashboardFilter{RequestType: &requestType}
 
 	where, args, _ := buildErrorWhere(filter, testTimeA, testTimeB, 1)
 	if !strings.Contains(where, "request_type") {

@@ -1,11 +1,10 @@
 package repository
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 func TestOpsErrorLogInsertDoesNotPersistRequestReplayFields(t *testing.T) {
@@ -26,7 +25,7 @@ func TestOpsErrorLogInsertDoesNotPersistRequestReplayFields(t *testing.T) {
 		}
 	}
 
-	inputType := reflect.TypeOf(service.OpsInsertErrorLogInput{})
+	inputType := reflect.TypeOf(domain.OpsInsertErrorLogInput{})
 	disallowedFields := []string{
 		"RequestBodyJSON",
 		"RequestBodyTruncated",

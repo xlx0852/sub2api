@@ -3,11 +3,12 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/service"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/Wei-Shaw/sub2api/migrations"
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -43,7 +44,7 @@ func TestProviderStatusLiveFetchAndPersistence(t *testing.T) {
 	inserted, err = repo.InsertProviderStatusSnapshot(ctx, record)
 	require.NoError(t, err)
 	require.False(t, inserted)
-	latest, err := repo.GetLatestProviderStatusSnapshot(ctx, service.ProviderStatusOpenAI)
+	latest, err := repo.GetLatestProviderStatusSnapshot(ctx, domain.ProviderStatusOpenAI)
 	require.NoError(t, err)
 	require.Equal(t, record.ContentHash, latest.ContentHash)
 }

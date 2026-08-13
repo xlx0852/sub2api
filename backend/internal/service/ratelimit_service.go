@@ -184,7 +184,10 @@ func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Accoun
 // HandleUpstreamError 处理上游错误响应，标记账号状态
 // 返回是否应该停止该账号的调度
 func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte, requestedModel ...string) (shouldDisable bool) {
-	if account != nil && account.IsOpenAICompatible() {
+	if account == nil {
+		return false
+	}
+	if account.IsOpenAICompatible() {
 		class := ClassifyUpstreamOutcome(statusCode, nil, false)
 		recordOpenAIUpstreamOutcome(class)
 		if class == UpstreamOutcomeCredential || class == UpstreamOutcomeQuota {
@@ -858,10 +861,10 @@ func kimiQuotaLimitResetAt(account *Account, now time.Time) time.Time {
 	}
 	var resetAt time.Time
 	for _, window := range []string{"5h", "7d"} {
-		if account.getExtraFloat64("kimi_quota_"+window+"_utilization") < 100 {
+		if account.GetExtraFloat64("kimi_quota_"+window+"_utilization") < 100 {
 			continue
 		}
-		candidate := account.getExtraTime("kimi_quota_" + window + "_reset_at")
+		candidate := account.GetExtraTime("kimi_quota_" + window + "_reset_at")
 		if candidate.After(now) && candidate.After(resetAt) {
 			resetAt = candidate
 		}

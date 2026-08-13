@@ -21,7 +21,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/lib/pq"
 
 	entsql "entgo.io/ent/dialect/sql"
@@ -36,7 +35,7 @@ type userRepository struct {
 
 var _ ports.RedeemUserAdjustmentRepository = (*userRepository)(nil)
 
-func NewUserRepository(client *dbent.Client, sqlDB *sql.DB) service.UserRepository {
+func NewUserRepository(client *dbent.Client, sqlDB *sql.DB) ports.UserRepository {
 	return newUserRepositoryWithSQL(client, sqlDB)
 }
 
@@ -44,7 +43,7 @@ func newUserRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor) *userRepos
 	return &userRepository{client: client, sql: sqlq}
 }
 
-func (r *userRepository) Create(ctx context.Context, userIn *service.User) error {
+func (r *userRepository) Create(ctx context.Context, userIn *domain.User) error {
 	if userIn == nil {
 		return nil
 	}
@@ -101,7 +100,7 @@ func (r *userRepository) Create(ctx context.Context, userIn *service.User) error
 		SetRpmLimit(userIn.RPMLimit).
 		Save(txCtx)
 	if err != nil {
-		return translatePersistenceError(err, nil, service.ErrEmailExists)
+		return translatePersistenceError(err, nil, domain.ErrEmailExists)
 	}
 
 	if err := r.syncUserAllowedGroupsWithClient(txCtx, txClient, created.ID, userIn.AllowedGroups); err != nil {
@@ -121,7 +120,7 @@ func (r *userRepository) Create(ctx context.Context, userIn *service.User) error
 	return nil
 }
 
-func (r *userRepository) GetByID(ctx context.Context, id int64) (*service.User, error) {
+func (r *userRepository) GetByID(ctx context.Context, id int64) (*domain.User, error) {
 	m, err := r.client.User.Query().Where(dbuser.IDEQ(id)).Only(ctx)
 	if err != nil {
 		return nil, translatePersistenceError(err, domain.ErrUserNotFound, nil)
@@ -138,7 +137,7 @@ func (r *userRepository) GetByID(ctx context.Context, id int64) (*service.User, 
 	return out, nil
 }
 
-func (r *userRepository) GetByIDIncludeDeleted(ctx context.Context, id int64) (*service.User, error) {
+func (r *userRepository) GetByIDIncludeDeleted(ctx context.Context, id int64) (*domain.User, error) {
 	ctx = mixins.SkipSoftDelete(ctx)
 	m, err := r.client.User.Query().Where(dbuser.IDEQ(id)).Only(ctx)
 	if err != nil {
@@ -155,7 +154,7 @@ func (r *userRepository) GetByIDIncludeDeleted(ctx context.Context, id int64) (*
 	return out, nil
 }
 
-func (r *userRepository) GetByEmail(ctx context.Context, email string) (*service.User, error) {
+func (r *userRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	matches, err := r.client.User.Query().
 		Where(userEmailLookupPredicate(email)).
 		Order(dbent.Asc(dbuser.FieldID)).
@@ -182,7 +181,7 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*service
 	return out, nil
 }
 
-func (r *userRepository) Update(ctx context.Context, userIn *service.User) error {
+func (r *userRepository) Update(ctx context.Context, userIn *domain.User) error {
 	if userIn == nil {
 		return nil
 	}
@@ -258,7 +257,7 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User) error
 	}
 	updated, err := updateOp.Save(txCtx)
 	if err != nil {
-		return translatePersistenceError(err, domain.ErrUserNotFound, service.ErrEmailExists)
+		return translatePersistenceError(err, domain.ErrUserNotFound, domain.ErrEmailExists)
 	}
 
 	if err := r.syncUserAllowedGroupsWithClient(txCtx, txClient, updated.ID, userIn.AllowedGroups); err != nil {
@@ -430,11 +429,11 @@ func (r *userRepository) deleteUser(ctx context.Context, exec *dbent.Client, id 
 	return nil
 }
 
-func (r *userRepository) List(ctx context.Context, params pagination.PaginationParams) ([]service.User, *pagination.PaginationResult, error) {
+func (r *userRepository) List(ctx context.Context, params pagination.PaginationParams) ([]domain.User, *pagination.PaginationResult, error) {
 	return r.ListWithFilters(ctx, params, domain.UserListFilters{})
 }
 
-func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters domain.UserListFilters) ([]service.User, *pagination.PaginationResult, error) {
+func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters domain.UserListFilters) ([]domain.User, *pagination.PaginationResult, error) {
 	// SkipSoftDelete 仅作用于 User 身份解析（下方 Count/All）；订阅、分组等关联实体沿用原始 ctx，避免穿透到这些同样带软删除的实体而带出已删除行。
 	userCtx := ctx
 	if filters.IncludeDeleted {
@@ -487,7 +486,7 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 		}
 		if len(allowedUserIDs) == 0 {
 			// No users match the attribute filters
-			return []service.User{}, paginationResultFromTotal(0, params), nil
+			return []domain.User{}, paginationResultFromTotal(0, params), nil
 		}
 		q = q.Where(dbuser.IDIn(allowedUserIDs...))
 	}
@@ -509,13 +508,13 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 		return nil, nil, err
 	}
 
-	outUsers := make([]service.User, 0, len(users))
+	outUsers := make([]domain.User, 0, len(users))
 	if len(users) == 0 {
 		return outUsers, paginationResultFromTotal(int64(total), params), nil
 	}
 
 	userIDs := make([]int64, 0, len(users))
-	userMap := make(map[int64]*service.User, len(users))
+	userMap := make(map[int64]*domain.User, len(users))
 	for i := range users {
 		userIDs = append(userIDs, users[i].ID)
 		u := userEntityToService(users[i])
@@ -887,7 +886,7 @@ func ensureNormalizedEmailAvailableWithClient(ctx context.Context, client *dbent
 	}
 	for _, match := range matches {
 		if match.ID != userID {
-			return service.ErrEmailExists
+			return domain.ErrEmailExists
 		}
 	}
 	return nil
@@ -954,7 +953,7 @@ func (r *userRepository) RemoveGroupFromUserAllowedGroups(ctx context.Context, u
 	return err
 }
 
-func (r *userRepository) GetFirstAdmin(ctx context.Context) (*service.User, error) {
+func (r *userRepository) GetFirstAdmin(ctx context.Context) (*domain.User, error) {
 	m, err := r.client.User.Query().
 		Where(
 			dbuser.RoleEQ(domain.RoleAdmin),
@@ -1041,7 +1040,7 @@ func (r *userRepository) syncUserAllowedGroupsWithClient(ctx context.Context, cl
 	return nil
 }
 
-func applyUserEntityToService(dst *service.User, src *dbent.User) {
+func applyUserEntityToService(dst *domain.User, src *dbent.User) {
 	if dst == nil || src == nil {
 		return
 	}

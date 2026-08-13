@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -37,25 +38,7 @@ func ContextSkipRedeemAffiliate(ctx context.Context) context.Context {
 	return context.WithValue(ctx, ctxKeySkipRedeemAffiliate{}, true)
 }
 
-type RedeemCodeRepository interface {
-	Create(ctx context.Context, code *RedeemCode) error
-	CreateBatch(ctx context.Context, codes []RedeemCode) error
-	GetByID(ctx context.Context, id int64) (*RedeemCode, error)
-	GetByCode(ctx context.Context, code string) (*RedeemCode, error)
-	Update(ctx context.Context, code *RedeemCode) error
-	BatchUpdate(ctx context.Context, ids []int64, fields RedeemCodeBatchUpdateFields) (int64, error)
-	Delete(ctx context.Context, id int64) error
-	Use(ctx context.Context, id, userID int64) error
-
-	List(ctx context.Context, params pagination.PaginationParams) ([]RedeemCode, *pagination.PaginationResult, error)
-	ListWithFilters(ctx context.Context, params pagination.PaginationParams, codeType, status, search string) ([]RedeemCode, *pagination.PaginationResult, error)
-	ListByUser(ctx context.Context, userID int64, limit int) ([]RedeemCode, error)
-	// ListByUserPaginated returns paginated balance/concurrency history for a specific user.
-	// codeType filter is optional - pass empty string to return all types.
-	ListByUserPaginated(ctx context.Context, userID int64, params pagination.PaginationParams, codeType string) ([]RedeemCode, *pagination.PaginationResult, error)
-	// SumPositiveBalanceByUser returns the total recharged amount (sum of positive balance values) for a user.
-	SumPositiveBalanceByUser(ctx context.Context, userID int64) (float64, error)
-}
+type RedeemCodeRepository = ports.RedeemCodeRepository
 
 // GenerateCodesRequest 生成兑换码请求
 type GenerateCodesRequest struct {

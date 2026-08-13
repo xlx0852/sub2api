@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"context"
 	"log/slog"
 	"math"
@@ -11,11 +12,7 @@ import (
 
 // AccountQuotaObservationRepository is optional so existing window-ledger
 // fakes remain source compatible while the SQL repository provides samples.
-type AccountQuotaObservationRepository interface {
-	HasObservation(ctx context.Context, quotaWindowID int64, usedPercent float64) (bool, error)
-	InsertObservation(ctx context.Context, observation *AccountQuotaUsageObservation) (bool, error)
-	ListObservations(ctx context.Context, quotaWindowID int64, limit int) ([]*AccountQuotaUsageObservation, error)
-}
+type AccountQuotaObservationRepository = ports.AccountQuotaObservationRepository
 
 // QuotaWindowObservation is a live upstream snapshot for one kind.
 type QuotaWindowObservation struct {

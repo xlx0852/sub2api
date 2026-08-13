@@ -2,18 +2,18 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
 func TestBuildContentModerationLogWhere_BlockedIncludesAllBlockActions(t *testing.T) {
-	where, args := buildContentModerationLogWhere(service.ContentModerationLogFilter{Result: "blocked"})
+	where, args := buildContentModerationLogWhere(domain.ContentModerationLogFilter{Result: "blocked"})
 
 	require.Empty(t, args)
 	sql := strings.Join(where, " AND ")
@@ -30,10 +30,10 @@ func TestContentModerationRepositorySummarizeLogs(t *testing.T) {
 	mock.ExpectQuery("(?s)COUNT\\(\\*\\) FILTER.*keyword_block.*cyber_policy.*action = 'error'.*FROM content_moderation_logs").
 		WillReturnRows(sqlmock.NewRows([]string{"local", "upstream", "errors", "total"}).AddRow(23, 10, 0, 33))
 
-	summary, err := repo.SummarizeLogs(context.Background(), service.ContentModerationLogFilter{})
+	summary, err := repo.SummarizeLogs(context.Background(), domain.ContentModerationLogFilter{})
 
 	require.NoError(t, err)
-	require.Equal(t, &service.ContentModerationLogSummary{LocalPreBlock: 23, UpstreamPolicy: 10, Errors: 0, Total: 33}, summary)
+	require.Equal(t, &domain.ContentModerationLogSummary{LocalPreBlock: 23, UpstreamPolicy: 10, Errors: 0, Total: 33}, summary)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

@@ -3,20 +3,20 @@
 package repository
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/google/uuid"
 )
 
 func (s *UsageLogRepoSuite) TestListWithFilters_SortByModelAsc() {
-	user := mustCreateUser(s.T(), s.client, &service.User{Email: "usage-sort@example.com"})
-	apiKey := mustCreateApiKey(s.T(), s.client, &service.APIKey{UserID: user.ID, Key: "sk-usage-sort", Name: "k"})
-	account := mustCreateAccount(s.T(), s.client, &service.Account{Name: "usage-sort-account"})
+	user := mustCreateUser(s.T(), s.client, &domain.User{Email: "usage-sort@example.com"})
+	apiKey := mustCreateApiKey(s.T(), s.client, &domain.APIKey{UserID: user.ID, Key: "sk-usage-sort", Name: "k"})
+	account := mustCreateAccount(s.T(), s.client, &domain.Account{Name: "usage-sort-account"})
 
-	first := &service.UsageLog{
+	first := &domain.UsageLog{
 		UserID:         user.ID,
 		APIKeyID:       apiKey.ID,
 		AccountID:      account.ID,
@@ -32,7 +32,7 @@ func (s *UsageLogRepoSuite) TestListWithFilters_SortByModelAsc() {
 	_, err := s.repo.Create(s.ctx, first)
 	s.Require().NoError(err)
 
-	second := &service.UsageLog{
+	second := &domain.UsageLog{
 		UserID:         user.ID,
 		APIKeyID:       apiKey.ID,
 		AccountID:      account.ID,

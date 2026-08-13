@@ -230,7 +230,7 @@ func TestIsModelRateLimited(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.account.isModelRateLimitedWithContext(context.Background(), tt.requestedModel)
+			result := tt.account.IsModelRateLimitedWithContext(context.Background(), tt.requestedModel)
 			if result != tt.expected {
 				t.Errorf("isModelRateLimited(%q) = %v, want %v", tt.requestedModel, result, tt.expected)
 			}
@@ -251,8 +251,8 @@ func TestIsModelRateLimited_OpenAIImageGenerationIntentBlocksTextModelImageTool(
 		},
 	}
 
-	require.False(t, account.isModelRateLimitedWithContext(context.Background(), "gpt-5.4"))
-	require.True(t, account.isModelRateLimitedWithContext(WithOpenAIImageGenerationIntent(context.Background()), "gpt-5.4"))
+	require.False(t, account.IsModelRateLimitedWithContext(context.Background(), "gpt-5.4"))
+	require.True(t, account.IsModelRateLimitedWithContext(WithOpenAIImageGenerationIntent(context.Background()), "gpt-5.4"))
 }
 
 func TestIsModelRateLimited_Antigravity_ThinkingAffectsModelKey(t *testing.T) {
@@ -271,7 +271,7 @@ func TestIsModelRateLimited_Antigravity_ThinkingAffectsModelKey(t *testing.T) {
 	}
 
 	ctx := context.WithValue(context.Background(), ctxkey.ThinkingEnabled, true)
-	if !account.isModelRateLimitedWithContext(ctx, "claude-sonnet-4-5") {
+	if !account.IsModelRateLimitedWithContext(ctx, "claude-sonnet-4-5") {
 		t.Errorf("expected model to be rate limited")
 	}
 }
@@ -528,7 +528,7 @@ func TestIsModelRateLimited_AnthropicFableFamilyKey(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.requestedModel, func(t *testing.T) {
-			got := account.isModelRateLimitedWithContext(context.Background(), tc.requestedModel)
+			got := account.IsModelRateLimitedWithContext(context.Background(), tc.requestedModel)
 			require.Equal(t, tc.expected, got)
 			remaining := account.GetModelRateLimitRemainingTimeWithContext(context.Background(), tc.requestedModel)
 			require.Equal(t, tc.expected, remaining > 0)

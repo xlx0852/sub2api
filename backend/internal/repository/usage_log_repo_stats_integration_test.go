@@ -4,11 +4,11 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,15 +18,15 @@ func TestUsageLog_GetStatsWithFilters_AggregatesAndEndpoints(t *testing.T) {
 	client := tx.Client()
 	repo := newUsageLogRepositoryWithSQL(client, tx)
 
-	user := mustCreateUser(t, client, &service.User{Email: "stats@test.com"})
-	apiKey := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "sk-stats-1", Name: "k"})
-	account := mustCreateAccount(t, client, &service.Account{Name: "acc-stats"})
+	user := mustCreateUser(t, client, &domain.User{Email: "stats@test.com"})
+	apiKey := mustCreateApiKey(t, client, &domain.APIKey{UserID: user.ID, Key: "sk-stats-1", Name: "k"})
+	account := mustCreateAccount(t, client, &domain.Account{Name: "acc-stats"})
 
 	now := time.Now().UTC()
 	inboundEndpoint := "/v1/messages"
 	upstreamEndpoint := "/v1/responses"
 	for i := 0; i < 3; i++ {
-		_, err := repo.Create(ctx, &service.UsageLog{
+		_, err := repo.Create(ctx, &domain.UsageLog{
 			UserID: user.ID, APIKeyID: apiKey.ID, AccountID: account.ID,
 			Model: "claude-3", InputTokens: 2, OutputTokens: 3,
 			CacheCreationTokens: 4, CacheReadTokens: 5,

@@ -118,7 +118,7 @@ var importRules = []importRule{
 	},
 	{
 		name:      "repository-layering",
-		desc:      "repository 不得 import 接入层与应用装配层（对 service 的反向依赖为已知拆包死锁，白名单管理，P1 ports 下沉后清零）",
+		desc:      "repository 不得 import 接入层、应用装配层与 service（P1 已清零拆包死锁）",
 		appliesTo: []string{"internal/repository"},
 		forbidden: []string{
 			"internal/service", "internal/handler", "internal/server",

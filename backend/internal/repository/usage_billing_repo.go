@@ -4,23 +4,23 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"strings"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 type usageBillingRepository struct {
 	db *sql.DB
 }
 
-func NewUsageBillingRepository(_ *dbent.Client, sqlDB *sql.DB) service.UsageBillingRepository {
+func NewUsageBillingRepository(_ *dbent.Client, sqlDB *sql.DB) ports.UsageBillingRepository {
 	return &usageBillingRepository{db: sqlDB}
 }
 
-func (r *usageBillingRepository) Apply(ctx context.Context, cmd *service.UsageBillingCommand) (_ *domain.UsageBillingApplyResult, err error) {
+func (r *usageBillingRepository) Apply(ctx context.Context, cmd *domain.UsageBillingCommand) (_ *domain.UsageBillingApplyResult, err error) {
 	if cmd == nil {
 		return &domain.UsageBillingApplyResult{}, nil
 	}
@@ -63,7 +63,7 @@ func (r *usageBillingRepository) Apply(ctx context.Context, cmd *service.UsageBi
 	return result, nil
 }
 
-func (r *usageBillingRepository) claimUsageBillingKey(ctx context.Context, tx *sql.Tx, cmd *service.UsageBillingCommand) (bool, error) {
+func (r *usageBillingRepository) claimUsageBillingKey(ctx context.Context, tx *sql.Tx, cmd *domain.UsageBillingCommand) (bool, error) {
 	return r.claimUsageBillingRequest(ctx, tx, cmd.RequestID, cmd.APIKeyID, cmd.RequestFingerprint)
 }
 
@@ -172,7 +172,7 @@ func (r *usageBillingRepository) applyBatchImageBalanceHold(
 	return result, nil
 }
 
-func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, tx *sql.Tx, cmd *service.UsageBillingCommand, result *domain.UsageBillingApplyResult) error {
+func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, tx *sql.Tx, cmd *domain.UsageBillingCommand, result *domain.UsageBillingApplyResult) error {
 	if cmd.SubscriptionCost > 0 && cmd.SubscriptionID != nil {
 		if err := incrementUsageBillingSubscription(ctx, tx, *cmd.SubscriptionID, cmd.SubscriptionCost); err != nil {
 			return err

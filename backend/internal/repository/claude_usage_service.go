@@ -11,7 +11,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 )
 
 const defaultClaudeUsageURL = "https://api.anthropic.com/api/oauth/usage"
@@ -22,12 +22,12 @@ const defaultUsageUserAgent = "claude-code/2.1.7"
 type claudeUsageService struct {
 	usageURL          string
 	allowPrivateHosts bool
-	httpUpstream      service.HTTPUpstream
+	httpUpstream      ports.HTTPUpstream
 }
 
 // NewClaudeUsageFetcher 创建 Claude 用量获取服务
 // httpUpstream: 可选，如果提供则支持 TLS 指纹伪装
-func NewClaudeUsageFetcher(httpUpstream service.HTTPUpstream) service.ClaudeUsageFetcher {
+func NewClaudeUsageFetcher(httpUpstream ports.HTTPUpstream) ports.ClaudeUsageFetcher {
 	return &claudeUsageService{
 		usageURL:     defaultClaudeUsageURL,
 		httpUpstream: httpUpstream,
@@ -36,14 +36,14 @@ func NewClaudeUsageFetcher(httpUpstream service.HTTPUpstream) service.ClaudeUsag
 
 // FetchUsage 简单版本，不支持 TLS 指纹（向后兼容）
 func (s *claudeUsageService) FetchUsage(ctx context.Context, accessToken, proxyURL string) (*domain.ClaudeUsageResponse, error) {
-	return s.FetchUsageWithOptions(ctx, &service.ClaudeUsageFetchOptions{
+	return s.FetchUsageWithOptions(ctx, &domain.ClaudeUsageFetchOptions{
 		AccessToken: accessToken,
 		ProxyURL:    proxyURL,
 	})
 }
 
 // FetchUsageWithOptions 完整版本，支持 TLS 指纹和自定义 User-Agent
-func (s *claudeUsageService) FetchUsageWithOptions(ctx context.Context, opts *service.ClaudeUsageFetchOptions) (*domain.ClaudeUsageResponse, error) {
+func (s *claudeUsageService) FetchUsageWithOptions(ctx context.Context, opts *domain.ClaudeUsageFetchOptions) (*domain.ClaudeUsageResponse, error) {
 	if opts == nil {
 		return nil, fmt.Errorf("options is nil")
 	}

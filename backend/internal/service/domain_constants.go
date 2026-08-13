@@ -56,6 +56,12 @@ const (
 	PlatformAntigravity = domain.PlatformAntigravity
 	PlatformGrok        = domain.PlatformGrok
 	PlatformKimi        = domain.PlatformKimi
+
+	PrivacyModeTrainingOff   = domain.PrivacyModeTrainingOff
+	PrivacyModeFailed        = domain.PrivacyModeFailed
+	PrivacyModeCFBlocked     = domain.PrivacyModeCFBlocked
+	AntigravityPrivacySet    = domain.AntigravityPrivacySet
+	AntigravityPrivacyFailed = domain.AntigravityPrivacyFailed
 )
 
 // AllowedQuotaPlatforms 是允许设置 user × platform quota 的平台列表（单一权威来源）。
@@ -525,8 +531,8 @@ func SettingKeyAuthSourcePlatformQuotas(source string) string {
 
 // QuotaDimension constants for spark shadow accounts.
 const (
-	QuotaDimensionGlobal = "global"
-	QuotaDimensionSpark  = "spark"
+	QuotaDimensionGlobal = domain.QuotaDimensionGlobal
+	QuotaDimensionSpark  = domain.QuotaDimensionSpark
 )
 
 // AdminAPIKeyPrefix is the prefix for admin API keys (distinct from user "sk-" keys).

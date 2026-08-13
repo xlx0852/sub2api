@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"strings"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/ent/user"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 
@@ -26,7 +26,7 @@ type apiKeyRepository struct {
 	sql    sqlExecutor
 }
 
-func NewAPIKeyRepository(client *dbent.Client, sqlDB *sql.DB) service.APIKeyRepository {
+func NewAPIKeyRepository(client *dbent.Client, sqlDB *sql.DB) ports.APIKeyRepository {
 	return newAPIKeyRepositoryWithSQL(client, sqlDB)
 }
 
@@ -39,7 +39,7 @@ func (r *apiKeyRepository) activeQuery() *dbent.APIKeyQuery {
 	return r.client.APIKey.Query().Where(apikey.DeletedAtIsNil())
 }
 
-func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) error {
+func (r *apiKeyRepository) Create(ctx context.Context, key *domain.APIKey) error {
 	builder := r.client.APIKey.Create().
 		SetUserID(key.UserID).
 		SetKey(key.Key).
@@ -72,7 +72,7 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 	return translatePersistenceError(err, nil, domain.ErrAPIKeyExists)
 }
 
-func (r *apiKeyRepository) GetByID(ctx context.Context, id int64) (*service.APIKey, error) {
+func (r *apiKeyRepository) GetByID(ctx context.Context, id int64) (*domain.APIKey, error) {
 	m, err := r.activeQuery().
 		Where(apikey.IDEQ(id)).
 		WithUser().
@@ -106,7 +106,7 @@ func (r *apiKeyRepository) GetKeyAndOwnerID(ctx context.Context, id int64) (stri
 	return m.Key, m.UserID, nil
 }
 
-func (r *apiKeyRepository) GetByKey(ctx context.Context, key string) (*service.APIKey, error) {
+func (r *apiKeyRepository) GetByKey(ctx context.Context, key string) (*domain.APIKey, error) {
 	m, err := r.activeQuery().
 		Where(apikey.KeyEQ(key)).
 		WithUser(func(q *dbent.UserQuery) {
@@ -125,7 +125,7 @@ func (r *apiKeyRepository) GetByKey(ctx context.Context, key string) (*service.A
 	return apiKeyEntityToService(m), nil
 }
 
-func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*service.APIKey, error) {
+func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*domain.APIKey, error) {
 	m, err := r.activeQuery().
 		Where(apikey.KeyEQ(key)).
 		Select(
@@ -219,7 +219,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 	return apiKeyEntityToService(m), nil
 }
 
-func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) error {
+func (r *apiKeyRepository) Update(ctx context.Context, key *domain.APIKey) error {
 	// 使用原子操作：将软删除检查与更新合并到同一语句，避免竞态条件。
 	// 之前的实现先检查 Exist 再 UpdateOneID，若在两步之间发生软删除，
 	// 则会更新已删除的记录。
@@ -397,7 +397,7 @@ func (r *apiKeyRepository) deleteWithAudit(ctx context.Context, exec *dbent.Clie
 	return nil
 }
 
-func (r *apiKeyRepository) ListByUserID(ctx context.Context, userID int64, params pagination.PaginationParams, filters domain.APIKeyListFilters) ([]service.APIKey, *pagination.PaginationResult, error) {
+func (r *apiKeyRepository) ListByUserID(ctx context.Context, userID int64, params pagination.PaginationParams, filters domain.APIKeyListFilters) ([]domain.APIKey, *pagination.PaginationResult, error) {
 	q := r.activeQuery().Where(apikey.UserIDEQ(userID))
 
 	// Apply filters
@@ -436,7 +436,7 @@ func (r *apiKeyRepository) ListByUserID(ctx context.Context, userID int64, param
 		return nil, nil, err
 	}
 
-	outKeys := make([]service.APIKey, 0, len(keys))
+	outKeys := make([]domain.APIKey, 0, len(keys))
 	for i := range keys {
 		outKeys = append(outKeys, *apiKeyEntityToService(keys[i]))
 	}
@@ -468,7 +468,7 @@ func (r *apiKeyRepository) ExistsByKey(ctx context.Context, key string) (bool, e
 	return count > 0, err
 }
 
-func (r *apiKeyRepository) ListByGroupID(ctx context.Context, groupID int64, params pagination.PaginationParams) ([]service.APIKey, *pagination.PaginationResult, error) {
+func (r *apiKeyRepository) ListByGroupID(ctx context.Context, groupID int64, params pagination.PaginationParams) ([]domain.APIKey, *pagination.PaginationResult, error) {
 	q := r.activeQuery().Where(apikey.GroupIDEQ(groupID))
 
 	total, err := q.Count(ctx)
@@ -489,7 +489,7 @@ func (r *apiKeyRepository) ListByGroupID(ctx context.Context, groupID int64, par
 		return nil, nil, err
 	}
 
-	outKeys := make([]service.APIKey, 0, len(keys))
+	outKeys := make([]domain.APIKey, 0, len(keys))
 	for i := range keys {
 		outKeys = append(outKeys, *apiKeyEntityToService(keys[i]))
 	}
@@ -524,7 +524,7 @@ func apiKeyListOrder(params pagination.PaginationParams) []func(*entsql.Selector
 }
 
 // SearchAPIKeys searches API keys by user ID and/or keyword (name)
-func (r *apiKeyRepository) SearchAPIKeys(ctx context.Context, userID int64, keyword string, limit int) ([]service.APIKey, error) {
+func (r *apiKeyRepository) SearchAPIKeys(ctx context.Context, userID int64, keyword string, limit int) ([]domain.APIKey, error) {
 	q := r.activeQuery()
 	if userID > 0 {
 		q = q.Where(apikey.UserIDEQ(userID))
@@ -539,7 +539,7 @@ func (r *apiKeyRepository) SearchAPIKeys(ctx context.Context, userID int64, keyw
 		return nil, err
 	}
 
-	outKeys := make([]service.APIKey, 0, len(keys))
+	outKeys := make([]domain.APIKey, 0, len(keys))
 	for i := range keys {
 		outKeys = append(outKeys, *apiKeyEntityToService(keys[i]))
 	}
@@ -707,11 +707,11 @@ func (r *apiKeyRepository) GetRateLimitData(ctx context.Context, id int64) (resu
 	return data, rows.Err()
 }
 
-func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
+func apiKeyEntityToService(m *dbent.APIKey) *domain.APIKey {
 	if m == nil {
 		return nil
 	}
-	out := &service.APIKey{
+	out := &domain.APIKey{
 		ID:              m.ID,
 		UserID:          m.UserID,
 		Key:             m.Key,
@@ -754,11 +754,11 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 	return out
 }
 
-func userEntityToService(u *dbent.User) *service.User {
+func userEntityToService(u *dbent.User) *domain.User {
 	if u == nil {
 		return nil
 	}
-	out := &service.User{
+	out := &domain.User{
 		ID:                         u.ID,
 		Email:                      u.Email,
 		Username:                   u.Username,
@@ -791,11 +791,11 @@ func userEntityToService(u *dbent.User) *service.User {
 	return out
 }
 
-func groupEntityToService(g *dbent.Group) *service.Group {
+func groupEntityToService(g *dbent.Group) *domain.Group {
 	if g == nil {
 		return nil
 	}
-	return &service.Group{
+	return &domain.Group{
 		ID:                              g.ID,
 		Name:                            g.Name,
 		Description:                     derefString(g.Description),

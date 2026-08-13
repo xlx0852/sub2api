@@ -1,9 +1,9 @@
 package repository
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,10 +20,10 @@ func TestFilterSchedulerCredentialsKeepsSubscriptionPlanType(t *testing.T) {
 }
 
 func TestSchedulerMetadataAccountKeepsOpenAISubscriptionIdentity(t *testing.T) {
-	account := service.Account{
+	account := domain.Account{
 		ID:       24,
-		Platform: service.PlatformOpenAI,
-		Type:     service.AccountTypeOAuth,
+		Platform: domain.PlatformOpenAI,
+		Type:     domain.AccountTypeOAuth,
 		Credentials: map[string]any{
 			"plan_type":    "plus",
 			"access_token": "secret-access-token",
@@ -46,7 +46,7 @@ func TestBuildSchedulerMetadataAccountKeepsGrokQuotaSnapshots(t *testing.T) {
 		"requests":   map[string]any{"limit": 100, "remaining": 75},
 		"updated_at": "2026-07-15T09:00:00Z",
 	}
-	account := service.Account{ID: 89, Platform: service.PlatformGrok, Extra: map[string]any{
+	account := domain.Account{ID: 89, Platform: domain.PlatformGrok, Extra: map[string]any{
 		"grok_billing_snapshot": billing,
 		"grok_usage_snapshot":   quota,
 		"unused_large_field":    "drop-me",

@@ -5,11 +5,11 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -28,8 +28,8 @@ func (s *ProxyExpirySuite) SetupTest() {
 func TestProxyExpirySuite(t *testing.T) { suite.Run(t, new(ProxyExpirySuite)) }
 
 func (s *ProxyExpirySuite) mkProxy(name, mode string, expiresAt *time.Time, backupID *int64) int64 {
-	p := &service.Proxy{Name: name, Protocol: "http", Host: "127.0.0.1", Port: 8080,
-		Status: service.StatusActive, FallbackMode: mode, ExpiryWarnDays: 7,
+	p := &domain.Proxy{Name: name, Protocol: "http", Host: "127.0.0.1", Port: 8080,
+		Status: domain.StatusActive, FallbackMode: mode, ExpiryWarnDays: 7,
 		ExpiresAt: expiresAt, BackupProxyID: backupID}
 	s.Require().NoError(s.repo.Create(s.ctx, p))
 	return p.ID
@@ -54,7 +54,7 @@ func (s *ProxyExpirySuite) accountProxyID(id int64) *int64 {
 
 func (s *ProxyExpirySuite) TestSweep_DirectMode() {
 	past := time.Now().Add(-time.Hour)
-	pid := s.mkProxy("p-direct", service.FallbackModeDirect, &past, nil)
+	pid := s.mkProxy("p-direct", domain.FallbackModeDirect, &past, nil)
 	aid := s.mkAccountWithProxy(pid)
 
 	changed, err := s.repo.SweepExpiredProxies(s.ctx, time.Now())
@@ -62,7 +62,7 @@ func (s *ProxyExpirySuite) TestSweep_DirectMode() {
 	s.Require().GreaterOrEqual(changed, int64(1))
 
 	got, _ := s.repo.GetByID(s.ctx, pid)
-	s.Require().Equal(service.StatusExpired, got.Status)
+	s.Require().Equal(domain.StatusExpired, got.Status)
 	s.Require().Nil(s.accountProxyID(aid))
 	var origin *int64
 	err = scanSingleRow(s.ctx, s.tx, `SELECT proxy_fallback_origin_id FROM accounts WHERE id=$1`, []any{aid}, &origin)
@@ -73,8 +73,8 @@ func (s *ProxyExpirySuite) TestSweep_DirectMode() {
 
 func (s *ProxyExpirySuite) TestSweep_EnqueuesChangedAccountIDsWithoutFullRebuild() {
 	past := time.Now().Add(-time.Hour)
-	firstProxyID := s.mkProxy("p-bulk-first", service.FallbackModeDirect, &past, nil)
-	secondProxyID := s.mkProxy("p-bulk-second", service.FallbackModeDirect, &past, nil)
+	firstProxyID := s.mkProxy("p-bulk-first", domain.FallbackModeDirect, &past, nil)
+	secondProxyID := s.mkProxy("p-bulk-second", domain.FallbackModeDirect, &past, nil)
 	firstAccountID := s.mkAccountWithProxy(firstProxyID)
 	secondAccountID := s.mkAccountWithProxy(secondProxyID)
 
@@ -88,7 +88,7 @@ func (s *ProxyExpirySuite) TestSweep_EnqueuesChangedAccountIDsWithoutFullRebuild
 		FROM scheduler_outbox
 		WHERE event_type=$1
 		ORDER BY id DESC
-		LIMIT 1`, []any{service.SchedulerOutboxEventAccountBulkChanged}, &payloadRaw)
+		LIMIT 1`, []any{domain.SchedulerOutboxEventAccountBulkChanged}, &payloadRaw)
 	s.Require().NoError(err)
 
 	var payload struct {
@@ -101,7 +101,7 @@ func (s *ProxyExpirySuite) TestSweep_EnqueuesChangedAccountIDsWithoutFullRebuild
 	err = scanSingleRow(s.ctx, s.tx, `
 		SELECT COUNT(*)
 		FROM scheduler_outbox
-		WHERE event_type=$1`, []any{service.SchedulerOutboxEventFullRebuild}, &fullRebuildCount)
+		WHERE event_type=$1`, []any{domain.SchedulerOutboxEventFullRebuild}, &fullRebuildCount)
 	s.Require().NoError(err)
 	s.Require().Zero(fullRebuildCount)
 }
@@ -109,8 +109,8 @@ func (s *ProxyExpirySuite) TestSweep_EnqueuesChangedAccountIDsWithoutFullRebuild
 func (s *ProxyExpirySuite) TestSweep_ProxyMode_Healthy() {
 	future := time.Now().Add(24 * time.Hour)
 	past := time.Now().Add(-time.Hour)
-	backup := s.mkProxy("p-backup", service.FallbackModeNone, &future, nil)
-	pid := s.mkProxy("p-main", service.FallbackModeProxy, &past, &backup)
+	backup := s.mkProxy("p-backup", domain.FallbackModeNone, &future, nil)
+	pid := s.mkProxy("p-main", domain.FallbackModeProxy, &past, &backup)
 	aid := s.mkAccountWithProxy(pid)
 
 	_, err := s.repo.SweepExpiredProxies(s.ctx, time.Now())
@@ -125,13 +125,13 @@ func (s *ProxyExpirySuite) TestSweep_ProxyMode_Healthy() {
 
 func (s *ProxyExpirySuite) TestSweep_NoneMode_KeepsAccount() {
 	past := time.Now().Add(-time.Hour)
-	pid := s.mkProxy("p-none", service.FallbackModeNone, &past, nil)
+	pid := s.mkProxy("p-none", domain.FallbackModeNone, &past, nil)
 	aid := s.mkAccountWithProxy(pid)
 
 	_, err := s.repo.SweepExpiredProxies(s.ctx, time.Now())
 	s.Require().NoError(err)
 	got, _ := s.repo.GetByID(s.ctx, pid)
-	s.Require().Equal(service.StatusExpired, got.Status)
+	s.Require().Equal(domain.StatusExpired, got.Status)
 	s.Require().Equal(pid, *s.accountProxyID(aid))
 	var origin *int64
 	err = scanSingleRow(s.ctx, s.tx, `SELECT proxy_fallback_origin_id FROM accounts WHERE id=$1`, []any{aid}, &origin)

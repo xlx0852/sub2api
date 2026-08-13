@@ -3,8 +3,8 @@
 package repository
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 func (s *APIKeyRepoSuite) TestListByUserID_SortByNameAsc() {
@@ -17,7 +17,7 @@ func (s *APIKeyRepoSuite) TestListByUserID_SortByNameAsc() {
 		PageSize:  10,
 		SortBy:    "name",
 		SortOrder: "asc",
-	}, service.APIKeyListFilters{})
+	}, domain.APIKeyListFilters{})
 	s.Require().NoError(err)
 	s.Require().Len(keys, 2)
 	s.Require().Equal("a-key", keys[0].Name)

@@ -197,15 +197,15 @@ func (s *OpenAIGatewayService) doOpenAIUpstreamWithCompactV2Keepalive(
 	for {
 		select {
 		case <-ctx.Done():
-			// Soft-timeout / client cancel: drain late Do results so response
-			// bodies are not leaked if the request completes after we return.
+			// Soft-timeout / client cancel: drain the late Do result so the response
+			// body is always closed. `ctx` is the same (detached) context the upstream
+			// request uses, so Do returns promptly once it is cancelled — no fixed
+			// timeout cap is needed. A capped give-up would drop the body and leak the
+			// connection / inFlight slot if Do returned after the cap.
 			go func() {
-				select {
-				case res := <-done:
-					if res.resp != nil && res.resp.Body != nil {
-						_ = res.resp.Body.Close()
-					}
-				case <-time.After(2 * time.Minute):
+				res := <-done
+				if res.resp != nil && res.resp.Body != nil {
+					_ = res.resp.Body.Close()
 				}
 			}()
 			return nil, ctx.Err()

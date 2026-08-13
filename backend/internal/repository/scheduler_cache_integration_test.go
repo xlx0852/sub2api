@@ -4,11 +4,11 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,19 +17,19 @@ func TestSchedulerCacheSnapshotUsesSlimMetadataButKeepsFullAccount(t *testing.T)
 	rdb := testRedis(t)
 	cache := NewSchedulerCache(rdb)
 
-	bucket := service.SchedulerBucket{GroupID: 2, Platform: service.PlatformGemini, Mode: service.SchedulerModeSingle}
+	bucket := domain.SchedulerBucket{GroupID: 2, Platform: domain.PlatformGemini, Mode: domain.SchedulerModeSingle}
 	now := time.Now().UTC().Truncate(time.Second)
 	limitReset := now.Add(10 * time.Minute)
 	overloadUntil := now.Add(2 * time.Minute)
 	tempUnschedUntil := now.Add(3 * time.Minute)
 	windowEnd := now.Add(5 * time.Hour)
 
-	account := service.Account{
+	account := domain.Account{
 		ID:          101,
 		Name:        "gemini-heavy",
-		Platform:    service.PlatformGemini,
-		Type:        service.AccountTypeOAuth,
-		Status:      service.StatusActive,
+		Platform:    domain.PlatformGemini,
+		Type:        domain.AccountTypeOAuth,
+		Status:      domain.StatusActive,
 		Schedulable: true,
 		Concurrency: 3,
 		Priority:    7,
@@ -57,17 +57,17 @@ func TestSchedulerCacheSnapshotUsesSlimMetadataButKeepsFullAccount(t *testing.T)
 		SessionWindowEnd:       &windowEnd,
 		SessionWindowStatus:    "active",
 		GroupIDs:               []int64{bucket.GroupID},
-		AccountGroups: []service.AccountGroup{
+		AccountGroups: []domain.AccountGroup{
 			{
 				AccountID: 101,
 				GroupID:   bucket.GroupID,
 				Priority:  5,
-				Group:     &service.Group{ID: bucket.GroupID, Name: "gemini-group"},
+				Group:     &domain.Group{ID: bucket.GroupID, Name: "gemini-group"},
 			},
 		},
 	}
 
-	require.NoError(t, cache.SetSnapshot(ctx, bucket, []service.Account{account}))
+	require.NoError(t, cache.SetSnapshot(ctx, bucket, []domain.Account{account}))
 
 	snapshot, hit, err := cache.GetSnapshot(ctx, bucket)
 	require.NoError(t, err)

@@ -208,7 +208,7 @@ func (r *contentModerationRepository) CountFlaggedByUserSince(ctx context.Contex
 	if userID <= 0 {
 		return 0, nil
 	}
-	// SQL 中的 'cyber_policy' 字面量须与 service.ContentModerationActionCyberPolicy 保持一致。
+	// SQL 中的 'cyber_policy' 字面量须与 domain.ContentModerationActionCyberPolicy 保持一致。
 	var count int
 	err := r.db.QueryRowContext(ctx, `
 WITH last_auto_ban AS (

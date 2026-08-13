@@ -4,10 +4,10 @@ package repository
 
 import (
 	"errors"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -15,7 +15,7 @@ import (
 
 type GeminiTokenCacheSuite struct {
 	IntegrationRedisSuite
-	cache service.GeminiTokenCache
+	cache ports.GeminiTokenCache
 }
 
 func (s *GeminiTokenCacheSuite) SetupTest() {

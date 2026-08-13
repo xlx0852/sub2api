@@ -1,13 +1,7 @@
 package service
 
-import "time"
+import (
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+)
 
-type AccountGroup struct {
-	AccountID int64
-	GroupID   int64
-	Priority  int
-	CreatedAt time.Time
-
-	Account *Account
-	Group   *Group
-}
+type AccountGroup = domain.AccountGroup

@@ -2,11 +2,11 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,7 +18,7 @@ func TestOpsRepositoryGetOpenAITokenStats_PaginationMode(t *testing.T) {
 	end := start.Add(24 * time.Hour)
 	groupID := int64(9)
 
-	filter := &service.OpsOpenAITokenStatsFilter{
+	filter := &domain.OpsOpenAITokenStatsFilter{
 		TimeRange: "1d",
 		StartTime: start,
 		EndTime:   end,
@@ -74,7 +74,7 @@ func TestOpsRepositoryGetOpenAITokenStats_TopNMode(t *testing.T) {
 
 	start := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
 	end := start.Add(time.Hour)
-	filter := &service.OpsOpenAITokenStatsFilter{
+	filter := &domain.OpsOpenAITokenStatsFilter{
 		TimeRange: "1h",
 		StartTime: start,
 		EndTime:   end,
@@ -121,7 +121,7 @@ func TestOpsRepositoryGetOpenAITokenStats_EmptyResult(t *testing.T) {
 
 	start := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
 	end := start.Add(30 * time.Minute)
-	filter := &service.OpsOpenAITokenStatsFilter{
+	filter := &domain.OpsOpenAITokenStatsFilter{
 		TimeRange: "30m",
 		StartTime: start,
 		EndTime:   end,

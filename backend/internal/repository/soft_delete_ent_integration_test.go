@@ -5,6 +5,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +14,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,18 +42,18 @@ func TestEntSoftDelete_ApiKey_DefaultFilterAndSkip(t *testing.T) {
 	u := createEntUser(t, ctx, client, uniqueSoftDeleteValue(t, "sd-user")+"@example.com")
 
 	repo := NewAPIKeyRepository(client, integrationDB)
-	key := &service.APIKey{
+	key := &domain.APIKey{
 		UserID: u.ID,
 		Key:    uniqueSoftDeleteValue(t, "sk-soft-delete"),
 		Name:   "soft-delete",
-		Status: service.StatusActive,
+		Status: domain.StatusActive,
 	}
 	require.NoError(t, repo.Create(ctx, key), "create api key")
 
 	require.NoError(t, repo.Delete(ctx, key.ID), "soft delete api key")
 
 	_, err := repo.GetByID(ctx, key.ID)
-	require.ErrorIs(t, err, service.ErrAPIKeyNotFound, "deleted rows should be hidden by default")
+	require.ErrorIs(t, err, domain.ErrAPIKeyNotFound, "deleted rows should be hidden by default")
 
 	_, err = client.APIKey.Query().Where(apikey.IDEQ(key.ID)).Only(ctx)
 	require.Error(t, err, "default ent query should not see soft-deleted rows")
@@ -74,11 +74,11 @@ func TestEntSoftDelete_ApiKey_DeleteIdempotent(t *testing.T) {
 	u := createEntUser(t, ctx, client, uniqueSoftDeleteValue(t, "sd-user2")+"@example.com")
 
 	repo := NewAPIKeyRepository(client, integrationDB)
-	key := &service.APIKey{
+	key := &domain.APIKey{
 		UserID: u.ID,
 		Key:    uniqueSoftDeleteValue(t, "sk-soft-delete2"),
 		Name:   "soft-delete2",
-		Status: service.StatusActive,
+		Status: domain.StatusActive,
 	}
 	require.NoError(t, repo.Create(ctx, key), "create api key")
 
@@ -94,11 +94,11 @@ func TestEntSoftDelete_ApiKey_HardDeleteViaSkipSoftDelete(t *testing.T) {
 	u := createEntUser(t, ctx, client, uniqueSoftDeleteValue(t, "sd-user3")+"@example.com")
 
 	repo := NewAPIKeyRepository(client, integrationDB)
-	key := &service.APIKey{
+	key := &domain.APIKey{
 		UserID: u.ID,
 		Key:    uniqueSoftDeleteValue(t, "sk-soft-delete3"),
 		Name:   "soft-delete3",
-		Status: service.StatusActive,
+		Status: domain.StatusActive,
 	}
 	require.NoError(t, repo.Create(ctx, key), "create api key")
 
@@ -121,7 +121,7 @@ func createEntGroup(t *testing.T, ctx context.Context, client *dbent.Client, nam
 
 	g, err := client.Group.Create().
 		SetName(name).
-		SetStatus(service.StatusActive).
+		SetStatus(domain.StatusActive).
 		Save(ctx)
 	require.NoError(t, err, "create ent group")
 	return g
@@ -135,10 +135,10 @@ func TestEntSoftDelete_UserSubscription_DefaultFilterAndSkip(t *testing.T) {
 	g := createEntGroup(t, ctx, client, uniqueSoftDeleteValue(t, "sd-sub-group"))
 
 	repo := NewUserSubscriptionRepository(client)
-	sub := &service.UserSubscription{
+	sub := &domain.UserSubscription{
 		UserID:    u.ID,
 		GroupID:   g.ID,
-		Status:    service.SubscriptionStatusActive,
+		Status:    domain.SubscriptionStatusActive,
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	}
 	require.NoError(t, repo.Create(ctx, sub), "create user subscription")
@@ -167,10 +167,10 @@ func TestEntSoftDelete_UserSubscription_DeleteIdempotent(t *testing.T) {
 	g := createEntGroup(t, ctx, client, uniqueSoftDeleteValue(t, "sd-sub-group2"))
 
 	repo := NewUserSubscriptionRepository(client)
-	sub := &service.UserSubscription{
+	sub := &domain.UserSubscription{
 		UserID:    u.ID,
 		GroupID:   g.ID,
-		Status:    service.SubscriptionStatusActive,
+		Status:    domain.SubscriptionStatusActive,
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	}
 	require.NoError(t, repo.Create(ctx, sub), "create user subscription")
@@ -189,18 +189,18 @@ func TestEntSoftDelete_UserSubscription_ListExcludesDeleted(t *testing.T) {
 
 	repo := NewUserSubscriptionRepository(client)
 
-	sub1 := &service.UserSubscription{
+	sub1 := &domain.UserSubscription{
 		UserID:    u.ID,
 		GroupID:   g1.ID,
-		Status:    service.SubscriptionStatusActive,
+		Status:    domain.SubscriptionStatusActive,
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	}
 	require.NoError(t, repo.Create(ctx, sub1), "create subscription 1")
 
-	sub2 := &service.UserSubscription{
+	sub2 := &domain.UserSubscription{
 		UserID:    u.ID,
 		GroupID:   g2.ID,
-		Status:    service.SubscriptionStatusActive,
+		Status:    domain.SubscriptionStatusActive,
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	}
 	require.NoError(t, repo.Create(ctx, sub2), "create subscription 2")

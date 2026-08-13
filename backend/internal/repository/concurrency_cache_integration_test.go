@@ -6,11 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -24,7 +25,7 @@ var testSlotTTL = time.Duration(testSlotTTLMinutes) * time.Minute
 
 type ConcurrencyCacheSuite struct {
 	IntegrationRedisSuite
-	cache    service.ConcurrencyCache
+	cache    ports.ConcurrencyCache
 	rawCache *concurrencyCache
 }
 
@@ -511,7 +512,7 @@ func (s *ConcurrencyCacheSuite) TestGetAccountsLoadBatch() {
 	// Account 3: 0/1 slots used, 0 waiting (idle)
 
 	// Query batch load
-	accounts := []service.AccountWithConcurrency{
+	accounts := []domain.AccountWithConcurrency{
 		{ID: account1, MaxConcurrency: 3},
 		{ID: account2, MaxConcurrency: 2},
 		{ID: account3, MaxConcurrency: 1},
@@ -548,7 +549,7 @@ func (s *ConcurrencyCacheSuite) TestGetAccountsLoadBatch() {
 
 func (s *ConcurrencyCacheSuite) TestGetAccountsLoadBatch_Empty() {
 	// Test with empty account list
-	loadMap, err := s.cache.GetAccountsLoadBatch(s.ctx, []service.AccountWithConcurrency{})
+	loadMap, err := s.cache.GetAccountsLoadBatch(s.ctx, []domain.AccountWithConcurrency{})
 	require.NoError(s.T(), err)
 	require.Empty(s.T(), loadMap)
 }
@@ -846,7 +847,7 @@ func (s *ConcurrencyCacheSuite) TestModelSlot_AcquireAndRelease() {
 	modelKey := "gpt-5.6-luna"
 	reqID1, reqID2, reqID3 := "mreq1", "mreq2", "mreq3"
 
-	cache, ok := s.cache.(service.ModelConcurrencyCache)
+	cache, ok := s.cache.(ports.ModelConcurrencyCache)
 	require.True(s.T(), ok, "cache must implement ModelConcurrencyCache")
 
 	ok1, err := cache.AcquireModelSlot(s.ctx, modelKey, 2, reqID1)
@@ -878,7 +879,7 @@ func (s *ConcurrencyCacheSuite) TestModelSlot_TTL() {
 	reqID := "mreq_ttl"
 	slotKey := modelSlotKey(modelKey)
 
-	cache, ok := s.cache.(service.ModelConcurrencyCache)
+	cache, ok := s.cache.(ports.ModelConcurrencyCache)
 	require.True(s.T(), ok)
 
 	acquired, err := cache.AcquireModelSlot(s.ctx, modelKey, 5, reqID)
@@ -894,7 +895,7 @@ func (s *ConcurrencyCacheSuite) TestModelSlot_DuplicateReqID_Idempotent() {
 	modelKey := "gpt-5.6-terra"
 	reqID := "mreq-dup"
 
-	cache, ok := s.cache.(service.ModelConcurrencyCache)
+	cache, ok := s.cache.(ports.ModelConcurrencyCache)
 	require.True(s.T(), ok)
 
 	ok1, err := cache.AcquireModelSlot(s.ctx, modelKey, 2, reqID)

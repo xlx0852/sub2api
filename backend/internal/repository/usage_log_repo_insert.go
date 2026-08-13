@@ -14,7 +14,6 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 // usageLogInsertArgTypes must stay in the same order as:
@@ -102,7 +101,7 @@ const (
 )
 
 type usageLogCreateRequest struct {
-	log      *service.UsageLog
+	log      *domain.UsageLog
 	prepared usageLogInsertPrepared
 	shared   *usageLogCreateShared
 	resultCh chan usageLogCreateResult
@@ -151,7 +150,7 @@ const (
 	usageLogCreateStateCanceled
 )
 
-func (r *usageLogRepository) Create(ctx context.Context, log *service.UsageLog) (bool, error) {
+func (r *usageLogRepository) Create(ctx context.Context, log *domain.UsageLog) (bool, error) {
 	if log == nil {
 		return false, nil
 	}
@@ -167,7 +166,7 @@ func (r *usageLogRepository) Create(ctx context.Context, log *service.UsageLog) 
 	return r.createBatched(ctx, log)
 }
 
-func (r *usageLogRepository) CreateBestEffort(ctx context.Context, log *service.UsageLog) error {
+func (r *usageLogRepository) CreateBestEffort(ctx context.Context, log *domain.UsageLog) error {
 	if log == nil {
 		return nil
 	}
@@ -215,7 +214,7 @@ func (r *usageLogRepository) CreateBestEffort(ctx context.Context, log *service.
 	}
 }
 
-func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor, log *service.UsageLog) (bool, error) {
+func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor, log *domain.UsageLog) (bool, error) {
 	prepared := prepareUsageLogInsert(log)
 	if sqlq == nil {
 		sqlq = r.sql
@@ -316,7 +315,7 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 	return true, nil
 }
 
-func (r *usageLogRepository) createBatched(ctx context.Context, log *service.UsageLog) (bool, error) {
+func (r *usageLogRepository) createBatched(ctx context.Context, log *domain.UsageLog) (bool, error) {
 	if r.db == nil {
 		return r.createSingle(ctx, r.sql, log)
 	}
@@ -1248,7 +1247,7 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 	return err
 }
 
-func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
+func prepareUsageLogInsert(log *domain.UsageLog) usageLogInsertPrepared {
 	createdAt := log.CreatedAt
 	if createdAt.IsZero() {
 		createdAt = time.Now()

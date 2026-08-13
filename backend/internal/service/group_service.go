@@ -1,35 +1,14 @@
 package service
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"context"
 	"fmt"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 )
 
-type GroupRepository interface {
-	Create(ctx context.Context, group *Group) error
-	GetByID(ctx context.Context, id int64) (*Group, error)
-	GetByIDLite(ctx context.Context, id int64) (*Group, error)
-	Update(ctx context.Context, group *Group) error
-	Delete(ctx context.Context, id int64) error
-	DeleteCascade(ctx context.Context, id int64) ([]int64, error)
-
-	List(ctx context.Context, params pagination.PaginationParams) ([]Group, *pagination.PaginationResult, error)
-	ListWithFilters(ctx context.Context, params pagination.PaginationParams, platform, status, search string, isExclusive *bool) ([]Group, *pagination.PaginationResult, error)
-	ListActive(ctx context.Context) ([]Group, error)
-	ListActiveByPlatform(ctx context.Context, platform string) ([]Group, error)
-
-	ExistsByName(ctx context.Context, name string) (bool, error)
-	GetAccountCount(ctx context.Context, groupID int64) (total int64, active int64, err error)
-	DeleteAccountGroupsByGroupID(ctx context.Context, groupID int64) (int64, error)
-	// GetAccountIDsByGroupIDs 获取多个分组的所有账号 ID（去重）
-	GetAccountIDsByGroupIDs(ctx context.Context, groupIDs []int64) ([]int64, error)
-	// BindAccountsToGroup 将多个账号绑定到指定分组
-	BindAccountsToGroup(ctx context.Context, groupID int64, accountIDs []int64) error
-	// UpdateSortOrders 批量更新分组排序
-	UpdateSortOrders(ctx context.Context, updates []GroupSortOrderUpdate) error
-}
+type GroupRepository = ports.GroupRepository
 
 // CreateGroupRequest 创建分组请求
 type CreateGroupRequest struct {

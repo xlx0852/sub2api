@@ -4,23 +4,23 @@ package repository
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
 func TestProfitRepositorySubscriptionBanSettlementDisablesAccountAndShadowAtomically(t *testing.T) {
 	ctx := context.Background()
-	parent := mustCreateAccount(t, integrationEntClient, &service.Account{
-		Name: "ban-settlement-parent", Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth,
-		Status: service.StatusActive, Schedulable: true,
+	parent := mustCreateAccount(t, integrationEntClient, &domain.Account{
+		Name: "ban-settlement-parent", Platform: domain.PlatformOpenAI, Type: domain.AccountTypeOAuth,
+		Status: domain.StatusActive, Schedulable: true,
 	})
 	parentID := parent.ID
-	shadow := mustCreateAccount(t, integrationEntClient, &service.Account{
-		Name: "ban-settlement-shadow", Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth,
-		Status: service.StatusActive, Schedulable: true, ParentAccountID: &parentID, QuotaDimension: service.QuotaDimensionSpark,
+	shadow := mustCreateAccount(t, integrationEntClient, &domain.Account{
+		Name: "ban-settlement-shadow", Platform: domain.PlatformOpenAI, Type: domain.AccountTypeOAuth,
+		Status: domain.StatusActive, Schedulable: true, ParentAccountID: &parentID, QuotaDimension: domain.QuotaDimensionSpark,
 	})
 	start := time.Now().UTC().AddDate(0, 0, -5).Truncate(24 * time.Hour)
 	var cycleID int64
@@ -40,9 +40,9 @@ func TestProfitRepositorySubscriptionBanSettlementDisablesAccountAndShadowAtomic
 
 	repo := &profitRepository{db: integrationDB}
 	bannedAt := start.AddDate(0, 0, 5)
-	result, err := repo.CreateSubscriptionTermination(ctx, &service.AccountSubscriptionTermination{
+	result, err := repo.CreateSubscriptionTermination(ctx, &domain.AccountSubscriptionTermination{
 		CycleID: cycleID, EffectiveAt: bannedAt, Reason: "upstream_banned", Notes: "integration",
-	}, &service.AccountSubscriptionRefund{Amount: 200, ReceivedAt: bannedAt, Notes: "partial"})
+	}, &domain.AccountSubscriptionRefund{Amount: 200, ReceivedAt: bannedAt, Notes: "partial"})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []int64{parent.ID, shadow.ID}, result.DisabledAccountIDs)
 
@@ -50,7 +50,7 @@ func TestProfitRepositorySubscriptionBanSettlementDisablesAccountAndShadowAtomic
 		var status string
 		var schedulable bool
 		require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT status, schedulable FROM accounts WHERE id = $1`, accountID).Scan(&status, &schedulable))
-		require.Equal(t, service.StatusDisabled, status)
+		require.Equal(t, domain.StatusDisabled, status)
 		require.False(t, schedulable)
 	}
 	cycles, err := repo.ListSubscriptionCycles(ctx, parent.ID)
@@ -60,15 +60,15 @@ func TestProfitRepositorySubscriptionBanSettlementDisablesAccountAndShadowAtomic
 	require.Len(t, cycles[0].Refunds, 1)
 	require.Equal(t, 200.0, cycles[0].Refunds[0].Amount)
 
-	_, err = repo.CreateSubscriptionRefund(ctx, &service.AccountSubscriptionRefund{
+	_, err = repo.CreateSubscriptionRefund(ctx, &domain.AccountSubscriptionRefund{
 		TerminationID: result.Termination.ID, Amount: 700, ReceivedAt: bannedAt.Add(time.Minute),
 	})
-	require.ErrorIs(t, err, service.ErrSubscriptionRefundExceedsFee)
+	require.ErrorIs(t, err, domain.ErrSubscriptionRefundExceedsFee)
 
 	voided, err := repo.VoidSubscriptionRefund(ctx, result.InitialRefund.ID, "wrong amount", bannedAt.Add(2*time.Minute))
 	require.NoError(t, err)
 	require.NotNil(t, voided.VoidedAt)
-	added, err := repo.CreateSubscriptionRefund(ctx, &service.AccountSubscriptionRefund{
+	added, err := repo.CreateSubscriptionRefund(ctx, &domain.AccountSubscriptionRefund{
 		TerminationID: result.Termination.ID, Amount: 100, ReceivedAt: bannedAt.Add(3 * time.Minute), Notes: "corrected",
 	})
 	require.NoError(t, err)
@@ -80,7 +80,7 @@ func TestProfitRepositorySubscriptionBanSettlementDisablesAccountAndShadowAtomic
 	var parentStatus string
 	var parentSchedulable bool
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT status, schedulable FROM accounts WHERE id = $1`, parent.ID).Scan(&parentStatus, &parentSchedulable))
-	require.Equal(t, service.StatusDisabled, parentStatus)
+	require.Equal(t, domain.StatusDisabled, parentStatus)
 	require.False(t, parentSchedulable, "financial reversal must not reactivate scheduling")
-	require.ErrorIs(t, repo.DeleteSubscriptionCycle(ctx, cycleID), service.ErrSubscriptionCycleSettled)
+	require.ErrorIs(t, repo.DeleteSubscriptionCycle(ctx, cycleID), domain.ErrSubscriptionCycleSettled)
 }

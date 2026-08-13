@@ -53,44 +53,6 @@ type vertexTokenResponse struct {
 	ErrorDesc   string `json:"error_description"`
 }
 
-func (a *Account) IsVertexServiceAccount() bool {
-	return a != nil && a.Type == AccountTypeServiceAccount
-}
-
-func (a *Account) VertexProjectID() string {
-	if a == nil {
-		return ""
-	}
-	if v := strings.TrimSpace(a.GetCredential("project_id")); v != "" {
-		return v
-	}
-	key, err := parseVertexServiceAccountKey(a)
-	if err == nil {
-		return strings.TrimSpace(key.ProjectID)
-	}
-	return ""
-}
-
-func (a *Account) VertexLocation(model string) string {
-	if a == nil {
-		return vertexDefaultLocation
-	}
-	if model != "" && a.Credentials != nil {
-		if raw, ok := a.Credentials["vertex_model_locations"].(map[string]any); ok {
-			if loc, ok := raw[model].(string); ok && strings.TrimSpace(loc) != "" {
-				return strings.TrimSpace(loc)
-			}
-		}
-	}
-	if v := strings.TrimSpace(a.GetCredential("location")); v != "" {
-		return v
-	}
-	if v := strings.TrimSpace(a.GetCredential("vertex_location")); v != "" {
-		return v
-	}
-	return vertexDefaultLocation
-}
-
 func parseVertexServiceAccountKey(account *Account) (*vertexServiceAccountKey, error) {
 	if account == nil || account.Credentials == nil {
 		return nil, errors.New("service account credentials not configured")

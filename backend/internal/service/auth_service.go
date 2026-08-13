@@ -17,6 +17,7 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/authidentity"
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 
@@ -27,7 +28,7 @@ import (
 var (
 	ErrInvalidCredentials      = infraerrors.Unauthorized("INVALID_CREDENTIALS", "invalid email or password")
 	ErrUserNotActive           = infraerrors.Forbidden("USER_NOT_ACTIVE", "user is not active")
-	ErrEmailExists             = infraerrors.Conflict("EMAIL_EXISTS", "email already exists")
+	ErrEmailExists             = domain.ErrEmailExists
 	ErrEmailReserved           = infraerrors.BadRequest("EMAIL_RESERVED", "email is reserved")
 	ErrInvalidToken            = infraerrors.Unauthorized("INVALID_TOKEN", "invalid token")
 	ErrTokenExpired            = infraerrors.Unauthorized("TOKEN_EXPIRED", "token has expired")
@@ -217,14 +218,50 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 		Status:       StatusActive,
 	}
 
-	if err := s.userRepo.Create(ctx, user); err != nil {
-		// 优先检查邮箱冲突错误（竞态条件下可能发生）
-		if errors.Is(err, ErrEmailExists) {
-			return "", nil, ErrEmailExists
+	if s.entClient != nil && invitationResolution.redeemCode != nil {
+		// 邀请码注册：在同一事务内创建用户并原子占用邀请码。
+		// redeemRepo.Use 是条件更新（WHERE status='unused'），并发下只有一个请求成功；
+		// 占用失败时回滚用户创建，避免“一码多用”批量开号（与 OAuth 注册路径一致）。
+		tx, txErr := s.entClient.Tx(ctx)
+		if txErr != nil {
+			logger.LegacyPrintf("service.auth", "[Auth] Failed to begin transaction for registration: %v", txErr)
+			return "", nil, ErrServiceUnavailable
 		}
-		logger.LegacyPrintf("service.auth", "[Auth] Database error creating user: %v", err)
-		return "", nil, ErrServiceUnavailable
+		defer func() { _ = tx.Rollback() }()
+		txCtx := dbent.NewTxContext(ctx, tx)
+
+		if err := s.userRepo.Create(txCtx, user); err != nil {
+			if errors.Is(err, ErrEmailExists) {
+				return "", nil, ErrEmailExists
+			}
+			logger.LegacyPrintf("service.auth", "[Auth] Database error creating user: %v", err)
+			return "", nil, ErrServiceUnavailable
+		}
+		if err := s.redeemRepo.Use(txCtx, invitationResolution.redeemCode.ID, user.ID); err != nil {
+			// 邀请码已被并发占用或不可用：回滚整个注册。
+			return "", nil, ErrInvitationCodeInvalid
+		}
+		if err := tx.Commit(); err != nil {
+			logger.LegacyPrintf("service.auth", "[Auth] Failed to commit registration transaction: %v", err)
+			return "", nil, ErrServiceUnavailable
+		}
+	} else {
+		if err := s.userRepo.Create(ctx, user); err != nil {
+			// 优先检查邮箱冲突错误（竞态条件下可能发生）
+			if errors.Is(err, ErrEmailExists) {
+				return "", nil, ErrEmailExists
+			}
+			logger.LegacyPrintf("service.auth", "[Auth] Database error creating user: %v", err)
+			return "", nil, ErrServiceUnavailable
+		}
+		// 无事务能力（如 entClient 未注入）时的兜底：仍原子占用邀请码，占用失败即拒绝注册。
+		if invitationResolution.redeemCode != nil {
+			if err := s.redeemRepo.Use(ctx, invitationResolution.redeemCode.ID, user.ID); err != nil {
+				return "", nil, ErrInvitationCodeInvalid
+			}
+		}
 	}
+
 	s.postAuthUserBootstrap(ctx, user, "email", true)
 	s.assignSubscriptions(ctx, user.ID, grantPlan.Subscriptions, "auto assigned by signup defaults")
 	// snapshot user × platform quota（fail-open）
@@ -238,14 +275,6 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 				// 邀请返利码绑定失败不影响注册，只记录日志
 				logger.LegacyPrintf("service.auth", "[Auth] Failed to bind affiliate inviter for user %d: %v", user.ID, err)
 			}
-		}
-	}
-
-	// 标记邀请码为已使用（如果使用了邀请码）
-	if invitationResolution.redeemCode != nil {
-		if err := s.redeemRepo.Use(ctx, invitationResolution.redeemCode.ID, user.ID); err != nil {
-			// 邀请码标记失败不影响注册，只记录日志
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to mark invitation code as used for user %d: %v", user.ID, err)
 		}
 	}
 	// 应用优惠码（如果提供且功能已启用）

@@ -28,6 +28,28 @@ const (
 	PlatformKimi        = "kimi"
 )
 
+// Privacy mode markers stored on account extra.
+const (
+	PrivacyModeTrainingOff   = "training_off"
+	PrivacyModeFailed        = "training_set_failed"
+	PrivacyModeCFBlocked     = "training_set_cf_blocked"
+	AntigravityPrivacySet    = "privacy_set"
+	AntigravityPrivacyFailed = "privacy_set_failed"
+)
+
+type OpenAIImagesCapability string
+
+const (
+	OpenAIImagesCapabilityBasic  OpenAIImagesCapability = "images-basic"
+	OpenAIImagesCapabilityNative OpenAIImagesCapability = "images-native"
+)
+
+// QuotaDimension constants for spark shadow accounts.
+const (
+	QuotaDimensionGlobal = "global"
+	QuotaDimensionSpark  = "spark"
+)
+
 // Account type constants
 const (
 	AccountTypeOAuth          = "oauth"           // OAuth类型账号（full scope: profile + inference）

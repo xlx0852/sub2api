@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"net/http"
 	"net/url"
 	"strings"
@@ -11,12 +12,11 @@ import (
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/imroc/req/v3"
 )
 
 // NewOpenAIOAuthClient creates a new OpenAI OAuth client
-func NewOpenAIOAuthClient() service.OpenAIOAuthClient {
+func NewOpenAIOAuthClient() ports.OpenAIOAuthClient {
 	return &openaiOAuthService{
 		tokenURL:               openai.TokenURL,
 		deviceUserCodeURL:      openai.DeviceUserCodeURL,

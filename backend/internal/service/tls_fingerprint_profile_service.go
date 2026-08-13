@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"context"
 	"math/rand/v2"
 	"sync"
@@ -12,22 +13,10 @@ import (
 )
 
 // TLSFingerprintProfileRepository 定义 TLS 指纹模板的数据访问接口
-type TLSFingerprintProfileRepository interface {
-	List(ctx context.Context) ([]*model.TLSFingerprintProfile, error)
-	GetByID(ctx context.Context, id int64) (*model.TLSFingerprintProfile, error)
-	Create(ctx context.Context, profile *model.TLSFingerprintProfile) (*model.TLSFingerprintProfile, error)
-	Update(ctx context.Context, profile *model.TLSFingerprintProfile) (*model.TLSFingerprintProfile, error)
-	Delete(ctx context.Context, id int64) error
-}
+type TLSFingerprintProfileRepository = ports.TLSFingerprintProfileRepository
 
 // TLSFingerprintProfileCache 定义 TLS 指纹模板的缓存接口
-type TLSFingerprintProfileCache interface {
-	Get(ctx context.Context) ([]*model.TLSFingerprintProfile, bool)
-	Set(ctx context.Context, profiles []*model.TLSFingerprintProfile) error
-	Invalidate(ctx context.Context) error
-	NotifyUpdate(ctx context.Context) error
-	SubscribeUpdates(ctx context.Context, handler func())
-}
+type TLSFingerprintProfileCache = ports.TLSFingerprintProfileCache
 
 // TLSFingerprintProfileService TLS 指纹模板管理服务
 type TLSFingerprintProfileService struct {

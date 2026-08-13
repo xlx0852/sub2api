@@ -6,13 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/authidentity"
 	"github.com/Wei-Shaw/sub2api/ent/authidentitychannel"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -475,7 +475,7 @@ func (s *UserProfileIdentityRepoSuite) TestWithUserProfileIdentityTx_AllowsAvata
 	s.Require().NotNil(model)
 
 	err = s.repo.WithUserProfileIdentityTx(s.ctx, func(txCtx context.Context) error {
-		_, err := s.repo.UpsertUserAvatar(txCtx, user.ID, service.UpsertUserAvatarInput{
+		_, err := s.repo.UpsertUserAvatar(txCtx, user.ID, domain.UpsertUserAvatarInput{
 			StorageProvider: "remote_url",
 			URL:             "https://cdn.example.com/avatar.png",
 		})
@@ -495,7 +495,7 @@ func (s *UserProfileIdentityRepoSuite) TestWithUserProfileIdentityTx_AllowsAvata
 func (s *UserProfileIdentityRepoSuite) TestUserAvatarCRUDAndUserLookup() {
 	user := s.mustCreateUser("avatar")
 
-	inlineAvatar, err := s.repo.UpsertUserAvatar(s.ctx, user.ID, service.UpsertUserAvatarInput{
+	inlineAvatar, err := s.repo.UpsertUserAvatar(s.ctx, user.ID, domain.UpsertUserAvatarInput{
 		StorageProvider: "inline",
 		URL:             "data:image/png;base64,QUJD",
 		ContentType:     "image/png",
@@ -512,7 +512,7 @@ func (s *UserProfileIdentityRepoSuite) TestUserAvatarCRUDAndUserLookup() {
 	s.Require().Equal("image/png", loadedAvatar.ContentType)
 	s.Require().Equal(3, loadedAvatar.ByteSize)
 
-	_, err = s.repo.UpsertUserAvatar(s.ctx, user.ID, service.UpsertUserAvatarInput{
+	_, err = s.repo.UpsertUserAvatar(s.ctx, user.ID, domain.UpsertUserAvatarInput{
 		StorageProvider: "remote_url",
 		URL:             "https://cdn.example.com/avatar.png",
 	})
