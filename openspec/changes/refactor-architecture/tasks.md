@@ -19,7 +19,7 @@
 
 ## 4. P3 网关统一管道（全平台迁移，每平台独立 change）
 
-- [ ] 4.1 落地 `app/gateway/{pipeline,stream,transport}` 骨架与阶段接口
+- [x] 4.1 落地 `app/gateway/{pipeline,stream,transport}` 骨架与阶段接口（尚未接入生产转发；平台迁移见 4.2+）
 - [ ] 4.2 试点平台迁移（Antigravity 或 Gemini）并验证抽象与回归
 - [ ] 4.3 Claude 链路迁移，删除旧 `GatewayService.Forward` 路径
 - [ ] 4.4 Kimi、Grok 迁移（按在途 change 密度安排窗口）
@@ -29,7 +29,7 @@
 
 ## 5. P4 调度统一
 
-- [ ] 5.1 定义 `AccountSelector` 接口与策略插件模型
+- [x] 5.1 定义 `AccountSelector` 接口与策略插件模型（接口已落在 `app/scheduling`；现有调度器适配见 5.2）
 - [ ] 5.2 两套现有调度器适配接口（行为不变）
 - [ ] 5.3 逐策略合并去重，删除双实现
 
