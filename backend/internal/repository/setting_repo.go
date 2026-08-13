@@ -6,26 +6,27 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 )
 
 type settingRepository struct {
 	client *ent.Client
 }
 
-func NewSettingRepository(client *ent.Client) service.SettingRepository {
+func NewSettingRepository(client *ent.Client) ports.SettingRepository {
 	return &settingRepository{client: client}
 }
 
-func (r *settingRepository) Get(ctx context.Context, key string) (*service.Setting, error) {
+func (r *settingRepository) Get(ctx context.Context, key string) (*domain.Setting, error) {
 	m, err := r.client.Setting.Query().Where(setting.KeyEQ(key)).Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			return nil, service.ErrSettingNotFound
+			return nil, domain.ErrSettingNotFound
 		}
 		return nil, err
 	}
-	return &service.Setting{
+	return &domain.Setting{
 		ID:        m.ID,
 		Key:       m.Key,
 		Value:     m.Value,

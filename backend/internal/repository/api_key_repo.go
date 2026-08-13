@@ -18,6 +18,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 
 	entsql "entgo.io/ent/dialect/sql"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 )
 
 type apiKeyRepository struct {
@@ -68,7 +69,7 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		key.CreatedAt = created.CreatedAt
 		key.UpdatedAt = created.UpdatedAt
 	}
-	return translatePersistenceError(err, nil, service.ErrAPIKeyExists)
+	return translatePersistenceError(err, nil, domain.ErrAPIKeyExists)
 }
 
 func (r *apiKeyRepository) GetByID(ctx context.Context, id int64) (*service.APIKey, error) {
@@ -79,7 +80,7 @@ func (r *apiKeyRepository) GetByID(ctx context.Context, id int64) (*service.APIK
 		Only(ctx)
 	if err != nil {
 		if dbent.IsNotFound(err) {
-			return nil, service.ErrAPIKeyNotFound
+			return nil, domain.ErrAPIKeyNotFound
 		}
 		return nil, err
 	}
@@ -98,7 +99,7 @@ func (r *apiKeyRepository) GetKeyAndOwnerID(ctx context.Context, id int64) (stri
 		Only(ctx)
 	if err != nil {
 		if dbent.IsNotFound(err) {
-			return "", 0, service.ErrAPIKeyNotFound
+			return "", 0, domain.ErrAPIKeyNotFound
 		}
 		return "", 0, err
 	}
@@ -117,7 +118,7 @@ func (r *apiKeyRepository) GetByKey(ctx context.Context, key string) (*service.A
 		Only(ctx)
 	if err != nil {
 		if dbent.IsNotFound(err) {
-			return nil, service.ErrAPIKeyNotFound
+			return nil, domain.ErrAPIKeyNotFound
 		}
 		return nil, err
 	}
@@ -211,7 +212,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 		Only(ctx)
 	if err != nil {
 		if dbent.IsNotFound(err) {
-			return nil, service.ErrAPIKeyNotFound
+			return nil, domain.ErrAPIKeyNotFound
 		}
 		return nil, err
 	}
@@ -288,7 +289,7 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) erro
 	}
 	if affected == 0 {
 		// 更新影响行数为 0，说明记录不存在或已被软删除。
-		return service.ErrAPIKeyNotFound
+		return domain.ErrAPIKeyNotFound
 	}
 
 	// 使用同一时间戳回填，避免并发删除导致二次查询失败。
@@ -307,7 +308,7 @@ func (r *apiKeyRepository) Delete(ctx context.Context, id int64) error {
 		Save(ctx)
 	if err != nil {
 		if dbent.IsNotFound(err) {
-			return service.ErrAPIKeyNotFound
+			return domain.ErrAPIKeyNotFound
 		}
 		return err
 	}
@@ -321,7 +322,7 @@ func (r *apiKeyRepository) Delete(ctx context.Context, id int64) error {
 		if exists {
 			return nil
 		}
-		return service.ErrAPIKeyNotFound
+		return domain.ErrAPIKeyNotFound
 	}
 	return nil
 }
@@ -391,12 +392,12 @@ func (r *apiKeyRepository) deleteWithAudit(ctx context.Context, exec *dbent.Clie
 		if exists {
 			return nil
 		}
-		return service.ErrAPIKeyNotFound
+		return domain.ErrAPIKeyNotFound
 	}
 	return nil
 }
 
-func (r *apiKeyRepository) ListByUserID(ctx context.Context, userID int64, params pagination.PaginationParams, filters service.APIKeyListFilters) ([]service.APIKey, *pagination.PaginationResult, error) {
+func (r *apiKeyRepository) ListByUserID(ctx context.Context, userID int64, params pagination.PaginationParams, filters domain.APIKeyListFilters) ([]service.APIKey, *pagination.PaginationResult, error) {
 	q := r.activeQuery().Where(apikey.UserIDEQ(userID))
 
 	// Apply filters
@@ -600,7 +601,7 @@ func (r *apiKeyRepository) IncrementQuotaUsed(ctx context.Context, id int64, amo
 		Save(ctx)
 	if err != nil {
 		if dbent.IsNotFound(err) {
-			return 0, service.ErrAPIKeyNotFound
+			return 0, domain.ErrAPIKeyNotFound
 		}
 		return 0, err
 	}
@@ -609,7 +610,7 @@ func (r *apiKeyRepository) IncrementQuotaUsed(ctx context.Context, id int64, amo
 
 // IncrementQuotaUsedAndGetState atomically increments quota_used, conditionally marks the key
 // as quota_exhausted, and returns the latest quota state in one round trip.
-func (r *apiKeyRepository) IncrementQuotaUsedAndGetState(ctx context.Context, id int64, amount float64) (*service.APIKeyQuotaUsageState, error) {
+func (r *apiKeyRepository) IncrementQuotaUsedAndGetState(ctx context.Context, id int64, amount float64) (*domain.APIKeyQuotaUsageState, error) {
 	query := `
 		UPDATE api_keys
 		SET
@@ -623,10 +624,10 @@ func (r *apiKeyRepository) IncrementQuotaUsedAndGetState(ctx context.Context, id
 		RETURNING quota_used, quota, key, status
 	`
 
-	state := &service.APIKeyQuotaUsageState{}
-	if err := scanSingleRow(ctx, r.sql, query, []any{amount, service.StatusAPIKeyQuotaExhausted, id}, &state.QuotaUsed, &state.Quota, &state.Key, &state.Status); err != nil {
+	state := &domain.APIKeyQuotaUsageState{}
+	if err := scanSingleRow(ctx, r.sql, query, []any{amount, domain.StatusAPIKeyQuotaExhausted, id}, &state.QuotaUsed, &state.Quota, &state.Key, &state.Status); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, service.ErrAPIKeyNotFound
+			return nil, domain.ErrAPIKeyNotFound
 		}
 		return nil, err
 	}
@@ -643,7 +644,7 @@ func (r *apiKeyRepository) UpdateLastUsed(ctx context.Context, id int64, usedAt 
 		return err
 	}
 	if affected == 0 {
-		return service.ErrAPIKeyNotFound
+		return domain.ErrAPIKeyNotFound
 	}
 	return nil
 }
@@ -682,7 +683,7 @@ func (r *apiKeyRepository) ResetRateLimitWindows(ctx context.Context, id int64) 
 }
 
 // GetRateLimitData returns the current rate limit usage and window start times for an API key.
-func (r *apiKeyRepository) GetRateLimitData(ctx context.Context, id int64) (result *service.APIKeyRateLimitData, err error) {
+func (r *apiKeyRepository) GetRateLimitData(ctx context.Context, id int64) (result *domain.APIKeyRateLimitData, err error) {
 	rows, err := r.sql.QueryContext(ctx, `
 		SELECT usage_5h, usage_1d, usage_7d, window_5h_start, window_1d_start, window_7d_start
 		FROM api_keys
@@ -697,9 +698,9 @@ func (r *apiKeyRepository) GetRateLimitData(ctx context.Context, id int64) (resu
 		}
 	}()
 	if !rows.Next() {
-		return nil, service.ErrAPIKeyNotFound
+		return nil, domain.ErrAPIKeyNotFound
 	}
-	data := &service.APIKeyRateLimitData{}
+	data := &domain.APIKeyRateLimitData{}
 	if err := rows.Scan(&data.Usage5h, &data.Usage1d, &data.Usage7d, &data.Window5hStart, &data.Window1dStart, &data.Window7dStart); err != nil {
 		return nil, err
 	}
@@ -711,26 +712,26 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		return nil
 	}
 	out := &service.APIKey{
-		ID:            m.ID,
-		UserID:        m.UserID,
-		Key:           m.Key,
-		Name:          m.Name,
-		Status:        m.Status,
-		IPWhitelist:   m.IPWhitelist,
-		IPBlacklist:   m.IPBlacklist,
-		LastUsedAt:    m.LastUsedAt,
-		CreatedAt:     m.CreatedAt,
-		UpdatedAt:     m.UpdatedAt,
-		GroupID:       m.GroupID,
-		Quota:         m.Quota,
-		QuotaUsed:     m.QuotaUsed,
-		ExpiresAt:     m.ExpiresAt,
-		RateLimit5h:   m.RateLimit5h,
-		RateLimit1d:   m.RateLimit1d,
-		RateLimit7d:   m.RateLimit7d,
-		Usage5h:       m.Usage5h,
-		Usage1d:       m.Usage1d,
-		Usage7d:       m.Usage7d,
+		ID:              m.ID,
+		UserID:          m.UserID,
+		Key:             m.Key,
+		Name:            m.Name,
+		Status:          m.Status,
+		IPWhitelist:     m.IPWhitelist,
+		IPBlacklist:     m.IPBlacklist,
+		LastUsedAt:      m.LastUsedAt,
+		CreatedAt:       m.CreatedAt,
+		UpdatedAt:       m.UpdatedAt,
+		GroupID:         m.GroupID,
+		Quota:           m.Quota,
+		QuotaUsed:       m.QuotaUsed,
+		ExpiresAt:       m.ExpiresAt,
+		RateLimit5h:     m.RateLimit5h,
+		RateLimit1d:     m.RateLimit1d,
+		RateLimit7d:     m.RateLimit7d,
+		Usage5h:         m.Usage5h,
+		Usage1d:         m.Usage1d,
+		Usage7d:         m.Usage7d,
 		Window5hStart:   m.Window5hStart,
 		Window1dStart:   m.Window1dStart,
 		Window7dStart:   m.Window7dStart,
@@ -785,7 +786,7 @@ func userEntityToService(u *dbent.User) *service.User {
 	}
 	// Parse extra emails JSON (supports both old []string and new []NotifyEmailEntry format)
 	if u.BalanceNotifyExtraEmails != "" && u.BalanceNotifyExtraEmails != "[]" {
-		out.BalanceNotifyExtraEmails = service.ParseNotifyEmails(u.BalanceNotifyExtraEmails)
+		out.BalanceNotifyExtraEmails = domain.ParseNotifyEmails(u.BalanceNotifyExtraEmails)
 	}
 	return out
 }

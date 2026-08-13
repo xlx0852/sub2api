@@ -7,24 +7,23 @@ import (
 	"io"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
-// S3BackupStore implements service.BackupObjectStore using AWS S3 compatible storage
+// S3BackupStore implements domain.BackupObjectStore using AWS S3 compatible storage
 type S3BackupStore struct {
 	client *s3.Client
 	bucket string
 }
 
 // NewS3BackupStoreFactory returns a BackupObjectStoreFactory that creates S3-backed stores
-func NewS3BackupStoreFactory() service.BackupObjectStoreFactory {
-	return func(ctx context.Context, cfg *service.BackupS3Config) (service.BackupObjectStore, error) {
+func NewS3BackupStoreFactory() domain.BackupObjectStoreFactory {
+	return func(ctx context.Context, cfg *domain.BackupS3Config) (domain.BackupObjectStore, error) {
 		region := cfg.Region
 		if region == "" {
 			region = "auto" // Cloudflare R2 默认 region

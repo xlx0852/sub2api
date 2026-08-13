@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -17,7 +18,7 @@ type dashboardCache struct {
 	keyPrefix string
 }
 
-func NewDashboardCache(rdb *redis.Client, cfg *config.Config) service.DashboardStatsCache {
+func NewDashboardCache(rdb *redis.Client, cfg *config.Config) ports.DashboardStatsCache {
 	prefix := "sub2api:"
 	if cfg != nil {
 		prefix = strings.TrimSpace(cfg.Dashboard.KeyPrefix)
@@ -35,7 +36,7 @@ func (c *dashboardCache) GetDashboardStats(ctx context.Context) (string, error) 
 	val, err := c.rdb.Get(ctx, c.buildKey()).Result()
 	if err != nil {
 		if err == redis.Nil {
-			return "", service.ErrDashboardStatsCacheMiss
+			return "", domain.ErrDashboardStatsCacheMiss
 		}
 		return "", err
 	}

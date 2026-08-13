@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -34,7 +35,7 @@ func NewClaudeUsageFetcher(httpUpstream service.HTTPUpstream) service.ClaudeUsag
 }
 
 // FetchUsage 简单版本，不支持 TLS 指纹（向后兼容）
-func (s *claudeUsageService) FetchUsage(ctx context.Context, accessToken, proxyURL string) (*service.ClaudeUsageResponse, error) {
+func (s *claudeUsageService) FetchUsage(ctx context.Context, accessToken, proxyURL string) (*domain.ClaudeUsageResponse, error) {
 	return s.FetchUsageWithOptions(ctx, &service.ClaudeUsageFetchOptions{
 		AccessToken: accessToken,
 		ProxyURL:    proxyURL,
@@ -42,7 +43,7 @@ func (s *claudeUsageService) FetchUsage(ctx context.Context, accessToken, proxyU
 }
 
 // FetchUsageWithOptions 完整版本，支持 TLS 指纹和自定义 User-Agent
-func (s *claudeUsageService) FetchUsageWithOptions(ctx context.Context, opts *service.ClaudeUsageFetchOptions) (*service.ClaudeUsageResponse, error) {
+func (s *claudeUsageService) FetchUsageWithOptions(ctx context.Context, opts *service.ClaudeUsageFetchOptions) (*domain.ClaudeUsageResponse, error) {
 	if opts == nil {
 		return nil, fmt.Errorf("options is nil")
 	}
@@ -99,7 +100,7 @@ func (s *claudeUsageService) FetchUsageWithOptions(ctx context.Context, opts *se
 		return nil, infraerrors.New(http.StatusInternalServerError, "UPSTREAM_ERROR", msg)
 	}
 
-	var usageResp service.ClaudeUsageResponse
+	var usageResp domain.ClaudeUsageResponse
 	if err := json.NewDecoder(resp.Body).Decode(&usageResp); err != nil {
 		return nil, fmt.Errorf("decode response failed: %w", err)
 	}

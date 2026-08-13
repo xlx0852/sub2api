@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"time"
-
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 type accountQuotaWindowRepository struct {
@@ -15,11 +15,11 @@ type accountQuotaWindowRepository struct {
 }
 
 // NewAccountQuotaWindowRepository creates the quota-window ledger store.
-func NewAccountQuotaWindowRepository(db *sql.DB) service.AccountQuotaWindowRepository {
+func NewAccountQuotaWindowRepository(db *sql.DB) ports.AccountQuotaWindowRepository {
 	return &accountQuotaWindowRepository{db: db}
 }
 
-func (r *accountQuotaWindowRepository) ListByAccount(ctx context.Context, accountID int64, kind string, limit int) ([]*service.AccountQuotaWindow, error) {
+func (r *accountQuotaWindowRepository) ListByAccount(ctx context.Context, accountID int64, kind string, limit int) ([]*domain.AccountQuotaWindow, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 48
 	}
@@ -51,7 +51,7 @@ func (r *accountQuotaWindowRepository) ListByAccount(ctx context.Context, accoun
 	return scanAccountQuotaWindows(rows)
 }
 
-func (r *accountQuotaWindowRepository) ListOpenByAccount(ctx context.Context, accountID int64) ([]*service.AccountQuotaWindow, error) {
+func (r *accountQuotaWindowRepository) ListOpenByAccount(ctx context.Context, accountID int64) ([]*domain.AccountQuotaWindow, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, account_id, platform, kind, start_at, end_at, window_minutes, source,
 		       COALESCE(closed_reason,''), used_percent_open, used_percent_close, is_open, created_at, updated_at
@@ -65,7 +65,7 @@ func (r *accountQuotaWindowRepository) ListOpenByAccount(ctx context.Context, ac
 	return scanAccountQuotaWindows(rows)
 }
 
-func (r *accountQuotaWindowRepository) GetOpen(ctx context.Context, accountID int64, kind string) (*service.AccountQuotaWindow, error) {
+func (r *accountQuotaWindowRepository) GetOpen(ctx context.Context, accountID int64, kind string) (*domain.AccountQuotaWindow, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, account_id, platform, kind, start_at, end_at, window_minutes, source,
 		       COALESCE(closed_reason,''), used_percent_open, used_percent_close, is_open, created_at, updated_at
@@ -79,7 +79,7 @@ func (r *accountQuotaWindowRepository) GetOpen(ctx context.Context, accountID in
 	return w, err
 }
 
-func (r *accountQuotaWindowRepository) InsertOpen(ctx context.Context, w *service.AccountQuotaWindow) (*service.AccountQuotaWindow, error) {
+func (r *accountQuotaWindowRepository) InsertOpen(ctx context.Context, w *domain.AccountQuotaWindow) (*domain.AccountQuotaWindow, error) {
 	if w == nil {
 		return nil, fmt.Errorf("nil window")
 	}
@@ -90,7 +90,7 @@ func (r *accountQuotaWindowRepository) InsertOpen(ctx context.Context, w *servic
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,NOW(),NOW())
 		RETURNING id, account_id, platform, kind, start_at, end_at, window_minutes, source,
 		          COALESCE(closed_reason,''), used_percent_open, used_percent_close, is_open, created_at, updated_at`,
-		w.AccountID, w.Platform, w.Kind, w.StartAt, w.EndAt, w.WindowMinutes, nullIfEmpty(w.Source, service.QuotaWindowSourceSeed),
+		w.AccountID, w.Platform, w.Kind, w.StartAt, w.EndAt, w.WindowMinutes, nullIfEmpty(w.Source, domain.QuotaWindowSourceSeed),
 		w.UsedPercentOpen,
 	)
 	return scanAccountQuotaWindow(row)
@@ -132,8 +132,8 @@ func (r *accountQuotaWindowRepository) CloseAndOpen(
 	closeEnd time.Time,
 	closeReason string,
 	closeUsed *float64,
-	open *service.AccountQuotaWindow,
-) (*service.AccountQuotaWindow, error) {
+	open *domain.AccountQuotaWindow,
+) (*domain.AccountQuotaWindow, error) {
 	if open == nil {
 		return nil, fmt.Errorf("nil open window")
 	}
@@ -166,7 +166,7 @@ func (r *accountQuotaWindowRepository) CloseAndOpen(
 		RETURNING id, account_id, platform, kind, start_at, end_at, window_minutes, source,
 		          COALESCE(closed_reason,''), used_percent_open, used_percent_close, is_open, created_at, updated_at`,
 		open.AccountID, open.Platform, open.Kind, open.StartAt, open.EndAt, open.WindowMinutes,
-		nullIfEmpty(open.Source, service.QuotaWindowSourceObserved), open.UsedPercentOpen,
+		nullIfEmpty(open.Source, domain.QuotaWindowSourceObserved), open.UsedPercentOpen,
 	)
 	out, err := scanAccountQuotaWindow(row)
 	if err != nil {
@@ -178,7 +178,7 @@ func (r *accountQuotaWindowRepository) CloseAndOpen(
 	return out, nil
 }
 
-func (r *accountQuotaWindowRepository) InsertObservation(ctx context.Context, observation *service.AccountQuotaUsageObservation) (bool, error) {
+func (r *accountQuotaWindowRepository) InsertObservation(ctx context.Context, observation *domain.AccountQuotaUsageObservation) (bool, error) {
 	if observation == nil {
 		return false, fmt.Errorf("nil observation")
 	}
@@ -209,7 +209,7 @@ func (r *accountQuotaWindowRepository) HasObservation(ctx context.Context, quota
 	return exists, err
 }
 
-func (r *accountQuotaWindowRepository) ListObservations(ctx context.Context, quotaWindowID int64, limit int) ([]*service.AccountQuotaUsageObservation, error) {
+func (r *accountQuotaWindowRepository) ListObservations(ctx context.Context, quotaWindowID int64, limit int) ([]*domain.AccountQuotaUsageObservation, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 120
 	}
@@ -229,9 +229,9 @@ func (r *accountQuotaWindowRepository) ListObservations(ctx context.Context, quo
 		return nil, err
 	}
 	defer rows.Close()
-	result := make([]*service.AccountQuotaUsageObservation, 0)
+	result := make([]*domain.AccountQuotaUsageObservation, 0)
 	for rows.Next() {
-		observation := &service.AccountQuotaUsageObservation{}
+		observation := &domain.AccountQuotaUsageObservation{}
 		if err := rows.Scan(
 			&observation.ID, &observation.QuotaWindowID, &observation.AccountID,
 			&observation.Platform, &observation.Kind, &observation.ObservedAt,
@@ -250,8 +250,8 @@ type aqScan interface {
 	Scan(dest ...any) error
 }
 
-func scanAccountQuotaWindow(row aqScan) (*service.AccountQuotaWindow, error) {
-	var w service.AccountQuotaWindow
+func scanAccountQuotaWindow(row aqScan) (*domain.AccountQuotaWindow, error) {
+	var w domain.AccountQuotaWindow
 	var closed string
 	var windowMinutes sql.NullInt64
 	var usedOpen, usedClose sql.NullFloat64
@@ -278,8 +278,8 @@ func scanAccountQuotaWindow(row aqScan) (*service.AccountQuotaWindow, error) {
 	return &w, nil
 }
 
-func scanAccountQuotaWindows(rows *sql.Rows) ([]*service.AccountQuotaWindow, error) {
-	var out []*service.AccountQuotaWindow
+func scanAccountQuotaWindows(rows *sql.Rows) ([]*domain.AccountQuotaWindow, error) {
+	var out []*domain.AccountQuotaWindow
 	for rows.Next() {
 		w, err := scanAccountQuotaWindow(rows)
 		if err != nil {

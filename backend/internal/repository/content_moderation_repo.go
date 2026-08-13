@@ -8,19 +8,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 )
 
 type contentModerationRepository struct {
 	db *sql.DB
 }
 
-func NewContentModerationRepository(db *sql.DB) service.ContentModerationRepository {
+func NewContentModerationRepository(db *sql.DB) ports.ContentModerationRepository {
 	return &contentModerationRepository{db: db}
 }
 
-func (r *contentModerationRepository) CreateLog(ctx context.Context, log *service.ContentModerationLog) error {
+func (r *contentModerationRepository) CreateLog(ctx context.Context, log *domain.ContentModerationLog) error {
 	if log == nil {
 		return nil
 	}
@@ -71,7 +72,7 @@ INSERT INTO content_moderation_logs (
 	return nil
 }
 
-func (r *contentModerationRepository) ListLogs(ctx context.Context, filter service.ContentModerationLogFilter) ([]service.ContentModerationLog, *pagination.PaginationResult, error) {
+func (r *contentModerationRepository) ListLogs(ctx context.Context, filter domain.ContentModerationLogFilter) ([]domain.ContentModerationLog, *pagination.PaginationResult, error) {
 	where, args := buildContentModerationLogWhere(filter)
 	whereSQL := "WHERE " + strings.Join(where, " AND ")
 
@@ -109,9 +110,9 @@ LIMIT $`+fmt.Sprint(len(queryArgs)-1)+` OFFSET $`+fmt.Sprint(len(queryArgs)),
 	}
 	defer func() { _ = rows.Close() }()
 
-	items := make([]service.ContentModerationLog, 0)
+	items := make([]domain.ContentModerationLog, 0)
 	for rows.Next() {
-		var item service.ContentModerationLog
+		var item domain.ContentModerationLog
 		var userID, apiKeyID, groupID, latency, queueDelay sql.NullInt64
 		var scoresRaw, thresholdsRaw []byte
 		if err := rows.Scan(
@@ -180,7 +181,7 @@ LIMIT $`+fmt.Sprint(len(queryArgs)-1)+` OFFSET $`+fmt.Sprint(len(queryArgs)),
 	return items, paginationResultFromTotal(total, params), nil
 }
 
-func (r *contentModerationRepository) SummarizeLogs(ctx context.Context, filter service.ContentModerationLogFilter) (*service.ContentModerationLogSummary, error) {
+func (r *contentModerationRepository) SummarizeLogs(ctx context.Context, filter domain.ContentModerationLogFilter) (*domain.ContentModerationLogSummary, error) {
 	where, args := buildContentModerationLogWhere(filter)
 	query := `
 SELECT
@@ -191,7 +192,7 @@ SELECT
 FROM content_moderation_logs l
 WHERE ` + strings.Join(where, " AND ")
 
-	var summary service.ContentModerationLogSummary
+	var summary domain.ContentModerationLogSummary
 	if err := r.db.QueryRowContext(ctx, query, args...).Scan(
 		&summary.LocalPreBlock,
 		&summary.UpstreamPolicy,
@@ -230,8 +231,8 @@ WHERE user_id = $1
 	return count, nil
 }
 
-func (r *contentModerationRepository) ListLatestFlaggedLogsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*service.ContentModerationLog, error) {
-	out := make(map[int64]*service.ContentModerationLog, len(userIDs))
+func (r *contentModerationRepository) ListLatestFlaggedLogsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*domain.ContentModerationLog, error) {
+	out := make(map[int64]*domain.ContentModerationLog, len(userIDs))
 	if r == nil || r.db == nil || len(userIDs) == 0 {
 		return out, nil
 	}
@@ -249,7 +250,7 @@ LIMIT 1
 		if userID <= 0 {
 			continue
 		}
-		var log service.ContentModerationLog
+		var log domain.ContentModerationLog
 		var uid sql.NullInt64
 		var apiKeyID sql.NullInt64
 		var groupID sql.NullInt64
@@ -298,8 +299,8 @@ func (r *contentModerationRepository) UpdateLogEnforcement(ctx context.Context, 
 	return nil
 }
 
-func (r *contentModerationRepository) CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time) (*service.ContentModerationCleanupResult, error) {
-	result := &service.ContentModerationCleanupResult{FinishedAt: time.Now()}
+func (r *contentModerationRepository) CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time) (*domain.ContentModerationCleanupResult, error) {
+	result := &domain.ContentModerationCleanupResult{FinishedAt: time.Now()}
 	if r == nil || r.db == nil {
 		return result, nil
 	}
@@ -332,7 +333,7 @@ func nullableIntPtr(value *int) any {
 	return *value
 }
 
-func buildContentModerationLogWhere(filter service.ContentModerationLogFilter) ([]string, []any) {
+func buildContentModerationLogWhere(filter domain.ContentModerationLogFilter) ([]string, []any) {
 	where := []string{"l.id IS NOT NULL"}
 	args := make([]any, 0)
 	add := func(expr string, value any) {

@@ -12,8 +12,9 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 )
 
 type githubReleaseClient struct {
@@ -26,7 +27,7 @@ type githubReleaseClientError struct {
 }
 
 // ProvideGitHubReleaseClient 创建 GitHub Release 客户端。
-func ProvideGitHubReleaseClient(cfg *config.Config) service.GitHubReleaseClient {
+func ProvideGitHubReleaseClient(cfg *config.Config) ports.GitHubReleaseClient {
 	proxyURL := ""
 	allowDirect := true
 	if cfg != nil {
@@ -40,7 +41,7 @@ func ProvideGitHubReleaseClient(cfg *config.Config) service.GitHubReleaseClient 
 }
 
 // NewGitHubReleaseClient 创建 GitHub Release 客户端。
-func NewGitHubReleaseClient(proxyURL string, allowDirectOnProxyError bool) service.GitHubReleaseClient {
+func NewGitHubReleaseClient(proxyURL string, allowDirectOnProxyError bool) ports.GitHubReleaseClient {
 	sharedClient, err := httpclient.GetClient(httpclient.Options{
 		Timeout:  30 * time.Second,
 		ProxyURL: proxyURL,
@@ -90,15 +91,15 @@ func (c *githubReleaseClient) newAPIRequest(ctx context.Context, url string) (*h
 	return req, nil
 }
 
-func (c *githubReleaseClientError) FetchLatestRelease(ctx context.Context, repo string) (*service.GitHubRelease, error) {
+func (c *githubReleaseClientError) FetchLatestRelease(ctx context.Context, repo string) (*domain.GitHubRelease, error) {
 	return nil, c.err
 }
 
-func (c *githubReleaseClientError) FetchRecentReleases(ctx context.Context, repo string, perPage int) ([]*service.GitHubRelease, error) {
+func (c *githubReleaseClientError) FetchRecentReleases(ctx context.Context, repo string, perPage int) ([]*domain.GitHubRelease, error) {
 	return nil, c.err
 }
 
-func (c *githubReleaseClient) FetchLatestRelease(ctx context.Context, repo string) (*service.GitHubRelease, error) {
+func (c *githubReleaseClient) FetchLatestRelease(ctx context.Context, repo string) (*domain.GitHubRelease, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
 	req, err := c.newAPIRequest(ctx, url)
 	if err != nil {
@@ -112,14 +113,14 @@ func (c *githubReleaseClient) FetchLatestRelease(ctx context.Context, repo strin
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned %d", resp.StatusCode)
 	}
-	var release service.GitHubRelease
+	var release domain.GitHubRelease
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
 		return nil, err
 	}
 	return &release, nil
 }
 
-func (c *githubReleaseClient) FetchRecentReleases(ctx context.Context, repo string, perPage int) ([]*service.GitHubRelease, error) {
+func (c *githubReleaseClient) FetchRecentReleases(ctx context.Context, repo string, perPage int) ([]*domain.GitHubRelease, error) {
 	if perPage <= 0 {
 		perPage = 10
 	}
@@ -139,7 +140,7 @@ func (c *githubReleaseClient) FetchRecentReleases(ctx context.Context, repo stri
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned %d", resp.StatusCode)
 	}
-	var releases []*service.GitHubRelease
+	var releases []*domain.GitHubRelease
 	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
 		return nil, err
 	}

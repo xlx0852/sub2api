@@ -8,6 +8,7 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	gocache "github.com/patrickmn/go-cache"
 )
@@ -78,10 +79,10 @@ func appendUsageLogBillingModeWhereConditionWithAlias(conditions []string, args 
 		return alias + "." + name
 	}
 	placeholder := fmt.Sprintf("$%d", len(args)+1)
-	switch service.BillingMode(mode) {
-	case service.BillingModeImage:
+	switch domain.BillingMode(mode) {
+	case domain.BillingModeImage:
 		conditions = append(conditions, fmt.Sprintf("(%s = %s OR COALESCE(%s, 0) > 0)", column("billing_mode"), placeholder, column("image_count")))
-	case service.BillingModeToken:
+	case domain.BillingModeToken:
 		conditions = append(conditions, fmt.Sprintf("(%s = %s OR ((%s IS NULL OR %s = '') AND COALESCE(%s, 0) <= 0))", column("billing_mode"), placeholder, column("billing_mode"), column("billing_mode"), column("image_count")))
 	default:
 		conditions = append(conditions, fmt.Sprintf("%s = %s", column("billing_mode"), placeholder))
@@ -201,7 +202,7 @@ func buildRequestTypeFilterCondition(startArgIndex int, requestType int16) (stri
 }
 
 func buildRequestTypeFilterConditionWithColumns(startArgIndex int, requestType int16, requestTypeColumn, streamColumn, openAIWSModeColumn string) (string, []any) {
-	normalized := service.RequestTypeFromInt16(requestType)
+	normalized := domain.RequestTypeFromInt16(requestType)
 	requestTypeArg := int16(normalized)
 	requestTypeColumn = strings.TrimSpace(requestTypeColumn)
 	if requestTypeColumn == "" {
@@ -213,23 +214,23 @@ func buildRequestTypeFilterConditionWithColumns(startArgIndex int, requestType i
 	}
 	openAIWSModeColumn = strings.TrimSpace(openAIWSModeColumn)
 	switch normalized {
-	case service.RequestTypeSync:
-		legacy := fmt.Sprintf("%s = %d AND %s = FALSE", requestTypeColumn, int16(service.RequestTypeUnknown), streamColumn)
+	case domain.RequestTypeSync:
+		legacy := fmt.Sprintf("%s = %d AND %s = FALSE", requestTypeColumn, int16(domain.RequestTypeUnknown), streamColumn)
 		if openAIWSModeColumn != "" {
 			legacy += fmt.Sprintf(" AND %s = FALSE", openAIWSModeColumn)
 		}
 		return fmt.Sprintf("(%s = $%d OR (%s))", requestTypeColumn, startArgIndex, legacy), []any{requestTypeArg}
-	case service.RequestTypeStream:
-		legacy := fmt.Sprintf("%s = %d AND %s = TRUE", requestTypeColumn, int16(service.RequestTypeUnknown), streamColumn)
+	case domain.RequestTypeStream:
+		legacy := fmt.Sprintf("%s = %d AND %s = TRUE", requestTypeColumn, int16(domain.RequestTypeUnknown), streamColumn)
 		if openAIWSModeColumn != "" {
 			legacy += fmt.Sprintf(" AND %s = FALSE", openAIWSModeColumn)
 		}
 		return fmt.Sprintf("(%s = $%d OR (%s))", requestTypeColumn, startArgIndex, legacy), []any{requestTypeArg}
-	case service.RequestTypeWSV2:
+	case domain.RequestTypeWSV2:
 		if openAIWSModeColumn == "" {
 			return fmt.Sprintf("%s = $%d", requestTypeColumn, startArgIndex), []any{requestTypeArg}
 		}
-		return fmt.Sprintf("(%s = $%d OR (%s = %d AND %s = TRUE))", requestTypeColumn, startArgIndex, requestTypeColumn, int16(service.RequestTypeUnknown), openAIWSModeColumn), []any{requestTypeArg}
+		return fmt.Sprintf("(%s = $%d OR (%s = %d AND %s = TRUE))", requestTypeColumn, startArgIndex, requestTypeColumn, int16(domain.RequestTypeUnknown), openAIWSModeColumn), []any{requestTypeArg}
 	default:
 		return fmt.Sprintf("%s = $%d", requestTypeColumn, startArgIndex), []any{requestTypeArg}
 	}

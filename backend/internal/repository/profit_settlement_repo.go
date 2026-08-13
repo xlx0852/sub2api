@@ -8,16 +8,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/lib/pq"
 )
 
-func (r *profitRepository) enrichSubscriptionCycles(ctx context.Context, cycles []*service.AccountSubscriptionCycle) ([]*service.AccountSubscriptionCycle, error) {
+func (r *profitRepository) enrichSubscriptionCycles(ctx context.Context, cycles []*domain.AccountSubscriptionCycle) ([]*domain.AccountSubscriptionCycle, error) {
 	if len(cycles) == 0 {
 		return cycles, nil
 	}
 	cycleIDs := make([]int64, 0, len(cycles))
-	cyclesByID := make(map[int64]*service.AccountSubscriptionCycle, len(cycles))
+	cyclesByID := make(map[int64]*domain.AccountSubscriptionCycle, len(cycles))
 	for _, cycle := range cycles {
 		cycleIDs = append(cycleIDs, cycle.ID)
 		cyclesByID[cycle.ID] = cycle
@@ -76,7 +76,7 @@ func (r *profitRepository) enrichSubscriptionCycles(ctx context.Context, cycles 
 	return cycles, nil
 }
 
-func (r *profitRepository) CreateSubscriptionTermination(ctx context.Context, termination *service.AccountSubscriptionTermination, initialRefund *service.AccountSubscriptionRefund) (*service.SubscriptionTerminationWriteResult, error) {
+func (r *profitRepository) CreateSubscriptionTermination(ctx context.Context, termination *domain.AccountSubscriptionTermination, initialRefund *domain.AccountSubscriptionRefund) (*domain.SubscriptionTerminationWriteResult, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -97,7 +97,7 @@ func (r *profitRepository) CreateSubscriptionTermination(ctx context.Context, te
 		FOR UPDATE
 	`, termination.CycleID).Scan(&accountID, &startsAt, &periodFee, &periodDays, &currency)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, service.ErrSubscriptionCycleNotFound
+		return nil, domain.ErrSubscriptionCycleNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -116,7 +116,7 @@ func (r *profitRepository) CreateSubscriptionTermination(ctx context.Context, te
 		return nil, err
 	}
 	if hasActive {
-		return nil, service.ErrSubscriptionCycleAlreadyTerminated
+		return nil, domain.ErrSubscriptionCycleAlreadyTerminated
 	}
 	termination.AccountID = accountID
 	if termination.Reason == "" {
@@ -134,7 +134,7 @@ func (r *profitRepository) CreateSubscriptionTermination(ctx context.Context, te
 		return nil, err
 	}
 
-	var createdRefund *service.AccountSubscriptionRefund
+	var createdRefund *domain.AccountSubscriptionRefund
 	if initialRefund != nil && initialRefund.Amount > 0 {
 		var existingRefundTotal float64
 		if err := tx.QueryRowContext(ctx, `
@@ -146,7 +146,7 @@ func (r *profitRepository) CreateSubscriptionTermination(ctx context.Context, te
 			return nil, err
 		}
 		if existingRefundTotal+initialRefund.Amount > periodFee+0.00000001 {
-			return nil, service.ErrSubscriptionRefundExceedsFee
+			return nil, domain.ErrSubscriptionRefundExceedsFee
 		}
 		if initialRefund.ReceivedAt.Before(termination.EffectiveAt) {
 			return nil, fmt.Errorf("refund received_at cannot be before termination effective_at")
@@ -172,7 +172,7 @@ func (r *profitRepository) CreateSubscriptionTermination(ctx context.Context, te
 		SET status = $2, schedulable = FALSE, updated_at = NOW()
 		WHERE deleted_at IS NULL AND (id = $1 OR parent_account_id = $1)
 		RETURNING id
-	`, accountID, service.StatusDisabled)
+	`, accountID, domain.StatusDisabled)
 	if err != nil {
 		return nil, err
 	}
@@ -191,25 +191,25 @@ func (r *profitRepository) CreateSubscriptionTermination(ctx context.Context, te
 	}
 	_ = rows.Close()
 	if len(disabledIDs) == 0 {
-		return nil, service.ErrAccountNotFound
+		return nil, domain.ErrAccountNotFound
 	}
 	for _, id := range disabledIDs {
 		id := id
-		if err := enqueueSchedulerOutbox(ctx, tx, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
+		if err := enqueueSchedulerOutbox(ctx, tx, domain.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
 			return nil, err
 		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return &service.SubscriptionTerminationWriteResult{
+	return &domain.SubscriptionTerminationWriteResult{
 		Termination:        createdTermination,
 		InitialRefund:      createdRefund,
 		DisabledAccountIDs: disabledIDs,
 	}, nil
 }
 
-func (r *profitRepository) CreateSubscriptionRefund(ctx context.Context, refund *service.AccountSubscriptionRefund) (*service.AccountSubscriptionRefund, error) {
+func (r *profitRepository) CreateSubscriptionRefund(ctx context.Context, refund *domain.AccountSubscriptionRefund) (*domain.AccountSubscriptionRefund, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -232,13 +232,13 @@ func (r *profitRepository) CreateSubscriptionRefund(ctx context.Context, refund 
 		FOR UPDATE OF t, c
 	`, refund.TerminationID).Scan(&cycleID, &accountID, &periodFee, &currency, &effectiveAt, &reversedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, service.ErrSubscriptionTerminationNotFound
+		return nil, domain.ErrSubscriptionTerminationNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
 	if reversedAt != nil {
-		return nil, service.ErrSubscriptionTerminationReversed
+		return nil, domain.ErrSubscriptionTerminationReversed
 	}
 	if refund.Amount <= 0 {
 		return nil, fmt.Errorf("refund amount must be positive")
@@ -256,7 +256,7 @@ func (r *profitRepository) CreateSubscriptionRefund(ctx context.Context, refund 
 		return nil, err
 	}
 	if refundTotal+refund.Amount > periodFee+0.00000001 {
-		return nil, service.ErrSubscriptionRefundExceedsFee
+		return nil, domain.ErrSubscriptionRefundExceedsFee
 	}
 	if refund.Currency == "" {
 		refund.Currency = currency
@@ -278,7 +278,7 @@ func (r *profitRepository) CreateSubscriptionRefund(ctx context.Context, refund 
 	return created, nil
 }
 
-func (r *profitRepository) VoidSubscriptionRefund(ctx context.Context, id int64, reason string, voidedAt time.Time) (*service.AccountSubscriptionRefund, error) {
+func (r *profitRepository) VoidSubscriptionRefund(ctx context.Context, id int64, reason string, voidedAt time.Time) (*domain.AccountSubscriptionRefund, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -294,13 +294,13 @@ func (r *profitRepository) VoidSubscriptionRefund(ctx context.Context, id int64,
 	`, id)
 	refund, err := scanSubscriptionRefund(row)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, service.ErrSubscriptionRefundNotFound
+		return nil, domain.ErrSubscriptionRefundNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
 	if refund.VoidedAt != nil {
-		return nil, service.ErrSubscriptionRefundVoided
+		return nil, domain.ErrSubscriptionRefundVoided
 	}
 	row = tx.QueryRowContext(ctx, `
 		UPDATE account_subscription_refunds r
@@ -320,7 +320,7 @@ func (r *profitRepository) VoidSubscriptionRefund(ctx context.Context, id int64,
 	return updated, nil
 }
 
-func (r *profitRepository) ReverseSubscriptionTermination(ctx context.Context, id int64, reason string, reversedAt time.Time) (*service.AccountSubscriptionTermination, error) {
+func (r *profitRepository) ReverseSubscriptionTermination(ctx context.Context, id int64, reason string, reversedAt time.Time) (*domain.AccountSubscriptionTermination, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -335,13 +335,13 @@ func (r *profitRepository) ReverseSubscriptionTermination(ctx context.Context, i
 	`, id)
 	termination, err := scanSubscriptionTermination(row)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, service.ErrSubscriptionTerminationNotFound
+		return nil, domain.ErrSubscriptionTerminationNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
 	if termination.ReversedAt != nil {
-		return nil, service.ErrSubscriptionTerminationReversed
+		return nil, domain.ErrSubscriptionTerminationReversed
 	}
 	row = tx.QueryRowContext(ctx, `
 		UPDATE account_subscription_terminations
@@ -360,7 +360,7 @@ func (r *profitRepository) ReverseSubscriptionTermination(ctx context.Context, i
 	return updated, nil
 }
 
-func (r *profitRepository) GetSubscriptionCycleRevenueBatch(ctx context.Context, ranges []service.SubscriptionCycleUsageRange) (map[int64]float64, error) {
+func (r *profitRepository) GetSubscriptionCycleRevenueBatch(ctx context.Context, ranges []domain.SubscriptionCycleUsageRange) (map[int64]float64, error) {
 	result := make(map[int64]float64, len(ranges))
 	if len(ranges) == 0 {
 		return result, nil
@@ -408,8 +408,8 @@ func (r *profitRepository) GetSubscriptionCycleRevenueBatch(ctx context.Context,
 	return result, rows.Err()
 }
 
-func scanSubscriptionTermination(row costConfigScanner) (*service.AccountSubscriptionTermination, error) {
-	termination := &service.AccountSubscriptionTermination{}
+func scanSubscriptionTermination(row costConfigScanner) (*domain.AccountSubscriptionTermination, error) {
+	termination := &domain.AccountSubscriptionTermination{}
 	err := row.Scan(
 		&termination.ID,
 		&termination.CycleID,
@@ -428,8 +428,8 @@ func scanSubscriptionTermination(row costConfigScanner) (*service.AccountSubscri
 	return termination, nil
 }
 
-func scanSubscriptionRefund(row costConfigScanner) (*service.AccountSubscriptionRefund, error) {
-	refund := &service.AccountSubscriptionRefund{}
+func scanSubscriptionRefund(row costConfigScanner) (*domain.AccountSubscriptionRefund, error) {
+	refund := &domain.AccountSubscriptionRefund{}
 	err := row.Scan(
 		&refund.ID,
 		&refund.TerminationID,

@@ -60,7 +60,7 @@ type UserPlatformQuotaRepository interface {
 	IncrementUsageWithReset(ctx context.Context, userID int64, platform string, cost float64, now time.Time) error
 	// ResetExpiredWindow 重置指定窗口（daily/weekly/monthly）的用量与起始时间。
 	ResetExpiredWindow(ctx context.Context, userID int64, platform string, window string, newStart time.Time) error
-	// UpsertForUser 全量替换该用户所有平台限额配置（详见 service.UserPlatformQuotaRepository.UpsertForUser）。
+	// UpsertForUser 全量替换该用户所有平台限额配置（详见 ports.UserPlatformQuotaRepository.UpsertForUser）。
 	UpsertForUser(ctx context.Context, userID int64, records []UserPlatformQuotaRecord) error
 	// BatchSnapshotUsage 用一条多行 UPSERT 把整批 usage 以绝对值覆盖写入(非累加)。
 	// usage/window_start 直接取 EXCLUDED(Redis 当前窗口快照),无 CASE。整批共用 now 作 created/updated_at。

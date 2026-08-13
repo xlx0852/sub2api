@@ -3,12 +3,11 @@ package repository
 import (
 	"context"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"time"
-
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
-func (r *opsRepository) GetWindowStats(ctx context.Context, filter *service.OpsDashboardFilter) (*service.OpsWindowStats, error) {
+func (r *opsRepository) GetWindowStats(ctx context.Context, filter *domain.OpsDashboardFilter) (*domain.OpsWindowStats, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil ops repository")
 	}
@@ -39,7 +38,7 @@ func (r *opsRepository) GetWindowStats(ctx context.Context, filter *service.OpsD
 		return nil, err
 	}
 
-	return &service.OpsWindowStats{
+	return &domain.OpsWindowStats{
 		StartTime: start,
 		EndTime:   end,
 

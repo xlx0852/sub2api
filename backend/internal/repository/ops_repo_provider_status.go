@@ -4,12 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"time"
-
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
-func (r *opsRepository) InsertProviderStatusSnapshot(ctx context.Context, input *service.ProviderStatusSnapshotRecord) (bool, error) {
+func (r *opsRepository) InsertProviderStatusSnapshot(ctx context.Context, input *domain.ProviderStatusSnapshotRecord) (bool, error) {
 	if r == nil || r.db == nil {
 		return false, fmt.Errorf("nil ops repository")
 	}
@@ -39,7 +38,7 @@ ON CONFLICT (provider, content_hash) DO NOTHING`,
 	return affected > 0, err
 }
 
-func (r *opsRepository) GetLatestProviderStatusSnapshot(ctx context.Context, provider string) (*service.ProviderStatusSnapshotRecord, error) {
+func (r *opsRepository) GetLatestProviderStatusSnapshot(ctx context.Context, provider string) (*domain.ProviderStatusSnapshotRecord, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil ops repository")
 	}
@@ -60,12 +59,12 @@ LIMIT 1`, provider)
 	return item, nil
 }
 
-func (r *opsRepository) ListProviderStatusSnapshots(ctx context.Context, filter *service.ProviderStatusHistoryFilter) ([]*service.ProviderStatusSnapshotRecord, error) {
+func (r *opsRepository) ListProviderStatusSnapshots(ctx context.Context, filter *domain.ProviderStatusHistoryFilter) ([]*domain.ProviderStatusSnapshotRecord, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil ops repository")
 	}
 	if filter == nil {
-		filter = &service.ProviderStatusHistoryFilter{Provider: service.ProviderStatusOpenAI}
+		filter = &domain.ProviderStatusHistoryFilter{Provider: domain.ProviderStatusOpenAI}
 	}
 	limit := filter.Limit
 	if limit <= 0 || limit > 500 {
@@ -90,7 +89,7 @@ LIMIT $4`, filter.Provider, start, end, limit)
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	out := make([]*service.ProviderStatusSnapshotRecord, 0, limit)
+	out := make([]*domain.ProviderStatusSnapshotRecord, 0, limit)
 	for rows.Next() {
 		item, err := scanProviderStatusSnapshot(rows)
 		if err != nil {
@@ -105,8 +104,8 @@ type providerStatusScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanProviderStatusSnapshot(scanner providerStatusScanner) (*service.ProviderStatusSnapshotRecord, error) {
-	var item service.ProviderStatusSnapshotRecord
+func scanProviderStatusSnapshot(scanner providerStatusScanner) (*domain.ProviderStatusSnapshotRecord, error) {
+	var item domain.ProviderStatusSnapshotRecord
 	var sourceUpdatedAt sql.NullTime
 	if err := scanner.Scan(
 		&item.ID,

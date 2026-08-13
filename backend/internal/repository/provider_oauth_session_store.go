@@ -9,7 +9,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -92,11 +93,11 @@ type providerOAuthSessionStore struct {
 	rdb *redis.Client
 }
 
-func NewProviderOAuthSessionStore(rdb *redis.Client) service.ProviderOAuthSessionStore {
+func NewProviderOAuthSessionStore(rdb *redis.Client) ports.ProviderOAuthSessionStore {
 	return &providerOAuthSessionStore{rdb: rdb}
 }
 
-func (s *providerOAuthSessionStore) Create(ctx context.Context, session *service.ProviderOAuthSession, ttl time.Duration) error {
+func (s *providerOAuthSessionStore) Create(ctx context.Context, session *domain.ProviderOAuthSession, ttl time.Duration) error {
 	if err := s.validate(session, ttl); err != nil {
 		return err
 	}
@@ -114,7 +115,7 @@ func (s *providerOAuthSessionStore) Create(ctx context.Context, session *service
 	return nil
 }
 
-func (s *providerOAuthSessionStore) Get(ctx context.Context, sessionID string) (*service.ProviderOAuthSession, error) {
+func (s *providerOAuthSessionStore) Get(ctx context.Context, sessionID string) (*domain.ProviderOAuthSession, error) {
 	if s == nil || s.rdb == nil {
 		return nil, errors.New("provider OAuth session store is not configured")
 	}
@@ -128,7 +129,7 @@ func (s *providerOAuthSessionStore) Get(ctx context.Context, sessionID string) (
 	return decodeProviderOAuthSession(payload)
 }
 
-func (s *providerOAuthSessionStore) AcquirePollLease(ctx context.Context, sessionID string, now time.Time, leaseTTL time.Duration) (*service.ProviderOAuthSessionLease, error) {
+func (s *providerOAuthSessionStore) AcquirePollLease(ctx context.Context, sessionID string, now time.Time, leaseTTL time.Duration) (*domain.ProviderOAuthSessionLease, error) {
 	if s == nil || s.rdb == nil {
 		return nil, errors.New("provider OAuth session store is not configured")
 	}
@@ -152,17 +153,17 @@ func (s *providerOAuthSessionStore) AcquirePollLease(ctx context.Context, sessio
 		return nil, err
 	}
 	if code < 0 {
-		return &service.ProviderOAuthSessionLease{}, nil
+		return &domain.ProviderOAuthSessionLease{}, nil
 	}
 	raw := fmt.Sprint(items[1])
 	session, err := decodeProviderOAuthSession([]byte(raw))
 	if err != nil {
 		return nil, err
 	}
-	return &service.ProviderOAuthSessionLease{Session: session, ID: leaseID, Held: code == 1}, nil
+	return &domain.ProviderOAuthSessionLease{Session: session, ID: leaseID, Held: code == 1}, nil
 }
 
-func (s *providerOAuthSessionStore) CommitPoll(ctx context.Context, lease *service.ProviderOAuthSessionLease, updated *service.ProviderOAuthSession) (bool, error) {
+func (s *providerOAuthSessionStore) CommitPoll(ctx context.Context, lease *domain.ProviderOAuthSessionLease, updated *domain.ProviderOAuthSession) (bool, error) {
 	if s == nil || s.rdb == nil {
 		return false, errors.New("provider OAuth session store is not configured")
 	}
@@ -194,7 +195,7 @@ func (s *providerOAuthSessionStore) Cancel(ctx context.Context, sessionID string
 	return result == 1, nil
 }
 
-func (s *providerOAuthSessionStore) ConsumeAuthorized(ctx context.Context, sessionID string) (*service.ProviderOAuthSession, error) {
+func (s *providerOAuthSessionStore) ConsumeAuthorized(ctx context.Context, sessionID string) (*domain.ProviderOAuthSession, error) {
 	if s == nil || s.rdb == nil {
 		return nil, errors.New("provider OAuth session store is not configured")
 	}
@@ -223,7 +224,7 @@ func (s *providerOAuthSessionStore) Delete(ctx context.Context, sessionID string
 	return s.rdb.Del(ctx, providerOAuthSessionKey(sessionID)).Err()
 }
 
-func (s *providerOAuthSessionStore) validate(session *service.ProviderOAuthSession, ttl time.Duration) error {
+func (s *providerOAuthSessionStore) validate(session *domain.ProviderOAuthSession, ttl time.Duration) error {
 	if s == nil || s.rdb == nil {
 		return errors.New("provider OAuth session store is not configured")
 	}
@@ -240,8 +241,8 @@ func providerOAuthSessionKey(sessionID string) string {
 	return providerOAuthSessionKeyPrefix + sessionID
 }
 
-func decodeProviderOAuthSession(payload []byte) (*service.ProviderOAuthSession, error) {
-	var session service.ProviderOAuthSession
+func decodeProviderOAuthSession(payload []byte) (*domain.ProviderOAuthSession, error) {
+	var session domain.ProviderOAuthSession
 	if err := json.Unmarshal(payload, &session); err != nil {
 		return nil, err
 	}

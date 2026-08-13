@@ -83,8 +83,8 @@ var migrationChecksumCompatibilityRules = map[string]migrationChecksumCompatibil
 	// 189/189b 为 Gemini model_class 生成列 + 覆盖索引。线上先于本仓库提交执行过
 	// 不同构建的文本变体（仅注释/空白差异，schema 语义一致，见 schema_migrations
 	// 与 pg_indexes 校验），白名单放行使新版本启动校验通过。
-	"189_gemini_model_class_column.sql":                       newMigrationChecksumCompatibilityRule("ae2372ce76b740d7d6e0ee565143c5a6ac2a32d9308ab158e7cd02331e6eec53", "a813c8d7ecfbe34139b7fdb8d56f4583e952309e69932e9cab182c8a1ca5a384"),
-	"189b_gemini_model_class_index_notx.sql":                  newMigrationChecksumCompatibilityRule("c9a67ec735e3273a0b72208766af4101a3ad0b840abe9cd89ac309f57302460f", "e16caefaba954a12ca67b10a3017f0d42cbaedbfd47b37d0c78877bb6aef1108"),
+	"189_gemini_model_class_column.sql":      newMigrationChecksumCompatibilityRule("ae2372ce76b740d7d6e0ee565143c5a6ac2a32d9308ab158e7cd02331e6eec53", "a813c8d7ecfbe34139b7fdb8d56f4583e952309e69932e9cab182c8a1ca5a384"),
+	"189b_gemini_model_class_index_notx.sql": newMigrationChecksumCompatibilityRule("c9a67ec735e3273a0b72208766af4101a3ad0b840abe9cd89ac309f57302460f", "e16caefaba954a12ca67b10a3017f0d42cbaedbfd47b37d0c78877bb6aef1108"),
 }
 
 // ApplyMigrations 将嵌入的 SQL 迁移文件应用到指定的数据库。

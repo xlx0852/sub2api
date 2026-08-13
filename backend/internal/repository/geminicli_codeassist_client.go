@@ -3,13 +3,12 @@ package repository
 import (
 	"context"
 	"fmt"
-
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 )
 
 type geminiCliCodeAssistClient struct{}
 
-func NewGeminiCliCodeAssistClient() service.GeminiCliCodeAssistClient {
+func NewGeminiCliCodeAssistClient() ports.GeminiCliCodeAssistClient {
 	return &geminiCliCodeAssistClient{}
 }
 

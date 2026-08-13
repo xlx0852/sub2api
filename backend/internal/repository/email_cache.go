@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -46,24 +47,24 @@ type emailCache struct {
 	rdb *redis.Client
 }
 
-func NewEmailCache(rdb *redis.Client) service.EmailCache {
+func NewEmailCache(rdb *redis.Client) ports.EmailCache {
 	return &emailCache{rdb: rdb}
 }
 
-func (c *emailCache) GetVerificationCode(ctx context.Context, email string) (*service.VerificationCodeData, error) {
+func (c *emailCache) GetVerificationCode(ctx context.Context, email string) (*domain.VerificationCodeData, error) {
 	key := verifyCodeKey(email)
 	val, err := c.rdb.Get(ctx, key).Result()
 	if err != nil {
 		return nil, err
 	}
-	var data service.VerificationCodeData
+	var data domain.VerificationCodeData
 	if err := json.Unmarshal([]byte(val), &data); err != nil {
 		return nil, err
 	}
 	return &data, nil
 }
 
-func (c *emailCache) SetVerificationCode(ctx context.Context, email string, data *service.VerificationCodeData, ttl time.Duration) error {
+func (c *emailCache) SetVerificationCode(ctx context.Context, email string, data *domain.VerificationCodeData, ttl time.Duration) error {
 	key := verifyCodeKey(email)
 	val, err := json.Marshal(data)
 	if err != nil {
@@ -79,20 +80,20 @@ func (c *emailCache) DeleteVerificationCode(ctx context.Context, email string) e
 
 // Password reset token methods
 
-func (c *emailCache) GetPasswordResetToken(ctx context.Context, email string) (*service.PasswordResetTokenData, error) {
+func (c *emailCache) GetPasswordResetToken(ctx context.Context, email string) (*domain.PasswordResetTokenData, error) {
 	key := passwordResetKey(email)
 	val, err := c.rdb.Get(ctx, key).Result()
 	if err != nil {
 		return nil, err
 	}
-	var data service.PasswordResetTokenData
+	var data domain.PasswordResetTokenData
 	if err := json.Unmarshal([]byte(val), &data); err != nil {
 		return nil, err
 	}
 	return &data, nil
 }
 
-func (c *emailCache) SetPasswordResetToken(ctx context.Context, email string, data *service.PasswordResetTokenData, ttl time.Duration) error {
+func (c *emailCache) SetPasswordResetToken(ctx context.Context, email string, data *domain.PasswordResetTokenData, ttl time.Duration) error {
 	key := passwordResetKey(email)
 	val, err := json.Marshal(data)
 	if err != nil {
@@ -121,20 +122,20 @@ func (c *emailCache) SetPasswordResetEmailCooldown(ctx context.Context, email st
 
 // Notify email verification code methods
 
-func (c *emailCache) GetNotifyVerifyCode(ctx context.Context, email string) (*service.VerificationCodeData, error) {
+func (c *emailCache) GetNotifyVerifyCode(ctx context.Context, email string) (*domain.VerificationCodeData, error) {
 	key := notifyVerifyKey(email)
 	val, err := c.rdb.Get(ctx, key).Result()
 	if err != nil {
 		return nil, err
 	}
-	var data service.VerificationCodeData
+	var data domain.VerificationCodeData
 	if err := json.Unmarshal([]byte(val), &data); err != nil {
 		return nil, err
 	}
 	return &data, nil
 }
 
-func (c *emailCache) SetNotifyVerifyCode(ctx context.Context, email string, data *service.VerificationCodeData, ttl time.Duration) error {
+func (c *emailCache) SetNotifyVerifyCode(ctx context.Context, email string, data *domain.VerificationCodeData, ttl time.Duration) error {
 	key := notifyVerifyKey(email)
 	val, err := json.Marshal(data)
 	if err != nil {

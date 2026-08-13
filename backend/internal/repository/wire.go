@@ -7,6 +7,7 @@ import (
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/google/wire"
 	"github.com/redis/go-redis/v9"
@@ -33,7 +34,7 @@ func ProvidePricingRemoteClient(cfg *config.Config) service.PricingRemoteClient 
 
 // ProvideSessionLimitCache 创建会话限制缓存
 // 用于 Anthropic OAuth/SetupToken 账号的并发会话数量控制
-func ProvideSessionLimitCache(rdb *redis.Client, cfg *config.Config) service.SessionLimitCache {
+func ProvideSessionLimitCache(rdb *redis.Client, cfg *config.Config) ports.SessionLimitCache {
 	defaultIdleTimeoutMinutes := 5 // 默认 5 分钟空闲超时
 	if cfg != nil && cfg.Gateway.SessionIdleTimeoutMinutes > 0 {
 		defaultIdleTimeoutMinutes = cfg.Gateway.SessionIdleTimeoutMinutes
@@ -87,10 +88,10 @@ var ProviderSet = wire.NewSet(
 	NewChannelRepository,
 	NewContentModerationRepository,
 	NewProfitRepository,
-		NewAccountQuotaWindowRepository,
+	NewAccountQuotaWindowRepository,
 	NewAffiliateRepository,
 	NewUserPlatformQuotaRepository,     // T14: user × platform quota
-	NewUserPlatformQuotaServiceAdapter, // T14: adapter → service.UserPlatformQuotaRepository
+	NewUserPlatformQuotaServiceAdapter, // T14: adapter → ports.UserPlatformQuotaRepository
 
 	// Cache implementations
 	NewGatewayCache,

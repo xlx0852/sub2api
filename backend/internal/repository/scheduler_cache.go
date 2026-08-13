@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/redis/go-redis/v9"
 )
@@ -94,7 +95,7 @@ func newSchedulerCacheWithChunkSizes(rdb *redis.Client, mgetChunkSize, writeChun
 	}
 }
 
-func (c *schedulerCache) GetSnapshot(ctx context.Context, bucket service.SchedulerBucket) ([]*service.Account, bool, error) {
+func (c *schedulerCache) GetSnapshot(ctx context.Context, bucket domain.SchedulerBucket) ([]*service.Account, bool, error) {
 	readyKey := schedulerBucketKey(schedulerReadyPrefix, bucket)
 	readyVal, err := c.rdb.Get(ctx, readyKey).Result()
 	if err == redis.Nil {
@@ -151,7 +152,7 @@ func (c *schedulerCache) GetSnapshot(ctx context.Context, bucket service.Schedul
 	return accounts, true, nil
 }
 
-func (c *schedulerCache) SetSnapshot(ctx context.Context, bucket service.SchedulerBucket, accounts []service.Account) error {
+func (c *schedulerCache) SetSnapshot(ctx context.Context, bucket domain.SchedulerBucket, accounts []service.Account) error {
 	// Phase 1: 分配新版本号并写入快照数据。
 	// INCR 保证每个调用方获得唯一递增版本号。
 	// 写入的 snapshotKey 是新的版本化 key，reader 尚不知晓，因此无竞态。
@@ -287,24 +288,24 @@ func (c *schedulerCache) UpdateLastUsed(ctx context.Context, updates map[int64]t
 	return err
 }
 
-func (c *schedulerCache) TryLockBucket(ctx context.Context, bucket service.SchedulerBucket, ttl time.Duration) (bool, error) {
+func (c *schedulerCache) TryLockBucket(ctx context.Context, bucket domain.SchedulerBucket, ttl time.Duration) (bool, error) {
 	key := schedulerBucketKey(schedulerLockPrefix, bucket)
 	return c.rdb.SetNX(ctx, key, time.Now().UnixNano(), ttl).Result()
 }
 
-func (c *schedulerCache) UnlockBucket(ctx context.Context, bucket service.SchedulerBucket) error {
+func (c *schedulerCache) UnlockBucket(ctx context.Context, bucket domain.SchedulerBucket) error {
 	key := schedulerBucketKey(schedulerLockPrefix, bucket)
 	return c.rdb.Del(ctx, key).Err()
 }
 
-func (c *schedulerCache) ListBuckets(ctx context.Context) ([]service.SchedulerBucket, error) {
+func (c *schedulerCache) ListBuckets(ctx context.Context) ([]domain.SchedulerBucket, error) {
 	raw, err := c.rdb.SMembers(ctx, schedulerBucketSetKey).Result()
 	if err != nil {
 		return nil, err
 	}
-	out := make([]service.SchedulerBucket, 0, len(raw))
+	out := make([]domain.SchedulerBucket, 0, len(raw))
 	for _, entry := range raw {
-		bucket, ok := service.ParseSchedulerBucket(entry)
+		bucket, ok := domain.ParseSchedulerBucket(entry)
 		if !ok {
 			continue
 		}
@@ -332,11 +333,11 @@ func (c *schedulerCache) SetOutboxWatermark(ctx context.Context, id int64) error
 	return c.rdb.Set(ctx, schedulerOutboxWatermarkKey, strconv.FormatInt(id, 10), 0).Err()
 }
 
-func schedulerBucketKey(prefix string, bucket service.SchedulerBucket) string {
+func schedulerBucketKey(prefix string, bucket domain.SchedulerBucket) string {
 	return fmt.Sprintf("%s%d:%s:%s", prefix, bucket.GroupID, bucket.Platform, bucket.Mode)
 }
 
-func schedulerSnapshotKey(bucket service.SchedulerBucket, version string) string {
+func schedulerSnapshotKey(bucket domain.SchedulerBucket, version string) string {
 	return fmt.Sprintf("%s%d:%s:%s:v%s", schedulerSnapshotPrefix, bucket.GroupID, bucket.Platform, bucket.Mode, version)
 }
 

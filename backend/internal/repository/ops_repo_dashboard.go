@@ -5,11 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"math"
 	"strings"
 	"time"
-
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 const (
@@ -17,7 +16,7 @@ const (
 	opsRawPeakQueryTimeout    = 1500 * time.Millisecond
 )
 
-func (r *opsRepository) GetDashboardOverview(ctx context.Context, filter *service.OpsDashboardFilter) (*service.OpsDashboardOverview, error) {
+func (r *opsRepository) GetDashboardOverview(ctx context.Context, filter *domain.OpsDashboardFilter) (*domain.OpsDashboardOverview, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil ops repository")
 	}
@@ -31,11 +30,11 @@ func (r *opsRepository) GetDashboardOverview(ctx context.Context, filter *servic
 	mode := resolveOpsDashboardQueryMode(filter)
 
 	switch mode {
-	case service.OpsQueryModePreagg:
+	case domain.OpsQueryModePreagg:
 		return r.getDashboardOverviewPreaggregated(ctx, filter)
-	case service.OpsQueryModeAuto:
+	case domain.OpsQueryModeAuto:
 		out, err := r.getDashboardOverviewPreaggregated(ctx, filter)
-		if err != nil && errors.Is(err, service.ErrOpsPreaggregatedNotPopulated) {
+		if err != nil && errors.Is(err, domain.ErrOpsPreaggregatedNotPopulated) {
 			return r.getDashboardOverviewRaw(ctx, filter)
 		}
 		return out, err
@@ -44,7 +43,7 @@ func (r *opsRepository) GetDashboardOverview(ctx context.Context, filter *servic
 	}
 }
 
-func (r *opsRepository) getDashboardOverviewRaw(ctx context.Context, filter *service.OpsDashboardFilter) (*service.OpsDashboardOverview, error) {
+func (r *opsRepository) getDashboardOverviewRaw(ctx context.Context, filter *domain.OpsDashboardFilter) (*domain.OpsDashboardOverview, error) {
 	start := filter.StartTime.UTC()
 	end := filter.EndTime.UTC()
 	degraded := false
@@ -60,8 +59,8 @@ func (r *opsRepository) getDashboardOverviewRaw(ctx context.Context, filter *ser
 	if err != nil {
 		if isQueryTimeoutErr(err) {
 			degraded = true
-			duration = service.OpsPercentiles{}
-			ttft = service.OpsPercentiles{}
+			duration = domain.OpsPercentiles{}
+			ttft = domain.OpsPercentiles{}
 		} else {
 			return nil, err
 		}
@@ -121,7 +120,7 @@ func (r *opsRepository) getDashboardOverviewRaw(ctx context.Context, filter *ser
 		}
 	}
 
-	return &service.OpsDashboardOverview{
+	return &domain.OpsDashboardOverview{
 		StartTime: start,
 		EndTime:   end,
 		Platform:  strings.TrimSpace(filter.Platform),
@@ -142,12 +141,12 @@ func (r *opsRepository) getDashboardOverviewRaw(ctx context.Context, filter *ser
 		Upstream429Count:             upstream429,
 		Upstream529Count:             upstream529,
 
-		QPS: service.OpsRateSummary{
+		QPS: domain.OpsRateSummary{
 			Current: qpsCurrent,
 			Peak:    qpsPeak,
 			Avg:     qpsAvg,
 		},
-		TPS: service.OpsRateSummary{
+		TPS: domain.OpsRateSummary{
 			Current: tpsCurrent,
 			Peak:    tpsPeak,
 			Avg:     tpsAvg,
@@ -171,11 +170,11 @@ type opsDashboardPartial struct {
 
 	tokenConsumed int64
 
-	duration service.OpsPercentiles
-	ttft     service.OpsPercentiles
+	duration domain.OpsPercentiles
+	ttft     domain.OpsPercentiles
 }
 
-func (r *opsRepository) getDashboardOverviewPreaggregated(ctx context.Context, filter *service.OpsDashboardFilter) (*service.OpsDashboardOverview, error) {
+func (r *opsRepository) getDashboardOverviewPreaggregated(ctx context.Context, filter *domain.OpsDashboardFilter) (*domain.OpsDashboardOverview, error) {
 	if filter == nil {
 		return nil, fmt.Errorf("nil filter")
 	}
@@ -201,7 +200,7 @@ func (r *opsRepository) getDashboardOverviewPreaggregated(ctx context.Context, f
 	if len(preaggRows) == 0 {
 		// Distinguish "no data" vs "preagg not populated yet".
 		if exists, err := r.rawOpsDataExists(ctx, filter, aggFullStart, aggFullEnd); err == nil && exists {
-			return nil, service.ErrOpsPreaggregatedNotPopulated
+			return nil, domain.ErrOpsPreaggregatedNotPopulated
 		}
 	}
 	preagg := aggregateHourlyRows(preaggRows)
@@ -304,7 +303,7 @@ func (r *opsRepository) getDashboardOverviewPreaggregated(ctx context.Context, f
 		}
 	}
 
-	return &service.OpsDashboardOverview{
+	return &domain.OpsDashboardOverview{
 		StartTime: start,
 		EndTime:   end,
 		Platform:  strings.TrimSpace(filter.Platform),
@@ -325,12 +324,12 @@ func (r *opsRepository) getDashboardOverviewPreaggregated(ctx context.Context, f
 		Upstream429Count:             upstream429,
 		Upstream529Count:             upstream529,
 
-		QPS: service.OpsRateSummary{
+		QPS: domain.OpsRateSummary{
 			Current: qpsCurrent,
 			Peak:    qpsPeak,
 			Avg:     qpsAvg,
 		},
-		TPS: service.OpsRateSummary{
+		TPS: domain.OpsRateSummary{
 			Current: tpsCurrent,
 			Peak:    tpsPeak,
 			Avg:     tpsAvg,
@@ -371,7 +370,7 @@ type opsHourlyMetricsRow struct {
 	ttftMax sql.NullInt64
 }
 
-func (r *opsRepository) listHourlyMetricsRows(ctx context.Context, filter *service.OpsDashboardFilter, start, end time.Time) ([]opsHourlyMetricsRow, error) {
+func (r *opsRepository) listHourlyMetricsRows(ctx context.Context, filter *domain.OpsDashboardFilter, start, end time.Time) ([]opsHourlyMetricsRow, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil ops repository")
 	}
@@ -634,7 +633,7 @@ func aggregateHourlyRows(rows []opsHourlyMetricsRow) opsDashboardPartial {
 	return out
 }
 
-func (r *opsRepository) queryRawPartial(ctx context.Context, filter *service.OpsDashboardFilter, start, end time.Time) (*opsDashboardPartial, error) {
+func (r *opsRepository) queryRawPartial(ctx context.Context, filter *domain.OpsDashboardFilter, start, end time.Time) (*opsDashboardPartial, error) {
 	successCount, tokenConsumed, err := r.queryUsageCounts(ctx, filter, start, end)
 	if err != nil {
 		return nil, err
@@ -645,8 +644,8 @@ func (r *opsRepository) queryRawPartial(ctx context.Context, filter *service.Ops
 	cancelLatency()
 	if err != nil {
 		if isQueryTimeoutErr(err) {
-			duration = service.OpsPercentiles{}
-			ttft = service.OpsPercentiles{}
+			duration = domain.OpsPercentiles{}
+			ttft = domain.OpsPercentiles{}
 			ttftSampleCount = 0
 		} else {
 			return nil, err
@@ -673,7 +672,7 @@ func (r *opsRepository) queryRawPartial(ctx context.Context, filter *service.Ops
 	}, nil
 }
 
-func (r *opsRepository) rawOpsDataExists(ctx context.Context, filter *service.OpsDashboardFilter, start, end time.Time) (bool, error) {
+func (r *opsRepository) rawOpsDataExists(ctx context.Context, filter *domain.OpsDashboardFilter, start, end time.Time) (bool, error) {
 	{
 		join, where, args, _ := buildUsageWhere(filter, start, end, 1)
 		q := `SELECT EXISTS(SELECT 1 FROM usage_logs ul ` + join + ` ` + where + ` LIMIT 1)`
@@ -699,11 +698,11 @@ func (r *opsRepository) rawOpsDataExists(ctx context.Context, filter *service.Op
 
 type opsPercentileSegment struct {
 	weight int64
-	p      service.OpsPercentiles
+	p      domain.OpsPercentiles
 }
 
-func combineApproxPercentiles(segments []opsPercentileSegment) service.OpsPercentiles {
-	weightedInt := func(get func(service.OpsPercentiles) *int) *int {
+func combineApproxPercentiles(segments []opsPercentileSegment) domain.OpsPercentiles {
+	weightedInt := func(get func(domain.OpsPercentiles) *int) *int {
 		var sum float64
 		var w int64
 		for _, seg := range segments {
@@ -724,7 +723,7 @@ func combineApproxPercentiles(segments []opsPercentileSegment) service.OpsPercen
 		return &out
 	}
 
-	maxInt := func(get func(service.OpsPercentiles) *int) *int {
+	maxInt := func(get func(domain.OpsPercentiles) *int) *int {
 		var max *int
 		for _, seg := range segments {
 			v := get(seg.p)
@@ -739,13 +738,13 @@ func combineApproxPercentiles(segments []opsPercentileSegment) service.OpsPercen
 		return max
 	}
 
-	return service.OpsPercentiles{
-		P50: weightedInt(func(p service.OpsPercentiles) *int { return p.P50 }),
-		P90: weightedInt(func(p service.OpsPercentiles) *int { return p.P90 }),
-		P95: maxInt(func(p service.OpsPercentiles) *int { return p.P95 }),
-		P99: maxInt(func(p service.OpsPercentiles) *int { return p.P99 }),
-		Avg: weightedInt(func(p service.OpsPercentiles) *int { return p.Avg }),
-		Max: maxInt(func(p service.OpsPercentiles) *int { return p.Max }),
+	return domain.OpsPercentiles{
+		P50: weightedInt(func(p domain.OpsPercentiles) *int { return p.P50 }),
+		P90: weightedInt(func(p domain.OpsPercentiles) *int { return p.P90 }),
+		P95: maxInt(func(p domain.OpsPercentiles) *int { return p.P95 }),
+		P99: maxInt(func(p domain.OpsPercentiles) *int { return p.P99 }),
+		Avg: weightedInt(func(p domain.OpsPercentiles) *int { return p.Avg }),
+		Max: maxInt(func(p domain.OpsPercentiles) *int { return p.Max }),
 	}
 }
 
@@ -785,7 +784,7 @@ func maxTime(a, b time.Time) time.Time {
 	return b
 }
 
-func (r *opsRepository) queryUsageCounts(ctx context.Context, filter *service.OpsDashboardFilter, start, end time.Time) (successCount int64, tokenConsumed int64, err error) {
+func (r *opsRepository) queryUsageCounts(ctx context.Context, filter *domain.OpsDashboardFilter, start, end time.Time) (successCount int64, tokenConsumed int64, err error) {
 	join, where, args, _ := buildUsageWhere(filter, start, end, 1)
 
 	q := `
@@ -806,7 +805,7 @@ FROM usage_logs ul
 	return successCount, tokenConsumed, nil
 }
 
-func (r *opsRepository) queryUsageLatency(ctx context.Context, filter *service.OpsDashboardFilter, start, end time.Time) (duration service.OpsPercentiles, ttft service.OpsPercentiles, ttftSampleCount int64, err error) {
+func (r *opsRepository) queryUsageLatency(ctx context.Context, filter *domain.OpsDashboardFilter, start, end time.Time) (duration domain.OpsPercentiles, ttft domain.OpsPercentiles, ttftSampleCount int64, err error) {
 	join, where, args, _ := buildUsageWhere(filter, start, end, 1)
 	q := `
 SELECT
@@ -838,7 +837,7 @@ FROM usage_logs ul
 		&dP50, &dP90, &dP95, &dP99, &dAvg, &dMax,
 		&tP50, &tP90, &tP95, &tP99, &tAvg, &tMax, &tCount,
 	); err != nil {
-		return service.OpsPercentiles{}, service.OpsPercentiles{}, 0, err
+		return domain.OpsPercentiles{}, domain.OpsPercentiles{}, 0, err
 	}
 
 	duration.P50 = floatToIntPtr(dP50)
@@ -864,7 +863,7 @@ FROM usage_logs ul
 	return duration, ttft, tCount, nil
 }
 
-func (r *opsRepository) queryErrorCounts(ctx context.Context, filter *service.OpsDashboardFilter, start, end time.Time) (
+func (r *opsRepository) queryErrorCounts(ctx context.Context, filter *domain.OpsDashboardFilter, start, end time.Time) (
 	errorTotal int64,
 	businessLimited int64,
 	errorCountSLA int64,
@@ -899,7 +898,7 @@ FROM ops_error_logs
 	return errorTotal, businessLimited, errorCountSLA, upstreamExcl429529, upstream429, upstream529, nil
 }
 
-func (r *opsRepository) queryCurrentRates(ctx context.Context, filter *service.OpsDashboardFilter, end time.Time) (qpsCurrent float64, tpsCurrent float64, err error) {
+func (r *opsRepository) queryCurrentRates(ctx context.Context, filter *domain.OpsDashboardFilter, end time.Time) (qpsCurrent float64, tpsCurrent float64, err error) {
 	windowStart := end.Add(-1 * time.Minute)
 
 	successCount1m, token1m, err := r.queryUsageCounts(ctx, filter, windowStart, end)
@@ -916,7 +915,7 @@ func (r *opsRepository) queryCurrentRates(ctx context.Context, filter *service.O
 	return qpsCurrent, tpsCurrent, nil
 }
 
-func (r *opsRepository) queryPeakRates(ctx context.Context, filter *service.OpsDashboardFilter, start, end time.Time) (qpsPeak float64, tpsPeak float64, err error) {
+func (r *opsRepository) queryPeakRates(ctx context.Context, filter *domain.OpsDashboardFilter, start, end time.Time) (qpsPeak float64, tpsPeak float64, err error) {
 	usageJoin, usageWhere, usageArgs, next := buildUsageWhere(filter, start, end, 1)
 	errorWhere, errorArgs, _ := buildErrorWhere(filter, start, end, next)
 
@@ -969,22 +968,22 @@ func isQueryTimeoutErr(err error) bool {
 	return errors.Is(err, context.DeadlineExceeded)
 }
 
-func resolveOpsDashboardQueryMode(filter *service.OpsDashboardFilter) service.OpsQueryMode {
+func resolveOpsDashboardQueryMode(filter *domain.OpsDashboardFilter) domain.OpsQueryMode {
 	if filter == nil {
-		return service.OpsQueryModeRaw
+		return domain.OpsQueryModeRaw
 	}
 	mode := filter.QueryMode
 	if !mode.IsValid() {
-		mode = service.OpsQueryModeRaw
+		mode = domain.OpsQueryModeRaw
 	}
 	if filter.RequestType != nil {
 		// 预聚合表当前不包含 request_type 维度，带该过滤时只能走原始日志。
-		return service.OpsQueryModeRaw
+		return domain.OpsQueryModeRaw
 	}
 	return mode
 }
 
-func buildUsageWhere(filter *service.OpsDashboardFilter, start, end time.Time, startIndex int) (join string, where string, args []any, nextIndex int) {
+func buildUsageWhere(filter *domain.OpsDashboardFilter, start, end time.Time, startIndex int) (join string, where string, args []any, nextIndex int) {
 	platform := ""
 	groupID := (*int64)(nil)
 	requestType := (*int16)(nil)
@@ -1035,7 +1034,7 @@ func buildUsageWhere(filter *service.OpsDashboardFilter, start, end time.Time, s
 	return join, where, args, idx
 }
 
-func buildErrorWhere(filter *service.OpsDashboardFilter, start, end time.Time, startIndex int) (where string, args []any, nextIndex int) {
+func buildErrorWhere(filter *domain.OpsDashboardFilter, start, end time.Time, startIndex int) (where string, args []any, nextIndex int) {
 	platform := ""
 	groupID := (*int64)(nil)
 	requestType := (*int16)(nil)

@@ -3,13 +3,12 @@ package repository
 import (
 	"context"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"strings"
 	"time"
-
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
-func (r *usageLogRepository) GetTrafficAvailability(ctx context.Context, start, end time.Time, bucketSize time.Duration, userID *int64, platform string) (*service.TrafficAvailability, error) {
+func (r *usageLogRepository) GetTrafficAvailability(ctx context.Context, start, end time.Time, bucketSize time.Duration, userID *int64, platform string) (*domain.TrafficAvailability, error) {
 	if bucketSize <= 0 || !start.Before(end) {
 		return nil, fmt.Errorf("invalid availability range")
 	}
@@ -87,13 +86,13 @@ FROM events GROUP BY bucket ORDER BY bucket`
 		return nil, err
 	}
 
-	result := &service.TrafficAvailability{StartAt: start.UTC(), EndAt: end.UTC(), BucketMinutes: int(bucketSize / time.Minute), Buckets: make([]service.TrafficAvailabilityBucket, 0, int(end.Sub(start)/bucketSize))}
+	result := &domain.TrafficAvailability{StartAt: start.UTC(), EndAt: end.UTC(), BucketMinutes: int(bucketSize / time.Minute), Buckets: make([]domain.TrafficAvailabilityBucket, 0, int(end.Sub(start)/bucketSize))}
 	var latencyWeighted float64
 	var latencySamples int64
 	for cursor := start.UTC(); cursor.Before(end.UTC()); cursor = cursor.Add(bucketSize) {
 		a := byBucket[cursor]
 		samples := a.success + a.failure
-		bucket := service.TrafficAvailabilityBucket{StartAt: cursor, SuccessCount: a.success, FailureCount: a.failure, SampleCount: samples, AverageLatency: a.latency}
+		bucket := domain.TrafficAvailabilityBucket{StartAt: cursor, SuccessCount: a.success, FailureCount: a.failure, SampleCount: samples, AverageLatency: a.latency}
 		if samples > 0 {
 			rate := float64(a.success) * 100 / float64(samples)
 			bucket.SuccessRate = &rate

@@ -8,20 +8,21 @@ import (
 	"github.com/imroc/req/v3"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 )
 
 type geminiOAuthClient struct{}
 
-func NewGeminiOAuthClient(_ *config.Config) service.GeminiOAuthClient {
+func NewGeminiOAuthClient(_ *config.Config) ports.GeminiOAuthClient {
 	return &geminiOAuthClient{}
 }
 
-func (c *geminiOAuthClient) ExchangeCode(ctx context.Context, oauthType, code, codeVerifier, redirectURI, proxyURL string) (*service.GeminiTokenResponse, error) {
+func (c *geminiOAuthClient) ExchangeCode(ctx context.Context, oauthType, code, codeVerifier, redirectURI, proxyURL string) (*domain.GeminiTokenResponse, error) {
 	return nil, fmt.Errorf("gemini oauth retired")
 }
 
-func (c *geminiOAuthClient) RefreshToken(ctx context.Context, oauthType, refreshToken, proxyURL string) (*service.GeminiTokenResponse, error) {
+func (c *geminiOAuthClient) RefreshToken(ctx context.Context, oauthType, refreshToken, proxyURL string) (*domain.GeminiTokenResponse, error) {
 	return nil, fmt.Errorf("gemini oauth retired")
 }
 

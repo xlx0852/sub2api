@@ -7,19 +7,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/redis/go-redis/v9"
 )
 
 const contentModerationFlaggedHashSetKey = "content_moderation:flagged_hashes"
-const contentModerationCleanHashPrefix   = "content_moderation:clean_hash:"
+const contentModerationCleanHashPrefix = "content_moderation:clean_hash:"
 const contentModerationElevatedUserPrefix = "content_moderation:elevated_user:"
 
 type contentModerationHashCache struct {
 	rdb *redis.Client
 }
 
-func NewContentModerationHashCache(rdb *redis.Client) service.ContentModerationHashCache {
+func NewContentModerationHashCache(rdb *redis.Client) ports.ContentModerationHashCache {
 	return &contentModerationHashCache{rdb: rdb}
 }
 
@@ -106,8 +107,8 @@ func (c *contentModerationHashCache) GetElevatedUserSampling(ctx context.Context
 	return true, val == "1", nil
 }
 
-func (c *contentModerationHashCache) ListElevatedUsers(ctx context.Context) ([]service.ContentModerationElevatedUserCacheEntry, error) {
-	out := make([]service.ContentModerationElevatedUserCacheEntry, 0)
+func (c *contentModerationHashCache) ListElevatedUsers(ctx context.Context) ([]domain.ContentModerationElevatedUserCacheEntry, error) {
+	out := make([]domain.ContentModerationElevatedUserCacheEntry, 0)
 	if c == nil || c.rdb == nil {
 		return out, nil
 	}
@@ -147,7 +148,7 @@ func (c *contentModerationHashCache) ListElevatedUsers(ctx context.Context) ([]s
 					sec = 0
 				}
 			}
-			out = append(out, service.ContentModerationElevatedUserCacheEntry{UserID: uid, TTLSeconds: sec})
+			out = append(out, domain.ContentModerationElevatedUserCacheEntry{UserID: uid, TTLSeconds: sec})
 		}
 		cursor = next
 		if cursor == 0 {

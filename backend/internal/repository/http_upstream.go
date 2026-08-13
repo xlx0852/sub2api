@@ -25,6 +25,7 @@ import (
 	"golang.org/x/net/http2"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyurl"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyutil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
@@ -183,9 +184,9 @@ func (s *httpUpstreamService) Do(req *http.Request, proxyURL string, accountID i
 	if err := s.validateRequestHost(req); err != nil {
 		return nil, err
 	}
-	profile := service.HTTPUpstreamProfileDefault
+	profile := domain.HTTPUpstreamProfileDefault
 	if req != nil {
-		profile = service.HTTPUpstreamProfileFromContext(req.Context())
+		profile = domain.HTTPUpstreamProfileFromContext(req.Context())
 	}
 
 	// 获取或创建对应的客户端，并标记请求占用
@@ -197,7 +198,7 @@ func (s *httpUpstreamService) Do(req *http.Request, proxyURL string, accountID i
 	// 执行请求；Grok CLI 403 兼容拒绝时回退到官方 api.x.ai
 	client := httpClientWithGrokAccessDeniedFallback(entry.client)
 	resp, err := client.Do(req)
-	if err != nil && profile == service.HTTPUpstreamProfileGrok {
+	if err != nil && profile == domain.HTTPUpstreamProfileGrok {
 		if retryReq, ok := cloneGrokRequestForHTTP1Retry(req); ok {
 			fallbackClient, buildErr := s.newGrokHTTP1FallbackClient(proxyURL, accountConcurrency)
 			if buildErr == nil {
@@ -281,9 +282,9 @@ func (s *httpUpstreamService) DoWithTLS(req *http.Request, proxyURL string, acco
 	if profile == nil {
 		return s.Do(req, proxyURL, accountID, accountConcurrency)
 	}
-	upstreamProfile := service.HTTPUpstreamProfileDefault
+	upstreamProfile := domain.HTTPUpstreamProfileDefault
 	if req != nil {
-		upstreamProfile = service.HTTPUpstreamProfileFromContext(req.Context())
+		upstreamProfile = domain.HTTPUpstreamProfileFromContext(req.Context())
 	}
 
 	targetHost := ""
@@ -326,13 +327,13 @@ func (s *httpUpstreamService) DoWithTLS(req *http.Request, proxyURL string, acco
 }
 
 // acquireClientWithTLS 获取或创建带 TLS 指纹的客户端
-func (s *httpUpstreamService) acquireClientWithTLS(proxyURL string, accountID int64, accountConcurrency int, profile *tlsfingerprint.Profile, upstreamProfile service.HTTPUpstreamProfile) (*upstreamClientEntry, error) {
+func (s *httpUpstreamService) acquireClientWithTLS(proxyURL string, accountID int64, accountConcurrency int, profile *tlsfingerprint.Profile, upstreamProfile domain.HTTPUpstreamProfile) (*upstreamClientEntry, error) {
 	return s.getClientEntryWithTLS(proxyURL, accountID, accountConcurrency, profile, upstreamProfile, true, true)
 }
 
 // getClientEntryWithTLS 获取或创建带 TLS 指纹的客户端条目
 // TLS 指纹客户端使用独立的缓存键，与普通客户端隔离
-func (s *httpUpstreamService) getClientEntryWithTLS(proxyURL string, accountID int64, accountConcurrency int, profile *tlsfingerprint.Profile, upstreamProfile service.HTTPUpstreamProfile, markInFlight bool, enforceLimit bool) (*upstreamClientEntry, error) {
+func (s *httpUpstreamService) getClientEntryWithTLS(proxyURL string, accountID int64, accountConcurrency int, profile *tlsfingerprint.Profile, upstreamProfile domain.HTTPUpstreamProfile, markInFlight bool, enforceLimit bool) (*upstreamClientEntry, error) {
 	isolation := s.getIsolationMode()
 	proxyKey, parsedProxy, err := normalizeProxyURL(proxyURL)
 	if err != nil {
@@ -343,7 +344,7 @@ func (s *httpUpstreamService) getClientEntryWithTLS(proxyURL string, accountID i
 	// OpenAI 指纹客户端与普通 openai_h2 池对齐：启用 H2 + PING keepalive。
 	// Claude 等其它指纹路径保持 default（通常 ALPN=http/1.1），避免改写指纹语义。
 	protocolMode := upstreamProtocolModeDefault
-	if upstreamProfile == service.HTTPUpstreamProfileOpenAI {
+	if upstreamProfile == domain.HTTPUpstreamProfileOpenAI {
 		protocolMode = s.resolveProtocolMode(upstreamProfile, proxyKey, parsedProxy)
 	}
 	// TLS 指纹客户端使用独立的缓存键，加 "tls:" 前缀
@@ -468,7 +469,7 @@ func (s *httpUpstreamService) redirectChecker(req *http.Request, via []*http.Req
 	if len(via) >= 10 {
 		return errors.New("stopped after 10 redirects")
 	}
-	if service.HTTPUpstreamRedirectsDisabled(req.Context()) {
+	if domain.HTTPUpstreamRedirectsDisabled(req.Context()) {
 		// Credential-bearing probes must not follow redirects through the shared
 		// client: a redirect target would receive the upstream Authorization header.
 		return http.ErrUseLastResponse
@@ -479,11 +480,11 @@ func (s *httpUpstreamService) redirectChecker(req *http.Request, via []*http.Req
 // acquireClient 获取或创建客户端，并标记为进行中请求
 // 用于请求路径，避免在获取后被淘汰
 func (s *httpUpstreamService) acquireClient(proxyURL string, accountID int64, accountConcurrency int) (*upstreamClientEntry, error) {
-	return s.acquireClientWithProfile(proxyURL, accountID, accountConcurrency, service.HTTPUpstreamProfileDefault)
+	return s.acquireClientWithProfile(proxyURL, accountID, accountConcurrency, domain.HTTPUpstreamProfileDefault)
 }
 
 // acquireClientWithProfile 获取或创建客户端，并按请求 profile 选择协议策略。
-func (s *httpUpstreamService) acquireClientWithProfile(proxyURL string, accountID int64, accountConcurrency int, profile service.HTTPUpstreamProfile) (*upstreamClientEntry, error) {
+func (s *httpUpstreamService) acquireClientWithProfile(proxyURL string, accountID int64, accountConcurrency int, profile domain.HTTPUpstreamProfile) (*upstreamClientEntry, error) {
 	return s.getClientEntry(proxyURL, accountID, accountConcurrency, profile, true, true)
 }
 
@@ -503,13 +504,13 @@ func (s *httpUpstreamService) acquireClientWithProfile(proxyURL string, accountI
 //   - account: 按账户隔离，同一账户共享客户端（代理变更时重建）
 //   - account_proxy: 按账户+代理组合隔离，最细粒度
 func (s *httpUpstreamService) getOrCreateClient(proxyURL string, accountID int64, accountConcurrency int) (*upstreamClientEntry, error) {
-	return s.getClientEntry(proxyURL, accountID, accountConcurrency, service.HTTPUpstreamProfileDefault, false, false)
+	return s.getClientEntry(proxyURL, accountID, accountConcurrency, domain.HTTPUpstreamProfileDefault, false, false)
 }
 
 // getClientEntry 获取或创建客户端条目
 // markInFlight=true 时会标记进行中请求，用于请求路径防止被淘汰
 // enforceLimit=true 时会限制客户端数量，超限且无法淘汰时返回错误
-func (s *httpUpstreamService) getClientEntry(proxyURL string, accountID int64, accountConcurrency int, profile service.HTTPUpstreamProfile, markInFlight bool, enforceLimit bool) (*upstreamClientEntry, error) {
+func (s *httpUpstreamService) getClientEntry(proxyURL string, accountID int64, accountConcurrency int, profile domain.HTTPUpstreamProfile, markInFlight bool, enforceLimit bool) (*upstreamClientEntry, error) {
 	// 获取隔离模式
 	isolation := s.getIsolationMode()
 	// 标准化代理 URL 并解析
@@ -764,8 +765,8 @@ func (s *httpUpstreamService) resolvePoolSettings(isolation string, accountConcu
 	return settings
 }
 
-func (s *httpUpstreamService) applyProfilePoolSettings(settings poolSettings, profile service.HTTPUpstreamProfile) poolSettings {
-	if profile != service.HTTPUpstreamProfileOpenAI {
+func (s *httpUpstreamService) applyProfilePoolSettings(settings poolSettings, profile domain.HTTPUpstreamProfile) poolSettings {
+	if profile != domain.HTTPUpstreamProfileOpenAI {
 		return settings
 	}
 	settings.responseHeaderTimeout = 0
@@ -848,11 +849,11 @@ func (s *httpUpstreamService) resolveOpenAIHTTP2Settings() openAIHTTP2Settings {
 	return settings
 }
 
-func (s *httpUpstreamService) resolveProtocolMode(profile service.HTTPUpstreamProfile, proxyKey string, parsedProxy *url.URL) string {
-	if profile == service.HTTPUpstreamProfileGrok {
+func (s *httpUpstreamService) resolveProtocolMode(profile domain.HTTPUpstreamProfile, proxyKey string, parsedProxy *url.URL) string {
+	if profile == domain.HTTPUpstreamProfileGrok {
 		return upstreamProtocolModeGrokH2
 	}
-	if profile != service.HTTPUpstreamProfileOpenAI {
+	if profile != domain.HTTPUpstreamProfileOpenAI {
 		return upstreamProtocolModeDefault
 	}
 	settings := s.resolveOpenAIHTTP2Settings()
@@ -956,8 +957,8 @@ func isUpstreamTimeoutError(err error) bool {
 	return false
 }
 
-func (s *httpUpstreamService) recordOpenAIHTTP2Failure(profile service.HTTPUpstreamProfile, protocolMode, proxyKey string, err error) {
-	if profile != service.HTTPUpstreamProfileOpenAI || protocolMode != upstreamProtocolModeOpenAIH2 {
+func (s *httpUpstreamService) recordOpenAIHTTP2Failure(profile domain.HTTPUpstreamProfile, protocolMode, proxyKey string, err error) {
+	if profile != domain.HTTPUpstreamProfileOpenAI || protocolMode != upstreamProtocolModeOpenAIH2 {
 		return
 	}
 	settings := s.resolveOpenAIHTTP2Settings()
@@ -976,8 +977,8 @@ func (s *httpUpstreamService) recordOpenAIHTTP2Failure(profile service.HTTPUpstr
 	}
 }
 
-func (s *httpUpstreamService) recordOpenAIHTTP2Success(profile service.HTTPUpstreamProfile, protocolMode, proxyKey string) {
-	if profile != service.HTTPUpstreamProfileOpenAI || protocolMode != upstreamProtocolModeOpenAIH2 {
+func (s *httpUpstreamService) recordOpenAIHTTP2Success(profile domain.HTTPUpstreamProfile, protocolMode, proxyKey string) {
+	if profile != domain.HTTPUpstreamProfileOpenAI || protocolMode != upstreamProtocolModeOpenAIH2 {
 		return
 	}
 	if !isHTTPProxyKey(proxyKey) {

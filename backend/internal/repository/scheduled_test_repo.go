@@ -1,13 +1,13 @@
 package repository
 
 import (
-	"fmt"
-	"strings"
 	"context"
 	"database/sql"
+	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
+	"strings"
 	"time"
-
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 // --- Plan Repository ---
@@ -16,11 +16,11 @@ type scheduledTestPlanRepository struct {
 	db *sql.DB
 }
 
-func NewScheduledTestPlanRepository(db *sql.DB) service.ScheduledTestPlanRepository {
+func NewScheduledTestPlanRepository(db *sql.DB) ports.ScheduledTestPlanRepository {
 	return &scheduledTestPlanRepository{db: db}
 }
 
-func (r *scheduledTestPlanRepository) Create(ctx context.Context, plan *service.ScheduledTestPlan) (*service.ScheduledTestPlan, error) {
+func (r *scheduledTestPlanRepository) Create(ctx context.Context, plan *domain.ScheduledTestPlan) (*domain.ScheduledTestPlan, error) {
 	row := r.db.QueryRowContext(ctx, `
 		INSERT INTO scheduled_test_plans (account_id, model_id, cron_expression, enabled, max_results, auto_recover, next_run_at, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
@@ -29,7 +29,7 @@ func (r *scheduledTestPlanRepository) Create(ctx context.Context, plan *service.
 	return scanPlan(row)
 }
 
-func (r *scheduledTestPlanRepository) GetByID(ctx context.Context, id int64) (*service.ScheduledTestPlan, error) {
+func (r *scheduledTestPlanRepository) GetByID(ctx context.Context, id int64) (*domain.ScheduledTestPlan, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, account_id, model_id, cron_expression, enabled, max_results, auto_recover, last_run_at, next_run_at, created_at, updated_at
 		FROM scheduled_test_plans WHERE id = $1
@@ -37,7 +37,7 @@ func (r *scheduledTestPlanRepository) GetByID(ctx context.Context, id int64) (*s
 	return scanPlan(row)
 }
 
-func (r *scheduledTestPlanRepository) ListByAccountID(ctx context.Context, accountID int64) ([]*service.ScheduledTestPlan, error) {
+func (r *scheduledTestPlanRepository) ListByAccountID(ctx context.Context, accountID int64) ([]*domain.ScheduledTestPlan, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, account_id, model_id, cron_expression, enabled, max_results, auto_recover, last_run_at, next_run_at, created_at, updated_at
 		FROM scheduled_test_plans WHERE account_id = $1
@@ -50,7 +50,7 @@ func (r *scheduledTestPlanRepository) ListByAccountID(ctx context.Context, accou
 	return scanPlans(rows)
 }
 
-func (r *scheduledTestPlanRepository) ClaimDue(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]*service.ScheduledTestPlan, error) {
+func (r *scheduledTestPlanRepository) ClaimDue(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]*domain.ScheduledTestPlan, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
@@ -104,7 +104,7 @@ func (r *scheduledTestPlanRepository) Reschedule(ctx context.Context, id int64, 
 	return err
 }
 
-func (r *scheduledTestPlanRepository) Update(ctx context.Context, plan *service.ScheduledTestPlan) (*service.ScheduledTestPlan, error) {
+func (r *scheduledTestPlanRepository) Update(ctx context.Context, plan *domain.ScheduledTestPlan) (*domain.ScheduledTestPlan, error) {
 	row := r.db.QueryRowContext(ctx, `
 		UPDATE scheduled_test_plans
 		SET model_id = $2, cron_expression = $3, enabled = $4, max_results = $5, auto_recover = $6, next_run_at = $7, updated_at = NOW()
@@ -132,18 +132,18 @@ type scheduledTestResultRepository struct {
 	db *sql.DB
 }
 
-func NewScheduledTestResultRepository(db *sql.DB) service.ScheduledTestResultRepository {
+func NewScheduledTestResultRepository(db *sql.DB) ports.ScheduledTestResultRepository {
 	return &scheduledTestResultRepository{db: db}
 }
 
-func (r *scheduledTestResultRepository) Create(ctx context.Context, result *service.ScheduledTestResult) (*service.ScheduledTestResult, error) {
+func (r *scheduledTestResultRepository) Create(ctx context.Context, result *domain.ScheduledTestResult) (*domain.ScheduledTestResult, error) {
 	row := r.db.QueryRowContext(ctx, `
 		INSERT INTO scheduled_test_results (plan_id, status, response_text, error_message, latency_ms, started_at, finished_at, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
 		RETURNING id, plan_id, status, response_text, error_message, latency_ms, started_at, finished_at, created_at
 	`, result.PlanID, result.Status, result.ResponseText, result.ErrorMessage, result.LatencyMs, result.StartedAt, result.FinishedAt)
 
-	out := &service.ScheduledTestResult{}
+	out := &domain.ScheduledTestResult{}
 	if err := row.Scan(
 		&out.ID, &out.PlanID, &out.Status, &out.ResponseText, &out.ErrorMessage,
 		&out.LatencyMs, &out.StartedAt, &out.FinishedAt, &out.CreatedAt,
@@ -153,7 +153,7 @@ func (r *scheduledTestResultRepository) Create(ctx context.Context, result *serv
 	return out, nil
 }
 
-func (r *scheduledTestResultRepository) ListByPlanID(ctx context.Context, planID int64, limit int) ([]*service.ScheduledTestResult, error) {
+func (r *scheduledTestResultRepository) ListByPlanID(ctx context.Context, planID int64, limit int) ([]*domain.ScheduledTestResult, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, plan_id, status, response_text, error_message, latency_ms, started_at, finished_at, created_at
 		FROM scheduled_test_results
@@ -166,9 +166,9 @@ func (r *scheduledTestResultRepository) ListByPlanID(ctx context.Context, planID
 	}
 	defer func() { _ = rows.Close() }()
 
-	var results []*service.ScheduledTestResult
+	var results []*domain.ScheduledTestResult
 	for rows.Next() {
-		r := &service.ScheduledTestResult{}
+		r := &domain.ScheduledTestResult{}
 		if err := rows.Scan(
 			&r.ID, &r.PlanID, &r.Status, &r.ResponseText, &r.ErrorMessage,
 			&r.LatencyMs, &r.StartedAt, &r.FinishedAt, &r.CreatedAt,
@@ -195,14 +195,13 @@ func (r *scheduledTestResultRepository) PruneOldResults(ctx context.Context, pla
 	return err
 }
 
-
-func (r *scheduledTestPlanRepository) ListDiagnosticsStatusByAccountIDs(ctx context.Context, accountIDs []int64) (map[int64]service.ScheduledDiagnosticsStatus, error) {
-	out := make(map[int64]service.ScheduledDiagnosticsStatus, len(accountIDs))
+func (r *scheduledTestPlanRepository) ListDiagnosticsStatusByAccountIDs(ctx context.Context, accountIDs []int64) (map[int64]domain.ScheduledDiagnosticsStatus, error) {
+	out := make(map[int64]domain.ScheduledDiagnosticsStatus, len(accountIDs))
 	if len(accountIDs) == 0 {
 		return out, nil
 	}
 	for _, id := range accountIDs {
-		out[id] = service.ScheduledDiagnosticsStatus{AccountID: id}
+		out[id] = domain.ScheduledDiagnosticsStatus{AccountID: id}
 	}
 
 	const chunkSize = 200
@@ -239,7 +238,7 @@ func (r *scheduledTestPlanRepository) ListDiagnosticsStatusByAccountIDs(ctx cont
 				_ = rows.Close()
 				return nil, err
 			}
-			st := service.ScheduledDiagnosticsStatus{
+			st := domain.ScheduledDiagnosticsStatus{
 				AccountID:    accountID,
 				PlanCount:    planCount,
 				EnabledCount: enabledCount,
@@ -266,8 +265,8 @@ type scannable interface {
 	Scan(dest ...any) error
 }
 
-func scanPlan(row scannable) (*service.ScheduledTestPlan, error) {
-	p := &service.ScheduledTestPlan{}
+func scanPlan(row scannable) (*domain.ScheduledTestPlan, error) {
+	p := &domain.ScheduledTestPlan{}
 	if err := row.Scan(
 		&p.ID, &p.AccountID, &p.ModelID, &p.CronExpression, &p.Enabled, &p.MaxResults, &p.AutoRecover,
 		&p.LastRunAt, &p.NextRunAt, &p.CreatedAt, &p.UpdatedAt,
@@ -277,8 +276,8 @@ func scanPlan(row scannable) (*service.ScheduledTestPlan, error) {
 	return p, nil
 }
 
-func scanPlans(rows *sql.Rows) ([]*service.ScheduledTestPlan, error) {
-	var plans []*service.ScheduledTestPlan
+func scanPlans(rows *sql.Rows) ([]*domain.ScheduledTestPlan, error) {
+	var plans []*domain.ScheduledTestPlan
 	for rows.Next() {
 		p, err := scanPlan(rows)
 		if err != nil {

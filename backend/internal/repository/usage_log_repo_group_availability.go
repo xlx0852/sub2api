@@ -3,15 +3,14 @@ package repository
 import (
 	"context"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"time"
-
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 // GetGroupAvailability aggregates real-traffic availability for a group:
 // successes from usage_logs (per request_id), failures from ops_error_logs
 // (status >= 400, excluding business-limited rows), aligned with traffic_availability.
-func (r *usageLogRepository) GetGroupTrafficAvailability(ctx context.Context, groupID int64, start, end time.Time, bucketSize time.Duration) (*service.GroupTrafficAvailability, error) {
+func (r *usageLogRepository) GetGroupTrafficAvailability(ctx context.Context, groupID int64, start, end time.Time, bucketSize time.Duration) (*domain.GroupTrafficAvailability, error) {
 	if groupID <= 0 || bucketSize <= 0 || !start.Before(end) {
 		return nil, fmt.Errorf("invalid group availability range")
 	}
@@ -71,19 +70,19 @@ FROM events GROUP BY bucket ORDER BY bucket`
 		return nil, err
 	}
 
-	result := &service.GroupTrafficAvailability{
+	result := &domain.GroupTrafficAvailability{
 		GroupID:       groupID,
 		StartAt:       start.UTC(),
 		EndAt:         end.UTC(),
 		BucketMinutes: int(bucketSize / time.Minute),
-		Buckets:       make([]service.TrafficAvailabilityBucket, 0, int(end.Sub(start)/bucketSize)),
+		Buckets:       make([]domain.TrafficAvailabilityBucket, 0, int(end.Sub(start)/bucketSize)),
 	}
 	var latencyWeighted float64
 	var latencySamples int64
 	for cursor := start.UTC(); cursor.Before(end.UTC()); cursor = cursor.Add(bucketSize) {
 		a := byBucket[cursor]
 		samples := a.success + a.failure
-		bucket := service.TrafficAvailabilityBucket{StartAt: cursor, SuccessCount: a.success, FailureCount: a.failure, SampleCount: samples, AverageLatency: a.latency}
+		bucket := domain.TrafficAvailabilityBucket{StartAt: cursor, SuccessCount: a.success, FailureCount: a.failure, SampleCount: samples, AverageLatency: a.latency}
 		if samples > 0 {
 			rate := float64(a.success) * 100 / float64(samples)
 			bucket.SuccessRate = &rate
@@ -117,7 +116,7 @@ FROM events GROUP BY bucket ORDER BY bucket`
 // GetGroupTrafficAvailabilityRollup returns a single-window aggregate without
 // request_id-level dedup and without time buckets. Used for the 7d summary so
 // long windows don't pay for a huge DISTINCT ON sort.
-func (r *usageLogRepository) GetGroupTrafficAvailabilityRollup(ctx context.Context, groupID int64, start, end time.Time) (*service.GroupTrafficAvailability, error) {
+func (r *usageLogRepository) GetGroupTrafficAvailabilityRollup(ctx context.Context, groupID int64, start, end time.Time) (*domain.GroupTrafficAvailability, error) {
 	if groupID <= 0 || !start.Before(end) {
 		return nil, fmt.Errorf("invalid group availability range")
 	}
@@ -138,7 +137,7 @@ SELECT
 		Scan(&success, &failure, &latency); err != nil {
 		return nil, err
 	}
-	result := &service.GroupTrafficAvailability{
+	result := &domain.GroupTrafficAvailability{
 		GroupID:      groupID,
 		StartAt:      start.UTC(),
 		EndAt:        end.UTC(),

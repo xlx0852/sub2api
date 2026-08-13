@@ -7,7 +7,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/lib/pq"
 )
 
@@ -16,7 +17,7 @@ type profitRepository struct {
 }
 
 // NewProfitRepository 创建利润分析仓储。
-func NewProfitRepository(db *sql.DB) service.ProfitRepository {
+func NewProfitRepository(db *sql.DB) ports.ProfitRepository {
 	return &profitRepository{db: db}
 }
 
@@ -30,7 +31,7 @@ func (r *profitRepository) GetCurrentUserBalanceTotal(ctx context.Context) (floa
 	return total, err
 }
 
-func (r *profitRepository) UpsertCostConfig(ctx context.Context, cfg *service.AccountCostConfig) (*service.AccountCostConfig, error) {
+func (r *profitRepository) UpsertCostConfig(ctx context.Context, cfg *domain.AccountCostConfig) (*domain.AccountCostConfig, error) {
 	row := r.db.QueryRowContext(ctx, `
 		INSERT INTO account_cost_configs (account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, auto_renew, notes, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
@@ -48,7 +49,7 @@ func (r *profitRepository) UpsertCostConfig(ctx context.Context, cfg *service.Ac
 	return scanCostConfig(row)
 }
 
-func (r *profitRepository) GetCostConfig(ctx context.Context, accountID int64) (*service.AccountCostConfig, error) {
+func (r *profitRepository) GetCostConfig(ctx context.Context, accountID int64) (*domain.AccountCostConfig, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, auto_renew, notes, created_at, updated_at
 		FROM account_cost_configs WHERE account_id = $1
@@ -60,7 +61,7 @@ func (r *profitRepository) GetCostConfig(ctx context.Context, accountID int64) (
 	return cfg, err
 }
 
-func (r *profitRepository) ListCostConfigs(ctx context.Context) ([]*service.AccountCostConfig, error) {
+func (r *profitRepository) ListCostConfigs(ctx context.Context) ([]*domain.AccountCostConfig, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, auto_renew, notes, created_at, updated_at
 		FROM account_cost_configs ORDER BY account_id ASC
@@ -70,7 +71,7 @@ func (r *profitRepository) ListCostConfigs(ctx context.Context) ([]*service.Acco
 	}
 	defer func() { _ = rows.Close() }()
 
-	var out []*service.AccountCostConfig
+	var out []*domain.AccountCostConfig
 	for rows.Next() {
 		cfg, err := scanCostConfig(rows)
 		if err != nil {
@@ -81,7 +82,7 @@ func (r *profitRepository) ListCostConfigs(ctx context.Context) ([]*service.Acco
 	return out, rows.Err()
 }
 
-func (r *profitRepository) InsertCostConfigsIfAbsent(ctx context.Context, configs []*service.AccountCostConfig) ([]int64, error) {
+func (r *profitRepository) InsertCostConfigsIfAbsent(ctx context.Context, configs []*domain.AccountCostConfig) ([]int64, error) {
 	if len(configs) == 0 {
 		return nil, nil
 	}
@@ -125,7 +126,7 @@ func (r *profitRepository) DeleteCostConfig(ctx context.Context, accountID int64
 	return err
 }
 
-func (r *profitRepository) ListSubscriptionCycles(ctx context.Context, accountID int64) ([]*service.AccountSubscriptionCycle, error) {
+func (r *profitRepository) ListSubscriptionCycles(ctx context.Context, accountID int64) ([]*domain.AccountSubscriptionCycle, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, account_id, starts_at, period_fee, period_days, currency, notes, created_at, updated_at
 		FROM account_subscription_cycles
@@ -136,7 +137,7 @@ func (r *profitRepository) ListSubscriptionCycles(ctx context.Context, accountID
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var cycles []*service.AccountSubscriptionCycle
+	var cycles []*domain.AccountSubscriptionCycle
 	for rows.Next() {
 		cycle, err := scanSubscriptionCycle(rows)
 		if err != nil {
@@ -151,7 +152,7 @@ func (r *profitRepository) ListSubscriptionCycles(ctx context.Context, accountID
 	return r.enrichSubscriptionCycles(ctx, cycles)
 }
 
-func (r *profitRepository) ListSubscriptionCyclesBatch(ctx context.Context, accountIDs []int64) ([]*service.AccountSubscriptionCycle, error) {
+func (r *profitRepository) ListSubscriptionCyclesBatch(ctx context.Context, accountIDs []int64) ([]*domain.AccountSubscriptionCycle, error) {
 	if len(accountIDs) == 0 {
 		return nil, nil
 	}
@@ -165,7 +166,7 @@ func (r *profitRepository) ListSubscriptionCyclesBatch(ctx context.Context, acco
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var cycles []*service.AccountSubscriptionCycle
+	var cycles []*domain.AccountSubscriptionCycle
 	for rows.Next() {
 		cycle, err := scanSubscriptionCycle(rows)
 		if err != nil {
@@ -180,26 +181,26 @@ func (r *profitRepository) ListSubscriptionCyclesBatch(ctx context.Context, acco
 	return r.enrichSubscriptionCycles(ctx, cycles)
 }
 
-func (r *profitRepository) GetSubscriptionCycle(ctx context.Context, id int64) (*service.AccountSubscriptionCycle, error) {
+func (r *profitRepository) GetSubscriptionCycle(ctx context.Context, id int64) (*domain.AccountSubscriptionCycle, error) {
 	cycle, err := scanSubscriptionCycle(r.db.QueryRowContext(ctx, `
 		SELECT id, account_id, starts_at, period_fee, period_days, currency, notes, created_at, updated_at
 		FROM account_subscription_cycles
 		WHERE id = $1
 	`, id))
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, service.ErrSubscriptionCycleNotFound
+		return nil, domain.ErrSubscriptionCycleNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	cycles, err := r.enrichSubscriptionCycles(ctx, []*service.AccountSubscriptionCycle{cycle})
+	cycles, err := r.enrichSubscriptionCycles(ctx, []*domain.AccountSubscriptionCycle{cycle})
 	if err != nil {
 		return nil, err
 	}
 	return cycles[0], nil
 }
 
-func (r *profitRepository) CreateSubscriptionCycle(ctx context.Context, cycle *service.AccountSubscriptionCycle) (*service.AccountSubscriptionCycle, error) {
+func (r *profitRepository) CreateSubscriptionCycle(ctx context.Context, cycle *domain.AccountSubscriptionCycle) (*domain.AccountSubscriptionCycle, error) {
 	row := r.db.QueryRowContext(ctx, `
 		INSERT INTO account_subscription_cycles (account_id, starts_at, period_fee, period_days, currency, notes, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
@@ -231,13 +232,13 @@ func (r *profitRepository) DeleteSubscriptionCycle(ctx context.Context, id int64
 		return err
 	}
 	if settled {
-		return service.ErrSubscriptionCycleSettled
+		return domain.ErrSubscriptionCycleSettled
 	}
-	return service.ErrSubscriptionCycleNotFound
+	return domain.ErrSubscriptionCycleNotFound
 }
 
-func (r *profitRepository) GetAccountUsageStatsBatch(ctx context.Context, accountIDs []int64, start, end time.Time) (map[int64]*service.ProfitUsageStats, error) {
-	result := make(map[int64]*service.ProfitUsageStats, len(accountIDs))
+func (r *profitRepository) GetAccountUsageStatsBatch(ctx context.Context, accountIDs []int64, start, end time.Time) (map[int64]*domain.ProfitUsageStats, error) {
+	result := make(map[int64]*domain.ProfitUsageStats, len(accountIDs))
 	if len(accountIDs) == 0 {
 		return result, nil
 	}
@@ -258,7 +259,7 @@ func (r *profitRepository) GetAccountUsageStatsBatch(ctx context.Context, accoun
 
 	for rows.Next() {
 		var accountID int64
-		stats := &service.ProfitUsageStats{}
+		stats := &domain.ProfitUsageStats{}
 		if err := rows.Scan(&accountID, &stats.Requests, &stats.Revenue, &stats.MeteredCost); err != nil {
 			return nil, err
 		}
@@ -267,8 +268,8 @@ func (r *profitRepository) GetAccountUsageStatsBatch(ctx context.Context, accoun
 	return result, rows.Err()
 }
 
-func (r *profitRepository) GetAccountUsageStatsForRanges(ctx context.Context, ranges []service.ProfitAccountUsageRange) (map[int64]*service.ProfitUsageStats, error) {
-	result := make(map[int64]*service.ProfitUsageStats, len(ranges))
+func (r *profitRepository) GetAccountUsageStatsForRanges(ctx context.Context, ranges []domain.ProfitAccountUsageRange) (map[int64]*domain.ProfitUsageStats, error) {
+	result := make(map[int64]*domain.ProfitUsageStats, len(ranges))
 	if len(ranges) == 0 {
 		return result, nil
 	}
@@ -301,7 +302,7 @@ func (r *profitRepository) GetAccountUsageStatsForRanges(ctx context.Context, ra
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var accountID int64
-		stats := &service.ProfitUsageStats{}
+		stats := &domain.ProfitUsageStats{}
 		if err := rows.Scan(&accountID, &stats.Requests, &stats.Revenue, &stats.MeteredCost); err != nil {
 			return nil, err
 		}
@@ -310,7 +311,7 @@ func (r *profitRepository) GetAccountUsageStatsForRanges(ctx context.Context, ra
 	return result, rows.Err()
 }
 
-func (r *profitRepository) GetAccountDailyUsageStats(ctx context.Context, accountIDs []int64, start, end time.Time, tzName string) ([]*service.ProfitAccountDailyUsagePoint, error) {
+func (r *profitRepository) GetAccountDailyUsageStats(ctx context.Context, accountIDs []int64, start, end time.Time, tzName string) ([]*domain.ProfitAccountDailyUsagePoint, error) {
 	if len(accountIDs) == 0 {
 		return nil, nil
 	}
@@ -336,9 +337,9 @@ func (r *profitRepository) GetAccountDailyUsageStats(ctx context.Context, accoun
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var out []*service.ProfitAccountDailyUsagePoint
+	var out []*domain.ProfitAccountDailyUsagePoint
 	for rows.Next() {
-		point := &service.ProfitAccountDailyUsagePoint{}
+		point := &domain.ProfitAccountDailyUsagePoint{}
 		if err := rows.Scan(&point.AccountID, &point.Date, &point.Requests, &point.Revenue, &point.MeteredCost); err != nil {
 			return nil, err
 		}
@@ -347,7 +348,7 @@ func (r *profitRepository) GetAccountDailyUsageStats(ctx context.Context, accoun
 	return out, rows.Err()
 }
 
-func (r *profitRepository) GetDailyUsageStats(ctx context.Context, accountID *int64, start, end time.Time, tzName string) ([]*service.ProfitDailyUsagePoint, error) {
+func (r *profitRepository) GetDailyUsageStats(ctx context.Context, accountID *int64, start, end time.Time, tzName string) ([]*domain.ProfitDailyUsagePoint, error) {
 	query := `
 		SELECT
 			TO_CHAR(date_trunc('day', ul.created_at AT TIME ZONE $4), 'YYYY-MM-DD') AS day,
@@ -379,9 +380,9 @@ func (r *profitRepository) GetDailyUsageStats(ctx context.Context, accountID *in
 	}
 	defer func() { _ = rows.Close() }()
 
-	var out []*service.ProfitDailyUsagePoint
+	var out []*domain.ProfitDailyUsagePoint
 	for rows.Next() {
-		p := &service.ProfitDailyUsagePoint{}
+		p := &domain.ProfitDailyUsagePoint{}
 		if err := rows.Scan(&p.Date, &p.Revenue, &p.MeteredCost); err != nil {
 			return nil, err
 		}
@@ -449,8 +450,8 @@ type costConfigScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanCostConfig(row costConfigScanner) (*service.AccountCostConfig, error) {
-	cfg := &service.AccountCostConfig{}
+func scanCostConfig(row costConfigScanner) (*domain.AccountCostConfig, error) {
+	cfg := &domain.AccountCostConfig{}
 	err := row.Scan(
 		&cfg.ID, &cfg.AccountID, &cfg.CostType, &cfg.PeriodFee,
 		&cfg.PeriodDays, &cfg.Currency,
@@ -462,8 +463,8 @@ func scanCostConfig(row costConfigScanner) (*service.AccountCostConfig, error) {
 	return cfg, nil
 }
 
-func scanSubscriptionCycle(row costConfigScanner) (*service.AccountSubscriptionCycle, error) {
-	cycle := &service.AccountSubscriptionCycle{}
+func scanSubscriptionCycle(row costConfigScanner) (*domain.AccountSubscriptionCycle, error) {
+	cycle := &domain.AccountSubscriptionCycle{}
 	err := row.Scan(&cycle.ID, &cycle.AccountID, &cycle.StartsAt, &cycle.PeriodFee, &cycle.PeriodDays, &cycle.Currency, &cycle.Notes, &cycle.CreatedAt, &cycle.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -472,7 +473,7 @@ func scanSubscriptionCycle(row costConfigScanner) (*service.AccountSubscriptionC
 }
 
 // ListAutoRenewSubscriptionAccounts returns subscription cost configs with auto_renew enabled.
-func (r *profitRepository) ListAutoRenewSubscriptionAccounts(ctx context.Context) ([]*service.AccountCostConfig, error) {
+func (r *profitRepository) ListAutoRenewSubscriptionAccounts(ctx context.Context) ([]*domain.AccountCostConfig, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, account_id, cost_type, period_fee, period_days, currency, window_baseline_revenue, auto_renew, notes, created_at, updated_at
 		FROM account_cost_configs
@@ -483,7 +484,7 @@ func (r *profitRepository) ListAutoRenewSubscriptionAccounts(ctx context.Context
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var out []*service.AccountCostConfig
+	var out []*domain.AccountCostConfig
 	for rows.Next() {
 		cfg, err := scanCostConfig(rows)
 		if err != nil {

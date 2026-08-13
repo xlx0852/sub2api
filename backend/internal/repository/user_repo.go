@@ -25,6 +25,8 @@ import (
 	"github.com/lib/pq"
 
 	entsql "entgo.io/ent/dialect/sql"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 )
 
 type userRepository struct {
@@ -32,7 +34,7 @@ type userRepository struct {
 	sql    sqlExecutor
 }
 
-var _ service.RedeemUserAdjustmentRepository = (*userRepository)(nil)
+var _ ports.RedeemUserAdjustmentRepository = (*userRepository)(nil)
 
 func NewUserRepository(client *dbent.Client, sqlDB *sql.DB) service.UserRepository {
 	return newUserRepositoryWithSQL(client, sqlDB)
@@ -122,7 +124,7 @@ func (r *userRepository) Create(ctx context.Context, userIn *service.User) error
 func (r *userRepository) GetByID(ctx context.Context, id int64) (*service.User, error) {
 	m, err := r.client.User.Query().Where(dbuser.IDEQ(id)).Only(ctx)
 	if err != nil {
-		return nil, translatePersistenceError(err, service.ErrUserNotFound, nil)
+		return nil, translatePersistenceError(err, domain.ErrUserNotFound, nil)
 	}
 
 	out := userEntityToService(m)
@@ -140,7 +142,7 @@ func (r *userRepository) GetByIDIncludeDeleted(ctx context.Context, id int64) (*
 	ctx = mixins.SkipSoftDelete(ctx)
 	m, err := r.client.User.Query().Where(dbuser.IDEQ(id)).Only(ctx)
 	if err != nil {
-		return nil, translatePersistenceError(err, service.ErrUserNotFound, nil)
+		return nil, translatePersistenceError(err, domain.ErrUserNotFound, nil)
 	}
 	out := userEntityToService(m)
 	groups, err := r.loadAllowedGroups(ctx, []int64{id})
@@ -162,7 +164,7 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*service
 		return nil, err
 	}
 	if len(matches) == 0 {
-		return nil, service.ErrUserNotFound
+		return nil, domain.ErrUserNotFound
 	}
 	if len(matches) > 1 {
 		return nil, fmt.Errorf("normalized email lookup matched multiple users for %q", strings.TrimSpace(email))
@@ -223,7 +225,7 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User) error
 
 	existing, err := clientFromContext(txCtx, txClient).User.Get(txCtx, userIn.ID)
 	if err != nil {
-		return translatePersistenceError(err, service.ErrUserNotFound, nil)
+		return translatePersistenceError(err, domain.ErrUserNotFound, nil)
 	}
 	oldEmail := existing.Email
 
@@ -256,7 +258,7 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User) error
 	}
 	updated, err := updateOp.Save(txCtx)
 	if err != nil {
-		return translatePersistenceError(err, service.ErrUserNotFound, service.ErrEmailExists)
+		return translatePersistenceError(err, domain.ErrUserNotFound, service.ErrEmailExists)
 	}
 
 	if err := r.syncUserAllowedGroupsWithClient(txCtx, txClient, updated.ID, userIn.AllowedGroups); err != nil {
@@ -352,10 +354,10 @@ func normalizeEmailAuthIdentitySubject(email string) string {
 	if normalized == "" {
 		return ""
 	}
-	if strings.HasSuffix(normalized, service.LinuxDoConnectSyntheticEmailDomain) ||
-		strings.HasSuffix(normalized, service.OIDCConnectSyntheticEmailDomain) ||
-		strings.HasSuffix(normalized, service.WeChatConnectSyntheticEmailDomain) ||
-		strings.HasSuffix(normalized, service.DingTalkConnectSyntheticEmailDomain) {
+	if strings.HasSuffix(normalized, domain.LinuxDoConnectSyntheticEmailDomain) ||
+		strings.HasSuffix(normalized, domain.OIDCConnectSyntheticEmailDomain) ||
+		strings.HasSuffix(normalized, domain.WeChatConnectSyntheticEmailDomain) ||
+		strings.HasSuffix(normalized, domain.DingTalkConnectSyntheticEmailDomain) {
 		return ""
 	}
 	return normalized
@@ -370,7 +372,7 @@ func (r *userRepository) Delete(ctx context.Context, id int64) error {
 
 	tx, err := r.client.Tx(ctx)
 	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
-		return translatePersistenceError(err, service.ErrUserNotFound, nil)
+		return translatePersistenceError(err, domain.ErrUserNotFound, nil)
 	}
 	exec := r.client
 	if err == nil {
@@ -385,7 +387,7 @@ func (r *userRepository) Delete(ctx context.Context, id int64) error {
 
 	if tx != nil {
 		if err := tx.Commit(); err != nil {
-			return translatePersistenceError(err, service.ErrUserNotFound, nil)
+			return translatePersistenceError(err, domain.ErrUserNotFound, nil)
 		}
 	}
 	return nil
@@ -397,42 +399,42 @@ func (r *userRepository) deleteUser(ctx context.Context, exec *dbent.Client, id 
 		Where(authidentity.UserIDEQ(id)).
 		IDs(ctx)
 	if err != nil {
-		return translatePersistenceError(err, service.ErrUserNotFound, nil)
+		return translatePersistenceError(err, domain.ErrUserNotFound, nil)
 	}
 	if len(identityIDs) > 0 {
 		if _, err := exec.IdentityAdoptionDecision.Update().
 			Where(identityadoptiondecision.IdentityIDIn(identityIDs...)).
 			ClearIdentityID().
 			Save(ctx); err != nil {
-			return translatePersistenceError(err, service.ErrUserNotFound, nil)
+			return translatePersistenceError(err, domain.ErrUserNotFound, nil)
 		}
 		if _, err := exec.AuthIdentityChannel.Delete().
 			Where(authidentitychannel.IdentityIDIn(identityIDs...)).
 			Exec(ctx); err != nil {
-			return translatePersistenceError(err, service.ErrUserNotFound, nil)
+			return translatePersistenceError(err, domain.ErrUserNotFound, nil)
 		}
 		if _, err := exec.AuthIdentity.Delete().
 			Where(authidentity.UserIDEQ(id)).
 			Exec(ctx); err != nil {
-			return translatePersistenceError(err, service.ErrUserNotFound, nil)
+			return translatePersistenceError(err, domain.ErrUserNotFound, nil)
 		}
 	}
 
 	affected, err := exec.User.Delete().Where(dbuser.IDEQ(id)).Exec(ctx)
 	if err != nil {
-		return translatePersistenceError(err, service.ErrUserNotFound, nil)
+		return translatePersistenceError(err, domain.ErrUserNotFound, nil)
 	}
 	if affected == 0 {
-		return service.ErrUserNotFound
+		return domain.ErrUserNotFound
 	}
 	return nil
 }
 
 func (r *userRepository) List(ctx context.Context, params pagination.PaginationParams) ([]service.User, *pagination.PaginationResult, error) {
-	return r.ListWithFilters(ctx, params, service.UserListFilters{})
+	return r.ListWithFilters(ctx, params, domain.UserListFilters{})
 }
 
-func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters service.UserListFilters) ([]service.User, *pagination.PaginationResult, error) {
+func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters domain.UserListFilters) ([]service.User, *pagination.PaginationResult, error) {
 	// SkipSoftDelete 仅作用于 User 身份解析（下方 Count/All）；订阅、分组等关联实体沿用原始 ctx，避免穿透到这些同样带软删除的实体而带出已删除行。
 	userCtx := ctx
 	if filters.IncludeDeleted {
@@ -527,7 +529,7 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 		subs, err := r.client.UserSubscription.Query().
 			Where(
 				usersubscription.UserIDIn(userIDs...),
-				usersubscription.StatusEQ(service.SubscriptionStatusActive),
+				usersubscription.StatusEQ(domain.SubscriptionStatusActive),
 			).
 			WithGroup().
 			All(ctx)
@@ -745,10 +747,10 @@ func (r *userRepository) UpdateBalance(ctx context.Context, id int64, amount flo
 	}
 	n, err := update.Save(ctx)
 	if err != nil {
-		return translatePersistenceError(err, service.ErrUserNotFound, nil)
+		return translatePersistenceError(err, domain.ErrUserNotFound, nil)
 	}
 	if n == 0 {
-		return service.ErrUserNotFound
+		return domain.ErrUserNotFound
 	}
 	return nil
 }
@@ -769,7 +771,7 @@ func (r *userRepository) ApplyRedeemBalanceAdjustment(ctx context.Context, id in
 		return err
 	}
 	if affected == 0 {
-		return service.ErrUserNotFound
+		return domain.ErrUserNotFound
 	}
 	return nil
 }
@@ -798,7 +800,7 @@ func (r *userRepository) DeductBalance(ctx context.Context, id int64, amount flo
 		return err
 	}
 	if n == 0 {
-		return service.ErrUserNotFound
+		return domain.ErrUserNotFound
 	}
 	return nil
 }
@@ -807,10 +809,10 @@ func (r *userRepository) UpdateConcurrency(ctx context.Context, id int64, amount
 	client := clientFromContext(ctx, r.client)
 	n, err := client.User.Update().Where(dbuser.IDEQ(id)).AddConcurrency(amount).Save(ctx)
 	if err != nil {
-		return translatePersistenceError(err, service.ErrUserNotFound, nil)
+		return translatePersistenceError(err, domain.ErrUserNotFound, nil)
 	}
 	if n == 0 {
-		return service.ErrUserNotFound
+		return domain.ErrUserNotFound
 	}
 	return nil
 }
@@ -831,7 +833,7 @@ func (r *userRepository) ApplyRedeemConcurrencyAdjustment(ctx context.Context, i
 		return err
 	}
 	if affected == 0 {
-		return service.ErrUserNotFound
+		return domain.ErrUserNotFound
 	}
 	return nil
 }
@@ -955,13 +957,13 @@ func (r *userRepository) RemoveGroupFromUserAllowedGroups(ctx context.Context, u
 func (r *userRepository) GetFirstAdmin(ctx context.Context) (*service.User, error) {
 	m, err := r.client.User.Query().
 		Where(
-			dbuser.RoleEQ(service.RoleAdmin),
-			dbuser.StatusEQ(service.StatusActive),
+			dbuser.RoleEQ(domain.RoleAdmin),
+			dbuser.StatusEQ(domain.StatusActive),
 		).
 		Order(dbent.Asc(dbuser.FieldID)).
 		First(ctx)
 	if err != nil {
-		return nil, translatePersistenceError(err, service.ErrUserNotFound, nil)
+		return nil, translatePersistenceError(err, domain.ErrUserNotFound, nil)
 	}
 
 	out := userEntityToService(m)
@@ -1063,8 +1065,8 @@ func userSignupSourceOrDefault(signupSource string) string {
 }
 
 // marshalExtraEmails serializes notify email entries to JSON for storage.
-func marshalExtraEmails(entries []service.NotifyEmailEntry) string {
-	return service.MarshalNotifyEmails(entries)
+func marshalExtraEmails(entries []domain.NotifyEmailEntry) string {
+	return domain.MarshalNotifyEmails(entries)
 }
 
 // UpdateTotpSecret 更新用户的 TOTP 加密密钥
@@ -1078,7 +1080,7 @@ func (r *userRepository) UpdateTotpSecret(ctx context.Context, userID int64, enc
 	}
 	_, err := update.Save(ctx)
 	if err != nil {
-		return translatePersistenceError(err, service.ErrUserNotFound, nil)
+		return translatePersistenceError(err, domain.ErrUserNotFound, nil)
 	}
 	return nil
 }
@@ -1091,7 +1093,7 @@ func (r *userRepository) EnableTotp(ctx context.Context, userID int64) error {
 		SetTotpEnabledAt(time.Now()).
 		Save(ctx)
 	if err != nil {
-		return translatePersistenceError(err, service.ErrUserNotFound, nil)
+		return translatePersistenceError(err, domain.ErrUserNotFound, nil)
 	}
 	return nil
 }
@@ -1105,7 +1107,7 @@ func (r *userRepository) DisableTotp(ctx context.Context, userID int64) error {
 		ClearTotpSecretEncrypted().
 		Save(ctx)
 	if err != nil {
-		return translatePersistenceError(err, service.ErrUserNotFound, nil)
+		return translatePersistenceError(err, domain.ErrUserNotFound, nil)
 	}
 	return nil
 }

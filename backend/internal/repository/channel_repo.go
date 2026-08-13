@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/lib/pq"
@@ -52,7 +53,7 @@ func (r *channelRepository) Create(ctx context.Context, channel *service.Channel
 		).Scan(&channel.ID, &channel.CreatedAt, &channel.UpdatedAt)
 		if err != nil {
 			if isUniqueViolation(err) {
-				return service.ErrChannelExists
+				return domain.ErrChannelExists
 			}
 			return fmt.Errorf("insert channel: %w", err)
 		}
@@ -85,7 +86,7 @@ func (r *channelRepository) GetByID(ctx context.Context, id int64) (*service.Cha
 		 FROM channels WHERE id = $1`, id,
 	).Scan(&ch.ID, &ch.Name, &ch.Description, &ch.Status, &modelMappingJSON, &ch.BillingModelSource, &ch.RestrictModels, &ch.Features, &featuresConfigJSON, &ch.CreatedAt, &ch.UpdatedAt)
 	if err == sql.ErrNoRows {
-		return nil, service.ErrChannelNotFound
+		return nil, domain.ErrChannelNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get channel: %w", err)
@@ -104,7 +105,6 @@ func (r *channelRepository) GetByID(ctx context.Context, id int64) (*service.Cha
 		return nil, err
 	}
 	ch.ModelPricing = pricing
-
 
 	return ch, nil
 }
@@ -126,13 +126,13 @@ func (r *channelRepository) Update(ctx context.Context, channel *service.Channel
 		)
 		if err != nil {
 			if isUniqueViolation(err) {
-				return service.ErrChannelExists
+				return domain.ErrChannelExists
 			}
 			return fmt.Errorf("update channel: %w", err)
 		}
 		rows, _ := result.RowsAffected()
 		if rows == 0 {
-			return service.ErrChannelNotFound
+			return domain.ErrChannelNotFound
 		}
 
 		// 更新分组关联
@@ -171,7 +171,7 @@ func (r *channelRepository) Delete(ctx context.Context, id int64) error {
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return service.ErrChannelNotFound
+		return domain.ErrChannelNotFound
 	}
 	return nil
 }
@@ -420,121 +420,121 @@ func (r *channelRepository) SetGroupIDs(ctx context.Context, channelID int64, gr
 }
 
 func (r *channelRepository) GetChannelIDByGroupID(ctx context.Context, groupID int64) (int64, error) {
-		// P4.1a: groups.sell_price_policy_id is the sole source of truth for hot-path resolution.
-		// channel_groups remains dual-written for admin listing but is not consulted here.
-		var channelID sql.NullInt64
-		err := r.db.QueryRowContext(ctx, `
+	// P4.1a: groups.sell_price_policy_id is the sole source of truth for hot-path resolution.
+	// channel_groups remains dual-written for admin listing but is not consulted here.
+	var channelID sql.NullInt64
+	err := r.db.QueryRowContext(ctx, `
 			SELECT g.sell_price_policy_id
 			FROM groups g
 			WHERE g.id = $1 AND g.deleted_at IS NULL
 		`, groupID).Scan(&channelID)
-		if err == sql.ErrNoRows {
-			return 0, nil
-		}
-		if err != nil {
-			// Mid-rollout without migration 185: fall back to channel_groups only.
-			if isUndefinedColumnError(err) {
-				var id int64
-				err2 := r.db.QueryRowContext(ctx,
-					`SELECT channel_id FROM channel_groups WHERE group_id = $1`, groupID,
-				).Scan(&id)
-				if err2 == sql.ErrNoRows {
-					return 0, nil
-				}
-				return id, err2
-			}
-			return 0, err
-		}
-		if !channelID.Valid || channelID.Int64 <= 0 {
-			return 0, nil
-		}
-		return channelID.Int64, nil
+	if err == sql.ErrNoRows {
+		return 0, nil
 	}
-
-	func (r *channelRepository) GetChannelIDsByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]int64, error) {
-		out := make(map[int64]int64, len(groupIDs))
-		if len(groupIDs) == 0 {
-			return out, nil
+	if err != nil {
+		// Mid-rollout without migration 185: fall back to channel_groups only.
+		if isUndefinedColumnError(err) {
+			var id int64
+			err2 := r.db.QueryRowContext(ctx,
+				`SELECT channel_id FROM channel_groups WHERE group_id = $1`, groupID,
+			).Scan(&id)
+			if err2 == sql.ErrNoRows {
+				return 0, nil
+			}
+			return id, err2
 		}
-		// P4.1a: only explicit groups.sell_price_policy_id (no channel_groups fill-in).
-		rows, err := r.db.QueryContext(ctx, `
+		return 0, err
+	}
+	if !channelID.Valid || channelID.Int64 <= 0 {
+		return 0, nil
+	}
+	return channelID.Int64, nil
+}
+
+func (r *channelRepository) GetChannelIDsByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]int64, error) {
+	out := make(map[int64]int64, len(groupIDs))
+	if len(groupIDs) == 0 {
+		return out, nil
+	}
+	// P4.1a: only explicit groups.sell_price_policy_id (no channel_groups fill-in).
+	rows, err := r.db.QueryContext(ctx, `
 			SELECT g.id, g.sell_price_policy_id
 			FROM groups g
 			WHERE g.id = ANY($1) AND g.deleted_at IS NULL
 		`, pq.Array(groupIDs))
-		if err != nil {
-			if isUndefinedColumnError(err) {
-				return r.getChannelIDsByGroupIDsLegacy(ctx, groupIDs)
-			}
-			return nil, fmt.Errorf("batch load group sell_price_policy_id: %w", err)
+	if err != nil {
+		if isUndefinedColumnError(err) {
+			return r.getChannelIDsByGroupIDsLegacy(ctx, groupIDs)
 		}
-		defer func() { _ = rows.Close() }()
-		for rows.Next() {
-			var gid int64
-			var pid sql.NullInt64
-			if err := rows.Scan(&gid, &pid); err != nil {
-				return nil, err
-			}
-			if pid.Valid && pid.Int64 > 0 {
-				out[gid] = pid.Int64
-			}
-		}
-		if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("batch load group sell_price_policy_id: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var gid int64
+		var pid sql.NullInt64
+		if err := rows.Scan(&gid, &pid); err != nil {
 			return nil, err
 		}
-		return out, nil
+		if pid.Valid && pid.Int64 > 0 {
+			out[gid] = pid.Int64
+		}
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
 
-	// ListGroupIDsBoundToPolicies returns all groups that have sell_price_policy_id set,
-	// plus platforms — used to expand the hot-path cache beyond channel_groups membership.
-	func (r *channelRepository) ListGroupIDsWithSellPricePolicy(ctx context.Context) (map[int64]int64, error) {
-		rows, err := r.db.QueryContext(ctx, `
+// ListGroupIDsBoundToPolicies returns all groups that have sell_price_policy_id set,
+// plus platforms — used to expand the hot-path cache beyond channel_groups membership.
+func (r *channelRepository) ListGroupIDsWithSellPricePolicy(ctx context.Context) (map[int64]int64, error) {
+	rows, err := r.db.QueryContext(ctx, `
 			SELECT g.id, g.sell_price_policy_id
 			FROM groups g
 			WHERE g.deleted_at IS NULL
 			  AND g.sell_price_policy_id IS NOT NULL
 			  AND g.sell_price_policy_id > 0
 		`)
-		if err != nil {
-			if isUndefinedColumnError(err) {
-				return map[int64]int64{}, nil
-			}
-			return nil, fmt.Errorf("list groups with sell_price_policy_id: %w", err)
+	if err != nil {
+		if isUndefinedColumnError(err) {
+			return map[int64]int64{}, nil
 		}
-		defer func() { _ = rows.Close() }()
-		out := make(map[int64]int64)
-		for rows.Next() {
-			var gid, pid int64
-			if err := rows.Scan(&gid, &pid); err != nil {
-				return nil, err
-			}
-			out[gid] = pid
-		}
-		return out, rows.Err()
+		return nil, fmt.Errorf("list groups with sell_price_policy_id: %w", err)
 	}
+	defer func() { _ = rows.Close() }()
+	out := make(map[int64]int64)
+	for rows.Next() {
+		var gid, pid int64
+		if err := rows.Scan(&gid, &pid); err != nil {
+			return nil, err
+		}
+		out[gid] = pid
+	}
+	return out, rows.Err()
+}
 
-	func (r *channelRepository) getChannelIDsByGroupIDsLegacy(ctx context.Context, groupIDs []int64) (map[int64]int64, error) {
-		out := make(map[int64]int64, len(groupIDs))
-		if len(groupIDs) == 0 {
-			return out, nil
-		}
-		rows, err := r.db.QueryContext(ctx,
-			`SELECT group_id, channel_id FROM channel_groups WHERE group_id = ANY($1)`,
-			pq.Array(groupIDs),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("batch load channel_groups: %w", err)
-		}
-		defer func() { _ = rows.Close() }()
-		for rows.Next() {
-			var gid, cid int64
-			if err := rows.Scan(&gid, &cid); err != nil {
-				return nil, err
-			}
-			out[gid] = cid
-		}
-		return out, rows.Err()
+func (r *channelRepository) getChannelIDsByGroupIDsLegacy(ctx context.Context, groupIDs []int64) (map[int64]int64, error) {
+	out := make(map[int64]int64, len(groupIDs))
+	if len(groupIDs) == 0 {
+		return out, nil
 	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT group_id, channel_id FROM channel_groups WHERE group_id = ANY($1)`,
+		pq.Array(groupIDs),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("batch load channel_groups: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var gid, cid int64
+		if err := rows.Scan(&gid, &cid); err != nil {
+			return nil, err
+		}
+		out[gid] = cid
+	}
+	return out, rows.Err()
+}
 
 func (r *channelRepository) GetGroupsInOtherChannels(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error) {
 	if len(groupIDs) == 0 {

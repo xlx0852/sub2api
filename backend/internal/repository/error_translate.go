@@ -46,7 +46,7 @@ func clientFromContext(ctx context.Context, defaultClient *dbent.Client) *dbent.
 //
 // 示例：
 //
-//	err := translatePersistenceError(dbErr, service.ErrUserNotFound, service.ErrEmailExists)
+//	err := translatePersistenceError(dbErr, domain.ErrUserNotFound, service.ErrEmailExists)
 func translatePersistenceError(err error, notFound, conflict *infraerrors.ApplicationError) error {
 	if err == nil {
 		return nil
