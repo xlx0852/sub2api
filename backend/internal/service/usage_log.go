@@ -11,54 +11,6 @@ const (
 	BillingTypeSubscription int8 = 1 // 订阅套餐
 )
 
-type RequestType int16
-
-const (
-	RequestTypeUnknown      RequestType = 0
-	RequestTypeSync         RequestType = 1
-	RequestTypeStream       RequestType = 2
-	RequestTypeWSV2         RequestType = 3
-	RequestTypeCyberBlocked RequestType = 4 // cyber_policy 命中（透传但被上游安全策略拒绝）
-	RequestTypeCompact      RequestType = 5 // Codex /responses/compact 远端摘要请求
-)
-
-func (t RequestType) IsValid() bool {
-	switch t {
-	case RequestTypeUnknown, RequestTypeSync, RequestTypeStream, RequestTypeWSV2, RequestTypeCyberBlocked, RequestTypeCompact:
-		return true
-	default:
-		return false
-	}
-}
-
-func (t RequestType) Normalize() RequestType {
-	if t.IsValid() {
-		return t
-	}
-	return RequestTypeUnknown
-}
-
-func (t RequestType) String() string {
-	switch t.Normalize() {
-	case RequestTypeSync:
-		return "sync"
-	case RequestTypeStream:
-		return "stream"
-	case RequestTypeWSV2:
-		return "ws_v2"
-	case RequestTypeCyberBlocked:
-		return "cyber"
-	case RequestTypeCompact:
-		return "compact"
-	default:
-		return "unknown"
-	}
-}
-
-func RequestTypeFromInt16(v int16) RequestType {
-	return RequestType(v).Normalize()
-}
-
 func ParseUsageRequestType(value string) (RequestType, error) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "unknown":
@@ -88,19 +40,6 @@ func RequestTypeFromLegacy(stream bool, openAIWSMode bool) RequestType {
 	return RequestTypeSync
 }
 
-func ApplyLegacyRequestFields(requestType RequestType, fallbackStream bool, fallbackOpenAIWSMode bool) (stream bool, openAIWSMode bool) {
-	switch requestType.Normalize() {
-	case RequestTypeSync, RequestTypeCompact:
-		return false, false
-	case RequestTypeStream:
-		return true, false
-	case RequestTypeWSV2:
-		return true, true
-	default:
-		return fallbackStream, fallbackOpenAIWSMode
-	}
-}
-
 type UsageLog struct {
 	ID        int64
 	UserID    int64
@@ -114,12 +53,12 @@ type UsageLog struct {
 	// UpstreamModel is the actual model sent to the upstream provider after mapping.
 	// Nil means no mapping was applied (requested model was used as-is).
 	UpstreamModel *string
-// ChannelID 渠道/售价策略 ID（历史字段名；P4 起与 PricingPolicyID 同义）
-		ChannelID *int64
-		// PricingPolicyID 售价策略 ID（P4 别名；写入时若仅填此项会回填 ChannelID）
-		PricingPolicyID *int64
-		// ModelMappingChain 模型映射链，如 "a→b→c"
-		ModelMappingChain *string
+	// ChannelID 渠道/售价策略 ID（历史字段名；P4 起与 PricingPolicyID 同义）
+	ChannelID *int64
+	// PricingPolicyID 售价策略 ID（P4 别名；写入时若仅填此项会回填 ChannelID）
+	PricingPolicyID *int64
+	// ModelMappingChain 模型映射链，如 "a→b→c"
+	ModelMappingChain *string
 	// BillingTier 计费层级标签（per_request/image 模式）
 	BillingTier *string
 	// BillingMode 计费模式：token/image

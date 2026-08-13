@@ -23,16 +23,6 @@ const (
 	groupUsageSummaryCacheTTL = 30 * time.Second
 )
 
-// ErrDashboardStatsCacheMiss 标记仪表盘缓存未命中。
-var ErrDashboardStatsCacheMiss = errors.New("仪表盘缓存未命中")
-
-// DashboardStatsCache 定义仪表盘统计缓存接口。
-type DashboardStatsCache interface {
-	GetDashboardStats(ctx context.Context) (string, error)
-	SetDashboardStats(ctx context.Context, data string, ttl time.Duration) error
-	DeleteDashboardStats(ctx context.Context) error
-}
-
 type dashboardStatsRangeFetcher interface {
 	GetDashboardStatsWithRange(ctx context.Context, start, end time.Time) (*usagestats.DashboardStats, error)
 }

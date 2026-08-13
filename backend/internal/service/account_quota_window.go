@@ -9,67 +9,6 @@ import (
 	"time"
 )
 
-// Account quota window sources / close reasons.
-const (
-	QuotaWindowSourceObserved  = "observed"
-	QuotaWindowSourceResetCard = "reset_card"
-	QuotaWindowSourceSeed      = "seed"
-
-	QuotaWindowCloseObserved  = "observed_reset"
-	QuotaWindowCloseCleared   = "provider_zero_reset"
-	QuotaWindowCloseResetCard = "reset_card"
-	QuotaWindowCloseReplaced  = "replaced"
-)
-
-// AccountQuotaWindow is one real quota period for an account (ledger row).
-type AccountQuotaWindow struct {
-	ID               int64
-	AccountID        int64
-	Platform         string
-	Kind             string // 5h | 7d | 30d | 24h | ...
-	StartAt          time.Time
-	EndAt            time.Time
-	WindowMinutes    *int
-	Source           string
-	ClosedReason     string
-	UsedPercentOpen  *float64
-	UsedPercentClose *float64
-	IsOpen           bool
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
-// AccountQuotaWindowRepository persists real quota-window history.
-type AccountQuotaWindowRepository interface {
-	ListByAccount(ctx context.Context, accountID int64, kind string, limit int) ([]*AccountQuotaWindow, error)
-	ListOpenByAccount(ctx context.Context, accountID int64) ([]*AccountQuotaWindow, error)
-	GetOpen(ctx context.Context, accountID int64, kind string) (*AccountQuotaWindow, error)
-	// CloseAndOpen atomically closes the open row (if any) and inserts a new open row.
-	CloseAndOpen(ctx context.Context, closeID int64, closeEnd time.Time, closeReason string, closeUsed *float64, open *AccountQuotaWindow) (*AccountQuotaWindow, error)
-	// UpsertOpenRefresh updates end/used on the current open window without closing.
-	UpsertOpenRefresh(ctx context.Context, accountID int64, kind string, endAt time.Time, used *float64, windowMinutes *int) error
-	InsertOpen(ctx context.Context, w *AccountQuotaWindow) (*AccountQuotaWindow, error)
-	CloseOpen(ctx context.Context, accountID int64, kind string, endAt time.Time, reason string, used *float64) error
-}
-
-// AccountQuotaUsageObservation is one upstream utilization snapshot aligned
-// with local consumption ending at ObservedAt.
-type AccountQuotaUsageObservation struct {
-	ID            int64
-	QuotaWindowID int64
-	AccountID     int64
-	Platform      string
-	Kind          string
-	ObservedAt    time.Time
-	UsedPercent   float64
-	Requests      int64
-	Tokens        int64
-	AccountCost   float64
-	StandardCost  float64
-	UserCost      float64
-	CreatedAt     time.Time
-}
-
 // AccountQuotaObservationRepository is optional so existing window-ledger
 // fakes remain source compatible while the SQL repository provides samples.
 type AccountQuotaObservationRepository interface {

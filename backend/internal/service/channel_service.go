@@ -16,8 +16,6 @@ import (
 )
 
 var (
-	ErrChannelNotFound       = infraerrors.NotFound("CHANNEL_NOT_FOUND", "channel not found")
-	ErrChannelExists         = infraerrors.Conflict("CHANNEL_EXISTS", "channel name already exists")
 	ErrGroupAlreadyInChannel = infraerrors.Conflict(
 		"GROUP_ALREADY_IN_CHANNEL",
 		"one or more groups already belong to another sell-price policy (a group can only bind one policy)",
@@ -36,14 +34,14 @@ type ChannelRepository interface {
 	ExistsByNameExcluding(ctx context.Context, name string, excludeID int64) (bool, error)
 
 	// 分组关联
-GetGroupIDs(ctx context.Context, channelID int64) ([]int64, error)
-		SetGroupIDs(ctx context.Context, channelID int64, groupIDs []int64) error
-		GetChannelIDByGroupID(ctx context.Context, groupID int64) (int64, error)
-		// GetChannelIDsByGroupIDs batch resolves group → policy/channel id (0 = none).
-		GetChannelIDsByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]int64, error)
-		// ListGroupIDsWithSellPricePolicy returns groupID → policyID for all groups with explicit binding.
-		ListGroupIDsWithSellPricePolicy(ctx context.Context) (map[int64]int64, error)
-		GetGroupsInOtherChannels(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error)
+	GetGroupIDs(ctx context.Context, channelID int64) ([]int64, error)
+	SetGroupIDs(ctx context.Context, channelID int64, groupIDs []int64) error
+	GetChannelIDByGroupID(ctx context.Context, groupID int64) (int64, error)
+	// GetChannelIDsByGroupIDs batch resolves group → policy/channel id (0 = none).
+	GetChannelIDsByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]int64, error)
+	// ListGroupIDsWithSellPricePolicy returns groupID → policyID for all groups with explicit binding.
+	ListGroupIDsWithSellPricePolicy(ctx context.Context) (map[int64]int64, error)
+	GetGroupsInOtherChannels(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error)
 
 	// 分组平台查询
 	GetGroupPlatforms(ctx context.Context, groupIDs []int64) (map[int64]string, error)
@@ -272,15 +270,15 @@ func (s *ChannelService) buildCache(ctx context.Context) (*channelCache, error) 
 	dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), channelCacheDBTimeout)
 	defer cancel()
 
-channels, groupPlatforms, groupToPolicy, err := s.fetchChannelData(dbCtx)
-		if err != nil {
-			return nil, err
-		}
-
-		cache := populateChannelCache(channels, groupPlatforms, groupToPolicy)
-		s.cache.Store(cache)
-		return cache, nil
+	channels, groupPlatforms, groupToPolicy, err := s.fetchChannelData(dbCtx)
+	if err != nil {
+		return nil, err
 	}
+
+	cache := populateChannelCache(channels, groupPlatforms, groupToPolicy)
+	s.cache.Store(cache)
+	return cache, nil
+}
 
 // fetchChannelData 从数据库加载渠道列表和分组平台映射。
 func (s *ChannelService) fetchChannelData(ctx context.Context) ([]Channel, map[int64]string, map[int64]int64, error) {
@@ -291,49 +289,49 @@ func (s *ChannelService) fetchChannelData(ctx context.Context) ([]Channel, map[i
 		return nil, nil, nil, fmt.Errorf("list all channels: %w", err)
 	}
 
-// P4.1a: group → policy map comes only from groups.sell_price_policy_id.
-		// channel.GroupIDs (channel_groups) is dual-written for admin UI but not used for resolution.
-		groupToPolicy, err := s.repo.ListGroupIDsWithSellPricePolicy(ctx)
-		if err != nil {
-			slog.Warn("failed to load group sell_price_policy_id for channel cache", "error", err)
-			groupToPolicy = make(map[int64]int64)
-			// Soft fallback: derive from dual-written channel.GroupIDs so a partial rollout
-			// does not zero out pricing if the explicit column query fails unexpectedly.
-			for i := range channels {
-				for _, gid := range channels[i].GroupIDs {
-					if _, ok := groupToPolicy[gid]; !ok {
-						groupToPolicy[gid] = channels[i].ID
-					}
+	// P4.1a: group → policy map comes only from groups.sell_price_policy_id.
+	// channel.GroupIDs (channel_groups) is dual-written for admin UI but not used for resolution.
+	groupToPolicy, err := s.repo.ListGroupIDsWithSellPricePolicy(ctx)
+	if err != nil {
+		slog.Warn("failed to load group sell_price_policy_id for channel cache", "error", err)
+		groupToPolicy = make(map[int64]int64)
+		// Soft fallback: derive from dual-written channel.GroupIDs so a partial rollout
+		// does not zero out pricing if the explicit column query fails unexpectedly.
+		for i := range channels {
+			for _, gid := range channels[i].GroupIDs {
+				if _, ok := groupToPolicy[gid]; !ok {
+					groupToPolicy[gid] = channels[i].ID
 				}
 			}
 		}
+	}
 
-		groupIDSet := make(map[int64]struct{}, len(groupToPolicy))
-		for gid := range groupToPolicy {
+	groupIDSet := make(map[int64]struct{}, len(groupToPolicy))
+	for gid := range groupToPolicy {
+		groupIDSet[gid] = struct{}{}
+	}
+	// Platforms for bound groups (and any leftover GroupIDs for admin consistency).
+	for i := range channels {
+		for _, gid := range channels[i].GroupIDs {
 			groupIDSet[gid] = struct{}{}
 		}
-		// Platforms for bound groups (and any leftover GroupIDs for admin consistency).
-		for i := range channels {
-			for _, gid := range channels[i].GroupIDs {
-				groupIDSet[gid] = struct{}{}
-			}
-		}
-		allGroupIDs := make([]int64, 0, len(groupIDSet))
-		for gid := range groupIDSet {
-			allGroupIDs = append(allGroupIDs, gid)
-		}
-
-		groupPlatforms := make(map[int64]string)
-		if len(allGroupIDs) > 0 {
-			groupPlatforms, err = s.repo.GetGroupPlatforms(ctx, allGroupIDs)
-			if err != nil {
-				slog.Warn("failed to load group platforms for channel cache", "error", err)
-				s.storeErrorCache()
-				return nil, nil, nil, fmt.Errorf("get group platforms: %w", err)
-			}
-		}
-		return channels, groupPlatforms, groupToPolicy, nil
 	}
+	allGroupIDs := make([]int64, 0, len(groupIDSet))
+	for gid := range groupIDSet {
+		allGroupIDs = append(allGroupIDs, gid)
+	}
+
+	groupPlatforms := make(map[int64]string)
+	if len(allGroupIDs) > 0 {
+		groupPlatforms, err = s.repo.GetGroupPlatforms(ctx, allGroupIDs)
+		if err != nil {
+			slog.Warn("failed to load group platforms for channel cache", "error", err)
+			s.storeErrorCache()
+			return nil, nil, nil, fmt.Errorf("get group platforms: %w", err)
+		}
+	}
+	return channels, groupPlatforms, groupToPolicy, nil
+}
 
 // populateChannelCache 将渠道列表和分组平台映射填充到缓存快照中。
 // 装填时对每个 Channel 统一归一化 BillingModelSource，让缓存命中的所有下游
@@ -1029,31 +1027,30 @@ func detectConflicts(entries []modelEntry, platform, errCode, label string) erro
 
 // CreateChannelInput 创建渠道输入
 type CreateChannelInput struct {
-	Name                       string
-	Description                string
-	GroupIDs                   []int64
-	ModelPricing               []ChannelModelPricing
-	ModelMapping               map[string]map[string]string // platform → {src→dst}
-	BillingModelSource         string
-	RestrictModels             bool
-	Features                   string
-	FeaturesConfig             map[string]any
+	Name               string
+	Description        string
+	GroupIDs           []int64
+	ModelPricing       []ChannelModelPricing
+	ModelMapping       map[string]map[string]string // platform → {src→dst}
+	BillingModelSource string
+	RestrictModels     bool
+	Features           string
+	FeaturesConfig     map[string]any
 }
 
 // UpdateChannelInput 更新渠道输入
 type UpdateChannelInput struct {
-	Name                       string
-	Description                *string
-	Status                     string
-	GroupIDs                   *[]int64
-	ModelPricing               *[]ChannelModelPricing
-	ModelMapping               map[string]map[string]string // platform → {src→dst}
-	BillingModelSource         string
-	RestrictModels             *bool
-	Features                   *string
-	FeaturesConfig             map[string]any
+	Name               string
+	Description        *string
+	Status             string
+	GroupIDs           *[]int64
+	ModelPricing       *[]ChannelModelPricing
+	ModelMapping       map[string]map[string]string // platform → {src→dst}
+	BillingModelSource string
+	RestrictModels     *bool
+	Features           *string
+	FeaturesConfig     map[string]any
 }
-
 
 // stripNonPricingPolicyFields clears legacy non-pricing capabilities so sell-price
 // policies stay price+binding only (in-memory; DB may still have empty JSON).

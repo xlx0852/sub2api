@@ -16,18 +16,6 @@ type GroupCapacitySummary struct {
 	RPMMax          int   `json:"rpm_max"`
 }
 
-// GroupAccountCapacityRow is the lightweight account projection needed for
-// capacity summary aggregation.
-type GroupAccountCapacityRow struct {
-	GroupID             int64
-	AccountID           int64
-	Concurrency         int
-	Extra               map[string]any
-	SessionWindowStart  *time.Time
-	SessionWindowEnd    *time.Time
-	SessionWindowStatus string
-}
-
 type groupCapacityActiveGroupIDLister interface {
 	ListActiveIDs(ctx context.Context) ([]int64, error)
 }

@@ -8,28 +8,6 @@ import (
 
 const trafficAvailabilityBucketSize = 10 * time.Minute
 
-type TrafficAvailabilityBucket struct {
-	StartAt        time.Time `json:"start_at"`
-	SuccessCount   int64     `json:"success_count"`
-	FailureCount   int64     `json:"failure_count"`
-	SampleCount    int64     `json:"sample_count"`
-	SuccessRate    *float64  `json:"success_rate"`
-	AverageLatency *float64  `json:"average_latency_ms"`
-	Status         string    `json:"status"`
-}
-
-type TrafficAvailability struct {
-	StartAt          time.Time                   `json:"start_at"`
-	EndAt            time.Time                   `json:"end_at"`
-	BucketMinutes    int                         `json:"bucket_minutes"`
-	SuccessCount     int64                       `json:"success_count"`
-	FailureCount     int64                       `json:"failure_count"`
-	SampleCount      int64                       `json:"sample_count"`
-	SuccessRate      *float64                    `json:"success_rate"`
-	AverageLatencyMs *float64                    `json:"average_latency_ms"`
-	Buckets          []TrafficAvailabilityBucket `json:"buckets"`
-}
-
 func trafficAvailabilityStatus(samples int64, rate float64) string {
 	if samples == 0 {
 		return "no_traffic"

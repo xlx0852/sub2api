@@ -21,9 +21,7 @@ import (
 )
 
 var (
-	ErrAPIKeyNotFound     = infraerrors.NotFound("API_KEY_NOT_FOUND", "api key not found")
 	ErrGroupNotAllowed    = infraerrors.Forbidden("GROUP_NOT_ALLOWED", "user is not allowed to bind this group")
-	ErrAPIKeyExists       = infraerrors.Conflict("API_KEY_EXISTS", "api key already exists")
 	ErrAPIKeyTooShort     = infraerrors.BadRequest("API_KEY_TOO_SHORT", "api key must be at least 16 characters")
 	ErrAPIKeyInvalidChars = infraerrors.BadRequest("API_KEY_INVALID_CHARS", "api key can only contain letters, numbers, underscores, and hyphens")
 	ErrAPIKeyRateLimited  = infraerrors.TooManyRequests("API_KEY_RATE_LIMITED", "too many failed attempts, please try again later")
@@ -80,67 +78,6 @@ type APIKeyRepository interface {
 	IncrementRateLimitUsage(ctx context.Context, id int64, cost float64) error
 	ResetRateLimitWindows(ctx context.Context, id int64) error
 	GetRateLimitData(ctx context.Context, id int64) (*APIKeyRateLimitData, error)
-}
-
-// APIKeyRateLimitData holds rate limit usage and window state for an API key.
-type APIKeyRateLimitData struct {
-	Usage5h       float64
-	Usage1d       float64
-	Usage7d       float64
-	Window5hStart *time.Time
-	Window1dStart *time.Time
-	Window7dStart *time.Time
-}
-
-// EffectiveUsage5h returns the 5h window usage, or 0 if the window has expired.
-func (d *APIKeyRateLimitData) EffectiveUsage5h() float64 {
-	if IsWindowExpired(d.Window5hStart, RateLimitWindow5h) {
-		return 0
-	}
-	return d.Usage5h
-}
-
-// EffectiveUsage1d returns the 1d window usage, or 0 if the window has expired.
-func (d *APIKeyRateLimitData) EffectiveUsage1d() float64 {
-	if IsWindowExpired(d.Window1dStart, RateLimitWindow1d) {
-		return 0
-	}
-	return d.Usage1d
-}
-
-// EffectiveUsage7d returns the 7d window usage, or 0 if the window has expired.
-func (d *APIKeyRateLimitData) EffectiveUsage7d() float64 {
-	if IsWindowExpired(d.Window7dStart, RateLimitWindow7d) {
-		return 0
-	}
-	return d.Usage7d
-}
-
-// APIKeyQuotaUsageState captures the latest quota fields after an atomic quota update.
-// It is intentionally small so repositories can return it from a single SQL statement.
-type APIKeyQuotaUsageState struct {
-	QuotaUsed float64
-	Quota     float64
-	Key       string
-	Status    string
-}
-
-// APIKeyCache defines cache operations for API key service
-type APIKeyCache interface {
-	GetCreateAttemptCount(ctx context.Context, userID int64) (int, error)
-	IncrementCreateAttemptCount(ctx context.Context, userID int64) error
-	DeleteCreateAttemptCount(ctx context.Context, userID int64) error
-
-	IncrementDailyUsage(ctx context.Context, apiKey string) error
-	SetDailyUsageExpiry(ctx context.Context, apiKey string, ttl time.Duration) error
-
-	GetAuthCache(ctx context.Context, key string) (*APIKeyAuthCacheEntry, error)
-	SetAuthCache(ctx context.Context, key string, entry *APIKeyAuthCacheEntry, ttl time.Duration) error
-	DeleteAuthCache(ctx context.Context, key string) error
-
-	// Pub/Sub for L1 cache invalidation across instances
-	PublishAuthCacheInvalidation(ctx context.Context, cacheKey string) error
-	SubscribeAuthCacheInvalidation(ctx context.Context, handler func(cacheKey string)) error
 }
 
 // APIKeyAuthCacheInvalidator 提供认证缓存失效能力

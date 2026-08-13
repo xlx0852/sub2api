@@ -502,20 +502,6 @@ type ProxyQualityCheckItem struct {
 	CFRay      string `json:"cf_ray,omitempty"`
 }
 
-// ProxyExitInfo represents proxy exit information from ip-api.com
-type ProxyExitInfo struct {
-	IP          string
-	City        string
-	Region      string
-	Country     string
-	CountryCode string
-}
-
-// ProxyExitInfoProber tests proxy connectivity and retrieves exit information
-type ProxyExitInfoProber interface {
-	ProbeProxy(ctx context.Context, proxyURL string) (*ProxyExitInfo, int64, error)
-}
-
 type groupExistenceBatchReader interface {
 	ExistsByIDs(ctx context.Context, ids []int64) (map[int64]bool, error)
 }

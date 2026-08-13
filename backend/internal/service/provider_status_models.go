@@ -1,16 +1,7 @@
 package service
 
 import (
-	"encoding/json"
 	"time"
-)
-
-const (
-	ProviderStatusOpenAI = "openai"
-
-	ProviderStatusFresh       = "fresh"
-	ProviderStatusStale       = "stale"
-	ProviderStatusUnavailable = "unavailable"
 )
 
 type ProviderStatusComponent struct {
@@ -53,19 +44,6 @@ type ProviderStatusSnapshot struct {
 	ContentHash        string                    `json:"-"`
 }
 
-type ProviderStatusSnapshotRecord struct {
-	ID                 int64
-	Provider           string
-	SourceURL          string
-	OverallIndicator   string
-	OverallDescription string
-	ComponentsJSON     json.RawMessage
-	IncidentsJSON      json.RawMessage
-	SourceUpdatedAt    *time.Time
-	FetchedAt          time.Time
-	ContentHash        string
-}
-
 type ProviderStatusCurrent struct {
 	Provider      string                  `json:"provider"`
 	Freshness     string                  `json:"freshness"`
@@ -74,11 +52,4 @@ type ProviderStatusCurrent struct {
 	LastSuccessAt *time.Time              `json:"last_success_at,omitempty"`
 	LastErrorAt   *time.Time              `json:"last_error_at,omitempty"`
 	LastError     string                  `json:"last_error,omitempty"`
-}
-
-type ProviderStatusHistoryFilter struct {
-	Provider  string
-	StartTime *time.Time
-	EndTime   *time.Time
-	Limit     int
 }

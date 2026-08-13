@@ -184,11 +184,6 @@ func (w *BatchImageWorker) RunOnce(ctx context.Context) error {
 	return w.queue.RequeueAfter(ctx, reserved.BatchID, delay)
 }
 
-// BatchImageJobLockRefresher 是可选的锁续期能力；由具体锁实现按需提供。
-type BatchImageJobLockRefresher interface {
-	Refresh(ctx context.Context, ttl time.Duration) error
-}
-
 func (w *BatchImageWorker) heartbeatInterval() time.Duration {
 	interval := w.opts.JobLockTTL
 	if w.opts.StaleActiveAfter < interval {

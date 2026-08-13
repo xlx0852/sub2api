@@ -382,62 +382,6 @@ type ContentModerationDecision struct {
 	Action          string             `json:"action"`
 }
 
-type ContentModerationLog struct {
-	ID                int64              `json:"id"`
-	RequestID         string             `json:"request_id"`
-	UserID            *int64             `json:"user_id,omitempty"`
-	UserEmail         string             `json:"user_email"`
-	APIKeyID          *int64             `json:"api_key_id,omitempty"`
-	APIKeyName        string             `json:"api_key_name"`
-	GroupID           *int64             `json:"group_id,omitempty"`
-	GroupName         string             `json:"group_name"`
-	Endpoint          string             `json:"endpoint"`
-	Provider          string             `json:"provider"`
-	Model             string             `json:"model"`
-	Mode              string             `json:"mode"`
-	Action            string             `json:"action"`
-	Flagged           bool               `json:"flagged"`
-	HighestCategory   string             `json:"highest_category"`
-	HighestScore      float64            `json:"highest_score"`
-	MatchedKeyword    string             `json:"matched_keyword"`
-	CategoryScores    map[string]float64 `json:"category_scores"`
-	ThresholdSnapshot map[string]float64 `json:"threshold_snapshot"`
-	InputExcerpt      string             `json:"input_excerpt"`
-	UpstreamLatencyMS *int               `json:"upstream_latency_ms,omitempty"`
-	Error             string             `json:"error"`
-	ViolationCount    int                `json:"violation_count"`
-	APIKeyDisabled    bool               `json:"api_key_disabled"`
-	AutoBanned        bool               `json:"auto_banned"`
-	EnforcementError  string             `json:"enforcement_error"`
-	EmailSent         bool               `json:"email_sent"`
-	UserStatus        string             `json:"user_status"`
-	QueueDelayMS      *int               `json:"queue_delay_ms,omitempty"`
-	CreatedAt         time.Time          `json:"created_at"`
-}
-
-type ContentModerationLogFilter struct {
-	Pagination pagination.PaginationParams
-	Result     string
-	GroupID    *int64
-	Endpoint   string
-	Search     string
-	From       *time.Time
-	To         *time.Time
-}
-
-type ContentModerationLogSummary struct {
-	LocalPreBlock  int64 `json:"local_pre_block"`
-	UpstreamPolicy int64 `json:"upstream_policy"`
-	Errors         int64 `json:"errors"`
-	Total          int64 `json:"total"`
-}
-
-type ContentModerationCleanupResult struct {
-	DeletedHit    int64     `json:"deleted_hit"`
-	DeletedNonHit int64     `json:"deleted_non_hit"`
-	FinishedAt    time.Time `json:"finished_at"`
-}
-
 type ContentModerationRuntimeStatus struct {
 	Enabled                      bool                            `json:"enabled"`
 	RiskControlEnabled           bool                            `json:"risk_control_enabled"`
@@ -483,12 +427,6 @@ type ContentModerationElevatedUser struct {
 	LastAt     *time.Time `json:"last_at,omitempty"`
 }
 
-// ContentModerationElevatedUserCacheEntry Redis 中的高危用户标记。
-type ContentModerationElevatedUserCacheEntry struct {
-	UserID     int64
-	TTLSeconds int64
-}
-
 type ContentModerationUnbanUserResult struct {
 	UserID int64  `json:"user_id"`
 	Status string `json:"status"`
@@ -503,20 +441,6 @@ type ContentModerationClearHashesResult struct {
 	Deleted int64 `json:"deleted"`
 }
 
-type ContentModerationRepository interface {
-	CreateLog(ctx context.Context, log *ContentModerationLog) error
-	ListLogs(ctx context.Context, filter ContentModerationLogFilter) ([]ContentModerationLog, *pagination.PaginationResult, error)
-	SummarizeLogs(ctx context.Context, filter ContentModerationLogFilter) (*ContentModerationLogSummary, error)
-	// CountFlaggedByUserSince 统计窗口内计入封号的违规次数（排除 hash_block；
-	// excludeCyberPolicy 为 true 时额外排除 cyber_policy 行）。
-	CountFlaggedByUserSince(ctx context.Context, userID int64, since time.Time, excludeCyberPolicy bool) (int, error)
-	// ListLatestFlaggedLogsByUserIDs 返回每个用户最近一条 flagged 记录（含 cyber_policy）。
-	ListLatestFlaggedLogsByUserIDs(ctx context.Context, userIDs []int64) (map[int64]*ContentModerationLog, error)
-	CleanupExpiredLogs(ctx context.Context, hitBefore time.Time, nonHitBefore time.Time) (*ContentModerationCleanupResult, error)
-	// UpdateLogEmailSent 回写邮件发送结果（F7：CreateLog 先行后补 EmailSent）。
-	UpdateLogEmailSent(ctx context.Context, id int64, sent bool) error
-}
-
 type contentModerationEnforcementLogUpdater interface {
 	UpdateLogEnforcement(ctx context.Context, id int64, apiKeyDisabled bool, enforcementError string) error
 }
@@ -524,22 +448,6 @@ type contentModerationEnforcementLogUpdater interface {
 type ContentModerationAPIKeyRepository interface {
 	GetByID(ctx context.Context, id int64) (*APIKey, error)
 	Update(ctx context.Context, key *APIKey) error
-}
-
-type ContentModerationHashCache interface {
-	RecordFlaggedInputHash(ctx context.Context, inputHash string) error
-	HasFlaggedInputHash(ctx context.Context, inputHash string) (bool, error)
-	// 干净输入短缓存：命中则跳过 moderation API（fail-open）。
-	RecordCleanInputHash(ctx context.Context, inputHash string, ttl time.Duration) error
-	HasCleanInputHash(ctx context.Context, inputHash string) (bool, error)
-	DeleteCleanInputHash(ctx context.Context, inputHash string) error
-	// 高风险用户采样标记：true=强制全量审；false=短负缓存。
-	SetElevatedUserSampling(ctx context.Context, userID int64, elevated bool, ttl time.Duration) error
-	GetElevatedUserSampling(ctx context.Context, userID int64) (known bool, elevated bool, err error)
-	ListElevatedUsers(ctx context.Context) ([]ContentModerationElevatedUserCacheEntry, error)
-	DeleteFlaggedInputHash(ctx context.Context, inputHash string) (bool, error)
-	ClearFlaggedInputHashes(ctx context.Context) (int64, error)
-	CountFlaggedInputHashes(ctx context.Context) (int64, error)
 }
 
 type ContentModerationService struct {

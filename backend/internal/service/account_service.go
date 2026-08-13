@@ -2,30 +2,10 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
-	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-)
-
-var (
-	ErrAccountNotFound         = infraerrors.NotFound("ACCOUNT_NOT_FOUND", "account not found")
-	ErrAccountNilInput         = infraerrors.BadRequest("ACCOUNT_NIL_INPUT", "account input cannot be nil")
-	ErrAccountNotInFallback    = infraerrors.BadRequest("ACCOUNT_NOT_IN_FALLBACK", "account is not in proxy fallback state")
-	// ErrAccountNotSchedulable 表示账号处于 error/disabled 等不可打开调度的状态。
-	ErrAccountNotSchedulable = errors.New("account cannot be enabled for scheduling in current status")
-)
-
-const AccountListGroupUngrouped int64 = -1
-const AccountPrivacyModeUnsetFilter = "__unset__"
-
-// 账号列表特殊 status 过滤值（前端回收站）
-const (
-	AccountListStatusTrash   = "trash"
-	AccountListStatusDeleted = "deleted"
-	AccountListStatusBanned  = "banned"
 )
 
 type AccountRepository interface {
@@ -112,21 +92,6 @@ type AccountRepository interface {
 	// ListShadowsByParent 返回指定父账号的影子账号；当前实现仅查 quota_dimension='spark'（唯一预设）。
 	// ⚠️ 新增影子维度时：须更新此函数（或新增维度专用列举），并检查所有调用点（级联删除/一母一影校验/type 守卫），否则会静默漏掉新维度。
 	ListShadowsByParent(ctx context.Context, parentID int64) ([]*Account, error)
-}
-
-// AccountBulkUpdate describes the fields that can be updated in a bulk operation.
-// Nil pointers mean "do not change".
-type AccountBulkUpdate struct {
-	Name           *string
-	ProxyID        *int64
-	Concurrency    *int
-	Priority       *int
-	RateMultiplier *float64
-	LoadFactor     *int
-	Status         *string
-	Schedulable    *bool
-	Credentials    map[string]any
-	Extra          map[string]any
 }
 
 // CreateAccountRequest 创建账号请求

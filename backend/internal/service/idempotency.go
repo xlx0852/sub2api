@@ -17,12 +17,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
 )
 
-const (
-	IdempotencyStatusProcessing      = "processing"
-	IdempotencyStatusSucceeded       = "succeeded"
-	IdempotencyStatusFailedRetryable = "failed_retryable"
-)
-
 var (
 	ErrIdempotencyKeyRequired    = infraerrors.BadRequest("IDEMPOTENCY_KEY_REQUIRED", "idempotency key is required")
 	ErrIdempotencyKeyInvalid     = infraerrors.BadRequest("IDEMPOTENCY_KEY_INVALID", "idempotency key is invalid")
@@ -32,31 +26,6 @@ var (
 	ErrIdempotencyStoreUnavail   = infraerrors.ServiceUnavailable("IDEMPOTENCY_STORE_UNAVAILABLE", "idempotency store unavailable")
 	ErrIdempotencyInvalidPayload = infraerrors.BadRequest("IDEMPOTENCY_PAYLOAD_INVALID", "failed to normalize request payload")
 )
-
-type IdempotencyRecord struct {
-	ID                 int64
-	Scope              string
-	IdempotencyKeyHash string
-	RequestFingerprint string
-	Status             string
-	ResponseStatus     *int
-	ResponseBody       *string
-	ErrorReason        *string
-	LockedUntil        *time.Time
-	ExpiresAt          time.Time
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-}
-
-type IdempotencyRepository interface {
-	CreateProcessing(ctx context.Context, record *IdempotencyRecord) (bool, error)
-	GetByScopeAndKeyHash(ctx context.Context, scope, keyHash string) (*IdempotencyRecord, error)
-	TryReclaim(ctx context.Context, id int64, fromStatus string, now, newLockedUntil, newExpiresAt time.Time) (bool, error)
-	ExtendProcessingLock(ctx context.Context, id int64, requestFingerprint string, newLockedUntil, newExpiresAt time.Time) (bool, error)
-	MarkSucceeded(ctx context.Context, id int64, responseStatus int, responseBody string, expiresAt time.Time) error
-	MarkFailedRetryable(ctx context.Context, id int64, errorReason string, lockedUntil, expiresAt time.Time) error
-	DeleteExpired(ctx context.Context, now time.Time, limit int) (int64, error)
-}
 
 type IdempotencyConfig struct {
 	DefaultTTL           time.Duration

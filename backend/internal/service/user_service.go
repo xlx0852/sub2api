@@ -8,8 +8,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"image"
 	"image/color"
 	stddraw "image/draw"
@@ -24,19 +22,20 @@ import (
 	"sync"
 	"time"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+
 	xdraw "golang.org/x/image/draw"
 	"golang.org/x/sync/singleflight"
 )
 
 var (
-	ErrUserNotFound             = infraerrors.NotFound("USER_NOT_FOUND", "user not found")
 	ErrPasswordIncorrect        = infraerrors.BadRequest("PASSWORD_INCORRECT", "current password is incorrect")
 	ErrInsufficientPerms        = infraerrors.Forbidden("INSUFFICIENT_PERMISSIONS", "insufficient permissions")
 	ErrNotifyCodeUserRateLimit  = infraerrors.TooManyRequests("NOTIFY_CODE_USER_RATE_LIMIT", "too many verification codes requested, please try again later")
 	ErrAvatarInvalid            = infraerrors.BadRequest("AVATAR_INVALID", "avatar must be a valid image data URL or http(s) URL")
 	ErrAvatarTooLarge           = infraerrors.BadRequest("AVATAR_TOO_LARGE", "avatar image must be 100KB or smaller")
 	ErrAvatarNotImage           = infraerrors.BadRequest("AVATAR_NOT_IMAGE", "avatar content must be an image")
-	ErrIdentityProviderInvalid  = infraerrors.BadRequest("IDENTITY_PROVIDER_INVALID", "identity provider is invalid")
 	ErrIdentityRedirectInvalid  = infraerrors.BadRequest("IDENTITY_REDIRECT_INVALID", "identity redirect path is invalid")
 	ErrIdentityUnbindLastMethod = infraerrors.Conflict(
 		"IDENTITY_UNBIND_LAST_METHOD",
@@ -62,26 +61,6 @@ var (
 	avatarScaleSteps   = []float64{1, 0.92, 0.84, 0.76, 0.68, 0.6, 0.52, 0.44, 0.36}
 	avatarQualitySteps = []int{88, 80, 72, 64, 56, 48, 40, 32}
 )
-
-// UserListFilters contains all filter options for listing users
-type UserListFilters struct {
-	Status    string // User status filter
-	Role      string // User role filter
-	Search    string // Search in email, username
-	GroupName string // Filter by allowed group name (fuzzy match)
-	// APIKeyGroupID filters users who own at least one non-soft-deleted API key
-	// bound to this group (api_keys.group_id). 0 = no filter. Covers all three
-	// group types since it matches the key's group directly, not allowed_groups.
-	APIKeyGroupID int64
-	Attributes    map[int64]string // Custom attribute filters: attributeID -> value
-	// IncludeSubscriptions controls whether ListWithFilters should load active subscriptions.
-	// For large datasets this can be expensive; admin list pages should enable it on demand.
-	// nil means not specified (default: load subscriptions for backward compatibility).
-	IncludeSubscriptions *bool
-	// IncludeDeleted 为 true 时绕过软删除过滤，返回含已删除（deleted_at 非空）的用户。
-	// 仅供 /admin/usage 的 SearchUsers 端点使用，其他列表调用方不要设置。
-	IncludeDeleted bool
-}
 
 type UserRepository interface {
 	Create(ctx context.Context, user *User) error
@@ -120,25 +99,6 @@ type UserRepository interface {
 	UpdateTotpSecret(ctx context.Context, userID int64, encryptedSecret *string) error
 	EnableTotp(ctx context.Context, userID int64) error
 	DisableTotp(ctx context.Context, userID int64) error
-}
-
-// RedeemUserAdjustmentRepository provides the atomic, floor-at-zero updates
-// used by negative-value redeem codes. It is intentionally narrower than
-// UserRepository because normal usage billing is allowed to overdraw.
-type RedeemUserAdjustmentRepository interface {
-	ApplyRedeemBalanceAdjustment(ctx context.Context, id int64, delta float64) error
-	ApplyRedeemConcurrencyAdjustment(ctx context.Context, id int64, delta int) error
-}
-
-type UserAuthIdentityRecord struct {
-	ProviderType    string
-	ProviderKey     string
-	ProviderSubject string
-	VerifiedAt      *time.Time
-	Issuer          *string
-	Metadata        map[string]any
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
 }
 
 type UserIdentitySummary struct {
@@ -191,24 +151,6 @@ type UpdateProfileRequest struct {
 	Concurrency            *int     `json:"concurrency"`
 	BalanceNotifyEnabled   *bool    `json:"balance_notify_enabled"`
 	BalanceNotifyThreshold *float64 `json:"balance_notify_threshold"`
-}
-
-type UserAvatar struct {
-	StorageProvider string
-	StorageKey      string
-	URL             string
-	ContentType     string
-	ByteSize        int
-	SHA256          string
-}
-
-type UpsertUserAvatarInput struct {
-	StorageProvider string
-	StorageKey      string
-	URL             string
-	ContentType     string
-	ByteSize        int
-	SHA256          string
 }
 
 type userProfileIdentityTxRunner interface {

@@ -28,11 +28,6 @@ import (
 )
 
 const (
-	// These values live in accounts.extra so PR2 does not require a schema migration.
-	UpstreamBillingProbeExtraKey           = "upstream_billing_probe"
-	UpstreamBillingProbeEnabledExtraKey    = "upstream_billing_probe_enabled"
-	UpstreamBillingRateSyncEnabledExtraKey = "upstream_billing_rate_sync_enabled"
-
 	upstreamBillingProbeDefaultIntervalMinutes = 30
 	upstreamBillingProbeMinIntervalMinutes     = 5
 	upstreamBillingProbeMaxIntervalMinutes     = 24 * 60
@@ -76,9 +71,6 @@ var (
 	ErrUpstreamBillingProbeAccountInvalid = infraerrors.BadRequest(
 		"UPSTREAM_BILLING_PROBE_ACCOUNT_INVALID", "account is not an API key account",
 	)
-	ErrUpstreamBillingProbeIdentityChanged = infraerrors.Conflict(
-		"UPSTREAM_BILLING_PROBE_IDENTITY_CHANGED", "account identity changed during upstream billing probe; retry the probe",
-	)
 	ErrUpstreamBillingRateSyncBulkConflict = infraerrors.Conflict(
 		"UPSTREAM_BILLING_RATE_SYNC_BULK_CONFLICT",
 		"account rate multiplier cannot be changed in bulk while upstream billing rate sync is enabled",
@@ -89,36 +81,10 @@ var (
 	)
 )
 
-const (
-	UpstreamBillingProbeStatusOK          = "ok"
-	UpstreamBillingProbeStatusUnsupported = "unsupported"
-	UpstreamBillingProbeStatusFailed      = "failed"
-)
-
 // UpstreamBillingProbeSettings controls the periodic probe runner.
 type UpstreamBillingProbeSettings struct {
 	Enabled         bool `json:"enabled"`
 	IntervalMinutes int  `json:"interval_minutes"`
-}
-
-// UpstreamBillingProbeSnapshot is persisted in accounts.extra. Data is kept as
-// a sanitized map so future response fields do not require a database change.
-type UpstreamBillingProbeSnapshot struct {
-	Status        string         `json:"status"`
-	Data          map[string]any `json:"data,omitempty"`
-	ReceivedAt    *time.Time     `json:"received_at,omitempty"`
-	FreshUntil    *time.Time     `json:"fresh_until,omitempty"`
-	LastAttemptAt time.Time      `json:"last_attempt_at"`
-	NextProbeAt   time.Time      `json:"next_probe_at"`
-	FailureCount  int            `json:"failure_count,omitempty"`
-	HTTPStatus    int            `json:"http_status,omitempty"`
-	LastError     string         `json:"last_error,omitempty"`
-	// SyncedRateMultiplier records the value this probe wrote into
-	// accounts.rate_multiplier. It is only set when the account opted into rate
-	// sync and the declared value passed the write-back range check, so the
-	// stored snapshot always answers "did this probe move the account rate, and
-	// to what" without a separate history table.
-	SyncedRateMultiplier *float64 `json:"synced_rate_multiplier,omitempty"`
 }
 
 // UpstreamBillingProbeResult is returned by manual probe endpoints.

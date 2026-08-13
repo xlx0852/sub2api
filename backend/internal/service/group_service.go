@@ -4,13 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
-)
-
-var (
-	ErrGroupNotFound = infraerrors.NotFound("GROUP_NOT_FOUND", "group not found")
-	ErrGroupExists   = infraerrors.Conflict("GROUP_EXISTS", "group name already exists")
 )
 
 type GroupRepository interface {
@@ -35,12 +29,6 @@ type GroupRepository interface {
 	BindAccountsToGroup(ctx context.Context, groupID int64, accountIDs []int64) error
 	// UpdateSortOrders 批量更新分组排序
 	UpdateSortOrders(ctx context.Context, updates []GroupSortOrderUpdate) error
-}
-
-// GroupSortOrderUpdate 分组排序更新
-type GroupSortOrderUpdate struct {
-	ID        int64 `json:"id"`
-	SortOrder int   `json:"sort_order"`
 }
 
 // CreateGroupRequest 创建分组请求

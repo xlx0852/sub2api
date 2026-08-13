@@ -31,14 +31,6 @@ const (
 
 var errBatchImageDownloadSizeExceeded = errors.New("batch image download size limit exceeded")
 
-type BatchImageDownloadLimiter interface {
-	Acquire(ctx context.Context, userID string, kind string) (BatchImageDownloadPermit, error)
-}
-
-type BatchImageDownloadPermit interface {
-	Release(ctx context.Context) error
-}
-
 type BatchImageContentStream struct {
 	Reader        io.ReadCloser
 	ContentType   string

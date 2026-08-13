@@ -45,15 +45,6 @@ type GeminiQuotaPolicy struct {
 	tiers map[string]GeminiTierPolicy
 }
 
-type GeminiUsageTotals struct {
-	ProRequests   int64
-	FlashRequests int64
-	ProTokens     int64
-	FlashTokens   int64
-	ProCost       float64
-	FlashCost     float64
-}
-
 const geminiQuotaCacheTTL = time.Minute
 
 type geminiQuotaOverridesV1 struct {

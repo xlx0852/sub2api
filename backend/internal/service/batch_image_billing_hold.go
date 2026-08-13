@@ -9,24 +9,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	batchImageHoldRequestPrefix    = "batch_image_hold:"
-	batchImageCaptureRequestPrefix = "batch_image_capture:"
-	batchImageReleaseRequestPrefix = "batch_image_release:"
-)
-
-func BatchImageHoldRequestID(batchID string) string {
-	return batchImageHoldRequestPrefix + strings.TrimSpace(batchID)
-}
-
-func BatchImageCaptureRequestID(batchID string) string {
-	return batchImageCaptureRequestPrefix + strings.TrimSpace(batchID)
-}
-
-func BatchImageReleaseRequestID(batchID string) string {
-	return batchImageReleaseRequestPrefix + strings.TrimSpace(batchID)
-}
-
 func buildBatchImageHoldCommand(job *BatchImageJob, requestID string, actualAmount float64, payloadHash string) (*BatchImageBalanceHoldCommand, error) {
 	if job == nil {
 		return nil, ErrBatchImageBillingHoldFailed

@@ -25,50 +25,6 @@ var (
 	ErrPasswordRequired    = infraerrors.BadRequest("PASSWORD_REQUIRED", "password is required")
 )
 
-// TotpCache defines cache operations for TOTP service
-type TotpCache interface {
-	// Setup session methods
-	GetSetupSession(ctx context.Context, userID int64) (*TotpSetupSession, error)
-	SetSetupSession(ctx context.Context, userID int64, session *TotpSetupSession, ttl time.Duration) error
-	DeleteSetupSession(ctx context.Context, userID int64) error
-
-	// Login session methods (for 2FA login flow)
-	GetLoginSession(ctx context.Context, tempToken string) (*TotpLoginSession, error)
-	SetLoginSession(ctx context.Context, tempToken string, session *TotpLoginSession, ttl time.Duration) error
-	DeleteLoginSession(ctx context.Context, tempToken string) error
-
-	// Rate limiting
-	IncrementVerifyAttempts(ctx context.Context, userID int64) (int, error)
-	GetVerifyAttempts(ctx context.Context, userID int64) (int, error)
-	ClearVerifyAttempts(ctx context.Context, userID int64) error
-}
-
-// SecretEncryptor defines encryption operations for TOTP secrets
-type SecretEncryptor interface {
-	Encrypt(plaintext string) (string, error)
-	Decrypt(ciphertext string) (string, error)
-}
-
-// TotpSetupSession represents a TOTP setup session
-type TotpSetupSession struct {
-	Secret     string // Plain text TOTP secret (not encrypted yet)
-	SetupToken string // Random token to verify setup request
-	CreatedAt  time.Time
-}
-
-// TotpLoginSession represents a pending 2FA login session
-type TotpLoginSession struct {
-	UserID           int64
-	Email            string
-	TokenExpiry      time.Time
-	PendingOAuthBind *PendingOAuthBindLoginSession `json:"pending_oauth_bind,omitempty"`
-}
-
-type PendingOAuthBindLoginSession struct {
-	PendingSessionToken string `json:"pending_session_token,omitempty"`
-	BrowserSessionKey   string `json:"browser_session_key,omitempty"`
-}
-
 // TotpStatus represents the TOTP status for a user
 type TotpStatus struct {
 	Enabled        bool       `json:"enabled"`

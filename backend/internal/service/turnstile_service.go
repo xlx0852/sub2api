@@ -14,25 +14,10 @@ var (
 	ErrTurnstileInvalidSecretKey   = infraerrors.BadRequest("TURNSTILE_INVALID_SECRET_KEY", "invalid turnstile secret key")
 )
 
-// TurnstileVerifier 验证 Turnstile token 的接口
-type TurnstileVerifier interface {
-	VerifyToken(ctx context.Context, secretKey, token, remoteIP string) (*TurnstileVerifyResponse, error)
-}
-
 // TurnstileService Turnstile 验证服务
 type TurnstileService struct {
 	settingService *SettingService
 	verifier       TurnstileVerifier
-}
-
-// TurnstileVerifyResponse Cloudflare Turnstile 验证响应
-type TurnstileVerifyResponse struct {
-	Success     bool     `json:"success"`
-	ChallengeTS string   `json:"challenge_ts"`
-	Hostname    string   `json:"hostname"`
-	ErrorCodes  []string `json:"error-codes"`
-	Action      string   `json:"action"`
-	CData       string   `json:"cdata"`
 }
 
 // NewTurnstileService 创建 Turnstile 服务实例

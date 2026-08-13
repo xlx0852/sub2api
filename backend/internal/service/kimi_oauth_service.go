@@ -32,57 +32,6 @@ type KimiOAuthClient interface {
 	RefreshToken(ctx context.Context, refreshToken, proxyURL string, headers kimi.DeviceHeaders) (*kimi.TokenResponse, error)
 }
 
-type KimiDeviceSessionStore interface {
-	Create(ctx context.Context, session *KimiDeviceSession, ttl time.Duration) error
-	Get(ctx context.Context, sessionID string) (*KimiDeviceSession, error)
-	AcquirePollLease(ctx context.Context, sessionID string, now time.Time, leaseTTL time.Duration) (*KimiDevicePollLease, error)
-	CommitPoll(ctx context.Context, lease *KimiDevicePollLease, updated *KimiDeviceSession) (bool, error)
-	ConsumeAuthorized(ctx context.Context, sessionID string) (*KimiDeviceSession, error)
-	Cancel(ctx context.Context, sessionID string, tombstoneTTL time.Duration) (bool, error)
-	Delete(ctx context.Context, sessionID string) error
-}
-
-type KimiDevicePollLease struct {
-	Session       *KimiDeviceSession
-	ProviderLease *ProviderOAuthSessionLease
-	Held          bool
-}
-
-type KimiDeviceSession struct {
-	ID                      string              `json:"id"`
-	Status                  string              `json:"status"`
-	DeviceCode              string              `json:"device_code"`
-	UserCode                string              `json:"user_code"`
-	VerificationURI         string              `json:"verification_uri"`
-	VerificationURIComplete string              `json:"verification_uri_complete"`
-	ProxyURL                string              `json:"proxy_url,omitempty"`
-	ProxyID                 *int64              `json:"proxy_id,omitempty"`
-	DeviceID                string              `json:"device_id"`
-	DeviceName              string              `json:"device_name"`
-	DeviceModel             string              `json:"device_model"`
-	IntervalSeconds         int64               `json:"interval_seconds"`
-	NextPollAt              time.Time           `json:"next_poll_at"`
-	ExpiresAt               time.Time           `json:"expires_at"`
-	Token                   *KimiOAuthTokenInfo `json:"token,omitempty"`
-	Error                   string              `json:"error,omitempty"`
-}
-
-type KimiOAuthTokenInfo struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token,omitempty"`
-	TokenType    string `json:"token_type,omitempty"`
-	Scope        string `json:"scope,omitempty"`
-	ExpiresIn    int64  `json:"expires_in"`
-	ExpiresAt    int64  `json:"expires_at"`
-	DeviceID     string `json:"device_id"`
-	DeviceName   string `json:"device_name"`
-	DeviceModel  string `json:"device_model"`
-	// UserID is the durable Kimi subject (JWT user_id/sub). Used as the OAuth
-	// merge identity because Kimi device tokens do not include an email claim.
-	UserID  string `json:"user_id,omitempty"`
-	ProxyID *int64 `json:"proxy_id,omitempty"`
-}
-
 type KimiDeviceAuthorizationResult struct {
 	SessionID               string `json:"session_id"`
 	Status                  string `json:"status"`

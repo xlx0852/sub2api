@@ -16,8 +16,6 @@ import (
 )
 
 var (
-	ErrRedeemCodeNotFound  = infraerrors.NotFound("REDEEM_CODE_NOT_FOUND", "redeem code not found")
-	ErrRedeemCodeUsed      = infraerrors.Conflict("REDEEM_CODE_USED", "redeem code already used")
 	ErrRedeemCodeExpired   = infraerrors.Conflict("REDEEM_CODE_EXPIRED", "redeem code expired")
 	ErrInsufficientBalance = infraerrors.BadRequest("INSUFFICIENT_BALANCE", "insufficient balance")
 	ErrRedeemRateLimited   = infraerrors.TooManyRequests("REDEEM_RATE_LIMITED", "too many failed attempts, please try again later")
@@ -37,15 +35,6 @@ type ctxKeySkipRedeemAffiliate struct{}
 // via applyAffiliateRebateForOrder (with audit-log deduplication).
 func ContextSkipRedeemAffiliate(ctx context.Context) context.Context {
 	return context.WithValue(ctx, ctxKeySkipRedeemAffiliate{}, true)
-}
-
-// RedeemCache defines cache operations for redeem service
-type RedeemCache interface {
-	GetRedeemAttemptCount(ctx context.Context, userID int64) (int, error)
-	IncrementRedeemAttemptCount(ctx context.Context, userID int64) error
-
-	AcquireRedeemLock(ctx context.Context, code string, ttl time.Duration) (bool, error)
-	ReleaseRedeemLock(ctx context.Context, code string) error
 }
 
 type RedeemCodeRepository interface {
@@ -81,45 +70,6 @@ type RedeemCodeResponse struct {
 	Value     float64   `json:"value"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
-}
-
-type NullableTimeUpdate struct {
-	Set   bool
-	Value *time.Time
-}
-
-type NullableInt64Update struct {
-	Set   bool
-	Value *int64
-}
-
-type RedeemCodeBatchUpdateFields struct {
-	Status    *string
-	ExpiresAt NullableTimeUpdate
-	Notes     *string
-	GroupID   NullableInt64Update
-
-	// Core fields are intentionally modeled only so service validation can
-	// reject payloads that try to mutate redemption value semantics in bulk.
-	Type  *string
-	Value *float64
-}
-
-func (f RedeemCodeBatchUpdateFields) HasChanges() bool {
-	return f.Status != nil ||
-		f.ExpiresAt.Set ||
-		f.Notes != nil ||
-		f.GroupID.Set ||
-		f.Type != nil ||
-		f.Value != nil
-}
-
-func (f RedeemCodeBatchUpdateFields) HasCoreFieldChanges() bool {
-	return f.Type != nil || f.Value != nil
-}
-
-func (f RedeemCodeBatchUpdateFields) TouchesUsedSensitiveFields() bool {
-	return f.Status != nil || f.ExpiresAt.Set || f.GroupID.Set
 }
 
 type RedeemCodeBatchUpdateInput struct {

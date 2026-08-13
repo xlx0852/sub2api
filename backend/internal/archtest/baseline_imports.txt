@@ -14,3 +14,8 @@ internal/repository -> internal/service
 # 现有 internal/domain 尚依赖 pkg 的错误与模型目录库；P2 domain 拆分时收敛为零依赖。
 internal/domain -> internal/pkg/errors
 internal/domain -> internal/pkg/modelcatalog
+
+# P1 ports 下沉：仓储接口签名普遍携带分页参数（13 个接口），ports 不得 import pkg，
+# 故在 domain 以类型别名再导出 pagination 类型（domain/pagination.go），
+# 引入本条过渡边；P2 分页类型正式迁入 domain 后移除。
+internal/domain -> internal/pkg/pagination
