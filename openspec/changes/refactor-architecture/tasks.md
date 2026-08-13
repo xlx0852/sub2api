@@ -6,10 +6,10 @@
 
 ## 2. P1 ports 下沉（打破拆包死锁）
 
-- [ ] 2.1 创建 `internal/ports` 与 `internal/domain` 骨架
-- [ ] 2.2 将 service 内 Repository/Cache 接口及其依赖类型机械搬移（签名不变）
-- [ ] 2.3 `repository` 改为实现 ports 接口，删除对 service 的 import
-- [ ] 2.4 全量编译 + 既有测试回归通过
+- [x] 2.1 创建 `internal/ports` 与 `internal/domain` 骨架
+- [ ] 2.2 将 service 内 Repository/Cache 接口及其依赖类型机械搬移（签名不变）（主体完成：58 接口迁入 ports、357 类型/常量/函数/错误迁入 domain；余 19 接口及 Account/Group/User/APIKey/UsageLog 等核心类型因 codex-fingerprint WIP 脏文件与 pkg 依赖待收口，见 P1 迁移报告）
+- [ ] 2.3 `repository` 改为实现 ports 接口，删除对 service 的 import（86 文件已改指 ports/domain；仍余 41 个符号引用 service，`repository -> service` 基线边保留，待 2.2 尾巴收口后清零）
+- [ ] 2.4 全量编译 + 既有测试回归通过（`go build ./...`、archtest、route 清单、repository/domain/server 测试与 service 抽样均通过；全量 go test 交由 CI）
 
 ## 3. P2 domain 与 config 拆分
 
