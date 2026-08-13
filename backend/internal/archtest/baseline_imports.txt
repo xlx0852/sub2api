@@ -1,0 +1,16 @@
+# 架构 import 违例基线（OpenSpec change: refactor-architecture, P0 边界冻结）
+#
+# 每行一条现存的跨层依赖违例，格式：<from 包> -> <to 包>（路径相对 module 根）。
+# 由 internal/archtest/imports_test.go 消费：
+#   - 实际违例必须是本清单的子集，出现基线外新违例即测试失败；
+#   - 某条违例消失后测试同样失败并提示从本清单移除（只允许收敛，不允许回退）。
+#
+# 迁移计划见 openspec/changes/refactor-architecture/design.md（Migration Plan）。
+
+# 拆包死锁根因：约 151 个 Repository/Cache 接口定义在 service 内，
+# repository 反向 import service 来实现它们；P1 ports 下沉后应清零。
+internal/repository -> internal/service
+
+# 现有 internal/domain 尚依赖 pkg 的错误与模型目录库；P2 domain 拆分时收敛为零依赖。
+internal/domain -> internal/pkg/errors
+internal/domain -> internal/pkg/modelcatalog

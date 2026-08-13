@@ -1,0 +1,89 @@
+# 包级可变全局基线（OpenSpec change: refactor-architecture, P0 边界冻结）
+#
+# 每行一条现存的包级可变全局状态，格式：
+#   <包路径>: var <变量名>   —— 指针/atomic/sync.Map/函数值/channel 类包级变量
+#   <包路径>: func <函数名>  —— 全局 Set* 装配旁路（绕过 Wire 注入）
+# 由 internal/archtest/globals_test.go 消费：
+#   - 实际扫描结果必须与本清单一致，新增即失败；
+#   - 条目消失后测试提示从本清单移除（design.md D6：全局状态收归构造注入）。
+
+# ---- 全局 Set* 装配旁路（design.md D6 点名收编对象） ----
+internal/service: func SetCodexCanonicalUserAgentResolver
+internal/service: func SetCodexIdentityEnforcementEnabled
+internal/service: func SetDefaultIdempotencyCoordinator
+internal/service: func SetWebSearchManager
+
+# ---- repository 包级可变状态 ----
+internal/repository: var readRandomBytes
+internal/repository: var repositoryScopedKeyLocks
+internal/repository: var sharedReqClients
+
+# ---- service 包级可变状态：装配旁路的背后存储 ----
+internal/service: var codexIdentityEnforcement
+internal/service: var defaultIdempotencySvc
+internal/service: var webSearchManagerPtr
+
+# ---- service 包级可变状态：设置项运行时缓存（setting_gateway_runtime.go 等） ----
+internal/service: var backendModeCache
+internal/service: var backendModeSF
+internal/service: var gatewayForwardingCache
+internal/service: var gatewayForwardingSF
+internal/service: var openAIAdvancedSchedulerSettingCache
+internal/service: var openAIAdvancedSchedulerSettingSF
+internal/service: var versionBoundsCache
+internal/service: var versionBoundsSF
+internal/service: var webSearchEmulationCache
+internal/service: var webSearchEmulationSF
+
+# ---- service 包级可变状态：共享缓存/锁表/节流 ----
+internal/service: var agentIdentityTaskLocks
+internal/service: var authPendingIdentityScopedKeyLocks
+internal/service: var defaultOpenAICodexSnapshotPersistThrottle
+internal/service: var openAIStickyInvalidEpoch
+internal/service: var sharedUserGroupRateCache
+internal/service: var stickyReevalLastAt
+
+# ---- service 包级可变状态：进程内指标计数器 ----
+internal/service: var modelsListCacheHitTotal
+internal/service: var modelsListCacheMissTotal
+internal/service: var modelsListCacheStoreTotal
+internal/service: var openAIOutcomeCallerTotal
+internal/service: var openAIOutcomeCredentialTotal
+internal/service: var openAIOutcomeQuotaTotal
+internal/service: var openAIOutcomeSuccessTotal
+internal/service: var openAIOutcomeTransientTotal
+internal/service: var openAIOutcomeUnknownTotal
+internal/service: var openAIStickyLegacyDualWriteTotal
+internal/service: var openAIStickyLegacyReadFallbackHit
+internal/service: var openAIStickyLegacyReadFallbackTotal
+internal/service: var requestIDCounter
+internal/service: var requestMetadataFallbackAccountSwitchCountTotal
+internal/service: var requestMetadataFallbackIsMaxTokensOneHaikuTotal
+internal/service: var requestMetadataFallbackPrefetchedStickyAccount
+internal/service: var requestMetadataFallbackPrefetchedStickyGroup
+internal/service: var requestMetadataFallbackSingleAccountRetryTotal
+internal/service: var requestMetadataFallbackThinkingEnabledTotal
+internal/service: var userGroupRateCacheFallbackTotal
+internal/service: var userGroupRateCacheHitTotal
+internal/service: var userGroupRateCacheLoadTotal
+internal/service: var userGroupRateCacheMissTotal
+internal/service: var userGroupRateCacheSFSharedTotal
+internal/service: var userPlatformQuotaDBIncrErrorTotal
+internal/service: var userPlatformQuotaDBIncrLegacyErrorTotal
+internal/service: var userPlatformQuotaSentinelSetCacheErrorTotal
+internal/service: var windowCostPrefetchBatchSQLTotal
+internal/service: var windowCostPrefetchCacheHitTotal
+internal/service: var windowCostPrefetchCacheMissTotal
+internal/service: var windowCostPrefetchErrorTotal
+internal/service: var windowCostPrefetchFallbackTotal
+
+# ---- service 包级可变状态：测试注入缝隙（函数值）与只读数据指针 ----
+internal/service: var createPaymentProviderFromInstance
+internal/service: var crc32IEEETable
+internal/service: var newTimingWheel
+internal/service: var openAIGPT54FallbackPricing
+internal/service: var openAIGPT54MiniFallbackPricing
+internal/service: var openAIGPT54NanoFallbackPricing
+internal/service: var openAIGPT56LunaFallbackPricing
+internal/service: var openAIGPT56SolFallbackPricing
+internal/service: var openAIGPT56TerraFallbackPricing

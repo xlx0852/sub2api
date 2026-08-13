@@ -43,6 +43,314 @@ linters:
               desc: "handler must not import gorm"
             - pkg: github.com/redis/go-redis/v9
               desc: "handler must not import redis"
+
+        # ---------------------------------------------------------------
+        # P0 边界冻结（OpenSpec change: refactor-architecture, design.md D1/D10）
+        #
+        # 以下规则编码"当前已成立"的依赖不变量，防止迁移期间架构回退腐化；
+        # 已存在的历史违例（repository→service 拆包死锁、domain→pkg/*）
+        # 不在此硬禁（会立即红），由 internal/archtest 基线测试按
+        # "现状白名单 + 禁止新增"管理。
+        # 目标分层 domain/ports/app/infra/transport 的规则对未来包预先生效
+        # （arch-future-* 规则当前不匹配任何文件，包创建后自动激活）。
+        # ---------------------------------------------------------------
+        arch-config-standalone:
+          list-mode: original
+          files:
+            - "**/internal/config/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal
+              desc: "config must not import any internal package"
+        arch-util-minimal:
+          list-mode: original
+          files:
+            - "**/internal/util/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/service
+              desc: "util may only import internal/config"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/repository
+              desc: "util may only import internal/config"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/handler
+              desc: "util may only import internal/config"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/server
+              desc: "util may only import internal/config"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/middleware
+              desc: "util may only import internal/config"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/model
+              desc: "util may only import internal/config"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/payment
+              desc: "util may only import internal/config"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/setup
+              desc: "util may only import internal/config"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/web
+              desc: "util may only import internal/config"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/domain
+              desc: "util may only import internal/config"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/pkg
+              desc: "util may only import internal/config"
+        arch-model-minimal:
+          list-mode: original
+          files:
+            - "**/internal/model/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/service
+              desc: "model may only import internal/pkg"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/repository
+              desc: "model may only import internal/pkg"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/handler
+              desc: "model may only import internal/pkg"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/server
+              desc: "model may only import internal/pkg"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/middleware
+              desc: "model may only import internal/pkg"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/config
+              desc: "model may only import internal/pkg"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/payment
+              desc: "model may only import internal/pkg"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/setup
+              desc: "model may only import internal/pkg"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/web
+              desc: "model may only import internal/pkg"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/domain
+              desc: "model may only import internal/pkg"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/util
+              desc: "model may only import internal/pkg"
+        arch-domain-no-business-imports:
+          # domain 的目标是零 internal 依赖（design.md D1）；现存 domain→pkg/errors、
+          # domain→pkg/modelcatalog 由 internal/archtest 基线管理，此处不禁 pkg。
+          list-mode: original
+          files:
+            - "**/internal/domain/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/service
+              desc: "domain must stay dependency-free (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/repository
+              desc: "domain must stay dependency-free (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/handler
+              desc: "domain must stay dependency-free (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/server
+              desc: "domain must stay dependency-free (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/middleware
+              desc: "domain must stay dependency-free (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/config
+              desc: "domain must stay dependency-free (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/model
+              desc: "domain must stay dependency-free (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/payment
+              desc: "domain must stay dependency-free (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/setup
+              desc: "domain must stay dependency-free (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/web
+              desc: "domain must stay dependency-free (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/util
+              desc: "domain must stay dependency-free (design.md D1)"
+        arch-pkg-no-upper-layers:
+          list-mode: original
+          files:
+            - "**/internal/pkg/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/service
+              desc: "pkg (stateless protocol/util libs) must not import upper layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/repository
+              desc: "pkg (stateless protocol/util libs) must not import upper layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/handler
+              desc: "pkg (stateless protocol/util libs) must not import upper layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/server
+              desc: "pkg (stateless protocol/util libs) must not import upper layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/middleware
+              desc: "pkg (stateless protocol/util libs) must not import upper layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/model
+              desc: "pkg (stateless protocol/util libs) must not import upper layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/payment
+              desc: "pkg (stateless protocol/util libs) must not import upper layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/setup
+              desc: "pkg (stateless protocol/util libs) must not import upper layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/web
+              desc: "pkg (stateless protocol/util libs) must not import upper layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/domain
+              desc: "pkg (stateless protocol/util libs) must not import upper layers"
+        arch-middleware-standalone:
+          list-mode: original
+          files:
+            - "**/internal/middleware/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/service
+              desc: "base middleware must not import business/transport layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/repository
+              desc: "base middleware must not import business/transport layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/handler
+              desc: "base middleware must not import business/transport layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/server
+              desc: "base middleware must not import business/transport layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/setup
+              desc: "base middleware must not import business/transport layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/web
+              desc: "base middleware must not import business/transport layers"
+        arch-payment-no-upper-layers:
+          list-mode: original
+          files:
+            - "**/internal/payment/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/service
+              desc: "payment protocol lib must not import business/transport layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/repository
+              desc: "payment protocol lib must not import business/transport layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/handler
+              desc: "payment protocol lib must not import business/transport layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/server
+              desc: "payment protocol lib must not import business/transport layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/setup
+              desc: "payment protocol lib must not import business/transport layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/web
+              desc: "payment protocol lib must not import business/transport layers"
+        arch-repository-no-transport:
+          # repository→service 为已知拆包死锁（P1 ports 下沉后清零），
+          # 由 internal/archtest 基线管理，此处不禁；禁止的是向接入层扩散。
+          list-mode: original
+          files:
+            - "**/internal/repository/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/handler
+              desc: "repository must not import transport/assembly layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/server
+              desc: "repository must not import transport/assembly layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/middleware
+              desc: "repository must not import transport/assembly layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/setup
+              desc: "repository must not import transport/assembly layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/web
+              desc: "repository must not import transport/assembly layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/payment
+              desc: "repository must not import transport/assembly layers"
+        arch-service-no-transport:
+          list-mode: original
+          files:
+            - "**/internal/service/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/handler
+              desc: "service must not import transport/assembly layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/server
+              desc: "service must not import transport/assembly layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/middleware
+              desc: "service must not import transport/assembly layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/setup
+              desc: "service must not import transport/assembly layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/web
+              desc: "service must not import transport/assembly layers"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/integration
+              desc: "service must not import transport/assembly layers"
+        arch-handler-no-routes:
+          list-mode: original
+          files:
+            - "**/internal/handler/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/server/routes
+              desc: "handler must not import route registration layer"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/setup
+              desc: "handler must not import setup/web assembly"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/web
+              desc: "handler must not import setup/web assembly"
+        arch-server-no-repository:
+          list-mode: original
+          files:
+            - "**/internal/server/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/repository
+              desc: "server (routing/HTTP assembly) must not import repository directly"
+        arch-setup-no-transport:
+          list-mode: original
+          files:
+            - "**/internal/setup/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/handler
+              desc: "setup wizard must not import regular transport layer"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/server
+              desc: "setup wizard must not import regular transport layer"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/web
+              desc: "setup wizard must not import regular transport layer"
+        # ---- 目标分层（design.md D1），包尚未创建，规则预先生效 ----
+        arch-future-ports-only-domain:
+          list-mode: original
+          files:
+            - "**/internal/ports/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/service
+              desc: "ports may only import internal/domain (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/repository
+              desc: "ports may only import internal/domain (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/handler
+              desc: "ports may only import internal/domain (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/server
+              desc: "ports may only import internal/domain (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/middleware
+              desc: "ports may only import internal/domain (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/config
+              desc: "ports may only import internal/domain (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/model
+              desc: "ports may only import internal/domain (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/payment
+              desc: "ports may only import internal/domain (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/pkg
+              desc: "ports may only import internal/domain (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/util
+              desc: "ports may only import internal/domain (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/setup
+              desc: "ports may only import internal/domain (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/web
+              desc: "ports may only import internal/domain (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/app
+              desc: "ports may only import internal/domain (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/infra
+              desc: "ports may only import internal/domain (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/transport
+              desc: "ports may only import internal/domain (design.md D1)"
+        arch-future-app-layering:
+          list-mode: original
+          files:
+            - "**/internal/app/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/infra
+              desc: "app must not import infra/transport or their legacy forms (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/transport
+              desc: "app must not import infra/transport or their legacy forms (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/repository
+              desc: "app must not import infra/transport or their legacy forms (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/handler
+              desc: "app must not import infra/transport or their legacy forms (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/server
+              desc: "app must not import infra/transport or their legacy forms (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/service
+              desc: "app modules must not depend back on the legacy service god-package"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/middleware
+              desc: "app must not import infra/transport or their legacy forms (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/setup
+              desc: "app must not import infra/transport or their legacy forms (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/web
+              desc: "app must not import infra/transport or their legacy forms (design.md D1)"
+        arch-future-infra-no-app:
+          list-mode: original
+          files:
+            - "**/internal/infra/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/app
+              desc: "infra must not import app layer (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/service
+              desc: "infra must not import app layer (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/handler
+              desc: "infra must not import app layer (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/server
+              desc: "infra must not import app layer (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/transport
+              desc: "infra must not import app layer (design.md D1)"
+        arch-future-transport-via-app:
+          list-mode: original
+          files:
+            - "**/internal/transport/**"
+          deny:
+            - pkg: github.com/Wei-Shaw/sub2api/internal/infra
+              desc: "transport must reach data layer via app, not infra/repository (design.md D1)"
+            - pkg: github.com/Wei-Shaw/sub2api/internal/repository
+              desc: "transport must reach data layer via app, not infra/repository (design.md D1)"
     gosec:
       excludes:
         - G101
