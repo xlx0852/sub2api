@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/handler"
-	basemiddleware "github.com/Wei-Shaw/sub2api/internal/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -22,14 +21,17 @@ func RegisterUserRoutes(
 ) {
 	publicPricingHandlers := []gin.HandlerFunc{}
 	if len(redisClients) > 0 && redisClients[0] != nil {
-		publicLimiter := basemiddleware.NewRateLimiter(redisClients[0])
+		publicLimiter := middleware.NewRateLimiter(redisClients[0])
 		publicPricingHandlers = append(publicPricingHandlers, publicLimiter.LimitWithOptions(
 			"public_pricing", 60, time.Minute,
-			basemiddleware.RateLimitOptions{FailureMode: basemiddleware.RateLimitFailClose},
+			middleware.RateLimitOptions{FailureMode: middleware.RateLimitFailClose},
 		))
 	}
 	publicPricingHandlers = append(publicPricingHandlers, h.AvailableChannel.PublicPricing)
 	v1.GET("/public/pricing", publicPricingHandlers...)
+	// Canonical public runtime config (8.1). /settings/public stays as a compatibility alias.
+	v1.GET("/public/config", h.Setting.GetPublicSettings)
+	v1.GET("/public/version", h.Setting.GetPublicVersion)
 
 	authenticated := v1.Group("")
 	authenticated.Use(gin.HandlerFunc(jwtAuth))

@@ -20,97 +20,6 @@ func init() {
 	gin.SetMode(gin.TestMode)
 }
 
-func TestInjectSiteTitle(t *testing.T) {
-	t.Run("replaces_title_with_site_name", func(t *testing.T) {
-		html := []byte(`<html><head><title>Sub2API - AI API Gateway</title></head><body></body></html>`)
-		settingsJSON := []byte(`{"site_name":"MyCustomSite"}`)
-
-		result := injectSiteTitle(html, settingsJSON)
-
-		assert.Contains(t, string(result), "<title>MyCustomSite - AI API Gateway</title>")
-		assert.NotContains(t, string(result), "Sub2API")
-	})
-
-	t.Run("returns_unchanged_when_site_name_empty", func(t *testing.T) {
-		html := []byte(`<html><head><title>Sub2API - AI API Gateway</title></head><body></body></html>`)
-		settingsJSON := []byte(`{"site_name":""}`)
-
-		result := injectSiteTitle(html, settingsJSON)
-
-		assert.Equal(t, string(html), string(result))
-	})
-
-	t.Run("returns_unchanged_when_site_name_missing", func(t *testing.T) {
-		html := []byte(`<html><head><title>Sub2API - AI API Gateway</title></head><body></body></html>`)
-		settingsJSON := []byte(`{"other_field":"value"}`)
-
-		result := injectSiteTitle(html, settingsJSON)
-
-		assert.Equal(t, string(html), string(result))
-	})
-
-	t.Run("returns_unchanged_when_invalid_json", func(t *testing.T) {
-		html := []byte(`<html><head><title>Sub2API - AI API Gateway</title></head><body></body></html>`)
-		settingsJSON := []byte(`{invalid json}`)
-
-		result := injectSiteTitle(html, settingsJSON)
-
-		assert.Equal(t, string(html), string(result))
-	})
-
-	t.Run("returns_unchanged_when_no_title_tag", func(t *testing.T) {
-		html := []byte(`<html><head></head><body></body></html>`)
-		settingsJSON := []byte(`{"site_name":"MyCustomSite"}`)
-
-		result := injectSiteTitle(html, settingsJSON)
-
-		assert.Equal(t, string(html), string(result))
-	})
-
-	t.Run("returns_unchanged_when_title_has_attributes", func(t *testing.T) {
-		// The function looks for "<title>" literally, so attributes are not supported
-		// This is acceptable since index.html uses plain <title> without attributes
-		html := []byte(`<html><head><title lang="en">Sub2API</title></head><body></body></html>`)
-		settingsJSON := []byte(`{"site_name":"NewSite"}`)
-
-		result := injectSiteTitle(html, settingsJSON)
-
-		// Should return unchanged since <title> with attributes is not matched
-		assert.Equal(t, string(html), string(result))
-	})
-
-	t.Run("escapes_html_in_site_name", func(t *testing.T) {
-		html := []byte(`<html><head><title>Sub2API - AI API Gateway</title></head><body></body></html>`)
-		settingsJSON := []byte(`{"site_name":"</title><script>alert(1)</script><title>"}`)
-
-		result := injectSiteTitle(html, settingsJSON)
-
-		assert.NotContains(t, string(result), "<script>")
-		assert.Contains(t, string(result), "&lt;/title&gt;&lt;script&gt;alert(1)&lt;/script&gt;&lt;title&gt;")
-	})
-
-	t.Run("escapes_ampersand_in_site_name", func(t *testing.T) {
-		html := []byte(`<html><head><title>Sub2API</title></head><body></body></html>`)
-		settingsJSON := []byte(`{"site_name":"A&B"}`)
-
-		result := injectSiteTitle(html, settingsJSON)
-
-		assert.Contains(t, string(result), "<title>A&amp;B - AI API Gateway</title>")
-	})
-
-	t.Run("preserves_rest_of_html", func(t *testing.T) {
-		html := []byte(`<html><head><meta charset="UTF-8"><title>Sub2API</title><script src="app.js"></script></head><body><div id="app"></div></body></html>`)
-		settingsJSON := []byte(`{"site_name":"TestSite"}`)
-
-		result := injectSiteTitle(html, settingsJSON)
-
-		assert.Contains(t, string(result), `<meta charset="UTF-8">`)
-		assert.Contains(t, string(result), `<script src="app.js"></script>`)
-		assert.Contains(t, string(result), `<div id="app"></div>`)
-		assert.Contains(t, string(result), "<title>TestSite - AI API Gateway</title>")
-	})
-}
-
 func TestReplaceNoncePlaceholder(t *testing.T) {
 	t.Run("replaces_single_placeholder", func(t *testing.T) {
 		html := []byte(`<script nonce="__CSP_NONCE_VALUE__">console.log('test');</script>`)
@@ -178,59 +87,23 @@ func (m *mockSettingsProvider) GetPublicSettingsForInjection(ctx context.Context
 	return m.settings, m.err
 }
 
-func TestFrontendServer_InjectSettings(t *testing.T) {
-	t.Run("injects_settings_with_nonce_placeholder", func(t *testing.T) {
-		provider := &mockSettingsProvider{
-			settings: map[string]string{"key": "value"},
-		}
+func TestFrontendServer_DoesNotInjectSettings(t *testing.T) {
+	provider := &mockSettingsProvider{
+		settings: map[string]string{"key": "value"},
+	}
 
-		server, err := NewFrontendServer(provider)
-		require.NoError(t, err)
+	server, err := NewFrontendServer(provider)
+	require.NoError(t, err)
 
-		settingsJSON := []byte(`{"test":"data"}`)
-		result := server.injectSettings(settingsJSON)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	server.serveIndexHTML(c)
 
-		// Should contain the script with nonce placeholder
-		assert.Contains(t, string(result), `<script nonce="__CSP_NONCE_VALUE__">`)
-		assert.Contains(t, string(result), `window.__APP_CONFIG__={"test":"data"};`)
-		assert.Contains(t, string(result), `</script></head>`)
-	})
-
-	t.Run("injects_before_head_close", func(t *testing.T) {
-		provider := &mockSettingsProvider{
-			settings: map[string]string{"key": "value"},
-		}
-
-		server, err := NewFrontendServer(provider)
-		require.NoError(t, err)
-
-		settingsJSON := []byte(`{}`)
-		result := server.injectSettings(settingsJSON)
-
-		// Script should be injected before </head>
-		headCloseIndex := bytes.Index(result, []byte("</head>"))
-		scriptIndex := bytes.Index(result, []byte(`<script nonce="`))
-
-		assert.True(t, scriptIndex < headCloseIndex, "script should be before </head>")
-	})
-
-	t.Run("handles_complex_settings", func(t *testing.T) {
-		provider := &mockSettingsProvider{
-			settings: map[string]any{
-				"nested": map[string]any{
-					"array": []int{1, 2, 3},
-				},
-			},
-		}
-
-		server, err := NewFrontendServer(provider)
-		require.NoError(t, err)
-
-		settingsJSON := []byte(`{"nested":{"array":[1,2,3]},"special":"<>&"}`)
-		result := server.injectSettings(settingsJSON)
-
-		assert.Contains(t, string(result), `window.__APP_CONFIG__={"nested":{"array":[1,2,3]},"special":"<>&"};`)
-	})
+	assert.Equal(t, http.StatusOK, w.Code)
+	body := w.Body.String()
+	assert.NotContains(t, body, "window.__APP_CONFIG__")
+	assert.Equal(t, 0, provider.called)
 }
 
 func TestFrontendServer_ServeIndexHTML(t *testing.T) {
@@ -257,9 +130,11 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 		assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
 
 		body := w.Body.String()
-		// Nonce placeholder should be replaced
 		assert.NotContains(t, body, NonceHTMLPlaceholder)
-		assert.Contains(t, body, `nonce="`+testNonce+`"`)
+		assert.NotContains(t, body, "window.__APP_CONFIG__")
+		if bytes.Contains(server.baseHTML, []byte(NonceHTMLPlaceholder)) {
+			assert.Contains(t, body, `nonce="`+testNonce+`"`)
+		}
 	})
 
 	t.Run("caches_html_content", func(t *testing.T) {
@@ -277,20 +152,20 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 		c1.Set(middleware.CSPNonceKey, "nonce1")
 
 		server.serveIndexHTML(c1)
-		assert.Equal(t, 1, provider.called)
+		assert.Equal(t, 0, provider.called)
 
-		// Second request - should use cache
+		// Second request - should use cache and still skip settings
 		w2 := httptest.NewRecorder()
 		c2, _ := gin.CreateTestContext(w2)
 		c2.Request = httptest.NewRequest(http.MethodGet, "/", nil)
 		c2.Set(middleware.CSPNonceKey, "nonce2")
 
 		server.serveIndexHTML(c2)
-		// Settings provider should not be called again
-		assert.Equal(t, 1, provider.called)
-
-		// But nonce should be different
-		assert.Contains(t, w2.Body.String(), `nonce="nonce2"`)
+		assert.Equal(t, 0, provider.called)
+		assert.NotContains(t, w2.Body.String(), "window.__APP_CONFIG__")
+		if bytes.Contains(server.baseHTML, []byte(NonceHTMLPlaceholder)) {
+			assert.Contains(t, w2.Body.String(), `nonce="nonce2"`)
+		}
 	})
 
 	t.Run("sets_etag_header", func(t *testing.T) {
@@ -383,9 +258,10 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 
 		server.serveIndexHTML(c)
 
-		// Should still return 200 with base HTML
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+		assert.Equal(t, 0, provider.called)
+		assert.NotContains(t, w.Body.String(), "window.__APP_CONFIG__")
 	})
 }
 
@@ -405,22 +281,19 @@ func TestFrontendServer_InvalidateCache(t *testing.T) {
 		c1.Set(middleware.CSPNonceKey, "nonce1")
 
 		server.serveIndexHTML(c1)
-		assert.Equal(t, 1, provider.called)
+		assert.Equal(t, 0, provider.called)
 
-		// Invalidate cache
 		server.InvalidateCache()
 
-		// Update settings
-		provider.settings = map[string]string{"test": "new_value"}
-
-		// Second request should fetch new settings
 		w2 := httptest.NewRecorder()
 		c2, _ := gin.CreateTestContext(w2)
 		c2.Request = httptest.NewRequest(http.MethodGet, "/", nil)
 		c2.Set(middleware.CSPNonceKey, "nonce2")
 
 		server.serveIndexHTML(c2)
-		assert.Equal(t, 2, provider.called)
+		assert.Equal(t, http.StatusOK, w2.Code)
+		assert.Equal(t, 0, provider.called)
+		assert.NotContains(t, w2.Body.String(), "window.__APP_CONFIG__")
 	})
 
 	t.Run("handles_nil_server", func(t *testing.T) {
@@ -742,8 +615,7 @@ func TestHTMLCache(t *testing.T) {
 		cache.SetBaseHTML([]byte("<html></html>"))
 
 		html := []byte("<html><body>test</body></html>")
-		settings := []byte(`{"key":"value"}`)
-		cache.Set(html, settings)
+		cache.Set(html)
 
 		result := cache.Get()
 		require.NotNil(t, result)
@@ -756,8 +628,7 @@ func TestHTMLCache(t *testing.T) {
 		cache.SetBaseHTML([]byte("<html></html>"))
 
 		html := []byte("<html><body>test</body></html>")
-		settings := []byte(`{"key":"value"}`)
-		cache.Set(html, settings)
+		cache.Set(html)
 
 		require.NotNil(t, cache.Get())
 
@@ -766,34 +637,32 @@ func TestHTMLCache(t *testing.T) {
 		assert.Nil(t, cache.Get())
 	})
 
-	t.Run("etag_changes_with_settings", func(t *testing.T) {
+	t.Run("etag_stable_for_same_base", func(t *testing.T) {
 		cache := NewHTMLCache()
 		cache.SetBaseHTML([]byte("<html></html>"))
 
 		html := []byte("<html><body>test</body></html>")
 
-		cache.Set(html, []byte(`{"v":1}`))
+		cache.Set(html)
 		etag1 := cache.Get().ETag
 
 		cache.Invalidate()
-		cache.Set(html, []byte(`{"v":2}`))
+		cache.Set(html)
 		etag2 := cache.Get().ETag
 
-		assert.NotEqual(t, etag1, etag2)
+		assert.Equal(t, etag1, etag2)
 	})
 
 	t.Run("etag_format", func(t *testing.T) {
 		cache := NewHTMLCache()
 		cache.SetBaseHTML([]byte("<html></html>"))
 
-		cache.Set([]byte("<html></html>"), []byte(`{}`))
+		cache.Set([]byte("<html></html>"))
 		result := cache.Get()
 
-		// ETag should be quoted
 		assert.True(t, strings.HasPrefix(result.ETag, `"`))
 		assert.True(t, strings.HasSuffix(result.ETag, `"`))
-		// Should contain dash separator
-		assert.Contains(t, result.ETag[1:len(result.ETag)-1], "-")
+		assert.NotContains(t, result.ETag[1:len(result.ETag)-1], "-")
 	})
 }
 

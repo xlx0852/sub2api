@@ -366,6 +366,12 @@ type PublicSettings struct {
 	AllowUserViewErrorRequests bool `json:"allow_user_view_error_requests"`
 }
 
+// PublicVersion is the public version-skew payload for separated deploys.
+type PublicVersion struct {
+	Version            string `json:"version"`
+	MinFrontendVersion string `json:"min_frontend_version"`
+}
+
 type LoginAgreementDocument struct {
 	ID        string `json:"id"`
 	Title     string `json:"title"`

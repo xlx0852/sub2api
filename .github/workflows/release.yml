@@ -172,6 +172,20 @@ jobs:
         id: lowercase
         run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
+      - name: Package frontend static artifact
+        if: ${{ env.SIMPLE_RELEASE != 'true' }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION=${{ github.event.inputs.tag }}
+            VERSION=${VERSION#v}
+          else
+            VERSION=${GITHUB_REF#refs/tags/v}
+          fi
+          test -f backend/internal/web/dist/index.html
+          rm -f "sub2api-frontend-${VERSION}.zip"
+          (cd backend/internal/web/dist && zip -r "${GITHUB_WORKSPACE}/sub2api-frontend-${VERSION}.zip" .)
+          echo "FRONTEND_VERSION=${VERSION}" >> "$GITHUB_ENV"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
@@ -184,6 +198,18 @@ jobs:
           GITHUB_REPO_OWNER_LOWER: ${{ steps.lowercase.outputs.owner }}
           GITHUB_REPO_NAME: ${{ github.event.repository.name }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME || 'skip' }}
+
+      - name: Upload frontend static artifact
+        if: ${{ env.SIMPLE_RELEASE != 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG_NAME=${{ github.event.inputs.tag }}
+          else
+            TAG_NAME=${GITHUB_REF#refs/tags/}
+          fi
+          gh release upload "$TAG_NAME" "sub2api-frontend-${FRONTEND_VERSION}.zip" --clobber
 
       # Update DockerHub description
       - name: Update DockerHub description

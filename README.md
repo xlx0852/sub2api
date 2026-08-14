@@ -385,8 +385,9 @@ docker compose -f docker-compose.local.yml logs -f sub2api
 |---------|-------------|-----------|----------|
 | **docker-compose.local.yml** | Local directories | ✅ Easy (tar entire directory) | Production, frequent backups |
 | **docker-compose.yml** | Named volumes | ⚠️ Requires docker commands | Simple setup |
+| **+ docker-compose.separated.yml** | Same as the base file | Same as the base file | Optional static console + API behind nginx |
 
-**Recommendation:** Use `docker-compose.local.yml` (deployed by script) for easier data management.
+**Recommendation:** Use `docker-compose.local.yml` (deployed by script) for easier data management. Architecture and the full deployment matrix: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 #### Access
 
@@ -735,28 +736,31 @@ Antigravity accounts support optional **hybrid scheduling**. When enabled, the g
 
 ```
 sub2api/
-├── backend/                  # Go backend service
-│   ├── cmd/server/           # Application entry
-│   ├── internal/             # Internal modules
-│   │   ├── config/           # Configuration
-│   │   ├── model/            # Data models
-│   │   ├── service/          # Business logic
+├── backend/                  # Go backend (modular monolith)
+│   ├── cmd/server/           # Application entry + Wire
+│   ├── internal/
+│   │   ├── domain/           # Entities (no internal imports)
+│   │   ├── ports/            # Repository / cache / upstream interfaces
+│   │   ├── app/              # Pipeline, scheduling, billing, lifecycle
+│   │   ├── service/          # Remaining business logic + adapters
+│   │   ├── repository/       # ports implementations (must not import service)
 │   │   ├── handler/          # HTTP handlers
-│   │   └── gateway/          # API gateway core
-│   └── resources/            # Static resources
+│   │   ├── server/           # Routes + middleware
+│   │   ├── config/           # YAML/env load (key names stable)
+│   │   └── web/              # Optional embed static server
+│   └── resources/
 │
-├── frontend/                 # Vue 3 frontend
+├── frontend/                 # Vue 3 console
 │   └── src/
-│       ├── api/              # API calls
-│       ├── stores/           # State management
-│       ├── views/            # Page components
-│       └── components/       # Reusable components
+│       ├── api/generated/    # Control-plane OpenAPI client
+│       ├── features/         # Feature APIs / stores
+│       ├── ui/               # Primitive UI
+│       ├── views/            # Pages (migration in progress)
+│       └── components/
 │
-└── deploy/                   # Deployment files
-    ├── docker-compose.yml    # Docker Compose configuration
-    ├── .env.example          # Environment variables for Docker Compose
-    ├── config.example.yaml   # Full config file for binary deployment
-    └── install.sh            # One-click installation script
+├── openapi/                  # Control-plane OpenAPI
+├── docs/ARCHITECTURE.md      # Architecture + deployment matrix
+└── deploy/                   # Default compose, install.sh, optional nginx overlay
 ```
 
 ## Star History

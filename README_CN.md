@@ -389,8 +389,9 @@ docker compose -f docker-compose.local.yml logs -f sub2api
 |------|---------|-----------|---------|
 | **docker-compose.local.yml** | 本地目录 | ✅ 简单（打包整个目录） | 生产环境、频繁备份 |
 | **docker-compose.yml** | 命名卷 | ⚠️ 需要 docker 命令 | 简单设置 |
+| **+ docker-compose.separated.yml** | 与基础文件相同 | 与基础文件相同 | 可选：nginx 托管静态控制台 + 内网 API |
 
-**推荐：** 使用 `docker-compose.local.yml`（脚本部署）以便更轻松地管理数据。
+**推荐：** 使用 `docker-compose.local.yml`（脚本部署）以便更轻松地管理数据。架构与完整部署矩阵见 [docs/ARCHITECTURE_CN.md](docs/ARCHITECTURE_CN.md)。
 
 #### 启用“数据管理”功能（datamanagementd）
 
@@ -733,28 +734,31 @@ Antigravity 账户支持可选的**混合调度**功能。开启后，通用端�
 
 ```
 sub2api/
-├── backend/                  # Go 后端服务
-│   ├── cmd/server/           # 应用入口
-│   ├── internal/             # 内部模块
-│   │   ├── config/           # 配置管理
-│   │   ├── model/            # 数据模型
-│   │   ├── service/          # 业务逻辑
+├── backend/                  # Go 后端（模块化单体）
+│   ├── cmd/server/           # 应用入口 + Wire
+│   ├── internal/
+│   │   ├── domain/           # 领域类型（不依赖 internal）
+│   │   ├── ports/            # Repository / cache / 上游接口
+│   │   ├── app/              # 管道、调度、结算、生命周期
+│   │   ├── service/          # 尚未拆完的业务 + 适配器
+│   │   ├── repository/       # ports 实现（禁止 import service）
 │   │   ├── handler/          # HTTP 处理器
-│   │   └── gateway/          # API 网关核心
-│   └── resources/            # 静态资源
+│   │   ├── server/           # 路由 + 中间件
+│   │   ├── config/           # YAML/env（键名稳定）
+│   │   └── web/              # 可选 embed 静态服务
+│   └── resources/
 │
-├── frontend/                 # Vue 3 前端
+├── frontend/                 # Vue 3 控制台
 │   └── src/
-│       ├── api/              # API 调用
-│       ├── stores/           # 状态管理
-│       ├── views/            # 页面组件
-│       └── components/       # 通用组件
+│       ├── api/generated/    # 控制面 OpenAPI 客户端
+│       ├── features/         # 功能 API / store
+│       ├── ui/               # 基础控件
+│       ├── views/            # 页面（迁移中）
+│       └── components/
 │
-└── deploy/                   # 部署文件
-    ├── docker-compose.yml    # Docker Compose 配置
-    ├── .env.example          # Docker Compose 环境变量
-    ├── config.example.yaml   # 二进制部署完整配置文件
-    └── install.sh            # 一键安装脚本
+├── openapi/                  # 控制面 OpenAPI
+├── docs/ARCHITECTURE_CN.md   # 架构与部署矩阵
+└── deploy/                   # 默认 compose、install.sh、可选 nginx overlay
 ```
 
 ## Star History

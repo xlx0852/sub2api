@@ -35,7 +35,7 @@ func (h *SettingHandler) SetNotificationEmailService(notificationEmailService *s
 }
 
 // GetPublicSettings 获取公开设置
-// GET /api/v1/settings/public
+// GET /api/v1/public/config (canonical) and GET /api/v1/settings/public (compat)
 func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 	settings, err := h.settingService.GetPublicSettings(c.Request.Context())
 	if err != nil {
@@ -100,6 +100,16 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		RiskControlEnabled: settings.RiskControlEnabled,
 
 		AllowUserViewErrorRequests: settings.AllowUserViewErrorRequests,
+	})
+}
+
+// GetPublicVersion returns backend version and the oldest compatible frontend.
+// GET /api/v1/public/version
+func (h *SettingHandler) GetPublicVersion(c *gin.Context) {
+	version := strings.TrimSpace(h.version)
+	response.Success(c, dto.PublicVersion{
+		Version:            version,
+		MinFrontendVersion: version,
 	})
 }
 

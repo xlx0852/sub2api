@@ -7,6 +7,7 @@ This directory contains files for deploying Sub2API on Linux servers.
 | Method | Best For | Setup Wizard |
 |--------|----------|--------------|
 | **Docker Compose** | Quick setup, all-in-one | Not needed (auto-setup) |
+| **Separated Compose** | Static console + API behind nginx | Not needed (auto-setup) |
 | **Binary Install** | Production servers, systemd | Web-based wizard |
 
 ## Files
@@ -14,6 +15,8 @@ This directory contains files for deploying Sub2API on Linux servers.
 | File | Description |
 |------|-------------|
 | `docker-compose.yml` | Docker Compose configuration (named volumes) |
+| `docker-compose.separated.yml` | Overlay: nginx static console + API (see `nginx/README.md`) |
+| `nginx/` | Official nginx reference for SSE, WebSocket, and underscore headers |
 | `docker-compose.local.yml` | Docker Compose configuration (local directories, easy migration) |
 | `docker-deploy.sh` | **One-click Docker deployment script (recommended)** |
 | `SAFE_BLUE_GREEN_DEPLOY_CN.md` | 生产安全蓝绿部署流程：本地打包、新容器验证、Nginx 切流、保留回滚 |
@@ -98,14 +101,29 @@ docker compose -f docker-compose.local.yml logs -f sub2api
 # http://localhost:8080
 ```
 
+### Method 3: Separated frontend / API
+
+Optional overlay. Default `docker-compose.yml` / `docker-compose.local.yml` stay single-container.
+
+```bash
+mkdir -p frontend-dist
+# Unpack the GitHub Release asset sub2api-frontend-<version>.zip into frontend-dist/
+docker compose -f docker-compose.yml -f docker-compose.separated.yml up -d
+```
+
+See `nginx/README.md` for SSE, WebSocket, underscore-header, and split-origin CORS notes.
+
 ### Deployment Version Comparison
 
 | Version | Data Storage | Migration | Best For |
 |---------|-------------|-----------|----------|
 | **docker-compose.local.yml** | Local directories (./data, ./postgres_data, ./redis_data) | ✅ Easy (tar entire directory) | Production, need frequent backups/migration |
 | **docker-compose.yml** | Named volumes (/var/lib/docker/volumes/) | ⚠️ Requires docker commands | Simple setup, don't need migration |
+| **+ docker-compose.separated.yml** | Same as the base file; nginx serves the console | Same as the base file | Static console + API behind one origin |
 
 **Recommendation:** Use `docker-compose.local.yml` (deployed by `docker-deploy.sh`) for easier data management and migration.
+
+The full topology matrix (embed binary, single-container compose, separated nginx, split-origin CORS, version skew) is in [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).
 
 ### How Auto-Setup Works
 

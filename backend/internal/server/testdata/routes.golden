@@ -230,7 +230,9 @@ GET /api/v1/payment/orders/:id
 GET /api/v1/payment/orders/my
 GET /api/v1/payment/orders/refund-eligible-providers
 GET /api/v1/payment/webhook/easypay
+GET /api/v1/public/config
 GET /api/v1/public/pricing
+GET /api/v1/public/version
 GET /api/v1/redeem/history
 GET /api/v1/settings/email-unsubscribe
 GET /api/v1/settings/public

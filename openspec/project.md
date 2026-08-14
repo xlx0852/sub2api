@@ -18,9 +18,11 @@ Sub2API 是一个 AI API 网关，负责把多种上游账号能力包装成统�
 - 兼容层优先保持输入输出语义稳定，不用“大而全”抽象掩盖协议差异
 
 ### Architecture Patterns
-- `handler` 负责请求校验、鉴权上下文和响应编码，`service` 负责路由、调度和协议转发
-- 账号调度、会话粘连、传输连接池、协议修正属于不同职责边界，不应共享隐式状态
+- 模块化单体：`domain` → `ports` → `app`/`service` → `handler`/`repository`。`repository` 禁止 import `service`；`app` 禁止 import `service`/`repository`/`handler`
+- `handler` 负责请求校验、鉴权上下文和响应编码；网关转发走 `app/gateway/pipeline`（Parse → Admission → Select → Rewrite → Transport → Relay → Settle），协议差异留在各平台显式适配器
+- 账号调度入口是 `AccountSelector`；会话粘连、传输连接池、协议修正属于不同职责边界，不应共享隐式状态
 - WebSocket 转发中的 `session/thread`、`turn`、`transport connection` 是不同层级，不能混为同一状态机
+- 控制面契约见 `openapi/control-plane.yaml`；运行时配置走 `GET /api/v1/public/config`。embed 只提供静态文件，默认部署形态不变。部署矩阵见 `docs/ARCHITECTURE.md`
 
 ### Testing Strategy
 - 优先补服务层单测与 WebSocket 回归测试，覆盖请求改写、重试、恢复和事件流

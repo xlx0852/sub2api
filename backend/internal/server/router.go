@@ -61,19 +61,15 @@ func SetupRouter(
 		return nil
 	}))
 
-	// Serve embedded frontend with settings injection if available
+	// Serve embedded frontend as static files when the binary was built with -tags embed.
 	if web.HasEmbeddedFrontend() {
 		frontendServer, err := web.NewFrontendServer(settingService)
 		if err != nil {
-			log.Printf("Warning: Failed to create frontend server with settings injection: %v, using legacy mode", err)
+			log.Printf("Warning: Failed to create frontend server: %v, using legacy mode", err)
 			r.Use(web.ServeEmbeddedFrontend())
 			settingService.SetOnUpdateCallback(refreshFrameOrigins)
 		} else {
-			// Register combined callback: invalidate HTML cache + refresh frame origins
-			settingService.SetOnUpdateCallback(func() {
-				frontendServer.InvalidateCache()
-				refreshFrameOrigins()
-			})
+			settingService.SetOnUpdateCallback(refreshFrameOrigins)
 			r.Use(frontendServer.Middleware())
 		}
 	} else {

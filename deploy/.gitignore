@@ -6,6 +6,7 @@
 data/
 postgres_data/
 redis_data/
+frontend-dist/
 
 # Environment configuration (contains sensitive information)
 .env
