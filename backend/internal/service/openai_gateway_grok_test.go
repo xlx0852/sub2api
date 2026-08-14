@@ -1196,6 +1196,7 @@ func TestForwardGrokResponsesAPIKeyStreamingUsesOfficialXAIResponses(t *testing.
 	body := []byte(`{"model":"grok","input":"hi","stream":true}`)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set("api_key", &APIKey{ID: 5401, ForceOpenAIFast: true})
 
 	account := &Account{
 		ID:          54,
@@ -1208,14 +1209,14 @@ func TestForwardGrokResponsesAPIKeyStreamingUsesOfficialXAIResponses(t *testing.
 			"base_url":  xai.DefaultBaseURL,
 			"using_api": true,
 			"model_mapping": map[string]any{
-				"grok": "grok-4.5",
+				"grok": "grok-4.6",
 			},
 		},
 	}
 	upstreamBody := strings.Join([]string{
 		`data: {"type":"response.output_text.delta","sequence_number":0,"delta":"ok"}`,
 		"",
-		`data: {"type":"response.completed","sequence_number":1,"response":{"id":"resp_grok_api","model":"grok-4.5","usage":{"input_tokens":4,"output_tokens":2}}}`,
+		`data: {"type":"response.completed","sequence_number":1,"response":{"id":"resp_grok_api","model":"grok-4.6","service_tier":"priority","usage":{"input_tokens":4,"output_tokens":2}}}`,
 		"",
 	}, "\n")
 	upstream := &httpUpstreamRecorder{resp: &http.Response{
@@ -1234,13 +1235,16 @@ func TestForwardGrokResponsesAPIKeyStreamingUsesOfficialXAIResponses(t *testing.
 	require.Equal(t, "Bearer xai-api-key", upstream.lastReq.Header.Get("Authorization"))
 	require.Empty(t, upstream.lastReq.Header.Get(xai.GrokCLITokenAuthHeader))
 	require.Empty(t, upstream.lastReq.Header.Get(xai.GrokCLIVersionHeader))
-	require.Equal(t, "grok-4.5", gjson.GetBytes(upstream.lastBody, "model").String())
+	require.Equal(t, "grok-4.6", gjson.GetBytes(upstream.lastBody, "model").String())
+	require.Equal(t, "priority", gjson.GetBytes(upstream.lastBody, "service_tier").String())
 	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
 	require.True(t, result.Stream)
 	require.Equal(t, "resp_grok_api", result.ResponseID)
 	require.Equal(t, "xai-api-stream-req", result.RequestID)
 	require.Equal(t, 4, result.Usage.InputTokens)
 	require.Equal(t, 2, result.Usage.OutputTokens)
+	require.NotNil(t, result.ServiceTier)
+	require.Equal(t, "priority", *result.ServiceTier)
 	require.Contains(t, recorder.Header().Get("Content-Type"), "text/event-stream")
 	require.Contains(t, recorder.Body.String(), "response.output_text.delta")
 }

@@ -3,12 +3,11 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/app/gateway/pipeline"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
@@ -24,106 +23,23 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 	account *Account,
 	body []byte,
 ) (*OpenAIForwardResult, error) {
-	startTime := time.Now()
-
-	flattenedBody, err := flattenOpenAIResponsesNamespaces(c, body)
-	if err != nil {
-		writeOpenAIResponsesFallbackError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
-		return nil, fmt.Errorf("flatten responses namespace tools: %w", err)
+	st := &responsesChatFallbackState{
+		c:         c,
+		startTime: time.Now(),
+		body:      body,
 	}
-	body = flattenedBody
-
-	var responsesReq apicompat.ResponsesRequest
-	if err := json.Unmarshal(body, &responsesReq); err != nil {
-		writeOpenAIResponsesFallbackError(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")
-		return nil, fmt.Errorf("parse responses request: %w", err)
+	platform := ""
+	if account != nil {
+		platform = account.Platform
 	}
-	originalModel := strings.TrimSpace(responsesReq.Model)
-	if originalModel == "" {
-		writeOpenAIResponsesFallbackError(c, http.StatusBadRequest, "invalid_request_error", "model is required")
-		return nil, fmt.Errorf("missing model in request")
+	ex := &pipeline.Exchange{
+		Ctx:      ctx,
+		Platform: platform,
+		Inbound:  body,
+		Account:  account,
 	}
-
-	clientStream := responsesReq.Stream
-	serviceTier := extractOpenAIServiceTierFromBody(body)
-	// custom 工具（如 codex 的 exec）降级为 function 工具转发，回程需按名字还原为
-	// custom_tool_call 项，先记下名字集合。
-	effectiveTools, err := apicompat.EffectiveResponsesTools(&responsesReq)
-	if err != nil {
-		writeOpenAIResponsesFallbackError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
-		return nil, fmt.Errorf("resolve responses tools: %w", err)
-	}
-	customTools := apicompat.CustomToolNames(effectiveTools)
-
-	chatReq, err := apicompat.ResponsesToChatCompletionsRequest(&responsesReq)
-	if err != nil {
-		writeOpenAIResponsesFallbackError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
-		return nil, fmt.Errorf("convert responses to chat completions: %w", err)
-	}
-
-	billingModel := resolveOpenAIForwardModel(account, originalModel, "")
-	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
-	reasoningEffort := extractOpenAIReasoningEffortFromBody(body, firstNonEmpty(upstreamModel, billingModel, originalModel))
-	// 国产模型默认 effort 补充：需要 mappedModel 判定，推迟到 billingModel 算出之后。
-	reasoningEffort = ApplyThinkingEnabledFallback(reasoningEffort, body, billingModel)
-	chatReq.Model = upstreamModel
-	if clientStream {
-		chatReq.StreamOptions = &apicompat.ChatStreamOptions{IncludeUsage: true}
-	}
-
-	chatBody, err := json.Marshal(chatReq)
-	if err != nil {
-		return nil, fmt.Errorf("marshal chat completions fallback request: %w", err)
-	}
-	chatBody, err = s.applyOpenAIFastPolicyToBody(ctx, account, upstreamModel, chatBody, forceOpenAIFastFromContext(c))
-	if err != nil {
-		var blocked *OpenAIFastBlockedError
-		if errors.As(err, &blocked) {
-			writeOpenAIFastPolicyBlockedResponse(c, blocked)
-		}
-		return nil, err
-	}
-	if account.Platform == PlatformKimi {
-		chatBody, err = normalizeKimiToolMessageLinks(chatBody)
-		if err != nil {
-			return nil, fmt.Errorf("normalize Kimi tool messages: %w", err)
-		}
-	}
-	if serviceTier == nil {
-		serviceTier = extractOpenAIServiceTierFromBody(chatBody)
-	}
-
-	logger.L().Debug("openai responses: forwarding via raw chat completions",
-		zap.Int64("account_id", account.ID),
-		zap.String("original_model", originalModel),
-		zap.String("billing_model", billingModel),
-		zap.String("upstream_model", upstreamModel),
-		zap.Bool("stream", clientStream),
-	)
-
-	// Build and send upstream request via the shared CC pipeline
-	apiKey, targetURL, err := s.resolveCCFallbackTarget(ctx, account)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := s.sendCCUpstreamRequestWithKimiRefresh(ctx, c, account, targetURL, chatBody, clientStream, apiKey, account.GetOpenAIUserAgent(), "")
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode >= 400 {
-		respBody, upstreamMsg := s.readOpenAIUpstreamError(resp)
-		if foErr := s.failoverOpenAIUpstreamHTTPError(ctx, c, account, resp, respBody, upstreamMsg, upstreamModel); foErr != nil {
-			return nil, foErr
-		}
-		return s.handleErrorResponse(ctx, resp, c, account, chatBody, billingModel)
-	}
-
-	if clientStream {
-		return s.streamChatCompletionsAsResponses(c, resp, originalModel, customTools, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
-	}
-	return s.bufferChatCompletionsAsResponses(c, resp, originalModel, customTools, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
+	ex.Set(responsesChatFallbackStateKey, st)
+	return s.finishResponsesChatFallback(st, s.responsesChatFallbackPipeline().Run(ex))
 }
 
 func (s *OpenAIGatewayService) bufferChatCompletionsAsResponses(

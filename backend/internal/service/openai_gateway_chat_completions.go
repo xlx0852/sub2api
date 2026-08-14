@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/app/gateway/pipeline"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
@@ -49,7 +50,9 @@ var cursorResponsesUnsupportedFields = []string{
 //   - APIKey 账号 + 强制或探测确认不支持 Responses → 走 forwardAsRawChatCompletions
 //     直转上游 /v1/chat/completions，不做协议转换
 //   - 其他所有情况（OAuth、APIKey 强制/探测确认支持、未探测）→ 走原有 CC→Responses
-//     转换路径（保留旧行为，存量未探测账号零兼容破坏）
+//     转换路径（parse → rewrite → transport → relay → settle）
+//
+// Grok / Kimi / raw CC 仍为入口短路径。
 func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	ctx context.Context,
 	c *gin.Context,
@@ -94,254 +97,21 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
 
-	startTime := time.Now()
-
-	// 1. Parse Chat Completions request
-	var chatReq apicompat.ChatCompletionsRequest
-	if err := json.Unmarshal(body, &chatReq); err != nil {
-		return nil, fmt.Errorf("parse chat completions request: %w", err)
+	st := &openaiChatForwardState{
+		c:                  c,
+		startTime:          time.Now(),
+		body:               body,
+		promptCacheKey:     promptCacheKey,
+		defaultMappedModel: defaultMappedModel,
 	}
-	originalModel := chatReq.Model
-	clientStream := chatReq.Stream
-
-	// 2. Resolve model mapping early so compat prompt_cache_key injection can
-	// derive a stable seed from the final upstream model family.
-	billingModel := resolveOpenAIForwardModel(account, originalModel, defaultMappedModel)
-	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
-
-	promptCacheKey = strings.TrimSpace(promptCacheKey)
-	compatPromptCacheInjected := false
-	if promptCacheKey == "" && account.Type == AccountTypeOAuth && shouldAutoInjectPromptCacheKeyForCompat(upstreamModel) {
-		promptCacheKey = deriveCompatPromptCacheKey(&chatReq, upstreamModel)
-		compatPromptCacheInjected = promptCacheKey != ""
+	ex := &pipeline.Exchange{
+		Ctx:      ctx,
+		Platform: account.Platform,
+		Inbound:  body,
+		Account:  account,
 	}
-
-	// 3. Build the upstream (Responses API) body.
-	//
-	// Cursor compatibility: some clients (notably Cursor cloud) send Responses
-	// API shaped bodies — `input: [...]` with no `messages` field — to the
-	// /v1/chat/completions URL. Running those through ChatCompletionsToResponses
-	// would silently drop Cursor's `input` array (the struct has no Input field)
-	// and produce `input: null`, which Codex upstreams reject with
-	// "Invalid type for 'input': expected a string, but got an object".
-	//
-	// Detect that shape and forward the raw body as-is, only rewriting `model`
-	// to the resolved upstream model. The downstream codex OAuth transform will
-	// still normalize store/stream/instructions/etc.
-	isResponsesShape := !gjson.GetBytes(body, "messages").Exists() && gjson.GetBytes(body, "input").Exists()
-
-	var (
-		responsesReq  *apicompat.ResponsesRequest
-		responsesBody []byte
-		err           error
-	)
-	if isResponsesShape {
-		responsesBody, err = sjson.SetBytes(body, "model", upstreamModel)
-		if err != nil {
-			return nil, fmt.Errorf("rewrite model in responses-shape body: %w", err)
-		}
-		// Strip Responses API parameters that no Codex upstream accepts.
-		// Because this branch forwards the raw body (the normal path rebuilds
-		// it from ChatCompletionsRequest and drops unknown fields naturally),
-		// we must filter these fields explicitly here — otherwise the upstream
-		// rejects the request with "Unsupported parameter: ...".
-		for _, field := range cursorResponsesUnsupportedFields {
-			if stripped, derr := sjson.DeleteBytes(responsesBody, field); derr == nil {
-				responsesBody = stripped
-			}
-		}
-		responsesBody, normalizedServiceTier, err := normalizeResponsesBodyServiceTier(responsesBody)
-		if err != nil {
-			return nil, fmt.Errorf("normalize service_tier in responses-shape body: %w", err)
-		}
-		// Minimal stub populated from the raw body so downstream billing
-		// propagation (ServiceTier, ReasoningEffort) keeps working.
-		responsesReq = &apicompat.ResponsesRequest{
-			Model:       upstreamModel,
-			ServiceTier: normalizedServiceTier,
-		}
-		if effort := gjson.GetBytes(responsesBody, "reasoning.effort").String(); effort != "" {
-			responsesReq.Reasoning = &apicompat.ResponsesReasoning{Effort: effort}
-		}
-	} else {
-		// Normal path: convert Chat Completions → Responses.
-		// ChatCompletionsToResponses always sets Stream=true (upstream always streams).
-		responsesReq, err = apicompat.ChatCompletionsToResponses(&chatReq)
-		if err != nil {
-			return nil, fmt.Errorf("convert chat completions to responses: %w", err)
-		}
-		responsesReq.Model = upstreamModel
-		normalizeResponsesRequestServiceTier(responsesReq)
-		responsesBody, err = json.Marshal(responsesReq)
-		if err != nil {
-			return nil, fmt.Errorf("marshal responses request: %w", err)
-		}
-	}
-
-	logFields := []zap.Field{
-		zap.Int64("account_id", account.ID),
-		zap.String("original_model", originalModel),
-		zap.String("billing_model", billingModel),
-		zap.String("upstream_model", upstreamModel),
-		zap.Bool("stream", clientStream),
-		zap.Bool("responses_shape", isResponsesShape),
-	}
-	if compatPromptCacheInjected {
-		logFields = append(logFields,
-			zap.Bool("compat_prompt_cache_key_injected", true),
-			zap.String("compat_prompt_cache_key_sha256", hashSensitiveValueForLog(promptCacheKey)),
-		)
-	}
-	logger.L().Debug("openai chat_completions: model mapping applied", logFields...)
-
-	if account.Type == AccountTypeOAuth {
-		var reqBody map[string]any
-		if err := json.Unmarshal(responsesBody, &reqBody); err != nil {
-			return nil, fmt.Errorf("unmarshal for codex transform: %w", err)
-		}
-		codexResult := applyCodexOAuthTransformWithOptions(reqBody, codexOAuthTransformOptions{
-			SkipDefaultInstructions: !isResponsesShape,
-		})
-		if !isResponsesShape {
-			ensureCodexOAuthInstructionsField(reqBody)
-		}
-		if codexResult.NormalizedModel != "" {
-			upstreamModel = codexResult.NormalizedModel
-		}
-		if codexResult.PromptCacheKey != "" {
-			promptCacheKey = codexResult.PromptCacheKey
-		} else if promptCacheKey != "" {
-			reqBody["prompt_cache_key"] = promptCacheKey
-		}
-		responsesBody, err = json.Marshal(reqBody)
-		if err != nil {
-			return nil, fmt.Errorf("remarshal after codex transform: %w", err)
-		}
-	}
-
-	if account.Type == AccountTypeAPIKey {
-		if trimmedKey := strings.TrimSpace(promptCacheKey); trimmedKey != "" {
-			var reqBody map[string]any
-			if err := json.Unmarshal(responsesBody, &reqBody); err != nil {
-				return nil, fmt.Errorf("unmarshal for prompt cache key injection: %w", err)
-			}
-			if existing, ok := reqBody["prompt_cache_key"].(string); !ok || strings.TrimSpace(existing) == "" {
-				reqBody["prompt_cache_key"] = trimmedKey
-				responsesBody, err = json.Marshal(reqBody)
-				if err != nil {
-					return nil, fmt.Errorf("remarshal after prompt cache key injection: %w", err)
-				}
-			}
-		}
-	}
-
-	// 4b. Apply OpenAI fast policy (may filter service_tier or block the request).
-	updatedBody, policyErr := s.applyOpenAIFastPolicyToBody(ctx, account, upstreamModel, responsesBody, forceOpenAIFastFromContext(c))
-	if policyErr != nil {
-		var blocked *OpenAIFastBlockedError
-		if errors.As(policyErr, &blocked) {
-			MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
-			writeChatCompletionsError(c, http.StatusForbidden, "permission_error", blocked.Message)
-		}
-		return nil, policyErr
-	}
-	responsesBody = updatedBody
-
-	// 5. Get access token
-	token, _, err := s.GetAccessToken(ctx, account)
-	if err != nil {
-		return nil, fmt.Errorf("get access token: %w", err)
-	}
-
-	// 6. Build upstream request
-	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
-	upstreamReq, err := s.buildUpstreamRequest(upstreamCtx, c, account, responsesBody, token, true, promptCacheKey, false)
-	releaseUpstreamCtx()
-	if err != nil {
-		return nil, fmt.Errorf("build upstream request: %w", err)
-	}
-
-	if promptCacheKey != "" {
-		apiKeyID := getAPIKeyIDFromContext(c)
-		upstreamReq.Header.Set("session_id", generateSessionUUID(isolateOpenAISessionID(apiKeyID, promptCacheKey)))
-	}
-
-	// 7. Send request
-	proxyURL := ""
-	if account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
-	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
-	if err != nil {
-		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	// 8. Handle error response with failover
-	if resp.StatusCode >= 400 {
-		respBody, upstreamMsg := s.readOpenAIUpstreamError(resp)
-		if !agentIdentityTaskRecoveryWasTried(ctx) && s.isAgentIdentityAccount(ctx, account) && isAgentIdentityTaskInvalidHTTPResponse(resp.StatusCode, respBody) {
-			expectedTaskID := account.GetCredential("task_id")
-			if err := s.recoverAgentIdentityTask(ctx, account, expectedTaskID); err != nil {
-				return nil, fmt.Errorf("agent identity task recovery failed: %w", err)
-			}
-			return s.ForwardAsChatCompletions(markAgentIdentityTaskRecoveryTried(ctx), c, account, body, promptCacheKey, defaultMappedModel)
-		}
-		if account.Type == AccountTypeAPIKey &&
-			openai_compat.ResolveResponsesSupport(account.Extra) == openai_compat.ResponsesSupportUnknown &&
-			!isResponsesEndpointSupportedByStatus(resp.StatusCode) {
-			logger.L().Info("openai chat_completions: /responses unsupported, falling back to raw chat completions",
-				zap.Int64("account_id", account.ID),
-				zap.Int("upstream_status", resp.StatusCode),
-				zap.String("upstream_message", upstreamMsg),
-			)
-			return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
-		}
-		if foErr := s.failoverOpenAIUpstreamHTTPError(ctx, c, account, resp, respBody, upstreamMsg, upstreamModel); foErr != nil {
-			return nil, foErr
-		}
-		return s.handleChatCompletionsErrorResponse(resp, c, account, billingModel)
-	}
-
-	// 9. Handle normal response
-	var result *OpenAIForwardResult
-	var handleErr error
-	if clientStream {
-		result, handleErr = s.handleChatStreamingResponse(resp, c, account, originalModel, billingModel, upstreamModel, startTime, len(body))
-	} else {
-		result, handleErr = s.handleChatBufferedStreamingResponse(resp, c, account, originalModel, billingModel, upstreamModel, startTime)
-	}
-
-	// cyber_policy：标记已设、error 已按 Chat Completions 格式发给客户端。丢弃 result、
-	// 返回哨兵，使 handler 落入 tokens=0 免费用量行（对齐 /v1/responses），不计费、不 failover。
-	if GetOpsCyberPolicy(c) != nil {
-		if handleErr == nil {
-			handleErr = errOpenAICyberPolicyForwarded
-		}
-		return nil, handleErr
-	}
-
-	// Propagate ServiceTier and ReasoningEffort to result for billing.
-	// ServiceTier must come from post-policy body so Key force-fast / admin filter are reflected.
-	if handleErr == nil && result != nil {
-		if tier := extractOpenAIServiceTierFromBody(responsesBody); tier != nil {
-			result.ServiceTier = tier
-		}
-		if responsesReq.Reasoning != nil && responsesReq.Reasoning.Effort != "" {
-			re := responsesReq.Reasoning.Effort
-			result.ReasoningEffort = &re
-		}
-	}
-
-	// Extract and save Codex usage snapshot from response headers (for OAuth accounts).
-	// 排除 spark 影子:其 codex_* 仅由 QueryUsage(/wham/usage bengalfox)更新(外审第7轮 P1)。
-	if handleErr == nil && account.Type == AccountTypeOAuth && !account.IsShadow() {
-		if snapshot := ParseCodexRateLimitHeaders(resp.Header); snapshot != nil {
-			s.updateCodexUsageSnapshot(ctx, account.ID, snapshot)
-		}
-	}
-
-	return result, handleErr
+	ex.Set(openaiChatForwardStateKey, st)
+	return s.finishOpenAIChatForward(st, s.openaiChatForwardPipeline().Run(ex))
 }
 
 func normalizeResponsesRequestServiceTier(req *apicompat.ResponsesRequest) {

@@ -147,7 +147,7 @@ func (m *openAIWSPassthroughUsageMeta) initFromFirstFrame(policyOutput []byte, m
 		return
 	}
 	m.serviceTier.Store(extractOpenAIServiceTierFromBody(policyOutput))
-	m.reasoningEffort.Store(extractOpenAIReasoningEffortFromBody(policyOutput, firstNonEmpty(mappedModel, m.sessionRequestModel)))
+	m.reasoningEffort.Store(extractOpenAIWSPassthroughUsageReasoningEffort(policyOutput, mappedModel, m.sessionRequestModel))
 }
 
 func (m *openAIWSPassthroughUsageMeta) updateSessionRequestModel(payload []byte) {
@@ -174,7 +174,20 @@ func (m *openAIWSPassthroughUsageMeta) updateFromResponseCreate(policyOutput []b
 		return
 	}
 	m.serviceTier.Store(extractOpenAIServiceTierFromBody(policyOutput))
-	m.reasoningEffort.Store(extractOpenAIReasoningEffortFromBody(policyOutput, firstNonEmpty(mappedModel, requestModelForFrame)))
+	m.reasoningEffort.Store(extractOpenAIWSPassthroughUsageReasoningEffort(policyOutput, mappedModel, requestModelForFrame))
+}
+
+func extractOpenAIWSPassthroughUsageReasoningEffort(body []byte, mappedModel, requestModel string) *string {
+	// Explicit effort is normalized against the mapped upstream model (for
+	// example, gpt-5.6 keeps "max"). When effort is implicit in a model suffix,
+	// usage attribution must instead inspect the client's original model because
+	// channel mapping may intentionally strip that suffix before forwarding.
+	hasExplicitEffort := strings.TrimSpace(gjson.GetBytes(body, "reasoning.effort").String()) != "" ||
+		strings.TrimSpace(gjson.GetBytes(body, "reasoning_effort").String()) != ""
+	if hasExplicitEffort {
+		return extractOpenAIReasoningEffortFromBody(body, firstNonEmpty(mappedModel, requestModel))
+	}
+	return extractOpenAIReasoningEffortFromBody(body, firstNonEmpty(requestModel, mappedModel))
 }
 
 func openAIWSPassthroughRequestModelForFrame(payload []byte) string {
@@ -304,6 +317,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, blocked.Message, blocked)
 	}
 	firstClientMessage = updatedFirst
+	fingerprintIDs := resolveCodexFingerprintIDsFromContext(c, account)
+	firstClientMessage = applyCodexFingerprintJSONBytes(firstClientMessage, fingerprintIDs)
 
 	// 在 policy filter 之后再提取 service_tier / reasoning_effort 用于
 	// usage 上报：filter
@@ -434,6 +449,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		filter: func(msgType coderws.MessageType, payload []byte) ([]byte, *OpenAIFastBlockedError, error) {
 			if msgType != coderws.MessageText {
 				return payload, nil, nil
+			}
+			if strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create" {
+				payload = applyCodexFingerprintJSONBytes(payload, nextCodexFingerprintTurnIDs(fingerprintIDs))
 			}
 			if strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create" && hooks != nil && hooks.BeforeRequest != nil {
 				turnNo := int(completedTurns.Load()) + 1

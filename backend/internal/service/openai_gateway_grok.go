@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/app/gateway/pipeline"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
@@ -38,139 +38,22 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 	reqStream bool,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
-	if account.Type != AccountTypeOAuth && account.Type != AccountTypeAPIKey {
-		return nil, fmt.Errorf("grok account type %s is not supported by responses forwarding", account.Type)
+	st := &grokForwardState{
+		c:             c,
+		startTime:     startTime,
+		body:          body,
+		originalModel: originalModel,
+		reqStream:     reqStream,
 	}
-
-	upstreamModel := account.GetMappedModel(originalModel)
-	if strings.TrimSpace(upstreamModel) == "" {
-		upstreamModel = xai.CurrentDefaultChatModel()
+	ex := &pipeline.Exchange{
+		Ctx:            ctx,
+		Platform:       PlatformGrok,
+		RequestedModel: originalModel,
+		Inbound:        body,
+		Account:        account,
 	}
-	cacheIdentity := resolveGrokCacheIdentity(c, body, "", upstreamModel)
-	patchedBody, translation, err := patchGrokResponsesBodyWithTranslation(body, upstreamModel)
-	if err != nil {
-		return nil, err
-	}
-	setGrokCodexTranslation(c, translation)
-	patchedBody, err = applyGrokResponsesCacheIdentity(patchedBody, body, cacheIdentity, account.IsGrokOAuth())
-	if err != nil {
-		return nil, fmt.Errorf("apply grok prompt cache identity: %w", err)
-	}
-	patchedBody, err = s.optimizeGrokPayload(account, patchedBody, grokPayloadResponses)
-	if err != nil {
-		if handleGrokPayloadOptimizationError(c, grokPayloadResponses, err) {
-			return nil, err
-		}
-		return nil, fmt.Errorf("optimize Grok Responses payload: %w", err)
-	}
-
-	token, _, credential, err := s.getGrokAccessTokenWithDescriptor(ctx, account)
-	if err != nil {
-		return nil, err
-	}
-
-	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
-	defer releaseUpstreamCtx()
-	upstreamReq, err := buildGrokResponsesRequest(upstreamCtx, c, account, patchedBody, token, cacheIdentity)
-	if err != nil {
-		return nil, err
-	}
-
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
-
-	upstreamStart := time.Now()
-	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
-	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
-	if err != nil {
-		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode >= 400 {
-		respBody := s.readUpstreamErrorBody(resp)
-		resp.Body = io.NopCloser(bytes.NewReader(respBody))
-		s.updateGrokUsageSnapshot(ctx, account, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
-		upstreamMsg := sanitizeUpstreamErrorMessage(extractUpstreamErrorMessage(respBody))
-		if upstreamMsg == "" {
-			upstreamMsg = fmt.Sprintf("xAI upstream returned status %d", resp.StatusCode)
-		}
-		attribution := s.attributeGrokUnauthorized(ctx, c, account, resp.StatusCode, credential)
-		retryDisabled := grokUpstreamExplicitlyDisablesRetry(resp.Header)
-		if retryDisabled {
-			return s.handleErrorResponse(ctx, resp, c, account, patchedBody, upstreamModel)
-		}
-		opsEvent := OpsUpstreamErrorEvent{
-			Platform:           account.Platform,
-			AccountID:          account.ID,
-			AccountName:        account.Name,
-			UpstreamStatusCode: resp.StatusCode,
-			UpstreamRequestID:  firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id")),
-			Kind:               "failover",
-			Message:            upstreamMsg,
-		}
-		applyGrokUnauthorizedAttribution(&opsEvent, attribution)
-		appendOpsUpstreamError(c, opsEvent)
-		grokSameAccountRetry := s.isGrokSameAccountRetry(c, resp.StatusCode)
-		penalizeAccount := shouldPenalizeGrokUnauthorized(resp.StatusCode, attribution)
-		if !grokSameAccountRetry && penalizeAccount {
-			s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
-		}
-		if s.shouldFailoverUpstreamError(resp.StatusCode) {
-			return nil, &UpstreamFailoverError{
-				StatusCode:                resp.StatusCode,
-				ResponseBody:              respBody,
-				ResponseHeaders:           resp.Header.Clone(),
-				RetryableOnSameAccount:    grokSameAccountRetry || (account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode)),
-				GrokSameAccountRetry:      grokSameAccountRetry,
-				GrokAccountPenaltyApplied: !grokSameAccountRetry && penalizeAccount,
-				GrokStaleCredential:       !penalizeAccount,
-			}
-		}
-		return s.handleErrorResponse(ctx, resp, c, account, patchedBody, upstreamModel)
-	}
-
-	s.updateGrokUsageSnapshot(ctx, account, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
-
-	var usage *OpenAIUsage
-	var firstTokenMs *int
-	responseID := ""
-	if reqStream {
-		streamResult, err := s.handleStreamingResponse(ctx, resp, c, account, startTime, originalModel, upstreamModel)
-		if err != nil {
-			return nil, err
-		}
-		usage = streamResult.usage
-		firstTokenMs = streamResult.firstTokenMs
-		responseID = strings.TrimSpace(streamResult.responseID)
-	} else {
-		nonStreamResult, err := s.handleNonStreamingResponse(ctx, resp, c, account, originalModel, upstreamModel)
-		if err != nil {
-			return nil, err
-		}
-		usage = nonStreamResult.usage
-		responseID = strings.TrimSpace(nonStreamResult.responseID)
-	}
-
-	if usage == nil {
-		usage = &OpenAIUsage{}
-	}
-	reasoningEffort := extractOpenAIReasoningEffortFromBody(patchedBody, originalModel)
-	return &OpenAIForwardResult{
-		RequestID:       firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id")),
-		ResponseID:      responseID,
-		Usage:           *usage,
-		Model:           originalModel,
-		UpstreamModel:   upstreamModel,
-		ReasoningEffort: reasoningEffort,
-		Stream:          reqStream,
-		OpenAIWSMode:    false,
-		ResponseHeaders: resp.Header.Clone(),
-		Duration:        time.Since(startTime),
-		FirstTokenMs:    firstTokenMs,
-	}, nil
+	ex.Set(grokForwardStateKey, st)
+	return s.finishGrokForward(st, s.grokForwardPipeline().Run(ex))
 }
 
 func patchGrokResponsesBody(body []byte, upstreamModel string) ([]byte, error) {

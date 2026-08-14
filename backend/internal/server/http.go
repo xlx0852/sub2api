@@ -61,7 +61,7 @@ func ProvideRouter(
 	// Wire up websearch Manager builder so it initializes on startup and rebuilds on config save.
 	settingService.SetWebSearchManagerBuilder(context.Background(), func(cfg *service.WebSearchEmulationConfig, proxyURLs map[int64]string) {
 		if cfg == nil || !cfg.Enabled || len(cfg.Providers) == 0 {
-			service.SetWebSearchManager(nil)
+			settingService.SetWebSearchManager(nil)
 			return
 		}
 		configs := make([]websearch.ProviderConfig, 0, len(cfg.Providers))
@@ -91,7 +91,7 @@ func ProvideRouter(
 			}
 			configs = append(configs, pc)
 		}
-		service.SetWebSearchManager(websearch.NewManager(configs, redisClient))
+		settingService.SetWebSearchManager(websearch.NewManager(configs, redisClient))
 	})
 
 	return SetupRouter(r, handlers, jwtAuth, adminAuth, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, cfg, redisClient)

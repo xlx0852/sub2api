@@ -3,14 +3,12 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/app/gateway/pipeline"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
 )
 
@@ -202,8 +200,6 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (*OpenAIForwardResult, error) {
-	startTime := time.Now()
-
 	var chatReq apicompat.ChatCompletionsRequest
 	if err := json.Unmarshal(body, &chatReq); err != nil {
 		return nil, fmt.Errorf("parse grok chat completions request: %w", err)
@@ -217,129 +213,24 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
 
-	responsesReq, err := apicompat.ChatCompletionsToResponses(&chatReq)
-	if err != nil {
-		return nil, fmt.Errorf("convert grok chat completions to responses: %w", err)
+	st := &grokChatForwardState{
+		c:             c,
+		startTime:     time.Now(),
+		body:          body,
+		chatReq:       &chatReq,
+		originalModel: originalModel,
+		billingModel:  billingModel,
+		upstreamModel: upstreamModel,
+		clientStream:  clientStream,
+		cacheIdentity: cacheIdentity,
 	}
-	responsesReq.Model = upstreamModel
-	responsesReq.Stream = true
-	// These fields are useful to Codex but are not needed by the Grok CLI
-	// protocol. Keep the bridge request as close as possible to native Grok.
-	responsesReq.Include = nil
-	responsesReq.Store = nil
-
-	responsesBody, err := json.Marshal(responsesReq)
-	if err != nil {
-		return nil, fmt.Errorf("marshal grok responses bridge request: %w", err)
+	ex := &pipeline.Exchange{
+		Ctx:            ctx,
+		Platform:       account.Platform,
+		RequestedModel: originalModel,
+		Inbound:        body,
+		Account:        account,
 	}
-	responsesBody, err = patchGrokResponsesBody(responsesBody, upstreamModel)
-	if err != nil {
-		return nil, fmt.Errorf("patch grok responses bridge request: %w", err)
-	}
-	intentBody, err := grokChatCacheIntentBody(body)
-	if err != nil {
-		return nil, fmt.Errorf("normalize grok responses bridge tool intent: %w", err)
-	}
-	responsesBody, err = applyGrokResponsesCacheIdentity(responsesBody, intentBody, cacheIdentity, true)
-	if err != nil {
-		return nil, fmt.Errorf("apply grok responses bridge cache identity: %w", err)
-	}
-
-	updatedBody, policyErr := s.applyOpenAIFastPolicyToBody(ctx, account, upstreamModel, responsesBody, forceOpenAIFastFromContext(c))
-	if policyErr != nil {
-		var blocked *OpenAIFastBlockedError
-		if errors.As(policyErr, &blocked) {
-			MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
-			writeChatCompletionsError(c, http.StatusForbidden, "permission_error", blocked.Message)
-		}
-		return nil, policyErr
-	}
-	responsesBody = updatedBody
-	responsesBody, err = s.optimizeGrokPayload(account, responsesBody, grokPayloadResponses)
-	if err != nil {
-		if handleGrokPayloadOptimizationError(c, grokPayloadChat, err) {
-			return nil, err
-		}
-		return nil, fmt.Errorf("optimize Grok Responses bridge payload: %w", err)
-	}
-
-	token, _, credential, err := s.getGrokAccessTokenWithDescriptor(ctx, account)
-	if err != nil {
-		return nil, fmt.Errorf("get grok access token: %w", err)
-	}
-	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
-	upstreamReq, err := buildGrokResponsesRequest(upstreamCtx, c, account, responsesBody, token, cacheIdentity)
-	releaseUpstreamCtx()
-	if err != nil {
-		return nil, fmt.Errorf("build grok responses bridge request: %w", err)
-	}
-	SetActualOpenAIUpstreamEndpoint(c, grokChatResponsesEndpoint)
-
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
-	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
-	if err != nil {
-		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode >= http.StatusBadRequest {
-		respBody, upstreamMsg := s.readOpenAIUpstreamError(resp)
-		if upstreamMsg == "" {
-			upstreamMsg = fmt.Sprintf("xAI upstream returned status %d", resp.StatusCode)
-		}
-		attribution := s.attributeGrokUnauthorized(ctx, c, account, resp.StatusCode, credential)
-		retryDisabled := grokUpstreamExplicitlyDisablesRetry(resp.Header)
-		if retryDisabled {
-			return s.handleChatCompletionsErrorResponse(resp, c, account, billingModel)
-		}
-		opsEvent := OpsUpstreamErrorEvent{
-			Platform:           account.Platform,
-			AccountID:          account.ID,
-			AccountName:        account.Name,
-			UpstreamStatusCode: resp.StatusCode,
-			UpstreamRequestID:  firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id")),
-			Kind:               "failover",
-			Message:            upstreamMsg,
-		}
-		applyGrokUnauthorizedAttribution(&opsEvent, attribution)
-		appendOpsUpstreamError(c, opsEvent)
-		grokSameAccountRetry := s.isGrokSameAccountRetry(c, resp.StatusCode)
-		penalizeAccount := shouldPenalizeGrokUnauthorized(resp.StatusCode, attribution)
-		if !grokSameAccountRetry && penalizeAccount {
-			s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
-		}
-		if s.shouldFailoverUpstreamError(resp.StatusCode) {
-			return nil, &UpstreamFailoverError{
-				StatusCode:                resp.StatusCode,
-				ResponseBody:              respBody,
-				ResponseHeaders:           resp.Header.Clone(),
-				RetryableOnSameAccount:    grokSameAccountRetry || (account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode)),
-				GrokSameAccountRetry:      grokSameAccountRetry,
-				GrokAccountPenaltyApplied: !grokSameAccountRetry && penalizeAccount,
-				GrokStaleCredential:       !penalizeAccount,
-			}
-		}
-		return s.handleChatCompletionsErrorResponse(resp, c, account, billingModel)
-	}
-
-	s.updateGrokUsageSnapshot(ctx, account, xai.ParseQuotaHeaders(resp.Header, resp.StatusCode))
-
-	var result *OpenAIForwardResult
-	if clientStream {
-		result, err = s.handleChatStreamingResponse(resp, c, account, originalModel, billingModel, upstreamModel, startTime, len(body))
-	} else {
-		result, err = s.handleChatBufferedStreamingResponse(resp, c, account, originalModel, billingModel, upstreamModel, startTime)
-	}
-	if result != nil {
-		result.UpstreamEndpoint = grokChatResponsesEndpoint
-		result.ResponseHeaders = resp.Header.Clone()
-		if result.RequestID == "" {
-			result.RequestID = firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id"))
-		}
-		result.ReasoningEffort = extractOpenAIReasoningEffortFromBody(body, firstNonEmpty(upstreamModel, billingModel, originalModel))
-	}
-	return result, err
+	ex.Set(grokChatForwardStateKey, st)
+	return s.finishGrokChatForward(st, s.grokChatForwardPipeline().Run(ex))
 }

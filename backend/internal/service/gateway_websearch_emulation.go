@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/websearch"
@@ -35,24 +34,12 @@ const (
 	featureKeyWebSearchEmulation = "web_search_emulation"
 )
 
-// webSearchManagerPtr stores *websearch.Manager atomically for concurrent safety.
-var webSearchManagerPtr atomic.Pointer[websearch.Manager]
-
-// SetWebSearchManager wires the websearch.Manager into the gateway (goroutine-safe).
-func SetWebSearchManager(m *websearch.Manager) {
-	webSearchManagerPtr.Store(m)
-}
-
-func getWebSearchManager() *websearch.Manager {
-	return webSearchManagerPtr.Load()
-}
-
 // shouldEmulateWebSearch checks whether a request should be intercepted.
 //
 // Judgment chain: manager exists → only web_search tool → global enabled → account/channel enabled.
 // Account-level mode: "enabled" (force on), "disabled" (force off), "default" (follow channel).
 func (s *GatewayService) shouldEmulateWebSearch(ctx context.Context, account *Account, groupID *int64, body []byte) bool {
-	if getWebSearchManager() == nil {
+	if s.webSearchManager() == nil {
 		return false
 	}
 	if !isOnlyWebSearchToolInBody(body) {
@@ -158,7 +145,7 @@ func (s *GatewayService) handleWebSearchEmulation(
 	slog.Info("web search emulation: executing search",
 		"account_id", account.ID, "account_name", account.Name, "query", query)
 
-	resp, providerName, err := doWebSearch(ctx, account, query)
+	resp, providerName, err := s.doWebSearch(ctx, account, query)
 	if err != nil {
 		// Proxy unavailable → trigger account switch via UpstreamFailoverError
 		if errors.Is(err, websearch.ErrProxyUnavailable) {
@@ -184,9 +171,16 @@ func (s *GatewayService) handleWebSearchEmulation(
 	return writeWebSearchNonStreamResponse(c, query, resp, model, startTime)
 }
 
-func doWebSearch(ctx context.Context, account *Account, query string) (*websearch.SearchResponse, string, error) {
+func (s *GatewayService) webSearchManager() *websearch.Manager {
+	if s == nil || s.settingService == nil {
+		return nil
+	}
+	return s.settingService.WebSearchManager()
+}
+
+func (s *GatewayService) doWebSearch(ctx context.Context, account *Account, query string) (*websearch.SearchResponse, string, error) {
 	proxyURL := resolveAccountProxyURL(account)
-	mgr := getWebSearchManager()
+	mgr := s.webSearchManager()
 	if mgr == nil {
 		return nil, "", fmt.Errorf("web search emulation: manager not initialized")
 	}

@@ -29,7 +29,29 @@ type Exchange struct {
 	Group          *domain.Group
 	Inbound        []byte
 	Outbound       []byte
+	UpstreamModel  string
+	Values         map[string]any
+	StageDuration  map[StageName]int64
 	Err            error
+}
+
+// Set 写入 provider 私有状态。管道本身不解释 key。
+func (ex *Exchange) Set(key string, value any) {
+	if ex == nil {
+		return
+	}
+	if ex.Values == nil {
+		ex.Values = make(map[string]any)
+	}
+	ex.Values[key] = value
+}
+
+// Get 读取 provider 私有状态。
+func (ex *Exchange) Get(key string) any {
+	if ex == nil || ex.Values == nil {
+		return nil
+	}
+	return ex.Values[key]
 }
 
 // Stage 是管道中的一个生命周期步骤。

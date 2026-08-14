@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
@@ -38,6 +39,7 @@ var gatewayCompatibilityMetricsLogCounter atomic.Uint64
 // GatewayHandler handles API gateway requests
 type GatewayHandler struct {
 	gatewayService            *service.GatewayService
+	accountSelector           scheduling.AccountSelector
 	geminiCompatService       *service.GeminiMessagesCompatService
 	antigravityGatewayService *service.AntigravityGatewayService
 	userService               *service.UserService
@@ -93,6 +95,7 @@ func NewGatewayHandler(
 
 	return &GatewayHandler{
 		gatewayService:            gatewayService,
+		accountSelector:           service.NewGatewayAccountSelector(gatewayService),
 		geminiCompatService:       geminiCompatService,
 		antigravityGatewayService: antigravityGatewayService,
 		userService:               userService,
@@ -298,7 +301,12 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 		}
 
 		for {
-			selection, err := h.gatewayService.SelectAccountWithLoadAwareness(c.Request.Context(), apiKey.GroupID, sessionKey, reqModel, fs.FailedAccountIDs, "", int64(0)) // Gemini 不使用会话限制
+			selection, err := service.AccountSelectionFromScheduling(h.accountSelector.Select(c.Request.Context(), scheduling.Request{
+				GroupID:        apiKey.GroupID,
+				StickyKey:      sessionKey,
+				RequestedModel: reqModel,
+				ExcludedIDs:    fs.FailedAccountIDs,
+			})) // Gemini 不使用会话限制
 			if err != nil {
 				if len(fs.FailedAccountIDs) == 0 {
 					cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, reqModel, reqModel, service.PlatformGemini)
@@ -595,7 +603,14 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				zap.Bool("has_bound_session", hasBoundSession),
 				zap.Int("failed_account_count", len(fs.FailedAccountIDs)),
 			)
-			selection, err := h.gatewayService.SelectAccountWithLoadAwareness(c.Request.Context(), currentAPIKey.GroupID, sessionKey, reqModel, fs.FailedAccountIDs, parsedReq.MetadataUserID, subject.UserID)
+			selection, err := service.AccountSelectionFromScheduling(h.accountSelector.Select(c.Request.Context(), scheduling.Request{
+				GroupID:        currentAPIKey.GroupID,
+				StickyKey:      sessionKey,
+				RequestedModel: reqModel,
+				ExcludedIDs:    fs.FailedAccountIDs,
+				MetadataUserID: parsedReq.MetadataUserID,
+				Sub2APIUserID:  subject.UserID,
+			}))
 			if err != nil {
 				if len(fs.FailedAccountIDs) == 0 {
 					cls := classifyNoAccountErrorFromGin(c, h.gatewayService, currentAPIKey, reqModel, reqModel, platform)

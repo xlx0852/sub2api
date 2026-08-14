@@ -1604,7 +1604,27 @@ func (p *openAIWSConnPool) prewarmConns(accountID int64, req openAIWSAcquireRequ
 	if len(generations) > 0 {
 		generation = generations[0]
 	}
+	// remaining 跟踪尚未在循环内归还的 creating 名额。defer 保证即使 dialConn panic 或提前 return，
+	// 也把未消费的 creating 归还，避免账户池永远认为“仍在建连”而饿死后续 Acquire。
+	remaining := total
+	releaseRemainingCreating := func() {
+		if remaining <= 0 {
+			return
+		}
+		if ap, ok := p.getAccountPool(accountID); ok && ap != nil {
+			ap.mu.Lock()
+			if ap.creating >= remaining {
+				ap.creating -= remaining
+			} else {
+				ap.creating = 0
+			}
+			ap.signalChangedLocked()
+			ap.mu.Unlock()
+		}
+		remaining = 0
+	}
 	defer func() {
+		releaseRemainingCreating()
 		if ap, ok := p.getAccountPool(accountID); ok && ap != nil {
 			ap.mu.Lock()
 			ap.prewarmActive = false
@@ -1628,6 +1648,7 @@ func (p *openAIWSConnPool) prewarmConns(accountID int64, req openAIWSAcquireRequ
 		if ap.creating > 0 {
 			ap.creating--
 		}
+		remaining--
 		if err != nil {
 			ap.prewarmFails++
 			ap.prewarmFailAt = time.Now()

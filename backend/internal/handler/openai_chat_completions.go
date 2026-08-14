@@ -196,7 +196,14 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		_ = scheduleDecision
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
-		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, reqModel, reqStream, &streamStarted, reqLog)
+		acquireSessionHash := sessionHash
+		if pinnedRetry {
+			// The scheduler already bound this session when it selected the account.
+			// A same-account retry only needs to reacquire the released slot; rebinding
+			// would add a repository lookup without changing the selected account.
+			acquireSessionHash = ""
+		}
+		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, acquireSessionHash, selection, reqModel, reqStream, &streamStarted, reqLog)
 		if !acquired {
 			if penalty := grokRetry.penaltyForFailedAttempt(nil); penalty != nil {
 				h.gatewayService.ApplyGrokSameAccountRetryPenalty(c.Request.Context(), account, penalty)

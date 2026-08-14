@@ -1,18 +1,96 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
 
 type openAIFastPolicyRepoStub struct {
 	values map[string]string
+}
+
+func TestForwardGrokResponses_APIKeyForceFastInjectsPriorityAndRecordsTier(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"grok-4.6","input":"hi","stream":true}`)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Set("api_key", &APIKey{ID: 1, ForceOpenAIFast: true})
+	account := &Account{
+		ID: 1, Platform: PlatformGrok, Type: AccountTypeAPIKey, Concurrency: 1,
+		Credentials: map[string]any{"api_key": "xai-test", "base_url": xai.DefaultBaseURL, "using_api": true},
+	}
+	upstreamBody := strings.Join([]string{
+		`data: {"type":"response.output_text.delta","sequence_number":0,"delta":"ok"}`,
+		"",
+		`data: {"type":"response.completed","sequence_number":1,"response":{"id":"resp_fast","model":"grok-4.6","service_tier":"priority","usage":{"input_tokens":4,"output_tokens":2}}}`,
+		"",
+	}, "\n")
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       io.NopCloser(strings.NewReader(upstreamBody)),
+	}}
+	svc := &OpenAIGatewayService{httpUpstream: upstream}
+
+	result, err := svc.Forward(context.Background(), c, account, body)
+	require.NoError(t, err)
+	require.Equal(t, "priority", gjson.GetBytes(upstream.lastBody, "service_tier").String())
+	require.NotNil(t, result.ServiceTier)
+	require.Equal(t, "priority", *result.ServiceTier)
+}
+
+func TestForwardGrokResponses_APIKeyForceFastRespectsAdminBlock(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	settings := &OpenAIFastPolicySettings{Rules: []OpenAIFastPolicyRule{{
+		ServiceTier:  OpenAIFastTierPriority,
+		Action:       BetaPolicyActionBlock,
+		Scope:        BetaPolicyScopeAll,
+		ErrorMessage: "grok priority blocked",
+	}}}
+	svc := newOpenAIGatewayServiceWithSettings(t, settings)
+	body := []byte(`{"model":"grok-4.6","input":"hi","stream":true}`)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Set("api_key", &APIKey{ID: 1, ForceOpenAIFast: true})
+	account := &Account{ID: 1, Platform: PlatformGrok, Type: AccountTypeAPIKey}
+
+	_, err := svc.forwardGrokResponses(context.Background(), c, account, body, "grok-4.6", true, time.Now())
+	require.Error(t, err)
+	var blocked *OpenAIFastBlockedError
+	require.ErrorAs(t, err, &blocked)
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "grok priority blocked")
+}
+
+func TestGrokResponsesFastPolicy_NoForceLeavesTierAbsent(t *testing.T) {
+	svc := newOpenAIGatewayServiceWithSettings(t, DefaultOpenAIFastPolicySettings())
+	body := []byte(`{"model":"grok-4.6","input":"hi"}`)
+	updated, err := svc.applyOpenAIFastPolicyToBody(
+		context.Background(),
+		&Account{Platform: PlatformGrok, Type: AccountTypeAPIKey},
+		"grok-4.6",
+		body,
+		false,
+	)
+	require.NoError(t, err)
+	require.JSONEq(t, string(body), string(updated))
+	require.False(t, gjson.GetBytes(updated, "service_tier").Exists())
 }
 
 func (s *openAIFastPolicyRepoStub) Get(ctx context.Context, key string) (*Setting, error) {
@@ -326,7 +404,6 @@ func TestSetOpenAIFastPolicySettings_Validation(t *testing.T) {
 	require.Equal(t, OpenAIFastPolicyActionForcePriority, got.Rules[0].Action)
 }
 
-
 func TestApplyOpenAIFastPolicyToBody_APIKeyForceFastInjectsPriority(t *testing.T) {
 	svc := newOpenAIGatewayServiceWithSettings(t, DefaultOpenAIFastPolicySettings())
 	account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
@@ -358,9 +435,9 @@ func TestApplyOpenAIFastPolicyToBody_APIKeyForceFastWinsOverAdminFilter(t *testi
 
 func TestApplyOpenAIFastPolicyToBody_APIKeyForceFastRespectsAdminBlock(t *testing.T) {
 	settings := &OpenAIFastPolicySettings{Rules: []OpenAIFastPolicyRule{{
-		ServiceTier: OpenAIFastTierPriority,
-		Action:      BetaPolicyActionBlock,
-		Scope:       "all",
+		ServiceTier:  OpenAIFastTierPriority,
+		Action:       BetaPolicyActionBlock,
+		Scope:        "all",
 		ErrorMessage: "priority blocked",
 	}}}
 	svc := newOpenAIGatewayServiceWithSettings(t, settings)

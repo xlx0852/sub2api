@@ -40,3 +40,14 @@ func TestWSPassthroughUsageMeta_UpdateFromResponseCreate_MappedModelCandidate(t 
 	require.NotNil(t, got)
 	require.Equal(t, "max", *got, "mapped model should preserve max on multi-turn update")
 }
+
+func TestWSPassthroughUsageMeta_InitFromFirstFrame_InfersFromOriginalModelSuffix(t *testing.T) {
+	body := []byte(`{"type":"response.create","model":"gpt-5.4"}`)
+
+	meta := newOpenAIWSPassthroughUsageMeta("gpt-5.4-xhigh", body)
+	meta.initFromFirstFrame(body, "gpt-5.4")
+
+	got := meta.reasoningEffort.Load()
+	require.NotNil(t, got)
+	require.Equal(t, "xhigh", *got, "mapped model must not erase the original request suffix used for billing metadata")
+}

@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
@@ -43,11 +44,11 @@ const (
 	openAIImagesResponsesMainModel = "gpt-5.4-mini"
 )
 
-type OpenAIImagesCapability string
+type OpenAIImagesCapability = domain.OpenAIImagesCapability
 
 const (
-	OpenAIImagesCapabilityBasic  OpenAIImagesCapability = "images-basic"
-	OpenAIImagesCapabilityNative OpenAIImagesCapability = "images-native"
+	OpenAIImagesCapabilityBasic  = domain.OpenAIImagesCapabilityBasic
+	OpenAIImagesCapabilityNative = domain.OpenAIImagesCapabilityNative
 )
 
 type OpenAIImagesUpload struct {

@@ -361,5 +361,7 @@ func newOpenAIWSV2TestConfig() *config.Config {
 	cfg.Gateway.OpenAIWS.APIKeyEnabled = true
 	cfg.Gateway.OpenAIWS.ResponsesWebsocketsV2 = true
 	cfg.Gateway.OpenAIWS.StickyResponseIDTTLSeconds = 3600
+	// 单测以 httptest 环回地址作为上游 base_url；SSRF 加固后需显式放行私网。
+	cfg.Security.URLAllowlist.AllowPrivateHosts = true
 	return cfg
 }

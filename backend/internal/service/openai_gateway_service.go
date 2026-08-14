@@ -84,7 +84,7 @@ var openaiAllowedHeaders = map[string]bool{
 	"version":                  true, // provider http_headers: CARGO_PKG_VERSION
 	"x-client-request-id":      true,
 	"x-codex-beta-features":    true,
-	"x-codex-image-turn-id":     true,
+	"x-codex-image-turn-id":    true,
 	"x-codex-installation-id":  true,
 	"x-codex-parent-thread-id": true,
 	"x-codex-turn-state":       true,
@@ -111,7 +111,7 @@ var openaiPassthroughAllowedHeaders = map[string]bool{
 	"version":                  true,
 	"x-client-request-id":      true,
 	"x-codex-beta-features":    true,
-	"x-codex-image-turn-id":     true,
+	"x-codex-image-turn-id":    true,
 	"x-codex-installation-id":  true,
 	"x-codex-parent-thread-id": true,
 	"x-codex-turn-state":       true,
@@ -424,16 +424,17 @@ type OpenAIGatewayService struct {
 	openAITokenProvider   *OpenAITokenProvider
 	grokTokenProvider     *GrokTokenProvider
 	kimiTokenProvider     *KimiTokenProvider
-kimiQuotaService      KimiQuotaQuerier
-		grokQuotaService      GrokQuotaProber
-		quotaWindowLedger     *QuotaWindowLedger
-		toolCorrector         *CodexToolCorrector
+	kimiQuotaService      KimiQuotaQuerier
+	grokQuotaService      GrokQuotaProber
+	quotaWindowLedger     *QuotaWindowLedger
+	toolCorrector         *CodexToolCorrector
 	openaiWSResolver      OpenAIWSProtocolResolver
 	resolver              *ModelPricingResolver
 	channelService        *ChannelService
 	balanceNotifyService  *BalanceNotifyService
 	settingService        *SettingService
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+	codexIdentity         *CodexIdentity
 
 	openaiWSPoolOnce              sync.Once
 	openaiWSStateStoreOnce        sync.Once
@@ -465,16 +466,16 @@ func (s *OpenAIGatewayService) SetKimiQuotaService(service KimiQuotaQuerier) {
 }
 
 func (s *OpenAIGatewayService) SetGrokQuotaService(service GrokQuotaProber) {
-		if s != nil {
-			s.grokQuotaService = service
-		}
+	if s != nil {
+		s.grokQuotaService = service
 	}
+}
 
-	func (s *OpenAIGatewayService) SetQuotaWindowLedger(ledger *QuotaWindowLedger) {
-		if s != nil {
-			s.quotaWindowLedger = ledger
-		}
+func (s *OpenAIGatewayService) SetQuotaWindowLedger(ledger *QuotaWindowLedger) {
+	if s != nil {
+		s.quotaWindowLedger = ledger
 	}
+}
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
 func NewOpenAIGatewayService(
@@ -502,11 +503,6 @@ func NewOpenAIGatewayService(
 	settingService *SettingService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
 ) *OpenAIGatewayService {
-	// enforceCodexIdentityHeaders 是 HTTP / 透传 / WS / 探针 等出站路径共用的纯函数收口点，
-	// 拿不到配置，故在此发布进程级开关快照。配置取反义，零值即「强制统一出口开启」。
-	if cfg != nil {
-		SetCodexIdentityEnforcementEnabled(!cfg.Gateway.DisableCodexIdentityEnforcement)
-	}
 	svc := &OpenAIGatewayService{
 		accountRepo:         accountRepo,
 		usageLogRepo:        usageLogRepo,
@@ -540,6 +536,7 @@ func NewOpenAIGatewayService(
 		balanceNotifyService:  balanceNotifyService,
 		settingService:        settingService,
 		userPlatformQuotaRepo: userPlatformQuotaRepo,
+		codexIdentity:         newCodexIdentityFromConfig(cfg, settingService),
 		responseHeaderFilter:  compileResponseHeaderFilter(cfg),
 		codexSnapshotThrottle: newAccountWriteThrottle(openAICodexSnapshotPersistMinInterval),
 	}

@@ -1,5 +1,7 @@
 package pipeline
 
+import "time"
+
 // Pipeline 按固定顺序执行生命周期阶段。
 // 任一阶段返回错误或设置 Exchange.Err 即停止后续阶段。
 type Pipeline struct {
@@ -30,8 +32,14 @@ func (p *Pipeline) Run(ex *Exchange) error {
 	if ex == nil {
 		return errNilExchange
 	}
+	if ex.StageDuration == nil {
+		ex.StageDuration = make(map[StageName]int64, len(p.stages))
+	}
 	for _, stage := range p.stages {
-		if err := stage.Run(ex); err != nil {
+		started := time.Now()
+		err := stage.Run(ex)
+		ex.StageDuration[stage.Name()] = time.Since(started).Milliseconds()
+		if err != nil {
 			if ex.Err == nil {
 				ex.Err = err
 			}

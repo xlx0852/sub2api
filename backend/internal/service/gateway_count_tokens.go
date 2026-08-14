@@ -8,15 +8,17 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
+	"github.com/Wei-Shaw/sub2api/internal/app/gateway/pipeline"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/tidwall/gjson"
 
 	"github.com/gin-gonic/gin"
 )
 
-// ForwardCountTokens 转发 count_tokens 请求到上游 API
-// 特点：不记录使用量、仅支持非流式响应
+// ForwardCountTokens 转发 count_tokens 请求到上游 API。
+// 特点：不记录使用量、仅支持非流式响应。
+// Anthropic API Key passthrough 与 Bedrock 仍走入口短路径；主路径走
+// parse → rewrite → transport → relay → settle。
 func (s *GatewayService) ForwardCountTokens(ctx context.Context, c *gin.Context, account *Account, parsed *ParsedRequest) error {
 	if parsed == nil {
 		s.countTokensError(c, http.StatusBadRequest, "invalid_request_error", "Request body is empty")
@@ -40,208 +42,18 @@ func (s *GatewayService) ForwardCountTokens(ctx context.Context, c *gin.Context,
 		return nil
 	}
 
-	body := parsed.Body.Bytes()
-	replaceBody := func(next []byte) error {
-		if err := parsed.ReplaceBody(next); err != nil {
-			return fmt.Errorf("rewrite count_tokens body: %w", err)
-		}
-		body = parsed.Body.Bytes()
-		return nil
+	st := &claudeCountTokensState{
+		c:      c,
+		parsed: parsed,
 	}
-	reqModel := parsed.Model
-
-	// Pre-filter: strip empty text blocks to prevent upstream 400.
-	if err := replaceBody(StripEmptyTextBlocks(body)); err != nil {
-		return err
+	ex := &pipeline.Exchange{
+		Ctx:      ctx,
+		Platform: account.Platform,
+		Inbound:  parsed.Body.Bytes(),
+		Account:  account,
 	}
-
-	isClaudeCodeCT := IsClaudeCodeClient(ctx) || isClaudeCodeClient(c.GetHeader("User-Agent"), parsed.MetadataUserID)
-	shouldMimicClaudeCode := account.IsOAuth() && !isClaudeCodeCT
-
-	if shouldMimicClaudeCode {
-		normalizeOpts := claudeOAuthNormalizeOptions{stripSystemCacheControl: true}
-		var normalizedBody []byte
-		normalizedBody, reqModel = normalizeClaudeOAuthRequestBody(body, reqModel, normalizeOpts)
-		if err := replaceBody(normalizedBody); err != nil {
-			return err
-		}
-
-		if err := replaceBody(s.rewriteMessageCacheControlIfEnabled(ctx, body)); err != nil {
-			return err
-		}
-		if rw := buildToolNameRewriteFromBody(body); rw != nil {
-			if err := replaceBody(applyToolNameRewriteToBody(body, rw)); err != nil {
-				return err
-			}
-		} else {
-			if err := replaceBody(applyToolsLastCacheBreakpoint(body)); err != nil {
-				return err
-			}
-		}
-	}
-
-	// Antigravity 账户不支持 count_tokens，返回 404 让客户端 fallback 到本地估算。
-	// 返回 nil 避免 handler 层记录为错误，也不设置 ops 上游错误上下文。
-	if account.Platform == PlatformAntigravity {
-		s.countTokensError(c, http.StatusNotFound, "not_found_error", "count_tokens endpoint is not supported for this platform")
-		return nil
-	}
-
-	// 应用模型映射：
-	// - APIKey 账号：使用账号级别的显式映射（如果配置），否则透传原始模型名
-	// - OAuth/SetupToken 账号：使用 Anthropic 标准映射（短ID → 长ID）
-	if reqModel != "" {
-		mappedModel := reqModel
-		mappingSource := ""
-		if account.Type == AccountTypeAPIKey {
-			mappedModel = account.GetMappedModel(reqModel)
-			if mappedModel != reqModel {
-				mappingSource = "account"
-			}
-		}
-		if mappingSource == "" && account.Platform == PlatformAnthropic && account.Type != AccountTypeAPIKey {
-			normalized := claude.NormalizeModelID(reqModel)
-			if normalized != reqModel {
-				mappedModel = normalized
-				mappingSource = "prefix"
-			}
-		}
-		if mappedModel != reqModel {
-			originalReqModel := reqModel
-			if err := replaceBody(s.replaceModelInBody(body, mappedModel)); err != nil {
-				return err
-			}
-			reqModel = mappedModel
-			parsed.Model = mappedModel
-			logger.LegacyPrintf("service.gateway", "CountTokens model mapping applied: %s -> %s (account: %s, source=%s)", originalReqModel, mappedModel, account.Name, mappingSource)
-		}
-	}
-
-	// 获取凭证
-	token, tokenType, err := s.GetAccessToken(ctx, account)
-	if err != nil {
-		s.countTokensError(c, http.StatusBadGateway, "upstream_error", "Failed to get access token")
-		return err
-	}
-
-	// 构建上游请求
-	upstreamReq, wireBody, err := s.buildCountTokensRequest(ctx, c, account, body, token, tokenType, reqModel, shouldMimicClaudeCode)
-	if err != nil {
-		s.countTokensError(c, http.StatusInternalServerError, "api_error", "Failed to build request")
-		return err
-	}
-	// 先记录首发 wire body；如果后面进入 400 retry，retry 会基于未签名的逻辑 body 重新构建。
-	acceptedWireBody := wireBody
-
-	// 获取代理URL（自定义 base URL 模式下，proxy 通过 buildCustomRelayURL 作为查询参数传递）
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		if !account.IsCustomBaseURLEnabled() || account.GetCustomBaseURL() == "" {
-			proxyURL = account.Proxy.URL()
-		}
-	}
-
-	// 发送请求
-	resp, err := s.httpUpstream.DoWithTLS(upstreamReq, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
-	if err != nil {
-		setOpsUpstreamError(c, 0, sanitizeUpstreamErrorMessage(err.Error()), "")
-		s.countTokensError(c, http.StatusBadGateway, "upstream_error", "Request failed")
-		return fmt.Errorf("upstream request failed: %w", err)
-	}
-
-	// 读取响应体
-	countTokensTooLarge := func(c *gin.Context) {
-		s.countTokensError(c, http.StatusBadGateway, "upstream_error", "Upstream response too large")
-	}
-	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, countTokensTooLarge)
-	_ = resp.Body.Close()
-	if err != nil {
-		if !errors.Is(err, ErrUpstreamResponseBodyTooLarge) {
-			s.countTokensError(c, http.StatusBadGateway, "upstream_error", "Failed to read response")
-		}
-		return err
-	}
-
-	// 检测 thinking block 签名错误（400）并重试一次（过滤 thinking blocks）
-	if resp.StatusCode == 400 && s.shouldRectifySignatureError(ctx, account, respBody, reqModel) {
-		logger.LegacyPrintf("service.gateway", "Account %d: detected thinking block signature error on count_tokens, retrying with filtered thinking blocks", account.ID)
-
-		filteredBody := FilterThinkingBlocksForRetry(body, reqModel)
-		retryReq, retryWireBody, buildErr := s.buildCountTokensRequest(ctx, c, account, filteredBody, token, tokenType, reqModel, shouldMimicClaudeCode)
-		if buildErr == nil {
-			retryResp, retryErr := s.httpUpstream.DoWithTLS(retryReq, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
-			if retryErr == nil {
-				if retryResp.StatusCode < 400 {
-					// count_tokens 签名重试成功后记录最终 wire body，错误响应仍保留原 body 便于后续处理。
-					acceptedWireBody = retryWireBody
-				}
-				resp = retryResp
-				respBody, err = ReadUpstreamResponseBody(resp.Body, s.cfg, c, countTokensTooLarge)
-				_ = resp.Body.Close()
-				if err != nil {
-					if !errors.Is(err, ErrUpstreamResponseBodyTooLarge) {
-						s.countTokensError(c, http.StatusBadGateway, "upstream_error", "Failed to read response")
-					}
-					return err
-				}
-			}
-		}
-	}
-
-	if resp.StatusCode < 400 && !bytes.Equal(acceptedWireBody, body) {
-		// count_tokens 成功后再同步最终 wire body，避免 retry 从已签名 body 派生。
-		if err := replaceBody(acceptedWireBody); err != nil {
-			return err
-		}
-	}
-
-	// 处理错误响应
-	if resp.StatusCode >= 400 {
-		// 标记账号状态（429/529等）
-		s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
-
-		upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
-		upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
-		upstreamDetail := ""
-		if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
-			maxBytes := s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes
-			if maxBytes <= 0 {
-				maxBytes = 2048
-			}
-			upstreamDetail = truncateString(string(respBody), maxBytes)
-		}
-		setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
-
-		// 记录上游错误摘要便于排障（不回显请求内容）
-		if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
-			logger.LegacyPrintf("service.gateway",
-				"count_tokens upstream error %d (account=%d platform=%s type=%s): %s",
-				resp.StatusCode,
-				account.ID,
-				account.Platform,
-				account.Type,
-				truncateForLog(respBody, s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes),
-			)
-		}
-
-		// 返回简化的错误响应
-		errMsg := "Upstream request failed"
-		switch resp.StatusCode {
-		case 429:
-			errMsg = "Rate limit exceeded"
-		case 529:
-			errMsg = "Service overloaded"
-		}
-		s.countTokensError(c, resp.StatusCode, "upstream_error", errMsg)
-		if upstreamMsg == "" {
-			return fmt.Errorf("upstream error: %d", resp.StatusCode)
-		}
-		return fmt.Errorf("upstream error: %d message=%s", resp.StatusCode, upstreamMsg)
-	}
-
-	// 透传成功响应
-	c.Data(resp.StatusCode, "application/json", respBody)
-	return nil
+	ex.Set(claudeCountTokensStateKey, st)
+	return s.finishClaudeCountTokens(st, s.claudeCountTokensPipeline().Run(ex))
 }
 
 func (s *GatewayService) forwardCountTokensAnthropicAPIKeyPassthrough(ctx context.Context, c *gin.Context, account *Account, body []byte) error {

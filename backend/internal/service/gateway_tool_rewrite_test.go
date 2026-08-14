@@ -214,7 +214,6 @@ func TestRewriteMessageCacheControlIfEnabled_OptInPreservesLegacyRewrite(t *test
 	repo := &gatewayTTLSettingRepo{data: map[string]string{
 		SettingKeyRewriteMessageCacheControl: "true",
 	}}
-	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
 	svc := &GatewayService{settingService: NewSettingService(repo, &config.Config{})}
 
 	out := svc.rewriteMessageCacheControlIfEnabled(context.Background(), body)

@@ -15,7 +15,6 @@ import (
 // unconditionally.
 func TestGatewayClientDatelineNormalization_Scope(t *testing.T) {
 	repo := &gatewayTTLSettingRepo{data: map[string]string{}}
-	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
 	svc := &GatewayService{
 		settingService: NewSettingService(repo, &config.Config{}),
 	}
@@ -29,13 +28,13 @@ func TestGatewayClientDatelineNormalization_Scope(t *testing.T) {
 
 	// Switch off: no account qualifies.
 	repo.data[SettingKeyEnableClientDatelineNormalization] = "false"
-	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
+	invalidateGatewayForwardingCache(svc.settingService)
 	require.False(t, svc.shouldNormalizeClientDateline(ctx, &Account{Platform: PlatformAnthropic, Type: AccountTypeOAuth}))
 	require.False(t, svc.shouldNormalizeClientDateline(ctx, &Account{Platform: PlatformAnthropic, Type: AccountTypeSetupToken}))
 
 	// Switch back on: OAuth qualifies again.
 	repo.data[SettingKeyEnableClientDatelineNormalization] = "true"
-	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
+	invalidateGatewayForwardingCache(svc.settingService)
 	require.True(t, svc.shouldNormalizeClientDateline(ctx, &Account{Platform: PlatformAnthropic, Type: AccountTypeOAuth}))
 }
 
@@ -49,7 +48,6 @@ func TestGatewayClientDatelineNormalization_HelperNoRewrite(t *testing.T) {
 	repo := &gatewayTTLSettingRepo{data: map[string]string{
 		SettingKeyEnableClientDatelineNormalization: "true",
 	}}
-	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
 	svc := &GatewayService{
 		settingService: NewSettingService(repo, &config.Config{}),
 	}
@@ -88,7 +86,7 @@ func TestGatewayClientDatelineNormalization_HelperNoRewrite(t *testing.T) {
 
 	// Switch off: even OAuth account is not rewritten.
 	repo.data[SettingKeyEnableClientDatelineNormalization] = "false"
-	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
+	invalidateGatewayForwardingCache(svc.settingService)
 	next, ok = svc.normalizeClientDatelineIfEnabled(ctx, &Account{Platform: PlatformAnthropic, Type: AccountTypeOAuth}, dirty)
 	require.False(t, ok)
 	require.Nil(t, next)
@@ -102,7 +100,6 @@ func TestGatewayClientDatelineNormalization_LeavesUserProseUntouched(t *testing.
 	repo := &gatewayTTLSettingRepo{data: map[string]string{
 		SettingKeyEnableClientDatelineNormalization: "true",
 	}}
-	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
 	svc := &GatewayService{
 		settingService: NewSettingService(repo, &config.Config{}),
 	}

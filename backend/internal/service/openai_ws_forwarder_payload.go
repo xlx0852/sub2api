@@ -191,7 +191,8 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	// 默认 Codex CLI 身份（承接原「非 Codex UA 兜底」，并修复其把 codex-tui 等官方 UA 改写为
 	// codex_cli_rs 造成的 originator 错配 404），详见 issue #3901。
 	if account != nil && account.Type == AccountTypeOAuth {
-		enforceCodexIdentityHeadersWithUA(headers, s.codexIdentityOverrideUA(account))
+		s.codexIdentity.enforceHeadersWithUA(headers, s.codexIdentityOverrideUA(account))
+		applyCodexFingerprintHeaders(headers, resolveCodexFingerprintIDsFromContext(c, account))
 	}
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）。
@@ -225,9 +226,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSCreatePayload(reqBody map[string]any
 }
 
 // sanitizeOpenAIWSResponseCreateFrame 收敛 WS response.create 帧的兼容性字段：
-// 1) clamp input[].call_id（所有账号）
-// 2) OAuth 路径额外剥离 max_output_tokens / max_completion_tokens
-//    （与 HTTP OAuth 透传/非 CLI strip 一致，避免 ChatGPT internal 400）
+//  1. clamp input[].call_id（所有账号）
+//  2. OAuth 路径额外剥离 max_output_tokens / max_completion_tokens
+//     （与 HTTP OAuth 透传/非 CLI strip 一致，避免 ChatGPT internal 400）
 func sanitizeOpenAIWSResponseCreateFrame(frame []byte, account *Account) ([]byte, bool, error) {
 	if len(frame) == 0 {
 		return frame, false, nil

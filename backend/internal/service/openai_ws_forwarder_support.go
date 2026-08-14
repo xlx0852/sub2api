@@ -337,13 +337,8 @@ func (s *OpenAIGatewayService) selectAccountByPreviousResponseIDForCapability(
 	cfg := s.schedulingConfig()
 	if s.concurrencyService != nil {
 		return &AccountSelectionResult{
-			Account: account,
-			WaitPlan: &AccountWaitPlan{
-				AccountID:      accountID,
-				MaxConcurrency: account.Concurrency,
-				Timeout:        cfg.StickySessionWaitTimeout,
-				MaxWaiting:     cfg.StickySessionMaxWaiting,
-			},
+			Account:  account,
+			WaitPlan: newStickyWaitPlan(accountID, account.Concurrency, cfg),
 		}, nil
 	}
 	return nil, nil
