@@ -163,15 +163,14 @@ func TestEnforceCodexIdentityHeadersWithAccountOverrideUA(t *testing.T) {
 
 	// 陈旧覆写 UA 同样跟随自动同步到的新版本，无需管理员重新编辑那条 UA。
 	t.Run("陈旧覆写 UA 跟随同步版本", func(t *testing.T) {
-		SetCodexCanonicalUserAgentResolver(func() string {
+		id := newCodexIdentity(true, func() string {
 			return "codex_cli_rs/0.200.1" + codexCLIUserAgentSuffix
 		})
-		t.Cleanup(func() { SetCodexCanonicalUserAgentResolver(nil) })
 
 		h := make(http.Header)
 		h.Set("originator", "codex_cli_rs")
 
-		enforceCodexIdentityHeadersWithUA(h, "codex-tui/0.125.0 (Mac OS X 14.0; arm64) iTerm")
+		id.enforceHeadersWithUA(h, "codex-tui/0.125.0 (Mac OS X 14.0; arm64) iTerm")
 
 		require.Equal(t, "codex-tui", h.Get("originator"))
 		require.Equal(t, "codex-tui/0.200.1 (Mac OS X 14.0; arm64) iTerm", h.Get("user-agent"))
@@ -180,19 +179,16 @@ func TestEnforceCodexIdentityHeadersWithAccountOverrideUA(t *testing.T) {
 }
 
 // 规范身份跟随注入的解析器（后台面板 UA / 自动同步版本号），无需重启或发版。
-//
-// 不得给本用例加 t.Parallel()：它改写进程级解析器。
 func TestEnforceCodexIdentityHeadersFollowsCanonicalResolver(t *testing.T) {
-	SetCodexCanonicalUserAgentResolver(func() string {
+	id := newCodexIdentity(true, func() string {
 		return "codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
 	})
-	t.Cleanup(func() { SetCodexCanonicalUserAgentResolver(nil) })
 
 	h := make(http.Header)
 	h.Set("originator", "codex-tui")
 	h.Set("user-agent", "codex-tui/0.140.2 (Mac OS X 14.0; arm64) iTerm (codex-tui; 0.140.2)")
 
-	enforceCodexIdentityHeaders(h)
+	id.enforceHeaders(h)
 
 	require.Equal(t, "codex_cli_rs", h.Get("originator"))
 	require.Equal(t, "codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color", h.Get("user-agent"))
@@ -201,39 +197,33 @@ func TestEnforceCodexIdentityHeadersFollowsCanonicalResolver(t *testing.T) {
 
 // 解析器返回非法值（配置被写坏、同步到异常内容）时必须回退到内置身份，
 // 绝不能把不可控内容拼进出站身份。
-//
-// 不得给本用例加 t.Parallel()：它改写进程级解析器。
 func TestEnforceCodexIdentityHeadersRejectsInvalidCanonicalUA(t *testing.T) {
-	SetCodexCanonicalUserAgentResolver(func() string { return "not-a-codex-client" })
-	t.Cleanup(func() { SetCodexCanonicalUserAgentResolver(nil) })
+	id := newCodexIdentity(true, func() string { return "not-a-codex-client" })
 
 	h := make(http.Header)
 	h.Set("originator", "codex_cli_rs")
 
-	enforceCodexIdentityHeaders(h)
+	id.enforceHeaders(h)
 
 	require.Equal(t, "codex_cli_rs", h.Get("originator"))
 	require.Equal(t, codexCLIUserAgent, h.Get("user-agent"))
 	require.Equal(t, codexCLIVersion, h.Get("version"))
 }
 
-// 开关是进程级快照，零值 Config（测试 / 工具手工构造，不经 viper）必须落在「强制统一开启」
-// 一侧，否则任意一处零值构造都会静默关掉全局保护。
-//
-// 不得给本文件的开关类用例加 t.Parallel()：它们改写进程级状态。
+// 零值 Config（测试 / 工具手工构造，不经 viper）必须落在「强制统一开启」一侧，
+// 否则任意一处零值构造都会静默关掉保护。
 func TestCodexIdentityEnforcementZeroValueConfigKeepsItEnabled(t *testing.T) {
 	var cfg config.Config
 	require.False(t, cfg.Gateway.DisableCodexIdentityEnforcement,
 		"零值必须表示强制统一开启；若改为正向命名，零值会静默关闭保护")
 
-	SetCodexIdentityEnforcementEnabled(!cfg.Gateway.DisableCodexIdentityEnforcement)
-	t.Cleanup(func() { SetCodexIdentityEnforcementEnabled(true) })
+	id := newCodexIdentityFromConfig(&cfg, nil)
 
 	h := make(http.Header)
 	h.Set("originator", "codex-tui")
 	h.Set("user-agent", "codex-tui/0.140.2 (Mac OS X 14.0; arm64) iTerm (codex-tui; 0.140.2)")
 
-	enforceCodexIdentityHeaders(h)
+	id.enforceHeaders(h)
 
 	require.Equal(t, "codex_cli_rs", h.Get("originator"))
 	require.Equal(t, codexCLIUserAgent, h.Get("user-agent"))
@@ -244,15 +234,14 @@ func TestCodexIdentityEnforcementZeroValueConfigKeepsItEnabled(t *testing.T) {
 func TestEnforceCodexIdentityHeaders_EnforcementDisabled(t *testing.T) {
 	const tuiUA = "codex-tui/0.145.2 (Mac OS X 14.0; arm64) iTerm (codex-tui; 0.145.2)"
 
-	SetCodexIdentityEnforcementEnabled(false)
-	t.Cleanup(func() { SetCodexIdentityEnforcementEnabled(true) })
+	id := newCodexIdentity(false, nil)
 
 	h := make(http.Header)
 	h.Set("originator", "codex-tui")
 	h.Set("user-agent", tuiUA)
 	h.Set("version", "0.145.2")
 
-	enforceCodexIdentityHeaders(h)
+	id.enforceHeaders(h)
 
 	require.Equal(t, "codex-tui", h.Get("originator"))
 	require.Equal(t, tuiUA, h.Get("user-agent"))
@@ -261,15 +250,14 @@ func TestEnforceCodexIdentityHeaders_EnforcementDisabled(t *testing.T) {
 
 // 关闭强制统一后，第三方 UA 仍整体回退为规范身份并对齐 version。
 func TestEnforceCodexIdentityHeaders_EnforcementDisabledThirdPartyFallback(t *testing.T) {
-	SetCodexIdentityEnforcementEnabled(false)
-	t.Cleanup(func() { SetCodexIdentityEnforcementEnabled(true) })
+	id := newCodexIdentity(false, nil)
 
 	h := make(http.Header)
 	h.Set("originator", "opencode")
 	h.Set("user-agent", "luna/1.0.0")
 	h.Set("version", "2.1.0")
 
-	enforceCodexIdentityHeaders(h)
+	id.enforceHeaders(h)
 
 	require.Equal(t, "codex_cli_rs", h.Get("originator"))
 	require.Equal(t, codexCLIUserAgent, h.Get("user-agent"))

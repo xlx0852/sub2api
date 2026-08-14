@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
@@ -81,7 +82,7 @@ func (s *GatewayService) SelectAccountForModelWithExclusions(ctx context.Context
 // SelectAccountWithLoadAwareness selects account with load-awareness and wait plan.
 // metadataUserID: 用于客户端亲和调度，从中提取客户端 ID
 // sub2apiUserID: 系统用户 ID，用于二维亲和调度
-func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, metadataUserID string, sub2apiUserID int64) (*AccountSelectionResult, error) {
+func (s *GatewayService) selectAccountWithLoadAwarenessStrategy(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, metadataUserID string, sub2apiUserID int64) (*AccountSelectionResult, error) {
 	// 调试日志：记录调度入口参数
 	excludedIDsList := make([]int64, 0, len(excludedIDs))
 	for id := range excludedIDs {
@@ -146,10 +147,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 
 	if s.concurrencyService == nil || !cfg.LoadBatchEnabled {
 		// 复制排除列表，用于会话限制拒绝时的重试
-		localExcluded := make(map[int64]struct{})
-		for k, v := range excludedIDs {
-			localExcluded[k] = v
-		}
+		localExcluded := scheduling.CloneExcluded(excludedIDs)
 
 		for {
 			account, err := s.SelectAccountForModelWithExclusions(ctx, groupID, sessionHash, requestedModel, localExcluded)
@@ -161,11 +159,11 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 			if err == nil && result.Acquired {
 				// 获取槽位后检查会话限制（使用 sessionHash 作为会话标识符）
 				if !s.checkAndRegisterSession(ctx, account, sessionHash) {
-					result.ReleaseFunc()                   // 释放槽位
-					localExcluded[account.ID] = struct{}{} // 排除此账号
-					continue                               // 重新选择
+					result.ReleaseFunc()                                              // 释放槽位
+					localExcluded = scheduling.AddExcluded(localExcluded, account.ID) // 排除此账号
+					continue                                                          // 重新选择
 				}
-				return s.newSelectionResult(ctx, account, true, result.ReleaseFunc, nil)
+				return s.newAcquiredSelectionResult(ctx, account, result.ReleaseFunc)
 			}
 			if err == nil && result.ModelLimited {
 				// 模型级并发预算已满：立即让路，不进入账号等待队列。
@@ -174,27 +172,17 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 
 			// 对于等待计划的情况，也需要先检查会话限制
 			if !s.checkAndRegisterSession(ctx, account, sessionHash) {
-				localExcluded[account.ID] = struct{}{}
+				localExcluded = scheduling.AddExcluded(localExcluded, account.ID)
 				continue
 			}
 
 			if stickyAccountID > 0 && stickyAccountID == account.ID && s.concurrencyService != nil {
 				waitingCount, _ := s.concurrencyService.GetAccountWaitingCount(ctx, account.ID)
 				if waitingCount < cfg.StickySessionMaxWaiting {
-					return s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
-						AccountID:      account.ID,
-						MaxConcurrency: account.Concurrency,
-						Timeout:        cfg.StickySessionWaitTimeout,
-						MaxWaiting:     cfg.StickySessionMaxWaiting,
-					})
+					return s.newSelectionResult(ctx, account, false, nil, newStickyWaitPlan(account.ID, account.Concurrency, cfg))
 				}
 			}
-			return s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
-				AccountID:      account.ID,
-				MaxConcurrency: account.Concurrency,
-				Timeout:        cfg.FallbackWaitTimeout,
-				MaxWaiting:     cfg.FallbackMaxWaiting,
-			})
+			return s.newSelectionResult(ctx, account, false, nil, newFallbackWaitPlan(account.ID, account.Concurrency, cfg))
 		}
 	}
 
@@ -223,11 +211,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 		accountByID[accounts[i].ID] = &accounts[i]
 	}
 	isExcluded := func(accountID int64) bool {
-		if excludedIDs == nil {
-			return false
-		}
-		_, excluded := excludedIDs[accountID]
-		return excluded
+		return scheduling.IsExcluded(excludedIDs, accountID)
 	}
 
 	// 获取模型路由配置（仅 anthropic 平台）
@@ -352,7 +336,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 									if s.debugModelRoutingEnabled() {
 										logger.LegacyPrintf("service.gateway", "[ModelRoutingDebug] routed sticky hit: group_id=%v model=%s session=%s account=%d", derefGroupID(groupID), requestedModel, shortSessionHash(sessionHash), stickyAccountID)
 									}
-									return s.newSelectionResult(ctx, stickyAccount, true, result.ReleaseFunc, nil)
+									return s.newAcquiredSelectionResult(ctx, stickyAccount, result.ReleaseFunc)
 								}
 							}
 							if err == nil && result.ModelLimited {
@@ -371,12 +355,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 										// 必须走 newSelectionResult 以 hydrate 账号凭证：
 										// 调度快照中的账号是精简版（OAuth token 等被剥离），
 										// 直接返回会导致后续转发缺少凭证而鉴权失败。
-										return s.newSelectionResult(ctx, stickyAccount, false, nil, &AccountWaitPlan{
-											AccountID:      stickyAccountID,
-											MaxConcurrency: stickyAccount.Concurrency,
-											Timeout:        cfg.StickySessionWaitTimeout,
-											MaxWaiting:     cfg.StickySessionMaxWaiting,
-										})
+										return s.newSelectionResult(ctx, stickyAccount, false, nil, newStickyWaitPlan(stickyAccountID, stickyAccount.Concurrency, cfg))
 									}
 								} else {
 									stickyCacheMissReason = "wait_queue_full"
@@ -467,7 +446,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 						if s.debugModelRoutingEnabled() {
 							logger.LegacyPrintf("service.gateway", "[ModelRoutingDebug] routed select: group_id=%v model=%s session=%s account=%d", derefGroupID(groupID), requestedModel, shortSessionHash(sessionHash), item.account.ID)
 						}
-						return s.newSelectionResult(ctx, item.account, true, result.ReleaseFunc, nil)
+						return s.newAcquiredSelectionResult(ctx, item.account, result.ReleaseFunc)
 					}
 					if err == nil && result.ModelLimited {
 						// 模型级并发预算已满：立即让路，不进入账号等待队列。
@@ -484,12 +463,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 					if s.debugModelRoutingEnabled() {
 						logger.LegacyPrintf("service.gateway", "[ModelRoutingDebug] routed wait: group_id=%v model=%s session=%s account=%d", derefGroupID(groupID), requestedModel, shortSessionHash(sessionHash), item.account.ID)
 					}
-					return s.newSelectionResult(ctx, item.account, false, nil, &AccountWaitPlan{
-						AccountID:      item.account.ID,
-						MaxConcurrency: item.account.Concurrency,
-						Timeout:        cfg.StickySessionWaitTimeout,
-						MaxWaiting:     cfg.StickySessionMaxWaiting,
-					})
+					return s.newSelectionResult(ctx, item.account, false, nil, newStickyWaitPlan(item.account.ID, item.account.Concurrency, cfg))
 				}
 				// 所有路由账号会话限制都已满，继续到 Layer 2 回退
 			}
@@ -559,7 +533,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 							if s.cache != nil {
 								_ = s.cache.RefreshSessionTTL(ctx, derefGroupID(groupID), sessionHash, stickySessionTTL)
 							}
-							return s.newSelectionResult(ctx, account, true, result.ReleaseFunc, nil)
+							return s.newAcquiredSelectionResult(ctx, account, result.ReleaseFunc)
 						}
 					} else if err == nil && result.ModelLimited {
 						// 模型级并发预算已满：立即让路，不进入账号等待队列。
@@ -582,12 +556,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 								"session", shortSessionHash(sessionHash),
 								"result", "wait_plan",
 							)
-							return s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
-								AccountID:      accountID,
-								MaxConcurrency: account.Concurrency,
-								Timeout:        cfg.StickySessionWaitTimeout,
-								MaxWaiting:     cfg.StickySessionMaxWaiting,
-							})
+							return s.newSelectionResult(ctx, account, false, nil, newStickyWaitPlan(accountID, account.Concurrency, cfg))
 						}
 					}
 				} else if !clearSticky {
@@ -721,7 +690,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 					if sessionHash != "" && s.cache != nil {
 						_ = s.cache.SetSessionAccountID(ctx, derefGroupID(groupID), sessionHash, selected.account.ID, stickySessionTTL)
 					}
-					return s.newSelectionResult(ctx, selected.account, true, result.ReleaseFunc, nil)
+					return s.newAcquiredSelectionResult(ctx, selected.account, result.ReleaseFunc)
 				}
 			}
 			if err == nil && result.ModelLimited {
@@ -748,12 +717,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 		if !s.checkAndRegisterSession(ctx, acc, sessionHash) {
 			continue // 会话限制已满，尝试下一个账号
 		}
-		return s.newSelectionResult(ctx, acc, false, nil, &AccountWaitPlan{
-			AccountID:      acc.ID,
-			MaxConcurrency: acc.Concurrency,
-			Timeout:        cfg.FallbackWaitTimeout,
-			MaxWaiting:     cfg.FallbackMaxWaiting,
-		})
+		return s.newSelectionResult(ctx, acc, false, nil, newFallbackWaitPlan(acc.ID, acc.Concurrency, cfg))
 	}
 	return nil, ErrNoAvailableAccounts
 }
@@ -773,7 +737,7 @@ func (s *GatewayService) tryAcquireByLegacyOrder(ctx context.Context, candidates
 			if sessionHash != "" && s.cache != nil {
 				_ = s.cache.SetSessionAccountID(ctx, derefGroupID(groupID), sessionHash, acc.ID, stickySessionTTL)
 			}
-			selection, err := s.newSelectionResult(ctx, acc, true, result.ReleaseFunc, nil)
+			selection, err := s.newAcquiredSelectionResult(ctx, acc, result.ReleaseFunc)
 			if err != nil {
 				return nil, false, err
 			}
@@ -793,17 +757,7 @@ func (s *GatewayService) tryAcquireByLegacyOrder(ctx context.Context, candidates
 }
 
 func (s *GatewayService) schedulingConfig() config.GatewaySchedulingConfig {
-	if s.cfg != nil {
-		return s.cfg.Gateway.Scheduling
-	}
-	return config.GatewaySchedulingConfig{
-		StickySessionMaxWaiting:  3,
-		StickySessionWaitTimeout: 45 * time.Second,
-		FallbackWaitTimeout:      30 * time.Second,
-		FallbackMaxWaiting:       100,
-		LoadBatchEnabled:         true,
-		SlotCleanupInterval:      30 * time.Second,
-	}
+	return schedulingConfigFrom(s.cfg)
 }
 
 func (s *GatewayService) withGroupContext(ctx context.Context, group *Group) context.Context {
@@ -1043,56 +997,37 @@ func (s *GatewayService) IsSingleAntigravityAccountGroup(ctx context.Context, gr
 	return len(accounts) == 1
 }
 
-func (s *GatewayService) isAccountAllowedForPlatform(account *Account, platform string, useMixed bool) bool {
-	if account == nil {
-		return false
-	}
-	if useMixed {
-		if account.Platform == platform {
-			return true
-		}
-		return account.Platform == PlatformAntigravity && account.IsMixedSchedulingEnabled()
-	}
-	return account.Platform == platform
-}
-
 func (s *GatewayService) isAccountSchedulableForSelection(account *Account) bool {
-	if account == nil {
-		return false
-	}
-	return account.IsSchedulable()
+	return scheduling.EvaluateCandidate(
+		context.Background(),
+		account,
+		scheduling.Request{},
+		scheduling.SchedulablePolicy,
+	).Allowed
 }
 
 func (s *GatewayService) isAccountSchedulableForModelSelection(ctx context.Context, account *Account, requestedModel string) bool {
-	if account == nil {
-		return false
-	}
-	return account.IsSchedulableForModelWithContext(ctx, requestedModel)
+	return scheduling.EvaluateCandidate(
+		ctx,
+		account,
+		scheduling.Request{RequestedModel: requestedModel},
+		scheduling.SchedulableForModelPolicy,
+	).Allowed
 }
 
 // isAccountInGroup checks if the account belongs to the specified group.
 // When groupID is nil, returns true only for ungrouped accounts (no group assignments).
 func (s *GatewayService) isAccountInGroup(account *Account, groupID *int64) bool {
-	if account == nil {
-		return false
-	}
-	if groupID == nil {
-		// 无分组的 API Key 只能使用未分组的账号
-		return len(account.AccountGroups) == 0
-	}
-	for _, ag := range account.AccountGroups {
-		if ag.GroupID == *groupID {
-			return true
-		}
-	}
-	return false
+	return scheduling.EvaluateCandidate(
+		context.Background(),
+		account,
+		scheduling.Request{GroupID: groupID},
+		scheduling.GroupMembershipPolicy,
+	).Allowed
 }
 
 func (s *GatewayService) tryAcquireAccountSlot(ctx context.Context, requestedModel string, accountID int64, maxConcurrency int) (*AcquireResult, error) {
-	if s.concurrencyService == nil {
-		return &AcquireResult{Acquired: true, ReleaseFunc: func() {}}, nil
-	}
-	return s.concurrencyService.AcquireModelAwareAccountSlot(ctx, requestedModel, accountID, maxConcurrency)
+	return tryAcquireAccountSlot(ctx, s.concurrencyService, requestedModel, accountID, maxConcurrency)
 }
 
 type usageLogWindowStatsBatchProvider interface {
@@ -1220,7 +1155,7 @@ func (s *GatewayService) withWindowCostPrefetch(ctx context.Context, accounts []
 
 // isAccountSchedulableForQuota 检查账号是否在配额限制内
 // 适用于配置了 quota_limit 的 apikey 和 bedrock 类型账号
-func (s *GatewayService) isAccountSchedulableForQuota(account *Account) bool {
+func (s *GatewayService) accountPassesQuota(account *Account) bool {
 	if !account.IsAPIKeyOrBedrock() {
 		return true
 	}
@@ -1230,7 +1165,7 @@ func (s *GatewayService) isAccountSchedulableForQuota(account *Account) bool {
 // isAccountSchedulableForWindowCost 检查账号是否可根据窗口费用进行调度
 // 仅适用于 Anthropic OAuth/SetupToken 账号
 // 返回 true 表示可调度，false 表示不可调度
-func (s *GatewayService) isAccountSchedulableForWindowCost(ctx context.Context, account *Account, isSticky bool) bool {
+func (s *GatewayService) accountPassesWindowCost(ctx context.Context, account *Account, isSticky bool) bool {
 	// 只检查 Anthropic OAuth/SetupToken 账号
 	if !account.IsAnthropicOAuthOrSetupToken() {
 		return true
@@ -1326,7 +1261,7 @@ func (s *GatewayService) withRPMPrefetch(ctx context.Context, accounts []Account
 
 // isAccountSchedulableForRPM 检查账号是否可根据 RPM 进行调度
 // 仅适用于 Anthropic OAuth/SetupToken 账号
-func (s *GatewayService) isAccountSchedulableForRPM(ctx context.Context, account *Account, isSticky bool) bool {
+func (s *GatewayService) accountPassesRPM(ctx context.Context, account *Account, isSticky bool) bool {
 	if !account.IsAnthropicOAuthOrSetupToken() {
 		return true
 	}
@@ -1400,52 +1335,27 @@ func (s *GatewayService) checkAndRegisterSession(ctx context.Context, account *A
 }
 
 func (s *GatewayService) getSchedulableAccount(ctx context.Context, accountID int64) (*Account, error) {
-	if s.schedulerSnapshot != nil {
-		return s.schedulerSnapshot.GetAccount(ctx, accountID)
-	}
-	return s.accountRepo.GetByID(ctx, accountID)
+	return lookupSchedulableAccount(ctx, s.schedulerSnapshot, s.accountRepo, accountID)
 }
 
 func (s *GatewayService) hydrateSelectedAccount(ctx context.Context, account *Account) (*Account, error) {
-	if account == nil || s.schedulerSnapshot == nil {
-		return account, nil
-	}
-	hydrated, err := s.schedulerSnapshot.GetAccount(ctx, account.ID)
-	if err != nil {
-		return nil, err
-	}
-	if hydrated == nil {
-		return nil, fmt.Errorf("selected gateway account %d not found during hydration", account.ID)
-	}
-	return hydrated, nil
+	return hydrateSelectedAccount(ctx, s.schedulerSnapshot, account, "gateway")
 }
 
 func (s *GatewayService) newSelectionResult(ctx context.Context, account *Account, acquired bool, release func(), waitPlan *AccountWaitPlan) (*AccountSelectionResult, error) {
-	hydrated, err := s.hydrateSelectedAccount(ctx, account)
-	if err != nil {
-		return nil, err
-	}
-	return &AccountSelectionResult{
-		Account:     hydrated,
-		Acquired:    acquired,
-		ReleaseFunc: release,
-		WaitPlan:    waitPlan,
-	}, nil
+	return newHydratedSelectionResult(ctx, s.schedulerSnapshot, account, "gateway", acquired, release, waitPlan)
+}
+
+// newAcquiredSelectionResult 构造已抢到并发槽的选择结果；若 hydrate 失败则立即释放槽位，
+// 避免槽位泄漏直到 Redis TTL 过期（与 OpenAIGatewayService.newAcquiredSelectionResult 对称）。
+func (s *GatewayService) newAcquiredSelectionResult(ctx context.Context, account *Account, release func()) (*AccountSelectionResult, error) {
+	return newHydratedAcquiredResult(ctx, s.schedulerSnapshot, account, "gateway", release)
 }
 
 // newModelLimitedSelectionResult 构造模型级预算已满的拒绝结果。
 // WaitPlan 恒为 nil，Handler 层据此直接 429 让路，不进入账号等待队列。
 func (s *GatewayService) newModelLimitedSelectionResult(ctx context.Context, account *Account) (*AccountSelectionResult, error) {
-	hydrated, err := s.hydrateSelectedAccount(ctx, account)
-	if err != nil {
-		return nil, err
-	}
-	return &AccountSelectionResult{
-		Account:      hydrated,
-		Acquired:     false,
-		WaitPlan:     nil,
-		ModelLimited: true,
-	}, nil
+	return newHydratedModelLimitedResult(ctx, s.schedulerSnapshot, account, "gateway")
 }
 
 // filterByMinPriority 过滤出优先级最小的账号集合
@@ -1584,22 +1494,15 @@ func selectByLRU(accounts []accountWithLoad, preferOAuth bool) *accountWithLoad 
 func sortAccountsByPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
 	sort.SliceStable(accounts, func(i, j int) bool {
 		a, b := accounts[i], accounts[j]
-		if a.Priority != b.Priority {
-			return a.Priority < b.Priority
+		if order := scheduling.ComparePriorityLRU(a, b); order != 0 {
+			return order < 0
 		}
-		switch {
-		case a.LastUsedAt == nil && b.LastUsedAt != nil:
-			return true
-		case a.LastUsedAt != nil && b.LastUsedAt == nil:
-			return false
-		case a.LastUsedAt == nil && b.LastUsedAt == nil:
+		if a.LastUsedAt == nil && b.LastUsedAt == nil {
 			if preferOAuth && a.Type != b.Type {
 				return a.Type == AccountTypeOAuth
 			}
-			return false
-		default:
-			return a.LastUsedAt.Before(*b.LastUsedAt)
 		}
+		return false
 	})
 	shuffleWithinPriorityAndLastUsed(accounts, preferOAuth)
 }

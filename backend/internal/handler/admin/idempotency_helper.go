@@ -23,12 +23,12 @@ const (
 
 func executeAdminIdempotent(
 	c *gin.Context,
+	coordinator *service.IdempotencyCoordinator,
 	scope string,
 	payload any,
 	ttl time.Duration,
 	execute func(context.Context) (any, error),
 ) (*service.IdempotencyExecuteResult, error) {
-	coordinator := service.DefaultIdempotencyCoordinator()
 	if coordinator == nil {
 		data, err := execute(c.Request.Context())
 		if err != nil {
@@ -56,33 +56,36 @@ func executeAdminIdempotent(
 
 func executeAdminIdempotentJSON(
 	c *gin.Context,
+	coordinator *service.IdempotencyCoordinator,
 	scope string,
 	payload any,
 	ttl time.Duration,
 	execute func(context.Context) (any, error),
 ) {
-	executeAdminIdempotentJSONWithMode(c, scope, payload, ttl, idempotencyStoreUnavailableFailClose, execute)
+	executeAdminIdempotentJSONWithMode(c, coordinator, scope, payload, ttl, idempotencyStoreUnavailableFailClose, execute)
 }
 
 func executeAdminIdempotentJSONFailOpenOnStoreUnavailable(
 	c *gin.Context,
+	coordinator *service.IdempotencyCoordinator,
 	scope string,
 	payload any,
 	ttl time.Duration,
 	execute func(context.Context) (any, error),
 ) {
-	executeAdminIdempotentJSONWithMode(c, scope, payload, ttl, idempotencyStoreUnavailableFailOpen, execute)
+	executeAdminIdempotentJSONWithMode(c, coordinator, scope, payload, ttl, idempotencyStoreUnavailableFailOpen, execute)
 }
 
 func executeAdminIdempotentJSONWithMode(
 	c *gin.Context,
+	coordinator *service.IdempotencyCoordinator,
 	scope string,
 	payload any,
 	ttl time.Duration,
 	mode idempotencyStoreUnavailableMode,
 	execute func(context.Context) (any, error),
 ) {
-	result, err := executeAdminIdempotent(c, scope, payload, ttl, execute)
+	result, err := executeAdminIdempotent(c, coordinator, scope, payload, ttl, execute)
 	if err != nil {
 		if infraerrors.Code(err) == infraerrors.Code(service.ErrIdempotencyStoreUnavail) {
 			strategy := "fail_close"

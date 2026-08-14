@@ -16,6 +16,7 @@ import (
 // ProxyHandler handles admin proxy management
 type ProxyHandler struct {
 	adminService service.AdminService
+	idempotency  *service.IdempotencyCoordinator
 }
 
 // NewProxyHandler creates a new admin proxy handler
@@ -142,7 +143,7 @@ func (h *ProxyHandler) Create(c *gin.Context) {
 		return
 	}
 
-	executeAdminIdempotentJSON(c, "admin.proxies.create", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
+	executeAdminIdempotentJSON(c, h.idempotency, "admin.proxies.create", req, h.idempotency.WriteTTL(), func(ctx context.Context) (any, error) {
 		var expiresAt *time.Time
 		if req.ExpiresAt != nil && *req.ExpiresAt > 0 {
 			t := time.Unix(*req.ExpiresAt, 0).UTC()

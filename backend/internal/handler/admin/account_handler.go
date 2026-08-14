@@ -62,6 +62,7 @@ type AccountHandler struct {
 	rpmCache                service.RPMCache
 	tokenCacheInvalidator   service.TokenCacheInvalidator
 	upstreamBillingProbe    *service.UpstreamBillingProbeService
+	idempotency             *service.IdempotencyCoordinator
 }
 
 // NewAccountHandler creates a new admin account handler
@@ -819,7 +820,7 @@ func (h *AccountHandler) Create(c *gin.Context) {
 	// 幂等重放时闭包不会执行 → createdAccount 为 nil → 不重复调度。
 	var createdAccount *service.Account
 
-	result, err := executeAdminIdempotent(c, "admin.accounts.create", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
+	result, err := executeAdminIdempotent(c, h.idempotency, "admin.accounts.create", req, h.idempotency.WriteTTL(), func(ctx context.Context) (any, error) {
 		account, execErr := h.adminService.CreateAccount(ctx, &service.CreateAccountInput{
 			Name:                  req.Name,
 			Notes:                 req.Notes,
@@ -1654,7 +1655,7 @@ func (h *AccountHandler) BatchCreate(c *gin.Context) {
 		return
 	}
 
-	executeAdminIdempotentJSON(c, "admin.accounts.batch_create", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
+	executeAdminIdempotentJSON(c, h.idempotency, "admin.accounts.batch_create", req, h.idempotency.WriteTTL(), func(ctx context.Context) (any, error) {
 		success := 0
 		failed := 0
 		results := make([]gin.H, 0, len(req.Accounts))

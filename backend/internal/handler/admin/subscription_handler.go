@@ -29,6 +29,7 @@ func toResponsePagination(p *pagination.PaginationResult) *response.PaginationRe
 // SubscriptionHandler handles admin subscription management
 type SubscriptionHandler struct {
 	subscriptionService *service.SubscriptionService
+	idempotency         *service.IdempotencyCoordinator
 }
 
 // NewSubscriptionHandler creates a new admin subscription handler
@@ -208,7 +209,7 @@ func (h *SubscriptionHandler) Extend(c *gin.Context) {
 		SubscriptionID: subscriptionID,
 		Body:           req,
 	}
-	executeAdminIdempotentJSON(c, "admin.subscriptions.extend", idempotencyPayload, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
+	executeAdminIdempotentJSON(c, h.idempotency, "admin.subscriptions.extend", idempotencyPayload, h.idempotency.WriteTTL(), func(ctx context.Context) (any, error) {
 		subscription, execErr := h.subscriptionService.ExtendSubscription(ctx, subscriptionID, req.Days)
 		if execErr != nil {
 			return nil, execErr

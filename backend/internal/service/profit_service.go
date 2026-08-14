@@ -839,9 +839,6 @@ func pickPreferredQuotaWindow(windows []ProfitQuotaWindow, requireUsed bool) *Pr
 		if requireUsed && (w.UsedPercent == nil || *w.UsedPercent <= 0) {
 			continue
 		}
-		if w.StartAt == nil && w.EndAt == nil {
-			continue
-		}
 		mins := profitWindowMinutes(w)
 		if mins <= 0 && (w.StartAt == nil || w.EndAt == nil || !w.EndAt.After(*w.StartAt)) {
 			continue

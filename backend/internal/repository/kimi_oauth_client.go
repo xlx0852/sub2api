@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/kimi"
@@ -14,12 +13,16 @@ import (
 	"github.com/imroc/req/v3"
 )
 
-type kimiOAuthClient struct{}
+type kimiOAuthClient struct {
+	clients *ReqClientPool
+}
 
-func NewKimiOAuthClient() ports.KimiOAuthClient { return &kimiOAuthClient{} }
+func NewKimiOAuthClient(pool *ReqClientPool) ports.KimiOAuthClient {
+	return &kimiOAuthClient{clients: orNewReqClientPool(pool)}
+}
 
 func (c *kimiOAuthClient) StartDeviceFlow(ctx context.Context, proxyURL string, headers kimi.DeviceHeaders) (*kimi.DeviceCodeResponse, error) {
-	client, err := createKimiReqClient(proxyURL)
+	client, err := createKimiReqClient(c.clients, proxyURL)
 	if err != nil {
 		return nil, kimiClientInitError(err)
 	}
@@ -53,7 +56,7 @@ func (c *kimiOAuthClient) RefreshToken(ctx context.Context, refreshToken, proxyU
 }
 
 func (c *kimiOAuthClient) requestToken(ctx context.Context, form url.Values, proxyURL string, headers kimi.DeviceHeaders, code string) (*kimi.TokenResponse, error) {
-	client, err := createKimiReqClient(proxyURL)
+	client, err := createKimiReqClient(c.clients, proxyURL)
 	if err != nil {
 		return nil, kimiClientInitError(err)
 	}
@@ -71,10 +74,6 @@ func (c *kimiOAuthClient) requestToken(ctx context.Context, form url.Values, pro
 		return &failure, nil
 	}
 	return nil, kimiOAuthStatusError(code, "token request failed", resp)
-}
-
-func createKimiReqClient(proxyURL string) (*req.Client, error) {
-	return getSharedReqClient(reqClientOptions{ProxyURL: proxyURL, Timeout: 60 * time.Second})
 }
 
 func kimiRequestHeaders(headers kimi.DeviceHeaders) map[string]string {

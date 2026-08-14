@@ -50,7 +50,7 @@ func TestGrokOAuthClientExchangeAndRefreshUseFormFields(t *testing.T) {
 	defer server.Close()
 	t.Setenv(xai.EnvTokenURL, server.URL)
 
-	client := NewGrokOAuthClient()
+	client := NewGrokOAuthClient(nil)
 
 	exchanged, err := client.ExchangeCode(
 		context.Background(),
@@ -82,7 +82,7 @@ func TestGrokOAuthClientRefreshForbiddenClassifiesEntitlement(t *testing.T) {
 	defer server.Close()
 	t.Setenv(xai.EnvTokenURL, server.URL)
 
-	client := NewGrokOAuthClient()
+	client := NewGrokOAuthClient(nil)
 	_, err := client.RefreshToken(context.Background(), "refresh-token", "", "client-id")
 	require.Error(t, err)
 	require.Contains(t, strings.ToUpper(err.Error()), "GROK_OAUTH_ENTITLEMENT_DENIED")
@@ -97,7 +97,7 @@ func TestGrokOAuthClientStatusErrorRedactsSensitiveResponseBody(t *testing.T) {
 	defer server.Close()
 	t.Setenv(xai.EnvTokenURL, server.URL)
 
-	client := NewGrokOAuthClient()
+	client := NewGrokOAuthClient(nil)
 	_, err := client.RefreshToken(context.Background(), "refresh-secret", "", "client-id")
 	require.Error(t, err)
 
@@ -145,7 +145,7 @@ func TestGrokOAuthClientDeviceFlowUsesDiscoveryAndHandlesPending(t *testing.T) {
 	defer server.Close()
 	t.Setenv(xai.EnvDiscoveryURL, server.URL+"/.well-known/openid-configuration")
 
-	client := NewGrokOAuthClient()
+	client := NewGrokOAuthClient(nil)
 	device, err := client.StartDeviceFlow(context.Background(), "", "client-id", "openid offline_access")
 	require.NoError(t, err)
 	require.Equal(t, "device-code", device.DeviceCode)

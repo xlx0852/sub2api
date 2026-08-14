@@ -42,8 +42,15 @@ func ProvideAdminHandlers(
 	complianceHandler *admin.ComplianceHandler,
 	profitHandler *admin.ProfitHandler,
 	upstreamBillingProbe *service.UpstreamBillingProbeService,
+	idempotency *service.IdempotencyCoordinator,
 ) *AdminHandlers {
 	accountHandler.SetUpstreamBillingProbeService(upstreamBillingProbe)
+	accountHandler.SetIdempotencyCoordinator(idempotency)
+	userHandler.SetIdempotencyCoordinator(idempotency)
+	proxyHandler.SetIdempotencyCoordinator(idempotency)
+	redeemHandler.SetIdempotencyCoordinator(idempotency)
+	usageHandler.SetIdempotencyCoordinator(idempotency)
+	subscriptionHandler.SetIdempotencyCoordinator(idempotency)
 	return &AdminHandlers{
 		Dashboard:             dashboardHandler,
 		User:                  userHandler,
@@ -81,8 +88,8 @@ func ProvideAdminHandlers(
 }
 
 // ProvideSystemHandler creates admin.SystemHandler with build version.
-func ProvideSystemHandler(buildInfo BuildInfo, lockService *service.SystemOperationLockService) *admin.SystemHandler {
-	return admin.NewSystemHandler(buildInfo.Version, lockService)
+func ProvideSystemHandler(buildInfo BuildInfo, lockService *service.SystemOperationLockService, idempotency *service.IdempotencyCoordinator) *admin.SystemHandler {
+	return admin.NewSystemHandler(buildInfo.Version, lockService, idempotency)
 }
 
 // ProvideSettingHandler creates SettingHandler with version from BuildInfo
@@ -117,7 +124,6 @@ func ProvideHandlers(
 	paymentHandler *PaymentHandler,
 	paymentWebhookHandler *PaymentWebhookHandler,
 	availableChannelHandler *AvailableChannelHandler,
-	_ *service.IdempotencyCoordinator,
 	_ *service.IdempotencyCleanupService,
 	_ *service.SubscriptionAutoRenewService,
 ) *Handlers {

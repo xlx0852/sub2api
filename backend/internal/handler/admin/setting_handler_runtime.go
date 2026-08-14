@@ -375,7 +375,7 @@ func (h *SettingHandler) GetWebSearchEmulationConfig(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, service.PopulateWebSearchUsage(c.Request.Context(), cfg))
+	response.Success(c, h.settingService.PopulateWebSearchUsage(c.Request.Context(), cfg))
 }
 
 // UpdateWebSearchEmulationConfig 更新 Web Search 模拟配置
@@ -398,7 +398,7 @@ func (h *SettingHandler) UpdateWebSearchEmulationConfig(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, service.PopulateWebSearchUsage(c.Request.Context(), updated))
+	response.Success(c, h.settingService.PopulateWebSearchUsage(c.Request.Context(), updated))
 }
 
 // ResetWebSearchUsage 重置指定 provider 的配额用量
@@ -415,7 +415,7 @@ func (h *SettingHandler) ResetWebSearchUsage(c *gin.Context) {
 		response.BadRequest(c, "provider_type is required")
 		return
 	}
-	if err := service.ResetWebSearchUsage(c.Request.Context(), req.ProviderType); err != nil {
+	if err := h.settingService.ResetWebSearchUsage(c.Request.Context(), req.ProviderType); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
@@ -436,7 +436,7 @@ func (h *SettingHandler) TestWebSearchEmulation(c *gin.Context) {
 		req.Query = "搜索今年世界大事件"
 	}
 
-	result, err := service.TestWebSearch(c.Request.Context(), req.Query)
+	result, err := h.settingService.TestWebSearch(c.Request.Context(), req.Query)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

@@ -8,19 +8,18 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
-	"github.com/imroc/req/v3"
 )
 
 // NewOpenAIOAuthClient creates a new OpenAI OAuth client
-func NewOpenAIOAuthClient() ports.OpenAIOAuthClient {
+func NewOpenAIOAuthClient(pool *ReqClientPool) ports.OpenAIOAuthClient {
 	return &openaiOAuthService{
 		tokenURL:               openai.TokenURL,
 		deviceUserCodeURL:      openai.DeviceUserCodeURL,
 		deviceAuthorizationURL: openai.DeviceAuthorizationURL,
+		clients:                orNewReqClientPool(pool),
 	}
 }
 
@@ -28,10 +27,11 @@ type openaiOAuthService struct {
 	tokenURL               string
 	deviceUserCodeURL      string
 	deviceAuthorizationURL string
+	clients                *ReqClientPool
 }
 
 func (s *openaiOAuthService) RequestDeviceCode(ctx context.Context, proxyURL, clientID string) (*openai.DeviceCodeResponse, error) {
-	client, err := createOpenAIReqClient(proxyURL)
+	client, err := createOpenAIReqClient(s.clients, proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}
@@ -64,7 +64,7 @@ func (s *openaiOAuthService) RequestDeviceCode(ctx context.Context, proxyURL, cl
 }
 
 func (s *openaiOAuthService) PollDeviceAuthorization(ctx context.Context, deviceAuthID, userCode, proxyURL string) (*openai.DeviceAuthorizationResponse, error) {
-	client, err := createOpenAIReqClient(proxyURL)
+	client, err := createOpenAIReqClient(s.clients, proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_DEVICE_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}
@@ -102,7 +102,7 @@ func (s *openaiOAuthService) PollDeviceAuthorization(ctx context.Context, device
 }
 
 func (s *openaiOAuthService) ExchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string) (*openai.TokenResponse, error) {
-	client, err := createOpenAIReqClient(proxyURL)
+	client, err := createOpenAIReqClient(s.clients, proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}
@@ -159,7 +159,7 @@ func (s *openaiOAuthService) RefreshTokenWithClientID(ctx context.Context, refre
 }
 
 func (s *openaiOAuthService) refreshTokenWithClientID(ctx context.Context, refreshToken, proxyURL, clientID string) (*openai.TokenResponse, error) {
-	client, err := createOpenAIReqClient(proxyURL)
+	client, err := createOpenAIReqClient(s.clients, proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}
@@ -191,13 +191,6 @@ func (s *openaiOAuthService) refreshTokenWithClientID(ctx context.Context, refre
 	}
 
 	return &tokenResp, nil
-}
-
-func createOpenAIReqClient(proxyURL string) (*req.Client, error) {
-	return getSharedReqClient(reqClientOptions{
-		ProxyURL: proxyURL,
-		Timeout:  120 * time.Second,
-	})
 }
 
 func shouldReturnOpenAINoProxyHint(ctx context.Context, proxyURL string, err error) bool {

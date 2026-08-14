@@ -501,19 +501,19 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	}
 
 	// 先使 inflight singleflight 失效，再刷新缓存，缩小旧值覆盖新值的竞态窗口
-	versionBoundsSF.Forget("version_bounds")
-	versionBoundsCache.Store(&cachedVersionBounds{
+	s.versionBoundsSF.Forget("version_bounds")
+	s.versionBoundsCache.Store(&cachedVersionBounds{
 		min:       settings.MinClaudeCodeVersion,
 		max:       settings.MaxClaudeCodeVersion,
 		expiresAt: time.Now().Add(versionBoundsCacheTTL).UnixNano(),
 	})
-	backendModeSF.Forget("backend_mode")
-	backendModeCache.Store(&cachedBackendMode{
+	s.backendModeSF.Forget("backend_mode")
+	s.backendModeCache.Store(&cachedBackendMode{
 		value:     settings.BackendModeEnabled,
 		expiresAt: time.Now().Add(backendModeCacheTTL).UnixNano(),
 	})
-	gatewayForwardingSF.Forget("gateway_forwarding")
-	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+	s.gatewayForwardingSF.Forget("gateway_forwarding")
+	s.gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
 		fingerprintUnification:           settings.EnableFingerprintUnification,
 		metadataPassthrough:              settings.EnableMetadataPassthrough,
 		cchSigning:                       settings.EnableCCHSigning,
@@ -546,8 +546,8 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	// 版本号缓存独立失效：同步任务可能刚写过 synced 值，
 	// 这里没有它的最新值，重算会把同步结果覆盖成陈旧值。
 	s.InvalidateOpenAICodexClientVersionCache()
-	openAIAdvancedSchedulerSettingSF.Forget(openAIAdvancedSchedulerSettingKey)
-	openAIAdvancedSchedulerSettingCache.Store(&cachedOpenAIAdvancedSchedulerSetting{
+	s.openAIAdvancedSchedulerSettingSF.Forget(openAIAdvancedSchedulerSettingKey)
+	s.openAIAdvancedSchedulerSettingCache.Store(&cachedOpenAIAdvancedSchedulerSetting{
 		enabled:                     settings.OpenAIAdvancedSchedulerEnabled,
 		stickyWeightedEnabled:       settings.OpenAIAdvancedSchedulerStickyWeightedEnabled,
 		subscriptionPriorityEnabled: settings.OpenAIAdvancedSchedulerSubscriptionPriorityEnabled,

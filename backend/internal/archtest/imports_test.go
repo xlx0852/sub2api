@@ -100,7 +100,7 @@ var importRules = []importRule{
 	},
 	{
 		name:      "middleware-standalone",
-		desc:      "internal/middleware（基础中间件）不得 import 业务与接入层",
+		desc:      "internal/middleware 已并入 server/middleware；若独立包回潮，仍不得 import 业务与接入层",
 		appliesTo: []string{"internal/middleware"},
 		forbidden: []string{
 			"internal/service", "internal/repository", "internal/handler",

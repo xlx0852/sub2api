@@ -16,12 +16,12 @@ import (
 
 func executeUserIdempotentJSON(
 	c *gin.Context,
+	coordinator *service.IdempotencyCoordinator,
 	scope string,
 	payload any,
 	ttl time.Duration,
 	execute func(context.Context) (any, error),
 ) {
-	coordinator := service.DefaultIdempotencyCoordinator()
 	if coordinator == nil {
 		data, err := execute(c.Request.Context())
 		if err != nil {

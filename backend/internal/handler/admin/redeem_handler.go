@@ -22,6 +22,7 @@ import (
 type RedeemHandler struct {
 	adminService  service.AdminService
 	redeemService *service.RedeemService
+	idempotency   *service.IdempotencyCoordinator
 }
 
 // NewRedeemHandler creates a new admin redeem handler
@@ -142,7 +143,7 @@ func (h *RedeemHandler) Generate(c *gin.Context) {
 		return
 	}
 
-	executeAdminIdempotentJSON(c, "admin.redeem_codes.generate", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
+	executeAdminIdempotentJSON(c, h.idempotency, "admin.redeem_codes.generate", req, h.idempotency.WriteTTL(), func(ctx context.Context) (any, error) {
 		codes, execErr := h.adminService.GenerateRedeemCodes(ctx, &service.GenerateRedeemCodesInput{
 			Count:        req.Count,
 			Type:         req.Type,
@@ -200,7 +201,7 @@ func (h *RedeemHandler) CreateAndRedeem(c *gin.Context) {
 		return
 	}
 
-	executeAdminIdempotentJSON(c, "admin.redeem_codes.create_and_redeem", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
+	executeAdminIdempotentJSON(c, h.idempotency, "admin.redeem_codes.create_and_redeem", req, h.idempotency.WriteTTL(), func(ctx context.Context) (any, error) {
 		existing, err := h.redeemService.GetByCode(ctx, req.Code)
 		if err == nil {
 			return h.resolveCreateAndRedeemExisting(ctx, existing, req.UserID)

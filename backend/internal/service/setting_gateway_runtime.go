@@ -8,12 +8,10 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
-	"golang.org/x/sync/singleflight"
 )
 
 // cachedVersionBounds 缓存 Claude Code 版本号上下限（进程内缓存，60s TTL）
@@ -22,12 +20,6 @@ type cachedVersionBounds struct {
 	max       string // 空字符串 = 不检查
 	expiresAt int64  // unix nano
 }
-
-// versionBoundsCache 版本号上下限进程内缓存
-var versionBoundsCache atomic.Value // *cachedVersionBounds
-
-// versionBoundsSF 防止缓存过期时 thundering herd
-var versionBoundsSF singleflight.Group
 
 // versionBoundsCacheTTL 缓存有效期
 const versionBoundsCacheTTL = 60 * time.Second
@@ -43,9 +35,6 @@ type cachedBackendMode struct {
 	value     bool
 	expiresAt int64 // unix nano
 }
-
-var backendModeCache atomic.Value // *cachedBackendMode
-var backendModeSF singleflight.Group
 
 const backendModeCacheTTL = 60 * time.Second
 const backendModeErrorTTL = 5 * time.Second
@@ -64,9 +53,6 @@ type cachedGatewayForwardingSettings struct {
 	clientDatelineNormalization      bool
 	expiresAt                        int64 // unix nano
 }
-
-var gatewayForwardingCache atomic.Value // *cachedGatewayForwardingSettings
-var gatewayForwardingSF singleflight.Group
 
 const gatewayForwardingCacheTTL = 60 * time.Second
 const gatewayForwardingErrorTTL = 5 * time.Second
@@ -297,7 +283,6 @@ func (s *SettingService) GetOpenAICodexUserAgent(ctx context.Context) string {
 	}
 	return fallback
 }
-
 
 // GetOpenAICodexClientVersion 返回出站声明的 Codex 客户端版本号。
 // 优先级：管理员在面板覆写的版本 → 自动同步到的官方最新稳定版 → 内置常量。
@@ -651,13 +636,13 @@ func ValidateEngineFingerprintSignalsJSON(raw string) error {
 // IsBackendModeEnabled checks if backend mode is enabled
 // Uses in-process atomic.Value cache with 60s TTL, zero-lock hot path
 func (s *SettingService) IsBackendModeEnabled(ctx context.Context) bool {
-	if cached, ok := backendModeCache.Load().(*cachedBackendMode); ok && cached != nil {
+	if cached, ok := s.backendModeCache.Load().(*cachedBackendMode); ok && cached != nil {
 		if time.Now().UnixNano() < cached.expiresAt {
 			return cached.value
 		}
 	}
-	result, _, _ := backendModeSF.Do("backend_mode", func() (any, error) {
-		if cached, ok := backendModeCache.Load().(*cachedBackendMode); ok && cached != nil {
+	result, _, _ := s.backendModeSF.Do("backend_mode", func() (any, error) {
+		if cached, ok := s.backendModeCache.Load().(*cachedBackendMode); ok && cached != nil {
 			if time.Now().UnixNano() < cached.expiresAt {
 				return cached.value, nil
 			}
@@ -668,21 +653,21 @@ func (s *SettingService) IsBackendModeEnabled(ctx context.Context) bool {
 		if err != nil {
 			if errors.Is(err, ErrSettingNotFound) {
 				// Setting not yet created (fresh install) - default to disabled with full TTL
-				backendModeCache.Store(&cachedBackendMode{
+				s.backendModeCache.Store(&cachedBackendMode{
 					value:     false,
 					expiresAt: time.Now().Add(backendModeCacheTTL).UnixNano(),
 				})
 				return false, nil
 			}
 			slog.Warn("failed to get backend_mode_enabled setting", "error", err)
-			backendModeCache.Store(&cachedBackendMode{
+			s.backendModeCache.Store(&cachedBackendMode{
 				value:     false,
 				expiresAt: time.Now().Add(backendModeErrorTTL).UnixNano(),
 			})
 			return false, nil
 		}
 		enabled := value == "true"
-		backendModeCache.Store(&cachedBackendMode{
+		s.backendModeCache.Store(&cachedBackendMode{
 			value:     enabled,
 			expiresAt: time.Now().Add(backendModeCacheTTL).UnixNano(),
 		})
@@ -701,7 +686,7 @@ type gatewayForwardingSettingsResult struct {
 }
 
 func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context) gatewayForwardingSettingsResult {
-	if cached, ok := gatewayForwardingCache.Load().(*cachedGatewayForwardingSettings); ok && cached != nil {
+	if cached, ok := s.gatewayForwardingCache.Load().(*cachedGatewayForwardingSettings); ok && cached != nil {
 		if time.Now().UnixNano() < cached.expiresAt {
 			return gatewayForwardingSettingsResult{
 				fp:                               cached.fingerprintUnification,
@@ -716,8 +701,8 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 			}
 		}
 	}
-	val, _, _ := gatewayForwardingSF.Do("gateway_forwarding", func() (any, error) {
-		if cached, ok := gatewayForwardingCache.Load().(*cachedGatewayForwardingSettings); ok && cached != nil {
+	val, _, _ := s.gatewayForwardingSF.Do("gateway_forwarding", func() (any, error) {
+		if cached, ok := s.gatewayForwardingCache.Load().(*cachedGatewayForwardingSettings); ok && cached != nil {
 			if time.Now().UnixNano() < cached.expiresAt {
 				return gatewayForwardingSettingsResult{
 					fp:                               cached.fingerprintUnification,
@@ -747,7 +732,7 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 		})
 		if err != nil {
 			slog.Warn("failed to get gateway forwarding settings", "error", err)
-			gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+			s.gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
 				fingerprintUnification:           true,
 				metadataPassthrough:              false,
 				cchSigning:                       false,
@@ -780,7 +765,7 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 		if v, ok := values[SettingKeyEnableClientDatelineNormalization]; ok && v != "" {
 			clientDatelineNormalization = v == "true"
 		}
-		gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+		s.gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
 			fingerprintUnification:           fp,
 			metadataPassthrough:              mp,
 			cchSigning:                       cch,
@@ -847,16 +832,16 @@ func (s *SettingService) GetClaudeOAuthSystemPromptInjectionSettings(ctx context
 // singleflight 防止缓存过期时 thundering herd
 // 返回空字符串表示不做对应方向的版本检查
 func (s *SettingService) GetClaudeCodeVersionBounds(ctx context.Context) (min, max string) {
-	if cached, ok := versionBoundsCache.Load().(*cachedVersionBounds); ok {
+	if cached, ok := s.versionBoundsCache.Load().(*cachedVersionBounds); ok {
 		if time.Now().UnixNano() < cached.expiresAt {
 			return cached.min, cached.max
 		}
 	}
 	// singleflight: 同一时刻只有一个 goroutine 查询 DB，其余复用结果
 	type bounds struct{ min, max string }
-	result, err, _ := versionBoundsSF.Do("version_bounds", func() (any, error) {
+	result, err, _ := s.versionBoundsSF.Do("version_bounds", func() (any, error) {
 		// 二次检查，避免排队的 goroutine 重复查询
-		if cached, ok := versionBoundsCache.Load().(*cachedVersionBounds); ok {
+		if cached, ok := s.versionBoundsCache.Load().(*cachedVersionBounds); ok {
 			if time.Now().UnixNano() < cached.expiresAt {
 				return bounds{cached.min, cached.max}, nil
 			}
@@ -871,7 +856,7 @@ func (s *SettingService) GetClaudeCodeVersionBounds(ctx context.Context) (min, m
 		if err != nil {
 			// fail-open: DB 错误时不阻塞请求，但记录日志并使用短 TTL 快速重试
 			slog.Warn("failed to get claude code version bounds setting, skipping version check", "error", err)
-			versionBoundsCache.Store(&cachedVersionBounds{
+			s.versionBoundsCache.Store(&cachedVersionBounds{
 				min:       "",
 				max:       "",
 				expiresAt: time.Now().Add(versionBoundsErrorTTL).UnixNano(),
@@ -882,7 +867,7 @@ func (s *SettingService) GetClaudeCodeVersionBounds(ctx context.Context) (min, m
 			min: values[SettingKeyMinClaudeCodeVersion],
 			max: values[SettingKeyMaxClaudeCodeVersion],
 		}
-		versionBoundsCache.Store(&cachedVersionBounds{
+		s.versionBoundsCache.Store(&cachedVersionBounds{
 			min:       b.min,
 			max:       b.max,
 			expiresAt: time.Now().Add(versionBoundsCacheTTL).UnixNano(),

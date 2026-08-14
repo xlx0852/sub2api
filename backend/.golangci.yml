@@ -166,6 +166,7 @@ linters:
               desc: "pkg (stateless protocol/util libs) must not import upper layers"
             - pkg: github.com/Wei-Shaw/sub2api/internal/domain
               desc: "pkg (stateless protocol/util libs) must not import upper layers"
+        # P2.3：internal/middleware 已并入 server/middleware。保留本规则防止独立包回潮。
         arch-middleware-standalone:
           list-mode: original
           files:

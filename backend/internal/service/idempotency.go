@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -68,44 +67,27 @@ type IdempotencyCoordinator struct {
 	cfg  IdempotencyConfig
 }
 
-var (
-	defaultIdempotencyMu  sync.RWMutex
-	defaultIdempotencySvc *IdempotencyCoordinator
-)
-
-func SetDefaultIdempotencyCoordinator(svc *IdempotencyCoordinator) {
-	defaultIdempotencyMu.Lock()
-	defaultIdempotencySvc = svc
-	defaultIdempotencyMu.Unlock()
-}
-
-func DefaultIdempotencyCoordinator() *IdempotencyCoordinator {
-	defaultIdempotencyMu.RLock()
-	defer defaultIdempotencyMu.RUnlock()
-	return defaultIdempotencySvc
-}
-
-func DefaultWriteIdempotencyTTL() time.Duration {
-	defaultTTL := DefaultIdempotencyConfig().DefaultTTL
-	if coordinator := DefaultIdempotencyCoordinator(); coordinator != nil && coordinator.cfg.DefaultTTL > 0 {
-		return coordinator.cfg.DefaultTTL
-	}
-	return defaultTTL
-}
-
-func DefaultSystemOperationIdempotencyTTL() time.Duration {
-	defaultTTL := DefaultIdempotencyConfig().SystemOperationTTL
-	if coordinator := DefaultIdempotencyCoordinator(); coordinator != nil && coordinator.cfg.SystemOperationTTL > 0 {
-		return coordinator.cfg.SystemOperationTTL
-	}
-	return defaultTTL
-}
-
 func NewIdempotencyCoordinator(repo IdempotencyRepository, cfg IdempotencyConfig) *IdempotencyCoordinator {
 	return &IdempotencyCoordinator{
 		repo: repo,
 		cfg:  cfg,
 	}
+}
+
+// WriteTTL 是写操作幂等窗口。coordinator 为 nil 时回落编译期默认值。
+func (c *IdempotencyCoordinator) WriteTTL() time.Duration {
+	if c != nil && c.cfg.DefaultTTL > 0 {
+		return c.cfg.DefaultTTL
+	}
+	return DefaultIdempotencyConfig().DefaultTTL
+}
+
+// SystemOperationTTL 是系统级操作幂等窗口。coordinator 为 nil 时回落编译期默认值。
+func (c *IdempotencyCoordinator) SystemOperationTTL() time.Duration {
+	if c != nil && c.cfg.SystemOperationTTL > 0 {
+		return c.cfg.SystemOperationTTL
+	}
+	return DefaultIdempotencyConfig().SystemOperationTTL
 }
 
 func NormalizeIdempotencyKey(raw string) (string, error) {

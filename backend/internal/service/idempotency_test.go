@@ -488,11 +488,10 @@ func TestIdempotencyCoordinator_TruncatedStoredResponseRemainsUTF8(t *testing.T)
 	require.Contains(t, *stored.ResponseBody, "...(truncated)")
 }
 
-func TestDefaultIdempotencyCoordinatorAndTTLs(t *testing.T) {
-	SetDefaultIdempotencyCoordinator(nil)
-	require.Nil(t, DefaultIdempotencyCoordinator())
-	require.Equal(t, DefaultIdempotencyConfig().DefaultTTL, DefaultWriteIdempotencyTTL())
-	require.Equal(t, DefaultIdempotencyConfig().SystemOperationTTL, DefaultSystemOperationIdempotencyTTL())
+func TestIdempotencyCoordinatorTTLs(t *testing.T) {
+	var unset *IdempotencyCoordinator
+	require.Equal(t, DefaultIdempotencyConfig().DefaultTTL, unset.WriteTTL())
+	require.Equal(t, DefaultIdempotencyConfig().SystemOperationTTL, unset.SystemOperationTTL())
 
 	coordinator := NewIdempotencyCoordinator(newInMemoryIdempotencyRepo(), IdempotencyConfig{
 		DefaultTTL:         2 * time.Hour,
@@ -501,14 +500,8 @@ func TestDefaultIdempotencyCoordinatorAndTTLs(t *testing.T) {
 		FailedRetryBackoff: 3 * time.Second,
 		ObserveOnly:        false,
 	})
-	SetDefaultIdempotencyCoordinator(coordinator)
-	t.Cleanup(func() {
-		SetDefaultIdempotencyCoordinator(nil)
-	})
-
-	require.Same(t, coordinator, DefaultIdempotencyCoordinator())
-	require.Equal(t, 2*time.Hour, DefaultWriteIdempotencyTTL())
-	require.Equal(t, 15*time.Minute, DefaultSystemOperationIdempotencyTTL())
+	require.Equal(t, 2*time.Hour, coordinator.WriteTTL())
+	require.Equal(t, 15*time.Minute, coordinator.SystemOperationTTL())
 }
 
 func TestNormalizeIdempotencyKeyAndFingerprint(t *testing.T) {

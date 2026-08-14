@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"sync/atomic"
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/websearch"
-	"golang.org/x/sync/singleflight"
 )
 
 // WebSearchEmulationConfig holds the global web search emulation configuration.
@@ -72,9 +70,6 @@ type cachedWebSearchEmulationConfig struct {
 	expiresAt int64 // unix nano
 }
 
-var webSearchEmulationCache atomic.Value // *cachedWebSearchEmulationConfig
-var webSearchEmulationSF singleflight.Group
-
 const (
 	webSearchEmulationCacheTTL  = 60 * time.Second
 	webSearchEmulationErrorTTL  = 5 * time.Second
@@ -83,12 +78,12 @@ const (
 
 // GetWebSearchEmulationConfig returns the configuration with in-process cache + singleflight.
 func (s *SettingService) GetWebSearchEmulationConfig(ctx context.Context) (*WebSearchEmulationConfig, error) {
-	if cached := webSearchEmulationCache.Load(); cached != nil {
+	if cached := s.webSearchEmulationCache.Load(); cached != nil {
 		if c, ok := cached.(*cachedWebSearchEmulationConfig); ok && time.Now().UnixNano() < c.expiresAt {
 			return c.config, nil
 		}
 	}
-	result, err, _ := webSearchEmulationSF.Do(sfKeyWebSearchConfig, func() (any, error) {
+	result, err, _ := s.webSearchEmulationSF.Do(sfKeyWebSearchConfig, func() (any, error) {
 		return s.loadWebSearchConfigFromDB()
 	})
 	if err != nil {
@@ -106,14 +101,14 @@ func (s *SettingService) loadWebSearchConfigFromDB() (*WebSearchEmulationConfig,
 
 	raw, err := s.settingRepo.GetValue(dbCtx, SettingKeyWebSearchEmulationConfig)
 	if err != nil {
-		webSearchEmulationCache.Store(&cachedWebSearchEmulationConfig{
+		s.webSearchEmulationCache.Store(&cachedWebSearchEmulationConfig{
 			config:    &WebSearchEmulationConfig{},
 			expiresAt: time.Now().Add(webSearchEmulationErrorTTL).UnixNano(),
 		})
 		return &WebSearchEmulationConfig{}, err
 	}
 	cfg := parseWebSearchConfigJSON(raw)
-	webSearchEmulationCache.Store(&cachedWebSearchEmulationConfig{
+	s.webSearchEmulationCache.Store(&cachedWebSearchEmulationConfig{
 		config:    cfg,
 		expiresAt: time.Now().Add(webSearchEmulationCacheTTL).UnixNano(),
 	})
@@ -158,8 +153,8 @@ func (s *SettingService) SaveWebSearchEmulationConfig(ctx context.Context, cfg *
 		return fmt.Errorf("websearch: save config: %w", err)
 	}
 	// Invalidate: forget singleflight first, then store new value
-	webSearchEmulationSF.Forget(sfKeyWebSearchConfig)
-	webSearchEmulationCache.Store(&cachedWebSearchEmulationConfig{
+	s.webSearchEmulationSF.Forget(sfKeyWebSearchConfig)
+	s.webSearchEmulationCache.Store(&cachedWebSearchEmulationConfig{
 		config:    cfg,
 		expiresAt: time.Now().Add(webSearchEmulationCacheTTL).UnixNano(),
 	})
@@ -207,6 +202,23 @@ func (s *SettingService) IsWebSearchEmulationEnabled(ctx context.Context) bool {
 	return cfg.Enabled && len(cfg.Providers) > 0
 }
 
+// SetWebSearchManager stores the live websearch.Manager on this SettingService.
+// The infra builder and config-save rebuild write here; gateway reads via WebSearchManager.
+func (s *SettingService) SetWebSearchManager(m *websearch.Manager) {
+	if s == nil {
+		return
+	}
+	s.webSearchManager.Store(m)
+}
+
+// WebSearchManager returns the current manager, or nil if unset / service is nil.
+func (s *SettingService) WebSearchManager() *websearch.Manager {
+	if s == nil {
+		return nil
+	}
+	return s.webSearchManager.Load()
+}
+
 // SetWebSearchManagerBuilder injects a callback that creates and wires a websearch.Manager.
 // The infra layer (main/wire) provides this builder, keeping redis out of the service layer.
 // Triggers initial build.
@@ -222,7 +234,7 @@ func (s *SettingService) rebuildWebSearchManager(ctx context.Context) {
 	}
 	cfg, err := s.GetWebSearchEmulationConfig(ctx)
 	if err != nil {
-		SetWebSearchManager(nil)
+		s.SetWebSearchManager(nil)
 		return
 	}
 	proxyURLs := s.resolveProviderProxyURLs(ctx, cfg)
@@ -266,8 +278,8 @@ type WebSearchTestResult struct {
 // Uses Manager.TestSearch which bypasses quota tracking.
 const testSearchTimeout = 15 * time.Second
 
-func TestWebSearch(ctx context.Context, query string) (*WebSearchTestResult, error) {
-	mgr := getWebSearchManager()
+func (s *SettingService) TestWebSearch(ctx context.Context, query string) (*WebSearchTestResult, error) {
+	mgr := s.WebSearchManager()
 	if mgr == nil {
 		return nil, fmt.Errorf("web search: manager not initialized, save config first")
 	}
@@ -288,14 +300,14 @@ func TestWebSearch(ctx context.Context, query string) (*WebSearchTestResult, err
 }
 
 // PopulateWebSearchUsage returns a copy with quota usage populated from Redis (api_key kept as-is).
-func PopulateWebSearchUsage(ctx context.Context, cfg *WebSearchEmulationConfig) *WebSearchEmulationConfig {
+func (s *SettingService) PopulateWebSearchUsage(ctx context.Context, cfg *WebSearchEmulationConfig) *WebSearchEmulationConfig {
 	if cfg == nil {
 		return nil
 	}
 	out := *cfg
 	out.Providers = make([]WebSearchProviderConfig, len(cfg.Providers))
 
-	mgr := getWebSearchManager()
+	mgr := s.WebSearchManager()
 
 	for i, p := range cfg.Providers {
 		out.Providers[i] = p
@@ -310,8 +322,8 @@ func PopulateWebSearchUsage(ctx context.Context, cfg *WebSearchEmulationConfig) 
 }
 
 // ResetWebSearchUsage deletes the Redis quota key for the given provider type.
-func ResetWebSearchUsage(ctx context.Context, providerType string) error {
-	mgr := getWebSearchManager()
+func (s *SettingService) ResetWebSearchUsage(ctx context.Context, providerType string) error {
+	mgr := s.WebSearchManager()
 	if mgr == nil {
 		return fmt.Errorf("web search manager not initialized")
 	}
@@ -319,15 +331,14 @@ func ResetWebSearchUsage(ctx context.Context, providerType string) error {
 }
 
 // SanitizeWebSearchConfig returns a copy with api_key fields masked and quota usage populated.
-func SanitizeWebSearchConfig(ctx context.Context, cfg *WebSearchEmulationConfig) *WebSearchEmulationConfig {
+func (s *SettingService) SanitizeWebSearchConfig(ctx context.Context, cfg *WebSearchEmulationConfig) *WebSearchEmulationConfig {
 	if cfg == nil {
 		return nil
 	}
 	out := *cfg
 	out.Providers = make([]WebSearchProviderConfig, len(cfg.Providers))
 
-	// Load usage from the global Manager (reads from Redis)
-	mgr := getWebSearchManager()
+	mgr := s.WebSearchManager()
 
 	for i, p := range cfg.Providers {
 		out.Providers[i] = p

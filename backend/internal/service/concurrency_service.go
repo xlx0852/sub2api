@@ -222,6 +222,10 @@ func NewConcurrencyService(cache ConcurrencyCache) *ConcurrencyService {
 		cache:            cache,
 		accountLoadCache: make(map[string]cachedAccountLoadBatch),
 	}
+	// atomic.Value panics when Load is called before the first Store. Keep the
+	// zero-configuration path explicit: no provider means model budgets are
+	// disabled and account-slot acquisition behaves exactly as before.
+	svc.modelConcurrencyLimitProvider.Store((func(context.Context) map[string]int)(nil))
 	svc.SetAccountLoadBatchCacheTTL(defaultAccountLoadBatchCacheTTL)
 	return svc
 }

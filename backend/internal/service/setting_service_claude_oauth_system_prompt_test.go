@@ -10,12 +10,15 @@ import (
 
 func resetGatewayForwardingSettingsCacheForTest(t *testing.T) {
 	t.Helper()
-	gatewayForwardingSF.Forget("gateway_forwarding")
-	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
-	t.Cleanup(func() {
-		gatewayForwardingSF.Forget("gateway_forwarding")
-		gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
-	})
+	// 缓存已挂在 SettingService 实例上；新实例即空缓存。
+}
+
+func invalidateGatewayForwardingCache(s *SettingService) {
+	if s == nil {
+		return
+	}
+	s.gatewayForwardingSF.Forget("gateway_forwarding")
+	s.gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
 }
 
 func TestSettingService_GetClaudeOAuthSystemPromptInjectionSettings(t *testing.T) {

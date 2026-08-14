@@ -14,8 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
-	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -58,9 +58,6 @@ type openAIAdvancedSchedulerRuntimeSettings struct {
 	lbTopKOverride              int
 	weightOverrides             map[string]float64
 }
-
-var openAIAdvancedSchedulerSettingCache atomic.Value // *cachedOpenAIAdvancedSchedulerSetting
-var openAIAdvancedSchedulerSettingSF singleflight.Group
 
 var stickyReevalLastAt sync.Map // sessionHash -> int64 unix nano
 
@@ -562,13 +559,8 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 			return nil, true, nil
 		}
 		return &AccountSelectionResult{
-			Account: account,
-			WaitPlan: &AccountWaitPlan{
-				AccountID:      accountID,
-				MaxConcurrency: account.Concurrency,
-				Timeout:        cfg.StickySessionWaitTimeout,
-				MaxWaiting:     cfg.StickySessionMaxWaiting,
-			},
+			Account:  account,
+			WaitPlan: newStickyWaitPlan(accountID, account.Concurrency, cfg),
 		}, false, nil
 	}
 	return nil, false, nil
@@ -631,23 +623,12 @@ func (s *defaultOpenAIAccountScheduler) shouldReevalStickyForUsage(ctx context.C
 }
 
 func openAIStickyAccountMatchesGroup(account *Account, groupID *int64) bool {
-	if account == nil {
-		return false
-	}
-	if groupID == nil {
-		return len(account.AccountGroups) == 0 && len(account.GroupIDs) == 0
-	}
-	for _, accountGroupID := range account.GroupIDs {
-		if accountGroupID == *groupID {
-			return true
-		}
-	}
-	for _, accountGroup := range account.AccountGroups {
-		if accountGroup.GroupID == *groupID {
-			return true
-		}
-	}
-	return false
+	return scheduling.EvaluateCandidate(
+		context.Background(),
+		account,
+		scheduling.Request{GroupID: groupID, IncludeFlatGroupIDs: true},
+		scheduling.GroupMembershipPolicy,
+	).Allowed
 }
 
 func openAIAccountSchedulingPriority(account *Account) int {
@@ -1334,13 +1315,8 @@ func (s *defaultOpenAIAccountScheduler) tryFallbackToWeightedSticky(
 		if s.service.concurrencyService != nil {
 			cfg := s.service.schedulingConfig()
 			return &AccountSelectionResult{
-				Account: account,
-				WaitPlan: &AccountWaitPlan{
-					AccountID:      account.ID,
-					MaxConcurrency: account.Concurrency,
-					Timeout:        cfg.StickySessionWaitTimeout,
-					MaxWaiting:     cfg.StickySessionMaxWaiting,
-				},
+				Account:  account,
+				WaitPlan: newStickyWaitPlan(account.ID, account.Concurrency, cfg),
 			}, nil
 		}
 	}
@@ -1600,13 +1576,8 @@ func (s *defaultOpenAIAccountScheduler) finishLoadBalanceSelectionFallback(
 			continue
 		}
 		return &AccountSelectionResult{
-			Account: fresh,
-			WaitPlan: &AccountWaitPlan{
-				AccountID:      fresh.ID,
-				MaxConcurrency: fresh.Concurrency,
-				Timeout:        cfg.FallbackWaitTimeout,
-				MaxWaiting:     cfg.FallbackMaxWaiting,
-			},
+			Account:  fresh,
+			WaitPlan: newFallbackWaitPlan(fresh.ID, fresh.Concurrency, cfg),
 		}, candidateCount, topK, loadSkew, nil
 	}
 
@@ -1614,13 +1585,16 @@ func (s *defaultOpenAIAccountScheduler) finishLoadBalanceSelectionFallback(
 }
 
 func (s *defaultOpenAIAccountScheduler) isAccountTransportCompatible(account *Account, requiredTransport OpenAIUpstreamTransport) bool {
-	if requiredTransport == OpenAIUpstreamTransportAny || requiredTransport == OpenAIUpstreamTransportHTTPSSE {
-		return true
+	var service *OpenAIGatewayService
+	if s != nil {
+		service = s.service
 	}
-	if s == nil || s.service == nil {
-		return false
-	}
-	return s.service.isOpenAIAccountTransportCompatible(account, requiredTransport)
+	return scheduling.EvaluateCandidate(
+		context.Background(),
+		account,
+		scheduling.Request{RequiredTransport: string(requiredTransport)},
+		openAITransportPolicy{service: service},
+	).Allowed
 }
 
 func (s *defaultOpenAIAccountScheduler) lookupShadowParentAccount(ctx context.Context, id int64) *Account {
@@ -1640,36 +1614,20 @@ func (s *defaultOpenAIAccountScheduler) lookupShadowParentAccount(ctx context.Co
 }
 
 func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatible(ctx context.Context, account *Account, req OpenAIAccountScheduleRequest) bool {
-	if account == nil {
+	if s == nil || s.service == nil {
 		return false
 	}
-	if s != nil && s.service != nil && s.service.isOpenAIAccountRuntimeBlocked(account) {
-		return false
-	}
-	// Quota auto-pause must be evaluated during the initial filter too. Without it the
-	// TopK candidate pool can be filled with paused accounts and the later fresh/DB
-	// rechecks won't reach healthy accounts that fell outside TopK — manifesting as
-	// "no available accounts" even though healthy ones exist.
-	if paused, _ := shouldAutoPauseOpenAIAccountByQuota(ctx, account); paused {
-		return false
-	}
-	// 母账号健康联动：影子账号的凭据来自母账号，母账号不可调度时影子也不应被选中。
-	// Parent-health gate: shadow borrows the parent's credentials; an unschedulable
-	// parent must block the shadow across all scheduler paths.
-	if !parentHealthyForShadow(account, func(id int64) *Account {
-		return s.lookupShadowParentAccount(ctx, id)
-	}) {
-		return false
-	}
-	if req.RequestedModel != "" && !account.IsModelSupported(req.RequestedModel) {
-		return false
-	}
-	if req.GroupID != nil && s != nil && s.service != nil &&
-		s.service.needsUpstreamChannelRestrictionCheck(ctx, req.GroupID) &&
-		s.service.isUpstreamModelRestrictedByChannel(ctx, *req.GroupID, account, req.RequestedModel, req.RequireCompact) {
-		return false
-	}
-	return accountSupportsOpenAICapabilities(account, req.RequiredCapability, req.RequiredImageCapability)
+	return scheduling.EvaluateCandidate(
+		ctx,
+		account,
+		openAICandidatePolicyRequest(req),
+		openAIRuntimePolicy{service: s.service},
+		openAIAdvancedQuotaPolicy,
+		openAIShadowParentPolicy{scheduler: s},
+		openAIRequestedModelPolicy,
+		openAIUpstreamChannelPolicy{service: s.service},
+		openAIAllCapabilitiesPolicy,
+	).Allowed
 }
 
 func (s *defaultOpenAIAccountScheduler) ReportResult(accountID int64, success bool, firstTokenMs *int) {
@@ -1723,28 +1681,30 @@ func (s *defaultOpenAIAccountScheduler) SnapshotMetrics() OpenAIAccountScheduler
 	return snapshot
 }
 
-func (s *OpenAIGatewayService) openAIAdvancedSchedulerSettingRepo() SettingRepository {
-	if s == nil || s.rateLimitService == nil || s.rateLimitService.settingService == nil {
+func (s *OpenAIGatewayService) openAIAdvancedSchedulerSettingService() *SettingService {
+	if s == nil {
 		return nil
 	}
-	return s.rateLimitService.settingService.settingRepo
+	if s.settingService != nil {
+		return s.settingService
+	}
+	if s.rateLimitService != nil {
+		return s.rateLimitService.settingService
+	}
+	return nil
+}
+
+func (s *OpenAIGatewayService) openAIAdvancedSchedulerSettingRepo() SettingRepository {
+	if settingSvc := s.openAIAdvancedSchedulerSettingService(); settingSvc != nil {
+		return settingSvc.settingRepo
+	}
+	return nil
 }
 
 func (s *OpenAIGatewayService) openAIAdvancedSchedulerRuntimeSettings(ctx context.Context) openAIAdvancedSchedulerRuntimeSettings {
-	if cached, ok := openAIAdvancedSchedulerSettingCache.Load().(*cachedOpenAIAdvancedSchedulerSetting); ok && cached != nil {
-		if time.Now().UnixNano() < cached.expiresAt {
-			return openAIAdvancedSchedulerRuntimeSettings{
-				enabled:                     cached.enabled,
-				stickyWeightedEnabled:       cached.stickyWeightedEnabled,
-				subscriptionPriorityEnabled: cached.subscriptionPriorityEnabled,
-				lbTopKOverride:              cached.lbTopKOverride,
-				weightOverrides:             cloneOpenAIAdvancedSchedulerWeightOverrides(cached.weightOverrides),
-			}
-		}
-	}
-
-	result, _, _ := openAIAdvancedSchedulerSettingSF.Do(openAIAdvancedSchedulerSettingKey, func() (any, error) {
-		if cached, ok := openAIAdvancedSchedulerSettingCache.Load().(*cachedOpenAIAdvancedSchedulerSetting); ok && cached != nil {
+	settingSvc := s.openAIAdvancedSchedulerSettingService()
+	if settingSvc != nil {
+		if cached, ok := settingSvc.openAIAdvancedSchedulerSettingCache.Load().(*cachedOpenAIAdvancedSchedulerSetting); ok && cached != nil {
 			if time.Now().UnixNano() < cached.expiresAt {
 				return openAIAdvancedSchedulerRuntimeSettings{
 					enabled:                     cached.enabled,
@@ -1752,7 +1712,23 @@ func (s *OpenAIGatewayService) openAIAdvancedSchedulerRuntimeSettings(ctx contex
 					subscriptionPriorityEnabled: cached.subscriptionPriorityEnabled,
 					lbTopKOverride:              cached.lbTopKOverride,
 					weightOverrides:             cloneOpenAIAdvancedSchedulerWeightOverrides(cached.weightOverrides),
-				}, nil
+				}
+			}
+		}
+	}
+
+	doLoad := func() (any, error) {
+		if settingSvc != nil {
+			if cached, ok := settingSvc.openAIAdvancedSchedulerSettingCache.Load().(*cachedOpenAIAdvancedSchedulerSetting); ok && cached != nil {
+				if time.Now().UnixNano() < cached.expiresAt {
+					return openAIAdvancedSchedulerRuntimeSettings{
+						enabled:                     cached.enabled,
+						stickyWeightedEnabled:       cached.stickyWeightedEnabled,
+						subscriptionPriorityEnabled: cached.subscriptionPriorityEnabled,
+						lbTopKOverride:              cached.lbTopKOverride,
+						weightOverrides:             cloneOpenAIAdvancedSchedulerWeightOverrides(cached.weightOverrides),
+					}, nil
+				}
 			}
 		}
 
@@ -1789,14 +1765,16 @@ func (s *OpenAIGatewayService) openAIAdvancedSchedulerRuntimeSettings(ctx contex
 			}
 		}
 
-		openAIAdvancedSchedulerSettingCache.Store(&cachedOpenAIAdvancedSchedulerSetting{
-			enabled:                     enabled,
-			stickyWeightedEnabled:       stickyWeightedEnabled,
-			subscriptionPriorityEnabled: subscriptionPriorityEnabled,
-			lbTopKOverride:              lbTopKOverride,
-			weightOverrides:             cloneOpenAIAdvancedSchedulerWeightOverrides(weightOverrides),
-			expiresAt:                   time.Now().Add(openAIAdvancedSchedulerSettingCacheTTL).UnixNano(),
-		})
+		if settingSvc != nil {
+			settingSvc.openAIAdvancedSchedulerSettingCache.Store(&cachedOpenAIAdvancedSchedulerSetting{
+				enabled:                     enabled,
+				stickyWeightedEnabled:       stickyWeightedEnabled,
+				subscriptionPriorityEnabled: subscriptionPriorityEnabled,
+				lbTopKOverride:              lbTopKOverride,
+				weightOverrides:             cloneOpenAIAdvancedSchedulerWeightOverrides(weightOverrides),
+				expiresAt:                   time.Now().Add(openAIAdvancedSchedulerSettingCacheTTL).UnixNano(),
+			})
+		}
 		return openAIAdvancedSchedulerRuntimeSettings{
 			enabled:                     enabled,
 			stickyWeightedEnabled:       stickyWeightedEnabled,
@@ -1804,7 +1782,14 @@ func (s *OpenAIGatewayService) openAIAdvancedSchedulerRuntimeSettings(ctx contex
 			lbTopKOverride:              lbTopKOverride,
 			weightOverrides:             weightOverrides,
 		}, nil
-	})
+	}
+
+	var result any
+	if settingSvc != nil {
+		result, _, _ = settingSvc.openAIAdvancedSchedulerSettingSF.Do(openAIAdvancedSchedulerSettingKey, doLoad)
+	} else {
+		result, _ = doLoad()
+	}
 
 	settings, _ := result.(openAIAdvancedSchedulerRuntimeSettings)
 	return settings
@@ -1914,8 +1899,7 @@ func (s *OpenAIGatewayService) getOpenAIAccountScheduler(ctx context.Context) Op
 }
 
 func resetOpenAIAdvancedSchedulerSettingCacheForTest() {
-	openAIAdvancedSchedulerSettingCache = atomic.Value{}
-	openAIAdvancedSchedulerSettingSF = singleflight.Group{}
+	// 缓存已挂在 SettingService 实例上，测试隔离由各自 NewSettingService 保证。
 }
 
 func (s *OpenAIGatewayService) SelectAccountWithScheduler(
@@ -1928,7 +1912,7 @@ func (s *OpenAIGatewayService) SelectAccountWithScheduler(
 	requiredTransport OpenAIUpstreamTransport,
 	requireCompact bool,
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
-	return s.selectAccountWithScheduler(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, "", "", requireCompact, PlatformOpenAI, false)
+	return s.selectAccountThroughEngine(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, "", "", requireCompact, PlatformOpenAI, false)
 }
 
 // SelectAccountWithSchedulerForCapability 按能力要求调度账号。
@@ -1951,7 +1935,7 @@ func (s *OpenAIGatewayService) SelectAccountWithSchedulerForCapability(
 	if len(platformOverride) > 0 {
 		platform = platformOverride[0]
 	}
-	return s.selectAccountWithScheduler(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, "", requireCompact, platform, previousResponseCanMove)
+	return s.selectAccountThroughEngine(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, "", requireCompact, platform, previousResponseCanMove)
 }
 
 func (s *OpenAIGatewayService) SelectAccountWithSchedulerForImages(
@@ -1962,18 +1946,18 @@ func (s *OpenAIGatewayService) SelectAccountWithSchedulerForImages(
 	excludedIDs map[int64]struct{},
 	requiredCapability OpenAIImagesCapability,
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
-	selection, decision, err := s.selectAccountWithScheduler(ctx, groupID, "", sessionHash, requestedModel, excludedIDs, OpenAIUpstreamTransportHTTPSSE, "", requiredCapability, false, PlatformOpenAI, false)
+	selection, decision, err := s.selectAccountThroughEngine(ctx, groupID, "", sessionHash, requestedModel, excludedIDs, OpenAIUpstreamTransportHTTPSSE, "", requiredCapability, false, PlatformOpenAI, false)
 	if err == nil && selection != nil && selection.Account != nil {
 		return selection, decision, nil
 	}
 	// 如果要求 native 能力（如指定了模型）但没有可用的 APIKey 账号，回退到 basic（OAuth 账号）
 	if requiredCapability == OpenAIImagesCapabilityNative {
-		return s.selectAccountWithScheduler(ctx, groupID, "", sessionHash, requestedModel, excludedIDs, OpenAIUpstreamTransportHTTPSSE, "", OpenAIImagesCapabilityBasic, false, PlatformOpenAI, false)
+		return s.selectAccountThroughEngine(ctx, groupID, "", sessionHash, requestedModel, excludedIDs, OpenAIUpstreamTransportHTTPSSE, "", OpenAIImagesCapabilityBasic, false, PlatformOpenAI, false)
 	}
 	return selection, decision, err
 }
 
-func (s *OpenAIGatewayService) selectAccountWithScheduler(
+func (s *OpenAIGatewayService) selectAccountWithSchedulerStrategy(
 	ctx context.Context,
 	groupID *int64,
 	previousResponseID string,
@@ -1994,7 +1978,7 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 	if scheduler == nil {
 		decision.Layer = openAIAccountScheduleLayerLoadBalance
 		if requiredTransport == OpenAIUpstreamTransportAny || requiredTransport == OpenAIUpstreamTransportHTTPSSE {
-			effectiveExcludedIDs := cloneExcludedAccountIDs(excludedIDs)
+			effectiveExcludedIDs := scheduling.CloneExcluded(excludedIDs)
 			for {
 				selection, err := s.selectAccountWithLoadAwareness(ctx, groupID, platform, sessionHash, requestedModel, effectiveExcludedIDs, requireCompact, requiredCapability)
 				if err != nil {
@@ -2009,17 +1993,14 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 				if selection.ReleaseFunc != nil {
 					selection.ReleaseFunc()
 				}
-				if effectiveExcludedIDs == nil {
-					effectiveExcludedIDs = make(map[int64]struct{})
-				}
-				if _, exists := effectiveExcludedIDs[selection.Account.ID]; exists {
+				if scheduling.IsExcluded(effectiveExcludedIDs, selection.Account.ID) {
 					return nil, decision, ErrNoAvailableAccounts
 				}
-				effectiveExcludedIDs[selection.Account.ID] = struct{}{}
+				effectiveExcludedIDs = scheduling.AddExcluded(effectiveExcludedIDs, selection.Account.ID)
 			}
 		}
 
-		effectiveExcludedIDs := cloneExcludedAccountIDs(excludedIDs)
+		effectiveExcludedIDs := scheduling.CloneExcluded(excludedIDs)
 		for {
 			selection, err := s.selectAccountWithLoadAwareness(ctx, groupID, platform, sessionHash, requestedModel, effectiveExcludedIDs, requireCompact, requiredCapability)
 			if err != nil {
@@ -2035,13 +2016,10 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 			if selection.ReleaseFunc != nil {
 				selection.ReleaseFunc()
 			}
-			if effectiveExcludedIDs == nil {
-				effectiveExcludedIDs = make(map[int64]struct{})
-			}
-			if _, exists := effectiveExcludedIDs[selection.Account.ID]; exists {
+			if scheduling.IsExcluded(effectiveExcludedIDs, selection.Account.ID) {
 				return nil, decision, ErrNoAvailableAccounts
 			}
-			effectiveExcludedIDs[selection.Account.ID] = struct{}{}
+			effectiveExcludedIDs = scheduling.AddExcluded(effectiveExcludedIDs, selection.Account.ID)
 		}
 	}
 
@@ -2105,17 +2083,6 @@ func accountSupportsOpenAICapabilities(account *Account, requiredCapability Open
 	}
 	return account.SupportsOpenAIEndpointCapability(requiredCapability) &&
 		account.SupportsOpenAIImageCapability(requiredImageCapability)
-}
-
-func cloneExcludedAccountIDs(excludedIDs map[int64]struct{}) map[int64]struct{} {
-	if len(excludedIDs) == 0 {
-		return nil
-	}
-	cloned := make(map[int64]struct{}, len(excludedIDs))
-	for id := range excludedIDs {
-		cloned[id] = struct{}{}
-	}
-	return cloned
 }
 
 func (s *OpenAIGatewayService) isOpenAIAccountTransportCompatible(account *Account, requiredTransport OpenAIUpstreamTransport) bool {

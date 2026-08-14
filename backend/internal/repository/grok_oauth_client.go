@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
@@ -18,14 +17,15 @@ import (
 
 type grokOAuthClient struct {
 	tokenURL string
+	clients  *ReqClientPool
 }
 
-func NewGrokOAuthClient() ports.GrokOAuthClient {
-	return &grokOAuthClient{tokenURL: xai.EffectiveTokenURL()}
+func NewGrokOAuthClient(pool *ReqClientPool) ports.GrokOAuthClient {
+	return &grokOAuthClient{tokenURL: xai.EffectiveTokenURL(), clients: orNewReqClientPool(pool)}
 }
 
 func (c *grokOAuthClient) ExchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string) (*xai.TokenResponse, error) {
-	client, err := createGrokReqClient(proxyURL)
+	client, err := createGrokReqClient(c.clients, proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}
@@ -63,7 +63,7 @@ func (c *grokOAuthClient) RefreshToken(ctx context.Context, refreshToken, proxyU
 }
 
 func (c *grokOAuthClient) RefreshTokenAtEndpoint(ctx context.Context, refreshToken, tokenEndpoint, proxyURL, clientID string) (*xai.TokenResponse, error) {
-	client, err := createGrokReqClient(proxyURL)
+	client, err := createGrokReqClient(c.clients, proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}
@@ -104,7 +104,7 @@ func (c *grokOAuthClient) StartDeviceFlow(ctx context.Context, proxyURL, clientI
 	if err != nil {
 		return nil, err
 	}
-	client, err := createGrokReqClient(proxyURL)
+	client, err := createGrokReqClient(c.clients, proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}
@@ -140,7 +140,7 @@ func (c *grokOAuthClient) StartDeviceFlow(ctx context.Context, proxyURL, clientI
 }
 
 func (c *grokOAuthClient) PollDeviceToken(ctx context.Context, deviceCode, tokenEndpoint, proxyURL, clientID string) (*xai.DeviceTokenResponse, error) {
-	client, err := createGrokReqClient(proxyURL)
+	client, err := createGrokReqClient(c.clients, proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}
@@ -183,7 +183,7 @@ func (c *grokOAuthClient) PollDeviceToken(ctx context.Context, deviceCode, token
 }
 
 func (c *grokOAuthClient) discover(ctx context.Context, proxyURL string) (*xai.OIDCDiscoveryDocument, error) {
-	client, err := createGrokReqClient(proxyURL)
+	client, err := createGrokReqClient(c.clients, proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}
@@ -216,13 +216,6 @@ func (c *grokOAuthClient) discover(ctx context.Context, proxyURL string) (*xai.O
 		return nil, infraerrors.New(http.StatusBadGateway, "GROK_OAUTH_INVALID_DISCOVERY", fmt.Sprintf("xAI discovery returned duplicate OAuth endpoints: %s", discovery.TokenEndpoint))
 	}
 	return &discovery, nil
-}
-
-func createGrokReqClient(proxyURL string) (*req.Client, error) {
-	return getSharedReqClient(reqClientOptions{
-		ProxyURL: proxyURL,
-		Timeout:  60 * time.Second,
-	})
 }
 
 func grokOAuthStatusError(code, message string, resp *req.Response) error {

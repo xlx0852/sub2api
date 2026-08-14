@@ -189,13 +189,12 @@ func withUserSubject(userID int64) gin.HandlerFunc {
 
 func TestExecuteUserIdempotentJSONFallbackWithoutCoordinator(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service.SetDefaultIdempotencyCoordinator(nil)
 
 	var executed int
 	router := gin.New()
 	router.Use(withUserSubject(1))
 	router.POST("/idempotent", func(c *gin.Context) {
-		executeUserIdempotentJSON(c, "user.test.scope", map[string]any{"a": 1}, time.Minute, func(ctx context.Context) (any, error) {
+		executeUserIdempotentJSON(c, nil, "user.test.scope", map[string]any{"a": 1}, time.Minute, func(ctx context.Context) (any, error) {
 			executed++
 			return gin.H{"ok": true}, nil
 		})
@@ -212,16 +211,13 @@ func TestExecuteUserIdempotentJSONFallbackWithoutCoordinator(t *testing.T) {
 
 func TestExecuteUserIdempotentJSONFailCloseOnStoreUnavailable(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	service.SetDefaultIdempotencyCoordinator(service.NewIdempotencyCoordinator(userStoreUnavailableRepoStub{}, service.DefaultIdempotencyConfig()))
-	t.Cleanup(func() {
-		service.SetDefaultIdempotencyCoordinator(nil)
-	})
+	coordinator := service.NewIdempotencyCoordinator(userStoreUnavailableRepoStub{}, service.DefaultIdempotencyConfig())
 
 	var executed int
 	router := gin.New()
 	router.Use(withUserSubject(2))
 	router.POST("/idempotent", func(c *gin.Context) {
-		executeUserIdempotentJSON(c, "user.test.scope", map[string]any{"a": 1}, time.Minute, func(ctx context.Context) (any, error) {
+		executeUserIdempotentJSON(c, coordinator, "user.test.scope", map[string]any{"a": 1}, time.Minute, func(ctx context.Context) (any, error) {
 			executed++
 			return gin.H{"ok": true}, nil
 		})
@@ -242,16 +238,13 @@ func TestExecuteUserIdempotentJSONConcurrentRetrySingleSideEffectAndReplay(t *te
 	repo := newUserMemoryIdempotencyRepoStub()
 	cfg := service.DefaultIdempotencyConfig()
 	cfg.ProcessingTimeout = 2 * time.Second
-	service.SetDefaultIdempotencyCoordinator(service.NewIdempotencyCoordinator(repo, cfg))
-	t.Cleanup(func() {
-		service.SetDefaultIdempotencyCoordinator(nil)
-	})
+	coordinator := service.NewIdempotencyCoordinator(repo, cfg)
 
 	var executed atomic.Int32
 	router := gin.New()
 	router.Use(withUserSubject(3))
 	router.POST("/idempotent", func(c *gin.Context) {
-		executeUserIdempotentJSON(c, "user.test.scope", map[string]any{"a": 1}, time.Minute, func(ctx context.Context) (any, error) {
+		executeUserIdempotentJSON(c, coordinator, "user.test.scope", map[string]any{"a": 1}, time.Minute, func(ctx context.Context) (any, error) {
 			executed.Add(1)
 			time.Sleep(80 * time.Millisecond)
 			return gin.H{"ok": true}, nil

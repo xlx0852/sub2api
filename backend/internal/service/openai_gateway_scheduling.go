@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
@@ -192,6 +193,49 @@ func openAICompactSupportTier(account *Account) int {
 	return 0
 }
 
+var (
+	openAICompatiblePolicy = scheduling.NewCandidatePolicy("openai_compatible", func(_ context.Context, account *Account, _ scheduling.Request) bool {
+		return account != nil && account.IsOpenAICompatible()
+	})
+	openAIQuotaAutoPausePolicy = scheduling.NewCandidatePolicy("quota_auto_pause", func(ctx context.Context, account *Account, _ scheduling.Request) bool {
+		if account == nil {
+			return false
+		}
+		if account.IsOpenAI() {
+			if paused, reason := shouldAutoPauseOpenAIAccountByQuota(ctx, account); paused {
+				slog.Debug("account_auto_paused_by_quota",
+					"account_id", account.ID,
+					"window", reason.window,
+					"threshold", reason.threshold,
+					"utilization", reason.utilization,
+				)
+				return false
+			}
+		}
+		if account.IsGrok() {
+			if paused, reason := shouldAutoPauseGrokAccountByQuota(account); paused {
+				slog.Debug("grok_account_auto_paused_by_quota",
+					"account_id", account.ID,
+					"window", reason.window,
+					"threshold", reason.threshold,
+					"utilization", reason.utilization,
+				)
+				return false
+			}
+		}
+		return true
+	})
+	openAIRequestedModelPolicy = scheduling.NewCandidatePolicy("requested_model", func(_ context.Context, account *Account, req scheduling.Request) bool {
+		return account != nil && (req.RequestedModel == "" || account.IsModelSupported(req.RequestedModel))
+	})
+	openAIEndpointCapabilityPolicy = scheduling.NewCandidatePolicy("endpoint_capability", func(_ context.Context, account *Account, req scheduling.Request) bool {
+		return account != nil && account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapability(req.RequiredCapability))
+	})
+	openAICompactPolicy = scheduling.NewCandidatePolicy("compact", func(_ context.Context, account *Account, req scheduling.Request) bool {
+		return account != nil && (!req.RequireCompact || (account.IsOpenAI() && openAICompactSupportTier(account) > 0))
+	})
+)
+
 // isOpenAICompatibleAccountEligibleForRequest 判断 OpenAI 兼容账号是否满足本次请求的调度条件。
 // 检查内容包括：平台匹配、账号可用性、quota 自动暂停、spark 路由限制、模型支持及端点能力。
 //
@@ -199,43 +243,23 @@ func openAICompactSupportTier(account *Account) int {
 // 检查母账号凭据可用性；该检查未内置于本函数，以避免注入 DB 依赖。
 func isOpenAICompatibleAccountEligibleForRequest(ctx context.Context, account *Account, platform string, requestedModel string, requireCompact bool, requiredCapability OpenAIEndpointCapability) bool {
 	platform = normalizeOpenAICompatiblePlatform(platform)
-	if account == nil || account.Platform != platform || !account.IsOpenAICompatible() || !account.IsSchedulableForModelWithContext(ctx, requestedModel) {
-		return false
-	}
-	if account.IsOpenAI() {
-		if paused, reason := shouldAutoPauseOpenAIAccountByQuota(ctx, account); paused {
-			// Debug level: this fires per-candidate on the scheduling hot path, so Info
-			// would amplify into log spam once several accounts cross the threshold.
-			slog.Debug("account_auto_paused_by_quota",
-				"account_id", account.ID,
-				"window", reason.window,
-				"threshold", reason.threshold,
-				"utilization", reason.utilization,
-			)
-			return false
-		}
-	}
-	if account.IsGrok() {
-		if paused, reason := shouldAutoPauseGrokAccountByQuota(account); paused {
-			slog.Debug("grok_account_auto_paused_by_quota",
-				"account_id", account.ID,
-				"window", reason.window,
-				"threshold", reason.threshold,
-				"utilization", reason.utilization,
-			)
-			return false
-		}
-	}
-	if requestedModel != "" && !account.IsModelSupported(requestedModel) {
-		return false
-	}
-	if !account.SupportsOpenAIEndpointCapability(requiredCapability) {
-		return false
-	}
-	if requireCompact && (!account.IsOpenAI() || openAICompactSupportTier(account) == 0) {
-		return false
-	}
-	return true
+	return scheduling.EvaluateCandidate(
+		ctx,
+		account,
+		scheduling.Request{
+			Platform:           platform,
+			RequestedModel:     requestedModel,
+			RequireCompact:     requireCompact,
+			RequiredCapability: string(requiredCapability),
+		},
+		scheduling.PlatformPolicy,
+		scheduling.SchedulableForModelPolicy,
+		openAICompatiblePolicy,
+		openAIQuotaAutoPausePolicy,
+		openAIRequestedModelPolicy,
+		openAIEndpointCapabilityPolicy,
+		openAICompactPolicy,
+	).Allowed
 }
 
 type openAIQuotaAutoPauseDecision struct {
@@ -750,31 +774,7 @@ func (s *OpenAIGatewayService) selectBestAccount(ctx context.Context, groupID *i
 // isBetterAccount checks if candidate is better than current.
 // Rules: higher priority (lower value) wins; same priority: never used > least recently used.
 func (s *OpenAIGatewayService) isBetterAccount(candidate, current *Account) bool {
-	// 优先级更高（数值更小）
-	// Higher priority (lower value)
-	if candidate.Priority < current.Priority {
-		return true
-	}
-	if candidate.Priority > current.Priority {
-		return false
-	}
-
-	// 同优先级，比较最后使用时间
-	// Same priority, compare last used time
-	switch {
-	case candidate.LastUsedAt == nil && current.LastUsedAt != nil:
-		// candidate 从未使用，优先
-		return true
-	case candidate.LastUsedAt != nil && current.LastUsedAt == nil:
-		// current 从未使用，保持
-		return false
-	case candidate.LastUsedAt == nil && current.LastUsedAt == nil:
-		// 都未使用，保持
-		return false
-	default:
-		// 都使用过，选择最久未使用的
-		return candidate.LastUsedAt.Before(*current.LastUsedAt)
-	}
+	return scheduling.ComparePriorityLRU(candidate, current) < 0
 }
 
 // SelectAccountWithLoadAwareness selects an account with load-awareness and wait plan.
@@ -815,20 +815,10 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 		if stickyAccountID > 0 && stickyAccountID == account.ID && s.concurrencyService != nil {
 			waitingCount, _ := s.concurrencyService.GetAccountWaitingCount(ctx, account.ID)
 			if waitingCount < cfg.StickySessionMaxWaiting {
-				return s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
-					AccountID:      account.ID,
-					MaxConcurrency: account.Concurrency,
-					Timeout:        cfg.StickySessionWaitTimeout,
-					MaxWaiting:     cfg.StickySessionMaxWaiting,
-				})
+				return s.newSelectionResult(ctx, account, false, nil, newStickyWaitPlan(account.ID, account.Concurrency, cfg))
 			}
 		}
-		return s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
-			AccountID:      account.ID,
-			MaxConcurrency: account.Concurrency,
-			Timeout:        cfg.FallbackWaitTimeout,
-			MaxWaiting:     cfg.FallbackMaxWaiting,
-		})
+		return s.newSelectionResult(ctx, account, false, nil, newFallbackWaitPlan(account.ID, account.Concurrency, cfg))
 	}
 
 	accounts, err := s.listSchedulableAccounts(ctx, groupID, platform)
@@ -840,11 +830,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 	}
 
 	isExcluded := func(accountID int64) bool {
-		if excludedIDs == nil {
-			return false
-		}
-		_, excluded := excludedIDs[accountID]
-		return excluded
+		return scheduling.IsExcluded(excludedIDs, accountID)
 	}
 
 	// ============ Layer 1: Sticky session ============
@@ -886,12 +872,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 
 						waitingCount, _ := s.concurrencyService.GetAccountWaitingCount(ctx, accountID)
 						if waitingCount < cfg.StickySessionMaxWaiting {
-							return s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
-								AccountID:      accountID,
-								MaxConcurrency: account.Concurrency,
-								Timeout:        cfg.StickySessionWaitTimeout,
-								MaxWaiting:     cfg.StickySessionMaxWaiting,
-							})
+							return s.newSelectionResult(ctx, account, false, nil, newStickyWaitPlan(accountID, account.Concurrency, cfg))
 						}
 					}
 				}
@@ -1123,12 +1104,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 		if needsUpstreamCheck && s.isUpstreamModelRestrictedByChannel(ctx, *groupID, fresh, requestedModel, requireCompact) {
 			continue
 		}
-		return s.newSelectionResult(ctx, fresh, false, nil, &AccountWaitPlan{
-			AccountID:      fresh.ID,
-			MaxConcurrency: fresh.Concurrency,
-			Timeout:        cfg.FallbackWaitTimeout,
-			MaxWaiting:     cfg.FallbackMaxWaiting,
-		})
+		return s.newSelectionResult(ctx, fresh, false, nil, newFallbackWaitPlan(fresh.ID, fresh.Concurrency, cfg))
 	}
 
 	if requireCompact && baseCandidateCount > 0 {
@@ -1157,10 +1133,7 @@ func (s *OpenAIGatewayService) listSchedulableAccounts(ctx context.Context, grou
 }
 
 func (s *OpenAIGatewayService) tryAcquireAccountSlot(ctx context.Context, requestedModel string, accountID int64, maxConcurrency int) (*AcquireResult, error) {
-	if s.concurrencyService == nil {
-		return &AcquireResult{Acquired: true, ReleaseFunc: func() {}}, nil
-	}
-	return s.concurrencyService.AcquireModelAwareAccountSlot(ctx, requestedModel, accountID, maxConcurrency)
+	return tryAcquireAccountSlot(ctx, s.concurrencyService, requestedModel, accountID, maxConcurrency)
 }
 
 func (s *OpenAIGatewayService) resolveFreshSchedulableOpenAIAccount(ctx context.Context, account *Account, platform string, requestedModel string, requireCompact bool, requiredCapability OpenAIEndpointCapability) *Account {
@@ -1335,81 +1308,27 @@ func (s *OpenAIGatewayService) prefetchOpenAIAccountsForRequest(ctx context.Cont
 }
 
 func (s *OpenAIGatewayService) getSchedulableAccount(ctx context.Context, accountID int64) (*Account, error) {
-	var (
-		account *Account
-		err     error
-	)
-	if s.schedulerSnapshot != nil {
-		account, err = s.schedulerSnapshot.GetAccount(ctx, accountID)
-	} else {
-		account, err = s.accountRepo.GetByID(ctx, accountID)
-	}
-	if err != nil || account == nil {
-		return account, err
-	}
-	return account, nil
+	return lookupSchedulableAccount(ctx, s.schedulerSnapshot, s.accountRepo, accountID)
 }
 
 func (s *OpenAIGatewayService) hydrateSelectedAccount(ctx context.Context, account *Account) (*Account, error) {
-	if account == nil || s.schedulerSnapshot == nil {
-		return account, nil
-	}
-	hydrated, err := s.schedulerSnapshot.GetAccount(ctx, account.ID)
-	if err != nil {
-		return nil, err
-	}
-	if hydrated == nil {
-		return nil, fmt.Errorf("selected openai account %d not found during hydration", account.ID)
-	}
-	return hydrated, nil
+	return hydrateSelectedAccount(ctx, s.schedulerSnapshot, account, "openai")
 }
 
 func (s *OpenAIGatewayService) newSelectionResult(ctx context.Context, account *Account, acquired bool, release func(), waitPlan *AccountWaitPlan) (*AccountSelectionResult, error) {
-	hydrated, err := s.hydrateSelectedAccount(ctx, account)
-	if err != nil {
-		return nil, err
-	}
-	return &AccountSelectionResult{
-		Account:     hydrated,
-		Acquired:    acquired,
-		ReleaseFunc: release,
-		WaitPlan:    waitPlan,
-	}, nil
+	return newHydratedSelectionResult(ctx, s.schedulerSnapshot, account, "openai", acquired, release, waitPlan)
 }
 
 // newModelLimitedSelectionResult 构造模型级预算已满的拒绝结果。
 // WaitPlan 恒为 nil，Handler 层据此直接 429 让路，不进入账号等待队列。
 func (s *OpenAIGatewayService) newModelLimitedSelectionResult(ctx context.Context, account *Account) (*AccountSelectionResult, error) {
-	hydrated, err := s.hydrateSelectedAccount(ctx, account)
-	if err != nil {
-		return nil, err
-	}
-	return &AccountSelectionResult{
-		Account:      hydrated,
-		Acquired:     false,
-		WaitPlan:     nil,
-		ModelLimited: true,
-	}, nil
+	return newHydratedModelLimitedResult(ctx, s.schedulerSnapshot, account, "openai")
 }
 
 func (s *OpenAIGatewayService) newAcquiredSelectionResult(ctx context.Context, account *Account, release func()) (*AccountSelectionResult, error) {
-	selection, err := s.newSelectionResult(ctx, account, true, release, nil)
-	if err != nil && release != nil {
-		release()
-	}
-	return selection, err
+	return newHydratedAcquiredResult(ctx, s.schedulerSnapshot, account, "openai", release)
 }
 
 func (s *OpenAIGatewayService) schedulingConfig() config.GatewaySchedulingConfig {
-	if s.cfg != nil {
-		return s.cfg.Gateway.Scheduling
-	}
-	return config.GatewaySchedulingConfig{
-		StickySessionMaxWaiting:  3,
-		StickySessionWaitTimeout: 45 * time.Second,
-		FallbackWaitTimeout:      30 * time.Second,
-		FallbackMaxWaiting:       100,
-		LoadBatchEnabled:         true,
-		SlotCleanupInterval:      30 * time.Second,
-	}
+	return schedulingConfigFrom(s.cfg)
 }

@@ -19,30 +19,49 @@ type reqClientOptions struct {
 	ForceHTTP2  bool          // 是否强制使用 HTTP/2
 }
 
-// sharedReqClients 存储按配置参数缓存的 req 客户端实例
-//
-// 性能优化说明：
-// 原实现在每次 OAuth 刷新时都创建新的 req.Client：
-// 1. claude_oauth_service.go: 每次刷新创建新客户端
-// 2. openai_oauth_service.go: 每次刷新创建新客户端
-// 3. gemini_oauth_client.go: 每次刷新创建新客户端
-//
-// 新实现使用 sync.Map 缓存客户端：
-// 1. 相同配置（代理+超时+模拟设置）复用同一客户端
-// 2. 复用底层连接池，减少 TLS 握手开销
-// 3. LoadOrStore 保证并发安全，避免重复创建
-var sharedReqClients sync.Map
+// ReqClientPool 按配置参数缓存 req.Client，复用底层连接池。
+// 由 Wire 注入同一实例给各 OAuth client 与 PrivacyClientFactory。
+type ReqClientPool struct {
+	clients sync.Map
+}
 
-// getSharedReqClient 获取共享的 req 客户端实例
-// 性能优化：相同配置复用同一客户端，避免重复创建
-func getSharedReqClient(opts reqClientOptions) (*req.Client, error) {
+// NewReqClientPool 创建空的共享 req 客户端池。
+func NewReqClientPool() *ReqClientPool {
+	return &ReqClientPool{}
+}
+
+func orNewReqClientPool(pool *ReqClientPool) *ReqClientPool {
+	if pool != nil {
+		return pool
+	}
+	return NewReqClientPool()
+}
+
+// get 获取共享的 req 客户端。nil 接收者每次新建、不缓存，供测试零值构造。
+func (p *ReqClientPool) get(opts reqClientOptions) (*req.Client, error) {
+	if p == nil {
+		return newReqClient(opts)
+	}
 	key := buildReqClientKey(opts)
-	if cached, ok := sharedReqClients.Load(key); ok {
+	if cached, ok := p.clients.Load(key); ok {
 		if c, ok := cached.(*req.Client); ok {
 			return c, nil
 		}
 	}
 
+	client, err := newReqClient(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	actual, _ := p.clients.LoadOrStore(key, client)
+	if c, ok := actual.(*req.Client); ok {
+		return c, nil
+	}
+	return client, nil
+}
+
+func newReqClient(opts reqClientOptions) (*req.Client, error) {
 	client := req.C().SetTimeout(opts.Timeout)
 	if opts.ForceHTTP2 {
 		client = client.EnableForceHTTP2()
@@ -57,11 +76,6 @@ func getSharedReqClient(opts reqClientOptions) (*req.Client, error) {
 	if trimmed != "" {
 		client.SetProxyURL(trimmed)
 	}
-
-	actual, _ := sharedReqClients.LoadOrStore(key, client)
-	if c, ok := actual.(*req.Client); ok {
-		return c, nil
-	}
 	return client, nil
 }
 
@@ -74,13 +88,37 @@ func buildReqClientKey(opts reqClientOptions) string {
 	)
 }
 
-// CreatePrivacyReqClient creates an HTTP client for OpenAI privacy settings API
-// This is exported for use by OpenAIPrivacyService
-// Uses Chrome TLS fingerprint impersonation to bypass Cloudflare checks
-func CreatePrivacyReqClient(proxyURL string) (*req.Client, error) {
-	return getSharedReqClient(reqClientOptions{
+// CreatePrivacyReqClient creates an HTTP client for OpenAI privacy settings API.
+// Uses Chrome TLS fingerprint impersonation to bypass Cloudflare checks.
+func (p *ReqClientPool) CreatePrivacyReqClient(proxyURL string) (*req.Client, error) {
+	return p.get(reqClientOptions{
 		ProxyURL:    proxyURL,
 		Timeout:     30 * time.Second,
-		Impersonate: true, // Enable Chrome TLS fingerprint impersonation
+		Impersonate: true,
+	})
+}
+
+func createOpenAIReqClient(pool *ReqClientPool, proxyURL string) (*req.Client, error) {
+	return pool.get(reqClientOptions{
+		ProxyURL: proxyURL,
+		Timeout:  120 * time.Second,
+	})
+}
+
+func createGeminiReqClient(pool *ReqClientPool, proxyURL string) (*req.Client, error) {
+	return pool.get(reqClientOptions{
+		ProxyURL: proxyURL,
+		Timeout:  60 * time.Second,
+	})
+}
+
+func createKimiReqClient(pool *ReqClientPool, proxyURL string) (*req.Client, error) {
+	return pool.get(reqClientOptions{ProxyURL: proxyURL, Timeout: 60 * time.Second})
+}
+
+func createGrokReqClient(pool *ReqClientPool, proxyURL string) (*req.Client, error) {
+	return pool.get(reqClientOptions{
+		ProxyURL: proxyURL,
+		Timeout:  60 * time.Second,
 	})
 }

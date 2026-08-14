@@ -17,15 +17,17 @@ import (
 
 // SystemHandler handles system-related operations
 type SystemHandler struct {
-	version string
-	lockSvc *service.SystemOperationLockService
+	version     string
+	lockSvc     *service.SystemOperationLockService
+	idempotency *service.IdempotencyCoordinator
 }
 
 // NewSystemHandler creates a new SystemHandler
-func NewSystemHandler(version string, lockSvc *service.SystemOperationLockService) *SystemHandler {
+func NewSystemHandler(version string, lockSvc *service.SystemOperationLockService, idempotency *service.IdempotencyCoordinator) *SystemHandler {
 	return &SystemHandler{
-		version: version,
-		lockSvc: lockSvc,
+		version:     version,
+		lockSvc:     lockSvc,
+		idempotency: idempotency,
 	}
 }
 
@@ -56,7 +58,7 @@ func (h *SystemHandler) RefreshModelCatalog(c *gin.Context) {
 func (h *SystemHandler) RestartService(c *gin.Context) {
 	operationID := buildSystemOperationID(c, "restart")
 	payload := gin.H{"operation_id": operationID}
-	executeAdminIdempotentJSON(c, "admin.system.restart", payload, service.DefaultSystemOperationIdempotencyTTL(), func(ctx context.Context) (any, error) {
+	executeAdminIdempotentJSON(c, h.idempotency, "admin.system.restart", payload, h.idempotency.SystemOperationTTL(), func(ctx context.Context) (any, error) {
 		lock, release, err := h.acquireSystemLock(ctx, operationID)
 		if err != nil {
 			return nil, err

@@ -30,6 +30,7 @@ type EmailQueueService struct {
 	taskChan     chan EmailTask
 	wg           sync.WaitGroup
 	stopChan     chan struct{}
+	stopOnce     sync.Once
 	workers      int
 }
 
@@ -136,9 +137,11 @@ func (s *EmailQueueService) EnqueuePasswordReset(email, siteName, resetURL strin
 	}
 }
 
-// Stop 停止队列服务
+// Stop 停止队列服务（幂等，重复调用不会 panic）
 func (s *EmailQueueService) Stop() {
-	close(s.stopChan)
-	s.wg.Wait()
-	logger.LegacyPrintf("service.email_queue", "%s", "[EmailQueue] All workers stopped")
+	s.stopOnce.Do(func() {
+		close(s.stopChan)
+		s.wg.Wait()
+		logger.LegacyPrintf("service.email_queue", "%s", "[EmailQueue] All workers stopped")
+	})
 }

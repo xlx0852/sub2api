@@ -53,6 +53,17 @@ func TestAcquireModelAwareAccountSlot_NoBudget_Passthrough(t *testing.T) {
 	require.Equal(t, int64(0), cache.modelAcquireCalls.Load())
 }
 
+func TestAcquireModelAwareAccountSlot_NoProvider_Passthrough(t *testing.T) {
+	cache := &stubConcurrencyCacheForTest{}
+	cache.acquireResult = true
+	svc := NewConcurrencyService(cache)
+
+	result, err := svc.AcquireModelAwareAccountSlot(context.Background(), "grok-4.3", 1, 4)
+	require.NoError(t, err)
+	require.True(t, result.Acquired)
+	require.False(t, result.ModelLimited)
+}
+
 func TestAcquireModelAwareAccountSlot_NoBudgetForModel_Passthrough(t *testing.T) {
 	// 预算只配置了 gpt-5.6-luna，sol 请求不受影响（模型键折叠后不命中预算）。
 	cache := &modelLimitCacheForTest{}

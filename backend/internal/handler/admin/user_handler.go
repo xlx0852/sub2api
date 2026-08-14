@@ -30,6 +30,7 @@ type UserHandler struct {
 	concurrencyService    *service.ConcurrencyService
 	userPlatformQuotaRepo service.UserPlatformQuotaRepository // T13 admin quota view
 	billingCache          service.BillingCache                // T17/T18 缓存失效（PUT/POST 路径）
+	idempotency           *service.IdempotencyCoordinator
 }
 
 // NewUserHandler creates a new admin user handler
@@ -358,7 +359,7 @@ func (h *UserHandler) UpdateBalance(c *gin.Context) {
 		UserID: userID,
 		Body:   req,
 	}
-	executeAdminIdempotentJSON(c, "admin.users.balance.update", idempotencyPayload, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
+	executeAdminIdempotentJSON(c, h.idempotency, "admin.users.balance.update", idempotencyPayload, h.idempotency.WriteTTL(), func(ctx context.Context) (any, error) {
 		user, execErr := h.adminService.UpdateUserBalance(ctx, userID, req.Balance, req.Operation, req.Notes)
 		if execErr != nil {
 			return nil, execErr

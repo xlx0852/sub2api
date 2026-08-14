@@ -2,7 +2,6 @@ package repository
 
 import (
 	"reflect"
-	"sync"
 	"testing"
 	"time"
 	"unsafe"
@@ -21,17 +20,17 @@ func forceHTTPVersion(t *testing.T, client *req.Client) string {
 }
 
 func TestGetSharedReqClient_ForceHTTP2SeparatesCache(t *testing.T) {
-	sharedReqClients = sync.Map{}
+	pool := NewReqClientPool()
 	base := reqClientOptions{
 		ProxyURL: "http://proxy.local:8080",
 		Timeout:  time.Second,
 	}
-	clientDefault, err := getSharedReqClient(base)
+	clientDefault, err := pool.get(base)
 	require.NoError(t, err)
 
 	force := base
 	force.ForceHTTP2 = true
-	clientForce, err := getSharedReqClient(force)
+	clientForce, err := pool.get(force)
 	require.NoError(t, err)
 
 	require.NotSame(t, clientDefault, clientForce)
@@ -39,44 +38,44 @@ func TestGetSharedReqClient_ForceHTTP2SeparatesCache(t *testing.T) {
 }
 
 func TestGetSharedReqClient_ReuseCachedClient(t *testing.T) {
-	sharedReqClients = sync.Map{}
+	pool := NewReqClientPool()
 	opts := reqClientOptions{
 		ProxyURL: "http://proxy.local:8080",
 		Timeout:  2 * time.Second,
 	}
-	first, err := getSharedReqClient(opts)
+	first, err := pool.get(opts)
 	require.NoError(t, err)
-	second, err := getSharedReqClient(opts)
+	second, err := pool.get(opts)
 	require.NoError(t, err)
 	require.Same(t, first, second)
 }
 
 func TestGetSharedReqClient_IgnoresNonClientCache(t *testing.T) {
-	sharedReqClients = sync.Map{}
+	pool := NewReqClientPool()
 	opts := reqClientOptions{
 		ProxyURL: " http://proxy.local:8080 ",
 		Timeout:  3 * time.Second,
 	}
 	key := buildReqClientKey(opts)
-	sharedReqClients.Store(key, "invalid")
+	pool.clients.Store(key, "invalid")
 
-	client, err := getSharedReqClient(opts)
+	client, err := pool.get(opts)
 	require.NoError(t, err)
 
 	require.NotNil(t, client)
-	loaded, ok := sharedReqClients.Load(key)
+	loaded, ok := pool.clients.Load(key)
 	require.True(t, ok)
 	require.IsType(t, "invalid", loaded)
 }
 
 func TestGetSharedReqClient_ImpersonateAndProxy(t *testing.T) {
-	sharedReqClients = sync.Map{}
+	pool := NewReqClientPool()
 	opts := reqClientOptions{
 		ProxyURL:    "  http://proxy.local:8080  ",
 		Timeout:     4 * time.Second,
 		Impersonate: true,
 	}
-	client, err := getSharedReqClient(opts)
+	client, err := pool.get(opts)
 	require.NoError(t, err)
 
 	require.NotNil(t, client)
@@ -84,37 +83,40 @@ func TestGetSharedReqClient_ImpersonateAndProxy(t *testing.T) {
 }
 
 func TestGetSharedReqClient_InvalidProxyURL(t *testing.T) {
-	sharedReqClients = sync.Map{}
-	opts := reqClientOptions{
+	_, err := NewReqClientPool().get(reqClientOptions{
 		ProxyURL: "://missing-scheme",
 		Timeout:  time.Second,
-	}
-	_, err := getSharedReqClient(opts)
+	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid proxy URL")
 }
 
 func TestGetSharedReqClient_ProxyURLMissingHost(t *testing.T) {
-	sharedReqClients = sync.Map{}
-	opts := reqClientOptions{
+	_, err := NewReqClientPool().get(reqClientOptions{
 		ProxyURL: "http://",
 		Timeout:  time.Second,
-	}
-	_, err := getSharedReqClient(opts)
+	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "proxy URL missing host")
 }
 
 func TestCreateOpenAIReqClient_Timeout120Seconds(t *testing.T) {
-	sharedReqClients = sync.Map{}
-	client, err := createOpenAIReqClient("http://proxy.local:8080")
+	client, err := createOpenAIReqClient(NewReqClientPool(), "http://proxy.local:8080")
 	require.NoError(t, err)
 	require.Equal(t, 120*time.Second, client.GetClient().Timeout)
 }
 
 func TestCreateGeminiReqClient_ForceHTTP2Disabled(t *testing.T) {
-	sharedReqClients = sync.Map{}
-	client, err := createGeminiReqClient("http://proxy.local:8080")
+	client, err := createGeminiReqClient(NewReqClientPool(), "http://proxy.local:8080")
 	require.NoError(t, err)
 	require.Equal(t, "", forceHTTPVersion(t, client))
+}
+
+func TestReqClientPool_NilReceiverDoesNotCache(t *testing.T) {
+	opts := reqClientOptions{ProxyURL: "http://proxy.local:8080", Timeout: time.Second}
+	first, err := (*ReqClientPool)(nil).get(opts)
+	require.NoError(t, err)
+	second, err := (*ReqClientPool)(nil).get(opts)
+	require.NoError(t, err)
+	require.NotSame(t, first, second)
 }

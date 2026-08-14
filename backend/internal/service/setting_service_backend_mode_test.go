@@ -91,11 +91,7 @@ func (s *bmUpdateRepoStub) Delete(ctx context.Context, key string) error {
 
 func resetBackendModeTestCache(t *testing.T) {
 	t.Helper()
-
-	backendModeCache.Store((*cachedBackendMode)(nil))
-	t.Cleanup(func() {
-		backendModeCache.Store((*cachedBackendMode)(nil))
-	})
+	// 缓存已挂在 SettingService 实例上；新实例即空缓存。
 }
 
 func TestIsBackendModeEnabled_ReturnsTrue(t *testing.T) {
@@ -177,11 +173,6 @@ func TestIsBackendModeEnabled_CachesResult(t *testing.T) {
 func TestUpdateSettings_InvalidatesBackendModeCache(t *testing.T) {
 	resetBackendModeTestCache(t)
 
-	backendModeCache.Store(&cachedBackendMode{
-		value:     true,
-		expiresAt: time.Now().Add(backendModeCacheTTL).UnixNano(),
-	})
-
 	repo := &bmUpdateRepoStub{
 		getValueFn: func(ctx context.Context, key string) (string, error) {
 			require.Equal(t, SettingKeyBackendModeEnabled, key)
@@ -189,6 +180,10 @@ func TestUpdateSettings_InvalidatesBackendModeCache(t *testing.T) {
 		},
 	}
 	svc := NewSettingService(repo, &config.Config{})
+	svc.backendModeCache.Store(&cachedBackendMode{
+		value:     true,
+		expiresAt: time.Now().Add(backendModeCacheTTL).UnixNano(),
+	})
 
 	err := svc.UpdateSettings(context.Background(), &SystemSettings{
 		BackendModeEnabled: false,

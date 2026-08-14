@@ -147,7 +147,7 @@ func (h *AccountHandler) ImportCodexSession(c *gin.Context) {
 		return
 	}
 
-	executeAdminIdempotentJSON(c, "admin.accounts.import_codex_session", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
+	executeAdminIdempotentJSON(c, h.idempotency, "admin.accounts.import_codex_session", req, h.idempotency.WriteTTL(), func(ctx context.Context) (any, error) {
 		return h.importCodexSessions(ctx, req, entries)
 	})
 }

@@ -210,6 +210,7 @@ func ProvideAccountUsageService(
 	openAIGatewayService.SetKimiQuotaService(kimiQuotaService)
 	openAIGatewayService.SetGrokQuotaService(grokQuotaService)
 	service.agentIdentityWS = openAIGatewayService
+	service.codexIdentity = openAIGatewayService.codexIdentity
 	return service
 }
 
@@ -237,6 +238,7 @@ func ProvideAccountTestService(
 		tlsFPProfileService,
 	)
 	service.agentIdentityWS = openAIGatewayService
+	service.codexIdentity = openAIGatewayService.codexIdentity
 	return service
 }
 
@@ -523,9 +525,7 @@ func buildIdempotencyConfig(cfg *config.Config) IdempotencyConfig {
 }
 
 func ProvideIdempotencyCoordinator(repo IdempotencyRepository, cfg *config.Config) *IdempotencyCoordinator {
-	coordinator := NewIdempotencyCoordinator(repo, buildIdempotencyConfig(cfg))
-	SetDefaultIdempotencyCoordinator(coordinator)
-	return coordinator
+	return NewIdempotencyCoordinator(repo, buildIdempotencyConfig(cfg))
 }
 
 func ProvideSystemOperationLockService(repo IdempotencyRepository, cfg *config.Config) *SystemOperationLockService {
@@ -667,11 +667,6 @@ func ProvideSettingService(settingRepo SettingRepository, groupRepo GroupReposit
 		logger.LegacyPrintf("service.setting", "Warning: migrate codex body fingerprint to signals failed: %v", err)
 	}
 	antigravity.SetUserAgentVersionResolver(svc.GetAntigravityUserAgentVersion)
-	// enforceCodexIdentityHeaders 是所有 Codex 出站路径共用的纯函数收口点，拿不到 ctx，
-	// 故注入无参解析器；解析器内部自带 60s TTL 缓存，热路径不触库。
-	SetCodexCanonicalUserAgentResolver(func() string {
-		return svc.GetOpenAICodexCanonicalUserAgent(context.Background())
-	})
 	return svc
 }
 

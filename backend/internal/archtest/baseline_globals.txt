@@ -7,33 +7,9 @@
 #   - 实际扫描结果必须与本清单一致，新增即失败；
 #   - 条目消失后测试提示从本清单移除（design.md D6：全局状态收归构造注入）。
 
-# ---- 全局 Set* 装配旁路（design.md D6 点名收编对象） ----
-internal/service: func SetCodexCanonicalUserAgentResolver
-internal/service: func SetCodexIdentityEnforcementEnabled
-internal/service: func SetDefaultIdempotencyCoordinator
-internal/service: func SetWebSearchManager
-
 # ---- repository 包级可变状态 ----
 internal/repository: var readRandomBytes
 internal/repository: var repositoryScopedKeyLocks
-internal/repository: var sharedReqClients
-
-# ---- service 包级可变状态：装配旁路的背后存储 ----
-internal/service: var codexIdentityEnforcement
-internal/service: var defaultIdempotencySvc
-internal/service: var webSearchManagerPtr
-
-# ---- service 包级可变状态：设置项运行时缓存（setting_gateway_runtime.go 等） ----
-internal/service: var backendModeCache
-internal/service: var backendModeSF
-internal/service: var gatewayForwardingCache
-internal/service: var gatewayForwardingSF
-internal/service: var openAIAdvancedSchedulerSettingCache
-internal/service: var openAIAdvancedSchedulerSettingSF
-internal/service: var versionBoundsCache
-internal/service: var versionBoundsSF
-internal/service: var webSearchEmulationCache
-internal/service: var webSearchEmulationSF
 
 # ---- service 包级可变状态：共享缓存/锁表/节流 ----
 internal/service: var agentIdentityTaskLocks
