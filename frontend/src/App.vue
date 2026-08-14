@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { RouterView, useRouter, useRoute } from 'vue-router'
-import { onMounted, onBeforeUnmount, watch } from 'vue'
+import { onMounted, onBeforeUnmount, watch, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { getPublicVersion } from '@/features/public/version'
+import { isFrontendBelowMin } from '@/utils/semver'
 import Toast from '@/components/common/Toast.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
 import AdminComplianceDialog from '@/components/admin/AdminComplianceDialog.vue'
@@ -11,7 +14,9 @@ import { getSetupStatus } from '@/api/setup'
 
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 const appStore = useAppStore()
+const versionSkewWarning = ref('')
 const authStore = useAuthStore()
 const announcementStore = useAnnouncementStore()
 const adminComplianceStore = useAdminComplianceStore()
@@ -137,6 +142,19 @@ onMounted(async () => {
   // Load public settings into appStore (will be cached for other components)
   await appStore.fetchPublicSettings()
 
+  try {
+    const info = await getPublicVersion()
+    if (isFrontendBelowMin(__APP_VERSION__, info.min_frontend_version)) {
+      versionSkewWarning.value = t('version.skewWarning', {
+        frontend: __APP_VERSION__ || 'unknown',
+        backend: info.version,
+        min: info.min_frontend_version
+      })
+    }
+  } catch {
+    // Older backends or network errors must not block console boot.
+  }
+
   // Re-resolve document title now that site settings are available
   updateDocumentTitle()
 })
@@ -144,6 +162,22 @@ onMounted(async () => {
 
 <template>
   <NavigationProgress />
+  <div
+    v-if="versionSkewWarning"
+    class="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+    role="alert"
+  >
+    <div class="mx-auto flex max-w-6xl items-start justify-between gap-3">
+      <p>{{ versionSkewWarning }}</p>
+      <button
+        type="button"
+        class="shrink-0 font-medium underline"
+        @click="versionSkewWarning = ''"
+      >
+        {{ t('version.skewDismiss') }}
+      </button>
+    </div>
+  </div>
   <RouterView />
   <Toast />
   <AnnouncementPopup />

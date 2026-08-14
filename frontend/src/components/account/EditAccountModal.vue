@@ -61,17 +61,7 @@
             v-model="editBaseUrl"
             type="text"
             class="input"
-            :placeholder="
-              account.platform === 'openai'
-                ? 'https://api.openai.com'
-                : account.platform === 'gemini'
-                  ? 'https://generativelanguage.googleapis.com'
-                  : account.platform === 'antigravity'
-                    ? 'https://cloudcode-pa.googleapis.com'
-                    : account.platform === 'grok'
-                      ? 'https://api.x.ai/v1'
-                      : 'https://api.anthropic.com'
-            "
+            :placeholder="platformAPIKeyConfig(account.platform).baseUrl"
           />
           <p class="input-hint">{{ baseUrlHint }}</p>
         </div>
@@ -85,24 +75,14 @@
             data-1p-ignore
             data-lpignore="true"
             data-bwignore="true"
-            :placeholder="
-              account.platform === 'openai'
-                ? 'sk-proj-...'
-                : account.platform === 'gemini'
-                  ? 'AIza...'
-                  : account.platform === 'antigravity'
-                    ? 'sk-...'
-                    : account.platform === 'grok'
-                      ? 'xai-...'
-                      : 'sk-ant-...'
-            "
+            :placeholder="platformAPIKeyConfig(account.platform).placeholder"
           />
           <p class="input-hint">{{ t('admin.accounts.leaveEmptyToKeep') }}</p>
         </div>
 
         </div><!-- /apikey basic fields -->
         <!-- Model Restriction Section (不适用于 Antigravity) -->
-        <div v-show="activeEditTab === 'models'" v-if="account.platform !== 'antigravity'" class="pt-4">
+        <div v-show="activeEditTab === 'models'" v-if="isFieldVisible('oauthModelRestriction', { platform: account.platform })" class="pt-4">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
           <div
@@ -451,7 +431,7 @@
 
         <!-- Header Override Section (anthropic/openai apikey only) -->
         <div v-show="activeEditTab === 'routing'"
-          v-if="isHeaderOverridePlatform(account.platform)"
+          v-if="isFieldVisible('headerOverride', { platform: account.platform })"
           class="pt-4"
         >
           <div class="mb-3 flex items-center justify-between">
@@ -717,7 +697,7 @@
       </div>
 
       <!-- Vertex Service Account -->
-      <div v-if="(account.platform === 'gemini' || account.platform === 'anthropic') && account.type === 'service_account'" class="space-y-4">
+      <div v-if="isFieldVisible('vertexServiceAccount', { platform: account.platform }) && account.type === 'service_account'" class="space-y-4">
         <div v-show="activeEditTab === 'basic'" class="space-y-4">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
@@ -1142,7 +1122,7 @@
 
       <div
         v-show="activeEditTab === 'basic'"
-        v-if="account.platform === 'antigravity' && account.type === 'oauth'"
+        v-if="isFieldVisible('antigravityProjectId', { platform: account.platform }) && account.type === 'oauth'"
         class="pt-4"
         data-testid="edit-antigravity-project-id"
       >
@@ -1159,7 +1139,7 @@
 
       <!-- Antigravity model restriction (applies to all antigravity types) -->
       <!-- Antigravity 只支持模型映射模式，不支持白名单模式 -->
-      <div v-show="activeEditTab === 'models'" v-if="account.platform === 'antigravity'" class="pt-4">
+      <div v-show="activeEditTab === 'models'" v-if="isFieldVisible('antigravityAdvanced', { platform: account.platform })" class="pt-4">
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
         <!-- Mapping Mode Only (no toggle for Antigravity) -->
@@ -1408,7 +1388,7 @@
 
       <!-- Intercept Warmup Requests (Anthropic/Antigravity) -->
       <div v-show="activeEditTab === 'advanced'"
-        v-if="account?.platform === 'anthropic' || account?.platform === 'antigravity'"
+        v-if="account && isFieldVisible('interceptWarmup', { platform: account.platform })"
         class="pt-4"
       >
         <div class="flex items-center justify-between">
@@ -1525,7 +1505,7 @@
 
       <!-- OpenAI 自动透传开关（OAuth/API Key） -->
       <div v-show="activeEditTab === 'advanced'"
-        v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
+        v-if="account && isFieldVisible('openAIAdvanced', { platform: account.platform }) && (account.type === 'oauth' || account.type === 'setup-token' || account.type === 'apikey')"
         class="pt-4"
       >
         <div class="flex items-center justify-between">
@@ -1555,7 +1535,7 @@
 
       <!-- OpenAI Codex 图片工具统一策略（自动注入 + 客户端显式携带） -->
       <div v-show="activeEditTab === 'advanced'"
-        v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
+        v-if="account && isFieldVisible('openAIAdvanced', { platform: account.platform }) && (account.type === 'oauth' || account.type === 'setup-token' || account.type === 'apikey')"
         class="pt-4"
       >
         <div class="overflow-hidden rounded-lg border border-sky-100 bg-sky-50/60  dark:border-sky-900/50 dark:bg-sky-950/20">
@@ -1615,7 +1595,7 @@
 
       <!-- OpenAI WS Mode 三态（off/ctx_pool/passthrough） -->
       <div v-show="activeEditTab === 'advanced'"
-        v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
+        v-if="account && isFieldVisible('openAIAdvanced', { platform: account.platform }) && (account.type === 'oauth' || account.type === 'setup-token' || account.type === 'apikey')"
         class="pt-4"
       >
         <div class="flex items-center justify-between">
@@ -1636,7 +1616,7 @@
 
       <!-- OpenAI APIKey Responses API support mode -->
       <div v-show="activeEditTab === 'advanced'"
-        v-if="account?.platform === 'openai' && account?.type === 'apikey'"
+        v-if="account && isFieldVisible('openAIAdvanced', { platform: account.platform }) && account.type === 'apikey'"
         class="space-y-4 pt-4"
       >
         <div class="flex items-center justify-between gap-4">
@@ -1692,7 +1672,7 @@
 
       <!-- Anthropic API Key 自动透传开关 -->
       <div v-show="activeEditTab === 'advanced'"
-        v-if="account?.platform === 'anthropic' && account?.type === 'apikey'"
+        v-if="account && isFieldVisible('anthropicAdvanced', { platform: account.platform }) && account.type === 'apikey'"
         class="pt-4"
       >
         <div class="flex items-center justify-between">
@@ -1722,7 +1702,7 @@
 
       <div
         v-show="activeEditTab === 'advanced'"
-        v-if="account?.platform === 'anthropic' && account?.type === 'apikey'"
+        v-if="account && isFieldVisible('anthropicAdvanced', { platform: account.platform }) && account.type === 'apikey'"
         class="pt-4"
         data-testid="edit-anthropic-auth-scheme"
       >
@@ -1742,7 +1722,7 @@
 
       <!-- Anthropic API Key: Web Search Emulation (hidden when global disabled) -->
       <div v-show="activeEditTab === 'advanced'"
-        v-if="account?.platform === 'anthropic' && account?.type === 'apikey' && webSearchGlobalEnabled"
+        v-if="account && isFieldVisible('anthropicAdvanced', { platform: account.platform }) && account.type === 'apikey' && webSearchGlobalEnabled"
         class="pt-4"
       >
         <div class="flex items-center justify-between">
@@ -1762,7 +1742,7 @@
 
       <!-- 配额控制 (Anthropic apikey/bedrock: 配额限制 + 亲和) -->
       <div v-show="activeEditTab === 'advanced'"
-        v-if="account?.platform === 'anthropic' && (account?.type === 'apikey' || account?.type === 'bedrock')"
+        v-if="account && isFieldVisible('anthropicAdvanced', { platform: account.platform }) && (account.type === 'apikey' || account.type === 'bedrock')"
         class="pt-4 space-y-4"
       >
         <div class="mb-3">
@@ -1865,7 +1845,7 @@
 
       <!-- OpenAI OAuth Codex 官方客户端限制开关 -->
       <div v-show="activeEditTab === 'advanced'"
-        v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token')"
+        v-if="account && isFieldVisible('openAIAdvanced', { platform: account.platform }) && (account.type === 'oauth' || account.type === 'setup-token')"
         class="pt-4"
       >
         <div class="flex items-center justify-between">
@@ -1919,9 +1899,28 @@
         </div>
       </div>
 
+      <!-- Codex 指纹收敛模式（仅 OpenAI OAuth） -->
+      <div
+        v-show="activeEditTab === 'advanced'"
+        v-if="account && isFieldVisible('openAIAdvanced', { platform: account.platform }) && account.type === 'oauth'"
+        class="pt-4"
+      >
+        <div class="flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexFingerprintMode') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.codexFingerprintModeDesc') }}
+            </p>
+          </div>
+          <div class="w-52 flex-shrink-0">
+            <Select v-model="codexFingerprintMode" data-testid="edit-codex-fingerprint-mode-select" :options="codexFingerprintModeOptions" />
+          </div>
+        </div>
+      </div>
+
       <div
         v-show="activeEditTab === 'models'"
-        v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
+        v-if="account && isFieldVisible('openAIAdvanced', { platform: account.platform }) && (account.type === 'oauth' || account.type === 'setup-token' || account.type === 'apikey')"
         class="pt-4 space-y-4"
         data-testid="edit-openai-compact-mode"
       >
@@ -1982,7 +1981,7 @@
 
       <div
         v-show="activeEditTab === 'advanced'"
-        v-if="account?.platform === 'openai'"
+        v-if="account && isFieldVisible('openAIAdvanced', { platform: account.platform })"
         class="pt-4 space-y-4"
         data-testid="edit-openai-auto-pause-thresholds"
       >
@@ -2062,7 +2061,7 @@
 
       <!-- 配额控制 (Anthropic OAuth/SetupToken: 亲和 + 窗口费用 + 会话 + RPM 等) -->
       <div v-show="activeEditTab === 'advanced'"
-        v-if="account?.platform === 'anthropic' && (account?.type === 'oauth' || account?.type === 'setup-token')"
+        v-if="account && isFieldVisible('anthropicAdvanced', { platform: account.platform }) && (account.type === 'oauth' || account.type === 'setup-token')"
         class="pt-4 space-y-4"
       >
         <div class="mb-3">
@@ -2441,7 +2440,7 @@
       </div>
 
       <div v-show="activeEditTab === 'basic'" class="space-y-4" data-testid="edit-tab-basic-status">
-        <div v-if="account?.platform === 'antigravity'" class="flex items-center gap-2">
+        <div v-if="account && isFieldVisible('antigravityAdvanced', { platform: account.platform })" class="flex items-center gap-2">
           <label class="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
@@ -2483,7 +2482,7 @@
       <!-- Mixed Scheduling (only for antigravity accounts, read-only in edit mode) -->
       <div
         v-show="activeEditTab === 'advanced'"
-        v-if="account?.platform === 'antigravity'"
+        v-if="account && isFieldVisible('mixedScheduling', { platform: account.platform })"
         class="flex items-center gap-2 pt-4"
       >
         <label class="flex cursor-not-allowed items-center gap-2 opacity-60">
@@ -2691,13 +2690,14 @@ import {
   applyHeaderOverride,
   applyInterceptWarmup,
   getHeaderOverrideTemplate,
-  isHeaderOverridePlatform,
+  isFieldVisible,
   splitHeaderOverridesObject,
   validateHeaderOverrideRows,
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
   type HeaderOverrideRow
 } from '@/components/account/credentialsBuilder'
+import { platformAPIKeyConfig } from '@/features/admin-accounts/form/registry'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
@@ -2781,16 +2781,13 @@ const supportsOAuthModelRestriction = computed(() => {
   const platform = props.account?.platform
   const type = props.account?.type
   if (!platform || (type !== 'oauth' && type !== 'setup-token')) return false
-  return platform === 'openai' || platform === 'grok' || platform === 'kimi' || platform === 'anthropic' || platform === 'gemini'
+  return isFieldVisible('oauthModelRestriction', { platform })
 })
 
 // Platform-specific hint for Base URL
 const baseUrlHint = computed(() => {
   if (!props.account) return t('admin.accounts.baseUrlHint')
-  if (props.account.platform === 'openai') return t('admin.accounts.openai.baseUrlHint')
-  if (props.account.platform === 'gemini') return t('admin.accounts.gemini.baseUrlHint')
-  if (props.account.platform === 'grok') return t('admin.accounts.grok.baseUrlHint')
-  return t('admin.accounts.baseUrlHint')
+  return t(platformAPIKeyConfig(props.account.platform).baseUrlHintKey)
 })
 
 const antigravityPresetMappings = computed(() => getPresetMappingsByPlatform('antigravity'))
@@ -2960,6 +2957,8 @@ const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const codexCLIOnlyEnabled = ref(false)
 const codexCLIOnlyAppServerEnabled = ref(false)
+type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
+const codexFingerprintMode = ref<CodexFingerprintMode>('off')
 type CodexImageToolMode = 'inherit' | 'enabled' | 'disabled' | 'block'
 const codexImageToolMode = ref<CodexImageToolMode>('inherit')
 type AnthropicAPIKeyAuthScheme = 'x_api_key' | 'authorization_bearer'
@@ -3015,6 +3014,12 @@ const openaiResponsesWebSocketV2Mode = computed({
 const openAIWSModeConcurrencyHintKey = computed(() =>
   resolveOpenAIWSModeConcurrencyHintKey(openaiResponsesWebSocketV2Mode.value)
 )
+const codexFingerprintModeOptions = computed(() => [
+  { value: 'off' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintOff') },
+  { value: 'device' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintDevice') },
+  { value: 'session' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintSession') },
+  { value: 'full' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintFull') },
+])
 const codexImageToolOptions = computed<Array<{
   value: CodexImageToolMode
   label: string
@@ -3237,10 +3242,7 @@ const tempUnschedPresets = computed(() => [
 
 // Computed: default base URL based on platform
 const defaultBaseUrl = computed(() => {
-  if (props.account?.platform === 'openai') return 'https://api.openai.com'
-  if (props.account?.platform === 'gemini') return 'https://generativelanguage.googleapis.com'
-  if (props.account?.platform === 'grok') return 'https://api.x.ai/v1'
-  return 'https://api.anthropic.com'
+  return platformAPIKeyConfig(props.account?.platform ?? '').baseUrl
 })
 
 const mixedChannelWarningMessageText = computed(() => {
@@ -3413,6 +3415,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   codexCLIOnlyEnabled.value = false
   codexCLIOnlyAppServerEnabled.value = false
+  codexFingerprintMode.value = 'off'
   codexImageToolMode.value = 'inherit'
   anthropicPassthroughEnabled.value = false
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
@@ -3455,6 +3458,12 @@ const syncFormFromAccount = (newAccount: Account | null) => {
       codexCLIOnlyEnabled.value = extra?.codex_cli_only === true
       codexCLIOnlyAppServerEnabled.value =
         extra?.codex_cli_only_allow_app_server === true
+    }
+    if (newAccount.type === 'oauth') {
+      const fingerprintMode = extra?.codex_fingerprint_mode as string | undefined
+      codexFingerprintMode.value = (['off', 'device', 'session', 'full'].includes(fingerprintMode || '')
+        ? fingerprintMode as CodexFingerprintMode
+        : 'off')
     }
     const credentials = newAccount.credentials as Record<string, unknown> | undefined
     const compactMappings = credentials?.compact_model_mapping as Record<string, string> | undefined
@@ -3552,14 +3561,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   // Initialize API Key fields for apikey type
   if (newAccount.type === 'apikey' && newAccount.credentials) {
     const credentials = newAccount.credentials as Record<string, unknown>
-    const platformDefaultUrl =
-      newAccount.platform === 'openai'
-        ? 'https://api.openai.com'
-        : newAccount.platform === 'gemini'
-          ? 'https://generativelanguage.googleapis.com'
-          : newAccount.platform === 'grok'
-            ? 'https://api.x.ai/v1'
-            : 'https://api.anthropic.com'
+    const platformDefaultUrl = platformAPIKeyConfig(newAccount.platform).baseUrl
     editBaseUrl.value = (credentials.base_url as string) || platformDefaultUrl
 
     // Load model mappings and detect mode
@@ -3583,7 +3585,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 
     // Load header override (anthropic/openai apikey only)
     headerOverrideEnabled.value =
-      isHeaderOverridePlatform(newAccount.platform) &&
+      isFieldVisible('headerOverride', { platform: newAccount.platform }) &&
       credentials[HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY] === true
     headerOverrideRows.value = splitHeaderOverridesObject(
       credentials[HEADER_OVERRIDES_CREDENTIAL_KEY]
@@ -3630,18 +3632,13 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     // Load model mappings for service_account
     loadModelRestrictionFromMapping(credentials.model_mapping as Record<string, unknown> | undefined)
   } else {
-    const platformDefaultUrl =
-      newAccount.platform === 'openai'
-        ? 'https://api.openai.com'
-        : newAccount.platform === 'gemini'
-          ? 'https://generativelanguage.googleapis.com'
-          : 'https://api.anthropic.com'
+    const platformDefaultUrl = platformAPIKeyConfig(newAccount.platform).baseUrl
     editBaseUrl.value = platformDefaultUrl
 
     // Load model mappings for OAuth/setup-token accounts (non-antigravity)
     if (
       (newAccount.type === 'oauth' || newAccount.type === 'setup-token') &&
-      newAccount.platform !== 'antigravity' &&
+      isFieldVisible('oauthModelRestriction', { platform: newAccount.platform }) &&
       newAccount.credentials
     ) {
       const oauthCredentials = newAccount.credentials as Record<string, unknown>
@@ -4260,7 +4257,7 @@ const handleSubmit = async () => {
       }
 
       // Add header override if enabled (anthropic/openai apikey only)
-      if (isHeaderOverridePlatform(props.account.platform)) {
+      if (isFieldVisible('headerOverride', { platform: props.account.platform })) {
         if (headerOverrideEnabled.value) {
           const headerError = validateHeaderOverrideRows(headerOverrideRows.value)
           if (headerError) {
@@ -4676,6 +4673,10 @@ const handleSubmit = async () => {
         } else {
           delete newExtra.codex_cli_only_allow_app_server
         }
+      }
+
+      if (props.account.type === 'oauth') {
+        newExtra.codex_fingerprint_mode = codexFingerprintMode.value
       }
 
       updatePayload.extra = newExtra

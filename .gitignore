@@ -134,8 +134,11 @@ docs/*
 !docs/PAYMENT.md
 !docs/PAYMENT_CN.md
 !docs/ADMIN_PAYMENT_INTEGRATION_API.md
+!docs/ARCHITECTURE.md
+!docs/ARCHITECTURE_CN.md
 !docs/legal/
 !docs/legal/*.md
+!frontend/scripts/
 .serena/
 .codex/
 frontend/coverage/

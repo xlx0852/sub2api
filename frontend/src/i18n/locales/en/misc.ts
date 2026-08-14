@@ -38,7 +38,10 @@ export default {
     restartRequired: 'Please restart the service to apply the update',
     restartNow: 'Restart Now',
     restarting: 'Restarting...',
-    retry: 'Retry'
+    retry: 'Retry',
+    skewWarning:
+      'This console (v{frontend}) is older than the API requires (min v{min}, running v{backend}). Upgrade the frontend package to avoid broken pages.',
+    skewDismiss: 'Dismiss'
   },
 
   // Recharge Page

@@ -1214,6 +1214,10 @@ const isAnthropicOAuthOrSetupToken = computed(() => {
   return props.account.platform === 'anthropic' && (props.account.type === 'oauth' || props.account.type === 'setup-token')
 })
 
+// usageReqSeq 单调递增，用于丢弃过期响应：虚拟列表复用组件或连点刷新时，
+// 旧请求可能晚于新请求返回，若不校验会用旧账号的数据覆盖当前账号。
+let usageReqSeq = 0
+
 const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?: boolean }) => {
   if (!shouldFetchUsage.value) return
 
@@ -1229,23 +1233,28 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
 
   loading.value = true
   error.value = null
+  const seq = ++usageReqSeq
+  const requestedId = props.account.id
+
+  // 响应是否仍然有效：组件未卸载、无更新的请求、且账号未切换。
+  const isStale = () => unmounted.value || seq !== usageReqSeq || requestedId !== props.account.id
 
   try {
     const fetchFn = () => options?.source
-      ? adminAPI.accounts.getUsage(props.account.id, options.source)
-      : adminAPI.accounts.getUsage(props.account.id)
+      ? adminAPI.accounts.getUsage(requestedId, options.source)
+      : adminAPI.accounts.getUsage(requestedId)
     const result = await enqueueUsageRequest(props.account, fetchFn)
-    if (!unmounted.value) {
+    if (!isStale()) {
       usageInfo.value = result
-      _usageCache.set(props.account.id, { data: result, ts: Date.now() })
+      _usageCache.set(requestedId, { data: result, ts: Date.now() })
     }
   } catch (e: any) {
-    if (!unmounted.value) {
+    if (!isStale()) {
       error.value = t('common.error')
       console.error('Failed to load usage:', e)
     }
   } finally {
-    if (!unmounted.value) loading.value = false
+    if (!unmounted.value && seq === usageReqSeq) loading.value = false
   }
 }
 

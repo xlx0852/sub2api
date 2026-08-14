@@ -1,7 +1,16 @@
 import { defineConfig, loadEnv, Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import checker from 'vite-plugin-checker'
+import { readFileSync } from 'fs'
 import { resolve } from 'path'
+
+function readAppVersion(): string {
+  try {
+    return readFileSync(resolve(__dirname, '../backend/cmd/server/VERSION'), 'utf8').trim() || '0.0.0-dev'
+  } catch {
+    return '0.0.0-dev'
+  }
+}
 
 /**
  * Vite 插件：开发模式下注入公开配置到 index.html
@@ -15,7 +24,7 @@ function injectPublicSettings(backendUrl: string): Plugin {
       order: 'pre',
       async handler(html) {
         try {
-          const response = await fetch(`${backendUrl}/api/v1/settings/public`, {
+          const response = await fetch(`${backendUrl}/api/v1/public/config`, {
             signal: AbortSignal.timeout(2000)
           })
           if (response.ok) {
@@ -58,7 +67,8 @@ export default defineConfig(({ mode }) => {
   define: {
     // 启用 vue-i18n JIT 编译，在 CSP 环境下处理消息插值
     // JIT 编译器生成 AST 对象而非 JS 代码，无需 unsafe-eval
-    __INTLIFY_JIT_COMPILATION__: true
+    __INTLIFY_JIT_COMPILATION__: true,
+    __APP_VERSION__: JSON.stringify(readAppVersion())
   },
   build: {
     outDir: '../backend/internal/web/dist',

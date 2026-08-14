@@ -1,0 +1,2645 @@
+openapi: 3.1.0
+info:
+  title: Sub2API Control Plane
+  description: |
+    Control-plane HTTP contract for authentication, end-user, and payment APIs.
+    Gateway protocol endpoints (OpenAI / Anthropic / Gemini compatible) are excluded.
+    Admin APIs are added in later batches. Schemas are envelope-level in this first slice;
+    request/response fields will be tightened when the TypeScript client is generated.
+  version: 0.1.0
+servers:
+  - url: /
+tags:
+  - name: auth
+    description: Registration, login, session, and OAuth
+  - name: user
+    description: Profile, API keys, usage, redeem, and public settings
+  - name: payment
+    description: Checkout, orders, public resume, and provider webhooks
+paths:
+  /api/v1/announcements:
+    get:
+      operationId: getAnnouncements
+      tags: [user]
+      summary: GET /api/v1/announcements
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/announcements/{id}/read:
+    post:
+      operationId: postAnnouncementsIdRead
+      tags: [user]
+      summary: POST /api/v1/announcements/:id/read
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/forgot-password:
+    post:
+      operationId: postAuthForgotPassword
+      tags: [auth]
+      summary: POST /api/v1/auth/forgot-password
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/login:
+    post:
+      operationId: postAuthLogin
+      tags: [auth]
+      summary: POST /api/v1/auth/login
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/login/2fa:
+    post:
+      operationId: postAuthLogin2fa
+      tags: [auth]
+      summary: POST /api/v1/auth/login/2fa
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/logout:
+    post:
+      operationId: postAuthLogout
+      tags: [auth]
+      summary: POST /api/v1/auth/logout
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/me:
+    get:
+      operationId: getAuthMe
+      tags: [auth]
+      summary: GET /api/v1/auth/me
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/bind-token:
+    post:
+      operationId: postAuthOauthBindToken
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/bind-token
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/dingtalk/bind-login:
+    post:
+      operationId: postAuthOauthDingtalkBindLogin
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/dingtalk/bind-login
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/dingtalk/bind/start:
+    get:
+      operationId: getAuthOauthDingtalkBindStart
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/dingtalk/bind/start
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/dingtalk/callback:
+    get:
+      operationId: getAuthOauthDingtalkCallback
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/dingtalk/callback
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/dingtalk/complete-registration:
+    post:
+      operationId: postAuthOauthDingtalkCompleteRegistration
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/dingtalk/complete-registration
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/dingtalk/create-account:
+    post:
+      operationId: postAuthOauthDingtalkCreateAccount
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/dingtalk/create-account
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/dingtalk/start:
+    get:
+      operationId: getAuthOauthDingtalkStart
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/dingtalk/start
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/github/callback:
+    get:
+      operationId: getAuthOauthGithubCallback
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/github/callback
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/github/complete-registration:
+    post:
+      operationId: postAuthOauthGithubCompleteRegistration
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/github/complete-registration
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/github/start:
+    get:
+      operationId: getAuthOauthGithubStart
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/github/start
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/google/callback:
+    get:
+      operationId: getAuthOauthGoogleCallback
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/google/callback
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/google/complete-registration:
+    post:
+      operationId: postAuthOauthGoogleCompleteRegistration
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/google/complete-registration
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/google/start:
+    get:
+      operationId: getAuthOauthGoogleStart
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/google/start
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/linuxdo/bind-login:
+    post:
+      operationId: postAuthOauthLinuxdoBindLogin
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/linuxdo/bind-login
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/linuxdo/bind/start:
+    get:
+      operationId: getAuthOauthLinuxdoBindStart
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/linuxdo/bind/start
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/linuxdo/callback:
+    get:
+      operationId: getAuthOauthLinuxdoCallback
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/linuxdo/callback
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/linuxdo/complete-registration:
+    post:
+      operationId: postAuthOauthLinuxdoCompleteRegistration
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/linuxdo/complete-registration
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/linuxdo/create-account:
+    post:
+      operationId: postAuthOauthLinuxdoCreateAccount
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/linuxdo/create-account
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/linuxdo/start:
+    get:
+      operationId: getAuthOauthLinuxdoStart
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/linuxdo/start
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/oidc/bind-login:
+    post:
+      operationId: postAuthOauthOidcBindLogin
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/oidc/bind-login
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/oidc/bind/start:
+    get:
+      operationId: getAuthOauthOidcBindStart
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/oidc/bind/start
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/oidc/callback:
+    get:
+      operationId: getAuthOauthOidcCallback
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/oidc/callback
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/oidc/complete-registration:
+    post:
+      operationId: postAuthOauthOidcCompleteRegistration
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/oidc/complete-registration
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/oidc/create-account:
+    post:
+      operationId: postAuthOauthOidcCreateAccount
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/oidc/create-account
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/oidc/start:
+    get:
+      operationId: getAuthOauthOidcStart
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/oidc/start
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/pending/bind-login:
+    post:
+      operationId: postAuthOauthPendingBindLogin
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/pending/bind-login
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/pending/create-account:
+    post:
+      operationId: postAuthOauthPendingCreateAccount
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/pending/create-account
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/pending/exchange:
+    post:
+      operationId: postAuthOauthPendingExchange
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/pending/exchange
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/pending/send-verify-code:
+    post:
+      operationId: postAuthOauthPendingSendVerifyCode
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/pending/send-verify-code
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/wechat/bind-login:
+    post:
+      operationId: postAuthOauthWechatBindLogin
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/wechat/bind-login
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/wechat/bind/start:
+    get:
+      operationId: getAuthOauthWechatBindStart
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/wechat/bind/start
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/wechat/callback:
+    get:
+      operationId: getAuthOauthWechatCallback
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/wechat/callback
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/wechat/complete-registration:
+    post:
+      operationId: postAuthOauthWechatCompleteRegistration
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/wechat/complete-registration
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/wechat/create-account:
+    post:
+      operationId: postAuthOauthWechatCreateAccount
+      tags: [auth]
+      summary: POST /api/v1/auth/oauth/wechat/create-account
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/wechat/payment/callback:
+    get:
+      operationId: getAuthOauthWechatPaymentCallback
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/wechat/payment/callback
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/wechat/payment/start:
+    get:
+      operationId: getAuthOauthWechatPaymentStart
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/wechat/payment/start
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/oauth/wechat/start:
+    get:
+      operationId: getAuthOauthWechatStart
+      tags: [auth]
+      summary: GET /api/v1/auth/oauth/wechat/start
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/refresh:
+    post:
+      operationId: postAuthRefresh
+      tags: [auth]
+      summary: POST /api/v1/auth/refresh
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/register:
+    post:
+      operationId: postAuthRegister
+      tags: [auth]
+      summary: POST /api/v1/auth/register
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/reset-password:
+    post:
+      operationId: postAuthResetPassword
+      tags: [auth]
+      summary: POST /api/v1/auth/reset-password
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/revoke-all-sessions:
+    post:
+      operationId: postAuthRevokeAllSessions
+      tags: [auth]
+      summary: POST /api/v1/auth/revoke-all-sessions
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/send-verify-code:
+    post:
+      operationId: postAuthSendVerifyCode
+      tags: [auth]
+      summary: POST /api/v1/auth/send-verify-code
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/validate-invitation-code:
+    post:
+      operationId: postAuthValidateInvitationCode
+      tags: [auth]
+      summary: POST /api/v1/auth/validate-invitation-code
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/validate-promo-code:
+    post:
+      operationId: postAuthValidatePromoCode
+      tags: [auth]
+      summary: POST /api/v1/auth/validate-promo-code
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/channels/available:
+    get:
+      operationId: getChannelsAvailable
+      tags: [user]
+      summary: GET /api/v1/channels/available
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/groups/available:
+    get:
+      operationId: getGroupsAvailable
+      tags: [user]
+      summary: GET /api/v1/groups/available
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/groups/rates:
+    get:
+      operationId: getGroupsRates
+      tags: [user]
+      summary: GET /api/v1/groups/rates
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/keys:
+    get:
+      operationId: getKeys
+      tags: [user]
+      summary: GET /api/v1/keys
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      operationId: postKeys
+      tags: [user]
+      summary: POST /api/v1/keys
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/keys/{id}:
+    delete:
+      operationId: deleteKeysId
+      tags: [user]
+      summary: DELETE /api/v1/keys/:id
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    get:
+      operationId: getKeysId
+      tags: [user]
+      summary: GET /api/v1/keys/:id
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    put:
+      operationId: putKeysId
+      tags: [user]
+      summary: PUT /api/v1/keys/:id
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/model-catalog:
+    get:
+      operationId: getModelCatalog
+      tags: [user]
+      summary: GET /api/v1/model-catalog
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/checkout-info:
+    get:
+      operationId: getPaymentCheckoutInfo
+      tags: [payment]
+      summary: GET /api/v1/payment/checkout-info
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/config:
+    get:
+      operationId: getPaymentConfig
+      tags: [payment]
+      summary: GET /api/v1/payment/config
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/limits:
+    get:
+      operationId: getPaymentLimits
+      tags: [payment]
+      summary: GET /api/v1/payment/limits
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/orders:
+    post:
+      operationId: postPaymentOrders
+      tags: [payment]
+      summary: POST /api/v1/payment/orders
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/orders/my:
+    get:
+      operationId: getPaymentOrdersMy
+      tags: [payment]
+      summary: GET /api/v1/payment/orders/my
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/orders/refund-eligible-providers:
+    get:
+      operationId: getPaymentOrdersRefundEligibleProviders
+      tags: [payment]
+      summary: GET /api/v1/payment/orders/refund-eligible-providers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/orders/verify:
+    post:
+      operationId: postPaymentOrdersVerify
+      tags: [payment]
+      summary: POST /api/v1/payment/orders/verify
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/orders/{id}:
+    get:
+      operationId: getPaymentOrdersId
+      tags: [payment]
+      summary: GET /api/v1/payment/orders/:id
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/orders/{id}/cancel:
+    post:
+      operationId: postPaymentOrdersIdCancel
+      tags: [payment]
+      summary: POST /api/v1/payment/orders/:id/cancel
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/orders/{id}/refund-request:
+    post:
+      operationId: postPaymentOrdersIdRefundRequest
+      tags: [payment]
+      summary: POST /api/v1/payment/orders/:id/refund-request
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/public/orders/resolve:
+    post:
+      operationId: postPaymentPublicOrdersResolve
+      tags: [payment]
+      summary: POST /api/v1/payment/public/orders/resolve
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/public/orders/verify:
+    post:
+      operationId: postPaymentPublicOrdersVerify
+      tags: [payment]
+      summary: POST /api/v1/payment/public/orders/verify
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/webhook/airwallex:
+    post:
+      operationId: postPaymentWebhookAirwallex
+      tags: [payment]
+      summary: POST /api/v1/payment/webhook/airwallex
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/webhook/alipay:
+    post:
+      operationId: postPaymentWebhookAlipay
+      tags: [payment]
+      summary: POST /api/v1/payment/webhook/alipay
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/webhook/easypay:
+    get:
+      operationId: getPaymentWebhookEasypay
+      tags: [payment]
+      summary: GET /api/v1/payment/webhook/easypay
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      operationId: postPaymentWebhookEasypay
+      tags: [payment]
+      summary: POST /api/v1/payment/webhook/easypay
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/webhook/stripe:
+    post:
+      operationId: postPaymentWebhookStripe
+      tags: [payment]
+      summary: POST /api/v1/payment/webhook/stripe
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/payment/webhook/wxpay:
+    post:
+      operationId: postPaymentWebhookWxpay
+      tags: [payment]
+      summary: POST /api/v1/payment/webhook/wxpay
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/public/config:
+    get:
+      operationId: getPublicConfig
+      tags: [user]
+      summary: GET /api/v1/public/config
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/public/version:
+    get:
+      operationId: getPublicVersion
+      tags: [user]
+      summary: GET /api/v1/public/version
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/public/pricing:
+    get:
+      operationId: getPublicPricing
+      tags: [user]
+      summary: GET /api/v1/public/pricing
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/redeem:
+    post:
+      operationId: postRedeem
+      tags: [user]
+      summary: POST /api/v1/redeem
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/redeem/history:
+    get:
+      operationId: getRedeemHistory
+      tags: [user]
+      summary: GET /api/v1/redeem/history
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/settings/email-unsubscribe:
+    get:
+      operationId: getSettingsEmailUnsubscribe
+      tags: [user]
+      summary: GET /api/v1/settings/email-unsubscribe
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/settings/public:
+    get:
+      operationId: getSettingsPublic
+      tags: [user]
+      summary: GET /api/v1/settings/public
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/usage:
+    get:
+      operationId: getUsage
+      tags: [user]
+      summary: GET /api/v1/usage
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/usage/dashboard/api-keys-usage:
+    post:
+      operationId: postUsageDashboardApiKeysUsage
+      tags: [user]
+      summary: POST /api/v1/usage/dashboard/api-keys-usage
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/usage/dashboard/availability:
+    get:
+      operationId: getUsageDashboardAvailability
+      tags: [user]
+      summary: GET /api/v1/usage/dashboard/availability
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/usage/dashboard/group-availability:
+    get:
+      operationId: getUsageDashboardGroupAvailability
+      tags: [user]
+      summary: GET /api/v1/usage/dashboard/group-availability
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/usage/dashboard/models:
+    get:
+      operationId: getUsageDashboardModels
+      tags: [user]
+      summary: GET /api/v1/usage/dashboard/models
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/usage/dashboard/snapshot-v2:
+    get:
+      operationId: getUsageDashboardSnapshotV2
+      tags: [user]
+      summary: GET /api/v1/usage/dashboard/snapshot-v2
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/usage/dashboard/stats:
+    get:
+      operationId: getUsageDashboardStats
+      tags: [user]
+      summary: GET /api/v1/usage/dashboard/stats
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/usage/dashboard/trend:
+    get:
+      operationId: getUsageDashboardTrend
+      tags: [user]
+      summary: GET /api/v1/usage/dashboard/trend
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/usage/errors:
+    get:
+      operationId: getUsageErrors
+      tags: [user]
+      summary: GET /api/v1/usage/errors
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/usage/errors/{id}:
+    get:
+      operationId: getUsageErrorsId
+      tags: [user]
+      summary: GET /api/v1/usage/errors/:id
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/usage/stats:
+    get:
+      operationId: getUsageStats
+      tags: [user]
+      summary: GET /api/v1/usage/stats
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/usage/{id}:
+    get:
+      operationId: getUsageId
+      tags: [user]
+      summary: GET /api/v1/usage/:id
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user:
+    put:
+      operationId: putUser
+      tags: [user]
+      summary: PUT /api/v1/user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/account-bindings/email:
+    post:
+      operationId: postUserAccountBindingsEmail
+      tags: [user]
+      summary: POST /api/v1/user/account-bindings/email
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/account-bindings/email/send-code:
+    post:
+      operationId: postUserAccountBindingsEmailSendCode
+      tags: [user]
+      summary: POST /api/v1/user/account-bindings/email/send-code
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/account-bindings/{provider}:
+    delete:
+      operationId: deleteUserAccountBindingsProvider
+      tags: [user]
+      summary: DELETE /api/v1/user/account-bindings/:provider
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/providerPath'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/aff:
+    get:
+      operationId: getUserAff
+      tags: [user]
+      summary: GET /api/v1/user/aff
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/aff/transfer:
+    post:
+      operationId: postUserAffTransfer
+      tags: [user]
+      summary: POST /api/v1/user/aff/transfer
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/api-keys/{id}/usage/daily:
+    get:
+      operationId: getUserApiKeysIdUsageDaily
+      tags: [user]
+      summary: GET /api/v1/user/api-keys/:id/usage/daily
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idPath'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/auth-identities/bind/start:
+    post:
+      operationId: postUserAuthIdentitiesBindStart
+      tags: [user]
+      summary: POST /api/v1/user/auth-identities/bind/start
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/notify-email:
+    delete:
+      operationId: deleteUserNotifyEmail
+      tags: [user]
+      summary: DELETE /api/v1/user/notify-email
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/notify-email/send-code:
+    post:
+      operationId: postUserNotifyEmailSendCode
+      tags: [user]
+      summary: POST /api/v1/user/notify-email/send-code
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/notify-email/toggle:
+    put:
+      operationId: putUserNotifyEmailToggle
+      tags: [user]
+      summary: PUT /api/v1/user/notify-email/toggle
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/notify-email/verify:
+    post:
+      operationId: postUserNotifyEmailVerify
+      tags: [user]
+      summary: POST /api/v1/user/notify-email/verify
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/password:
+    put:
+      operationId: putUserPassword
+      tags: [user]
+      summary: PUT /api/v1/user/password
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/platform-quotas:
+    get:
+      operationId: getUserPlatformQuotas
+      tags: [user]
+      summary: GET /api/v1/user/platform-quotas
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/profile:
+    get:
+      operationId: getUserProfile
+      tags: [user]
+      summary: GET /api/v1/user/profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/totp/disable:
+    post:
+      operationId: postUserTotpDisable
+      tags: [user]
+      summary: POST /api/v1/user/totp/disable
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/totp/enable:
+    post:
+      operationId: postUserTotpEnable
+      tags: [user]
+      summary: POST /api/v1/user/totp/enable
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/totp/send-code:
+    post:
+      operationId: postUserTotpSendCode
+      tags: [user]
+      summary: POST /api/v1/user/totp/send-code
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/totp/setup:
+    post:
+      operationId: postUserTotpSetup
+      tags: [user]
+      summary: POST /api/v1/user/totp/setup
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LooseObject'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/totp/status:
+    get:
+      operationId: getUserTotpStatus
+      tags: [user]
+      summary: GET /api/v1/user/totp/status
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/user/totp/verification-method:
+    get:
+      operationId: getUserTotpVerificationMethod
+      tags: [user]
+      summary: GET /api/v1/user/totp/verification-method
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIEnvelope'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    idPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    providerPath:
+      name: provider
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    APIEnvelope:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+          description: 0 indicates success
+        message:
+          type: string
+        data: {}
+    ErrorEnvelope:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+    LooseObject:
+      type: object
+      additionalProperties: true
+      description: Placeholder request body; field contracts land with generated clients.

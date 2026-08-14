@@ -42,7 +42,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'Login',
-    component: () => import('@/views/auth/LoginView.vue'),
+    component: () => import('@/features/auth/LoginView.vue'),
     meta: {
       requiresAuth: false,
       title: 'Login',
@@ -52,7 +52,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/register',
     name: 'Register',
-    component: () => import('@/views/auth/RegisterView.vue'),
+    component: () => import('@/features/auth/RegisterView.vue'),
     meta: {
       requiresAuth: false,
       title: 'Register',
@@ -62,7 +62,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/email-verify',
     name: 'EmailVerify',
-    component: () => import('@/views/auth/EmailVerifyView.vue'),
+    component: () => import('@/features/auth/EmailVerifyView.vue'),
     meta: {
       requiresAuth: false,
       title: 'Verify Email'
@@ -72,7 +72,7 @@ const routes: RouteRecordRaw[] = [
     path: '/auth/callback',
     name: 'OAuthCallback',
     alias: '/auth/oauth/callback',
-    component: () => import('@/views/auth/OAuthCallbackView.vue'),
+    component: () => import('@/features/auth/OAuthCallbackView.vue'),
     meta: {
       requiresAuth: false,
       title: 'OAuth Callback',
@@ -82,7 +82,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/auth/linuxdo/callback',
     name: 'LinuxDoOAuthCallback',
-    component: () => import('@/views/auth/LinuxDoCallbackView.vue'),
+    component: () => import('@/features/auth/LinuxDoCallbackView.vue'),
     meta: {
       requiresAuth: false,
       title: 'LinuxDo OAuth Callback',
@@ -92,7 +92,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/auth/wechat/callback',
     name: 'WeChatOAuthCallback',
-    component: () => import('@/views/auth/WechatCallbackView.vue'),
+    component: () => import('@/features/auth/WechatCallbackView.vue'),
     meta: {
       requiresAuth: false,
       title: 'WeChat OAuth Callback',
@@ -102,7 +102,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/auth/wechat/payment/callback',
     name: 'WeChatPaymentOAuthCallback',
-    component: () => import('@/views/auth/WechatPaymentCallbackView.vue'),
+    component: () => import('@/features/auth/WechatPaymentCallbackView.vue'),
     meta: {
       requiresAuth: false,
       title: 'WeChat Payment Callback',
@@ -112,7 +112,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/auth/dingtalk/callback',
     name: 'DingTalkOAuthCallback',
-    component: () => import('@/views/auth/DingTalkCallbackView.vue'),
+    component: () => import('@/features/auth/DingTalkCallbackView.vue'),
     meta: {
       requiresAuth: false,
       title: 'DingTalk OAuth Callback',
@@ -122,7 +122,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/auth/dingtalk/email-completion',
     name: 'dingtalk-email-completion',
-    component: () => import('@/views/auth/DingTalkEmailCompletionView.vue'),
+    component: () => import('@/features/auth/DingTalkEmailCompletionView.vue'),
     meta: {
       requiresAuth: false,
       title: 'DingTalk Email Completion'
@@ -131,7 +131,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/auth/oidc/callback',
     name: 'OIDCOAuthCallback',
-    component: () => import('@/views/auth/OidcCallbackView.vue'),
+    component: () => import('@/features/auth/OidcCallbackView.vue'),
     meta: {
       requiresAuth: false,
       title: 'OIDC OAuth Callback',
@@ -141,7 +141,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/forgot-password',
     name: 'ForgotPassword',
-    component: () => import('@/views/auth/ForgotPasswordView.vue'),
+    component: () => import('@/features/auth/ForgotPasswordView.vue'),
     meta: {
       requiresAuth: false,
       title: 'Forgot Password',
@@ -151,7 +151,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/reset-password',
     name: 'ResetPassword',
-    component: () => import('@/views/auth/ResetPasswordView.vue'),
+    component: () => import('@/features/auth/ResetPasswordView.vue'),
     meta: {
       requiresAuth: false,
       title: 'Reset Password'
@@ -169,7 +169,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/legal/:documentId',
     name: 'LegalDocument',
-    component: () => import('@/views/public/LegalDocumentView.vue'),
+    component: () => import('@/features/public/LegalDocumentView.vue'),
     meta: {
       requiresAuth: false,
       title: 'Legal Document'
@@ -179,7 +179,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/docs',
     name: 'Docs',
-    component: () => import('@/views/public/DocsView.vue'),
+    component: () => import('@/features/public/DocsView.vue'),
     meta: {
       requiresAuth: false,
       title: 'Docs',
@@ -195,7 +195,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/dashboard',
     name: 'Dashboard',
-    component: () => import('@/views/user/DashboardView.vue'),
+    component: () => import('@/features/user/views/DashboardView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -207,7 +207,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/keys',
     name: 'Keys',
-    component: () => import('@/views/user/KeysView.vue'),
+    component: () => import('@/features/user/views/KeysView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -219,7 +219,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/usage',
     name: 'Usage',
-    component: () => import('@/views/user/UsageView.vue'),
+    component: () => import('@/features/user/views/UsageView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -246,7 +246,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/affiliate',
     name: 'Affiliate',
-    component: () => import('@/views/user/AffiliateView.vue'),
+    component: () => import('@/features/user/views/AffiliateView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -258,7 +258,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/available-channels',
     name: 'UserAvailableChannels',
-    component: () => import('@/views/user/AvailableChannelsView.vue'),
+    component: () => import('@/features/user/views/AvailableChannelsView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -270,7 +270,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/profile',
     name: 'Profile',
-    component: () => import('@/views/user/ProfileView.vue'),
+    component: () => import('@/features/user/views/ProfileView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -282,7 +282,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/purchase',
     name: 'Recharge',
-    component: () => import('@/views/user/RechargeRedeemView.vue'),
+    component: () => import('@/features/user/views/RechargeRedeemView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -294,7 +294,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/orders',
     name: 'OrderList',
-    component: () => import('@/views/user/UserOrdersView.vue'),
+    component: () => import('@/features/user/views/UserOrdersView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -306,7 +306,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/payment/qrcode',
     name: 'PaymentQRCode',
-    component: () => import('@/views/user/PaymentQRCodeView.vue'),
+    component: () => import('@/features/user/views/PaymentQRCodeView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -318,7 +318,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/payment/result',
     name: 'PaymentResult',
-    component: () => import('@/views/user/PaymentResultView.vue'),
+    component: () => import('@/features/user/views/PaymentResultView.vue'),
     meta: {
       requiresAuth: false,
       requiresAdmin: false,
@@ -330,7 +330,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/payment/stripe',
     name: 'StripePayment',
-    component: () => import('@/views/user/StripePaymentView.vue'),
+    component: () => import('@/features/user/views/StripePaymentView.vue'),
     meta: {
       requiresAuth: false,
       requiresAdmin: false,
@@ -342,7 +342,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/payment/airwallex',
     name: 'AirwallexPayment',
-    component: () => import('@/views/user/AirwallexPaymentView.vue'),
+    component: () => import('@/features/user/views/AirwallexPaymentView.vue'),
     meta: {
       requiresAuth: false,
       requiresAdmin: false,
@@ -354,7 +354,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/payment/stripe-popup',
     name: 'StripePopup',
-    component: () => import('@/views/user/StripePopupView.vue'),
+    component: () => import('@/features/user/views/StripePopupView.vue'),
     meta: {
       requiresAuth: false,
       requiresAdmin: false,
@@ -365,7 +365,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/custom/:id',
     name: 'CustomPage',
-    component: () => import('@/views/user/CustomPageView.vue'),
+    component: () => import('@/features/user/views/CustomPageView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -382,7 +382,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/dashboard',
     name: 'AdminDashboard',
-    component: () => import('@/views/admin/DashboardView.vue'),
+    component: () => import('@/features/admin/views/DashboardView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -394,7 +394,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/ops',
     name: 'AdminOps',
-    component: () => import('@/views/admin/ops/OpsDashboard.vue'),
+    component: () => import('@/features/admin/views/ops/OpsDashboard.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -406,7 +406,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/users',
     name: 'AdminUsers',
-    component: () => import('@/views/admin/UsersView.vue'),
+    component: () => import('@/features/admin/views/UsersView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -418,7 +418,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/groups',
     name: 'AdminGroups',
-    component: () => import('@/views/admin/GroupsView.vue'),
+    component: () => import('@/features/admin/views/GroupsView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -449,7 +449,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/accounts',
     name: 'AdminAccounts',
-    component: () => import('@/views/admin/AccountsView.vue'),
+    component: () => import('@/features/admin/views/AccountsView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -461,7 +461,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/profit',
     name: 'AdminProfit',
-    component: () => import('@/views/admin/ProfitView.vue'),
+    component: () => import('@/features/admin/views/ProfitView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -473,7 +473,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/announcements',
     name: 'AdminAnnouncements',
-    component: () => import('@/views/admin/AnnouncementsView.vue'),
+    component: () => import('@/features/admin/views/AnnouncementsView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -485,7 +485,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/proxies',
     name: 'AdminProxies',
-    component: () => import('@/views/admin/ProxiesView.vue'),
+    component: () => import('@/features/admin/views/ProxiesView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -497,7 +497,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/redeem',
     name: 'AdminRedeem',
-    component: () => import('@/views/admin/RedeemView.vue'),
+    component: () => import('@/features/admin/views/RedeemView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -509,7 +509,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/promo-codes',
     name: 'AdminPromoCodes',
-    component: () => import('@/views/admin/PromoCodesView.vue'),
+    component: () => import('@/features/admin/views/PromoCodesView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -519,9 +519,9 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/admin/settings',
+    path: '/admin/settings/:tab?',
     name: 'AdminSettings',
-    component: () => import('@/views/admin/SettingsView.vue'),
+    component: () => import('@/features/admin/views/SettingsView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -533,7 +533,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/risk-control',
     name: 'AdminRiskControl',
-    component: () => import('@/views/admin/RiskControlView.vue'),
+    component: () => import('@/features/admin/views/RiskControlView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -546,7 +546,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/usage',
     name: 'AdminUsage',
-    component: () => import('@/views/admin/UsageView.vue'),
+    component: () => import('@/features/admin/views/UsageView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -562,7 +562,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/affiliates/invites',
     name: 'AdminAffiliateInvites',
-    component: () => import('@/views/admin/affiliates/AdminAffiliateInvitesView.vue'),
+    component: () => import('@/features/admin/views/affiliates/AdminAffiliateInvitesView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -574,7 +574,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/affiliates/rebates',
     name: 'AdminAffiliateRebates',
-    component: () => import('@/views/admin/affiliates/AdminAffiliateRebatesView.vue'),
+    component: () => import('@/features/admin/views/affiliates/AdminAffiliateRebatesView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -586,7 +586,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/affiliates/transfers',
     name: 'AdminAffiliateTransfers',
-    component: () => import('@/views/admin/affiliates/AdminAffiliateTransfersView.vue'),
+    component: () => import('@/features/admin/views/affiliates/AdminAffiliateTransfersView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
@@ -601,7 +601,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/orders',
     name: 'AdminOrders',
-    component: () => import('@/views/admin/orders/AdminOrdersView.vue'),
+    component: () => import('@/features/admin/views/orders/AdminOrdersView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,

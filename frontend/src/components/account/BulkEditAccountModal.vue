@@ -444,8 +444,8 @@
         </div>
       </div>
 
-      <!-- Intercept warmup requests (Anthropic only) -->
-      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <!-- Intercept warmup requests (Anthropic/Antigravity) -->
+      <div v-if="allInterceptWarmupCapable" class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <div class="flex items-center justify-between">
           <div class="flex-1 pr-4">
             <label
@@ -909,6 +909,24 @@
         </div>
       </div>
 
+      <!-- Codex 指纹收敛模式（仅 OpenAI OAuth） -->
+      <div v-if="allOpenAIOAuth" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="mb-3 flex items-center justify-between">
+          <label class="input-label mb-0">{{ t('admin.accounts.openai.codexFingerprintMode') }}</label>
+          <input
+            v-model="enableCodexFingerprintMode"
+            type="checkbox"
+            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          />
+        </div>
+        <div :class="!enableCodexFingerprintMode && 'pointer-events-none opacity-50'">
+          <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.openai.codexFingerprintModeDesc') }}
+          </p>
+          <Select v-model="codexFingerprintMode" data-testid="bulk-codex-fingerprint-mode-select" :options="codexFingerprintModeOptions" />
+        </div>
+      </div>
+
       <!-- OpenAI API Key WS mode -->
       <div v-if="allOpenAIAPIKey" class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <div class="mb-3 flex items-center justify-between">
@@ -1275,7 +1293,7 @@ import {
 import {
   buildHeaderOverridesObject,
   getHeaderOverrideTemplate,
-  isHeaderOverridePlatform,
+  platformsShareField,
   validateHeaderOverrideRows,
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
@@ -1325,8 +1343,7 @@ const isMixedPlatform = computed(() => targetSelectedPlatforms.value.length > 1)
 
 const allOpenAIPassthroughCapable = computed(() => {
   return (
-    targetSelectedPlatforms.value.length === 1 &&
-    targetSelectedPlatforms.value[0] === 'openai' &&
+    platformsShareField(targetSelectedPlatforms.value, 'openAIAdvanced') &&
     targetSelectedTypes.value.length > 0 &&
     targetSelectedTypes.value.every(t => t === 'oauth' || t === 'setup-token' || t === 'apikey')
   )
@@ -1334,8 +1351,7 @@ const allOpenAIPassthroughCapable = computed(() => {
 
 const allOpenAIOAuth = computed(() => {
   return (
-    targetSelectedPlatforms.value.length === 1 &&
-    targetSelectedPlatforms.value[0] === 'openai' &&
+    platformsShareField(targetSelectedPlatforms.value, 'openAIAdvanced') &&
     targetSelectedTypes.value.length > 0 &&
     targetSelectedTypes.value.every(t => t === 'oauth' || t === 'setup-token')
   )
@@ -1343,18 +1359,21 @@ const allOpenAIOAuth = computed(() => {
 
 const allOpenAIAPIKey = computed(() => {
   return (
-    targetSelectedPlatforms.value.length === 1 &&
-    targetSelectedPlatforms.value[0] === 'openai' &&
+    platformsShareField(targetSelectedPlatforms.value, 'openAIAdvanced') &&
     targetSelectedTypes.value.length > 0 &&
     targetSelectedTypes.value.every(t => t === 'apikey')
   )
 })
 
 // 是否全部为 anthropic/openai 平台的 apikey 账号（请求头覆写仅在此条件下显示）
+const allInterceptWarmupCapable = computed(() => {
+  return platformsShareField(targetSelectedPlatforms.value, 'interceptWarmup')
+})
+
 const allHeaderOverrideCapable = computed(() => {
   return (
     targetSelectedPlatforms.value.length > 0 &&
-    targetSelectedPlatforms.value.every(p => isHeaderOverridePlatform(p)) &&
+    platformsShareField(targetSelectedPlatforms.value, 'headerOverride') &&
     targetSelectedTypes.value.length > 0 &&
     targetSelectedTypes.value.every(t => t === 'apikey')
   )
@@ -1363,8 +1382,7 @@ const allHeaderOverrideCapable = computed(() => {
 // 是否全部为 Anthropic OAuth/SetupToken（RPM 配置仅在此条件下显示）
 const allAnthropicOAuthOrSetupToken = computed(() => {
   return (
-    targetSelectedPlatforms.value.length === 1 &&
-    targetSelectedPlatforms.value[0] === 'anthropic' &&
+    platformsShareField(targetSelectedPlatforms.value, 'anthropicAdvanced') &&
     targetSelectedTypes.value.every(t => t === 'oauth' || t === 'setup-token')
   )
 })
@@ -1470,6 +1488,15 @@ const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const codexCLIOnlyEnabled = ref(false)
 const codexCLIOnlyAppServerEnabled = ref(false)
+type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
+const enableCodexFingerprintMode = ref(false)
+const codexFingerprintMode = ref<CodexFingerprintMode>('session')
+const codexFingerprintModeOptions = computed(() => [
+  { value: 'off' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintOff') },
+  { value: 'device' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintDevice') },
+  { value: 'session' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintSession') },
+  { value: 'full' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintFull') },
+])
 const openAICompactMode = ref<OpenAICompactMode>('auto')
 const openAICompactModelMappings = ref<ModelMapping[]>([])
 const rpmLimitEnabled = ref(false)
@@ -1741,6 +1768,10 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
     extra.codex_cli_only_allow_app_server = codexCLIOnlyAppServerEnabled.value
   }
 
+  if (enableCodexFingerprintMode.value) {
+    ensureExtra().codex_fingerprint_mode = codexFingerprintMode.value
+  }
+
   if (enableOpenAICompactMode.value) {
     const extra = ensureExtra()
     extra.openai_compact_mode = openAICompactMode.value
@@ -1849,6 +1880,7 @@ const handleSubmit = async () => {
     enableOpenAIAPIKeyWSMode.value ||
     enableCodexCLIOnly.value ||
     enableCodexCLIOnlyAppServer.value ||
+    enableCodexFingerprintMode.value ||
     enableOpenAICompactMode.value ||
     enableOpenAICompactModelMapping.value ||
     enableRpmLimit.value ||
@@ -1967,6 +1999,8 @@ watch(
       enableOpenAIAPIKeyWSMode.value = false
       enableCodexCLIOnly.value = false
       enableCodexCLIOnlyAppServer.value = false
+      enableCodexFingerprintMode.value = false
+      codexFingerprintMode.value = 'session'
       enableOpenAICompactMode.value = false
       enableOpenAICompactModelMapping.value = false
       enableRpmLimit.value = false

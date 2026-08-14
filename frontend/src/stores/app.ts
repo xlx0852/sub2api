@@ -274,9 +274,11 @@ export const useAppStore = defineStore('app', () => {
       return publicSettingsRequest
     }
 
-    // Check for injected config from server (eliminates flash)
+    // Optional HTML injection is only a first-paint cache. The public config
+    // endpoint is the source of truth for both embed and separated deploys.
     if (!publicSettingsLoaded.value && !force && window.__APP_CONFIG__) {
       applySettings(window.__APP_CONFIG__)
+      void fetchPublicSettings(true)
       return Promise.resolve(window.__APP_CONFIG__)
     }
 

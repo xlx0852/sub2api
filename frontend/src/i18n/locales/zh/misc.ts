@@ -38,7 +38,10 @@ export default {
     restartRequired: '请重启服务以应用更新',
     restartNow: '立即重启',
     restarting: '正在重启...',
-    retry: '重试'
+    retry: '重试',
+    skewWarning:
+      '当前控制台 (v{frontend}) 低于接口要求的最低前端版本（最低 v{min}，后端 v{backend}）。请升级前端静态包，以免页面异常。',
+    skewDismiss: '关闭'
   },
 
   // Recharge Page

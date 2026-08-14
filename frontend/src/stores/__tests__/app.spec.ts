@@ -383,6 +383,19 @@ describe('useAppStore', () => {
       consoleError.mockRestore()
     })
 
+    it('注入配置只作为首屏缓存，随后从公开配置端点刷新', async () => {
+      const windowAny = window as any
+      windowAny.__APP_CONFIG__ = createPublicSettings({ site_name: 'Injected' })
+      vi.mocked(getPublicSettings).mockResolvedValue(createPublicSettings({ site_name: 'From API' }))
+      const store = useAppStore()
+
+      await expect(store.fetchPublicSettings()).resolves.toMatchObject({ site_name: 'Injected' })
+      await vi.waitFor(() => {
+        expect(getPublicSettings).toHaveBeenCalledTimes(1)
+        expect(store.siteName).toBe('From API')
+      })
+    })
+
     it('从 window.__APP_CONFIG__ 初始化', () => {
       const windowAny = window as any
       windowAny.__APP_CONFIG__ = {

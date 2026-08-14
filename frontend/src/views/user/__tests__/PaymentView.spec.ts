@@ -22,7 +22,7 @@ const showWarning = vi.hoisted(() => vi.fn())
 const getCheckoutInfo = vi.hoisted(() => vi.fn())
 const bridgeInvoke = vi.hoisted(() => vi.fn())
 
-const paymentViewSource = readFileSync(resolve(process.cwd(), 'src/views/user/PaymentView.vue'), 'utf8')
+const paymentViewSource = readFileSync(resolve(process.cwd(), 'src/features/user/views/PaymentView.vue'), 'utf8')
 
 vi.mock('vue-router', async () => {
   const actual = await vi.importActual<typeof import('vue-router')>('vue-router')

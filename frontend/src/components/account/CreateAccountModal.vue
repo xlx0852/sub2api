@@ -88,29 +88,20 @@
         <label class="input-label">{{ t('admin.accounts.platform') }}</label>
         <div class="mt-2 flex flex-wrap rounded-lg bg-gray-100 p-1 dark:bg-dark-700" data-tour="account-form-platform">
           <button
+            v-for="platform in createPickerPlatforms()"
+            :key="platform.id"
             type="button"
-            @click="form.platform = 'anthropic'"
+            @click="form.platform = platform.id"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
-              form.platform === 'anthropic'
-                ? 'bg-white text-orange-600  dark:bg-dark-600 dark:text-orange-400'
+              form.platform === platform.id
+                ? platform.activeClass
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
             ]"
           >
-            <Icon name="sparkles" size="sm" />
-            Anthropic
-          </button>
-          <button
-            type="button"
-            @click="form.platform = 'openai'"
-            :class="[
-              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
-              form.platform === 'openai'
-                ? 'bg-white text-green-600  dark:bg-dark-600 dark:text-green-400'
-                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
-            ]"
-          >
+            <Icon v-if="platform.icon === 'sparkles'" name="sparkles" size="sm" />
             <svg
+              v-else-if="platform.icon === 'bolt'"
               class="h-4 w-4"
               fill="none"
               viewBox="0 0 24 24"
@@ -123,432 +114,22 @@
                 d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
               />
             </svg>
-            OpenAI
-          </button>
-          <button
-            type="button"
-            @click="form.platform = 'antigravity'"
-            :class="[
-              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
-              form.platform === 'antigravity'
-                ? 'bg-white text-purple-600  dark:bg-dark-600 dark:text-purple-400'
-                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
-            ]"
-          >
-            <Icon name="cloud" size="sm" />
-            Antigravity
-          </button>
-          <button
-            type="button"
-            @click="form.platform = 'grok'"
-            :class="[
-              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
-              form.platform === 'grok'
-                ? 'bg-white text-zinc-900  dark:bg-dark-600 dark:text-zinc-100'
-                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
-            ]"
-          >
-            <PlatformIcon platform="grok" size="sm" />
-            Grok
-          </button>
-          <button
-            type="button"
-            @click="form.platform = 'kimi'"
-            :class="[
-              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
-              form.platform === 'kimi'
-                ? 'bg-white text-amber-700 dark:bg-dark-600 dark:text-amber-300'
-                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
-            ]"
-          >
-            <PlatformIcon platform="kimi" size="sm" />
-            Kimi
+            <Icon v-else-if="platform.icon === 'cloud'" name="cloud" size="sm" />
+            <PlatformIcon v-else :platform="platform.id" size="sm" />
+            {{ platform.label }}
           </button>
         </div>
       </div>
 
-      <!-- Account Type Selection (Anthropic) -->
-      <div v-if="form.platform === 'anthropic'">
-        <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
-        <div class="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4" data-tour="account-form-type">
-          <button
-            type="button"
-            @click="accountCategory = 'oauth-based'"
-            :class="[
-              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
-              accountCategory === 'oauth-based'
-                ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
-                : 'border-gray-200 hover:border-orange-300 dark:border-dark-600 dark:hover:border-orange-700'
-            ]"
-          >
-            <div
-              :class="[
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                accountCategory === 'oauth-based'
-                  ? 'bg-orange-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
-              ]"
-            >
-              <Icon name="sparkles" size="sm" />
-            </div>
-            <div>
-              <span class="block text-sm font-medium text-gray-900 dark:text-white">{{
-                t('admin.accounts.claudeCode')
-              }}</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                t('admin.accounts.oauthSetupToken')
-              }}</span>
-            </div>
-          </button>
+      <AccountCategoryPicker
+        :platform="form.platform"
+        :model-value="categoryPickerValue"
+        @update:model-value="onCategoryPickerChange"
+        @help="showGeminiHelpDialog = true"
+      />
 
-          <button
-            type="button"
-            @click="accountCategory = 'apikey'"
-            :class="[
-              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
-              accountCategory === 'apikey'
-                ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
-            ]"
-          >
-            <div
-              :class="[
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                accountCategory === 'apikey'
-                  ? 'bg-purple-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
-              ]"
-            >
-              <Icon name="key" size="sm" />
-            </div>
-            <div>
-              <span class="block text-sm font-medium text-gray-900 dark:text-white">{{
-                t('admin.accounts.claudeConsole')
-              }}</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                t('admin.accounts.apiKey')
-              }}</span>
-            </div>
-          </button>
 
-          <button
-            type="button"
-            @click="accountCategory = 'bedrock'"
-            :class="[
-              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
-              accountCategory === 'bedrock'
-                ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
-                : 'border-gray-200 hover:border-amber-300 dark:border-dark-600 dark:hover:border-amber-700'
-            ]"
-          >
-            <div
-              :class="[
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                accountCategory === 'bedrock'
-                  ? 'bg-amber-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
-              ]"
-            >
-              <Icon name="cloud" size="sm" />
-            </div>
-            <div>
-              <span class="block text-sm font-medium text-gray-900 dark:text-white">{{
-                t('admin.accounts.bedrockLabel')
-              }}</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{
-                t('admin.accounts.bedrockDesc')
-              }}</span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            @click="accountCategory = 'service_account'"
-            :class="[
-              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
-              accountCategory === 'service_account'
-                ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20'
-                : 'border-gray-200 hover:border-sky-300 dark:border-dark-600 dark:hover:border-sky-700'
-            ]"
-          >
-            <div
-              :class="[
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                accountCategory === 'service_account'
-                  ? 'bg-sky-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
-              ]"
-            >
-              <Icon name="cloud" size="sm" />
-            </div>
-            <div>
-              <span class="block text-sm font-medium text-gray-900 dark:text-white">Vertex</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">Service Account</span>
-            </div>
-          </button>
-
-        </div>
-
-        <div
-          v-if="accountCategory === 'service_account'"
-          class="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-800/40 dark:bg-sky-900/20 dark:text-sky-200"
-        >
-          <p>{{ t('admin.accounts.vertexAnthropicHint') }}</p>
-        </div>
-      </div>
-
-      <!-- Account Type Selection (OpenAI) -->
-      <div v-if="form.platform === 'openai'">
-        <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
-        <div class="mt-2 grid grid-cols-2 gap-3" data-tour="account-form-type">
-          <button
-            type="button"
-            @click="accountCategory = 'oauth-based'"
-            :class="[
-              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
-              accountCategory === 'oauth-based'
-                ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                : 'border-gray-200 hover:border-green-300 dark:border-dark-600 dark:hover:border-green-700'
-            ]"
-          >
-            <div
-              :class="[
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                accountCategory === 'oauth-based'
-                  ? 'bg-green-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
-              ]"
-            >
-              <Icon name="key" size="sm" />
-            </div>
-            <div>
-              <span class="block text-sm font-medium text-gray-900 dark:text-white">OAuth</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.types.chatgptOauth') }}</span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            @click="accountCategory = 'apikey'"
-            :class="[
-              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
-              accountCategory === 'apikey'
-                ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
-            ]"
-          >
-            <div
-              :class="[
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                accountCategory === 'apikey'
-                  ? 'bg-purple-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
-              ]"
-            >
-              <Icon name="key" size="sm" />
-            </div>
-            <div>
-              <span class="block text-sm font-medium text-gray-900 dark:text-white">API Key</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.types.responsesApi') }}</span>
-            </div>
-          </button>
-
-        </div>
-      </div>
-
-      <!-- Account Type Selection (Grok) -->
-      <div v-if="form.platform === 'grok'">
-        <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
-        <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2" data-tour="account-form-type">
-          <button
-            type="button"
-            @click="accountCategory = 'oauth-based'"
-            :class="[
-              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
-              accountCategory === 'oauth-based'
-                ? 'border-zinc-800 bg-zinc-50 dark:bg-zinc-900/30'
-                : 'border-gray-200 hover:border-zinc-400 dark:border-dark-600 dark:hover:border-zinc-600'
-            ]"
-          >
-            <div
-              :class="[
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                accountCategory === 'oauth-based'
-                  ? 'bg-zinc-900 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
-              ]"
-            >
-              <PlatformIcon platform="grok" size="sm" />
-            </div>
-            <div>
-              <span class="block text-sm font-medium text-gray-900 dark:text-white">OAuth</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.types.grokOauth') }}</span>
-            </div>
-          </button>
-          <button
-            type="button"
-            @click="accountCategory = 'apikey'"
-            :class="[
-              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
-              accountCategory === 'apikey'
-                ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
-            ]"
-          >
-            <div
-              :class="[
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                accountCategory === 'apikey'
-                  ? 'bg-purple-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
-              ]"
-            >
-              <Icon name="key" size="sm" />
-            </div>
-            <div>
-              <span class="block text-sm font-medium text-gray-900 dark:text-white">API Key</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.types.responsesApi') }}</span>
-            </div>
-          </button>
-        </div>
-        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-          {{ t('admin.accounts.grok.accountTypeHint') }}
-        </p>
-      </div>
-
-      <!-- Account Type Selection (Gemini) -->
-      <div v-if="form.platform === 'kimi'">
-        <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
-        <div class="mt-2 rounded-lg border-2 border-amber-400 bg-amber-50 p-3 dark:bg-amber-950/20">
-          <div class="flex items-center gap-3">
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-white">
-              <PlatformIcon platform="kimi" size="sm" />
-            </div>
-            <div>
-              <span class="block text-sm font-medium text-gray-900 dark:text-white">OAuth Device Code</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">Kimi Coding Subscription</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="form.platform === 'gemini'">
-        <div class="flex items-center justify-between">
-          <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
-          <button
-            type="button"
-            @click="showGeminiHelpDialog = true"
-            class="flex items-center gap-1 rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
-          >
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
-            </svg>
-            {{ t('admin.accounts.gemini.helpButton') }}
-          </button>
-        </div>
-        <div class="mt-2 grid grid-cols-3 gap-3" data-tour="account-form-type">
-          <button
-            type="button"
-            @click="accountCategory = 'oauth-based'"
-            :class="[
-              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
-              accountCategory === 'oauth-based'
-                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                : 'border-gray-200 hover:border-blue-300 dark:border-dark-600 dark:hover:border-blue-700'
-            ]"
-          >
-            <div
-              :class="[
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                accountCategory === 'oauth-based'
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
-              ]"
-            >
-              <Icon name="key" size="sm" />
-            </div>
-            <div>
-              <span class="block text-sm font-medium text-gray-900 dark:text-white">
-                {{ t('admin.accounts.gemini.accountType.oauthTitle') }}
-              </span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">
-                {{ t('admin.accounts.gemini.accountType.oauthDesc') }}
-              </span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            @click="accountCategory = 'apikey'"
-            :class="[
-              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
-              accountCategory === 'apikey'
-                ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
-            ]"
-          >
-            <div
-              :class="[
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                accountCategory === 'apikey'
-                  ? 'bg-purple-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
-              ]"
-            >
-              <svg
-                class="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                stroke-width="1.5"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1721.75 8.25z"
-                />
-              </svg>
-            </div>
-            <div>
-              <span class="block text-sm font-medium text-gray-900 dark:text-white">
-                {{ t('admin.accounts.gemini.accountType.apiKeyTitle') }}
-              </span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">
-                {{ t('admin.accounts.gemini.accountType.apiKeyDesc') }}
-              </span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            @click="accountCategory = 'service_account'"
-            :class="[
-              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
-              accountCategory === 'service_account'
-                ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20'
-                : 'border-gray-200 hover:border-sky-300 dark:border-dark-600 dark:hover:border-sky-700'
-            ]"
-          >
-            <div
-              :class="[
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                accountCategory === 'service_account'
-                  ? 'bg-sky-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
-              ]"
-            >
-              <Icon name="cloud" size="sm" />
-            </div>
-            <div>
-              <span class="block text-sm font-medium text-gray-900 dark:text-white">
-                Vertex
-              </span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">
-                Service Account
-              </span>
-            </div>
-          </button>
-        </div>
+      <div v-if="isFieldVisible('geminiAdvanced', { platform: form.platform })">
 
         <div
           v-if="accountCategory === 'apikey'"
@@ -565,13 +146,6 @@
               {{ t('admin.accounts.gemini.accountType.apiKeyLink') }}
             </a>
           </div>
-        </div>
-
-        <div
-          v-if="accountCategory === 'service_account'"
-          class="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-800/40 dark:bg-sky-900/20 dark:text-sky-200"
-        >
-          <p>{{ t('admin.accounts.vertexGeminiHint') }}</p>
         </div>
 
         <!-- OAuth Type Selection (only show when oauth-based is selected) -->
@@ -814,65 +388,8 @@
         </div>
       </div>
 
-      <!-- Account Type Selection (Antigravity - OAuth or Upstream) -->
-      <div v-if="form.platform === 'antigravity'">
-        <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
-        <div class="mt-2 grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            @click="antigravityAccountType = 'oauth'"
-            :class="[
-              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
-              antigravityAccountType === 'oauth'
-                ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
-            ]"
-          >
-            <div
-              :class="[
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                antigravityAccountType === 'oauth'
-                  ? 'bg-purple-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
-              ]"
-            >
-              <Icon name="key" size="sm" />
-            </div>
-            <div>
-              <span class="block text-sm font-medium text-gray-900 dark:text-white">OAuth</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.types.antigravityOauth') }}</span>
-            </div>
-          </button>
 
-          <button
-            type="button"
-            @click="antigravityAccountType = 'upstream'"
-            :class="[
-              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
-              antigravityAccountType === 'upstream'
-                ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                : 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
-            ]"
-          >
-            <div
-              :class="[
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                antigravityAccountType === 'upstream'
-                  ? 'bg-purple-500 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
-              ]"
-            >
-              <Icon name="cloud" size="sm" />
-            </div>
-            <div>
-              <span class="block text-sm font-medium text-gray-900 dark:text-white">API Key</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.types.antigravityApikey') }}</span>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      <div v-if="form.platform === 'antigravity' && antigravityAccountType === 'oauth'">
+      <div v-if="isFieldVisible('antigravityProjectId', { platform: form.platform }) && antigravityAccountType === 'oauth'">
         <label class="input-label">{{ t('admin.accounts.antigravityProjectIdLabel') }}</label>
         <input
           v-model="antigravityProjectId"
@@ -885,7 +402,7 @@
       </div>
 
       <!-- Upstream config (only for Antigravity upstream type) -->
-      <div v-if="form.platform === 'antigravity' && antigravityAccountType === 'upstream'" class="space-y-4">
+      <div v-if="isFieldVisible('upstreamCredentials', { platform: form.platform }) && antigravityAccountType === 'upstream'" class="space-y-4">
         <div>
           <label class="input-label">{{ t('admin.accounts.upstream.baseUrl') }}</label>
           <input
@@ -909,7 +426,7 @@
       </div>
 
       <!-- Vertex Service Account -->
-      <div v-if="(form.platform === 'gemini' || form.platform === 'anthropic') && accountCategory === 'service_account'" class="space-y-4">
+      <div v-if="isFieldVisible('vertexServiceAccount', { platform: form.platform }) && accountCategory === 'service_account'" class="space-y-4">
         <div>
           <label class="input-label">Service Account JSON</label>
           <input
@@ -999,7 +516,7 @@
 
       <!-- Antigravity model restriction (applies to OAuth + Upstream) -->
       <!-- Antigravity 只支持模型映射模式，不支持白名单模式 -->
-      <div v-if="form.platform === 'antigravity'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+      <div v-if="isFieldVisible('antigravityAdvanced', { platform: form.platform })" class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
         <!-- Mapping Mode Only (no toggle for Antigravity) -->
@@ -1089,7 +606,7 @@
       </div>
 
       <!-- Add Method (only for Anthropic OAuth-based type) -->
-      <div v-if="form.platform === 'anthropic' && isOAuthFlow">
+      <div v-if="isFieldVisible('anthropicAdvanced', { platform: form.platform }) && isOAuthFlow">
         <label class="input-label">{{ t('admin.accounts.addMethod') }}</label>
         <div class="mt-2 flex gap-4">
           <label class="flex cursor-pointer items-center">
@@ -1116,22 +633,14 @@
       </div>
 
       <!-- API Key input (only for apikey type, excluding Antigravity which has its own fields) -->
-      <div v-if="form.type === 'apikey' && form.platform !== 'antigravity'" class="space-y-4">
+      <div v-if="form.type === 'apikey' && !isFieldVisible('antigravityAdvanced', { platform: form.platform })" class="space-y-4">
         <div>
           <label class="input-label">{{ t('admin.accounts.baseUrl') }}</label>
           <input
             v-model="apiKeyBaseUrl"
             type="text"
             class="input"
-            :placeholder="
-              form.platform === 'openai'
-                ? 'https://api.openai.com'
-                : form.platform === 'gemini'
-                  ? 'https://generativelanguage.googleapis.com'
-                  : form.platform === 'grok'
-                    ? 'https://api.x.ai/v1'
-                    : 'https://api.anthropic.com'
-            "
+            :placeholder="platformAPIKeyConfig(form.platform).baseUrl"
           />
           <p class="input-hint">{{ baseUrlHint }}</p>
         </div>
@@ -1141,21 +650,13 @@
             v-model="apiKeyValue"
             type="password"
             class="input font-mono"
-            :placeholder="
-              form.platform === 'openai'
-                ? 'sk-proj-...'
-                : form.platform === 'gemini'
-                  ? 'AIza...'
-                  : form.platform === 'grok'
-                    ? 'xai-...'
-                    : 'sk-ant-...'
-            "
+            :placeholder="platformAPIKeyConfig(form.platform).placeholder"
           />
           <p class="input-hint">{{ apiKeyHint }}</p>
         </div>
 
         <!-- Gemini API Key tier selection -->
-        <div v-if="form.platform === 'gemini'">
+        <div v-if="isFieldVisible('geminiAdvanced', { platform: form.platform })">
           <label class="input-label">{{ t('admin.accounts.gemini.tier.label') }}</label>
           <select v-model="geminiTierAIStudio" class="input">
             <option value="aistudio_free">{{ t('admin.accounts.gemini.tier.aiStudio.free') }}</option>
@@ -1514,7 +1015,7 @@
 
         <!-- Header Override Section (anthropic/openai apikey only) -->
         <div
-          v-if="isHeaderOverridePlatform(form.platform)"
+          v-if="isFieldVisible('headerOverride', { platform: form.platform })"
           class="border-t border-gray-200 pt-4 dark:border-dark-600"
         >
           <div class="mb-3 flex items-center justify-between">
@@ -1619,7 +1120,7 @@
       </div>
 
       <!-- Bedrock credentials (only for Anthropic Bedrock type) -->
-      <div v-if="form.platform === 'anthropic' && accountCategory === 'bedrock'" class="space-y-4">
+      <div v-if="isFieldVisible('anthropicAdvanced', { platform: form.platform }) && accountCategory === 'bedrock'" class="space-y-4">
         <!-- Auth Mode Radio -->
         <div>
           <label class="input-label">{{ t('admin.accounts.bedrockAuthMode') }}</label>
@@ -1875,7 +1376,7 @@
 
       <!-- 配额控制 (Anthropic apikey/bedrock: 配额限制 + 亲和) -->
       <div
-        v-if="form.platform === 'anthropic' && (form.type === 'apikey' || form.type === 'bedrock')"
+        v-if="isFieldVisible('anthropicAdvanced', { platform: form.platform }) && (form.type === 'apikey' || form.type === 'bedrock')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
       >
         <div class="mb-3">
@@ -1979,7 +1480,7 @@
 
       <!-- OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
       <div
-        v-if="(form.platform === 'openai' || form.platform === 'grok' || form.platform === 'kimi' || form.platform === 'anthropic' || form.platform === 'gemini') && accountCategory === 'oauth-based'"
+        v-if="isFieldVisible('oauthModelRestriction', { platform: form.platform }) && accountCategory === 'oauth-based'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
         data-testid="create-oauth-model-restriction"
       >
@@ -2264,7 +1765,7 @@
 
       <!-- Intercept Warmup Requests (Anthropic/Antigravity) -->
       <div
-        v-if="form.platform === 'anthropic' || form.platform === 'antigravity'"
+        v-if="isFieldVisible('interceptWarmup', { platform: form.platform })"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <div class="flex items-center justify-between">
@@ -2296,7 +1797,7 @@
 
       <!-- 配额控制 (Anthropic OAuth/SetupToken: 亲和 + 窗口费用 + 会话 + RPM 等) -->
       <div
-        v-if="form.platform === 'anthropic' && accountCategory === 'oauth-based'"
+        v-if="isFieldVisible('anthropicAdvanced', { platform: form.platform }) && accountCategory === 'oauth-based'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
       >
         <div class="mb-3">
@@ -2724,7 +2225,7 @@
 
       <!-- OpenAI 自动透传开关（OAuth/API Key） -->
       <div
-        v-if="form.platform === 'openai'"
+        v-if="isFieldVisible('openAIAdvanced', { platform: form.platform })"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <div class="flex items-center justify-between">
@@ -2754,7 +2255,7 @@
 
       <!-- OpenAI WS Mode 三态（off/ctx_pool/passthrough） -->
       <div
-        v-if="form.platform === 'openai' && (accountCategory === 'oauth-based' || accountCategory === 'apikey')"
+        v-if="isFieldVisible('openAIAdvanced', { platform: form.platform }) && (accountCategory === 'oauth-based' || accountCategory === 'apikey')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <div class="flex items-center justify-between">
@@ -2775,7 +2276,7 @@
 
       <!-- Anthropic API Key 自动透传开关 -->
       <div
-        v-if="form.platform === 'anthropic' && accountCategory === 'apikey'"
+        v-if="isFieldVisible('anthropicAdvanced', { platform: form.platform }) && accountCategory === 'apikey'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <div class="flex items-center justify-between">
@@ -2804,7 +2305,7 @@
       </div>
 
       <div
-        v-if="form.platform === 'anthropic' && accountCategory === 'apikey'"
+        v-if="isFieldVisible('anthropicAdvanced', { platform: form.platform }) && accountCategory === 'apikey'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <div class="flex items-center justify-between gap-4">
@@ -2823,7 +2324,7 @@
 
       <!-- Anthropic API Key: Web Search Emulation (hidden when global disabled) -->
       <div
-        v-if="form.platform === 'anthropic' && accountCategory === 'apikey' && webSearchGlobalEnabled"
+        v-if="isFieldVisible('anthropicAdvanced', { platform: form.platform }) && accountCategory === 'apikey' && webSearchGlobalEnabled"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <div class="flex items-center justify-between">
@@ -2843,7 +2344,7 @@
 
       <!-- OpenAI OAuth Codex 官方客户端限制开关 -->
       <div
-        v-if="form.platform === 'openai' && accountCategory === 'oauth-based'"
+        v-if="isFieldVisible('openAIAdvanced', { platform: form.platform }) && accountCategory === 'oauth-based'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <div class="flex items-center justify-between">
@@ -2897,9 +2398,27 @@
         </div>
       </div>
 
+      <!-- Codex 指纹收敛模式（仅 OpenAI OAuth） -->
+      <div
+        v-if="isFieldVisible('openAIAdvanced', { platform: form.platform }) && accountCategory === 'oauth-based'"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <div class="flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexFingerprintMode') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.codexFingerprintModeDesc') }}
+            </p>
+          </div>
+          <div class="w-52 flex-shrink-0">
+            <Select v-model="codexFingerprintMode" data-testid="create-codex-fingerprint-mode-select" :options="codexFingerprintModeOptions" />
+          </div>
+        </div>
+      </div>
+
       <!-- OpenAI Compact 能力配置 -->
       <div
-        v-if="form.platform === 'openai' && (accountCategory === 'oauth-based' || accountCategory === 'apikey')"
+        v-if="isFieldVisible('openAIAdvanced', { platform: form.platform }) && (accountCategory === 'oauth-based' || accountCategory === 'apikey')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600 space-y-4"
       >
         <div class="flex items-center justify-between">
@@ -2938,7 +2457,7 @@
 
       <!-- OpenAI APIKey Responses API support mode -->
       <div
-        v-if="form.platform === 'openai' && accountCategory === 'apikey'"
+        v-if="isFieldVisible('openAIAdvanced', { platform: form.platform }) && accountCategory === 'apikey'"
         class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <div class="flex items-center justify-between gap-4">
@@ -3017,7 +2536,7 @@
 
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <!-- Mixed Scheduling (only for antigravity accounts) -->
-        <div v-if="form.platform === 'antigravity'" class="flex items-center gap-2">
+        <div v-if="isFieldVisible('mixedScheduling', { platform: form.platform })" class="flex items-center gap-2">
           <label class="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
@@ -3045,7 +2564,7 @@
             </div>
           </div>
         </div>
-        <div v-if="form.platform === 'antigravity'" class="mt-3 flex items-center gap-2">
+        <div v-if="isFieldVisible('mixedScheduling', { platform: form.platform })" class="mt-3 flex items-center gap-2">
           <label class="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
@@ -3087,7 +2606,7 @@
       <!-- Step 2: OAuth Authorization -->
     <div v-else class="space-y-5">
       <div
-        v-if="form.platform === 'openai' || form.platform === 'grok'"
+        v-if="isFieldVisible('openAIAdvanced', { platform: form.platform }) || isFieldVisible('grokAdvanced', { platform: form.platform })"
         class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-dark-600 dark:bg-dark-700"
       >
         <p class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">
@@ -3117,7 +2636,7 @@
         </div>
       </div>
       <DeviceAuthorizationFlow
-        v-if="form.platform === 'kimi'"
+        v-if="isFieldVisible('kimiAdvanced', { platform: form.platform })"
         :session="kimiOAuth.session.value"
         :loading="kimiOAuth.loading.value || submitting"
         :error="kimiOAuth.error.value"
@@ -3127,7 +2646,7 @@
         @complete="handleCreateKimiAccount"
       />
       <DeviceAuthorizationFlow
-        v-else-if="form.platform === 'openai' && deviceAuthMode === 'device'"
+        v-else-if="isFieldVisible('openAIAdvanced', { platform: form.platform }) && deviceAuthMode === 'device'"
         provider="openai"
         :session="openaiDeviceOAuth.session.value"
         :loading="openaiDeviceOAuth.loading.value || submitting"
@@ -3138,7 +2657,7 @@
         @complete="handleCreateOpenAIDeviceAccount"
       />
       <DeviceAuthorizationFlow
-        v-else-if="form.platform === 'grok' && deviceAuthMode === 'device'"
+        v-else-if="isFieldVisible('grokAdvanced', { platform: form.platform }) && deviceAuthMode === 'device'"
         provider="grok"
         :session="grokDeviceOAuth.session.value"
         :loading="grokDeviceOAuth.loading.value || submitting"
@@ -3555,10 +3074,16 @@ import {
   applyHeaderOverride,
   applyInterceptWarmup,
   getHeaderOverrideTemplate,
-  isHeaderOverridePlatform,
+  isFieldVisible,
   validateHeaderOverrideRows,
   type HeaderOverrideRow
 } from '@/components/account/credentialsBuilder'
+import AccountCategoryPicker from '@/features/admin-accounts/form/AccountCategoryPicker.vue'
+import {
+  createPickerPlatforms,
+  platformAPIKeyConfig,
+  platformCategoryPicker
+} from '@/features/admin-accounts/form/registry'
 import { formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
@@ -3601,19 +3126,9 @@ const oauthStepTitle = computed(() => {
 })
 
 // Platform-specific hints for API Key type
-const baseUrlHint = computed(() => {
-  if (form.platform === 'openai') return t('admin.accounts.openai.baseUrlHint')
-  if (form.platform === 'gemini') return t('admin.accounts.gemini.baseUrlHint')
-  if (form.platform === 'grok') return t('admin.accounts.grok.baseUrlHint')
-  return t('admin.accounts.baseUrlHint')
-})
+const baseUrlHint = computed(() => t(platformAPIKeyConfig(form.platform).baseUrlHintKey))
 
-const apiKeyHint = computed(() => {
-  if (form.platform === 'openai') return t('admin.accounts.openai.apiKeyHint')
-  if (form.platform === 'gemini') return t('admin.accounts.gemini.apiKeyHint')
-  if (form.platform === 'grok') return t('admin.accounts.grok.apiKeyHint')
-  return t('admin.accounts.apiKeyHint')
-})
+const apiKeyHint = computed(() => t(platformAPIKeyConfig(form.platform).apiKeyHintKey))
 
 interface Props {
   show: boolean
@@ -3793,6 +3308,14 @@ const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const codexCLIOnlyEnabled = ref(false)
 const codexCLIOnlyAppServerEnabled = ref(false)
+type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
+const codexFingerprintMode = ref<CodexFingerprintMode>('session')
+const codexFingerprintModeOptions = computed(() => [
+  { value: 'off' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintOff') },
+  { value: 'device' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintDevice') },
+  { value: 'session' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintSession') },
+  { value: 'full' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintFull') },
+])
 type AnthropicAPIKeyAuthScheme = 'x_api_key' | 'authorization_bearer'
 const anthropicPassthroughEnabled = ref(false)
 const anthropicAPIKeyAuthScheme = ref<AnthropicAPIKeyAuthScheme>('x_api_key')
@@ -3814,6 +3337,21 @@ loadQuotaNotifyGlobal()
 const mixedScheduling = ref(false) // For antigravity accounts: enable mixed scheduling
 const allowOverages = ref(false) // For antigravity accounts: enable AI Credits overages
 const antigravityAccountType = ref<'oauth' | 'upstream'>('oauth') // For antigravity: oauth or upstream
+
+const categoryPickerValue = computed(() => {
+  const picker = platformCategoryPicker(form.platform)
+  if (picker?.model === 'antigravityAccountType') return antigravityAccountType.value
+  return accountCategory.value
+})
+
+function onCategoryPickerChange(value: string) {
+  const picker = platformCategoryPicker(form.platform)
+  if (picker?.model === 'antigravityAccountType') {
+    antigravityAccountType.value = value as 'oauth' | 'upstream'
+    return
+  }
+  accountCategory.value = value as typeof accountCategory.value
+}
 const antigravityProjectId = ref('')
 const upstreamBaseUrl = ref('') // For upstream type: base URL
 const upstreamApiKey = ref('') // For upstream type: API key
@@ -4186,14 +3724,7 @@ watch(
   () => form.platform,
   (newPlatform) => {
     // Reset base URL based on platform
-    apiKeyBaseUrl.value =
-      (newPlatform === 'openai')
-        ? 'https://api.openai.com'
-        : newPlatform === 'gemini'
-          ? 'https://generativelanguage.googleapis.com'
-          : newPlatform === 'grok'
-            ? 'https://api.x.ai/v1'
-            : 'https://api.anthropic.com'
+    apiKeyBaseUrl.value = platformAPIKeyConfig(newPlatform).baseUrl
     // Clear model-related settings
     allowedModels.value = []
     modelMappings.value = []
@@ -4613,9 +4144,9 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
     appStore.showSuccess(t('admin.accounts.accountCreated'))
     finishCreateSuccess(account)
   } catch (error: any) {
-    if (error.response?.status === 409 && error.response?.data?.error === 'mixed_channel_warning' && needsMixedChannelCheck(form.platform)) {
+    if (error.status === 409 && error.error === 'mixed_channel_warning' && needsMixedChannelCheck(form.platform)) {
       openMixedChannelDialog({
-        message: error.response?.data?.message,
+        message: error.message,
         onConfirm: async () => {
           antigravityMixedChannelConfirmed.value = true
           await submitCreateAccount(payload)
@@ -4623,7 +4154,7 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
       })
       return
     }
-    appStore.showError(error.response?.data?.message || error.response?.data?.detail || t('admin.accounts.failedToCreate'))
+    appStore.showError(error.message || t('admin.accounts.failedToCreate'))
   } finally {
     submitting.value = false
   }
@@ -4685,6 +4216,7 @@ const resetForm = () => {
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   codexCLIOnlyEnabled.value = false
   codexCLIOnlyAppServerEnabled.value = false
+  codexFingerprintMode.value = 'session'
   anthropicPassthroughEnabled.value = false
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
   webSearchEmulationMode.value = 'default'
@@ -4782,6 +4314,11 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
     extra.codex_cli_only_allow_app_server = true
   } else {
     delete extra.codex_cli_only_allow_app_server
+  }
+  if (accountCategory.value === 'oauth-based') {
+    extra.codex_fingerprint_mode = codexFingerprintMode.value
+  } else {
+    delete extra.codex_fingerprint_mode
   }
   if (openAICompactMode.value !== 'auto') {
     extra.openai_compact_mode = openAICompactMode.value
@@ -5068,14 +4605,7 @@ const handleSubmit = async () => {
   }
 
   // Determine default base URL based on platform
-  const defaultBaseUrl =
-    form.platform === 'openai'
-      ? 'https://api.openai.com'
-      : form.platform === 'gemini'
-        ? 'https://generativelanguage.googleapis.com'
-        : form.platform === 'grok'
-          ? 'https://api.x.ai/v1'
-          : 'https://api.anthropic.com'
+  const defaultBaseUrl = platformAPIKeyConfig(form.platform).baseUrl
 
   // Build credentials with optional model mapping
   const credentials: Record<string, unknown> = {
@@ -5119,7 +4649,7 @@ const handleSubmit = async () => {
   }
 
   // Add header override if enabled (anthropic/openai apikey only)
-  if (isHeaderOverridePlatform(form.platform)) {
+  if (isFieldVisible('headerOverride', { platform: form.platform })) {
     if (headerOverrideEnabled.value) {
       const headerError = validateHeaderOverrideRows(headerOverrideRows.value)
       if (headerError) {
