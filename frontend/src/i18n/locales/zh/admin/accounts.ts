@@ -698,6 +698,12 @@ export default {
         codexCLIOnlyDesc: '仅对 OpenAI OAuth 生效。开启后仅允许 Codex 官方客户端家族访问；关闭后完全绕过并保持原逻辑。',
         codexCLIOnlyAppServer: '允许 Codex app-server 客户端',
         codexCLIOnlyAppServerDesc: '仅在上方开关开启时生效。开启后本账号额外放行内嵌 Codex 引擎、经 app-server 协议接入的第三方客户端（如 Claude Code 的 codex 插件），仍需通过全局引擎指纹门；与全局 app-server 开关取 OR（任一开即放行）。',
+        codexFingerprintMode: 'Codex 指纹收敛',
+        codexFingerprintModeDesc: '多人共享 OAuth 账号时，收敛上游可见的设备、会话和线程标识。历史账号未配置时保持关闭；完全收敛最激进，请谨慎使用。',
+        codexFingerprintOff: '关闭（原样透传）',
+        codexFingerprintDevice: '仅设备',
+        codexFingerprintSession: '设备 + 会话（新账号推荐）',
+        codexFingerprintFull: '完全收敛（激进）',
         codexImageTool: 'Codex 图片工具',
         codexImageToolDesc:
           '统一控制 Codex /responses 文本请求的 image_generation 图片工具：是否自动注入，以及客户端自带该工具时是否放行。账号级策略优先于渠道和全局配置，不影响独立图片生成接口。',

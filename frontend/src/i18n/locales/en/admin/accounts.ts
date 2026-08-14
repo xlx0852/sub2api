@@ -494,6 +494,12 @@ export default {
         codexCLIOnlyAppServer: 'Allow Codex app-server clients',
         codexCLIOnlyAppServerDesc:
           "Effective only when the switch above is on. When enabled, this account also allows third-party clients that embed the Codex engine over the app-server protocol (e.g. Claude Code's codex plugin); they still pass the global engine-fingerprint gate. OR-combined with the global app-server toggle.",
+        codexFingerprintMode: 'Codex fingerprint convergence',
+        codexFingerprintModeDesc: 'Converges upstream-visible device, session, and thread identifiers for shared OAuth accounts. Existing accounts remain off when unset; full convergence is aggressive and should be used carefully.',
+        codexFingerprintOff: 'Off (passthrough)',
+        codexFingerprintDevice: 'Device only',
+        codexFingerprintSession: 'Device + Session (new account default)',
+        codexFingerprintFull: 'Full convergence (aggressive)',
         codexImageTool: 'Codex image tool',
         codexImageToolDesc:
           'One policy for the image_generation tool on Codex /responses text requests: whether it is auto-injected, and whether client-provided tools pass through. Account policy takes precedence over channel and global settings; standalone image-generation endpoints are unaffected.',
