@@ -645,6 +645,9 @@ type SecurityConfig struct {
 	ProxyFallback                    ProxyFallbackConfig  `mapstructure:"proxy_fallback"`
 	ProxyProbe                       ProxyProbeConfig     `mapstructure:"proxy_probe"`
 	TrustForwardedIPForAPIKeyACL     bool                 `mapstructure:"trust_forwarded_ip_for_api_key_acl"`
+	// RateLimitFailClosed 为 true 时，限流/RPM/配额检查在依赖（Redis/DB）故障时拒绝请求（fail-closed），
+	// 而非默认放行（fail-open）。默认 false 以优先可用性；对正确性敏感的部署可开启。
+	RateLimitFailClosed              bool                 `mapstructure:"rate_limit_fail_closed"`
 	trustForwardedIPForAPIKeyACLLive *atomic.Bool         `mapstructure:"-"`
 }
 
@@ -1756,7 +1759,8 @@ func setDefaults() {
 		"raw.githubusercontent.com",
 	})
 	viper.SetDefault("security.url_allowlist.crs_hosts", []string{})
-	viper.SetDefault("security.url_allowlist.allow_private_hosts", true)
+	// 默认阻断私网/环回/链路本地地址以防 SSRF；自托管或内网上游需显式设为 true。
+	viper.SetDefault("security.url_allowlist.allow_private_hosts", false)
 	viper.SetDefault("security.url_allowlist.allow_insecure_http", true)
 	viper.SetDefault("security.response_headers.enabled", true)
 	viper.SetDefault("security.response_headers.additional_allowed", []string{})
@@ -1765,6 +1769,7 @@ func setDefaults() {
 	viper.SetDefault("security.csp.policy", DefaultCSPPolicy)
 	viper.SetDefault("security.proxy_probe.insecure_skip_verify", false)
 	viper.SetDefault("security.trust_forwarded_ip_for_api_key_acl", false)
+	viper.SetDefault("security.rate_limit_fail_closed", false)
 
 	// Security - disable direct fallback on proxy error
 	viper.SetDefault("security.proxy_fallback.allow_direct_on_error", false)
