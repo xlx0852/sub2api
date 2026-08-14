@@ -75,15 +75,15 @@ This document provides practical examples of how to use the authentication views
 
 ```typescript
 // Method 1: Direct import
-import LoginView from '@/views/auth/LoginView.vue'
-import RegisterView from '@/views/auth/RegisterView.vue'
+import LoginView from '@/features/auth/LoginView.vue'
+import RegisterView from '@/features/auth/RegisterView.vue'
 
 // Method 2: Named exports from index
 import { LoginView, RegisterView } from '@/views/auth'
 
 // Method 3: Lazy loading (recommended for routes)
-const LoginView = () => import('@/views/auth/LoginView.vue')
-const RegisterView = () => import('@/views/auth/RegisterView.vue')
+const LoginView = () => import('@/features/auth/LoginView.vue')
+const RegisterView = () => import('@/features/auth/RegisterView.vue')
 ```
 
 ### Using in Router
@@ -95,13 +95,13 @@ const routes = [
   {
     path: '/login',
     name: 'Login',
-    component: () => import('@/views/auth/LoginView.vue'),
+    component: () => import('@/features/auth/LoginView.vue'),
     meta: { requiresAuth: false }
   },
   {
     path: '/register',
     name: 'Register',
-    component: () => import('@/views/auth/RegisterView.vue'),
+    component: () => import('@/features/auth/RegisterView.vue'),
     meta: { requiresAuth: false }
   }
 ]
@@ -276,7 +276,7 @@ errors = {
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import LoginView from '@/views/auth/LoginView.vue'
+import LoginView from '@/features/auth/LoginView.vue'
 
 describe('LoginView', () => {
   it('validates required fields', async () => {
@@ -514,11 +514,11 @@ async function handleRegister(): Promise<void> {
 // Router configuration with lazy loading
 {
   path: '/login',
-  component: () => import('@/views/auth/LoginView.vue'), // ✅ Lazy loaded
+  component: () => import('@/features/auth/LoginView.vue'), // ✅ Lazy loaded
 }
 
 // Direct import (not recommended for routes)
-import LoginView from '@/views/auth/LoginView.vue'; // ❌ Eager loaded
+import LoginView from '@/features/auth/LoginView.vue'; // ❌ Eager loaded
 ```
 
 ### Optimization Tips

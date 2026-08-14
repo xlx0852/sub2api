@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Pagination from '@/components/common/Pagination.vue'
+import Pagination from '@/ui/Pagination.vue'
 import SemanticBadge from '@/components/common/SemanticBadge.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useI18n } from 'vue-i18n'

@@ -172,7 +172,7 @@ import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { adminAPI } from '@/api/admin'
 import type { AccountSubscriptionCycle, AccountSubscriptionLossSummary, SubscriptionCycleListResponse } from '@/api/admin/profit'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import ConfirmDialog from '@/ui/ConfirmDialog.vue'
 import MetricItem from './AccountCostMetricItem.vue'
 
 const props = withDefaults(defineProps<{

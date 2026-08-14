@@ -177,8 +177,8 @@ import { useI18n } from 'vue-i18n'
 import { adminAPI, type BalanceHistoryItem } from '@/api/admin'
 import { formatDateTime } from '@/utils/format'
 import type { AdminUser } from '@/types'
-import BaseDialog from '@/components/common/BaseDialog.vue'
-import Select from '@/components/common/Select.vue'
+import BaseDialog from '@/ui/BaseDialog.vue'
+import Select from '@/ui/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const props = defineProps<{ show: boolean; user: AdminUser | null; hideActions?: boolean }>()

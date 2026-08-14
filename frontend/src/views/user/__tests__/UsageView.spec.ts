@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
-import UsageView from '../UsageView.vue'
+import UsageView from '@/features/user/views/UsageView.vue'
 
 const {
   query,

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
-import UsageView from '../UsageView.vue'
+import UsageView from '@/features/admin/views/UsageView.vue'
 
 const { list, getStats, getSnapshotV2, getById, getModelStats, listErrorLogs } = vi.hoisted(() => {
   vi.stubGlobal('localStorage', {

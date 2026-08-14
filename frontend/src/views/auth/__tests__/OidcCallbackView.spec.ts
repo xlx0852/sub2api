@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
-import OidcCallbackView from '../OidcCallbackView.vue'
+import OidcCallbackView from '@/features/auth/OidcCallbackView.vue'
 
 const replace = vi.fn()
 const showSuccess = vi.fn()

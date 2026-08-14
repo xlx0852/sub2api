@@ -165,8 +165,8 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { AccountProfitSummary, ProfitWindowEconomicsItem } from '@/api/admin/profit'
-import BaseDialog from '@/components/common/BaseDialog.vue'
-import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import BaseDialog from '@/ui/BaseDialog.vue'
+import LoadingSpinner from '@/ui/LoadingSpinner.vue'
 
 const props = defineProps<{
   show: boolean

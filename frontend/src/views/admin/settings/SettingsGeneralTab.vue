@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import Toggle from '@/components/common/Toggle.vue'
+import Toggle from '@/ui/Toggle.vue'
 import ImageUpload from '@/components/common/ImageUpload.vue'
 
 defineProps<{

@@ -2673,11 +2673,11 @@ import type {
   OpenAIResponsesMode,
   OpenAIEndpointCapability
 } from '@/types'
-import BaseDialog from '@/components/common/BaseDialog.vue'
-import Toggle from '@/components/common/Toggle.vue'
+import BaseDialog from '@/ui/BaseDialog.vue'
+import Toggle from '@/ui/Toggle.vue'
 import AccountCostConfigPanel from '@/components/admin/account/AccountCostConfigPanel.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import Select from '@/components/common/Select.vue'
+import ConfirmDialog from '@/ui/ConfirmDialog.vue'
+import Select from '@/ui/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
@@ -2696,7 +2696,7 @@ import {
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
   type HeaderOverrideRow
-} from '@/components/account/credentialsBuilder'
+} from '@/features/admin-accounts/form/credentialsBuilder'
 import { platformAPIKeyConfig } from '@/features/admin-accounts/form/registry'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'

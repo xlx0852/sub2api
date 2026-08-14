@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 import type { AdminGroup } from '@/types'
-import GroupsView from '../GroupsView.vue'
+import GroupsView from '@/features/admin/views/GroupsView.vue'
 
 const {
   listGroups,

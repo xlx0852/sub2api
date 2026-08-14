@@ -3057,10 +3057,10 @@ import type {
   OpenAIResponsesMode,
   OpenAIEndpointCapability
 } from '@/types'
-import BaseDialog from '@/components/common/BaseDialog.vue'
+import BaseDialog from '@/ui/BaseDialog.vue'
 import AccountCostConfigPanel from '@/components/admin/account/AccountCostConfigPanel.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import Select from '@/components/common/Select.vue'
+import ConfirmDialog from '@/ui/ConfirmDialog.vue'
+import Select from '@/ui/Select.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
@@ -3077,7 +3077,7 @@ import {
   isFieldVisible,
   validateHeaderOverrideRows,
   type HeaderOverrideRow
-} from '@/components/account/credentialsBuilder'
+} from '@/features/admin-accounts/form/credentialsBuilder'
 import AccountCategoryPicker from '@/features/admin-accounts/form/AccountCategoryPicker.vue'
 import {
   createPickerPlatforms,

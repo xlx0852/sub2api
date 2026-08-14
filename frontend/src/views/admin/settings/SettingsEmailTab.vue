@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
-import Toggle from '@/components/common/Toggle.vue'
+import Toggle from '@/ui/Toggle.vue'
 import EmailTemplateEditor from '@/views/admin/settings/EmailTemplateEditor.vue'
 
 defineProps<{

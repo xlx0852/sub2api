@@ -60,7 +60,7 @@ vi.mock('@stripe/stripe-js', () => ({
   loadStripe,
 }))
 
-import StripePaymentView from '../StripePaymentView.vue'
+import StripePaymentView from '@/features/user/views/StripePaymentView.vue'
 import { formatPaymentAmount } from '@/components/payment/currency'
 import type { PaymentOrder } from '@/types/payment'
 

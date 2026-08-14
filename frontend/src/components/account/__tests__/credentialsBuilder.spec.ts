@@ -12,7 +12,7 @@ import {
   isHeaderOverridePlatform,
   splitHeaderOverridesObject,
   validateHeaderOverrideRows
-} from '../credentialsBuilder'
+} from '@/features/admin-accounts/form/credentialsBuilder'
 
 describe('applyGrokAPIKeyRouting', () => {
   it('selects the official xAI API for Grok API Key accounts', () => {

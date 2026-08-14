@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import Toggle from '@/components/common/Toggle.vue'
-import Select from '@/components/common/Select.vue'
+import Toggle from '@/ui/Toggle.vue'
+import Select from '@/ui/Select.vue'
 import ImageUpload from '@/components/common/ImageUpload.vue'
 import PaymentProviderList from '@/components/payment/PaymentProviderList.vue'
 import type { ProviderInstance } from '@/types/payment'

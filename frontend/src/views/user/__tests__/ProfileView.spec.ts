@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import ProfileView from '@/views/user/ProfileView.vue'
+import ProfileView from '@/features/user/views/ProfileView.vue'
 
 const {
   fetchPublicSettingsMock,

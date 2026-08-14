@@ -166,7 +166,7 @@
 <script setup lang="ts">
 import { reactive, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import BaseDialog from '@/components/common/BaseDialog.vue'
+import BaseDialog from '@/ui/BaseDialog.vue'
 import type { PaymentOrder } from '@/types/payment'
 import { formatOrderDateTime as formatDateTime } from '@/components/payment/orderUtils'
 import { currencySymbol } from '@/components/payment/currency'

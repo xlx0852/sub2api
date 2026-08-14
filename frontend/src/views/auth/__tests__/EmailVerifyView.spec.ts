@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import EmailVerifyView from '@/views/auth/EmailVerifyView.vue'
+import EmailVerifyView from '@/features/auth/EmailVerifyView.vue'
 
 const {
   pushMock,

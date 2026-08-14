@@ -32,7 +32,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import BaseDialog from '@/components/common/BaseDialog.vue'
+import BaseDialog from '@/ui/BaseDialog.vue'
 import AccountCostConfigPanel from './AccountCostConfigPanel.vue'
 
 const props = defineProps<{ show: boolean; accountId: number | null; accountName?: string; accountType?: string; accountPlatform?: string }>()

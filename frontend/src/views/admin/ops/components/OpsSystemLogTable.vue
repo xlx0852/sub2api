@@ -2,8 +2,8 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { opsAPI, type OpsRuntimeLogConfig, type OpsSystemLog, type OpsSystemLogSinkHealth } from '@/api/admin/ops'
-import Pagination from '@/components/common/Pagination.vue'
-import Select from '@/components/common/Select.vue'
+import Pagination from '@/ui/Pagination.vue'
+import Select from '@/ui/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores'
 

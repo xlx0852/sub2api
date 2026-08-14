@@ -494,8 +494,8 @@ import { ref, reactive, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { testDatabase, testRedis, install, type InstallRequest } from '@/api/setup'
 import { buildGatewayUrl } from '@/api/client'
-import Select from '@/components/common/Select.vue'
-import Toggle from '@/components/common/Toggle.vue'
+import Select from '@/ui/Select.vue'
+import Toggle from '@/ui/Toggle.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()

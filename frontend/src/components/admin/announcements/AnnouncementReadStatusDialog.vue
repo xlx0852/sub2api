@@ -79,9 +79,9 @@ import type { AnnouncementUserReadStatus } from '@/types'
 import type { Column } from '@/components/common/types'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 
-import BaseDialog from '@/components/common/BaseDialog.vue'
+import BaseDialog from '@/ui/BaseDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
-import Pagination from '@/components/common/Pagination.vue'
+import Pagination from '@/ui/Pagination.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()

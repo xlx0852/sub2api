@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Icon from '@/components/icons/Icon.vue'
-import Toggle from '@/components/common/Toggle.vue'
+import Toggle from '@/ui/Toggle.vue'
 import type { LoginAgreementDocument } from '@/types'
 
 defineProps<{

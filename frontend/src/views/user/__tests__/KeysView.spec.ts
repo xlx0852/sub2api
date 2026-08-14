@@ -3,7 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
 import type { ApiKey } from '@/types'
-import KeysView from '../KeysView.vue'
+import KeysView from '@/features/user/views/KeysView.vue'
 
 const {
   listKeys,

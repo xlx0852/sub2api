@@ -18,8 +18,8 @@ import type { RouteRecordRaw } from 'vue-router'
 
 // Views
 import DashboardView from '@/views/DashboardView.vue'
-import LoginView from '@/views/auth/LoginView.vue'
-import RegisterView from '@/views/auth/RegisterView.vue'
+import LoginView from '@/features/auth/LoginView.vue'
+import RegisterView from '@/features/auth/RegisterView.vue'
 
 const routes: RouteRecordRaw[] = [
   // Auth routes (no layout needed - views use AuthLayout internally)
@@ -72,37 +72,37 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin/dashboard',
     name: 'AdminDashboard',
-    component: () => import('@/views/admin/DashboardView.vue'),
+    component: () => import('@/features/admin/views/DashboardView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Admin Dashboard' }
   },
   {
     path: '/admin/users',
     name: 'AdminUsers',
-    component: () => import('@/views/admin/UsersView.vue'),
+    component: () => import('@/features/admin/views/UsersView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, title: 'User Management' }
   },
   {
     path: '/admin/groups',
     name: 'AdminGroups',
-    component: () => import('@/views/admin/GroupsView.vue'),
+    component: () => import('@/features/admin/views/GroupsView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Groups' }
   },
   {
     path: '/admin/accounts',
     name: 'AdminAccounts',
-    component: () => import('@/views/admin/AccountsView.vue'),
+    component: () => import('@/features/admin/views/AccountsView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Accounts' }
   },
   {
     path: '/admin/proxies',
     name: 'AdminProxies',
-    component: () => import('@/views/admin/ProxiesView.vue'),
+    component: () => import('@/features/admin/views/ProxiesView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Proxies' }
   },
   {
     path: '/admin/redeem-codes',
     name: 'AdminRedeemCodes',
-    component: () => import('@/views/admin/RedeemCodesView.vue'),
+    component: () => import('@/features/admin/views/RedeemCodesView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Redeem Codes' }
   },
 

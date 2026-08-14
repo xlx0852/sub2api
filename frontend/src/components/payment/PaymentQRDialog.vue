@@ -73,7 +73,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import BaseDialog from '@/components/common/BaseDialog.vue'
+import BaseDialog from '@/ui/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { usePaymentStore } from '@/stores/payment'
 import { useAppStore } from '@/stores'

@@ -8,7 +8,7 @@ import type { OpsThroughputGroupBreakdownItem, OpsThroughputPlatformBreakdownIte
 import type { ChartState } from '../types'
 import { formatHistoryLabel, sumNumbers } from '../utils/opsFormatters'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
-import EmptyState from '@/components/common/EmptyState.vue'
+import EmptyState from '@/ui/EmptyState.vue'
 import { formatNumber } from '@/utils/format'
 import Icon from '@/components/icons/Icon.vue'
 

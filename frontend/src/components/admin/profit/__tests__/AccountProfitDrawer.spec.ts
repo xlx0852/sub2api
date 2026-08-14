@@ -15,14 +15,14 @@ vi.mock('vue-i18n', async () => {
   }
 })
 
-vi.mock('@/components/common/BaseDialog.vue', () => ({
+vi.mock('@/ui/BaseDialog.vue', () => ({
   default: {
     props: ['show', 'title'],
     template: '<div data-testid="drawer"><slot /></div>'
   }
 }))
 
-vi.mock('@/components/common/LoadingSpinner.vue', () => ({
+vi.mock('@/ui/LoadingSpinner.vue', () => ({
   default: { template: '<div data-testid="spinner" />' }
 }))
 

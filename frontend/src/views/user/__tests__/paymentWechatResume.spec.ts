@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseWechatResumeRoute, stripWechatResumeQuery } from '../paymentWechatResume'
+import { parseWechatResumeRoute, stripWechatResumeQuery } from '@/features/user/paymentWechatResume'
 
 describe('parseWechatResumeRoute', () => {
   it('prefers the opaque resume token over legacy openid query params', () => {

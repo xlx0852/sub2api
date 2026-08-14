@@ -1279,9 +1279,9 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import type { Proxy as ProxyConfig, AdminGroup, AccountPlatform, AccountType, OpenAICompactMode } from '@/types'
-import BaseDialog from '@/components/common/BaseDialog.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import Select from '@/components/common/Select.vue'
+import BaseDialog from '@/ui/BaseDialog.vue'
+import ConfirmDialog from '@/ui/ConfirmDialog.vue'
+import Select from '@/ui/Select.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
@@ -1298,7 +1298,7 @@ import {
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
   type HeaderOverrideRow
-} from '@/components/account/credentialsBuilder'
+} from '@/features/admin-accounts/form/credentialsBuilder'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
 import {
   OPENAI_WS_MODE_CTX_POOL,

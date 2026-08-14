@@ -110,7 +110,7 @@ interface RouteMeta {
 All route components use dynamic imports for code splitting:
 
 ```typescript
-component: () => import('@/views/user/DashboardView.vue')
+component: () => import('@/features/user/views/DashboardView.vue')
 ```
 
 Benefits:

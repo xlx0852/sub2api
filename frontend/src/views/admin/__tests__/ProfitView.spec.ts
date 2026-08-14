@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import ProfitView from '../ProfitView.vue'
+import ProfitView from '@/features/admin/views/ProfitView.vue'
 
 const { overview, summary, windowEconomics, showError } = vi.hoisted(() => ({
   overview: vi.fn(),

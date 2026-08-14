@@ -6,7 +6,7 @@ import { Bar } from 'vue-chartjs'
 import type { OpsLatencyHistogramResponse } from '@/api/admin/ops'
 import type { ChartState } from '../types'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
-import EmptyState from '@/components/common/EmptyState.vue'
+import EmptyState from '@/ui/EmptyState.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend)

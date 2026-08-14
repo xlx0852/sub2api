@@ -332,8 +332,8 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import type { TLSFingerprintProfile } from '@/api/admin/tlsFingerprintProfile'
-import BaseDialog from '@/components/common/BaseDialog.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import BaseDialog from '@/ui/BaseDialog.vue'
+import ConfirmDialog from '@/ui/ConfirmDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const props = defineProps<{

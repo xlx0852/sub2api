@@ -40,7 +40,7 @@ vi.mock('vue-i18n', async () => {
   }
 })
 
-vi.mock('@/components/common/BaseDialog.vue', () => ({
+vi.mock('@/ui/BaseDialog.vue', () => ({
   default: {
     name: 'BaseDialog',
     props: ['show', 'title', 'width'],

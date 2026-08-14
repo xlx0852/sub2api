@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import Toggle from '@/components/common/Toggle.vue'
-import Select from '@/components/common/Select.vue'
+import Toggle from '@/ui/Toggle.vue'
+import Select from '@/ui/Select.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
 import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
 import type { AuthSourceType } from '@/api/admin/settings'

@@ -40,7 +40,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import LoadingSpinner from '@/ui/LoadingSpinner.vue'
 import type { UserBreakdownItem } from '@/types'
 
 const { t } = useI18n()

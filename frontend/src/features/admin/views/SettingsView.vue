@@ -410,7 +410,7 @@ import type {
 import type { ProviderInstance } from "@/types/payment";
 import AppLayout from "@/components/layout/AppLayout.vue";
 import Icon from "@/components/icons/Icon.vue";
-import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
+import ConfirmDialog from "@/ui/ConfirmDialog.vue";
 import PaymentProviderDialog from "@/components/payment/PaymentProviderDialog.vue";
 import {
   SETTINGS_TABS,

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 import type { DashboardStats } from '@/types'
-import DashboardView from '../DashboardView.vue'
+import DashboardView from '@/features/admin/views/DashboardView.vue'
 
 const { getSnapshotV2, getUserUsageTrend, getUserSpendingRanking } = vi.hoisted(() => ({
   getSnapshotV2: vi.fn(),

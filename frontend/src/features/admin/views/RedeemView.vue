@@ -563,9 +563,9 @@ import type { Column } from '@/components/common/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
-import Pagination from '@/components/common/Pagination.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
-import Select from '@/components/common/Select.vue'
+import Pagination from '@/ui/Pagination.vue'
+import ConfirmDialog from '@/ui/ConfirmDialog.vue'
+import Select from '@/ui/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()

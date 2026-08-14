@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
-import LinuxDoCallbackView from '../LinuxDoCallbackView.vue'
+import LinuxDoCallbackView from '@/features/auth/LinuxDoCallbackView.vue'
 
 const replace = vi.fn()
 const showSuccess = vi.fn()

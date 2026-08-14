@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import OAuthCallbackView from '@/views/auth/OAuthCallbackView.vue'
+import OAuthCallbackView from '@/features/auth/OAuthCallbackView.vue'
 
 const {
   routeState,

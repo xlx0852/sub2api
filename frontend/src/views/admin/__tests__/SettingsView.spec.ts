@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 
-import SettingsView from "../SettingsView.vue";
+import SettingsView from "@/features/admin/views/SettingsView.vue";
 
 const {
   getSettings,

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, shallowMount } from '@vue/test-utils'
-import AirwallexPaymentView from '../AirwallexPaymentView.vue'
+import AirwallexPaymentView from '@/features/user/views/AirwallexPaymentView.vue'
 import {
   PAYMENT_RECOVERY_STORAGE_KEY,
   type PaymentRecoverySnapshot,

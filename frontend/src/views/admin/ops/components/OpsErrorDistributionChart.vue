@@ -6,7 +6,7 @@ import { Doughnut } from 'vue-chartjs'
 import type { OpsErrorDistributionResponse } from '@/api/admin/ops'
 import type { ChartState } from '../types'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
-import EmptyState from '@/components/common/EmptyState.vue'
+import EmptyState from '@/ui/EmptyState.vue'
 import Icon from '@/components/icons/Icon.vue'
 
 ChartJS.register(ArcElement, Tooltip, Legend)

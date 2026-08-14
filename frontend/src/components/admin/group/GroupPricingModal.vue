@@ -24,7 +24,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import type { AdminGroup } from '@/types'
-import BaseDialog from '@/components/common/BaseDialog.vue'
+import BaseDialog from '@/ui/BaseDialog.vue'
 import GroupSellPriceEditor from '@/components/admin/group/GroupSellPriceEditor.vue'
 
 defineProps<{

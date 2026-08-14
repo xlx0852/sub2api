@@ -3,11 +3,9 @@
  * Handles payment operations for regular users
  */
 
-import { apiClient } from '@/api/client'
 import { controlPlaneRequest } from '@/api/generated/request'
 import type {
   PaymentConfig,
-  SubscriptionPlan,
   MethodLimitsResponse,
   CheckoutInfoResponse,
   CreateOrderRequest,
@@ -31,11 +29,6 @@ export const paymentAPI = {
       'get',
       '/api/v1/payment/config'
     )
-  },
-
-  /** Retired route; kept for store compatibility and not in the control-plane spec. */
-  getPlans() {
-    return apiClient.get<SubscriptionPlan[]>('/payment/plans')
   },
 
   /** Get all checkout page data in a single call */

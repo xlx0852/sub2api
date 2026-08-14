@@ -183,11 +183,11 @@ import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import type { GroupRateMultiplierEntry } from '@/api/admin/groups'
 import type { AdminGroup, AdminUser } from '@/types'
-import BaseDialog from '@/components/common/BaseDialog.vue'
+import BaseDialog from '@/ui/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import GroupUserOverrideTable from './GroupUserOverrideTable.vue'
-import SearchInput from '@/components/common/SearchInput.vue'
+import SearchInput from '@/ui/SearchInput.vue'
 
 interface LocalEntry extends GroupRateMultiplierEntry {}
 

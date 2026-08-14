@@ -307,10 +307,10 @@
 <script setup lang="ts">
 import { reactive, computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import BaseDialog from '@/components/common/BaseDialog.vue'
+import BaseDialog from '@/ui/BaseDialog.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
-import Select from '@/components/common/Select.vue'
-import type { SelectOption } from '@/components/common/Select.vue'
+import Select from '@/ui/Select.vue'
+import type { SelectOption } from '@/ui/Select.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
 import type { ProviderInstance } from '@/types/payment'
 import type { EasyPayCustomMethod, TypeOption } from './providerConfig'

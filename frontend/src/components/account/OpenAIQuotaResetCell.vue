@@ -112,7 +112,7 @@ import {
   type OpenAIQuotaUsage,
   type OpenAIQuotaResetResult
 } from '@/api/admin/accounts'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import ConfirmDialog from '@/ui/ConfirmDialog.vue'
 import QuotaActionButton from './QuotaActionButton.vue'
 
 const props = defineProps<{

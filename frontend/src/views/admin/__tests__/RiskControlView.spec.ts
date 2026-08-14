@@ -3,7 +3,7 @@ import { defineComponent, h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { DOMWrapper, VueWrapper } from '@vue/test-utils'
 
-import RiskControlView from '../RiskControlView.vue'
+import RiskControlView from '@/features/admin/views/RiskControlView.vue'
 import type { ContentModerationConfig, UpdateContentModerationConfig } from '@/api/admin/riskControl'
 
 const {

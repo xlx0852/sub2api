@@ -291,7 +291,7 @@ import {
 } from '@/components/admin/channel/types'
 import type { AdminGroup, GroupPlatform } from '@/types'
 import { platformTextClass } from '@/utils/platformColors'
-import Select from '@/components/common/Select.vue'
+import Select from '@/ui/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import PricingEntryCard from '@/components/admin/channel/PricingEntryCard.vue'

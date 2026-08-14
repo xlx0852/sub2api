@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import Toggle from '@/components/common/Toggle.vue'
-import Select from '@/components/common/Select.vue'
+import Toggle from '@/ui/Toggle.vue'
+import Select from '@/ui/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import type { WebSearchEmulationConfig, WebSearchProviderConfig } from '@/api/admin/settings'

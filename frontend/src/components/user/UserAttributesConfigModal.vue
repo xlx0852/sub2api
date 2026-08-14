@@ -242,10 +242,10 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import type { UserAttributeDefinition, UserAttributeType, UserAttributeOption } from '@/types'
-import BaseDialog from '@/components/common/BaseDialog.vue'
-import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import BaseDialog from '@/ui/BaseDialog.vue'
+import ConfirmDialog from '@/ui/ConfirmDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
-import Select from '@/components/common/Select.vue'
+import Select from '@/ui/Select.vue'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
 
 const { t } = useI18n()
