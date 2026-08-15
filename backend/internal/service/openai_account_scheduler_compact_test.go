@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
 )
@@ -316,4 +317,33 @@ func TestOpenAICompactSupportTier(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOpenAIShadowRecordsAllCompactCandidatesRejected(t *testing.T) {
+	repo := &openAIAdvancedSchedulerSettingRepoStub{values: map[string]string{
+		SettingKeySchedulerScoringRollout: `{"platforms":{"openai":"shadow"}}`,
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:            &config.Config{},
+		settingService: NewSettingService(repo, &config.Config{}),
+	}
+	scheduler := &defaultOpenAIAccountScheduler{service: svc}
+	accounts := []*Account{
+		{ID: 72001, Platform: PlatformOpenAI, Extra: map[string]any{"openai_compact_mode": OpenAICompactModeForceOff}},
+		{ID: 72002, Platform: PlatformOpenAI, Extra: map[string]any{"openai_compact_supported": false}},
+	}
+
+	plan := scheduler.buildOpenAIAccountLoadPlan(context.Background(), OpenAIAccountScheduleRequest{
+		Platform:       PlatformOpenAI,
+		RequireCompact: true,
+	}, accounts, nil)
+
+	require.Equal(t, scheduling.RolloutShadow, plan.scoringMode)
+	require.NotNil(t, plan.shadowComparison)
+	require.Equal(t, []int64{72001, 72002}, plan.shadowComparison.CandidateIDs)
+	require.Empty(t, plan.shadowComparison.EligibleCandidateIDs)
+	require.Equal(t, []int64{72001, 72002}, plan.shadowComparison.CompactRejectedIDs)
+	require.Empty(t, plan.shadowComparison.LegacySelectionOrder)
+	require.Empty(t, plan.shadowComparison.SharedSelectionOrder)
+	require.False(t, plan.shadowComparison.HardGateViolation)
 }

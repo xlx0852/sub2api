@@ -274,6 +274,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		}
 
 		if err != nil {
+			h.gatewayService.ReportGatewayAccountScheduleResult(account.ID, false, nil)
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
 				if c.Writer.Size() != writerSizeBeforeForward {
@@ -304,6 +305,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 			)
 			return
 		}
+		h.gatewayService.ReportGatewayAccountScheduleResult(account.ID, true, result.FirstTokenMs)
 
 		// 6. Record usage
 		userAgent := c.GetHeader("User-Agent")

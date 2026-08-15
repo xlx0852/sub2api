@@ -252,6 +252,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		}
 
 		if err != nil {
+			h.gatewayService.ReportGatewayAccountScheduleResult(account.ID, false, nil)
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
 				// Can't failover if streaming content already sent
@@ -283,6 +284,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 			)
 			return
 		}
+		h.gatewayService.ReportGatewayAccountScheduleResult(account.ID, true, result.FirstTokenMs)
 
 		// 6. Record usage
 		userAgent := c.GetHeader("User-Agent")

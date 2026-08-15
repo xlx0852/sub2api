@@ -38,6 +38,19 @@ type PolicyDecision struct {
 	RejectedPolicy string
 }
 
+// CandidatePolicyTrace 是单个候选的稳定门槛诊断结果。
+type CandidatePolicyTrace struct {
+	AccountID      int64
+	Allowed        bool
+	RejectedPolicy string
+}
+
+// CandidateSetDecision 保持输入账号顺序，AllowedAccounts 仅包含全部硬门槛通过者。
+type CandidateSetDecision struct {
+	AllowedAccounts []*domain.Account
+	Trace           []CandidatePolicyTrace
+}
+
 // EvaluateCandidate 按声明顺序执行门槛策略，首个拒绝即停止。
 func EvaluateCandidate(ctx context.Context, account *domain.Account, req Request, policies ...CandidatePolicy) PolicyDecision {
 	for _, policy := range policies {
@@ -49,6 +62,31 @@ func EvaluateCandidate(ctx context.Context, account *domain.Account, req Request
 		}
 	}
 	return PolicyDecision{Allowed: true}
+}
+
+// EvaluateCandidates 对候选集合执行同一组按声明顺序排列的硬门槛。
+// 它不排序、不评分，也不执行 acquire/sticky/wait 等副作用。
+func EvaluateCandidates(ctx context.Context, accounts []*domain.Account, req Request, policies ...CandidatePolicy) CandidateSetDecision {
+	result := CandidateSetDecision{
+		AllowedAccounts: make([]*domain.Account, 0, len(accounts)),
+		Trace:           make([]CandidatePolicyTrace, 0, len(accounts)),
+	}
+	for _, account := range accounts {
+		decision := EvaluateCandidate(ctx, account, req, policies...)
+		accountID := int64(0)
+		if account != nil {
+			accountID = account.ID
+		}
+		result.Trace = append(result.Trace, CandidatePolicyTrace{
+			AccountID:      accountID,
+			Allowed:        decision.Allowed,
+			RejectedPolicy: decision.RejectedPolicy,
+		})
+		if decision.Allowed {
+			result.AllowedAccounts = append(result.AllowedAccounts, account)
+		}
+	}
+	return result
 }
 
 var (

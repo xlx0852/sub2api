@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
 )
@@ -2614,36 +2615,40 @@ func TestOpenAIAccountRuntimeStats_ReportConcurrent(t *testing.T) {
 	}
 }
 
-func TestSelectTopKOpenAICandidates(t *testing.T) {
+func TestSelectTopKOpenAICandidatesShared(t *testing.T) {
 	candidates := []openAIAccountCandidateScore{
 		{
 			account:  &Account{ID: 11, Priority: 2},
 			loadInfo: &AccountLoadInfo{LoadRate: 10, WaitingCount: 1},
 			score:    10.0,
+			priority: 2,
 		},
 		{
 			account:  &Account{ID: 12, Priority: 1},
 			loadInfo: &AccountLoadInfo{LoadRate: 20, WaitingCount: 1},
 			score:    9.5,
+			priority: 1,
 		},
 		{
 			account:  &Account{ID: 13, Priority: 1},
 			loadInfo: &AccountLoadInfo{LoadRate: 30, WaitingCount: 0},
 			score:    10.0,
+			priority: 1,
 		},
 		{
 			account:  &Account{ID: 14, Priority: 0},
 			loadInfo: &AccountLoadInfo{LoadRate: 40, WaitingCount: 0},
 			score:    8.0,
+			priority: 0,
 		},
 	}
 
-	top2 := selectTopKOpenAICandidates(candidates, 2)
+	top2 := selectTopKOpenAICandidatesShared(candidates, 2)
 	require.Len(t, top2, 2)
 	require.Equal(t, int64(13), top2[0].account.ID)
 	require.Equal(t, int64(11), top2[1].account.ID)
 
-	topAll := selectTopKOpenAICandidates(candidates, 8)
+	topAll := selectTopKOpenAICandidatesShared(candidates, 8)
 	require.Len(t, topAll, len(candidates))
 	require.Equal(t, int64(13), topAll[0].account.ID)
 	require.Equal(t, int64(11), topAll[1].account.ID)
@@ -2675,8 +2680,8 @@ func TestBuildOpenAIWeightedSelectionOrder_DeterministicBySessionSeed(t *testing
 		RequestedModel: "gpt-5.1",
 	}
 
-	first := buildOpenAIWeightedSelectionOrder(candidates, req)
-	second := buildOpenAIWeightedSelectionOrder(candidates, req)
+	first := buildOpenAIWeightedSelectionOrderShared(candidates, req)
+	second := buildOpenAIWeightedSelectionOrderShared(candidates, req)
 	require.Len(t, first, len(candidates))
 	require.Len(t, second, len(candidates))
 	for i := range first {
@@ -2800,7 +2805,7 @@ func TestBuildOpenAIWeightedSelectionOrder_HandlesInvalidScores(t *testing.T) {
 		SessionHash: "seed_invalid_scores",
 	}
 
-	order := buildOpenAIWeightedSelectionOrder(candidates, req)
+	order := buildOpenAIWeightedSelectionOrderShared(candidates, req)
 	require.Len(t, order, len(candidates))
 	seen := map[int64]struct{}{}
 	for _, item := range order {
@@ -2809,31 +2814,13 @@ func TestBuildOpenAIWeightedSelectionOrder_HandlesInvalidScores(t *testing.T) {
 	require.Len(t, seen, len(candidates))
 }
 
-func TestOpenAISelectionRNG_SeedZeroStillWorks(t *testing.T) {
-	rng := newOpenAISelectionRNG(0)
-	v1 := rng.nextUint64()
-	v2 := rng.nextUint64()
+func TestSharedSelectionRNG_SeedZeroStillWorks(t *testing.T) {
+	rng := scheduling.NewSelectionRNG(0)
+	v1 := rng.NextUint64()
+	v2 := rng.NextUint64()
 	require.NotEqual(t, v1, v2)
-	require.GreaterOrEqual(t, rng.nextFloat64(), 0.0)
-	require.Less(t, rng.nextFloat64(), 1.0)
-}
-
-func TestOpenAIAccountCandidateHeap_PushPopAndInvalidType(t *testing.T) {
-	h := openAIAccountCandidateHeap{}
-	h.Push(openAIAccountCandidateScore{
-		account:  &Account{ID: 7001},
-		loadInfo: &AccountLoadInfo{LoadRate: 0, WaitingCount: 0},
-		score:    1.0,
-	})
-	require.Equal(t, 1, h.Len())
-	popped, ok := h.Pop().(openAIAccountCandidateScore)
-	require.True(t, ok)
-	require.Equal(t, int64(7001), popped.account.ID)
-	require.Equal(t, 0, h.Len())
-
-	require.Panics(t, func() {
-		h.Push("bad_element_type")
-	})
+	require.GreaterOrEqual(t, rng.NextFloat64(), 0.0)
+	require.Less(t, rng.NextFloat64(), 1.0)
 }
 
 func TestClamp01_AllBranches(t *testing.T) {

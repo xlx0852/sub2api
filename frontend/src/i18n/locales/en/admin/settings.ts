@@ -1100,6 +1100,9 @@ export default {
         sourceRequiredError: 'Select a payment source before enabling {title}.'
       },
       openaiExperimentalScheduler: {
+        rolloutTitle: "Scoring rollout scopes",
+        rolloutDescription:
+          'Database-controlled JSON for off/shadow/enforce by platform and group. Keep the default rollout value set to off until shadow evidence is approved.',
         title: 'OpenAI experimental scheduler policy',
         description: "Disabled by default. When enabled, this only changes the gateway's experimental account-selection policy for OpenAI traffic; it does not indicate an upstream OpenAI capability.",
         stickyWeightedTitle: 'Sticky weighting',

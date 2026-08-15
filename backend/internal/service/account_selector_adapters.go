@@ -23,8 +23,16 @@ func (gatewaySchedulingStrategy) Supports(req scheduling.Request) bool {
 func (s gatewaySchedulingStrategy) Select(ctx context.Context, req scheduling.Request) (*scheduling.Outcome, error) {
 	if req.ForcePlatform != "" {
 		ctx = context.WithValue(ctx, ctxkey.ForcePlatform, req.ForcePlatform)
+	} else if req.AllowMixedPlatform && req.Platform != "" {
+		ctx = context.WithValue(ctx, gatewayPlatformHintContextKey{}, req.Platform)
 	}
-	result, err := s.service.selectAccountWithLoadAwarenessStrategy(
+	service := s.service
+	if req.SkipAcquire && service != nil {
+		copyService := *service
+		copyService.concurrencyService = nil
+		service = &copyService
+	}
+	result, err := service.selectAccountWithLoadAwarenessStrategy(
 		ctx, resolveSelectorGroupID(req), req.StickyKey, req.RequestedModel,
 		req.ExcludedIDs, req.MetadataUserID, req.Sub2APIUserID,
 	)
@@ -52,7 +60,13 @@ func (s openAISchedulingStrategy) Select(ctx context.Context, req scheduling.Req
 	if platform == "" {
 		platform = PlatformOpenAI
 	}
-	result, decision, err := s.service.selectAccountWithSchedulerStrategy(
+	service := s.service
+	if req.SkipAcquire && service != nil {
+		copyService := *service
+		copyService.concurrencyService = nil
+		service = &copyService
+	}
+	result, decision, err := service.selectAccountWithSchedulerStrategy(
 		ctx,
 		resolveSelectorGroupID(req),
 		req.PreviousResponseID,
@@ -72,6 +86,11 @@ func (s openAISchedulingStrategy) Select(ctx context.Context, req scheduling.Req
 // NewGatewayAccountSelector 创建 Gateway 平台策略的统一编排入口。
 func NewGatewayAccountSelector(service *GatewayService) scheduling.AccountSelector {
 	return scheduling.NewEngine(gatewaySchedulingStrategy{service: service})
+}
+
+// NewOpenAIAccountSelector 创建 OpenAI/Grok/Kimi 平台策略的统一编排入口。
+func NewOpenAIAccountSelector(service *OpenAIGatewayService) *scheduling.Engine {
+	return scheduling.NewEngine(openAISchedulingStrategy{service: service})
 }
 
 // NewUnifiedAccountSelector 创建可在全平台间分派的单一调度编排器。
@@ -114,7 +133,10 @@ func (s *OpenAIGatewayService) selectAccountThroughEngine(
 	platform string,
 	previousResponseCanMove bool,
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
-	engine := scheduling.NewEngine(openAISchedulingStrategy{service: s})
+	engine := s.accountSelector
+	if engine == nil {
+		engine = NewOpenAIAccountSelector(s)
+	}
 	outcome, err := engine.SelectOutcome(ctx, scheduling.Request{
 		Platform:                platform,
 		GroupID:                 groupID,

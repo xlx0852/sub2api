@@ -1,8 +1,9 @@
 package service
 
 import (
-	"sort"
 	"testing"
+
+	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 )
 
 func buildOpenAISchedulerBenchmarkCandidates(size int) []openAIAccountCandidateScore {
@@ -31,23 +32,6 @@ func buildOpenAISchedulerBenchmarkCandidates(size int) []openAIAccountCandidateS
 	return candidates
 }
 
-func selectTopKOpenAICandidatesBySortBenchmark(candidates []openAIAccountCandidateScore, topK int) []openAIAccountCandidateScore {
-	if len(candidates) == 0 {
-		return nil
-	}
-	if topK <= 0 {
-		topK = 1
-	}
-	ranked := append([]openAIAccountCandidateScore(nil), candidates...)
-	sort.Slice(ranked, func(i, j int) bool {
-		return isOpenAIAccountCandidateBetter(ranked[i], ranked[j])
-	})
-	if topK > len(ranked) {
-		topK = len(ranked)
-	}
-	return ranked[:topK]
-}
-
 func BenchmarkOpenAIAccountSchedulerSelectTopK(b *testing.B) {
 	cases := []struct {
 		name string
@@ -61,19 +45,19 @@ func BenchmarkOpenAIAccountSchedulerSelectTopK(b *testing.B) {
 
 	for _, tc := range cases {
 		candidates := buildOpenAISchedulerBenchmarkCandidates(tc.size)
-		b.Run(tc.name+"/heap_topk", func(b *testing.B) {
+		b.Run(tc.name+"/adapter", func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				result := selectTopKOpenAICandidates(candidates, tc.topK)
+				result := selectTopKOpenAICandidatesShared(candidates, tc.topK)
 				if len(result) == 0 {
 					b.Fatal("unexpected empty result")
 				}
 			}
 		})
-		b.Run(tc.name+"/full_sort", func(b *testing.B) {
+		b.Run(tc.name+"/shared_core", func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				result := selectTopKOpenAICandidatesBySortBenchmark(candidates, tc.topK)
+				result := scheduling.SelectTopK(scoredOpenAIAccountCandidates(candidates), tc.topK)
 				if len(result) == 0 {
 					b.Fatal("unexpected empty result")
 				}

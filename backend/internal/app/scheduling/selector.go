@@ -29,6 +29,9 @@ type Request struct {
 	IncludeFlatGroupIDs     bool
 	PreviousResponseID      string
 	PreviousResponseCanMove bool
+	// SkipAcquire is used by read-only routing probes such as count_tokens. The
+	// platform strategy still runs policies and affinity but uses a passthrough slot.
+	SkipAcquire bool
 }
 
 // WaitPlan 描述选号未立即拿到并发槽时的等待参数。

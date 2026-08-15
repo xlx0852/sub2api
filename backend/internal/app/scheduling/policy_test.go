@@ -74,6 +74,56 @@ func TestNewCandidatePolicyKeepsPlatformRuleExplicit(t *testing.T) {
 	require.Equal(t, PolicyDecision{RejectedPolicy: "custom"}, decision)
 }
 
+func TestEvaluateCandidatesPreservesInputOrderAndFirstRejection(t *testing.T) {
+	accounts := []*domain.Account{
+		{ID: 1, Platform: "openai", Status: domain.StatusActive, Schedulable: true},
+		{ID: 2, Platform: "openai", Status: domain.StatusActive, Schedulable: false},
+		nil,
+		{ID: 4, Platform: "grok", Status: domain.StatusActive, Schedulable: true},
+	}
+	req := Request{Platform: "openai", ExcludedIDs: map[int64]struct{}{2: {}}}
+
+	decision := EvaluateCandidates(
+		context.Background(),
+		accounts,
+		req,
+		NotExcludedPolicy,
+		PlatformPolicy,
+		SchedulablePolicy,
+	)
+
+	require.Equal(t, []*domain.Account{accounts[0]}, decision.AllowedAccounts)
+	require.Equal(t, []CandidatePolicyTrace{
+		{AccountID: 1, Allowed: true},
+		{AccountID: 2, RejectedPolicy: "not_excluded"},
+		{AccountID: 0, RejectedPolicy: "not_excluded"},
+		{AccountID: 4, RejectedPolicy: "platform"},
+	}, decision.Trace)
+}
+
+func TestEvaluateCandidatesDoesNotRunPoliciesAfterFirstRejection(t *testing.T) {
+	calls := make([]string, 0, 2)
+	first := NewCandidatePolicy("first", func(_ context.Context, _ *domain.Account, _ Request) bool {
+		calls = append(calls, "first")
+		return false
+	})
+	second := NewCandidatePolicy("second", func(_ context.Context, _ *domain.Account, _ Request) bool {
+		calls = append(calls, "second")
+		return true
+	})
+
+	decision := EvaluateCandidates(
+		context.Background(),
+		[]*domain.Account{{ID: 7}},
+		Request{},
+		first,
+		second,
+	)
+
+	require.Equal(t, []string{"first"}, calls)
+	require.Equal(t, []CandidatePolicyTrace{{AccountID: 7, RejectedPolicy: "first"}}, decision.Trace)
+}
+
 func TestGroupMembershipPolicyPreservesSnapshotRepresentationMode(t *testing.T) {
 	groupID := int64(9)
 	account := &domain.Account{GroupIDs: []int64{groupID}}

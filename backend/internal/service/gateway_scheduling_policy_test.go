@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,4 +55,44 @@ func TestGatewayPlatformPolicyKeepsMixedSchedulingSemantics(t *testing.T) {
 	require.True(t, service.isAccountAllowedForPlatform(native, PlatformGemini, false))
 	require.False(t, service.isAccountAllowedForPlatform(mixed, PlatformGemini, false))
 	require.True(t, service.isAccountAllowedForPlatform(mixed, PlatformGemini, true))
+}
+
+func TestGatewayCandidatePoliciesKeepStableFirstRejectionAndInputOrder(t *testing.T) {
+	service := &GatewayService{}
+	accounts := []*Account{
+		{ID: 1, Platform: PlatformAnthropic, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true},
+		{ID: 2, Platform: PlatformGemini, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true},
+		{ID: 3, Platform: PlatformAnthropic, Type: AccountTypeAPIKey, Status: StatusDisabled, Schedulable: false},
+	}
+
+	decision := service.evaluateGatewayCandidates(context.Background(), accounts, scheduling.Request{
+		Platform:    PlatformAnthropic,
+		ExcludedIDs: map[int64]struct{}{3: {}},
+	})
+
+	require.Equal(t, []*Account{accounts[0]}, decision.AllowedAccounts)
+	require.Equal(t, []scheduling.CandidatePolicyTrace{
+		{AccountID: 1, Allowed: true},
+		{AccountID: 2, RejectedPolicy: "gateway_platform"},
+		{AccountID: 3, RejectedPolicy: "not_excluded"},
+	}, decision.Trace)
+}
+
+func TestGatewayCandidatePoliciesPutPrivacyBeforePlatformAndModel(t *testing.T) {
+	service := &GatewayService{}
+	group := &Group{RequirePrivacySet: true, Name: "private"}
+	account := &Account{
+		ID:          9,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+	}
+
+	decision := scheduling.EvaluateCandidate(context.Background(), account, scheduling.Request{
+		Platform: PlatformAnthropic,
+	}, service.gatewayCandidatePoliciesFor(gatewayCandidatePolicyOptions{group: group})...)
+
+	require.False(t, decision.Allowed)
+	require.Equal(t, "privacy", decision.RejectedPolicy)
 }

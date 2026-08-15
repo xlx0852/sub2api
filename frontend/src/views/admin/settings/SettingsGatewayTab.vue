@@ -1589,6 +1589,20 @@ function quotaPercentage(provider: WebSearchProviderConfig): number {
                 <Toggle v-model="form.openai_advanced_scheduler_enabled" />
               </div>
 
+              <div class="border-t border-gray-100 pt-5 dark:border-dark-700">
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t("admin.settings.openaiExperimentalScheduler.rolloutTitle") }}
+                </label>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.openaiExperimentalScheduler.rolloutDescription") }}
+                </p>
+                <textarea
+                  v-model="form.scheduler_scoring_rollout"
+                  class="input mt-3 min-h-28 font-mono text-xs"
+                  spellcheck="false"
+                />
+              </div>
+
               <div
                 v-if="form.openai_advanced_scheduler_enabled"
                 class="flex items-center justify-between border-t border-gray-100 pt-5 dark:border-dark-700"

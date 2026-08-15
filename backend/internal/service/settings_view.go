@@ -232,6 +232,7 @@ type SystemSettings struct {
 	OpenAIAdvancedSchedulerWeightQuotaHeadroom             string
 	OpenAIAdvancedSchedulerWeightPreviousResponse          string
 	OpenAIAdvancedSchedulerWeightSessionSticky             string
+	SchedulerScoringRollout                                string
 	OpenAIAdvancedSchedulerEffectiveLBTopK                 string
 	OpenAIAdvancedSchedulerEffectiveWeightPriority         string
 	OpenAIAdvancedSchedulerEffectiveWeightLoad             string

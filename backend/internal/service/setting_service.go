@@ -53,6 +53,8 @@ type SettingService struct {
 	webSearchEmulationSF                singleflight.Group
 	openAIAdvancedSchedulerSettingCache atomic.Value // *cachedOpenAIAdvancedSchedulerSetting
 	openAIAdvancedSchedulerSettingSF    singleflight.Group
+	schedulerScoringRolloutCache        atomic.Value // *cachedSchedulerScoringRollout
+	schedulerScoringRolloutSF           singleflight.Group
 	antigravityUAVersionCache           atomic.Value // *cachedAntigravityUserAgentVersion
 	antigravityUAVersionSF              singleflight.Group
 	openAICodexUACache                  atomic.Value // *cachedOpenAICodexUserAgent

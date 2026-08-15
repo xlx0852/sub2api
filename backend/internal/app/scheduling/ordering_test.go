@@ -69,3 +69,57 @@ func TestShuffleEqualRunsDoesNotCrossGroupBoundary(t *testing.T) {
 		require.Equal(t, 2, copyItems[3].group)
 	}
 }
+
+func TestOrderPriorityLoadLRUPreservesGatewayLayering(t *testing.T) {
+	now := time.Now()
+	soon := now.Add(time.Minute)
+	later := now.Add(2 * time.Minute)
+	old := now.Add(-time.Hour)
+	newer := now.Add(-time.Minute)
+	candidates := []LoadCandidate{
+		{Account: &domain.Account{ID: 1, Priority: 2}, LoadRate: 0},
+		{Account: &domain.Account{ID: 2, Priority: 1, SessionWindowEnd: &later, LastUsedAt: &old}, LoadRate: 10},
+		{Account: &domain.Account{ID: 3, Priority: 1, SessionWindowEnd: &soon, LastUsedAt: &newer}, LoadRate: 50},
+		{Account: &domain.Account{ID: 4, Priority: 1, SessionWindowEnd: &soon, LastUsedAt: &old}, LoadRate: 20},
+		{Account: &domain.Account{ID: 5, Priority: 0}, LoadRate: 100},
+	}
+
+	ordered := OrderPriorityLoadLRU(candidates, PriorityLoadOrderOptions{
+		UseLoad:            true,
+		PreferSoonestReset: true,
+		Now:                now,
+	})
+	require.Equal(t, []int64{4, 3, 2, 1}, loadCandidateIDs(ordered))
+}
+
+func TestOrderPriorityLoadLRUWithoutLoadUsesPriorityLRUAndPreference(t *testing.T) {
+	used := time.Now()
+	candidates := []LoadCandidate{
+		{Account: &domain.Account{ID: 1, Priority: 1, Type: "api", LastUsedAt: &used}, LoadRate: 100},
+		{Account: &domain.Account{ID: 2, Priority: 1, Type: "oauth", LastUsedAt: &used}, LoadRate: 100},
+		{Account: &domain.Account{ID: 3, Priority: 2}, LoadRate: 0},
+	}
+	ordered := OrderPriorityLoadLRU(candidates, PriorityLoadOrderOptions{
+		Prefer: func(account *domain.Account) bool { return account.Type == "oauth" },
+	})
+	require.Equal(t, []int64{2, 1, 3}, loadCandidateIDs(ordered))
+}
+
+func TestBestPriorityLoadLRUTiesKeepsEquivalentCandidates(t *testing.T) {
+	used := time.Now()
+	candidates := []LoadCandidate{
+		{Account: &domain.Account{ID: 1, Priority: 1, LastUsedAt: &used}, LoadRate: 20},
+		{Account: &domain.Account{ID: 2, Priority: 1, LastUsedAt: &used}, LoadRate: 20},
+		{Account: &domain.Account{ID: 3, Priority: 1, LastUsedAt: &used}, LoadRate: 30},
+	}
+	best := BestPriorityLoadLRUTies(candidates, PriorityLoadOrderOptions{UseLoad: true})
+	require.ElementsMatch(t, []int64{1, 2}, loadCandidateIDs(best))
+}
+
+func loadCandidateIDs(candidates []LoadCandidate) []int64 {
+	result := make([]int64, 0, len(candidates))
+	for _, candidate := range candidates {
+		result = append(result, candidate.Account.ID)
+	}
+	return result
+}

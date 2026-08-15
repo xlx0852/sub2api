@@ -1095,6 +1095,9 @@ export default {
         sourceRequiredError: '{title} 已启用，请先选择支付来源。'
       },
       openaiExperimentalScheduler: {
+        rolloutTitle: "评分调度灰度范围",
+        rolloutDescription:
+          '按平台和分组控制 off/shadow/enforce 的数据库 JSON。shadow 证据审批前保持默认灰度值为 off。',
         title: 'OpenAI 实验调度策略',
         description: '默认关闭。开启后仅影响本网关在 OpenAI 账号间的实验性调度选择逻辑，不代表上游 OpenAI 官方能力。',
         stickyWeightedTitle: '粘性加权',

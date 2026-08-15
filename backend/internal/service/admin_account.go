@@ -68,7 +68,6 @@ func normalizeAccountConcurrency(platform, accountType string, concurrency int) 
 	return concurrency
 }
 
-
 func oauthAccountEmail(account *Account) string {
 	if account == nil {
 		return ""
@@ -1103,7 +1102,7 @@ func (s *adminServiceImpl) CreateShadow(ctx context.Context, parentID int64, opt
 		concurrency = parent.Concurrency
 	}
 	// 优先级未指定(<=0)时继承母账号——前端一键创建只传 name,opts.Priority 省略即 0,而调度
-	// 比较是「数值越小越优先」(openai_account_scheduler.isOpenAIAccountCandidateBetter),且 repo
+	// 比较是「数值越小越优先」（共享 scheduling scorer 的 priority tie-break），且 repo
 	// 显式 SetPriority 会绕过 ent 默认 50,直写 0 会让影子意外抢到最高优先级(外审第5轮 P1)。
 	// 与上方 Concurrency 一致采用「省略继承母账号」语义(影子的 proxy/分组/并发亦全部继承母账号)。
 	priority := opts.Priority
