@@ -114,8 +114,6 @@ const typeLabel = computed(() => {
       return 'Token'
     case 'apikey':
       return 'Key'
-    case 'bedrock':
-      return 'AWS'
     case 'service_account':
       return 'Vertex'
     default:

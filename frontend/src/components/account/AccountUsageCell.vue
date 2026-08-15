@@ -556,7 +556,7 @@
   <div ref="rootRef" v-else class="w-full max-w-full">
     <!-- Gemini API Key accounts: show quota info -->
     <AccountQuotaInfo v-if="account.platform === 'gemini'" :account="account" />
-    <!-- Key/Bedrock accounts: show today stats + optional quota bars -->
+    <!-- API-key accounts: show today stats + optional quota bars -->
     <div v-else class="space-y-0.5">
       <!-- Today stats row (requests, tokens, cost, user_cost) -->
       <UsageStatLine
@@ -1360,7 +1360,7 @@ const makeQuotaBar = (
 }
 
 const hasApiKeyQuota = computed(() => {
-  if (props.account.type !== 'apikey' && props.account.type !== 'bedrock') return false
+  if (props.account.type !== 'apikey') return false
   return (
     (props.account.quota_daily_limit ?? 0) > 0 ||
     (props.account.quota_weekly_limit ?? 0) > 0 ||

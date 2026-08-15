@@ -34,7 +34,8 @@ describe('account form registry', () => {
   })
 
   it('exposes platform types and header-override eligibility for all three modals', () => {
-    expect(platformCategories('anthropic')).toContain('bedrock')
+    expect(platformCategories('anthropic')).not.toContain('bedrock')
+    expect(platformSupportsType('anthropic', 'bedrock')).toBe(false)
     expect(platformSupportsType('openai', 'apikey')).toBe(true)
     expect(platformSupportsType('kimi', 'apikey')).toBe(false)
     expect(isHeaderOverridePlatform('anthropic')).toBe(true)
@@ -48,7 +49,6 @@ describe('account form registry', () => {
     expect(platformCategoryPicker('anthropic')?.options.map((item) => item.id)).toEqual([
       'oauth-based',
       'apikey',
-      'bedrock',
       'service_account'
     ])
     expect(platformCategoryPicker('openai')?.model).toBe('accountCategory')

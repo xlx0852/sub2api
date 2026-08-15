@@ -902,7 +902,7 @@ const buildDefaultTodayStats = (): WindowStats => ({
 const refreshTodayStatsBatch = async () => {
   // Why this checks both columns:
   // - today_stats column shows dedicated today's metrics.
-  // - usage column also embeds today's stats for Key/Bedrock rows.
+  // - usage column also embeds today's stats for API-key rows.
   // So we only skip fetching when BOTH columns are hidden.
   if (hiddenColumns.has('today_stats') && hiddenColumns.has('usage')) {
     todayStatsLoading.value = false

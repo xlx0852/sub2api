@@ -4,7 +4,6 @@ export type AccountFormMode = 'create' | 'edit' | 'bulk'
 export type AccountCategory =
   | 'oauth-based'
   | 'apikey'
-  | 'bedrock'
   | 'service_account'
   | 'upstream'
   | 'oauth'
@@ -55,8 +54,8 @@ export const ACCOUNT_PLATFORM_REGISTRY: readonly PlatformDefinition[] = [
     icon: 'sparkles',
     activeClass: 'bg-white text-orange-600  dark:bg-dark-600 dark:text-orange-400',
     showInCreatePicker: true,
-    categories: ['oauth-based', 'apikey', 'bedrock', 'service_account'],
-    types: ['oauth', 'setup-token', 'apikey', 'bedrock', 'service_account'],
+    categories: ['oauth-based', 'apikey', 'service_account'],
+    types: ['oauth', 'setup-token', 'apikey', 'service_account'],
     fields: {
       headerOverride: true,
       modelRestriction: true,
@@ -313,12 +312,6 @@ const purple = {
   selectedIconBg: 'bg-purple-500 text-white',
   hoverBorder: 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
 }
-const amber = {
-  selectedBorder: 'border-amber-500 bg-amber-50 dark:bg-amber-900/20',
-  selectedBg: 'bg-amber-500 text-white',
-  selectedIconBg: 'bg-amber-500 text-white',
-  hoverBorder: 'border-gray-200 hover:border-amber-300 dark:border-dark-600 dark:hover:border-amber-700'
-}
 const sky = {
   selectedBorder: 'border-sky-500 bg-sky-50 dark:bg-sky-900/20',
   selectedBg: 'bg-sky-500 text-white',
@@ -356,13 +349,6 @@ export const ACCOUNT_CATEGORY_PICKERS: Record<string, CategoryPickerConfig> = {
         subtitleKey: 'admin.accounts.apiKey',
         icon: 'key',
         ...purple
-      },
-      {
-        id: 'bedrock',
-        titleKey: 'admin.accounts.bedrockLabel',
-        subtitleKey: 'admin.accounts.bedrockDesc',
-        icon: 'cloud',
-        ...amber
       },
       {
         id: 'service_account',

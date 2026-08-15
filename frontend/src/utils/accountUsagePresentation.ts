@@ -197,7 +197,7 @@ export const buildAccountUsagePresentation = ({
     }
   }
 
-  if ((account.type === 'apikey' || account.type === 'bedrock') && windows.length === 0) {
+  if (account.type === 'apikey' && windows.length === 0) {
     const quotaRows = [
       {
         key: 'quota-daily',
