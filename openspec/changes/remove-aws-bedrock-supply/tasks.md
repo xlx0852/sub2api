@@ -59,3 +59,4 @@
 - [x] 7.4 以明确文件集合独立提交，不使用 `git add -A`，不混入 fingerprint 或其他 WIP
   - 备注：按后端、前端、工具/文档/OpenSpec 三个明确文件集分批提交，全程未使用 `git add -A`。
 - [ ] 7.5 staging 验证建号拒绝、存量 inactive、非 Bedrock HTTP/SSE/WS、计费与回滚；生产部署后观察通过才 archive
+  - 进展（2026-08-16）：按用户直接生产部署指令，在美国机隔离端口 `18246` 完成候选验证后切流。Bedrock 建号 400 且行数 0→0；group 4 HTTP/SSE/WS 均通过并有 usage/成本落库；公网真实流量 200/101、无 `code.sicts.shop` 5xx。当前 `0.1.321-separated@18246`，旧 `0.1.320@18245` 已停止但保留，备份为 `/opt/sub2api/backups/deploy-separated-0.1.321-20260815132927`。仍保留本项未勾选，等待更长生产观察后再 archive。
