@@ -25,7 +25,17 @@ from typing import Any
 from urllib.parse import urlparse
 
 
-SCENARIOS = {"normal", "missing_terminal", "retrieve_404", "hold_before_terminal", "hold_after_terminal"}
+SCENARIOS = {
+    "normal",
+    "missing_terminal",
+    "retrieve_404",
+    "hold_before_terminal",
+    "hold_after_terminal",
+    "http_401",
+    "http_403",
+    "http_429",
+    "http_500",
+}
 
 
 def compact(value: Any) -> bytes:
@@ -50,9 +60,14 @@ class FixtureState:
 
     def snapshot(self) -> dict[str, Any]:
         with self.lock:
+            request_paths: dict[str, int] = {}
+            for request in self.requests:
+                key = f"{request['method']} {request['path']}"
+                request_paths[key] = request_paths.get(key, 0) + 1
             return {
                 "scenario": self.scenario,
                 "request_count": len(self.requests),
+                "request_paths": request_paths,
                 "stored_response_ids": sorted(self.stored_responses),
                 "terminal_delivery_count": self.terminal_delivery_count,
                 "partial_delivery_count": self.partial_delivery_count,
@@ -531,6 +546,21 @@ class FixtureHandler(BaseHTTPRequestHandler):
                 or provider_from_path(path)
             )
         self.state.record("POST", path, request)
+
+        fault_status = {
+            "http_401": 401,
+            "http_403": 403,
+            "http_429": 429,
+            "http_500": 500,
+        }.get(self.state.scenario)
+        if fault_status is not None and "/fault/" in path:
+            headers = {"retry-after": "1"} if fault_status == 429 else None
+            self.send_json(
+                {"error": {"type": f"fixture_http_{fault_status}", "message": "injected scheduler failover fault"}},
+                fault_status,
+                headers=headers,
+            )
+            return
 
         if provider == "bedrock":
             self.handle_bedrock(request)

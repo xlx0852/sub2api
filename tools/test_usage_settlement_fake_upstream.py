@@ -28,6 +28,17 @@ from websockets.sync.client import connect  # noqa: E402
 
 
 class FixtureStateTest(unittest.TestCase):
+    def test_snapshot_counts_request_paths_without_request_content(self) -> None:
+        state = FixtureState()
+        state.record("POST", "/fault/openai/v1/responses", {"secret": "not-exposed"})
+        state.record("POST", "/fault/openai/v1/responses", {})
+
+        snapshot = state.snapshot()
+        self.assertEqual({"POST /fault/openai/v1/responses": 2}, snapshot["request_paths"])
+        self.assertNotIn("requests", snapshot)
+        state.reset()
+        self.assertEqual({}, state.snapshot()["request_paths"])
+
     def test_reset_rejects_unknown_scenario(self) -> None:
         state = FixtureState()
         with self.assertRaises(ValueError):

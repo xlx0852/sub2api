@@ -648,21 +648,29 @@ def main() -> int:
         )
 
     report["finished_at"] = utc_now()
+    transport_success_count = sum(
+        1
+        for case in report["cases"]
+        if case["old"]["status"] in {101, 200} and case["new"]["status"] in {101, 200}
+    )
+    all_equal = all(
+        value
+        for case in report["cases"]
+        for name, value in case["comparison"].items()
+        if name.endswith("_equal")
+    )
     report["summary"] = {
         "case_count": len(report["cases"]),
-        "transport_success_count": sum(
-            1
-            for case in report["cases"]
-            if case["old"]["status"] in {101, 200} and case["new"]["status"] in {101, 200}
-        ),
+        "transport_success_count": transport_success_count,
         "schema_equal_count": sum(1 for case in report["cases"] if case["comparison"]["schema_equal"]),
         "usage_equal_count": sum(1 for case in report["cases"] if case["comparison"]["usage_equal"]),
+        "passed": transport_success_count == len(report["cases"]) and all_equal,
     }
     output = pathlib.Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report["summary"], ensure_ascii=False))
-    return 0
+    return 0 if report["summary"]["passed"] else 1
 
 
 if __name__ == "__main__":

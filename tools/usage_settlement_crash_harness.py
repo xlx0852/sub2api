@@ -441,6 +441,84 @@ def normalized_disconnect_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     return value
 
 
+def run_scheduler_fault_diff(
+    old_url: str,
+    new_url: str,
+    old_dsn: str,
+    new_dsn: str,
+    old_secrets: pathlib.Path,
+    new_secrets: pathlib.Path,
+    scenario: str,
+    output: pathlib.Path,
+) -> int:
+    fault_scenarios = {"http_401", "http_403", "http_429", "http_500"}
+    try:
+        old_url = require_loopback_http(old_url)
+        new_url = require_loopback_http(new_url)
+        if scenario not in fault_scenarios:
+            raise ValueError(f"unsupported scheduler fault scenario: {scenario}")
+        case = next(case for case in DIFF_CASES if case["name"] == "openai_json")
+        run_id = f"scheduler-fault-{scenario}-{uuid.uuid4().hex[:12]}"
+
+        def run_side(base_url: str, dsn: str, secrets: pathlib.Path) -> dict[str, Any]:
+            load_fixture_secrets(secrets)
+            request_fixture_control("openai", "POST", {"scenario": scenario})
+            transport = request_one(base_url, case, run_id)
+            _, fixture, _ = request_fixture_control("openai")
+            snapshot: dict[str, Any] = {}
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline:
+                snapshot = query_snapshot(dsn, str(transport["marker"]))
+                if len(snapshot.get("usage_logs", [])) >= 1:
+                    break
+                time.sleep(0.05)
+            return {"transport": transport, "fixture": fixture, "snapshot": snapshot}
+
+        old = run_side(old_url, old_dsn, old_secrets)
+        new = run_side(new_url, new_dsn, new_secrets)
+        comparison = compare_transport(old["transport"], new["transport"])
+
+        def path_checks(side: dict[str, Any]) -> tuple[bool, bool]:
+            paths = side.get("fixture", {}).get("request_paths", {})
+            fault_hit = any("/fault/" in path and int(count) >= 1 for path, count in paths.items())
+            fallback_hit = any("/openai/" in path and "/fault/" not in path and int(count) >= 1 for path, count in paths.items())
+            return fault_hit, fallback_hit
+
+        old_fault_hit, old_fallback_hit = path_checks(old)
+        new_fault_hit, new_fallback_hit = path_checks(new)
+        old_accounts = [row.get("name") for row in old["snapshot"].get("accounts", [])]
+        new_accounts = [row.get("name") for row in new["snapshot"].get("accounts", [])]
+        checks = {
+            "old_transport_200": old["transport"]["status"] == 200,
+            "new_transport_200": new["transport"]["status"] == 200,
+            "transport_equal": all(value for key, value in comparison.items() if key.endswith("_equal")),
+            "old_fault_path_hit": old_fault_hit,
+            "new_fault_path_hit": new_fault_hit,
+            "old_fallback_path_hit": old_fallback_hit,
+            "new_fallback_path_hit": new_fallback_hit,
+            "old_usage_exactly_once": len(old["snapshot"].get("usage_logs", [])) == 1,
+            "new_usage_exactly_once": len(new["snapshot"].get("usage_logs", [])) == 1,
+            "fallback_account_equal": old_accounts == new_accounts == ["settlement-openai-fallback"],
+            "settlement_equal": normalized_disconnect_snapshot(old["snapshot"]) == normalized_disconnect_snapshot(new["snapshot"]),
+        }
+        report = {
+            "run_id": run_id,
+            "scenario": scenario,
+            "old": old,
+            "new": new,
+            "comparison": comparison,
+            "checks": checks,
+            "passed": all(checks.values()),
+        }
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(json.dumps({"scenario": scenario, "checks": checks, "passed": report["passed"]}, ensure_ascii=False, indent=2))
+        return 0 if report["passed"] else 1
+    except (OSError, ValueError, RuntimeError, KeyError, StopIteration, urllib.error.URLError) as error:
+        print(f"scheduler fault diff failed: {error}", file=sys.stderr)
+        return 1
+
+
 def run_disconnect_diff(old_url: str, new_url: str, old_dsn: str, new_dsn: str, output: pathlib.Path) -> int:
     try:
         old_url = require_loopback_http(old_url)
@@ -918,7 +996,7 @@ def seed_fixture_instance(base_url: str, admin_email: str, admin_password: str, 
                 "openai",
                 "openai",
                 "apikey",
-                {"api_key": "fixture-openai", "base_url": fixture_root + "/openai/v1"},
+                {"api_key": "fixture-openai", "base_url": fixture_root + "/fault/openai/v1"},
                 {
                     **account_quota,
                     "openai_apikey_responses_websockets_v2_enabled": True,
@@ -997,6 +1075,34 @@ def seed_fixture_instance(base_url: str, admin_email: str, admin_password: str, 
             )
             response_data(status, payload, f"create {fixture_name} API key")
             keys[fixture_name] = custom_key
+
+        openai_group_id = group_ids["openai"]
+        status, payload, _ = request_json(
+            base_url + "/api/v1/admin/accounts",
+            "POST",
+            {
+                "name": "settlement-openai-fallback",
+                "platform": "openai",
+                "type": "apikey",
+                "credentials": {"api_key": "fixture-openai-fallback", "base_url": fixture_root + "/openai/v1"},
+                "extra": {
+                    **account_quota,
+                    "openai_apikey_responses_websockets_v2_enabled": True,
+                    "openai_apikey_responses_websockets_v2_mode": "passthrough",
+                },
+                "concurrency": 3,
+                "priority": 2,
+                "rate_multiplier": 2.0,
+                "group_ids": [openai_group_id],
+                "confirm_mixed_channel_risk": True,
+            },
+            {**auth, "Idempotency-Key": "settlement-account-openai-fallback"},
+        )
+        fallback_account = response_data(status, payload, "create openai fallback account")
+        fallback_account_id = int(fallback_account.get("id", 0)) if isinstance(fallback_account, dict) else 0
+        if fallback_account_id <= 0:
+            raise RuntimeError("create openai fallback account response is missing id")
+        account_ids["openai_fallback"] = fallback_account_id
 
         secrets_output.parent.mkdir(parents=True, exist_ok=True)
         secrets_output.write_text(
@@ -1304,9 +1410,51 @@ def native_infra_down() -> int:
 
 
 def infra_up() -> int:
-    compose = compose_command("up", "-d", "--wait")
+    compose = compose_command("up", "-d")
     if compose:
-        return run_checked(compose)
+        if run_checked(compose) != 0:
+            return 1
+        import socket
+        deadline = time.monotonic() + 45
+        pending = {55441, 55442, 56381, 56382}
+        while pending and time.monotonic() < deadline:
+            for port in tuple(pending):
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                    probe.settimeout(0.1)
+                    if probe.connect_ex(("127.0.0.1", port)) == 0:
+                        pending.remove(port)
+            if pending:
+                time.sleep(0.1)
+        if pending:
+            print(f"compose infrastructure ports did not become ready: {sorted(pending)}", file=sys.stderr)
+            return 1
+        compose_ps = compose_command("ps", "-q")
+        container_ids = subprocess.run(
+            compose_ps,
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        ).stdout.split()
+        if len(container_ids) != 4:
+            print(f"expected four compose infrastructure containers, got {len(container_ids)}", file=sys.stderr)
+            return 1
+        docker = shutil.which("docker") or "docker"
+        while time.monotonic() < deadline:
+            health = []
+            for container_id in container_ids:
+                result = subprocess.run(
+                    [docker, "inspect", "--format", "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}", container_id],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                health.append(result.stdout.strip() if result.returncode == 0 else "missing")
+            if all(status == "healthy" for status in health):
+                return 0
+            time.sleep(0.2)
+        print(f"compose infrastructure did not become healthy: {health}", file=sys.stderr)
+        return 1
     return native_infra_up()
 
 
@@ -1392,27 +1540,35 @@ def docker_gateway_command(
     extra_env: dict[str, str] | None = None,
 ) -> list[str]:
     docker = shutil.which("docker") or "docker"
-    command = [
-        docker, "run", "-d", "--name", name,
-        "--add-host", "host.docker.internal:host-gateway",
-        "-p", f"127.0.0.1:{port}:{port}",
+    linux_host_network = sys.platform.startswith("linux")
+    infrastructure_host = "127.0.0.1" if linux_host_network else "host.docker.internal"
+    command = [docker, "run", "-d", "--name", name]
+    if linux_host_network:
+        command.extend(["--network", "host"])
+    else:
+        command.extend([
+            "--add-host", "host.docker.internal:host-gateway",
+            "-p", f"127.0.0.1:{port}:{port}",
+        ])
+    command.extend([
         "-v", f"{LOCAL_RUNTIME_ROOT / 'bin'}:/fixture/bin:ro",
         "-v", f"{data_dir}:/data",
         "-v", f"{LOCAL_RUNTIME_ROOT / 'tls'}:/fixture/tls:ro",
         "-e", "DATA_DIR=/data",
-        "-e", "DATABASE_HOST=host.docker.internal",
+        "-e", f"DATABASE_HOST={infrastructure_host}",
         "-e", f"DATABASE_PORT={db_port}",
         "-e", "DATABASE_USER=sub2api",
         "-e", "DATABASE_PASSWORD=settlement-test-only",
         "-e", f"DATABASE_DBNAME={database}",
         "-e", "DATABASE_SSLMODE=disable",
-        "-e", "REDIS_HOST=host.docker.internal",
+        "-e", f"REDIS_HOST={infrastructure_host}",
         "-e", f"REDIS_PORT={redis_port}",
         "-e", "REDIS_DB=0",
-        "-e", "SERVER_HOST=0.0.0.0",
+        "-e", f"SERVER_HOST={'127.0.0.1' if linux_host_network else '0.0.0.0'}",
         "-e", f"SERVER_PORT={port}",
         "-e", "SERVER_MODE=release",
-    ]
+        "-e", "SECURITY_URL_ALLOWLIST_ALLOW_PRIVATE_HOSTS=true",
+    ])
     if auto_setup:
         command.extend([
             "-e", "AUTO_SETUP=true",
@@ -2199,7 +2355,11 @@ def run_additive_schema_rollback(output: pathlib.Path) -> int:
                 pass
 
 
-def dual_up(old_ref: str = OLD_BASELINE_REF) -> int:
+def dual_up(
+    old_ref: str = OLD_BASELINE_REF,
+    old_binary: pathlib.Path | None = None,
+    new_binary: pathlib.Path | None = None,
+) -> int:
     if LOCAL_RUNTIME_MANIFEST.exists():
         print(f"dual runtime already exists: {LOCAL_RUNTIME_MANIFEST}; run dual-down first", file=sys.stderr)
         return 1
@@ -2207,6 +2367,14 @@ def dual_up(old_ref: str = OLD_BASELINE_REF) -> int:
         ensure_dual_ports_free()
         goarch = docker_goarch()
         LOCAL_RUNTIME_ROOT.mkdir(parents=True, exist_ok=False)
+        if (old_binary is None) != (new_binary is None):
+            raise ValueError("--old-binary and --new-binary must be provided together")
+        use_prebuilt = old_binary is not None and new_binary is not None
+        if use_prebuilt:
+            old_binary = old_binary.resolve()
+            new_binary = new_binary.resolve()
+            if not old_binary.is_file() or not new_binary.is_file():
+                raise ValueError("prebuilt old/new binary must both exist")
         old_source = LOCAL_RUNTIME_ROOT / "source-old"
         bin_dir = LOCAL_RUNTIME_ROOT / "bin"
         tls_dir = LOCAL_RUNTIME_ROOT / "tls"
@@ -2216,27 +2384,33 @@ def dual_up(old_ref: str = OLD_BASELINE_REF) -> int:
             directory.mkdir(parents=True, exist_ok=True)
         manifest: dict[str, Any] = {
             "old_ref": old_ref,
-            "old_source": str(old_source),
+            "old_source": "" if use_prebuilt else str(old_source),
             "fixture_pids": [],
             "containers": [],
             "goarch": goarch,
         }
         LOCAL_RUNTIME_MANIFEST.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
-        subprocess.run(["git", "worktree", "add", "--detach", str(old_source), old_ref], cwd=ROOT, check=True)
-        build_env = {**os.environ, "CGO_ENABLED": "0", "GOOS": "linux", "GOARCH": goarch}
-        subprocess.run(
-            ["go", "build", "-trimpath", "-o", str(bin_dir / "server-old"), "./cmd/server"],
-            cwd=old_source / "backend",
-            env=build_env,
-            check=True,
-        )
-        subprocess.run(
-            ["go", "build", "-trimpath", "-o", str(bin_dir / "server-new"), "./cmd/server"],
-            cwd=ROOT / "backend",
-            env=build_env,
-            check=True,
-        )
+        if use_prebuilt:
+            shutil.copy2(old_binary, bin_dir / "server-old")
+            shutil.copy2(new_binary, bin_dir / "server-new")
+            (bin_dir / "server-old").chmod(0o755)
+            (bin_dir / "server-new").chmod(0o755)
+        else:
+            subprocess.run(["git", "worktree", "add", "--detach", str(old_source), old_ref], cwd=ROOT, check=True)
+            build_env = {**os.environ, "CGO_ENABLED": "0", "GOOS": "linux", "GOARCH": goarch}
+            subprocess.run(
+                ["go", "build", "-trimpath", "-o", str(bin_dir / "server-old"), "./cmd/server"],
+                cwd=old_source / "backend",
+                env=build_env,
+                check=True,
+            )
+            subprocess.run(
+                ["go", "build", "-trimpath", "-o", str(bin_dir / "server-new"), "./cmd/server"],
+                cwd=ROOT / "backend",
+                env=build_env,
+                check=True,
+            )
         if infra_up() != 0:
             raise RuntimeError("isolated PostgreSQL/Redis startup failed")
         if generate_fixture_tls_cert() != 0:
@@ -2292,13 +2466,16 @@ def dual_up(old_ref: str = OLD_BASELINE_REF) -> int:
         wait_for_health("http://127.0.0.1:58082", 45)
         previous_fixture_host = os.environ.get("SUB2API_SETTLEMENT_FIXTURE_HOST")
         previous_proxy_host = os.environ.get("SUB2API_SETTLEMENT_PROXY_HOST")
-        os.environ["SUB2API_SETTLEMENT_FIXTURE_HOST"] = "host.docker.internal"
-        os.environ["SUB2API_SETTLEMENT_PROXY_HOST"] = "host.docker.internal"
+        fixture_host = "127.0.0.1" if sys.platform.startswith("linux") else "host.docker.internal"
+        os.environ["SUB2API_SETTLEMENT_FIXTURE_HOST"] = fixture_host
+        os.environ["SUB2API_SETTLEMENT_PROXY_HOST"] = fixture_host
         try:
             if seed_fixture_instance("http://127.0.0.1:58081", ADMIN_EMAIL, ADMIN_PASSWORD, data_old / "diff.env") != 0:
                 raise RuntimeError("old gateway fixture seed failed")
             if seed_fixture_instance("http://127.0.0.1:58082", ADMIN_EMAIL, ADMIN_PASSWORD, data_new / "diff.env") != 0:
                 raise RuntimeError("new gateway fixture seed failed")
+            for dsn in (INFRA["old_postgres"], INFRA["new_postgres"]):
+                execute_loopback_sql(dsn, "UPDATE scheduled_test_plans SET enabled = FALSE, updated_at = NOW();")
         finally:
             if previous_fixture_host is None:
                 os.environ.pop("SUB2API_SETTLEMENT_FIXTURE_HOST", None)
@@ -2375,9 +2552,11 @@ def dual_down() -> int:
         except (TypeError, ValueError):
             continue
     infra_down()
-    old_source = pathlib.Path(str(manifest.get("old_source", LOCAL_RUNTIME_ROOT / "source-old")))
-    if old_source.exists():
-        subprocess.run(["git", "worktree", "remove", "--force", str(old_source)], cwd=ROOT, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    old_source_value = str(manifest.get("old_source", "")).strip()
+    if old_source_value:
+        old_source = pathlib.Path(old_source_value)
+        if old_source.exists():
+            subprocess.run(["git", "worktree", "remove", "--force", str(old_source)], cwd=ROOT, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if LOCAL_RUNTIME_ROOT.exists():
         shutil.rmtree(LOCAL_RUNTIME_ROOT)
     print(json.dumps({"removed": str(LOCAL_RUNTIME_ROOT)}, ensure_ascii=False))
@@ -2411,6 +2590,8 @@ def main() -> int:
     sub.add_parser("fixture-tls-cert")
     dual_start = sub.add_parser("dual-up")
     dual_start.add_argument("--old-ref", default=OLD_BASELINE_REF)
+    dual_start.add_argument("--old-binary", type=pathlib.Path)
+    dual_start.add_argument("--new-binary", type=pathlib.Path)
     sub.add_parser("dual-down")
     smoke = sub.add_parser("fixture-smoke")
     smoke.add_argument("--output")
@@ -2432,6 +2613,15 @@ def main() -> int:
     short_paths.add_argument("--old-dsn", required=True)
     short_paths.add_argument("--new-dsn", required=True)
     short_paths.add_argument("--output", required=True)
+    scheduler_fault = sub.add_parser("run-scheduler-fault-diff")
+    scheduler_fault.add_argument("--old-url", required=True)
+    scheduler_fault.add_argument("--new-url", required=True)
+    scheduler_fault.add_argument("--old-dsn", required=True)
+    scheduler_fault.add_argument("--new-dsn", required=True)
+    scheduler_fault.add_argument("--old-secrets", required=True)
+    scheduler_fault.add_argument("--new-secrets", required=True)
+    scheduler_fault.add_argument("--scenario", required=True, choices=("http_401", "http_403", "http_429", "http_500"))
+    scheduler_fault.add_argument("--output", required=True)
     snapshot = sub.add_parser("snapshot")
     snapshot.add_argument("--dsn", required=True)
     snapshot.add_argument("--marker-prefix", required=True)
@@ -2482,7 +2672,7 @@ def main() -> int:
     if args.command == "fixture-tls-cert":
         return generate_fixture_tls_cert()
     if args.command == "dual-up":
-        return dual_up(args.old_ref)
+        return dual_up(args.old_ref, args.old_binary, args.new_binary)
     if args.command == "dual-down":
         return dual_down()
     if args.command == "fixture-smoke":
@@ -2507,6 +2697,17 @@ def main() -> int:
             args.new_url,
             args.old_dsn,
             args.new_dsn,
+            pathlib.Path(args.output),
+        )
+    if args.command == "run-scheduler-fault-diff":
+        return run_scheduler_fault_diff(
+            args.old_url,
+            args.new_url,
+            args.old_dsn,
+            args.new_dsn,
+            pathlib.Path(args.old_secrets),
+            pathlib.Path(args.new_secrets),
+            args.scenario,
             pathlib.Path(args.output),
         )
     if args.command == "snapshot":
