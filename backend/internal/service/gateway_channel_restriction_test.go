@@ -6,6 +6,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/stretchr/testify/require"
 )
 
@@ -13,25 +14,25 @@ import (
 
 func TestBillingModelForRestriction_Requested(t *testing.T) {
 	t.Parallel()
-	got := billingModelForRestriction(BillingModelSourceRequested, "claude-sonnet-4-5", "claude-sonnet-4-6")
+	got := scheduling.BillingModelForRestriction(BillingModelSourceRequested, "claude-sonnet-4-5", "claude-sonnet-4-6")
 	require.Equal(t, "claude-sonnet-4-5", got)
 }
 
 func TestBillingModelForRestriction_ChannelMapped(t *testing.T) {
 	t.Parallel()
-	got := billingModelForRestriction(BillingModelSourceChannelMapped, "claude-sonnet-4-5", "claude-sonnet-4-6")
+	got := scheduling.BillingModelForRestriction(BillingModelSourceChannelMapped, "claude-sonnet-4-5", "claude-sonnet-4-6")
 	require.Equal(t, "claude-sonnet-4-6", got)
 }
 
 func TestBillingModelForRestriction_Upstream(t *testing.T) {
 	t.Parallel()
-	got := billingModelForRestriction(BillingModelSourceUpstream, "claude-sonnet-4-5", "claude-sonnet-4-6")
+	got := scheduling.BillingModelForRestriction(BillingModelSourceUpstream, "claude-sonnet-4-5", "claude-sonnet-4-6")
 	require.Equal(t, "", got, "upstream should return empty (per-account check needed)")
 }
 
 func TestBillingModelForRestriction_Empty(t *testing.T) {
 	t.Parallel()
-	got := billingModelForRestriction("", "claude-sonnet-4-5", "claude-sonnet-4-6")
+	got := scheduling.BillingModelForRestriction("", "claude-sonnet-4-5", "claude-sonnet-4-6")
 	require.Equal(t, "claude-sonnet-4-6", got, "empty source defaults to channel_mapped")
 }
 

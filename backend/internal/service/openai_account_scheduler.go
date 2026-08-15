@@ -469,21 +469,22 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 			return nil, false, nil
 		}
 	}
-	if accountID <= 0 {
+	binding := scheduling.EvaluateStickyBinding(sessionHash, accountID, req.ExcludedIDs)
+	if !binding.Ready() {
 		return nil, false, nil
-	}
-	if req.ExcludedIDs != nil {
-		if _, excluded := req.ExcludedIDs[accountID]; excluded {
-			return nil, false, nil
-		}
 	}
 
 	account, err := s.service.getSchedulableAccount(ctx, accountID)
-	if err != nil || account == nil {
+	candidateID := int64(0)
+	if account != nil {
+		candidateID = account.ID
+	}
+	if err != nil || scheduling.EvaluateStickyCandidate(binding, candidateID, false) != scheduling.StickyReady {
 		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
 		return nil, false, nil
 	}
-	if shouldClearStickySession(account, req.RequestedModel) || account.Platform != normalizeOpenAICompatiblePlatform(req.Platform) || !account.IsOpenAICompatible() || !account.IsSchedulable() {
+	clearCandidate := shouldClearStickySession(account, req.RequestedModel) || account.Platform != normalizeOpenAICompatiblePlatform(req.Platform) || !account.IsOpenAICompatible() || !account.IsSchedulable()
+	if scheduling.EvaluateStickyCandidate(binding, account.ID, clearCandidate) == scheduling.StickyClear {
 		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
 		return nil, false, nil
 	}

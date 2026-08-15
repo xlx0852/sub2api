@@ -168,30 +168,7 @@ func (s *GatewayService) ResolveChannelMappingAndRestrict(ctx context.Context, g
 // 供调度阶段预检查（requested / channel_mapped）。
 // upstream 需逐账号检查，此处返回 false。
 func (s *GatewayService) checkChannelPricingRestriction(ctx context.Context, groupID *int64, requestedModel string) bool {
-	if groupID == nil || s.channelService == nil || requestedModel == "" {
-		return false
-	}
-	mapping := s.channelService.ResolveChannelMapping(ctx, *groupID, requestedModel)
-	billingModel := billingModelForRestriction(mapping.BillingModelSource, requestedModel, mapping.MappedModel)
-	if billingModel == "" {
-		return false
-	}
-	return s.channelService.IsModelRestricted(ctx, *groupID, billingModel)
-}
-
-// billingModelForRestriction 根据计费基准确定限制检查使用的模型。
-// upstream 返回空（需逐账号检查）。
-func billingModelForRestriction(source, requestedModel, channelMappedModel string) string {
-	switch source {
-	case BillingModelSourceRequested:
-		return requestedModel
-	case BillingModelSourceUpstream:
-		return ""
-	case BillingModelSourceChannelMapped:
-		return channelMappedModel
-	default:
-		return channelMappedModel
-	}
+	return checkChannelPricingRestriction(ctx, s.channelService, groupID, requestedModel)
 }
 
 // isUpstreamModelRestrictedByChannel 检查账号映射后的上游模型是否受渠道定价限制。

@@ -473,111 +473,111 @@ func (s *GatewayService) selectAccountWithLoadAwarenessStrategy(ctx context.Cont
 	}
 
 	// ============ Layer 1.5: 粘性会话（仅在无模型路由配置时生效） ============
-	if len(routingAccountIDs) == 0 && sessionHash != "" && stickyAccountID > 0 && !isExcluded(stickyAccountID) {
-		accountID := stickyAccountID
-		if accountID > 0 && !isExcluded(accountID) {
-			account, ok := accountByID[accountID]
-			if ok {
-				// 检查账户是否需要清理粘性会话绑定
-				clearSticky := shouldClearStickySession(account, requestedModel)
-				if clearSticky {
-					slog.Debug("sticky.layer1_5_no_routing_clear",
-						"account_id", accountID,
-						"reason", "should_clear_sticky_session",
-						"session", shortSessionHash(sessionHash),
-					)
-					_ = s.cache.DeleteSessionAccountID(ctx, derefGroupID(groupID), sessionHash)
-				}
-
-				// 注意：不再检查 isAccountInGroup，因为 accountByID 已经从按分组过滤的
-				// accounts 列表构建，账号一定在分组内。而 scheduler snapshot 缓存
-				// 反序列化后 AccountGroups 字段为空，导致 isAccountInGroup 永远返回 false。
-				platformOK := s.isAccountAllowedForPlatform(account, platform, useMixed)
-				modelSupported := requestedModel == "" || s.isModelSupportedByAccountWithContext(ctx, account, requestedModel)
-				modelSchedulable := s.isAccountSchedulableForModelSelection(ctx, account, requestedModel)
-				quotaOK := s.isAccountSchedulableForQuota(account)
-				windowCostOK := s.isAccountSchedulableForWindowCost(ctx, account, true)
-				rpmOK := s.isAccountSchedulableForRPM(ctx, account, true)
-				schedulable := s.isAccountSchedulableForSelection(account)
-
-				slog.Debug("sticky.layer1_5_no_routing_checks",
+	stickyBinding := scheduling.EvaluateStickyBinding(sessionHash, stickyAccountID, excludedIDs)
+	if len(routingAccountIDs) == 0 && stickyBinding.Ready() {
+		accountID := stickyBinding.AccountID
+		account, ok := accountByID[accountID]
+		if ok {
+			// 检查账户是否需要清理粘性会话绑定
+			clearSticky := shouldClearStickySession(account, requestedModel)
+			candidateDecision := scheduling.EvaluateStickyCandidate(stickyBinding, account.ID, clearSticky)
+			if candidateDecision == scheduling.StickyClear {
+				slog.Debug("sticky.layer1_5_no_routing_clear",
 					"account_id", accountID,
+					"reason", "should_clear_sticky_session",
 					"session", shortSessionHash(sessionHash),
-					"clear_sticky", clearSticky,
-					"schedulable", schedulable,
-					"platform_ok", platformOK,
-					"model_supported", modelSupported,
-					"model_schedulable", modelSchedulable,
-					"quota_ok", quotaOK,
-					"window_cost_ok", windowCostOK,
-					"rpm_ok", rpmOK,
 				)
+				_ = s.cache.DeleteSessionAccountID(ctx, derefGroupID(groupID), sessionHash)
+			}
 
-				if !clearSticky && platformOK && modelSupported && modelSchedulable && quotaOK && windowCostOK && rpmOK && schedulable {
-					result, err := s.tryAcquireAccountSlot(ctx, requestedModel, accountID, account.Concurrency)
-					if err == nil && result.Acquired {
-						// 会话数量限制检查
-						if !s.checkAndRegisterSession(ctx, account, sessionHash) {
-							result.ReleaseFunc() // 释放槽位，继续到 Layer 2
-							slog.Debug("sticky.layer1_5_no_routing_miss",
-								"account_id", accountID,
-								"reason", "session_limit",
-								"session", shortSessionHash(sessionHash),
-							)
-						} else {
-							slog.Debug("sticky.layer1_5_no_routing_hit",
-								"account_id", accountID,
-								"session", shortSessionHash(sessionHash),
-								"result", "slot_acquired",
-							)
-							if s.cache != nil {
-								_ = s.cache.RefreshSessionTTL(ctx, derefGroupID(groupID), sessionHash, stickySessionTTL)
-							}
-							return s.newAcquiredSelectionResult(ctx, account, result.ReleaseFunc)
-						}
-					} else if err == nil && result.ModelLimited {
-						// 模型级并发预算已满：立即让路，不进入账号等待队列。
-						return s.newModelLimitedSelectionResult(ctx, account)
-					} else {
-						slog.Debug("sticky.layer1_5_no_routing_slot_busy",
+			// 注意：不再检查 isAccountInGroup，因为 accountByID 已经从按分组过滤的
+			// accounts 列表构建，账号一定在分组内。而 scheduler snapshot 缓存
+			// 反序列化后 AccountGroups 字段为空，导致 isAccountInGroup 永远返回 false。
+			platformOK := s.isAccountAllowedForPlatform(account, platform, useMixed)
+			modelSupported := requestedModel == "" || s.isModelSupportedByAccountWithContext(ctx, account, requestedModel)
+			modelSchedulable := s.isAccountSchedulableForModelSelection(ctx, account, requestedModel)
+			quotaOK := s.isAccountSchedulableForQuota(account)
+			windowCostOK := s.isAccountSchedulableForWindowCost(ctx, account, true)
+			rpmOK := s.isAccountSchedulableForRPM(ctx, account, true)
+			schedulable := s.isAccountSchedulableForSelection(account)
+
+			slog.Debug("sticky.layer1_5_no_routing_checks",
+				"account_id", accountID,
+				"session", shortSessionHash(sessionHash),
+				"clear_sticky", clearSticky,
+				"schedulable", schedulable,
+				"platform_ok", platformOK,
+				"model_supported", modelSupported,
+				"model_schedulable", modelSchedulable,
+				"quota_ok", quotaOK,
+				"window_cost_ok", windowCostOK,
+				"rpm_ok", rpmOK,
+			)
+
+			if candidateDecision == scheduling.StickyReady && platformOK && modelSupported && modelSchedulable && quotaOK && windowCostOK && rpmOK && schedulable {
+				result, err := s.tryAcquireAccountSlot(ctx, requestedModel, accountID, account.Concurrency)
+				if err == nil && result.Acquired {
+					// 会话数量限制检查
+					if !s.checkAndRegisterSession(ctx, account, sessionHash) {
+						result.ReleaseFunc() // 释放槽位，继续到 Layer 2
+						slog.Debug("sticky.layer1_5_no_routing_miss",
 							"account_id", accountID,
+							"reason", "session_limit",
 							"session", shortSessionHash(sessionHash),
 						)
-					}
-
-					waitingCount, _ := s.concurrencyService.GetAccountWaitingCount(ctx, accountID)
-					if waitingCount < cfg.StickySessionMaxWaiting {
-						// 会话数量限制检查（等待计划也需要占用会话配额）
-						if !s.checkAndRegisterSession(ctx, account, sessionHash) {
-							// 会话限制已满，继续到 Layer 2
-						} else {
-							slog.Debug("sticky.layer1_5_no_routing_hit",
-								"account_id", accountID,
-								"session", shortSessionHash(sessionHash),
-								"result", "wait_plan",
-							)
-							return s.newSelectionResult(ctx, account, false, nil, newStickyWaitPlan(accountID, account.Concurrency, cfg))
+					} else {
+						slog.Debug("sticky.layer1_5_no_routing_hit",
+							"account_id", accountID,
+							"session", shortSessionHash(sessionHash),
+							"result", "slot_acquired",
+						)
+						if s.cache != nil {
+							_ = s.cache.RefreshSessionTTL(ctx, derefGroupID(groupID), sessionHash, stickySessionTTL)
 						}
+						return s.newAcquiredSelectionResult(ctx, account, result.ReleaseFunc)
 					}
-				} else if !clearSticky {
-					slog.Debug("sticky.layer1_5_no_routing_miss",
+				} else if err == nil && result.ModelLimited {
+					// 模型级并发预算已满：立即让路，不进入账号等待队列。
+					return s.newModelLimitedSelectionResult(ctx, account)
+				} else {
+					slog.Debug("sticky.layer1_5_no_routing_slot_busy",
 						"account_id", accountID,
-						"reason", "gate_check_failed",
 						"session", shortSessionHash(sessionHash),
 					)
 				}
-			} else {
+
+				waitingCount, _ := s.concurrencyService.GetAccountWaitingCount(ctx, accountID)
+				if waitingCount < cfg.StickySessionMaxWaiting {
+					// 会话数量限制检查（等待计划也需要占用会话配额）
+					if !s.checkAndRegisterSession(ctx, account, sessionHash) {
+						// 会话限制已满，继续到 Layer 2
+					} else {
+						slog.Debug("sticky.layer1_5_no_routing_hit",
+							"account_id", accountID,
+							"session", shortSessionHash(sessionHash),
+							"result", "wait_plan",
+						)
+						return s.newSelectionResult(ctx, account, false, nil, newStickyWaitPlan(accountID, account.Concurrency, cfg))
+					}
+				}
+			} else if candidateDecision == scheduling.StickyReady {
 				slog.Debug("sticky.layer1_5_no_routing_miss",
 					"account_id", accountID,
-					"reason", "account_not_in_map",
+					"reason", "gate_check_failed",
 					"session", shortSessionHash(sessionHash),
 				)
 			}
+		} else {
+			slog.Debug("sticky.layer1_5_no_routing_miss",
+				"account_id", accountID,
+				"reason", "account_not_in_map",
+				"session", shortSessionHash(sessionHash),
+			)
 		}
 	} else if len(routingAccountIDs) == 0 && sessionHash != "" {
 		slog.Debug("sticky.layer1_5_no_routing_skip",
 			"sticky_account_id", stickyAccountID,
-			"is_excluded", func() bool { return stickyAccountID > 0 && isExcluded(stickyAccountID) }(),
+			"is_excluded", stickyAccountID > 0 && isExcluded(stickyAccountID),
 			"session", shortSessionHash(sessionHash),
 			"reason", func() string {
 				if stickyAccountID == 0 {
@@ -888,102 +888,72 @@ func (s *GatewayService) resolvePlatform(ctx context.Context, groupID *int64, gr
 }
 
 func (s *GatewayService) listSchedulableAccounts(ctx context.Context, groupID *int64, platform string, hasForcePlatform bool) ([]Account, bool, error) {
-	if s.schedulerSnapshot != nil {
-		accounts, useMixed, err := s.schedulerSnapshot.ListSchedulableAccounts(ctx, groupID, platform, hasForcePlatform)
-		if err == nil {
-			slog.Debug("account_scheduling_list_snapshot",
-				"group_id", derefGroupID(groupID),
-				"platform", platform,
-				"use_mixed", useMixed,
-				"count", len(accounts))
-			if slog.Default().Enabled(ctx, slog.LevelDebug) {
-				for _, acc := range accounts {
-					slog.Debug("account_scheduling_account_detail",
-						"account_id", acc.ID,
-						"name", acc.Name,
-						"platform", acc.Platform,
-						"type", acc.Type,
-						"status", acc.Status,
-						"tls_fingerprint", acc.IsTLSFingerprintEnabled())
-				}
-			}
-		}
-		return accounts, useMixed, err
-	}
 	useMixed := (platform == PlatformAnthropic || platform == PlatformGemini) && !hasForcePlatform
+	repoPlatforms := []string{platform}
+	var repoFilter func(Account) bool
 	if useMixed {
-		platforms := []string{platform, PlatformAntigravity}
-		var accounts []Account
-		var err error
-		if groupID != nil {
-			accounts, err = s.accountRepo.ListSchedulableByGroupIDAndPlatforms(ctx, *groupID, platforms)
-		} else {
-			accounts, err = s.accountRepo.ListSchedulableUngroupedByPlatforms(ctx, platforms)
+		repoPlatforms = []string{platform, PlatformAntigravity}
+		repoFilter = func(account Account) bool {
+			return account.Platform != PlatformAntigravity || account.IsMixedSchedulingEnabled()
 		}
-		if err != nil {
+	}
+	var snapshot scheduling.AccountListSnapshot
+	if s.schedulerSnapshot != nil {
+		snapshot = s.schedulerSnapshot
+	}
+	result, err := scheduling.ListAccounts(ctx, snapshot, s.accountRepo, scheduling.AccountListRequest{
+		GroupID:          groupID,
+		Platform:         platform,
+		HasForcePlatform: hasForcePlatform,
+		UseMixed:         useMixed,
+		RepoPlatforms:    repoPlatforms,
+		RepoFilter:       repoFilter,
+	})
+	if err != nil {
+		if !result.FromSnapshot {
 			slog.Debug("account_scheduling_list_failed",
 				"group_id", derefGroupID(groupID),
 				"platform", platform,
 				"error", err)
-			return nil, useMixed, err
 		}
-		filtered := make([]Account, 0, len(accounts))
-		for _, acc := range accounts {
-			if acc.Platform == PlatformAntigravity && !acc.IsMixedSchedulingEnabled() {
-				continue
-			}
-			filtered = append(filtered, acc)
-		}
+		return result.Accounts, result.UseMixed, err
+	}
+	accounts := result.Accounts
+	if result.FromSnapshot {
+		slog.Debug("account_scheduling_list_snapshot",
+			"group_id", derefGroupID(groupID),
+			"platform", platform,
+			"use_mixed", result.UseMixed,
+			"count", len(accounts))
+	} else if result.UseMixed {
 		slog.Debug("account_scheduling_list_mixed",
 			"group_id", derefGroupID(groupID),
 			"platform", platform,
-			"raw_count", len(accounts),
-			"filtered_count", len(filtered))
-		if slog.Default().Enabled(ctx, slog.LevelDebug) {
-			for _, acc := range filtered {
-				slog.Debug("account_scheduling_account_detail",
-					"account_id", acc.ID,
-					"name", acc.Name,
-					"platform", acc.Platform,
-					"type", acc.Type,
-					"status", acc.Status,
-					"tls_fingerprint", acc.IsTLSFingerprintEnabled())
-			}
-		}
-		return filtered, useMixed, nil
-	}
-
-	var accounts []Account
-	var err error
-	if groupID != nil {
-		accounts, err = s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, *groupID, platform)
-		// 分组内无账号则返回空列表，由上层处理错误，不再回退到全平台查询
+			"raw_count", result.RawCount,
+			"filtered_count", len(accounts))
 	} else {
-		accounts, err = s.accountRepo.ListSchedulableUngroupedByPlatform(ctx, platform)
-	}
-	if err != nil {
-		slog.Debug("account_scheduling_list_failed",
+		slog.Debug("account_scheduling_list_single",
 			"group_id", derefGroupID(groupID),
 			"platform", platform,
-			"error", err)
-		return nil, useMixed, err
+			"count", len(accounts))
 	}
-	slog.Debug("account_scheduling_list_single",
-		"group_id", derefGroupID(groupID),
-		"platform", platform,
-		"count", len(accounts))
-	if slog.Default().Enabled(ctx, slog.LevelDebug) {
-		for _, acc := range accounts {
-			slog.Debug("account_scheduling_account_detail",
-				"account_id", acc.ID,
-				"name", acc.Name,
-				"platform", acc.Platform,
-				"type", acc.Type,
-				"status", acc.Status,
-				"tls_fingerprint", acc.IsTLSFingerprintEnabled())
-		}
+	logSchedulingAccountDetails(ctx, accounts)
+	return accounts, result.UseMixed, nil
+}
+
+func logSchedulingAccountDetails(ctx context.Context, accounts []Account) {
+	if !slog.Default().Enabled(ctx, slog.LevelDebug) {
+		return
 	}
-	return accounts, useMixed, nil
+	for _, account := range accounts {
+		slog.Debug("account_scheduling_account_detail",
+			"account_id", account.ID,
+			"name", account.Name,
+			"platform", account.Platform,
+			"type", account.Type,
+			"status", account.Status,
+			"tls_fingerprint", account.IsTLSFingerprintEnabled())
+	}
 }
 
 // IsSingleAntigravityAccountGroup 检查指定分组是否只有一个 antigravity 平台的可调度账号。
@@ -1492,40 +1462,17 @@ func selectByLRU(accounts []accountWithLoad, preferOAuth bool) *accountWithLoad 
 }
 
 func sortAccountsByPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
-	sort.SliceStable(accounts, func(i, j int) bool {
-		a, b := accounts[i], accounts[j]
-		if order := scheduling.ComparePriorityLRU(a, b); order != 0 {
-			return order < 0
-		}
-		if a.LastUsedAt == nil && b.LastUsedAt == nil {
-			if preferOAuth && a.Type != b.Type {
-				return a.Type == AccountTypeOAuth
-			}
-		}
-		return false
-	})
-	shuffleWithinPriorityAndLastUsed(accounts, preferOAuth)
+	var prefer func(*Account) bool
+	if preferOAuth {
+		prefer = func(account *Account) bool { return account.Type == AccountTypeOAuth }
+	}
+	scheduling.SortPriorityLRU(accounts, prefer)
 }
 
 // shuffleWithinSortGroups 对排序后的 accountWithLoad 切片，按 (Priority, LoadRate, LastUsedAt) 分组后组内随机打乱。
 // 防止并发请求读取同一快照时，确定性排序导致所有请求命中相同账号。
 func shuffleWithinSortGroups(accounts []accountWithLoad) {
-	if len(accounts) <= 1 {
-		return
-	}
-	i := 0
-	for i < len(accounts) {
-		j := i + 1
-		for j < len(accounts) && sameAccountWithLoadGroup(accounts[i], accounts[j]) {
-			j++
-		}
-		if j-i > 1 {
-			mathrand.Shuffle(j-i, func(a, b int) {
-				accounts[i+a], accounts[i+b] = accounts[i+b], accounts[i+a]
-			})
-		}
-		i = j
-	}
+	scheduling.ShuffleEqualRuns(accounts, sameAccountWithLoadGroup)
 }
 
 // sameAccountWithLoadGroup 判断两个 accountWithLoad 是否属于同一排序组
@@ -1546,42 +1493,11 @@ func sameAccountWithLoadGroup(a, b accountWithLoad) bool {
 // - 先把同组账号按 (OAuth / 非 OAuth) 拆成两段，保持 OAuth 段在前；
 // - 再分别在各段内随机打散，避免热点。
 func shuffleWithinPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
-	if len(accounts) <= 1 {
-		return
+	var prefer func(*Account) bool
+	if preferOAuth {
+		prefer = func(account *Account) bool { return account.Type == AccountTypeOAuth }
 	}
-	i := 0
-	for i < len(accounts) {
-		j := i + 1
-		for j < len(accounts) && sameAccountGroup(accounts[i], accounts[j]) {
-			j++
-		}
-		if j-i > 1 {
-			if preferOAuth {
-				oauth := make([]*Account, 0, j-i)
-				others := make([]*Account, 0, j-i)
-				for _, acc := range accounts[i:j] {
-					if acc.Type == AccountTypeOAuth {
-						oauth = append(oauth, acc)
-					} else {
-						others = append(others, acc)
-					}
-				}
-				if len(oauth) > 1 {
-					mathrand.Shuffle(len(oauth), func(a, b int) { oauth[a], oauth[b] = oauth[b], oauth[a] })
-				}
-				if len(others) > 1 {
-					mathrand.Shuffle(len(others), func(a, b int) { others[a], others[b] = others[b], others[a] })
-				}
-				copy(accounts[i:], oauth)
-				copy(accounts[i+len(oauth):], others)
-			} else {
-				mathrand.Shuffle(j-i, func(a, b int) {
-					accounts[i+a], accounts[i+b] = accounts[i+b], accounts[i+a]
-				})
-			}
-		}
-		i = j
-	}
+	scheduling.ShufflePriorityLRURuns(accounts, prefer)
 }
 
 // sameAccountGroup 判断两个 Account 是否属于同一排序组（Priority + LastUsedAt）
@@ -1594,14 +1510,7 @@ func sameAccountGroup(a, b *Account) bool {
 
 // sameLastUsedAt 判断两个 LastUsedAt 是否相同（精度到秒）
 func sameLastUsedAt(a, b *time.Time) bool {
-	switch {
-	case a == nil && b == nil:
-		return true
-	case a == nil || b == nil:
-		return false
-	default:
-		return a.Unix() == b.Unix()
-	}
+	return scheduling.SameLastUsedSecond(a, b)
 }
 
 // sortCandidatesForFallback 根据配置选择排序策略

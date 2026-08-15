@@ -599,15 +599,7 @@ func (s *OpenAIGatewayService) isCodexImageGenerationBridgeEnabled(ctx context.C
 }
 
 func (s *OpenAIGatewayService) checkChannelPricingRestriction(ctx context.Context, groupID *int64, requestedModel string) bool {
-	if groupID == nil || s.channelService == nil || requestedModel == "" {
-		return false
-	}
-	mapping := s.channelService.ResolveChannelMapping(ctx, *groupID, requestedModel)
-	billingModel := billingModelForRestriction(mapping.BillingModelSource, requestedModel, mapping.MappedModel)
-	if billingModel == "" {
-		return false
-	}
-	return s.channelService.IsModelRestricted(ctx, *groupID, billingModel)
+	return checkChannelPricingRestriction(ctx, s.channelService, groupID, requestedModel)
 }
 
 func (s *OpenAIGatewayService) isUpstreamModelRestrictedByChannel(ctx context.Context, groupID int64, account *Account, requestedModel string, requireCompact bool) bool {
