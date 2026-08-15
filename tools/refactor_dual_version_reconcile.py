@@ -161,28 +161,6 @@ SHORT_PATH_CASES = (
         },
     },
     {
-        "name": "bedrock_json",
-        "platform": "bedrock",
-        "path": "/v1/messages",
-        "body": {
-            "model": "claude-sonnet-4-5",
-            "max_tokens": 1,
-            "messages": [{"role": "user", "content": "Reply only OK"}],
-            "stream": False,
-        },
-    },
-    {
-        "name": "bedrock_sse",
-        "platform": "bedrock",
-        "path": "/v1/messages",
-        "body": {
-            "model": "claude-sonnet-4-5",
-            "max_tokens": 2,
-            "messages": [{"role": "user", "content": "Reply only OK"}],
-            "stream": True,
-        },
-    },
-    {
         "name": "raw_cc_json",
         "platform": "kimi",
         "path": "/v1/chat/completions",
@@ -213,7 +191,6 @@ KEY_ENV = {
     "grok": "SUB2API_DIFF_KEY_GROK",
     "kimi": "SUB2API_DIFF_KEY_KIMI",
     "anthropic_passthrough": "SUB2API_DIFF_KEY_ANTHROPIC_PASSTHROUGH",
-    "bedrock": "SUB2API_DIFF_KEY_BEDROCK",
 }
 
 

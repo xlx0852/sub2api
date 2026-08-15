@@ -7,8 +7,6 @@ import threading
 import time
 import unittest
 import urllib.request
-import struct
-import zlib
 from unittest import mock
 
 
@@ -64,7 +62,6 @@ class FixtureStateTest(unittest.TestCase):
         self.assertEqual("antigravity", provider_from_path("/antigravity/v1internal:generateContent"))
         self.assertEqual("gemini", provider_from_path("/gemini/v1beta/models/x:generateContent"))
         self.assertEqual("kimi", provider_from_path("/kimi/v1/chat/completions"))
-        self.assertEqual("bedrock", provider_from_path("/model/us.anthropic.claude/invoke-with-response-stream"))
 
     def test_provider_host_detection_distinguishes_xai_responses(self) -> None:
         self.assertEqual("grok", provider_from_host("api.x.ai"))
@@ -108,7 +105,7 @@ class FixtureStateTest(unittest.TestCase):
 
 
 class FixtureSmokeTest(unittest.TestCase):
-    def test_six_provider_fixture_smoke(self) -> None:
+    def test_provider_fixture_smoke(self) -> None:
         self.assertEqual(0, harness.fixture_smoke())
 
     def test_openai_websocket_two_turns(self) -> None:
@@ -155,29 +152,6 @@ class FixtureSmokeTest(unittest.TestCase):
             server.server_close()
             worker.join(timeout=2)
 
-    def test_bedrock_eventstream_frames_have_valid_crc(self) -> None:
-        server = make_server()
-        worker = threading.Thread(target=server.serve_forever, daemon=True)
-        worker.start()
-        try:
-            request = urllib.request.Request(
-                f"http://127.0.0.1:{server.server_port}/model/us.anthropic.claude/invoke-with-response-stream",
-                data=b"{}",
-                method="POST",
-                headers={"Content-Type": "application/json"},
-            )
-            with urllib.request.urlopen(request, timeout=2) as response:
-                raw = response.read()
-                self.assertEqual("application/vnd.amazon.eventstream", response.headers.get_content_type())
-            total_length, headers_length, prelude_crc = struct.unpack("!III", raw[:12])
-            self.assertGreater(headers_length, 0)
-            self.assertEqual(zlib.crc32(raw[:8]) & 0xFFFFFFFF, prelude_crc)
-            first_frame = raw[:total_length]
-            self.assertEqual(zlib.crc32(first_frame[:-4]) & 0xFFFFFFFF, struct.unpack("!I", first_frame[-4:])[0])
-        finally:
-            server.shutdown()
-            server.server_close()
-            worker.join(timeout=2)
 
 
 class SettlementSnapshotTest(unittest.TestCase):

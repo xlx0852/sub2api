@@ -27,7 +27,7 @@ Inbound traffic is orchestrated as:
 
 Parse → Admission → Select → Rewrite → Transport → Relay → Settle
 
-Provider-specific protocol work stays in explicit adapters (Claude, OpenAI/Codex, Gemini, Antigravity, Grok, Kimi). Shared stages own scheduling, admission, relay, and settlement. Entry short-circuits (passthrough, Bedrock, raw Grok/Kimi chat completions, Codex CLI-only) remain outside the pipeline.
+Provider-specific protocol work stays in explicit adapters (Claude, OpenAI/Codex, Gemini, Antigravity, Grok, Kimi). Shared stages own scheduling, admission, relay, and settlement. Entry short-circuits (passthrough, raw Grok/Kimi chat completions, Codex CLI-only) remain outside the pipeline. AWS Bedrock account supply is retired; migration 198 keeps historical rows but makes them inactive and unschedulable.
 
 `AccountSelector` (`app/scheduling`) is the production selection entry. Two scheduler implementations still exist behind adapters; wait-plan / slot / lookup helpers are shared.
 

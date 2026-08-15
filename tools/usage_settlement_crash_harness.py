@@ -381,7 +381,7 @@ def disconnect_after_first_sse_event(base_url: str, case: dict[str, Any], run_id
 
 
 def request_fixture_control(platform: str, method: str = "GET", body: dict[str, Any] | None = None) -> tuple[int, Any, str]:
-    if platform not in {"grok", "bedrock"}:
+    if platform != "grok":
         return request_json(INFRA["fixture"] + "/__control", method, body)
     data = None if body is None else json.dumps(body, separators=(",", ":")).encode()
     request = urllib.request.Request(
@@ -985,14 +985,6 @@ def seed_fixture_instance(base_url: str, admin_email: str, admin_password: str, 
                 None,
             ),
             (
-                "bedrock",
-                "anthropic",
-                "bedrock",
-                {"auth_mode": "apikey", "api_key": "fixture-bedrock", "aws_region": "us-east-1"},
-                dict(account_quota),
-                proxy_id,
-            ),
-            (
                 "openai",
                 "openai",
                 "apikey",
@@ -1282,7 +1274,7 @@ def generate_fixture_tls_cert() -> int:
             openssl,
             "req", "-x509", "-newkey", "rsa:2048", "-sha256", "-nodes", "-days", "2",
             "-keyout", str(key), "-out", str(cert), "-subj", "/CN=127.0.0.1",
-            "-addext", "subjectAltName=IP:127.0.0.1,DNS:api.x.ai,DNS:bedrock-runtime.us-east-1.amazonaws.com",
+            "-addext", "subjectAltName=IP:127.0.0.1,DNS:api.x.ai",
             "-addext", "basicConstraints=critical,CA:TRUE",
             "-addext", "keyUsage=critical,digitalSignature,keyEncipherment,keyCertSign",
         ],

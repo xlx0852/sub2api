@@ -18,7 +18,6 @@ import socketserver
 import ssl
 import struct
 import threading
-import zlib
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -145,8 +144,6 @@ class FixtureState:
 
 
 def provider_from_path(path: str) -> str:
-    if "/model/" in path and (path.endswith("/invoke") or path.endswith("/invoke-with-response-stream")):
-        return "bedrock"
     for provider in ("anthropic", "openai", "gemini", "antigravity", "grok", "kimi"):
         if f"/{provider}/" in path or path.startswith(f"/{provider}"):
             return provider
@@ -175,7 +172,7 @@ def remember_fixture_server_name(tls_socket: ssl.SSLSocket, server_name: str | N
 
 
 def usage_for(provider: str) -> dict[str, Any]:
-    if provider in {"anthropic", "bedrock"}:
+    if provider == "anthropic":
         return {
             "input_tokens": 10,
             "cache_creation_input_tokens": 2,
@@ -333,40 +330,6 @@ class FixtureHandler(BaseHTTPRequestHandler):
         self.send_header("xai-request-id", "xai_fixture_terminal")
         self.end_headers()
         self.wfile.write(body)
-
-    def encode_eventstream_header(self, name: str, value: str) -> bytes:
-        name_bytes = name.encode()
-        value_bytes = value.encode()
-        return bytes([len(name_bytes)]) + name_bytes + b"\x07" + struct.pack("!H", len(value_bytes)) + value_bytes
-
-    def encode_bedrock_eventstream_frame(self, event: dict[str, Any]) -> bytes:
-        headers = b"".join([
-            self.encode_eventstream_header(":message-type", "event"),
-            self.encode_eventstream_header(":event-type", "chunk"),
-            self.encode_eventstream_header(":content-type", "application/json"),
-        ])
-        payload = compact({"bytes": base64.b64encode(compact(event)).decode()})
-        total_length = 12 + len(headers) + len(payload) + 4
-        prelude_fields = struct.pack("!II", total_length, len(headers))
-        prelude = prelude_fields + struct.pack("!I", zlib.crc32(prelude_fields) & 0xFFFFFFFF)
-        message = prelude + headers + payload
-        return message + struct.pack("!I", zlib.crc32(message) & 0xFFFFFFFF)
-
-    def send_bedrock_eventstream(self, events: list[dict[str, Any]], terminal_event_count: int = 2) -> None:
-        self.send_response(200)
-        self.send_header("Content-Type", "application/vnd.amazon.eventstream")
-        self.send_header("Transfer-Encoding", "chunked")
-        self.send_header("x-amzn-requestid", "amzn_fixture_bedrock")
-        self.end_headers()
-        split = len(events) - terminal_event_count if self.state.scenario == "hold_before_terminal" else len(events)
-        initial = b"".join(self.encode_bedrock_eventstream_frame(event) for event in events[:split])
-        terminal = b"".join(self.encode_bedrock_eventstream_frame(event) for event in events[split:])
-        self.write_chunk(initial)
-        if self.state.scenario == "hold_before_terminal":
-            self.state.reach_before_terminal_barrier()
-        self.write_chunk(terminal)
-        self.wfile.write(b"0\r\n\r\n")
-        self.wfile.flush()
 
     def read_websocket_frame(self) -> tuple[int, bytes] | None:
         first = self.rfile.read(2)
@@ -537,7 +500,7 @@ class FixtureHandler(BaseHTTPRequestHandler):
             return
 
         provider = str(self.headers.get("X-Sub2API-Fixture-Provider", "")).strip().lower()
-        if provider not in {"anthropic", "openai", "gemini", "antigravity", "grok", "kimi", "bedrock"}:
+        if provider not in {"anthropic", "openai", "gemini", "antigravity", "grok", "kimi"}:
             provider = (
                 self.state.provider_for_connection(self.client_address)
                 or
@@ -562,9 +525,6 @@ class FixtureHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if provider == "bedrock":
-            self.handle_bedrock(request)
-            return
         if provider == "anthropic" or path.endswith("/messages"):
             self.handle_anthropic(request)
             return
@@ -607,42 +567,6 @@ class FixtureHandler(BaseHTTPRequestHandler):
             {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": usage},
             {"type": "message_stop"},
         ], terminal_event_count=2)
-        self.state.reach_terminal_barrier()
-
-    def handle_bedrock(self, request: dict[str, Any]) -> None:
-        usage = usage_for("bedrock")
-        stream = urlparse(self.path).path.endswith("/invoke-with-response-stream")
-        response = {
-            "id": "msg_fixture_bedrock",
-            "type": "message",
-            "role": "assistant",
-            "model": "bedrock-fixture-model",
-            "content": [{"type": "text", "text": "OK"}],
-            "stop_reason": "end_turn",
-            "stop_sequence": None,
-            "usage": usage,
-        }
-        if not stream:
-            if self.state.scenario == "missing_terminal":
-                self.send_json({**response, "usage": None, "stop_reason": None}, headers={"x-amzn-requestid": "amzn_fixture_bedrock"})
-                return
-            self.send_json(response, headers={"x-amzn-requestid": "amzn_fixture_bedrock"})
-            self.state.reach_terminal_barrier()
-            return
-        start = {
-            "type": "message_start",
-            "message": {**response, "content": [], "stop_reason": None, "usage": {**usage, "output_tokens": 0}},
-        }
-        delta = {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "OK"}}
-        if self.state.scenario == "missing_terminal":
-            self.send_bedrock_eventstream([start, delta], terminal_event_count=0)
-            return
-        terminal = {
-            "type": "message_delta",
-            "delta": {"stop_reason": "end_turn"},
-            "amazon-bedrock-invocationMetrics": {"inputTokenCount": 10, "outputTokenCount": 4},
-        }
-        self.send_bedrock_eventstream([start, delta, terminal, {"type": "message_stop"}], terminal_event_count=2)
         self.state.reach_terminal_barrier()
 
     def handle_responses(self, provider: str, request: dict[str, Any]) -> None:
