@@ -68,23 +68,23 @@ Parse → Admission → Select → Rewrite → Transport → Relay → Settle
 | 控制面（`/api/v1/auth`、`/user`、`/keys` …） | `openapi/control-plane.yaml` + `frontend/src/api/generated/*` |
 | 网关（`/v1/*`、`/v1beta/*`、Codex、Antigravity …） | 保持上游协议语义，不走 codegen |
 | 公开运行时配置 | 规范端点 `GET /api/v1/public/config`；`GET /api/v1/settings/public` 为兼容别名 |
-| 版本偏移 | `GET /api/v1/public/version` → `{ version, min_frontend_version }` |
+| 版本偏移 | API：`GET /api/v1/public/version` → `{ version, min_frontend_version }`；前端产物：`sub2api-build.json` → `{ frontend_version, min_backend_version }` |
 
 SPA 启动时拉取公开配置。`window.__APP_CONFIG__` 只作首屏缓存（Vite 开发注入）。embed 的 `index.html` 是纯静态壳。
 
 前端模块在 `frontend/src/features/`（API 与部分 store）。基础控件在 `frontend/src/ui/`。账号平台字段走 `features/admin-accounts/form/registry.ts`。设置页路由为 `/admin/settings/:tab?`，多数分区仍在 `SettingsView.vue`。
 
-构建产物仍输出到 `backend/internal/web/dist`，供 `-tags embed` 打进同一份二进制。Release 另发 `sub2api-frontend-<version>.zip`。
+构建产物仍输出到 `backend/internal/web/dist`，供兼容用 `-tags embed` 构建复用。前后端版本分别来自 `frontend/VERSION` 与 `backend/cmd/server/VERSION`。Release 分别发布 API 镜像、独立前端镜像/zip 和 embedded 兼容镜像。
 
 ## 部署矩阵
 
-默认一键安装、单容器 compose、后台自更新、setup 向导**零变化**。分离拓扑为可选。
+生产默认采用同域前后端分离：Nginx 占用公网端口，API 只在内部网络监听。embedded 交付仍供既有安装和回滚使用，但不再是生产默认。
 
 | 拓扑 | 方式 | 前端 | 公开配置 | 升级 | 说明 |
 |------|------|------|----------|------|------|
-| **二进制 + embed**（默认） | `deploy/install.sh` + systemd | Go 进程内静态托管 | `/api/v1/public/config` | 后台自更新 / 换二进制 | 与后端同版本。向导不变。 |
-| **单容器 compose**（默认） | `docker-compose.yml` 或 `docker-compose.local.yml` | 镜像内嵌 | 同上 | 拉镜像 / 重建 | Auto-setup。推荐 `docker-deploy.sh` + `docker-compose.local.yml`。 |
-| **分离 compose**（可选） | overlay `docker-compose.separated.yml` | nginx 托管解压后的前端 zip | 同上 | **同时**升级 API 镜像与前端 zip | 宿主机端口在 nginx，API 只内网。见 `deploy/nginx/README.md`。 |
+| **分离 compose**（默认） | `docker-compose.yml` 或 `docker-compose.local.yml` | `sub2api-frontend` nginx 镜像 | `/api/v1/public/config` | API 与前端可独立升级 | 公网端口在 nginx，API 只在 compose 网络。 |
+| **分离宿主机发布**（生产） | `component_deploy.py` + nginx/systemd/container hook | 不可变目录 + 原子 symlink | 同上 | 显式 `frontend`、`backend` 或 `both` | 每端各保留 current/rollback。 |
+| **二进制 + embed**（兼容） | `docker-compose.embedded.yml` 或 `-tags embed` | Go 进程内静态托管 | 同上 | 成对替换 | 用于既有安装和迁移回滚。 |
 | **分域**（可选） | 任意静态站 + API 进程 | 同一份 zip | 同上 | 可独立升级 | 设置 `CORS_ALLOWED_ORIGINS`（或 `cors.allowed_origins`）为控制台源。 |
 
 反向代理要求（官方配置：`deploy/nginx/sub2api.conf`）：
@@ -93,12 +93,14 @@ SPA 启动时拉取公开配置。`window.__APP_CONFIG__` 只作首屏缓存（V
 - WebSocket `Upgrade` / `Connection`
 - SSE / 流式网关关闭 `proxy_buffering`
 
-版本偏移：控制台构建号（`__APP_VERSION__`，来自 `backend/cmd/server/VERSION`）低于 `min_frontend_version` 时显示可关闭横幅。embed 天然同版本。版本端点缺失不阻断启动。
+版本偏移双向检查：SPA 运行时会提示“前端低于 API 门槛”或“API 低于前端门槛”；部署预检对缺失、畸形或不兼容元数据 fail-closed。跨端契约变更必须使用 `both`。
 
 ## 相关文件
 
 - OpenSpec 变更：`openspec/changes/refactor-architecture/`
 - 控制面规格：`openapi/README.md`
 - 分离代理：`deploy/nginx/README.md`
-- Compose overlay：`deploy/docker-compose.separated.yml`
+- 默认 Compose：`deploy/docker-compose.yml`
+- embedded 兼容 overlay：`deploy/docker-compose.embedded.yml`
+- 组件发布入口：`deploy/component_deploy.py`
 - 持久结算运维手册：`docs/USAGE_SETTLEMENT_OPERATIONS_CN.md`

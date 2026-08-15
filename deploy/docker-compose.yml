@@ -3,8 +3,8 @@
 # =============================================================================
 # Quick Start:
 #   1. Copy .env.example to .env and configure
-#   2. docker-compose up -d
-#   3. Check logs: docker-compose logs -f sub2api
+#   2. docker compose up -d
+#   3. Check logs: docker compose logs -f sub2api sub2api-web
 #   4. Access: http://localhost:8080
 #
 # All configuration is done via environment variables.
@@ -16,15 +16,15 @@ services:
   # Sub2API Application
   # ===========================================================================
   sub2api:
-    image: weishaw/sub2api:latest
+    image: ${BACKEND_IMAGE:-weishaw/sub2api:latest}
     container_name: sub2api
     restart: unless-stopped
     ulimits:
       nofile:
         soft: 100000
         hard: 100000
-    ports:
-      - "${BIND_HOST:-0.0.0.0}:${SERVER_PORT:-8080}:8080"
+    expose:
+      - "8080"
     volumes:
       # Data persistence (config.yaml will be auto-generated here)
       - sub2api_data:/app/data
@@ -189,6 +189,26 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  # Public listener and standalone console (default production topology).
+  # The API service above is reachable only on the compose network.
+  sub2api-web:
+    image: ${FRONTEND_IMAGE:-weishaw/sub2api-frontend:latest}
+    container_name: sub2api-web
+    restart: unless-stopped
+    ports:
+      - "${BIND_HOST:-0.0.0.0}:${SERVER_PORT:-8080}:80"
+    depends_on:
+      sub2api:
+        condition: service_healthy
+    networks:
+      - sub2api-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "5", "-O", "/dev/null", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   # ===========================================================================
   # PostgreSQL Database

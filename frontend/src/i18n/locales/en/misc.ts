@@ -41,6 +41,8 @@ export default {
     retry: 'Retry',
     skewWarning:
       'This console (v{frontend}) is older than the API requires (min v{min}, running v{backend}). Upgrade the frontend package to avoid broken pages.',
+    backendSkewWarning:
+      'This API (v{backend}) is older than the console requires (min v{min}, console v{frontend}). Upgrade the backend to avoid broken pages.',
     skewDismiss: 'Dismiss'
   },
 

@@ -1,0 +1,10 @@
+{
+  "scope": "frontend",
+  "contract_change": false,
+  "frontend": {
+    "version": "0.1.320",
+    "min_backend_version": "0.1.320",
+    "artifact": "/tmp/sub2api-frontend-0.1.320.zip",
+    "sha256": "replace-with-64-character-sha256"
+  }
+}

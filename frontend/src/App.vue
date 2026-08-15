@@ -3,7 +3,7 @@ import { RouterView, useRouter, useRoute } from 'vue-router'
 import { onMounted, onBeforeUnmount, watch, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getPublicVersion } from '@/features/public/version'
-import { isFrontendBelowMin } from '@/utils/semver'
+import { isBackendBelowMin, isFrontendBelowMin } from '@/utils/semver'
 import Toast from '@/ui/Toast.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
 import AdminComplianceDialog from '@/components/admin/AdminComplianceDialog.vue'
@@ -149,6 +149,12 @@ onMounted(async () => {
         frontend: __APP_VERSION__ || 'unknown',
         backend: info.version,
         min: info.min_frontend_version
+      })
+    } else if (isBackendBelowMin(info.version, __MIN_BACKEND_VERSION__)) {
+      versionSkewWarning.value = t('version.backendSkewWarning', {
+        frontend: __APP_VERSION__ || 'unknown',
+        backend: info.version,
+        min: __MIN_BACKEND_VERSION__
       })
     }
   } catch {

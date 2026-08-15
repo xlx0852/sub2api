@@ -68,23 +68,23 @@ There is no Prometheus/OTel or public settlement endpoint. Existing structured l
 | Control plane (`/api/v1/auth`, `/user`, `/keys`, …) | `openapi/control-plane.yaml` + generated `frontend/src/api/generated/*` |
 | Gateway (`/v1/*`, `/v1beta/*`, Codex, Antigravity, …) | Upstream protocol semantics. Not code-generated. |
 | Public runtime config | `GET /api/v1/public/config` (canonical). `GET /api/v1/settings/public` is a compatibility alias. |
-| Version skew | `GET /api/v1/public/version` → `{ version, min_frontend_version }` |
+| Version skew | API: `GET /api/v1/public/version` → `{ version, min_frontend_version }`; frontend artifact: `sub2api-build.json` → `{ frontend_version, min_backend_version }` |
 
 The SPA fetches public config at boot. Optional `window.__APP_CONFIG__` is only a first-paint cache (Vite dev inject). Embedded `index.html` is a static shell.
 
 Frontend modules live under `frontend/src/features/` (API + some stores). Primitive UI is in `frontend/src/ui/`. Account platform fields go through `features/admin-accounts/form/registry.ts`. Settings uses `/admin/settings/:tab?`; most tab bodies are still in `SettingsView.vue`.
 
-Build output is still `backend/internal/web/dist` so `-tags embed` can pack the same artifact. Release also publishes `sub2api-frontend-<version>.zip`.
+Build output remains `backend/internal/web/dist` so the compatibility `-tags embed` build can pack the same artifact. Frontend and backend versions are independent (`frontend/VERSION` and `backend/cmd/server/VERSION`). Release publishes an API image, a standalone frontend image/zip, and an embedded compatibility image.
 
 ## Deployment matrix
 
-Default install, single-container compose, admin self-update, and the setup wizard are **unchanged**. Separated topology is opt-in.
+Separated same-origin deployment is the production default. Nginx owns the public port; the API is internal-only. Embedded delivery remains available for existing installations and rollback, but it is not the default production topology.
 
 | Topology | How | Frontend | Public config | Upgrade | Notes |
 |----------|-----|----------|---------------|---------|-------|
-| **Binary + embed** (default) | `deploy/install.sh` + systemd | Served by the Go process (`-tags embed`) | `/api/v1/public/config` | Admin self-update / replace binary | Same version as the binary. Setup wizard unchanged. |
-| **Single-container compose** (default) | `docker-compose.yml` or `docker-compose.local.yml` | Embedded in `weishaw/sub2api` | Same | Pull image / recreate | Auto-setup. Preferred: `docker-compose.local.yml` via `docker-deploy.sh`. |
-| **Separated compose** (optional) | Overlay `docker-compose.separated.yml` | nginx serves unpacked `sub2api-frontend-*.zip` | Same | Upgrade API image **and** frontend zip | Host port is nginx. API stays internal. See `deploy/nginx/README.md`. |
+| **Separated compose** (default) | `docker-compose.yml` or `docker-compose.local.yml` | `sub2api-frontend` nginx image | `/api/v1/public/config` | Upgrade API or frontend independently | Host port is nginx; API is compose-network only. |
+| **Separated host release** (production) | `component_deploy.py` + nginx/systemd/container hooks | Immutable release directory + atomic symlink | Same | Explicit `frontend`, `backend`, or `both` scope | One current and rollback pointer per component. |
+| **Binary + embed** (compatibility) | `docker-compose.embedded.yml` or `-tags embed` | Served by the Go process | Same | Replace the paired artifact | Retained for existing operators and migration rollback. |
 | **Split origin** (optional) | Static host + API process | Same zip on any static server | Same | Independent | Set `CORS_ALLOWED_ORIGINS` (or `cors.allowed_origins`) to the console origin. |
 
 Reverse proxy requirements (official file: `deploy/nginx/sub2api.conf`):
@@ -93,12 +93,14 @@ Reverse proxy requirements (official file: `deploy/nginx/sub2api.conf`):
 - WebSocket `Upgrade` / `Connection`
 - `proxy_buffering off` for SSE / streamed gateway responses
 
-Version skew: if the console build (`__APP_VERSION__` from `backend/cmd/server/VERSION`) is older than `min_frontend_version`, the SPA shows a dismissible banner. Embed matches by construction. A missing version endpoint does not block boot.
+Version skew is checked in both directions. At runtime the SPA warns if it is older than the API floor or if the API is older than the frontend floor. Deployment preflight fails closed on missing, malformed, or incompatible metadata. Cross-component contract changes use scope `both`.
 
 ## Related files
 
 - OpenSpec change: `openspec/changes/refactor-architecture/`
 - Control-plane spec: `openapi/README.md`
 - Separated proxy: `deploy/nginx/README.md`
-- Compose overlay: `deploy/docker-compose.separated.yml`
+- Default compose: `deploy/docker-compose.yml`
+- Embedded compatibility overlay: `deploy/docker-compose.embedded.yml`
+- Component deployment: `deploy/component_deploy.py`
 - Durable settlement operations: `docs/USAGE_SETTLEMENT_OPERATIONS.md`

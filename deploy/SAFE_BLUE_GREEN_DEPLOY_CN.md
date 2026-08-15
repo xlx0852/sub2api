@@ -1,448 +1,154 @@
-# Sub2API 生产安全蓝绿部署流程
+# Sub2API 前后端分离安全发布手册
 
-本文档用于当前生产站点 `code.sicts.shop` 的后续版本更新。核心原则是：**本地打包、服务器只接收构建产物、新实例验证通过后再用 Nginx 切流、只保留上一个版本用于回滚**。
+生产默认由 Nginx 提供公网入口：静态前端来自独立 release 目录，API 运行在内部网络或 `127.0.0.1` 端口。embedded 单容器只用于既有安装兼容和迁移回滚。
 
-## 适用范围
+## 发布边界
 
-- 站点：`https://code.sicts.shop`
-- SSH：`root@89.208.254.77`
-- 生产目录：`/opt/sub2api`
-- Nginx 配置：`/etc/nginx/conf.d/code-sicts-shop.conf`
-- 数据目录：`/opt/sub2api/data`
-- Docker 网络：`sub2api_sub2api-network`
+- 每次发布显式选择 `frontend`、`backend` 或 `both`，并提供只列本次产物的 JSON manifest；禁止从整个 dirty worktree推断范围。
+- `frontend` 不重启/替换 API，不执行数据库备份或迁移，不改变 API current/rollback。
+- `backend` 不构建、上传或切换前端，不改变前端 current/rollback。
+- OpenAPI/generated client、公开 runtime-config schema、认证契约等不兼容跨端变更必须用 `both`。
+- 先 staging 后生产；生产迁移仍需当次明确批准。生产服务器不从 dirty 源码树构建。
 
-## 硬性约束
+典型归类：纯 Vue/CSS/文案修复为 `frontend`；不改变前端契约的调度、结算或计费实现修复为 `backend`；OpenAPI + generated client、登录协议或 runtime-config schema 变更为 `both`。若兼容测试能证明旧对端仍受支持，可以通过调整明确的版本门槛安全拆分发布，不能靠口头判断降级 scope。
 
-- 不在服务器打包。
-- 不上传源码到服务器。
-- 不重新初始化项目。
-- 不修改数据库连接配置。
-- 每次部署必须先本地递增版本号（默认 patch +1），禁止继续沿用上一次线上版本号构建发布。
-- 新容器验证通过前不停止旧容器。
-- 切流后停止旧容器，并将其作为唯一回滚版本保留。
-- 每次部署验证完成后删除更早的容器、二进制、资源目录和部署备份；线上始终只保留“当前版本 + 上一个版本”。
-- `model-catalog/catalog.json` 固定保存在 `$REMOTE_BASE/shared/model-catalog/`，发布资源同步到该目录后再只读挂载，清理历史版本时不得删除。
-- 密码、Token、`.env` 内容不得写进文档、提交或命令历史。
+## 版本和产物
 
-## 部署变量
+| 组件 | 当前版本 | 对端最低版本 | 产物 |
+|---|---|---|---|
+| API | `backend/cmd/server/VERSION` | `backend/cmd/server/MIN_FRONTEND_VERSION` | 非 embed `sub2api` + `resources/` tar |
+| 前端 | `frontend/VERSION` | `frontend/MIN_BACKEND_VERSION` | `sub2api-frontend-<version>.zip`，含 `sub2api-build.json` |
 
-在本机仓库根目录执行：
+API 的 `GET /api/v1/public/version` 返回 `version` 与 `min_frontend_version`；前端的 `sub2api-build.json` 返回 `frontend_version` 与 `min_backend_version`。部署预检双向 fail-closed。
 
 ```bash
-export SSH_TARGET="root@89.208.254.77"
-export REMOTE_BASE="/opt/sub2api"
-export TS="$(date +%Y%m%d%H%M%S)"
-export VERSION_FILE="backend/cmd/server/VERSION"
-# 默认 patch +1；需要 minor/major 时把 BUMP_LEVEL 改成 minor 或 major
-export BUMP_LEVEL="${BUMP_LEVEL:-patch}"
-export OLD_VERSION="$(tr -d ' \t\r\n' < "$VERSION_FILE")"
-export VERSION="$(
-python3 - "$OLD_VERSION" "$BUMP_LEVEL" <<'PY'
-import re, sys
-raw, level = sys.argv[1], sys.argv[2]
-m = re.fullmatch(r'(\d+)\.(\d+)\.(\d+)', raw)
-if not m:
-    raise SystemExit(f'invalid version in VERSION file: {raw!r}')
-major, minor, patch = map(int, m.groups())
-if level == 'major':
-    major, minor, patch = major + 1, 0, 0
-elif level == 'minor':
-    minor, patch = minor + 1, 0
-elif level == 'patch':
-    patch += 1
-else:
-    raise SystemExit(f'unsupported BUMP_LEVEL: {level!r}')
-print(f'{major}.{minor}.{patch}')
-PY
-)"
-printf '%s\n' "$VERSION" > "$VERSION_FILE"
-export COMMIT="$(git rev-parse --short HEAD)"
-# 有未提交改动时在 commit 后追加 dirty，避免与纯提交构建混淆
-if [ -n "$(git status --porcelain)" ]; then
-  export COMMIT="${COMMIT}-dirty"
-fi
-export BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-export OUT="/tmp/sub2api-${VERSION}-${TS}-${COMMIT}-linux-amd64"
-export REMOTE_BIN="${REMOTE_BASE}/sub2api-${VERSION}-${TS}-${COMMIT}-linux-amd64"
-export REMOTE_RESOURCES="${REMOTE_BASE}/resources-${TS}"
-export REMOTE_CATALOG="${REMOTE_BASE}/shared/model-catalog/catalog.json"
-export BACKUP_DIR="${REMOTE_BASE}/backups/deploy-${TS}"
-export IMAGE="sub2api:codex-ws-20260601044722"
-export NEW_PORT="18098"
-export NEW_NAME="sub2api-${VERSION//./-}-${COMMIT}-${TS}-blue"
-
-echo "version: ${OLD_VERSION} -> ${VERSION} (bump=${BUMP_LEVEL})"
-echo "commit:  ${COMMIT}"
-echo "out:     ${OUT}"
-echo "name:    ${NEW_NAME}"
-```
-
-说明：
-
-- 版本源文件固定为 `backend/cmd/server/VERSION`（semver：`MAJOR.MINOR.PATCH`）。
-- 默认每次部署执行 **patch +1**（例如 `0.1.157` → `0.1.158`）。
-- 需要功能小版本或大版本时：`BUMP_LEVEL=minor` 或 `BUMP_LEVEL=major` 后再导出变量。
-- 版本写入 `VERSION` 文件后，后续 `go build -ldflags ... -X main.Version=${VERSION}` 才会把新版本打进二进制；公网 `/api/v1/settings/public` 的 `version` 也来自这里。
-- 部署成功后建议把 `VERSION` 变更单独提交，避免下次部署又从旧号开始撞车。若本次部署中止/失败且尚未对外切流，可把 `VERSION` 文件改回 `$OLD_VERSION`。
-
-`NEW_PORT` 每次部署需要选择一个未被占用的本机端口。可在服务器上查看当前使用情况：
-
-```bash
-ssh "$SSH_TARGET" "docker ps --format 'table {{.Names}}\t{{.Ports}}' | grep sub2api || true"
-```
-
-## 1. 本地预检查
-
-```bash
-git status --short --branch
-cat backend/cmd/server/VERSION
-echo "planned version: ${OLD_VERSION} -> ${VERSION}"
-```
-
-确认当前分支、提交，以及 **VERSION 已递增且不等于线上当前版本**。可先对比线上：
-
-```bash
-curl -fsS https://code.sicts.shop/api/v1/settings/public \
-  | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("data",d).get("version"))'
-test "$(tr -d '\r\n' < backend/cmd/server/VERSION)" != "$(curl -fsS https://code.sicts.shop/api/v1/settings/public | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("data",d).get("version"))')"
-```
-
-建议至少跑一次后端入口测试：
-
-```bash
-cd backend
-go test ./cmd/server
-cd ..
-```
-
-如果 `go test` 或 `go build` 报 Wire 注入过期，先重新生成再测试：
-
-```bash
-cd backend
-go generate ./cmd/server
-go test ./cmd/server
-cd ..
-```
-
-## 2. 服务器备份
-
-部署前备份 Compose、环境文件、Nginx 配置和 PostgreSQL 数据。数据库备份必须使用容器内真实的 `POSTGRES_USER` 和 `POSTGRES_DB`，不要假设数据库用户是 `root`。
-
-```bash
-ssh "$SSH_TARGET" "set -euo pipefail
-mkdir -p '$BACKUP_DIR'
-cp -a '$REMOTE_BASE/docker-compose.yml' '$BACKUP_DIR/docker-compose.yml'
-cp -a '$REMOTE_BASE/.env' '$BACKUP_DIR/env'
-cp -a /etc/nginx/conf.d/code-sicts-shop.conf '$BACKUP_DIR/code-sicts-shop.conf'
-docker exec sub2api-postgres sh -lc 'pg_dump -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\"' | gzip > '$BACKUP_DIR/postgres.sql.gz'
-gzip -t '$BACKUP_DIR/postgres.sql.gz'
-ls -lh '$BACKUP_DIR'
-"
-```
-
-## 3. 本地构建前端
-
-前端构建产物会写入后端 embed 目录：
-
-```bash
+# 前端
+pnpm --dir frontend run typecheck
 pnpm --dir frontend run build
+FV=$(tr -d '\r\n' < frontend/VERSION)
+(cd backend/internal/web/dist && zip -r "$OLDPWD/sub2api-frontend-${FV}.zip" .)
+sha256sum "sub2api-frontend-${FV}.zip"
+
+# 非 embed API
+BV=$(tr -d '\r\n' < backend/cmd/server/VERSION)
+MFV=$(tr -d '\r\n' < backend/cmd/server/MIN_FRONTEND_VERSION)
+mkdir -p artifact-api
+(cd backend && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+  -ldflags="-s -w -X main.Version=${BV} -X main.MinFrontendVersion=${MFV} -X main.BuildType=release" \
+  -o ../artifact-api/sub2api ./cmd/server)
+cp -a backend/resources artifact-api/resources
+tar -C artifact-api -czf "sub2api-api-${BV}-linux-amd64.tar.gz" sub2api resources
+sha256sum "sub2api-api-${BV}-linux-amd64.tar.gz"
 ```
 
-如果只是后端补丁，也仍建议执行一次前端构建，确保 `backend/internal/web/dist` 与当前前端代码一致。
+兼容 embedded 构建只能显式执行 `make build-embedded`。
 
-## 4. 本地构建后端二进制
+## Manifest、上传和预检
+
+复制 `component-manifest.example.json`。`backend` 对象使用 `version`、`min_frontend_version`、`artifact`、`sha256` 和布尔值 `db_change`。
+
+```json
+{
+  "scope": "frontend",
+  "contract_change": false,
+  "frontend": {
+    "version": "0.1.321",
+    "min_backend_version": "0.1.320",
+    "artifact": "/tmp/sub2api-release/sub2api-frontend-0.1.321.zip",
+    "sha256": "<sha256>"
+  }
+}
+```
+
+逐文件上传，禁止通配整个工作树：
 
 ```bash
-cd backend
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-  -tags embed \
-  -ldflags="-s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.Date=${BUILD_DATE} -X main.BuildType=release" \
-  -trimpath \
-  -o "$OUT" \
-  ./cmd/server
-cd ..
-
-ls -lh "$OUT"
+scp component-manifest.json deploy/component_deploy.py "$DEPLOY_HOST:/tmp/sub2api-release/"
+scp sub2api-frontend-0.1.321.zip "$DEPLOY_HOST:/tmp/sub2api-release/"
+python3 /tmp/sub2api-release/component_deploy.py check \
+  --manifest /tmp/sub2api-release/component-manifest.json --root /opt/sub2api
 ```
 
-再次强调：不要在服务器上执行 `pnpm build`、`go build` 或源码打包。
+状态布局：
 
-## 5. 上传构建产物
+```text
+/opt/sub2api/
+├── frontend/{releases,current,rollback}
+├── api/{releases,current,rollback}
+└── state/{.codex-frontend-current,.codex-frontend-rollback,
+           .codex-api-current,.codex-api-rollback}
+```
 
-只上传二进制和运行资源目录：
+每端只保留 current 和 rollback 指向的两个不可变 release；清理本端时不删除另一端产物，也不删除迁移观察期的 embedded 回滚。
+
+## Frontend-only
+
+门禁：SHA/文件清单、`index.html`、build metadata、兼容预检、typecheck/build、登录与设置页渲染 smoke。
 
 ```bash
-scp "$OUT" "$SSH_TARGET:$REMOTE_BIN"
-
-COPYFILE_DISABLE=1 tar -C backend -czf - resources | ssh "$SSH_TARGET" "set -euo pipefail
-rm -rf '$REMOTE_RESOURCES'
-mkdir -p '$REMOTE_RESOURCES'
-tar -xzf - -C '$REMOTE_RESOURCES'
-chmod +x '$REMOTE_BIN'
-chmod -R a+rX '$REMOTE_RESOURCES'
-mkdir -p '$REMOTE_BASE/shared/model-catalog'
-cp -a '$REMOTE_RESOURCES/resources/model-catalog/catalog.json' '$REMOTE_CATALOG'
-chmod 0644 '$REMOTE_CATALOG'
-ls -lh '$REMOTE_BIN'
-find '$REMOTE_RESOURCES' -maxdepth 2 -type f | head
-"
+python3 /tmp/sub2api-release/component_deploy.py deploy \
+  --manifest /tmp/sub2api-release/component-manifest.json --root /opt/sub2api
+nginx -t && nginx -s reload
+curl -fsS "$PUBLIC_ORIGIN/sub2api-build.json"
+curl -fsS "$PUBLIC_ORIGIN/api/v1/public/version"
 ```
 
-不要上传整个仓库，也不要在服务器创建临时源码构建目录。
-
-## 6. 启动新容器
-
-新容器使用现有镜像作为运行壳，挂载本次本机构建出的二进制：
+Nginx `root` 指向 `/opt/sub2api/frontend/current`。该命令不触碰 API/DB。独立回滚：
 
 ```bash
-ssh "$SSH_TARGET" "set -euo pipefail
-docker rm -f '$NEW_NAME' >/dev/null 2>&1 || true
-docker run -d \
-  --name '$NEW_NAME' \
-  --restart unless-stopped \
-  --network sub2api_sub2api-network \
-  --env-file '$REMOTE_BASE/.env' \
-  -e GIN_MODE=release \
-  -e DATABASE_HOST=postgres \
-  -e REDIS_HOST=redis \
-  -v '$REMOTE_BIN:/app/sub2api:ro' \
-  -v '$REMOTE_BASE/data:/app/data' \
-  -v '$REMOTE_RESOURCES/resources:/app/resources:ro' \
-  -v '$REMOTE_BASE/shared/model-catalog:/app/resources/model-catalog:ro' \
-  -p 127.0.0.1:'$NEW_PORT':8080 \
-  '$IMAGE'
-docker ps --filter name='$NEW_NAME' --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
-"
+python3 /opt/sub2api/deploy/component_deploy.py rollback frontend --root /opt/sub2api
+nginx -t && nginx -s reload
 ```
 
-## 7. 验证新实例
+## Backend-only
 
-先在服务器本机验证，不经过 Nginx：
+候选 API 必须在备用 loopback 端口通过 `/health`、public config/version、未登录 401，以及与改动相关的 HTTP/SSE/WS/结算门禁。工具要求显式 verify/switch hook；`{release}` 替换为候选 release 绝对路径。
 
 ```bash
-ssh "$SSH_TARGET" "set -euo pipefail
-for i in 1 2 3; do
-  curl -fsS 'http://127.0.0.1:$NEW_PORT/health'
-  echo
-done
-curl -fsS 'http://127.0.0.1:$NEW_PORT/api/v1/settings/public' | head -c 500
-echo
-curl -fsSI 'http://127.0.0.1:$NEW_PORT/admin/accounts' | head
-docker logs --since 3m '$NEW_NAME' 2>&1 | egrep -i 'panic|fatal|migration|database|failed|error|5[0-9][0-9]' || true
-"
+python3 /tmp/sub2api-release/component_deploy.py deploy \
+  --manifest /tmp/sub2api-release/component-manifest.json --root /opt/sub2api \
+  --backend-verify-command 'sudo /opt/sub2api/bin/verify-api-candidate {release}' \
+  --backend-switch-command 'sudo /opt/sub2api/bin/switch-api-release {release}'
 ```
 
-健康标准：
-
-- `/health` 返回 `{"status":"ok"}`。
-- `/api/v1/settings/public` 能返回当前版本。
-- `/admin/accounts` 返回前端页面。
-- 最近启动日志无迁移失败、数据库连接失败、panic、fatal。
-
-## 8. Nginx 切流
-
-找到当前旧端口，并把 Nginx 上游端口替换为新端口：
+仅当 manifest 为 `db_change: true` 时才添加：
 
 ```bash
-ssh "$SSH_TARGET" "grep -n '127.0.0.1:' /etc/nginx/conf.d/code-sicts-shop.conf"
+--db-backup-command 'sudo /opt/sub2api/bin/backup-postgres-before-api-release'
 ```
 
-确认旧端口后执行，替换 `OLD_PORT`：
+独立回滚不改前端：
 
 ```bash
-export OLD_PORT="18097"
-
-ssh "$SSH_TARGET" "set -euo pipefail
-cp -a /etc/nginx/conf.d/code-sicts-shop.conf '$BACKUP_DIR/code-sicts-shop.conf.before-switch'
-python3 - '$OLD_PORT' '$NEW_PORT' <<'PY'
-from pathlib import Path
-import sys
-
-path = Path('/etc/nginx/conf.d/code-sicts-shop.conf')
-old = '127.0.0.1:' + sys.argv[1]
-new = '127.0.0.1:' + sys.argv[2]
-text = path.read_text()
-if old not in text:
-    raise SystemExit(f'old upstream {old} not found')
-path.write_text(text.replace(old, new))
-PY
-nginx -t
-nginx -s reload
-grep -n '127.0.0.1:' /etc/nginx/conf.d/code-sicts-shop.conf
-"
+python3 /opt/sub2api/deploy/component_deploy.py rollback backend --root /opt/sub2api \
+  --backend-switch-command 'sudo /opt/sub2api/bin/switch-api-release {release}'
 ```
 
-## 9. 公网验证
+## Both
 
-切流后从本机公网验证：
+顺序固定为：候选 API 兼容当前前端 → 备用端口验证并切 API → 候选前端兼容新 API → 原子切前端。若候选 API 不兼容当前前端，预检会拒绝，必须先做向后兼容的 API 过渡版本。失败默认只回滚失败端；兼容契约要求成对回滚时按逆序回滚。
+
+## Staging 门禁
+
+- frontend-only：API 容器 ID/启动时间、API marker、DB 状态前后不变；登录/设置正常；独立回滚成功。
+- backend-only：前端 SHA/symlink/marker 不变；HTTP/SSE/WS、粘性选号、故障切换、usage/计费对账正常；独立回滚成功。
+- both：旧前端在新 API 上正常，新前端切换后全链路正常，成对回滚成功。
+- Nginx：`nginx -t`；API 无公网监听；underscore header、SSE 不缓冲、WS Upgrade、SPA fallback 通过。
+
+## 从 embedded 迁移与回滚
+
+1. 记录旧 embedded 容器/二进制、镜像 digest、端口、Nginx config、env/config；不要删除。
+2. 生成初始 API/前端 marker，建立不可变 frontend release，但暂不切公网。
+3. 在新 loopback 端口启动非 embed API，使用同一 DB/Redis/config，完成协议和计费验证。
+4. `nginx -t` 后切换为“静态 current + 新 API upstream”。
+5. 观察期内保留旧 embedded 容器/config；失败就恢复旧 Nginx config 和旧容器，前后端成对回滚。
+6. 观察期通过后才建立独立 frontend/API rollback 生命周期。
+
+Compose 兼容回滚：
 
 ```bash
-for i in 1 2 3; do
-  curl -fsS https://code.sicts.shop/health
-  echo
-done
-
-curl -fsS https://code.sicts.shop/api/v1/settings/public | head -c 500
-echo
-curl -fsSI https://code.sicts.shop/admin/accounts | head
+EMBEDDED_IMAGE=<old-image@digest> \
+  docker compose -f docker-compose.yml -f docker-compose.embedded.yml up -d
 ```
 
-健康标准：
-
-- 公网 `/health` 连续返回 `ok`。
-- 公网版本号与本次构建版本一致。
-- 后台页面可返回 HTML。
-
-## 10. 停止旧容器并记录元信息
-
-公网验证通过后再停止旧容器。不要删除旧容器：
-
-```bash
-export OLD_NAME="sub2api-旧容器名"
-
-ssh "$SSH_TARGET" "set -euo pipefail
-docker stop '$OLD_NAME'
-printf '%s\n' '$NEW_NAME' > '$REMOTE_BASE/.codex-current-container'
-printf '%s\n' '$REMOTE_BIN' > '$REMOTE_BASE/.codex-current-binary'
-printf '%s\n' '$NEW_PORT' > '$REMOTE_BASE/.codex-current-port'
-printf '%s\n' '$REMOTE_RESOURCES' > '$REMOTE_BASE/.codex-current-resources'
-printf '%s\n' '$REMOTE_CATALOG' > '$REMOTE_BASE/.codex-current-catalog'
-printf '%s\n' '$OLD_NAME' > '$REMOTE_BASE/.codex-rollback-container'
-printf '%s\n' '$OLD_PORT' > '$REMOTE_BASE/.codex-rollback-port'
-docker ps -a --filter name=sub2api --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
-"
-```
-
-旧容器及其挂载的二进制、资源目录是唯一回滚版本，不得在本次部署中删除。
-
-## 11. 清理更早的发布历史
-
-只在公网验证、新实例日志检查和第 10 步元信息更新全部完成后执行。清理目标包括：
-
-- 当前和回滚标记之外的应用容器（PostgreSQL、Redis 不在清理范围）。
-- 当前和回滚容器未挂载的历史二进制及 `resources-*` 目录。
-- 当前部署的 `$BACKUP_DIR` 之外的 `backups/deploy-*` 目录。
-- 已解压后不再参与运行或回滚的历史资源压缩包。
-
-执行前先输出保留对象并确认 Nginx 正在使用当前端口：
-
-```bash
-ssh "$SSH_TARGET" "set -euo pipefail
-CURRENT_NAME=\$(cat '$REMOTE_BASE/.codex-current-container')
-CURRENT_PORT=\$(cat '$REMOTE_BASE/.codex-current-port')
-ROLLBACK_NAME=\$(cat '$REMOTE_BASE/.codex-rollback-container')
-
-grep -q \"127.0.0.1:\${CURRENT_PORT}\" /etc/nginx/conf.d/code-sicts-shop.conf
-test \"\$(docker inspect \"\$CURRENT_NAME\" --format '{{.State.Health.Status}}')\" = healthy
-docker inspect \"\$ROLLBACK_NAME\" >/dev/null
-
-echo \"保留当前容器: \$CURRENT_NAME\"
-echo \"保留回滚容器: \$ROLLBACK_NAME\"
-echo \"保留部署备份: $BACKUP_DIR\"
-"
-```
-
-清理时必须从当前、回滚容器的 Docker mounts 读取要保留的二进制和资源路径，不能仅按时间猜测。资源挂载源是 `resources-*/resources` 子目录，而实际清理对象是它的父目录 `resources-*`，因此保留集合必须使用挂载源的父目录：
-
-```bash
-CURRENT_RES_MOUNT=$(docker inspect "$CURRENT_NAME" --format '{{range .Mounts}}{{if eq .Destination "/app/resources"}}{{.Source}}{{end}}{{end}}')
-ROLLBACK_RES_MOUNT=$(docker inspect "$ROLLBACK_NAME" --format '{{range .Mounts}}{{if eq .Destination "/app/resources"}}{{.Source}}{{end}}{{end}}')
-CURRENT_RES_DIR=$(dirname "$CURRENT_RES_MOUNT")
-ROLLBACK_RES_DIR=$(dirname "$ROLLBACK_RES_MOUNT")
-```
-
-不得直接拿 `resources-*/resources` 与 `resources-*` 比较，否则会误删当前和回滚版本的资源父目录。完成后再次检查公网健康、Nginx 上游和回滚容器是否仍存在，并分别确认当前、回滚资源目录中的 model pricing 与 catalog 文件可读。线上只保留一个历史版本，不累积第二个或更早的回滚版本。
-
-## 回滚流程
-
-如果切流后发现严重问题，优先做 Nginx 端口回滚：
-
-```bash
-ssh "$SSH_TARGET" "set -euo pipefail
-docker start '$OLD_NAME'
-python3 - '$NEW_PORT' '$OLD_PORT' <<'PY'
-from pathlib import Path
-import sys
-
-path = Path('/etc/nginx/conf.d/code-sicts-shop.conf')
-old = '127.0.0.1:' + sys.argv[1]
-new = '127.0.0.1:' + sys.argv[2]
-text = path.read_text()
-if old not in text:
-    raise SystemExit(f'new upstream {old} not found')
-path.write_text(text.replace(old, new))
-PY
-nginx -t
-nginx -s reload
-curl -fsS http://127.0.0.1:'$OLD_PORT'/health
-"
-```
-
-数据库回滚属于高风险操作，只在确认新版本执行了错误迁移或错误数据写入时使用，并且需要先再次备份当前数据库。恢复命令示例：
-
-```bash
-ssh "$SSH_TARGET" "set -euo pipefail
-gzip -dc '$BACKUP_DIR/postgres.sql.gz' | docker exec -i sub2api-postgres sh -lc 'psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\"'
-"
-```
-
-执行数据库恢复前必须确认影响范围。
-
-## 常见问题
-
-### `go build` 报 Wire 注入不存在
-
-说明 `backend/cmd/server/wire_gen.go` 与当前依赖注入代码不同步：
-
-```bash
-cd backend
-go generate ./cmd/server
-go test ./cmd/server
-cd ..
-```
-
-### `pg_dump` 只有几十字节或提示角色不存在
-
-通常是用了宿主机用户或错误数据库名。必须通过 `docker exec sub2api-postgres` 使用容器内的 `POSTGRES_USER`、`POSTGRES_DB`。
-
-### 新旧容器同时运行会不会重复任务
-
-新容器本机验证阶段可能短暂与旧容器共存。验证窗口应尽量短；公网切流确认正常后立即停止旧容器。不要长时间让两个生产实例同时连接同一套数据库和 Redis。
-
-### 版本号页面没变
-
-优先确认：
-
-```bash
-curl -fsS https://code.sicts.shop/api/v1/settings/public
-```
-
-如果 API 版本正确但页面没变，通常是浏览器缓存或前端资源缓存；如果 API 版本也没变，检查 Nginx 是否切到新端口。
-
-### 连续部署版本号一直不变
-
-说明构建前没有递增 `backend/cmd/server/VERSION`，或 `ldflags` 仍引用了旧的 `$VERSION` 环境变量。按本文“部署变量”段重新导出（会自动 patch +1 并写回文件），确认：
-
-```bash
-cat backend/cmd/server/VERSION
-echo "$VERSION"
-# 构建后可用 strings 抽查二进制内嵌版本
-strings "$OUT" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head
-```
-
-切流后公网 `version` 必须严格大于部署前线上版本；若相等，停止后续清理，先排查是否误切到旧实例。
-
-## 最终检查清单
-
-- 本地构建完成，服务器没有源码构建动作。
-- `backend/cmd/server/VERSION` 已在本次部署前递增，公网 `version` 与 `$VERSION` 一致且已变化。
-- 服务器备份目录存在，`postgres.sql.gz` 已通过 `gzip -t`。
-- 新容器本机 `/health` 正常。
-- Nginx `nginx -t` 通过并已 reload。
-- 公网 `/health` 正常。
-- 公网版本号正确。
-- 上一个容器已停止并作为唯一回滚版本保留。
-- 更早的应用容器、二进制、资源目录及部署备份已清理。
-- 当前与回滚容器的挂载文件均存在，持久化 model catalog 未被清理。
-- `/opt/sub2api/.codex-current-*` 已更新。
-- 建议提交本次 `VERSION` 文件变更，作为下次升版基线。
+最终门禁还包括：针对性 Go 测试与非 embed Linux build、前端 typecheck/build/关键测试、组件部署测试、Nginx route-contract/`nginx -t`、Compose render、`git diff --check`、`openspec validate --strict`。涉及调度/计费时继续跑对应差分测试床。在 staging 三种 scope 与独立回滚留证前，不得声称重构或本 change 已完成。

@@ -41,6 +41,8 @@ export default {
     retry: '重试',
     skewWarning:
       '当前控制台 (v{frontend}) 低于接口要求的最低前端版本（最低 v{min}，后端 v{backend}）。请升级前端静态包，以免页面异常。',
+    backendSkewWarning:
+      '当前后端 (v{backend}) 低于控制台要求的最低后端版本（最低 v{min}，前端 v{frontend}）。请升级后端，以免页面异常。',
     skewDismiss: '关闭'
   },
 

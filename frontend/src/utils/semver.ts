@@ -4,6 +4,9 @@ function parseSemver(value: string): [number, number, number] | null {
   if (parts.length < 3) {
     return null
   }
+  if (parts.slice(0, 3).some((part) => !/^\d+$/.test(part))) {
+    return null
+  }
   const nums = parts.slice(0, 3).map((part) => Number(part))
   if (nums.some((n) => !Number.isFinite(n))) {
     return null
@@ -26,13 +29,21 @@ export function compareSemver(a: string, b: string): number {
 }
 
 export function isFrontendBelowMin(frontendVersion: string, minFrontendVersion: string): boolean {
-  const min = minFrontendVersion.trim()
-  if (!min) {
+  return isVersionBelowMin(frontendVersion, minFrontendVersion)
+}
+
+export function isBackendBelowMin(backendVersion: string, minBackendVersion: string): boolean {
+  return isVersionBelowMin(backendVersion, minBackendVersion)
+}
+
+function isVersionBelowMin(version: string, minimumVersion: string): boolean {
+  const minimum = minimumVersion.trim()
+  if (!minimum) {
     return false
   }
-  const frontend = frontendVersion.trim()
-  if (!frontend) {
+  const current = version.trim()
+  if (!current || !parseSemver(current) || !parseSemver(minimum)) {
     return true
   }
-  return compareSemver(frontend, min) < 0
+  return compareSemver(current, minimum) < 0
 }

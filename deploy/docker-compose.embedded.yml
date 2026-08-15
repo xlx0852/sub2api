@@ -1,0 +1,21 @@
+# =============================================================================
+# Embedded compatibility topology
+# =============================================================================
+# Use only for an existing single-container installation or emergency rollback:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.embedded.yml up -d
+#
+# The API image must be an embedded compatibility image. The public port moves
+# back to the Go process and the standalone frontend service is disabled by an
+# inactive profile.
+# =============================================================================
+
+services:
+  sub2api:
+    image: ${EMBEDDED_IMAGE:-weishaw/sub2api-embedded:latest}
+    ports:
+      - "${BIND_HOST:-0.0.0.0}:${SERVER_PORT:-8080}:8080"
+
+  sub2api-web:
+    profiles:
+      - separated

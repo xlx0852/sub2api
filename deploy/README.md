@@ -6,18 +6,20 @@ This directory contains files for deploying Sub2API on Linux servers.
 
 | Method | Best For | Setup Wizard |
 |--------|----------|--------------|
-| **Docker Compose** | Quick setup, all-in-one | Not needed (auto-setup) |
-| **Separated Compose** | Static console + API behind nginx | Not needed (auto-setup) |
-| **Binary Install** | Production servers, systemd | Web-based wizard |
+| **Separated Docker Compose** | Default: static console + internal API | Not needed (auto-setup) |
+| **Component release** | Production, independent frontend/API rollback | Existing database/setup |
+| **Embedded compatibility** | Existing installations and emergency rollback | Web-based wizard |
 
 ## Files
 
 | File | Description |
 |------|-------------|
-| `docker-compose.yml` | Docker Compose configuration (named volumes) |
-| `docker-compose.separated.yml` | Overlay: nginx static console + API (see `nginx/README.md`) |
+| `docker-compose.yml` | Default separated Compose (named volumes) |
+| `docker-compose.local.yml` | Default separated Compose (local data directories) |
+| `docker-compose.embedded.yml` | Explicit single-container compatibility/rollback overlay |
+| `docker-compose.separated.yml` | Deprecated no-op compatibility overlay |
 | `nginx/` | Official nginx reference for SSE, WebSocket, and underscore headers |
-| `docker-compose.local.yml` | Docker Compose configuration (local directories, easy migration) |
+| `component_deploy.py` | Manifest-driven `frontend|backend|both` install/preflight/rollback |
 | `docker-deploy.sh` | **One-click Docker deployment script (recommended)** |
 | `SAFE_BLUE_GREEN_DEPLOY_CN.md` | 生产安全蓝绿部署流程：本地打包、新容器验证、Nginx 切流、保留回滚 |
 | `.env.example` | Docker environment variables template |
@@ -101,17 +103,24 @@ docker compose -f docker-compose.local.yml logs -f sub2api
 # http://localhost:8080
 ```
 
-### Method 3: Separated frontend / API
+### Default topology
 
-Optional overlay. Default `docker-compose.yml` / `docker-compose.local.yml` stay single-container.
+Both official Compose files are separated by default. `sub2api-web` owns the public port and `sub2api` has no host port. Pin the two component images independently in `.env` when promoting a release:
 
 ```bash
-mkdir -p frontend-dist
-# Unpack the GitHub Release asset sub2api-frontend-<version>.zip into frontend-dist/
-docker compose -f docker-compose.yml -f docker-compose.separated.yml up -d
+BACKEND_IMAGE=weishaw/sub2api:0.1.320
+FRONTEND_IMAGE=weishaw/sub2api-frontend:0.1.320
+docker compose -f docker-compose.yml up -d
 ```
 
-See `nginx/README.md` for SSE, WebSocket, underscore-header, and split-origin CORS notes.
+For an existing embedded installation or emergency paired rollback:
+
+```bash
+EMBEDDED_IMAGE=weishaw/sub2api-embedded:0.1.320 \
+  docker compose -f docker-compose.yml -f docker-compose.embedded.yml up -d
+```
+
+See `nginx/README.md` for SSE, WebSocket, underscore-header, component releases, and split-origin CORS notes.
 
 ### Deployment Version Comparison
 
@@ -119,11 +128,11 @@ See `nginx/README.md` for SSE, WebSocket, underscore-header, and split-origin CO
 |---------|-------------|-----------|----------|
 | **docker-compose.local.yml** | Local directories (./data, ./postgres_data, ./redis_data) | ✅ Easy (tar entire directory) | Production, need frequent backups/migration |
 | **docker-compose.yml** | Named volumes (/var/lib/docker/volumes/) | ⚠️ Requires docker commands | Simple setup, don't need migration |
-| **+ docker-compose.separated.yml** | Same as the base file; nginx serves the console | Same as the base file | Static console + API behind one origin |
+| **+ docker-compose.embedded.yml** | Same as the base file | Same as the base file | Compatibility-only paired frontend/API image |
 
 **Recommendation:** Use `docker-compose.local.yml` (deployed by `docker-deploy.sh`) for easier data management and migration.
 
-The full topology matrix (embed binary, single-container compose, separated nginx, split-origin CORS, version skew) is in [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).
+The full topology and version-skew matrix is in [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md). The production component workflow is in [`SAFE_BLUE_GREEN_DEPLOY_CN.md`](SAFE_BLUE_GREEN_DEPLOY_CN.md).
 
 ### How Auto-Setup Works
 

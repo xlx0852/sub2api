@@ -4,11 +4,25 @@ import checker from 'vite-plugin-checker'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
-function readAppVersion(): string {
+function readVersionFile(fileName: string, fallback = '0.0.0-dev'): string {
   try {
-    return readFileSync(resolve(__dirname, '../backend/cmd/server/VERSION'), 'utf8').trim() || '0.0.0-dev'
+    return readFileSync(resolve(__dirname, fileName), 'utf8').trim() || fallback
   } catch {
-    return '0.0.0-dev'
+    return fallback
+  }
+}
+
+function emitBuildMetadata(frontendVersion: string, minBackendVersion: string): Plugin {
+  return {
+    name: 'emit-sub2api-build-metadata',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'sub2api-build.json',
+        source: `${JSON.stringify({ frontend_version: frontendVersion, min_backend_version: minBackendVersion }, null, 2)}\n`
+      })
+    }
   }
 }
 
@@ -48,6 +62,8 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const backendUrl = env.VITE_DEV_PROXY_TARGET || 'http://localhost:8080'
   const devPort = Number(env.VITE_DEV_PORT || 3000)
+  const frontendVersion = readVersionFile('VERSION')
+  const minBackendVersion = readVersionFile('MIN_BACKEND_VERSION', frontendVersion)
 
   return {
     plugins: [
@@ -55,6 +71,7 @@ export default defineConfig(({ mode }) => {
       checker({
         vueTsc: true
       }),
+      emitBuildMetadata(frontendVersion, minBackendVersion),
       injectPublicSettings(backendUrl)
     ],
   resolve: {
@@ -68,7 +85,8 @@ export default defineConfig(({ mode }) => {
     // 启用 vue-i18n JIT 编译，在 CSP 环境下处理消息插值
     // JIT 编译器生成 AST 对象而非 JS 代码，无需 unsafe-eval
     __INTLIFY_JIT_COMPILATION__: true,
-    __APP_VERSION__: JSON.stringify(readAppVersion())
+    __APP_VERSION__: JSON.stringify(frontendVersion),
+    __MIN_BACKEND_VERSION__: JSON.stringify(minBackendVersion)
   },
   build: {
     outDir: '../backend/internal/web/dist',

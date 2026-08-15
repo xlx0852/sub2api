@@ -8,12 +8,10 @@ before:
     - go mod tidy -C backend
 
 builds:
-  - id: sub2api
+  - id: sub2api-api
     dir: backend
     main: ./cmd/server
     binary: sub2api
-    flags:
-      - -tags=embed
     env:
       - CGO_ENABLED=0
     goos:
@@ -39,6 +37,8 @@ changelog:
 # 仅 GHCR x86_64 镜像
 dockers:
   - id: ghcr-amd64
+    ids:
+      - sub2api-api
     goos: linux
     goarch: amd64
     image_templates:

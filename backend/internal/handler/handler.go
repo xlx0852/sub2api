@@ -61,6 +61,7 @@ type Handlers struct {
 
 // BuildInfo contains build-time information
 type BuildInfo struct {
-	Version   string
-	BuildType string // "source" for manual builds, "release" for CI builds
+	Version            string
+	MinFrontendVersion string
+	BuildType          string // "source" for manual builds, "release" for CI builds
 }

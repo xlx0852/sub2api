@@ -12,7 +12,7 @@ import (
 
 func TestSettingHandler_GetPublicVersion(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	h := &SettingHandler{version: "0.1.319"}
+	h := &SettingHandler{version: "0.1.320", minFrontendVersion: "0.1.318"}
 
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
@@ -31,6 +31,17 @@ func TestSettingHandler_GetPublicVersion(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, 0, resp.Code)
-	require.Equal(t, "0.1.319", resp.Data.Version)
-	require.Equal(t, "0.1.319", resp.Data.MinFrontendVersion)
+	require.Equal(t, "0.1.320", resp.Data.Version)
+	require.Equal(t, "0.1.318", resp.Data.MinFrontendVersion)
+}
+
+func TestSettingHandler_GetPublicVersionDefaultsFloorToBackendVersion(t *testing.T) {
+	h := &SettingHandler{version: "0.1.320"}
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/public/version", nil)
+
+	h.GetPublicVersion(c)
+
+	require.Contains(t, recorder.Body.String(), `"min_frontend_version":"0.1.320"`)
 }

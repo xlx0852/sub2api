@@ -18,13 +18,19 @@ type SettingHandler struct {
 	settingService           *service.SettingService
 	notificationEmailService *service.NotificationEmailService
 	version                  string
+	minFrontendVersion       string
 }
 
 // NewSettingHandler 创建公开设置处理器
-func NewSettingHandler(settingService *service.SettingService, version string) *SettingHandler {
+func NewSettingHandler(settingService *service.SettingService, version string, minFrontendVersions ...string) *SettingHandler {
+	minFrontendVersion := version
+	if len(minFrontendVersions) > 0 && strings.TrimSpace(minFrontendVersions[0]) != "" {
+		minFrontendVersion = strings.TrimSpace(minFrontendVersions[0])
+	}
 	return &SettingHandler{
-		settingService: settingService,
-		version:        version,
+		settingService:     settingService,
+		version:            version,
+		minFrontendVersion: minFrontendVersion,
 	}
 }
 
@@ -107,9 +113,13 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 // GET /api/v1/public/version
 func (h *SettingHandler) GetPublicVersion(c *gin.Context) {
 	version := strings.TrimSpace(h.version)
+	minFrontendVersion := strings.TrimSpace(h.minFrontendVersion)
+	if minFrontendVersion == "" {
+		minFrontendVersion = version
+	}
 	response.Success(c, dto.PublicVersion{
 		Version:            version,
-		MinFrontendVersion: version,
+		MinFrontendVersion: minFrontendVersion,
 	})
 }
 

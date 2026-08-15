@@ -15,11 +15,21 @@ on:
         required: false
         type: boolean
         default: false
+      release_scope:
+        description: 'Component release scope'
+        required: true
+        type: choice
+        options:
+          - both
+          - frontend
+          - backend
+        default: both
 
 # 环境变量：合并 workflow_dispatch 输入和 repository variable
 # tag push 触发时读取 vars.SIMPLE_RELEASE，workflow_dispatch 时使用输入参数
 env:
   SIMPLE_RELEASE: ${{ github.event.inputs.simple_release == 'true' || vars.SIMPLE_RELEASE == 'true' }}
+  RELEASE_SCOPE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_scope || 'both' }}
 
 permissions:
   contents: write
@@ -41,21 +51,38 @@ jobs:
           else
             VERSION=${GITHUB_REF#refs/tags/v}
           fi
-          echo "$VERSION" > backend/cmd/server/VERSION
-          echo "Updated VERSION file to: $VERSION"
+          if [ "$RELEASE_SCOPE" = "backend" ] || [ "$RELEASE_SCOPE" = "both" ]; then
+            echo "$VERSION" > backend/cmd/server/VERSION
+          fi
+          if [ "$RELEASE_SCOPE" = "frontend" ] || [ "$RELEASE_SCOPE" = "both" ]; then
+            echo "$VERSION" > frontend/VERSION
+          fi
+          echo "Updated $RELEASE_SCOPE release version(s) to: $VERSION"
+          echo "Compatibility floors remain the reviewed source values"
 
-      - name: Upload VERSION artifact
+      - name: Upload component version artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: version-file
-          path: backend/cmd/server/VERSION
+          name: component-version-files
+          path: |
+            backend/cmd/server/VERSION
+            backend/cmd/server/MIN_FRONTEND_VERSION
+            frontend/VERSION
+            frontend/MIN_BACKEND_VERSION
           retention-days: 1
 
   build-frontend:
+    needs: [update-version]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Download component version artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: component-version-files
+          path: .
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -94,11 +121,11 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - name: Download VERSION artifact
+      - name: Download component version artifacts
         uses: actions/download-artifact@v8
         with:
-          name: version-file
-          path: backend/cmd/server/
+          name: component-version-files
+          path: .
 
       - name: Download frontend artifact
         uses: actions/download-artifact@v8
@@ -173,20 +200,17 @@ jobs:
         run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Package frontend static artifact
-        if: ${{ env.SIMPLE_RELEASE != 'true' }}
+        if: ${{ env.SIMPLE_RELEASE != 'true' && (env.RELEASE_SCOPE == 'frontend' || env.RELEASE_SCOPE == 'both') }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION=${{ github.event.inputs.tag }}
-            VERSION=${VERSION#v}
-          else
-            VERSION=${GITHUB_REF#refs/tags/v}
-          fi
+          VERSION=$(tr -d '\r\n' < frontend/VERSION)
           test -f backend/internal/web/dist/index.html
+          test -f backend/internal/web/dist/sub2api-build.json
           rm -f "sub2api-frontend-${VERSION}.zip"
           (cd backend/internal/web/dist && zip -r "${GITHUB_WORKSPACE}/sub2api-frontend-${VERSION}.zip" .)
           echo "FRONTEND_VERSION=${VERSION}" >> "$GITHUB_ENV"
 
       - name: Run GoReleaser
+        if: ${{ env.RELEASE_SCOPE == 'backend' || env.RELEASE_SCOPE == 'both' }}
         uses: goreleaser/goreleaser-action@v7
         with:
           version: '~> v2'
@@ -199,8 +223,50 @@ jobs:
           GITHUB_REPO_NAME: ${{ github.event.repository.name }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME || 'skip' }}
 
+      - name: Publish standalone frontend image
+        if: ${{ env.RELEASE_SCOPE == 'frontend' || env.RELEASE_SCOPE == 'both' }}
+        env:
+          FRONTEND_VERSION: ${{ env.FRONTEND_VERSION }}
+          GHCR_OWNER: ${{ steps.lowercase.outputs.owner }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          VERSION=$(tr -d '\r\n' < frontend/VERSION)
+          TAGS=(
+            -t "ghcr.io/${GHCR_OWNER}/sub2api-frontend:${VERSION}"
+            -t "ghcr.io/${GHCR_OWNER}/sub2api-frontend:latest"
+          )
+          if [ -n "$DOCKERHUB_USERNAME" ]; then
+            TAGS+=(
+              -t "${DOCKERHUB_USERNAME}/sub2api-frontend:${VERSION}"
+              -t "${DOCKERHUB_USERNAME}/sub2api-frontend:latest"
+            )
+          fi
+          docker buildx build --platform linux/amd64,linux/arm64 --push \
+            -f deploy/Dockerfile.frontend "${TAGS[@]}" .
+
+      - name: Publish embedded compatibility image
+        if: ${{ env.SIMPLE_RELEASE != 'true' && env.RELEASE_SCOPE == 'both' }}
+        env:
+          GHCR_OWNER: ${{ steps.lowercase.outputs.owner }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          VERSION=$(tr -d '\r\n' < backend/cmd/server/VERSION)
+          TAGS=(
+            -t "ghcr.io/${GHCR_OWNER}/sub2api-embedded:${VERSION}"
+            -t "ghcr.io/${GHCR_OWNER}/sub2api-embedded:latest"
+          )
+          if [ -n "$DOCKERHUB_USERNAME" ]; then
+            TAGS+=(
+              -t "${DOCKERHUB_USERNAME}/sub2api-embedded:${VERSION}"
+              -t "${DOCKERHUB_USERNAME}/sub2api-embedded:latest"
+            )
+          fi
+          docker buildx build --platform linux/amd64,linux/arm64 --push \
+            --build-arg VERSION="$VERSION" \
+            -f Dockerfile "${TAGS[@]}" .
+
       - name: Upload frontend static artifact
-        if: ${{ env.SIMPLE_RELEASE != 'true' }}
+        if: ${{ env.SIMPLE_RELEASE != 'true' && (env.RELEASE_SCOPE == 'frontend' || env.RELEASE_SCOPE == 'both') }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -208,6 +274,9 @@ jobs:
             TAG_NAME=${{ github.event.inputs.tag }}
           else
             TAG_NAME=${GITHUB_REF#refs/tags/}
+          fi
+          if ! gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release create "$TAG_NAME" --title "Sub2API ${TAG_NAME#v}" --notes "Component release scope: ${RELEASE_SCOPE}"
           fi
           gh release upload "$TAG_NAME" "sub2api-frontend-${FRONTEND_VERSION}.zip" --clobber
 
@@ -308,7 +377,7 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
 
-      - name: Sync VERSION file to released tag
+      - name: Sync component version files to released tag
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION=${{ github.event.inputs.tag }}
@@ -317,16 +386,31 @@ jobs:
             VERSION=${GITHUB_REF#refs/tags/v}
           fi
 
-          CURRENT_VERSION=$(tr -d '\r\n' < backend/cmd/server/VERSION || true)
-          if [ "$CURRENT_VERSION" = "$VERSION" ]; then
-            echo "VERSION file already matches $VERSION"
+          CURRENT_BACKEND_VERSION=$(tr -d '\r\n' < backend/cmd/server/VERSION || true)
+          CURRENT_FRONTEND_VERSION=$(tr -d '\r\n' < frontend/VERSION || true)
+          BACKEND_MATCH=false
+          FRONTEND_MATCH=false
+          [ "$CURRENT_BACKEND_VERSION" = "$VERSION" ] && BACKEND_MATCH=true
+          [ "$CURRENT_FRONTEND_VERSION" = "$VERSION" ] && FRONTEND_MATCH=true
+          if { [ "$RELEASE_SCOPE" = "backend" ] && $BACKEND_MATCH; } || \
+             { [ "$RELEASE_SCOPE" = "frontend" ] && $FRONTEND_MATCH; } || \
+             { [ "$RELEASE_SCOPE" = "both" ] && $BACKEND_MATCH && $FRONTEND_MATCH; }; then
+            echo "Component version files already match $VERSION"
             exit 0
           fi
 
-          echo "$VERSION" > backend/cmd/server/VERSION
+          FILES=()
+          if [ "$RELEASE_SCOPE" = "backend" ] || [ "$RELEASE_SCOPE" = "both" ]; then
+            echo "$VERSION" > backend/cmd/server/VERSION
+            FILES+=(backend/cmd/server/VERSION)
+          fi
+          if [ "$RELEASE_SCOPE" = "frontend" ] || [ "$RELEASE_SCOPE" = "both" ]; then
+            echo "$VERSION" > frontend/VERSION
+            FILES+=(frontend/VERSION)
+          fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/cmd/server/VERSION
-          git commit -m "chore: sync VERSION to ${VERSION} [skip ci]"
+          git add "${FILES[@]}"
+          git commit -m "chore: sync component versions to ${VERSION} [skip ci]"
           git push origin HEAD:${{ github.event.repository.default_branch }}

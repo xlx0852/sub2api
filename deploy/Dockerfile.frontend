@@ -1,0 +1,13 @@
+# syntax=docker/dockerfile:1
+FROM nginx:1.27-alpine
+
+LABEL description="Sub2API standalone frontend"
+
+COPY deploy/nginx/sub2api.conf /etc/nginx/conf.d/default.conf
+COPY deploy/nginx/sub2api-proxy.inc /etc/nginx/sub2api-proxy.inc
+COPY backend/internal/web/dist/ /usr/share/nginx/html/
+
+RUN test -f /usr/share/nginx/html/index.html \
+    && test -f /usr/share/nginx/html/sub2api-build.json
+
+EXPOSE 80

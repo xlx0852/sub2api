@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 declare const __APP_VERSION__: string
+declare const __MIN_BACKEND_VERSION__: string
 
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL: string
