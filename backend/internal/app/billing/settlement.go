@@ -43,7 +43,6 @@ type RecordPolicy struct {
 	FixedLongContextThreshold  int
 	FixedLongContextMultiplier float64
 	OpenAILongContextEnabled   bool
-	PreferUpstreamWSRequestID  bool
 }
 
 // Usage 是跨平台结算使用的统一用量模型（design.md D5）。

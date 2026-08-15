@@ -202,12 +202,11 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	}
 	return settlePreparedUsage(ctx, appbilling.RecordInput{
 		Policy: appbilling.RecordPolicy{
-			Provider:                  appbilling.ProviderOpenAI,
-			PricingMissing:            appbilling.PricingMissingLogZeroCost,
-			CostErrors:                appbilling.CostErrorLogZeroPricingOnly,
-			TokenBuckets:              appbilling.TokenBucketsOpenAIExclusiveInput,
-			OpenAILongContextEnabled:  longContextBillingEnabled,
-			PreferUpstreamWSRequestID: result.OpenAIWSMode && strings.TrimSpace(result.BillingRequestID) == "" && (s.usageSettlement == nil || !s.usageSettlement.Enabled()),
+			Provider:                 appbilling.ProviderOpenAI,
+			PricingMissing:           appbilling.PricingMissingLogZeroCost,
+			CostErrors:               appbilling.CostErrorLogZeroPricingOnly,
+			TokenBuckets:             appbilling.TokenBucketsOpenAIExclusiveInput,
+			OpenAILongContextEnabled: longContextBillingEnabled,
 		},
 		RequestID:             requestID,
 		BillingRequestID:      result.BillingRequestID,
