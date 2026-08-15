@@ -1,0 +1,1133 @@
+{
+  "cases": [
+    {
+      "comparison": {
+        "content_type_equal": true,
+        "format_equal": true,
+        "models_equal": true,
+        "normalized_equal": true,
+        "schema_equal": true,
+        "schema_only_new": [],
+        "schema_only_old": [],
+        "status_equal": true,
+        "usage_equal": true
+      },
+      "name": "anthropic_passthrough_json",
+      "new": {
+        "content_type": "application/json",
+        "error": "",
+        "event_count": 1,
+        "finished_at": "2026-08-15T06:45:35.700429+00:00",
+        "format": "json",
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/anthropic_passthrough_json",
+        "normalized_sha256": "bb5c499c35995f660d432eb417c3636dd311b7e9b13927659195296f71796eea",
+        "schema": [
+          "$.content[].text",
+          "$.content[].type",
+          "$.id",
+          "$.model",
+          "$.role",
+          "$.stop_reason",
+          "$.stop_sequence",
+          "$.type",
+          "$.usage.cache_creation_input_tokens",
+          "$.usage.cache_read_input_tokens",
+          "$.usage.input_tokens",
+          "$.usage.output_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "message"
+          ],
+          "models": [
+            "claude-sonnet-4-5"
+          ],
+          "usage": {
+            "cache_creation_tokens": 2,
+            "cache_read_tokens": 3,
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "reasoning_tokens": null,
+            "total_tokens": null
+          }
+        },
+        "started_at": "2026-08-15T06:45:35.640157+00:00",
+        "status": 200
+      },
+      "old": {
+        "content_type": "application/json",
+        "error": "",
+        "event_count": 1,
+        "finished_at": "2026-08-15T06:45:35.701017+00:00",
+        "format": "json",
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/anthropic_passthrough_json",
+        "normalized_sha256": "bb5c499c35995f660d432eb417c3636dd311b7e9b13927659195296f71796eea",
+        "schema": [
+          "$.content[].text",
+          "$.content[].type",
+          "$.id",
+          "$.model",
+          "$.role",
+          "$.stop_reason",
+          "$.stop_sequence",
+          "$.type",
+          "$.usage.cache_creation_input_tokens",
+          "$.usage.cache_read_input_tokens",
+          "$.usage.input_tokens",
+          "$.usage.output_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "message"
+          ],
+          "models": [
+            "claude-sonnet-4-5"
+          ],
+          "usage": {
+            "cache_creation_tokens": 2,
+            "cache_read_tokens": 3,
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "reasoning_tokens": null,
+            "total_tokens": null
+          }
+        },
+        "started_at": "2026-08-15T06:45:35.639836+00:00",
+        "status": 200
+      },
+      "passed": true,
+      "platform": "anthropic_passthrough",
+      "request": {
+        "max_tokens": 1,
+        "messages": [
+          {
+            "content": "Reply only OK",
+            "role": "user"
+          }
+        ],
+        "model": "claude-sonnet-4-5",
+        "stream": false
+      }
+    },
+    {
+      "comparison": {
+        "content_type_equal": true,
+        "format_equal": true,
+        "models_equal": true,
+        "normalized_equal": true,
+        "schema_equal": true,
+        "schema_only_new": [],
+        "schema_only_old": [],
+        "status_equal": true,
+        "usage_equal": true
+      },
+      "name": "anthropic_passthrough_sse",
+      "new": {
+        "content_type": "text/event-stream",
+        "error": "",
+        "event_count": 4,
+        "finished_at": "2026-08-15T06:45:35.717308+00:00",
+        "format": "sse",
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/anthropic_passthrough_sse",
+        "normalized_sha256": "a1c4f05bd3dc2c42bb6242c21a6d0038901f1d014b0c41ad678ca71ebdb96fa3",
+        "schema": [
+          "$[].delta.stop_reason",
+          "$[].delta.text",
+          "$[].delta.type",
+          "$[].index",
+          "$[].message.content[]",
+          "$[].message.id",
+          "$[].message.model",
+          "$[].message.role",
+          "$[].message.stop_reason",
+          "$[].message.stop_sequence",
+          "$[].message.type",
+          "$[].message.usage.cache_creation_input_tokens",
+          "$[].message.usage.cache_read_input_tokens",
+          "$[].message.usage.input_tokens",
+          "$[].message.usage.output_tokens",
+          "$[].type",
+          "$[].usage.cache_creation_input_tokens",
+          "$[].usage.cache_read_input_tokens",
+          "$[].usage.input_tokens",
+          "$[].usage.output_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "content_block_delta",
+            "message_delta",
+            "message_start",
+            "message_stop"
+          ],
+          "models": [],
+          "usage": {
+            "cache_creation_tokens": 2,
+            "cache_read_tokens": 3,
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "reasoning_tokens": null,
+            "total_tokens": null
+          }
+        },
+        "started_at": "2026-08-15T06:45:35.701683+00:00",
+        "status": 200
+      },
+      "old": {
+        "content_type": "text/event-stream",
+        "error": "",
+        "event_count": 4,
+        "finished_at": "2026-08-15T06:45:35.718427+00:00",
+        "format": "sse",
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/anthropic_passthrough_sse",
+        "normalized_sha256": "a1c4f05bd3dc2c42bb6242c21a6d0038901f1d014b0c41ad678ca71ebdb96fa3",
+        "schema": [
+          "$[].delta.stop_reason",
+          "$[].delta.text",
+          "$[].delta.type",
+          "$[].index",
+          "$[].message.content[]",
+          "$[].message.id",
+          "$[].message.model",
+          "$[].message.role",
+          "$[].message.stop_reason",
+          "$[].message.stop_sequence",
+          "$[].message.type",
+          "$[].message.usage.cache_creation_input_tokens",
+          "$[].message.usage.cache_read_input_tokens",
+          "$[].message.usage.input_tokens",
+          "$[].message.usage.output_tokens",
+          "$[].type",
+          "$[].usage.cache_creation_input_tokens",
+          "$[].usage.cache_read_input_tokens",
+          "$[].usage.input_tokens",
+          "$[].usage.output_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "content_block_delta",
+            "message_delta",
+            "message_start",
+            "message_stop"
+          ],
+          "models": [],
+          "usage": {
+            "cache_creation_tokens": 2,
+            "cache_read_tokens": 3,
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "reasoning_tokens": null,
+            "total_tokens": null
+          }
+        },
+        "started_at": "2026-08-15T06:45:35.701436+00:00",
+        "status": 200
+      },
+      "passed": true,
+      "platform": "anthropic_passthrough",
+      "request": {
+        "max_tokens": 2,
+        "messages": [
+          {
+            "content": "Reply only OK",
+            "role": "user"
+          }
+        ],
+        "model": "claude-sonnet-4-5",
+        "stream": true
+      }
+    },
+    {
+      "comparison": {
+        "content_type_equal": true,
+        "format_equal": true,
+        "models_equal": true,
+        "normalized_equal": true,
+        "schema_equal": true,
+        "schema_only_new": [],
+        "schema_only_old": [],
+        "status_equal": true,
+        "usage_equal": true
+      },
+      "name": "bedrock_json",
+      "new": {
+        "content_type": "application/json",
+        "error": "",
+        "event_count": 1,
+        "finished_at": "2026-08-15T06:45:35.743063+00:00",
+        "format": "json",
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/bedrock_json",
+        "normalized_sha256": "eb1b17c88c0d7f53bc35f83c650620c48e1839449620d5cf93b6462b421f0a06",
+        "schema": [
+          "$.content[].text",
+          "$.content[].type",
+          "$.id",
+          "$.model",
+          "$.role",
+          "$.stop_reason",
+          "$.stop_sequence",
+          "$.type",
+          "$.usage.cache_creation_input_tokens",
+          "$.usage.cache_read_input_tokens",
+          "$.usage.input_tokens",
+          "$.usage.output_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "message"
+          ],
+          "models": [
+            "bedrock-fixture-model"
+          ],
+          "usage": {
+            "cache_creation_tokens": 2,
+            "cache_read_tokens": 3,
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "reasoning_tokens": null,
+            "total_tokens": null
+          }
+        },
+        "started_at": "2026-08-15T06:45:35.718922+00:00",
+        "status": 200
+      },
+      "old": {
+        "content_type": "application/json",
+        "error": "",
+        "event_count": 1,
+        "finished_at": "2026-08-15T06:45:35.741364+00:00",
+        "format": "json",
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/bedrock_json",
+        "normalized_sha256": "eb1b17c88c0d7f53bc35f83c650620c48e1839449620d5cf93b6462b421f0a06",
+        "schema": [
+          "$.content[].text",
+          "$.content[].type",
+          "$.id",
+          "$.model",
+          "$.role",
+          "$.stop_reason",
+          "$.stop_sequence",
+          "$.type",
+          "$.usage.cache_creation_input_tokens",
+          "$.usage.cache_read_input_tokens",
+          "$.usage.input_tokens",
+          "$.usage.output_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "message"
+          ],
+          "models": [
+            "bedrock-fixture-model"
+          ],
+          "usage": {
+            "cache_creation_tokens": 2,
+            "cache_read_tokens": 3,
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "reasoning_tokens": null,
+            "total_tokens": null
+          }
+        },
+        "started_at": "2026-08-15T06:45:35.718760+00:00",
+        "status": 200
+      },
+      "passed": true,
+      "platform": "bedrock",
+      "request": {
+        "max_tokens": 1,
+        "messages": [
+          {
+            "content": "Reply only OK",
+            "role": "user"
+          }
+        ],
+        "model": "claude-sonnet-4-5",
+        "stream": false
+      }
+    },
+    {
+      "comparison": {
+        "content_type_equal": true,
+        "format_equal": true,
+        "models_equal": true,
+        "normalized_equal": true,
+        "schema_equal": true,
+        "schema_only_new": [],
+        "schema_only_old": [],
+        "status_equal": true,
+        "usage_equal": true
+      },
+      "name": "bedrock_sse",
+      "new": {
+        "content_type": "text/event-stream",
+        "error": "",
+        "event_count": 4,
+        "finished_at": "2026-08-15T06:45:35.758900+00:00",
+        "format": "sse",
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/bedrock_sse",
+        "normalized_sha256": "9f5547e2193aed055d8eeae404defbd81c86f19b2595c25f9771dae952117679",
+        "schema": [
+          "$[].delta.stop_reason",
+          "$[].delta.text",
+          "$[].delta.type",
+          "$[].index",
+          "$[].message.content[]",
+          "$[].message.id",
+          "$[].message.model",
+          "$[].message.role",
+          "$[].message.stop_reason",
+          "$[].message.stop_sequence",
+          "$[].message.type",
+          "$[].message.usage.cache_creation_input_tokens",
+          "$[].message.usage.cache_read_input_tokens",
+          "$[].message.usage.input_tokens",
+          "$[].message.usage.output_tokens",
+          "$[].type",
+          "$[].usage.input_tokens",
+          "$[].usage.output_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "content_block_delta",
+            "message_delta",
+            "message_start",
+            "message_stop"
+          ],
+          "models": [],
+          "usage": {
+            "cache_creation_tokens": null,
+            "cache_read_tokens": null,
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "reasoning_tokens": null,
+            "total_tokens": null
+          }
+        },
+        "started_at": "2026-08-15T06:45:35.743578+00:00",
+        "status": 200
+      },
+      "old": {
+        "content_type": "text/event-stream",
+        "error": "",
+        "event_count": 4,
+        "finished_at": "2026-08-15T06:45:35.758134+00:00",
+        "format": "sse",
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/bedrock_sse",
+        "normalized_sha256": "9f5547e2193aed055d8eeae404defbd81c86f19b2595c25f9771dae952117679",
+        "schema": [
+          "$[].delta.stop_reason",
+          "$[].delta.text",
+          "$[].delta.type",
+          "$[].index",
+          "$[].message.content[]",
+          "$[].message.id",
+          "$[].message.model",
+          "$[].message.role",
+          "$[].message.stop_reason",
+          "$[].message.stop_sequence",
+          "$[].message.type",
+          "$[].message.usage.cache_creation_input_tokens",
+          "$[].message.usage.cache_read_input_tokens",
+          "$[].message.usage.input_tokens",
+          "$[].message.usage.output_tokens",
+          "$[].type",
+          "$[].usage.input_tokens",
+          "$[].usage.output_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "content_block_delta",
+            "message_delta",
+            "message_start",
+            "message_stop"
+          ],
+          "models": [],
+          "usage": {
+            "cache_creation_tokens": null,
+            "cache_read_tokens": null,
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "reasoning_tokens": null,
+            "total_tokens": null
+          }
+        },
+        "started_at": "2026-08-15T06:45:35.743393+00:00",
+        "status": 200
+      },
+      "passed": true,
+      "platform": "bedrock",
+      "request": {
+        "max_tokens": 2,
+        "messages": [
+          {
+            "content": "Reply only OK",
+            "role": "user"
+          }
+        ],
+        "model": "claude-sonnet-4-5",
+        "stream": true
+      }
+    },
+    {
+      "comparison": {
+        "content_type_equal": true,
+        "format_equal": true,
+        "models_equal": true,
+        "normalized_equal": true,
+        "schema_equal": true,
+        "schema_only_new": [],
+        "schema_only_old": [],
+        "status_equal": true,
+        "usage_equal": true
+      },
+      "name": "raw_cc_json",
+      "new": {
+        "content_type": "application/json",
+        "error": "",
+        "event_count": 1,
+        "finished_at": "2026-08-15T06:45:35.773475+00:00",
+        "format": "json",
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/raw_cc_json",
+        "normalized_sha256": "46b66a751dedb52685a7b57dea05f47d527ea94aacd841b8de392df42e0b5224",
+        "schema": [
+          "$.choices[].finish_reason",
+          "$.choices[].index",
+          "$.choices[].message.content",
+          "$.choices[].message.role",
+          "$.created",
+          "$.id",
+          "$.model",
+          "$.object",
+          "$.usage.completion_tokens",
+          "$.usage.completion_tokens_details.reasoning_tokens",
+          "$.usage.prompt_tokens",
+          "$.usage.prompt_tokens_details.cached_tokens",
+          "$.usage.total_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "chat.completion"
+          ],
+          "models": [
+            "k3"
+          ],
+          "usage": {
+            "cache_creation_tokens": null,
+            "cache_read_tokens": 4,
+            "input_tokens": 12,
+            "output_tokens": 3,
+            "reasoning_tokens": 1,
+            "total_tokens": 15
+          }
+        },
+        "started_at": "2026-08-15T06:45:35.759476+00:00",
+        "status": 200
+      },
+      "old": {
+        "content_type": "application/json",
+        "error": "",
+        "event_count": 1,
+        "finished_at": "2026-08-15T06:45:35.773373+00:00",
+        "format": "json",
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/raw_cc_json",
+        "normalized_sha256": "46b66a751dedb52685a7b57dea05f47d527ea94aacd841b8de392df42e0b5224",
+        "schema": [
+          "$.choices[].finish_reason",
+          "$.choices[].index",
+          "$.choices[].message.content",
+          "$.choices[].message.role",
+          "$.created",
+          "$.id",
+          "$.model",
+          "$.object",
+          "$.usage.completion_tokens",
+          "$.usage.completion_tokens_details.reasoning_tokens",
+          "$.usage.prompt_tokens",
+          "$.usage.prompt_tokens_details.cached_tokens",
+          "$.usage.total_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "chat.completion"
+          ],
+          "models": [
+            "k3"
+          ],
+          "usage": {
+            "cache_creation_tokens": null,
+            "cache_read_tokens": 4,
+            "input_tokens": 12,
+            "output_tokens": 3,
+            "reasoning_tokens": 1,
+            "total_tokens": 15
+          }
+        },
+        "started_at": "2026-08-15T06:45:35.759278+00:00",
+        "status": 200
+      },
+      "passed": true,
+      "platform": "kimi",
+      "request": {
+        "max_tokens": 1,
+        "messages": [
+          {
+            "content": "Reply only OK",
+            "role": "user"
+          }
+        ],
+        "model": "k3",
+        "stream": false
+      }
+    },
+    {
+      "comparison": {
+        "content_type_equal": true,
+        "format_equal": true,
+        "models_equal": true,
+        "normalized_equal": true,
+        "schema_equal": true,
+        "schema_only_new": [],
+        "schema_only_old": [],
+        "status_equal": true,
+        "usage_equal": true
+      },
+      "name": "raw_cc_sse",
+      "new": {
+        "content_type": "text/event-stream",
+        "error": "",
+        "event_count": 2,
+        "finished_at": "2026-08-15T06:45:35.786485+00:00",
+        "format": "sse",
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/raw_cc_sse",
+        "normalized_sha256": "1878cc9e1044ad90ee72c8f44a2758ac1ca9112cc857c3890396e9e47e63d947",
+        "schema": [
+          "$[].choices[].delta.content",
+          "$[].choices[].delta{}",
+          "$[].choices[].finish_reason",
+          "$[].choices[].index",
+          "$[].created",
+          "$[].id",
+          "$[].model",
+          "$[].object",
+          "$[].usage.completion_tokens",
+          "$[].usage.completion_tokens_details.reasoning_tokens",
+          "$[].usage.prompt_tokens",
+          "$[].usage.prompt_tokens_details.cached_tokens",
+          "$[].usage.total_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "chat.completion.chunk"
+          ],
+          "models": [
+            "k3"
+          ],
+          "usage": {
+            "cache_creation_tokens": null,
+            "cache_read_tokens": 4,
+            "input_tokens": 12,
+            "output_tokens": 3,
+            "reasoning_tokens": 1,
+            "total_tokens": 15
+          }
+        },
+        "started_at": "2026-08-15T06:45:35.773992+00:00",
+        "status": 200
+      },
+      "old": {
+        "content_type": "text/event-stream",
+        "error": "",
+        "event_count": 2,
+        "finished_at": "2026-08-15T06:45:35.785673+00:00",
+        "format": "sse",
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/raw_cc_sse",
+        "normalized_sha256": "1878cc9e1044ad90ee72c8f44a2758ac1ca9112cc857c3890396e9e47e63d947",
+        "schema": [
+          "$[].choices[].delta.content",
+          "$[].choices[].delta{}",
+          "$[].choices[].finish_reason",
+          "$[].choices[].index",
+          "$[].created",
+          "$[].id",
+          "$[].model",
+          "$[].object",
+          "$[].usage.completion_tokens",
+          "$[].usage.completion_tokens_details.reasoning_tokens",
+          "$[].usage.prompt_tokens",
+          "$[].usage.prompt_tokens_details.cached_tokens",
+          "$[].usage.total_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "chat.completion.chunk"
+          ],
+          "models": [
+            "k3"
+          ],
+          "usage": {
+            "cache_creation_tokens": null,
+            "cache_read_tokens": 4,
+            "input_tokens": 12,
+            "output_tokens": 3,
+            "reasoning_tokens": 1,
+            "total_tokens": 15
+          }
+        },
+        "started_at": "2026-08-15T06:45:35.773810+00:00",
+        "status": 200
+      },
+      "passed": true,
+      "platform": "kimi",
+      "request": {
+        "max_tokens": 2,
+        "messages": [
+          {
+            "content": "Reply only OK",
+            "role": "user"
+          }
+        ],
+        "model": "k3",
+        "stream": true
+      }
+    }
+  ],
+  "new_snapshot": {
+    "accounts": [
+      {
+        "name": "settlement-anthropic_passthrough",
+        "platform": "anthropic",
+        "quota_limit": "50",
+        "quota_used": "0.000394",
+        "type": "apikey"
+      },
+      {
+        "name": "settlement-bedrock",
+        "platform": "anthropic",
+        "quota_limit": "50",
+        "quota_used": "0.000394",
+        "type": "bedrock"
+      },
+      {
+        "name": "settlement-kimi",
+        "platform": "kimi",
+        "type": "oauth"
+      }
+    ],
+    "api_keys": [
+      {
+        "name": "settlement-anthropic_passthrough",
+        "quota": "50.00000000",
+        "quota_used": "0.00019800",
+        "status": "active",
+        "usage_1d": "0.00000000",
+        "usage_5h": "0.00000000",
+        "usage_7d": "0.00000000"
+      },
+      {
+        "name": "settlement-bedrock",
+        "quota": "50.00000000",
+        "quota_used": "0.00019800",
+        "status": "active",
+        "usage_1d": "0.00000000",
+        "usage_5h": "0.00000000",
+        "usage_7d": "0.00000000"
+      },
+      {
+        "name": "settlement-kimi",
+        "quota": "50.00000000",
+        "quota_used": "0.00035500",
+        "status": "active",
+        "usage_1d": "0.00000000",
+        "usage_5h": "0.00000000",
+        "usage_7d": "0.00000000"
+      }
+    ],
+    "marker_prefix": "sub2api-dual-diff/settlement-short-path-6611d54deab1/",
+    "profit_contribution": {
+      "metered_cost": "0.00106800000000",
+      "profit": "-0.00053000000000",
+      "requests": 6,
+      "revenue": "0.0005380000"
+    },
+    "usage_logs": [
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000990000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000075000",
+        "cache_creation_tokens": 2,
+        "cache_read_cost": "0.0000009000",
+        "cache_read_tokens": 3,
+        "input_cost": "0.0000300000",
+        "input_tokens": 10,
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/anthropic_passthrough_json",
+        "model": "claude-sonnet-4-5",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000600000",
+        "output_tokens": 4,
+        "rate_multiplier": "1.0000",
+        "request_type": "1",
+        "requested_model": "claude-sonnet-4-5",
+        "stream": false,
+        "total_cost": "0.0000984000"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000990000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000075000",
+        "cache_creation_tokens": 2,
+        "cache_read_cost": "0.0000009000",
+        "cache_read_tokens": 3,
+        "input_cost": "0.0000300000",
+        "input_tokens": 10,
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/anthropic_passthrough_sse",
+        "model": "claude-sonnet-4-5",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000600000",
+        "output_tokens": 4,
+        "rate_multiplier": "1.0000",
+        "request_type": "2",
+        "requested_model": "claude-sonnet-4-5",
+        "stream": true,
+        "total_cost": "0.0000984000"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000990000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000075000",
+        "cache_creation_tokens": 2,
+        "cache_read_cost": "0.0000009000",
+        "cache_read_tokens": 3,
+        "input_cost": "0.0000300000",
+        "input_tokens": 10,
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/bedrock_json",
+        "model": "claude-sonnet-4-5",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000600000",
+        "output_tokens": 4,
+        "rate_multiplier": "1.0000",
+        "request_type": "1",
+        "requested_model": "claude-sonnet-4-5",
+        "stream": false,
+        "total_cost": "0.0000984000",
+        "upstream_model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000990000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000075000",
+        "cache_creation_tokens": 2,
+        "cache_read_cost": "0.0000009000",
+        "cache_read_tokens": 3,
+        "input_cost": "0.0000300000",
+        "input_tokens": 10,
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/bedrock_sse",
+        "model": "claude-sonnet-4-5",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000600000",
+        "output_tokens": 4,
+        "rate_multiplier": "1.0000",
+        "request_type": "2",
+        "requested_model": "claude-sonnet-4-5",
+        "stream": true,
+        "total_cost": "0.0000984000",
+        "upstream_model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000710000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000000000",
+        "cache_creation_tokens": 0,
+        "cache_read_cost": "0.0000012000",
+        "cache_read_tokens": 4,
+        "input_cost": "0.0000240000",
+        "input_tokens": 8,
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/raw_cc_json",
+        "model": "k3",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000450000",
+        "output_tokens": 3,
+        "rate_multiplier": "1.0000",
+        "request_type": "1",
+        "requested_model": "k3",
+        "stream": false,
+        "total_cost": "0.0000702000"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000710000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000000000",
+        "cache_creation_tokens": 0,
+        "cache_read_cost": "0.0000012000",
+        "cache_read_tokens": 4,
+        "input_cost": "0.0000240000",
+        "input_tokens": 8,
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/raw_cc_sse",
+        "model": "k3",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000450000",
+        "output_tokens": 3,
+        "rate_multiplier": "1.0000",
+        "request_type": "2",
+        "requested_model": "k3",
+        "stream": true,
+        "total_cost": "0.0000702000"
+      }
+    ],
+    "users": [
+      {
+        "balance": "99.99888600",
+        "email": "settlement-admin@local.test",
+        "frozen_balance": "0.00000000"
+      }
+    ]
+  },
+  "new_url": "http://127.0.0.1:58082",
+  "old_snapshot": {
+    "accounts": [
+      {
+        "name": "settlement-anthropic_passthrough",
+        "platform": "anthropic",
+        "quota_limit": "50",
+        "quota_used": "0.000394",
+        "type": "apikey"
+      },
+      {
+        "name": "settlement-bedrock",
+        "platform": "anthropic",
+        "quota_limit": "50",
+        "quota_used": "0.000394",
+        "type": "bedrock"
+      },
+      {
+        "name": "settlement-kimi",
+        "platform": "kimi",
+        "type": "oauth"
+      }
+    ],
+    "api_keys": [
+      {
+        "name": "settlement-anthropic_passthrough",
+        "quota": "50.00000000",
+        "quota_used": "0.00019800",
+        "status": "active",
+        "usage_1d": "0.00000000",
+        "usage_5h": "0.00000000",
+        "usage_7d": "0.00000000"
+      },
+      {
+        "name": "settlement-bedrock",
+        "quota": "50.00000000",
+        "quota_used": "0.00019800",
+        "status": "active",
+        "usage_1d": "0.00000000",
+        "usage_5h": "0.00000000",
+        "usage_7d": "0.00000000"
+      },
+      {
+        "name": "settlement-kimi",
+        "quota": "50.00000000",
+        "quota_used": "0.00035500",
+        "status": "active",
+        "usage_1d": "0.00000000",
+        "usage_5h": "0.00000000",
+        "usage_7d": "0.00000000"
+      }
+    ],
+    "marker_prefix": "sub2api-dual-diff/settlement-short-path-6611d54deab1/",
+    "profit_contribution": {
+      "metered_cost": "0.00106800000000",
+      "profit": "-0.00053000000000",
+      "requests": 6,
+      "revenue": "0.0005380000"
+    },
+    "usage_logs": [
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000990000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000075000",
+        "cache_creation_tokens": 2,
+        "cache_read_cost": "0.0000009000",
+        "cache_read_tokens": 3,
+        "input_cost": "0.0000300000",
+        "input_tokens": 10,
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/anthropic_passthrough_json",
+        "model": "claude-sonnet-4-5",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000600000",
+        "output_tokens": 4,
+        "rate_multiplier": "1.0000",
+        "request_type": "1",
+        "requested_model": "claude-sonnet-4-5",
+        "stream": false,
+        "total_cost": "0.0000984000"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000990000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000075000",
+        "cache_creation_tokens": 2,
+        "cache_read_cost": "0.0000009000",
+        "cache_read_tokens": 3,
+        "input_cost": "0.0000300000",
+        "input_tokens": 10,
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/anthropic_passthrough_sse",
+        "model": "claude-sonnet-4-5",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000600000",
+        "output_tokens": 4,
+        "rate_multiplier": "1.0000",
+        "request_type": "2",
+        "requested_model": "claude-sonnet-4-5",
+        "stream": true,
+        "total_cost": "0.0000984000"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000990000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000075000",
+        "cache_creation_tokens": 2,
+        "cache_read_cost": "0.0000009000",
+        "cache_read_tokens": 3,
+        "input_cost": "0.0000300000",
+        "input_tokens": 10,
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/bedrock_json",
+        "model": "claude-sonnet-4-5",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000600000",
+        "output_tokens": 4,
+        "rate_multiplier": "1.0000",
+        "request_type": "1",
+        "requested_model": "claude-sonnet-4-5",
+        "stream": false,
+        "total_cost": "0.0000984000",
+        "upstream_model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000990000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000075000",
+        "cache_creation_tokens": 2,
+        "cache_read_cost": "0.0000009000",
+        "cache_read_tokens": 3,
+        "input_cost": "0.0000300000",
+        "input_tokens": 10,
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/bedrock_sse",
+        "model": "claude-sonnet-4-5",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000600000",
+        "output_tokens": 4,
+        "rate_multiplier": "1.0000",
+        "request_type": "2",
+        "requested_model": "claude-sonnet-4-5",
+        "stream": true,
+        "total_cost": "0.0000984000",
+        "upstream_model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000710000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000000000",
+        "cache_creation_tokens": 0,
+        "cache_read_cost": "0.0000012000",
+        "cache_read_tokens": 4,
+        "input_cost": "0.0000240000",
+        "input_tokens": 8,
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/raw_cc_json",
+        "model": "k3",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000450000",
+        "output_tokens": 3,
+        "rate_multiplier": "1.0000",
+        "request_type": "1",
+        "requested_model": "k3",
+        "stream": false,
+        "total_cost": "0.0000702000"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000710000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000000000",
+        "cache_creation_tokens": 0,
+        "cache_read_cost": "0.0000012000",
+        "cache_read_tokens": 4,
+        "input_cost": "0.0000240000",
+        "input_tokens": 8,
+        "marker": "sub2api-dual-diff/settlement-short-path-6611d54deab1/raw_cc_sse",
+        "model": "k3",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000450000",
+        "output_tokens": 3,
+        "rate_multiplier": "1.0000",
+        "request_type": "2",
+        "requested_model": "k3",
+        "stream": true,
+        "total_cost": "0.0000702000"
+      }
+    ],
+    "users": [
+      {
+        "balance": "99.99888600",
+        "email": "settlement-admin@local.test",
+        "frozen_balance": "0.00000000"
+      }
+    ]
+  },
+  "old_url": "http://127.0.0.1:58081",
+  "run_id": "settlement-short-path-6611d54deab1",
+  "summary": {
+    "all_passed": true,
+    "case_count": 6,
+    "new_usage_count": 6,
+    "old_usage_count": 6,
+    "snapshot_equal": true,
+    "transport_passed_count": 6
+  }
+}

@@ -2369,6 +2369,37 @@ func newOpenAITokenImageChannelPricingResolverForTest(t *testing.T, groupID int6
 	return NewModelPricingResolver(cs, NewBillingService(&config.Config{}, nil))
 }
 
+func calculateGatewayUsageCostForTest(
+	t *testing.T,
+	svc *GatewayService,
+	result *ForwardResult,
+	apiKey *APIKey,
+	billingModel string,
+	multiplier float64,
+	imageMultiplier float64,
+) *CostBreakdown {
+	t.Helper()
+	cost, err := calculateUsageBillingCost(context.Background(), usageBillingCostDeps{
+		BillingService: svc.billingService,
+		Resolver:       svc.resolver,
+	}, usageBillingCostRequest{
+		Platform:      usageBillingPlatformGateway,
+		APIKey:        apiKey,
+		BillingModels: []string{billingModel},
+		Tokens: UsageTokens{
+			InputTokens:       result.Usage.InputTokens,
+			OutputTokens:      result.Usage.OutputTokens,
+			ImageOutputTokens: result.Usage.ImageOutputTokens,
+		},
+		ImageCount:      result.ImageCount,
+		ImageSize:       result.ImageSize,
+		RateMultiplier:  multiplier,
+		ImageMultiplier: imageMultiplier,
+	})
+	require.NoError(t, err)
+	return cost
+}
+
 func TestGatewayServiceCalculateRecordUsageCost_ChannelImageBillingUsesImageCount(t *testing.T) {
 	groupID := int64(126)
 	billingService := NewBillingService(&config.Config{}, nil)
@@ -2377,14 +2408,13 @@ func TestGatewayServiceCalculateRecordUsageCost_ChannelImageBillingUsesImageCoun
 		resolver:       newOpenAIImageChannelPricingResolverForTest(t, groupID, "gemini-image", 0.25),
 	}
 
-	cost := svc.calculateRecordUsageCost(
-		context.Background(),
+	cost := calculateGatewayUsageCostForTest(
+		t, svc,
 		&ForwardResult{Model: "gemini-image", ImageCount: 2, ImageSize: "1K"},
 		&APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID}},
 		"gemini-image",
 		0.15,
 		1.0,
-		nil,
 	)
 
 	require.NotNil(t, cost)
@@ -2416,14 +2446,13 @@ func TestGatewayServiceCalculateRecordUsageCost_ChannelImageBillingUsesSizeTier(
 		resolver:       NewModelPricingResolver(channelService, NewBillingService(&config.Config{}, nil)),
 	}
 
-	cost := svc.calculateRecordUsageCost(
-		context.Background(),
+	cost := calculateGatewayUsageCostForTest(
+		t, svc,
 		&ForwardResult{Model: "gemini-image", ImageCount: 2, ImageSize: "4K"},
 		&APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID}},
 		"gemini-image",
 		1.0,
 		1.0,
-		nil,
 	)
 
 	require.NotNil(t, cost)
@@ -2479,14 +2508,13 @@ func TestGatewayServiceCalculateRecordUsageCost_ChannelImageBillingNormalizesMis
 		resolver:       NewModelPricingResolver(channelService, NewBillingService(&config.Config{}, nil)),
 	}
 
-	cost := svc.calculateRecordUsageCost(
-		context.Background(),
+	cost := calculateGatewayUsageCostForTest(
+		t, svc,
 		&ForwardResult{Model: "gemini-image", ImageCount: 2, ImageSize: ""},
 		&APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID}},
 		"gemini-image",
 		1.0,
 		1.0,
-		nil,
 	)
 
 	require.NotNil(t, cost)

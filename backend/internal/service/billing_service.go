@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	appbilling "github.com/Wei-Shaw/sub2api/internal/app/billing"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
@@ -64,29 +65,8 @@ func serviceTierCostMultiplier(serviceTier string) float64 {
 	}
 }
 
-// UsageTokens 使用的token数量
-type UsageTokens struct {
-	InputTokens           int
-	ImageInputTokens      int
-	OutputTokens          int
-	CacheCreationTokens   int
-	CacheReadTokens       int
-	CacheCreation5mTokens int
-	CacheCreation1hTokens int
-	ImageOutputTokens     int
-}
-
-// CostBreakdown 费用明细
-type CostBreakdown struct {
-	InputCost         float64
-	OutputCost        float64
-	ImageOutputCost   float64
-	CacheCreationCost float64
-	CacheReadCost     float64
-	TotalCost         float64
-	ActualCost        float64 // 应用倍率后的实际费用
-	BillingMode       string  // 计费模式（"token"/"per_request"/"image"），由 CalculateCostUnified 填充
-}
+type UsageTokens = appbilling.UsageTokens
+type CostBreakdown = appbilling.CostBreakdown
 
 // ErrModelPricingUnavailable indicates that none of the configured pricing
 // sources can price the requested model.
