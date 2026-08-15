@@ -17,9 +17,10 @@ func TestOpsRepositoryProviderStatusSnapshots(t *testing.T) {
 	_, err := integrationDB.ExecContext(ctx, "TRUNCATE provider_status_snapshots RESTART IDENTITY")
 	require.NoError(t, err)
 	repo := NewOpsRepository(integrationDB)
+	const sourceURL = "https://status.example.test/api/v2/summary.json"
 	now := time.Now().UTC().Truncate(time.Second)
 	first := &domain.ProviderStatusSnapshotRecord{
-		Provider: domain.ProviderStatusOpenAI, SourceURL: domain.OpenAIStatusSummaryURL,
+		Provider: domain.ProviderStatusOpenAI, SourceURL: sourceURL,
 		OverallIndicator: "none", OverallDescription: "Fully operational",
 		ComponentsJSON: json.RawMessage(`[]`), IncidentsJSON: json.RawMessage(`[]`),
 		FetchedAt: now, ContentHash: "hash-1",

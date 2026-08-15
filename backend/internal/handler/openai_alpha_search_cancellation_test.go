@@ -100,7 +100,6 @@ func TestOpenAIGatewayHandlerAlphaSearch_ContextCanceledDoesNotFailOverOrPenaliz
 		nil, // kimiTokenProvider
 		nil,
 		nil,
-		nil,
 		cfg,
 		nil,
 		nil,
@@ -108,6 +107,7 @@ func TestOpenAIGatewayHandlerAlphaSearch_ContextCanceledDoesNotFailOverOrPenaliz
 		nil,
 		nil,
 		upstream,
+		nil,
 		nil,
 		nil,
 		nil,

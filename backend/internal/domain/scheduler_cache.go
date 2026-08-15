@@ -7,6 +7,12 @@ import (
 	"strings"
 )
 
+const (
+	SchedulerModeSingle = "single"
+	SchedulerModeMixed  = "mixed"
+	SchedulerModeForced = "forced"
+)
+
 type SchedulerBucket struct {
 	GroupID  int64
 	Platform string

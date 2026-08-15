@@ -1310,7 +1310,7 @@ func newContractDeps(t *testing.T) *contractDeps {
 	settingRepo := newStubSettingRepo()
 	settingService := service.NewSettingService(settingRepo, cfg)
 
-	adminService := service.NewAdminService(userRepo, groupRepo, &accountRepo, proxyRepo, apiKeyRepo, redeemRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	adminService := service.NewAdminService(userRepo, groupRepo, &accountRepo, proxyRepo, apiKeyRepo, redeemRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	authHandler := handler.NewAuthHandler(cfg, nil, userService, settingService, nil, redeemService, nil, nil)
 	apiKeyHandler := handler.NewAPIKeyHandler(apiKeyService, nil)
 	usageHandler := handler.NewUsageHandler(usageService, apiKeyService, nil, nil)
@@ -1696,6 +1696,10 @@ func (s *stubAccountRepo) HardDelete(ctx context.Context, id int64) error {
 }
 
 func (s *stubAccountRepo) ReassignAccountReferences(ctx context.Context, fromID, toID int64) error {
+	return errors.New("not implemented")
+}
+
+func (s *stubAccountRepo) Restore(ctx context.Context, id int64) error {
 	return errors.New("not implemented")
 }
 
@@ -2642,6 +2646,18 @@ func (r *stubUsageLogRepo) GetStatsWithFilters(ctx context.Context, filters usag
 	}, nil
 }
 func (r *stubUsageLogRepo) GetAllGroupUsageSummary(ctx context.Context, todayStart time.Time) ([]usagestats.GroupUsageSummary, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) GetGroupTrafficAvailability(ctx context.Context, groupID int64, start, end time.Time, bucketSize time.Duration) (*service.GroupTrafficAvailability, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) GetGroupTrafficAvailabilityRollup(ctx context.Context, groupID int64, start, end time.Time) (*service.GroupTrafficAvailability, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) GetTrafficAvailability(ctx context.Context, start, end time.Time, bucketSize time.Duration, userID *int64, platform string) (*service.TrafficAvailability, error) {
 	return nil, errors.New("not implemented")
 }
 

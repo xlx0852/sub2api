@@ -16,6 +16,13 @@ const (
 )
 
 const (
+	BatchImageItemStatusPending   = "pending"
+	BatchImageItemStatusSuccess   = "success"
+	BatchImageItemStatusFailed    = "failed"
+	BatchImageItemStatusCancelled = "cancelled"
+)
+
+const (
 	BatchImageJobStatusCreated       = "created"
 	BatchImageJobStatusUploading     = "uploading"
 	BatchImageJobStatusSubmitted     = "submitted"

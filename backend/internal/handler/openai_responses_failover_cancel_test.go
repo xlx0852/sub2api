@@ -85,7 +85,6 @@ func newOpenAIResponsesFailoverTestHandler(t *testing.T, upstream service.HTTPUp
 		nil, // kimiTokenProvider
 		nil,
 		nil,
-		nil,
 		cfg,
 		nil,
 		nil,
@@ -93,6 +92,7 @@ func newOpenAIResponsesFailoverTestHandler(t *testing.T, upstream service.HTTPUp
 		nil,
 		nil,
 		upstream,
+		nil,
 		nil,
 		nil,
 		nil,

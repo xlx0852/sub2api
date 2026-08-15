@@ -4,11 +4,12 @@ package repository
 
 import (
 	"context"
-	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,7 +49,7 @@ func TestSchedulerSnapshotOutboxReplay(t *testing.T) {
 	require.NoError(t, accountRepo.Create(ctx, account))
 	require.NoError(t, cache.SetAccount(ctx, account))
 
-	svc := domain.NewSchedulerSnapshotService(cache, outboxRepo, accountRepo, nil, cfg)
+	svc := service.NewSchedulerSnapshotService(cache, outboxRepo, accountRepo, nil, cfg)
 	svc.Start()
 	t.Cleanup(svc.Stop)
 

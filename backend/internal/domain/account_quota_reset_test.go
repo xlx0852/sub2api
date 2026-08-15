@@ -1,6 +1,6 @@
 //go:build unit
 
-package service
+package domain
 
 import (
 	"testing"

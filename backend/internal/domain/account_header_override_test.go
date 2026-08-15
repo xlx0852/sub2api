@@ -1,6 +1,6 @@
 //go:build unit
 
-package service
+package domain
 
 import (
 	"net/http"
@@ -142,7 +142,7 @@ func TestGrokHeaderOverrideEligibleAndAppliesAfterDefaults(t *testing.T) {
 	require.Equal(t, "Bearer real", h.Get("Authorization"))
 	require.Equal(t, "relay-agent/1.0", h.Get("User-Agent"))
 	// Unknown headers are written with lowercase wire keys; use raw lookup.
-	require.Equal(t, "abc", getHeaderRaw(h, "x-relay-token"))
+	require.Equal(t, "abc", headerOverrideTestRaw(h, "x-relay-token"))
 	require.Equal(t, "per-request", h.Get("x-grok-conv-id"))
 }
 
@@ -171,7 +171,7 @@ func TestApplyHeaderOverrides(t *testing.T) {
 	require.Empty(t, h["Anthropic-Beta"])
 	// 新增头（未知头以小写原样键写入，与转发链路 wire casing 约定一致）
 	require.Equal(t, []string{"custom-value"}, h["x-custom"])
-	require.Equal(t, "custom-value", getHeaderRaw(h, "x-custom"))
+	require.Equal(t, "custom-value", headerOverrideTestRaw(h, "x-custom"))
 	// 未覆写的头不受影响
 	require.Equal(t, "application/json", h.Get("Content-Type"))
 
@@ -183,6 +183,13 @@ func TestApplyHeaderOverrides(t *testing.T) {
 		}
 	}
 	require.Equal(t, 1, count)
+}
+
+func headerOverrideTestRaw(h http.Header, key string) string {
+	if values := h[key]; len(values) > 0 {
+		return values[0]
+	}
+	return h.Get(key)
 }
 
 func TestApplyHeaderOverridesNoOpPaths(t *testing.T) {

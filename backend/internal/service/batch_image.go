@@ -4,14 +4,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
 
 const (
-	BatchImageItemStatusPending   = "pending"
-	BatchImageItemStatusSuccess   = "success"
-	BatchImageItemStatusFailed    = "failed"
-	BatchImageItemStatusCancelled = "cancelled"
+	BatchImageItemStatusPending   = domain.BatchImageItemStatusPending
+	BatchImageItemStatusSuccess   = domain.BatchImageItemStatusSuccess
+	BatchImageItemStatusFailed    = domain.BatchImageItemStatusFailed
+	BatchImageItemStatusCancelled = domain.BatchImageItemStatusCancelled
 )
 
 var (

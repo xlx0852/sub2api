@@ -1,12 +1,8 @@
 //go:build unit
 
-package service
+package domain
 
-import (
-	"testing"
-
-	"github.com/Wei-Shaw/sub2api/internal/domain"
-)
+import "testing"
 
 func TestMatchWildcard(t *testing.T) {
 	tests := []struct {
@@ -329,23 +325,23 @@ func TestAccountGetModelMapping_AntigravityNormalizesGemini31ProAliases(t *testi
 		Platform: PlatformAntigravity,
 		Credentials: map[string]any{
 			"model_mapping": map[string]any{
-				domain.AntigravityGemini31ProAgentModel: domain.AntigravityGemini31ProAgentModel,
-				"gemini-3.1-pro-high":                   "gemini-3.1-pro-high",
-				"gemini-3.1-pro-preview":                "gemini-3.1-pro-high",
+				AntigravityGemini31ProAgentModel: AntigravityGemini31ProAgentModel,
+				"gemini-3.1-pro-high":            "gemini-3.1-pro-high",
+				"gemini-3.1-pro-preview":         "gemini-3.1-pro-high",
 			},
 		},
 	}
 
 	mapping := account.GetModelMapping()
 
-	if got := mapping["gemini-3.1-pro"]; got != domain.AntigravityGemini31ProAgentModel {
-		t.Fatalf("expected gemini-3.1-pro to map to %q, got %q", domain.AntigravityGemini31ProAgentModel, got)
+	if got := mapping["gemini-3.1-pro"]; got != AntigravityGemini31ProAgentModel {
+		t.Fatalf("expected gemini-3.1-pro to map to %q, got %q", AntigravityGemini31ProAgentModel, got)
 	}
-	if got := mapping["gemini-3.1-pro-high"]; got != domain.AntigravityGemini31ProAgentModel {
-		t.Fatalf("expected gemini-3.1-pro-high to map to %q, got %q", domain.AntigravityGemini31ProAgentModel, got)
+	if got := mapping["gemini-3.1-pro-high"]; got != AntigravityGemini31ProAgentModel {
+		t.Fatalf("expected gemini-3.1-pro-high to map to %q, got %q", AntigravityGemini31ProAgentModel, got)
 	}
-	if got := mapping["gemini-3.1-pro-preview"]; got != domain.AntigravityGemini31ProAgentModel {
-		t.Fatalf("expected gemini-3.1-pro-preview to map to %q, got %q", domain.AntigravityGemini31ProAgentModel, got)
+	if got := mapping["gemini-3.1-pro-preview"]; got != AntigravityGemini31ProAgentModel {
+		t.Fatalf("expected gemini-3.1-pro-preview to map to %q, got %q", AntigravityGemini31ProAgentModel, got)
 	}
 }
 
@@ -356,9 +352,9 @@ func TestAccountGetModelMapping_AntigravityPreservesGemini31ProOverrides(t *test
 		Platform: PlatformAntigravity,
 		Credentials: map[string]any{
 			"model_mapping": map[string]any{
-				domain.AntigravityGemini31ProAgentModel: domain.AntigravityGemini31ProAgentModel,
-				"gemini-3.1-pro-high":                   "custom-high",
-				"gemini-3.1-pro-preview":                "custom-preview",
+				AntigravityGemini31ProAgentModel: AntigravityGemini31ProAgentModel,
+				"gemini-3.1-pro-high":            "custom-high",
+				"gemini-3.1-pro-preview":         "custom-preview",
 			},
 		},
 	}
@@ -371,8 +367,8 @@ func TestAccountGetModelMapping_AntigravityPreservesGemini31ProOverrides(t *test
 	if got := mapping["gemini-3.1-pro-preview"]; got != "custom-preview" {
 		t.Fatalf("expected gemini-3.1-pro-preview override to be preserved, got %q", got)
 	}
-	if got := mapping["gemini-3.1-pro"]; got != domain.AntigravityGemini31ProAgentModel {
-		t.Fatalf("expected gemini-3.1-pro alias to default to %q, got %q", domain.AntigravityGemini31ProAgentModel, got)
+	if got := mapping["gemini-3.1-pro"]; got != AntigravityGemini31ProAgentModel {
+		t.Fatalf("expected gemini-3.1-pro alias to default to %q, got %q", AntigravityGemini31ProAgentModel, got)
 	}
 }
 
@@ -383,8 +379,8 @@ func TestAccountGetModelMapping_AntigravityGemini31ProAliasesRespectWildcard(t *
 		Platform: PlatformAntigravity,
 		Credentials: map[string]any{
 			"model_mapping": map[string]any{
-				domain.AntigravityGemini31ProAgentModel: domain.AntigravityGemini31ProAgentModel,
-				"gemini-3.1-*":                          "custom-wildcard",
+				AntigravityGemini31ProAgentModel: AntigravityGemini31ProAgentModel,
+				"gemini-3.1-*":                   "custom-wildcard",
 			},
 		},
 	}
