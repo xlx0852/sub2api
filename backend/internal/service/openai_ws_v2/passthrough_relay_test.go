@@ -454,6 +454,39 @@ func TestRelay_OnTurnComplete_PerTerminalEvent(t *testing.T) {
 	require.Equal(t, 5, result.Usage.OutputTokens)
 }
 
+func TestRelay_OnUpstreamEventUsesPerTurnNumbersBeforeCompletion(t *testing.T) {
+	t.Parallel()
+
+	clientConn := newPassthroughTestFrameConn(nil, false)
+	upstreamConn := newPassthroughTestFrameConn([]passthroughTestFrame{
+		{msgType: coderws.MessageText, payload: []byte(`{"type":"response.created","response":{"id":"resp_turn_1"}}`)},
+		{msgType: coderws.MessageText, payload: []byte(`{"type":"response.completed","response":{"id":"resp_turn_1","usage":{"input_tokens":1,"output_tokens":1}}}`)},
+		{msgType: coderws.MessageText, payload: []byte(`{"type":"response.created","response":{"id":"resp_turn_2"}}`)},
+		{msgType: coderws.MessageText, payload: []byte(`{"type":"response.completed","response":{"id":"resp_turn_2","usage":{"input_tokens":2,"output_tokens":1}}}`)},
+	}, true)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	type observed struct {
+		turn       int
+		eventType  string
+		responseID string
+	}
+	events := make([]observed, 0, 4)
+	_, relayExit := Relay(ctx, clientConn, upstreamConn, []byte(`{"type":"response.create","model":"gpt-5.4"}`), RelayOptions{
+		OnUpstreamEvent: func(turn int, eventType, responseID string) {
+			events = append(events, observed{turn: turn, eventType: eventType, responseID: responseID})
+		},
+	})
+	require.Nil(t, relayExit)
+	require.Equal(t, []observed{
+		{turn: 1, eventType: "response.created", responseID: "resp_turn_1"},
+		{turn: 1, eventType: "response.completed", responseID: "resp_turn_1"},
+		{turn: 2, eventType: "response.created", responseID: "resp_turn_2"},
+		{turn: 2, eventType: "response.completed", responseID: "resp_turn_2"},
+	}, events)
+}
+
 func TestRelay_OnTurnComplete_ProvidesTurnMetrics(t *testing.T) {
 	t.Parallel()
 

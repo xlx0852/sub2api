@@ -1,0 +1,39 @@
+{
+  "environment": "japan-staging-main",
+  "database": {
+    "migration_197_applied": true,
+    "authoritative_settled_before": 12,
+    "historical_shadow_ready_before": 6
+  },
+  "old_pair": {
+    "api_image": "sub2api-staging:refactor-20260814",
+    "frontend_release": "/opt/sub2api-staging/releases/refactor-20260814/frontend",
+    "health_status": 200,
+    "login_page_status": 200,
+    "admin_login_status": 200,
+    "auth_me_status": 200,
+    "openai_json_status": 200,
+    "usage_delta": 1,
+    "dedup_delta": 1,
+    "actual_cost": "0.000660",
+    "balance_delta": "0.000660",
+    "api_key_quota_delta": "0.000660",
+    "journal_attempt_delta": 0,
+    "authoritative_settled_delta": 0,
+    "historical_shadow_ready_delta": 0,
+    "passed": true
+  },
+  "restored_pair": {
+    "api_image": "sub2api-staging:settlement-f926ae06c-v3",
+    "frontend_release": "/opt/sub2api-staging/releases/settlement-f926ae06c/frontend",
+    "mode": "off",
+    "health_status": 200,
+    "admin_login_status": 200,
+    "auth_me_status": 200,
+    "authoritative_settled": 12,
+    "historical_shadow_ready": 6,
+    "processing_or_retryable": 0,
+    "passed": true
+  },
+  "all_passed": true
+}

@@ -1,0 +1,229 @@
+{
+  "cases": [
+    {
+      "attempt_after_recovery": {
+        "billing_identity": "client:6f634841-5ae7-4463-bdb3-3598cb038190",
+        "id": 1,
+        "payload_hash": "90c760a56448335658830bb18ab8308889bf35bec6877a0cf4ce2dea091d5739",
+        "provider_request_id": "resp_fixture_openai",
+        "reconciliation_deadline": "2026-08-15T10:56:45.853943+08:00",
+        "retry_count": 0,
+        "state": "settled"
+      },
+      "attempt_before_recovery": {
+        "billing_identity": "client:6f634841-5ae7-4463-bdb3-3598cb038190",
+        "id": 1,
+        "provider_request_id": "resp_fixture_openai",
+        "reconciliation_deadline": "2026-08-16T10:56:46.811268+08:00",
+        "retry_count": 0,
+        "state": "started"
+      },
+      "billing_after": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0.000011"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00000000",
+          "status": "active"
+        },
+        "dedup_count": 1,
+        "usage_count": 1,
+        "user": {
+          "balance": "99.99999400",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "billing_before": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00000000",
+          "status": "active"
+        },
+        "dedup_count": 0,
+        "usage_count": 0,
+        "user": {
+          "balance": "100.00000000",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "checks": {
+        "exactly_one_billing_dedup": true,
+        "exactly_one_usage_log": true,
+        "recovered_attempt_settled": true,
+        "recovered_payload_persisted": true,
+        "request_reached_upstream": true,
+        "stored_response_id_persisted": true
+      },
+      "passed": true,
+      "platform": "openai",
+      "request": {
+        "content_type": "text/event-stream",
+        "error": "",
+        "event_count": 3,
+        "finished_at": "2026-08-15T02:56:46.816873+00:00",
+        "format": "sse",
+        "marker": "sub2api-dual-diff/settlement-stored-recovery-openai-5c96e58c0108/openai_sse",
+        "normalized_sha256": "1b607e1d01b35c47368967a103c6687349c3a81e81e9520adc6065c7ea4f4669",
+        "schema": [
+          "$[].content_index",
+          "$[].delta",
+          "$[].item_id",
+          "$[].output_index",
+          "$[].response.created_at",
+          "$[].response.error.code",
+          "$[].response.error.message",
+          "$[].response.id",
+          "$[].response.model",
+          "$[].response.object",
+          "$[].response.output[]",
+          "$[].response.status",
+          "$[].response.store",
+          "$[].response.usage",
+          "$[].sequence_number",
+          "$[].type"
+        ],
+        "semantic": {
+          "event_types": [
+            "response.created",
+            "response.failed",
+            "response.output_text.delta",
+            "response.status:failed",
+            "response.status:in_progress"
+          ],
+          "models": [
+            "gpt-4o-mini"
+          ],
+          "usage": null
+        },
+        "started_at": "2026-08-15T02:56:46.785195+00:00",
+        "status": 200
+      },
+      "run_id": "settlement-stored-recovery-openai-5c96e58c0108"
+    },
+    {
+      "attempt_after_recovery": {
+        "billing_identity": "client:53aaf0a6-33ee-41cb-94f5-ac559fdc5829",
+        "id": 3,
+        "payload_hash": "06e9ad6b98c37fab75096dba8712e8c5a946d23c5c15318abdcdc7f199a5fa7e",
+        "provider_request_id": "resp_fixture_grok",
+        "reconciliation_deadline": "2026-08-15T10:56:46.434163+08:00",
+        "retry_count": 0,
+        "state": "settled"
+      },
+      "attempt_before_recovery": {
+        "billing_identity": "client:53aaf0a6-33ee-41cb-94f5-ac559fdc5829",
+        "id": 3,
+        "provider_request_id": "resp_fixture_grok",
+        "reconciliation_deadline": "2026-08-16T10:56:47.40336+08:00",
+        "retry_count": 0,
+        "state": "started"
+      },
+      "billing_after": {
+        "account": {
+          "name": "settlement-grok",
+          "quota_limit": "50",
+          "quota_used": "0.000113"
+        },
+        "api_key": {
+          "name": "settlement-grok",
+          "quota_used": "0.00000000",
+          "status": "active"
+        },
+        "dedup_count": 2,
+        "usage_count": 1,
+        "user": {
+          "balance": "99.99993700",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "billing_before": {
+        "account": {
+          "name": "settlement-grok",
+          "quota_limit": "50",
+          "quota_used": "0"
+        },
+        "api_key": {
+          "name": "settlement-grok",
+          "quota_used": "0.00000000",
+          "status": "active"
+        },
+        "dedup_count": 1,
+        "usage_count": 0,
+        "user": {
+          "balance": "99.99999400",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "checks": {
+        "exactly_one_billing_dedup": true,
+        "exactly_one_usage_log": true,
+        "recovered_attempt_settled": true,
+        "recovered_payload_persisted": true,
+        "request_reached_upstream": true,
+        "stored_response_id_persisted": true
+      },
+      "passed": true,
+      "platform": "grok",
+      "request": {
+        "content_type": "text/event-stream",
+        "error": "",
+        "event_count": 3,
+        "finished_at": "2026-08-15T02:56:47.397220+00:00",
+        "format": "sse",
+        "marker": "sub2api-dual-diff/settlement-stored-recovery-grok-d37d471e4893/grok_sse",
+        "normalized_sha256": "7417b894d815e732a7140df3bb15a9474147630796cea0155824063ec91c5a42",
+        "schema": [
+          "$[].content_index",
+          "$[].delta",
+          "$[].item_id",
+          "$[].output_index",
+          "$[].response.created_at",
+          "$[].response.error.code",
+          "$[].response.error.message",
+          "$[].response.id",
+          "$[].response.model",
+          "$[].response.object",
+          "$[].response.output[]",
+          "$[].response.status",
+          "$[].response.store",
+          "$[].response.usage",
+          "$[].sequence_number",
+          "$[].type"
+        ],
+        "semantic": {
+          "event_types": [
+            "response.created",
+            "response.failed",
+            "response.output_text.delta",
+            "response.status:failed",
+            "response.status:in_progress"
+          ],
+          "models": [
+            "grok-4.5"
+          ],
+          "usage": null
+        },
+        "started_at": "2026-08-15T02:56:47.356443+00:00",
+        "status": 200
+      },
+      "run_id": "settlement-stored-recovery-grok-d37d471e4893"
+    }
+  ],
+  "summary": {
+    "all_passed": true,
+    "case_count": 2,
+    "passed_count": 2
+  }
+}

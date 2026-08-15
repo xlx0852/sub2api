@@ -236,7 +236,16 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		if channelMapping.Mapped {
 			forwardBody = h.gatewayService.ReplaceModelInBody(body, channelMapping.MappedModel)
 		}
-		result, err := h.gatewayService.ForwardAsResponses(requestCtx, c, account, forwardBody, parsedReq)
+		attemptCtx := h.gatewayService.WithUsageSettlementAttempt(requestCtx, service.UsageSettlementStartInput{
+			RequestPayloadHash: service.HashUsageRequestPayload(body),
+			APIKey:             apiKey,
+			User:               apiKey.User,
+			Account:            account,
+			RequestType:        service.RequestTypeFromLegacy(reqStream, false),
+			InboundEndpoint:    GetInboundEndpoint(c),
+			UpstreamEndpoint:   GetUpstreamEndpoint(c, account.Platform),
+		})
+		result, err := h.gatewayService.ForwardAsResponses(attemptCtx, c, account, forwardBody, parsedReq)
 
 		if accountReleaseFunc != nil {
 			accountReleaseFunc()
@@ -283,7 +292,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
 
 		quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
-		h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
+		h.submitUsageRecordTask(usageSettlementTaskContext(c), func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 				Result:             result,
 				QuotaPlatform:      quotaPlatform,

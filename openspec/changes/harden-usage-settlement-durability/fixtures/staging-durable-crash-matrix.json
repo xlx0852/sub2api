@@ -1,0 +1,61 @@
+{
+  "environment": "japan-staging-isolated-new-clone",
+  "main_staging_touched": false,
+  "selected_group_id": 3,
+  "stages": [
+    {
+      "stage": "terminal_parsed",
+      "state_at_crash": "ready",
+      "usage_at_crash": 0,
+      "state_after_restart": "settled",
+      "usage_count": 1,
+      "dedup_count": 1,
+      "actual_cost": "0.0006600000",
+      "balance_delta": "0.00066000",
+      "api_key_quota_delta": "0.00066000",
+      "passed": true
+    },
+    {
+      "stage": "event_persisted",
+      "state_at_crash": "ready",
+      "usage_at_crash": 0,
+      "state_after_restart": "settled",
+      "usage_count": 1,
+      "dedup_count": 1,
+      "actual_cost": "0.0006600000",
+      "balance_delta": "0.00066000",
+      "api_key_quota_delta": "0.00066000",
+      "passed": true,
+      "note": "A preliminary 1-second marker poll allowed the worker to settle before SIGKILL and was excluded; this result is the immediate marker-monitor rerun."
+    },
+    {
+      "stage": "billing_before_commit",
+      "state_at_crash": "processing",
+      "usage_at_crash": 0,
+      "state_after_restart": "settled",
+      "usage_count": 1,
+      "dedup_count": 1,
+      "actual_cost": "0.0006600000",
+      "balance_delta": "0.00066000",
+      "api_key_quota_delta": "0.00066000",
+      "passed": true
+    },
+    {
+      "stage": "commit_before_ack",
+      "state_at_crash": "settled",
+      "usage_at_crash": 1,
+      "state_after_restart": "settled",
+      "usage_count": 1,
+      "dedup_count": 1,
+      "actual_cost": "0.0003430000",
+      "balance_delta": "0.00034300",
+      "api_key_quota_delta": "0.00034300",
+      "passed": true
+    }
+  ],
+  "summary": {
+    "stage_count": 4,
+    "passed_count": 4,
+    "all_passed": true
+  }
+}

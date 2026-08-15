@@ -34,6 +34,7 @@ func provideCleanup(
 	emailQueue *service.EmailQueueService,
 	billingCache *service.BillingCacheService,
 	usageRecordWorkerPool *service.UsageRecordWorkerPool,
+	usageSettlementBindings *usageSettlementBindings,
 	subscriptionService *service.SubscriptionService,
 	oauth *service.OAuthService,
 	openaiOAuth *service.OpenAIOAuthService,
@@ -179,6 +180,14 @@ func provideCleanup(
 					usageRecordWorkerPool.Stop()
 				}
 				return nil
+			}},
+			{"DurableSettlement", func() error {
+				if usageSettlementBindings == nil || usageSettlementBindings.worker == nil {
+					return nil
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				return usageSettlementBindings.worker.StopAndWait(ctx)
 			}},
 			{"OAuthService", func() error {
 				oauth.Stop()

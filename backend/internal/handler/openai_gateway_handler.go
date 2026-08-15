@@ -9,9 +9,11 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -89,7 +91,7 @@ func (h *OpenAIGatewayHandler) recordOpenAICompactSoftTimeoutUsage(
 	upstreamEndpoint := resolveOpenAIUpstreamEndpoint(c, account, result)
 	quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 	user := apiKey.User
-	h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
+	h.submitOpenAIUsageRecordTask(usageSettlementTaskContext(c), result, func(ctx context.Context) {
 		if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 			Result:             result,
 			APIKey:             apiKey,
@@ -546,6 +548,32 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			if admissionErr := h.gatewayService.ValidatePricingAdmission(forwardCtx, apiKey.GroupID, channelMapping.BillingModelSource, reqModel, mappedModel, account.GetMappedModel(mappedModel)); admissionErr != nil {
 				return nil, admissionErr
 			}
+			requestType := service.RequestTypeSync
+			if reqStream {
+				requestType = service.RequestTypeStream
+			}
+			var recoveryContext *domain.UsageSettlementRecoveryContextV1
+			if account.Type == service.AccountTypeAPIKey && (account.Platform == service.PlatformOpenAI || account.Platform == service.PlatformGrok) {
+				recoveryContext = service.NewOpenAIUsageSettlementRecoveryContext(
+					body,
+					reqModel,
+					mappedModel,
+					channelMapping.ToUsageFields(reqModel, mappedModel),
+					c.GetHeader("User-Agent"),
+					ip.GetClientIP(c),
+					service.QuotaPlatform(c.Request.Context(), apiKey),
+				)
+			}
+			forwardCtx = h.gatewayService.WithUsageSettlementAttempt(forwardCtx, service.UsageSettlementStartInput{
+				RequestPayloadHash: service.HashUsageRequestPayload(body),
+				APIKey:             apiKey,
+				User:               apiKey.User,
+				Account:            account,
+				RequestType:        requestType,
+				InboundEndpoint:    GetInboundEndpoint(c),
+				UpstreamEndpoint:   GetUpstreamEndpoint(c, account.Platform),
+				RecoveryContext:    recoveryContext,
+			})
 			return h.gatewayService.Forward(forwardCtx, c, account, forwardBody)
 		}()
 		if service.IsOpenAICompactV2SSEStarted(c) {
@@ -774,7 +802,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 
 		// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
 		cyberBlocked := service.GetOpsCyberPolicy(c) != nil
-		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
+		h.submitOpenAIUsageRecordTask(usageSettlementTaskContext(c), result, func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 				Result:             result,
 				APIKey:             apiKey,
@@ -1179,10 +1207,24 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			if channelMappingMsg.Mapped {
 				mappedModel = channelMappingMsg.MappedModel
 			}
-			if admissionErr := h.gatewayService.ValidatePricingAdmission(c.Request.Context(), apiKey.GroupID, channelMappingMsg.BillingModelSource, reqModel, mappedModel, account.GetMappedModel(mappedModel)); admissionErr != nil {
+			forwardCtx := c.Request.Context()
+			if admissionErr := h.gatewayService.ValidatePricingAdmission(forwardCtx, apiKey.GroupID, channelMappingMsg.BillingModelSource, reqModel, mappedModel, account.GetMappedModel(mappedModel)); admissionErr != nil {
 				return nil, admissionErr
 			}
-			return h.gatewayService.ForwardAsAnthropic(c.Request.Context(), c, account, forwardBody, promptCacheKey, defaultMappedModel)
+			requestType := service.RequestTypeSync
+			if reqStream {
+				requestType = service.RequestTypeStream
+			}
+			forwardCtx = h.gatewayService.WithUsageSettlementAttempt(forwardCtx, service.UsageSettlementStartInput{
+				RequestPayloadHash: service.HashUsageRequestPayload(body),
+				APIKey:             apiKey,
+				User:               apiKey.User,
+				Account:            account,
+				RequestType:        requestType,
+				InboundEndpoint:    GetInboundEndpoint(c),
+				UpstreamEndpoint:   GetUpstreamEndpoint(c, account.Platform),
+			})
+			return h.gatewayService.ForwardAsAnthropic(forwardCtx, c, account, forwardBody, promptCacheKey, defaultMappedModel)
 		}()
 		cyberBlockKeyMsg := ""
 		if service.GetOpsCyberPolicy(c) != nil {
@@ -1294,7 +1336,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		h.auditOpenAIModelMismatch(c, apiKey, account, result, reqModel, inboundEndpoint, upstreamEndpoint)
 
 		cyberBlocked := service.GetOpsCyberPolicy(c) != nil
-		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
+		h.submitOpenAIUsageRecordTask(usageSettlementTaskContext(c), result, func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 				Result:             result,
 				APIKey:             apiKey,
@@ -1915,6 +1957,21 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		)
 
 		var requestPayloadHash string
+		var turnPayloadHashMu sync.Mutex
+		turnPayloadHashes := make(map[int]string)
+		setTurnPayloadHash := func(turn int, hash string) {
+			turnPayloadHashMu.Lock()
+			turnPayloadHashes[turn] = hash
+			turnPayloadHashMu.Unlock()
+		}
+		getTurnPayloadHash := func(turn int) string {
+			turnPayloadHashMu.Lock()
+			defer turnPayloadHashMu.Unlock()
+			if hash := turnPayloadHashes[turn]; hash != "" {
+				return hash
+			}
+			return requestPayloadHash
+		}
 		hooks := &service.OpenAIWSIngressHooks{
 			InitialRequestModel: reqModel,
 			BeforeRequest: func(turn int, payload []byte, originalModel string) error {
@@ -1935,7 +1992,27 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					writeContentModerationWSError(ctx, wsConn, decision)
 					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, decision.Message, nil)
 				}
+				setTurnPayloadHash(turn, service.HashUsageRequestPayload(payload))
 				return nil
+			},
+			UpstreamAccepted: func(turn int, billingRequestID, providerRequestID string) {
+				if startErr := h.gatewayService.StartUsageSettlementAttempt(ctx, service.UsageSettlementStartInput{
+					BillingIdentity:    "local:" + billingRequestID,
+					RequestPayloadHash: getTurnPayloadHash(turn),
+					APIKey:             apiKey,
+					User:               apiKey.User,
+					Account:            account,
+					RequestType:        service.RequestTypeWSV2,
+					InboundEndpoint:    GetInboundEndpoint(c),
+					UpstreamEndpoint:   GetUpstreamEndpoint(c, account.Platform),
+					ProviderRequestID:  providerRequestID,
+				}); startErr != nil {
+					reqLog.Error("openai.websocket_usage_settlement_start_failed",
+						zap.Int("turn", turn),
+						zap.Int64("account_id", account.ID),
+						zap.Error(startErr),
+					)
+				}
 			},
 			BeforeTurn: func(turn int) error {
 				// turn==1 的会话屏蔽已由握手层检查覆盖；连接内 flag 只拦截后续 turn。
@@ -1985,7 +2062,8 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				// 届时 defer 已清除标记）。
 				defer clearCyberPolicyTurnState(c)
 				releaseTurnSlots()
-				h.recordCyberPolicyIfMarked(c, apiKey, account, subscription, reqModel, turnErr != nil, cyberBlockKey, channelMappingWS.ToUsageFields(reqModel, ""), requestPayloadHash)
+				turnPayloadHash := getTurnPayloadHash(turn)
+				h.recordCyberPolicyIfMarked(c, apiKey, account, subscription, reqModel, turnErr != nil, cyberBlockKey, channelMappingWS.ToUsageFields(reqModel, ""), turnPayloadHash)
 				if service.GetOpsCyberPolicy(c) != nil {
 					cyberBlockedThisConn = true
 				}
@@ -2018,7 +2096,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				// 上游响应模型审计：比对上游回显模型与网关配置的上游模型，不一致即记录（不拦截）。
 				h.auditOpenAIModelMismatch(c, apiKey, account, result, reqModel, inboundEndpoint, upstreamEndpoint)
 				cyberBlocked := service.GetOpsCyberPolicy(c) != nil
-				h.submitOpenAIUsageRecordTask(ctx, result, func(taskCtx context.Context) {
+				h.submitOpenAIUsageRecordTask(service.WithUsageSettlementGroupID(ctx, apiKey.GroupID), result, func(taskCtx context.Context) {
 					if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{
 						Result:             result,
 						APIKey:             apiKey,
@@ -2029,7 +2107,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 						UpstreamEndpoint:   upstreamEndpoint,
 						UserAgent:          userAgent,
 						IPAddress:          clientIP,
-						RequestPayloadHash: requestPayloadHash,
+						RequestPayloadHash: turnPayloadHash,
 						APIKeyService:      h.apiKeyService,
 						QuotaPlatform:      quotaPlatform,
 						ChannelUsageFields: channelMappingWS.ToUsageFields(reqModel, result.UpstreamModel),
@@ -2064,6 +2142,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 
 		// WebSocket 首包可能很大，hash 必须在 hooks 外算成字符串，避免 AfterTurn 闭包保活请求体。
 		requestPayloadHash = service.HashUsageRequestPayload(wsFirstMessage)
+		setTurnPayloadHash(1, requestPayloadHash)
 		mappedModel := reqModel
 		if channelMappingWS.Mapped {
 			mappedModel = channelMappingWS.MappedModel
@@ -2251,6 +2330,20 @@ func (h *OpenAIGatewayHandler) submitUsageRecordTask(parent context.Context, tas
 		return
 	}
 	task = wrapUsageRecordTaskContext(parent, task)
+	if h.gatewayService != nil && h.gatewayService.UsageSettlementEnabledFor(service.UsageSettlementGroupIDFromContext(parent)) {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				logger.L().With(
+					zap.String("component", "handler.openai_gateway.responses"),
+					zap.Any("panic", recovered),
+				).Error("openai.durable_usage_handoff_panic_recovered")
+			}
+		}()
+		task(ctx)
+		return
+	}
 	if h.usageRecordWorkerPool != nil {
 		h.usageRecordWorkerPool.Submit(task)
 		return
@@ -2279,6 +2372,10 @@ func (h *OpenAIGatewayHandler) submitOpenAIUsageRecordTask(parent context.Contex
 
 func (h *OpenAIGatewayHandler) submitMandatoryUsageRecordTask(parent context.Context, task service.UsageRecordTask) {
 	if task == nil {
+		return
+	}
+	if h.gatewayService != nil && h.gatewayService.UsageSettlementEnabledFor(service.UsageSettlementGroupIDFromContext(parent)) {
+		h.submitUsageRecordTask(parent, task)
 		return
 	}
 	task = wrapUsageRecordTaskContext(parent, task)

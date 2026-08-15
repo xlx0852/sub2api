@@ -35,6 +35,32 @@ Provider-specific protocol work stays in explicit adapters (Claude, OpenAI/Codex
 
 Wire + `app/lifecycle.Registry` own start/stop. `cmd/server/cleanup.go` is generated from the registry.
 
+## Durable usage settlement (rollout gated)
+
+Terminal usage can be handed off through the additive PostgreSQL table `usage_settlement_attempts`. The durable path does not replace either provider-specific cost calculator: it persists their existing scalar billing command and usage-log snapshot, then commits billing deduplication, balance/quota effects, the usage log, and the terminal `settled` state in one transaction.
+
+`started` → `ready` → `processing` → `settled`
+
+Alternative terminal states are `failed_retryable`, `failed_terminal`, and `reconciliation_required`. A processing lease is reclaimable after expiry; Redis and the in-process queue are wake-up accelerators only. Post-commit cache refreshes and notifications are intentionally outside the accounting transaction and are rebuildable from PostgreSQL.
+
+The startup setting `usage_settlement_durability_mode` has three values:
+
+| Mode | Journal writes | Durable claims | Billing authority |
+|------|----------------|----------------|-------------------|
+| `off` (default) | No | No | Existing non-durable path |
+| `shadow` | Yes | No | Existing path; journal is comparison evidence only |
+| `authoritative` | Yes | Yes | PostgreSQL durable worker |
+
+For `shadow` or `authoritative`, the second database setting `usage_settlement_durability_group_ids` is mandatory. It accepts a JSON array of positive group IDs; explicit `*` is reserved for isolated whole-instance testing. The same scope controls handler handoff, journal writes, legacy-path suppression, and PostgreSQL claims. Unselected groups create no journal row and retain the existing worker-pool billing path. Missing, unreadable, empty, malformed, or non-positive active scope fails closed to `off`.
+
+Each attempt also records immutable claim eligibility at creation. Shadow and pre-migration rows have `authoritative=false` and remain comparison evidence forever; switching the same group to authoritative does not upgrade or claim them. Only attempts created while that group is authoritative have `authoritative=true` and can be claimed. Group scope is an additional filter, not a replacement for this per-attempt guard.
+
+Both settings are read once when an instance starts. They are not YAML/env keys and do not change the default deployment. Production rollout should start with one low-risk test group; `*` must not be used as a production canary shortcut.
+
+The default reconciliation window is 24 hours. Exact pre-terminal recovery is conditional: only official OpenAI API-key and xAI API-key stored Responses with `store=true` can be retrieved by response ID. `store=false`, OAuth/Codex, Chat Completions, Anthropic, Gemini, Antigravity, Kimi, and other unsupported paths become `reconciliation_required`; partial or zero usage is never guessed. Journal payloads contain versioned billing/audit scalars and hashes, never prompts, response bodies, or credentials.
+
+There is no Prometheus/OTel or public settlement endpoint. Existing structured logs emit backlog counts, oldest pending age, retry/failure totals, reconciliation totals, and provider-recovery totals once per minute. Operational procedures are in `docs/USAGE_SETTLEMENT_OPERATIONS.md`.
+
 ## Frontend / API contract
 
 | Surface | Contract |
@@ -75,3 +101,4 @@ Version skew: if the console build (`__APP_VERSION__` from `backend/cmd/server/V
 - Control-plane spec: `openapi/README.md`
 - Separated proxy: `deploy/nginx/README.md`
 - Compose overlay: `deploy/docker-compose.separated.yml`
+- Durable settlement operations: `docs/USAGE_SETTLEMENT_OPERATIONS.md`

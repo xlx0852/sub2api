@@ -355,6 +355,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	flushedBufferedEventCount := 0
 	firstEventType := ""
 	lastEventType := ""
+	settlementAccepted := false
 
 	var flusher http.Flusher
 	if reqStream {
@@ -478,6 +479,10 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 
 		if responseID == "" && eventResponseID != "" {
 			responseID = eventResponseID
+		}
+		if eventType != "error" && !settlementAccepted {
+			settlementAccepted = true
+			notifyUsageSettlementUpstreamAccepted(ctx)
 		}
 
 		isTokenEvent := isOpenAIWSTokenEvent(eventType)

@@ -93,6 +93,21 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 	requireColumn(t, tx, "usage_billing_dedup_archive", "request_fingerprint", "character varying", 64, false)
 	requireIndex(t, tx, "usage_billing_dedup_archive", "usage_billing_dedup_archive_pkey")
 
+	// usage_settlement_attempts: durable terminal-usage handoff and claim lease.
+	var usageSettlementAttemptsRegclass sql.NullString
+	require.NoError(t, tx.QueryRowContext(context.Background(), "SELECT to_regclass('public.usage_settlement_attempts')").Scan(&usageSettlementAttemptsRegclass))
+	require.True(t, usageSettlementAttemptsRegclass.Valid, "expected usage_settlement_attempts table to exist")
+	requireColumn(t, tx, "usage_settlement_attempts", "billing_identity", "character varying", 255, false)
+	requireColumn(t, tx, "usage_settlement_attempts", "request_fingerprint", "character varying", 64, false)
+	requireColumn(t, tx, "usage_settlement_attempts", "state", "character varying", 32, false)
+	requireColumn(t, tx, "usage_settlement_attempts", "payload", "jsonb", 0, true)
+	requireColumn(t, tx, "usage_settlement_attempts", "lease_expires_at", "timestamp with time zone", 0, true)
+	requireColumn(t, tx, "usage_settlement_attempts", "authoritative", "boolean", 0, false)
+	requireIndex(t, tx, "usage_settlement_attempts", "idx_usage_settlement_attempts_identity_api_key")
+	requireIndex(t, tx, "usage_settlement_attempts", "idx_usage_settlement_attempts_claim")
+	requireIndex(t, tx, "usage_settlement_attempts", "idx_usage_settlement_attempts_authoritative_claim")
+	requireIndex(t, tx, "usage_settlement_attempts", "idx_usage_settlement_attempts_reconciliation")
+
 	// settings table should exist
 	var settingsRegclass sql.NullString
 	require.NoError(t, tx.QueryRowContext(context.Background(), "SELECT to_regclass('public.settings')").Scan(&settingsRegclass))

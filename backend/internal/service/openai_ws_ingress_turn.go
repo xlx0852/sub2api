@@ -78,8 +78,16 @@ func (sess *openAIWSIngressSession) runHTTPBridgeTurns(firstPayload openAIWSClie
 				openAIWSRawPayloadHasToolCallOutput(currentBridgePayload.payloadRaw),
 			)
 		}
+		billingRequestID := "ws-turn:" + generateRequestID()
+		bridgeCtx := ctx
+		if hooks != nil && hooks.UpstreamAccepted != nil {
+			bridgeCtx = context.WithValue(ctx, usageSettlementAcceptedCallbackKey{}, &usageSettlementAcceptedCallback{fn: func() error {
+				hooks.UpstreamAccepted(turn, billingRequestID, "")
+				return nil
+			}})
+		}
 		result, bridgeErr := s.proxyOpenAIWSHTTPBridgeTurn(
-			ctx,
+			bridgeCtx,
 			c,
 			account,
 			token,
@@ -92,6 +100,9 @@ func (sess *openAIWSIngressSession) runHTTPBridgeTurns(firstPayload openAIWSClie
 			turn,
 			sess.writeClientMessage,
 		)
+		if result != nil {
+			result.BillingRequestID = billingRequestID
+		}
 		if hooks != nil && hooks.AfterTurn != nil {
 			hooks.AfterTurn(turn, result, bridgeErr)
 		}

@@ -1,0 +1,888 @@
+{
+  "base_url": "http://127.0.0.1:58082",
+  "cases": [
+    {
+      "name": "anthropic_json",
+      "platform": "anthropic",
+      "result": {
+        "content_type": "application/json",
+        "error": "",
+        "event_count": 1,
+        "finished_at": "2026-08-14T19:01:57.289296+00:00",
+        "format": "json",
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/anthropic_json",
+        "normalized_sha256": "401ac15b68192257aa0c96628222db13166bc21d3c71685f029e31f0e4582792",
+        "schema": [
+          "$.content[].text",
+          "$.content[].type",
+          "$.id",
+          "$.model",
+          "$.role",
+          "$.stop_reason",
+          "$.stop_sequence",
+          "$.type",
+          "$.usage.cache_creation_input_tokens",
+          "$.usage.cache_read_input_tokens",
+          "$.usage.input_tokens",
+          "$.usage.output_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "message"
+          ],
+          "models": [
+            "deepseek-v4-flash"
+          ],
+          "usage": {
+            "cache_creation_tokens": 2,
+            "cache_read_tokens": 3,
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "reasoning_tokens": null,
+            "total_tokens": null
+          }
+        },
+        "started_at": "2026-08-14T19:01:57.240637+00:00",
+        "status": 200
+      }
+    },
+    {
+      "name": "anthropic_sse",
+      "platform": "anthropic",
+      "result": {
+        "content_type": "text/event-stream",
+        "error": "",
+        "event_count": 4,
+        "finished_at": "2026-08-14T19:01:57.305067+00:00",
+        "format": "sse",
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/anthropic_sse",
+        "normalized_sha256": "77993f289ee1eb7df5ef99168a8f6b3796067d959ebf2f9331deeb449c037862",
+        "schema": [
+          "$[].delta.stop_reason",
+          "$[].delta.text",
+          "$[].delta.type",
+          "$[].index",
+          "$[].message.content[]",
+          "$[].message.id",
+          "$[].message.model",
+          "$[].message.role",
+          "$[].message.stop_reason",
+          "$[].message.stop_sequence",
+          "$[].message.type",
+          "$[].message.usage.cache_creation_input_tokens",
+          "$[].message.usage.cache_read_input_tokens",
+          "$[].message.usage.input_tokens",
+          "$[].message.usage.output_tokens",
+          "$[].type",
+          "$[].usage.cache_creation_input_tokens",
+          "$[].usage.cache_read_input_tokens",
+          "$[].usage.input_tokens",
+          "$[].usage.output_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "content_block_delta",
+            "message_delta",
+            "message_start",
+            "message_stop"
+          ],
+          "models": [],
+          "usage": {
+            "cache_creation_tokens": 2,
+            "cache_read_tokens": 3,
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "reasoning_tokens": null,
+            "total_tokens": null
+          }
+        },
+        "started_at": "2026-08-14T19:01:57.289446+00:00",
+        "status": 200
+      }
+    },
+    {
+      "name": "openai_json",
+      "platform": "openai",
+      "result": {
+        "content_type": "application/json",
+        "error": "",
+        "event_count": 1,
+        "finished_at": "2026-08-14T19:01:57.332223+00:00",
+        "format": "json",
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/openai_json",
+        "normalized_sha256": "5dc3fed1bfddc6cae04cca76407e8375603f24a0a1a36fee708ef38fd0d56f4a",
+        "schema": [
+          "$.id",
+          "$.model",
+          "$.object",
+          "$.output[].content[].text",
+          "$.output[].content[].type",
+          "$.output[].id",
+          "$.output[].role",
+          "$.output[].status",
+          "$.output[].type",
+          "$.status",
+          "$.usage.input_tokens",
+          "$.usage.input_tokens_details.cached_tokens",
+          "$.usage.output_tokens",
+          "$.usage.total_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "response"
+          ],
+          "models": [
+            "gpt-4o-mini"
+          ],
+          "usage": {
+            "cache_creation_tokens": null,
+            "cache_read_tokens": 4,
+            "input_tokens": 12,
+            "output_tokens": 3,
+            "reasoning_tokens": null,
+            "total_tokens": 15
+          }
+        },
+        "started_at": "2026-08-14T19:01:57.305462+00:00",
+        "status": 200
+      }
+    },
+    {
+      "name": "openai_sse",
+      "platform": "openai",
+      "result": {
+        "content_type": "text/event-stream",
+        "error": "",
+        "event_count": 8,
+        "finished_at": "2026-08-14T19:01:57.348772+00:00",
+        "format": "sse",
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/openai_sse",
+        "normalized_sha256": "efd85a55fd350db24028854a5738776c36d244b722a36805f5aa6d6d2ce7429b",
+        "schema": [
+          "$[].content_index",
+          "$[].delta",
+          "$[].item.content[].text",
+          "$[].item.content[].type",
+          "$[].item.id",
+          "$[].item.role",
+          "$[].item.status",
+          "$[].item.type",
+          "$[].item_id",
+          "$[].output_index",
+          "$[].part.annotations[]",
+          "$[].part.logprobs[]",
+          "$[].part.text",
+          "$[].part.type",
+          "$[].response.id",
+          "$[].response.model",
+          "$[].response.object",
+          "$[].response.output[]",
+          "$[].response.output[].content[].text",
+          "$[].response.output[].content[].type",
+          "$[].response.output[].id",
+          "$[].response.output[].role",
+          "$[].response.output[].status",
+          "$[].response.output[].type",
+          "$[].response.status",
+          "$[].response.usage.input_tokens",
+          "$[].response.usage.input_tokens_details.cached_tokens",
+          "$[].response.usage.output_tokens",
+          "$[].response.usage.total_tokens",
+          "$[].sequence_number",
+          "$[].text",
+          "$[].type"
+        ],
+        "semantic": {
+          "event_types": [
+            "response.completed",
+            "response.content_part.added",
+            "response.content_part.done",
+            "response.created",
+            "response.output_item.added",
+            "response.output_item.done",
+            "response.output_text.delta",
+            "response.output_text.done",
+            "response.status:completed",
+            "response.status:in_progress"
+          ],
+          "models": [
+            "gpt-4o-mini"
+          ],
+          "usage": {
+            "cache_creation_tokens": null,
+            "cache_read_tokens": 4,
+            "input_tokens": 12,
+            "output_tokens": 3,
+            "reasoning_tokens": null,
+            "total_tokens": 15
+          }
+        },
+        "started_at": "2026-08-14T19:01:57.332334+00:00",
+        "status": 200
+      }
+    },
+    {
+      "name": "antigravity_json",
+      "platform": "antigravity",
+      "result": {
+        "content_type": "application/json",
+        "error": "",
+        "event_count": 1,
+        "finished_at": "2026-08-14T19:01:57.373199+00:00",
+        "format": "json",
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/antigravity_json",
+        "normalized_sha256": "5081b20835f42c49b41b3da388ab73c93c1bf99538b2f5ffd3080ef596aa729d",
+        "schema": [
+          "$.content[].text",
+          "$.content[].type",
+          "$.id",
+          "$.model",
+          "$.role",
+          "$.stop_reason",
+          "$.stop_sequence",
+          "$.type",
+          "$.usage.cache_creation_input_tokens",
+          "$.usage.cache_read_input_tokens",
+          "$.usage.input_tokens",
+          "$.usage.output_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "message"
+          ],
+          "models": [
+            "gemini-2.5-pro"
+          ],
+          "usage": {
+            "cache_creation_tokens": 2,
+            "cache_read_tokens": 3,
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "reasoning_tokens": null,
+            "total_tokens": null
+          }
+        },
+        "started_at": "2026-08-14T19:01:57.349044+00:00",
+        "status": 200
+      }
+    },
+    {
+      "name": "antigravity_sse",
+      "platform": "antigravity",
+      "result": {
+        "content_type": "text/event-stream",
+        "error": "",
+        "event_count": 4,
+        "finished_at": "2026-08-14T19:01:57.385123+00:00",
+        "format": "sse",
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/antigravity_sse",
+        "normalized_sha256": "309817d16e231a3cfeed97e0183b1a26d0ab26fa99b02642e5c1a386db1a5fc1",
+        "schema": [
+          "$[].delta.stop_reason",
+          "$[].delta.text",
+          "$[].delta.type",
+          "$[].index",
+          "$[].message.content[]",
+          "$[].message.id",
+          "$[].message.model",
+          "$[].message.role",
+          "$[].message.stop_reason",
+          "$[].message.stop_sequence",
+          "$[].message.type",
+          "$[].message.usage.cache_creation_input_tokens",
+          "$[].message.usage.cache_read_input_tokens",
+          "$[].message.usage.input_tokens",
+          "$[].message.usage.output_tokens",
+          "$[].type",
+          "$[].usage.cache_creation_input_tokens",
+          "$[].usage.cache_read_input_tokens",
+          "$[].usage.input_tokens",
+          "$[].usage.output_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "content_block_delta",
+            "message_delta",
+            "message_start",
+            "message_stop"
+          ],
+          "models": [],
+          "usage": {
+            "cache_creation_tokens": 2,
+            "cache_read_tokens": 3,
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "reasoning_tokens": null,
+            "total_tokens": null
+          }
+        },
+        "started_at": "2026-08-14T19:01:57.373303+00:00",
+        "status": 200
+      }
+    },
+    {
+      "name": "grok_json",
+      "platform": "grok",
+      "result": {
+        "content_type": "application/json",
+        "error": "",
+        "event_count": 1,
+        "finished_at": "2026-08-14T19:01:57.404266+00:00",
+        "format": "json",
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/grok_json",
+        "normalized_sha256": "1ef08ca8a9ea30e57a1b9d543092b595ecc2490cb3f9a11ab4f55dbcd9fc70f0",
+        "schema": [
+          "$.created_at",
+          "$.id",
+          "$.model",
+          "$.object",
+          "$.output[].content[].annotations[]",
+          "$.output[].content[].text",
+          "$.output[].content[].type",
+          "$.output[].id",
+          "$.output[].role",
+          "$.output[].status",
+          "$.output[].type",
+          "$.status",
+          "$.store",
+          "$.usage.input_tokens",
+          "$.usage.input_tokens_details.cached_tokens",
+          "$.usage.output_tokens",
+          "$.usage.output_tokens_details.reasoning_tokens",
+          "$.usage.total_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "response"
+          ],
+          "models": [
+            "grok-4.5"
+          ],
+          "usage": {
+            "cache_creation_tokens": null,
+            "cache_read_tokens": 5,
+            "input_tokens": 20,
+            "output_tokens": 4,
+            "reasoning_tokens": 1,
+            "total_tokens": 24
+          }
+        },
+        "started_at": "2026-08-14T19:01:57.385238+00:00",
+        "status": 200
+      }
+    },
+    {
+      "name": "grok_sse",
+      "platform": "grok",
+      "result": {
+        "content_type": "text/event-stream",
+        "error": "",
+        "event_count": 3,
+        "finished_at": "2026-08-14T19:01:57.416610+00:00",
+        "format": "sse",
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/grok_sse",
+        "normalized_sha256": "7d927e00df7746671ea3700fa40520e377055269011699b645bd0c14ea7f005b",
+        "schema": [
+          "$[].content_index",
+          "$[].delta",
+          "$[].item_id",
+          "$[].output_index",
+          "$[].response.created_at",
+          "$[].response.id",
+          "$[].response.model",
+          "$[].response.object",
+          "$[].response.output[]",
+          "$[].response.output[].content[].annotations[]",
+          "$[].response.output[].content[].text",
+          "$[].response.output[].content[].type",
+          "$[].response.output[].id",
+          "$[].response.output[].role",
+          "$[].response.output[].status",
+          "$[].response.output[].type",
+          "$[].response.status",
+          "$[].response.store",
+          "$[].response.usage",
+          "$[].response.usage.input_tokens",
+          "$[].response.usage.input_tokens_details.cached_tokens",
+          "$[].response.usage.output_tokens",
+          "$[].response.usage.output_tokens_details.reasoning_tokens",
+          "$[].response.usage.total_tokens",
+          "$[].sequence_number",
+          "$[].type"
+        ],
+        "semantic": {
+          "event_types": [
+            "response.completed",
+            "response.created",
+            "response.output_text.delta",
+            "response.status:completed",
+            "response.status:in_progress"
+          ],
+          "models": [
+            "grok-4.5"
+          ],
+          "usage": {
+            "cache_creation_tokens": null,
+            "cache_read_tokens": 5,
+            "input_tokens": 20,
+            "output_tokens": 4,
+            "reasoning_tokens": 1,
+            "total_tokens": 24
+          }
+        },
+        "started_at": "2026-08-14T19:01:57.404372+00:00",
+        "status": 200
+      }
+    },
+    {
+      "name": "kimi_json",
+      "platform": "kimi",
+      "result": {
+        "content_type": "application/json",
+        "error": "",
+        "event_count": 1,
+        "finished_at": "2026-08-14T19:01:57.437944+00:00",
+        "format": "json",
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/kimi_json",
+        "normalized_sha256": "46b66a751dedb52685a7b57dea05f47d527ea94aacd841b8de392df42e0b5224",
+        "schema": [
+          "$.choices[].finish_reason",
+          "$.choices[].index",
+          "$.choices[].message.content",
+          "$.choices[].message.role",
+          "$.created",
+          "$.id",
+          "$.model",
+          "$.object",
+          "$.usage.completion_tokens",
+          "$.usage.completion_tokens_details.reasoning_tokens",
+          "$.usage.prompt_tokens",
+          "$.usage.prompt_tokens_details.cached_tokens",
+          "$.usage.total_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "chat.completion"
+          ],
+          "models": [
+            "k3"
+          ],
+          "usage": {
+            "cache_creation_tokens": null,
+            "cache_read_tokens": 4,
+            "input_tokens": 12,
+            "output_tokens": 3,
+            "reasoning_tokens": 1,
+            "total_tokens": 15
+          }
+        },
+        "started_at": "2026-08-14T19:01:57.416734+00:00",
+        "status": 200
+      }
+    },
+    {
+      "name": "kimi_sse",
+      "platform": "kimi",
+      "result": {
+        "content_type": "text/event-stream",
+        "error": "",
+        "event_count": 2,
+        "finished_at": "2026-08-14T19:01:57.447136+00:00",
+        "format": "sse",
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/kimi_sse",
+        "normalized_sha256": "1878cc9e1044ad90ee72c8f44a2758ac1ca9112cc857c3890396e9e47e63d947",
+        "schema": [
+          "$[].choices[].delta.content",
+          "$[].choices[].delta{}",
+          "$[].choices[].finish_reason",
+          "$[].choices[].index",
+          "$[].created",
+          "$[].id",
+          "$[].model",
+          "$[].object",
+          "$[].usage.completion_tokens",
+          "$[].usage.completion_tokens_details.reasoning_tokens",
+          "$[].usage.prompt_tokens",
+          "$[].usage.prompt_tokens_details.cached_tokens",
+          "$[].usage.total_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "chat.completion.chunk"
+          ],
+          "models": [
+            "k3"
+          ],
+          "usage": {
+            "cache_creation_tokens": null,
+            "cache_read_tokens": 4,
+            "input_tokens": 12,
+            "output_tokens": 3,
+            "reasoning_tokens": 1,
+            "total_tokens": 15
+          }
+        },
+        "started_at": "2026-08-14T19:01:57.438038+00:00",
+        "status": 200
+      }
+    }
+  ],
+  "gemini_retired_baseline": {
+    "content_type": "text/plain",
+    "path": "/v1beta/models",
+    "payload": "404 page not found",
+    "status": 404
+  },
+  "run_id": "settlement-baseline-bca3f7ff064d",
+  "snapshot": {
+    "accounts": [
+      {
+        "name": "settlement-anthropic",
+        "platform": "anthropic",
+        "quota_limit": "50",
+        "quota_used": "0.000012",
+        "type": "apikey"
+      },
+      {
+        "name": "settlement-antigravity",
+        "platform": "antigravity",
+        "quota_limit": "50",
+        "quota_used": "0.000212",
+        "type": "apikey"
+      },
+      {
+        "name": "settlement-grok",
+        "platform": "grok",
+        "quota_limit": "50",
+        "quota_used": "0.000226",
+        "type": "apikey"
+      },
+      {
+        "name": "settlement-kimi",
+        "platform": "kimi",
+        "quota_used": "0",
+        "type": "oauth"
+      },
+      {
+        "name": "settlement-openai",
+        "platform": "openai",
+        "quota_limit": "50",
+        "quota_used": "0.000014",
+        "type": "apikey"
+      }
+    ],
+    "api_keys": [
+      {
+        "name": "settlement-anthropic",
+        "quota": "50.00000000",
+        "quota_used": "0.00000600",
+        "status": "active",
+        "usage_1d": "0.00000000",
+        "usage_5h": "0.00000000",
+        "usage_7d": "0.00000000"
+      },
+      {
+        "name": "settlement-antigravity",
+        "quota": "50.00000000",
+        "quota_used": "0.00010600",
+        "status": "active",
+        "usage_1d": "0.00000000",
+        "usage_5h": "0.00000000",
+        "usage_7d": "0.00000000"
+      },
+      {
+        "name": "settlement-grok",
+        "quota": "50.00000000",
+        "quota_used": "0.00011400",
+        "status": "active",
+        "usage_1d": "0.00000000",
+        "usage_5h": "0.00000000",
+        "usage_7d": "0.00000000"
+      },
+      {
+        "name": "settlement-kimi",
+        "quota": "50.00000000",
+        "quota_used": "0.00014200",
+        "status": "active",
+        "usage_1d": "0.00000000",
+        "usage_5h": "0.00000000",
+        "usage_7d": "0.00000000"
+      },
+      {
+        "name": "settlement-openai",
+        "quota": "50.00000000",
+        "quota_used": "0.00000800",
+        "status": "active",
+        "usage_1d": "0.00000000",
+        "usage_5h": "0.00000000",
+        "usage_7d": "0.00000000"
+      }
+    ],
+    "marker_prefix": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/",
+    "profit_contribution": {
+      "metered_cost": "0.00074161360000",
+      "profit": "-0.00036561360000",
+      "requests": 10,
+      "revenue": "0.0003760000"
+    },
+    "usage_logs": [
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000030000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000000000",
+        "cache_creation_tokens": 2,
+        "cache_read_cost": "0.0000000084",
+        "cache_read_tokens": 3,
+        "input_cost": "0.0000014000",
+        "input_tokens": 10,
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/anthropic_json",
+        "model": "deepseek-v4-flash",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000011200",
+        "output_tokens": 4,
+        "rate_multiplier": "1.0000",
+        "request_type": "1",
+        "requested_model": "deepseek-v4-flash",
+        "stream": false,
+        "total_cost": "0.0000025284"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000030000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000000000",
+        "cache_creation_tokens": 2,
+        "cache_read_cost": "0.0000000084",
+        "cache_read_tokens": 3,
+        "input_cost": "0.0000014000",
+        "input_tokens": 10,
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/anthropic_sse",
+        "model": "deepseek-v4-flash",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000011200",
+        "output_tokens": 4,
+        "rate_multiplier": "1.0000",
+        "request_type": "2",
+        "requested_model": "deepseek-v4-flash",
+        "stream": true,
+        "total_cost": "0.0000025284"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000530000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000000000",
+        "cache_creation_tokens": 2,
+        "cache_read_cost": "0.0000003750",
+        "cache_read_tokens": 3,
+        "input_cost": "0.0000125000",
+        "input_tokens": 10,
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/antigravity_json",
+        "model": "gemini-2.5-pro",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000400000",
+        "output_tokens": 4,
+        "rate_multiplier": "1.0000",
+        "request_type": "1",
+        "requested_model": "gemini-2.5-pro",
+        "stream": false,
+        "total_cost": "0.0000528750",
+        "upstream_model": "gemini-pro-agent"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000530000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000000000",
+        "cache_creation_tokens": 2,
+        "cache_read_cost": "0.0000003750",
+        "cache_read_tokens": 3,
+        "input_cost": "0.0000125000",
+        "input_tokens": 10,
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/antigravity_sse",
+        "model": "gemini-2.5-pro",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000400000",
+        "output_tokens": 4,
+        "rate_multiplier": "1.0000",
+        "request_type": "2",
+        "requested_model": "gemini-2.5-pro",
+        "stream": true,
+        "total_cost": "0.0000528750",
+        "upstream_model": "gemini-pro-agent"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000570000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000000000",
+        "cache_creation_tokens": 0,
+        "cache_read_cost": "0.0000025000",
+        "cache_read_tokens": 5,
+        "input_cost": "0.0000300000",
+        "input_tokens": 15,
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/grok_json",
+        "model": "grok-4.5",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000240000",
+        "output_tokens": 4,
+        "rate_multiplier": "1.0000",
+        "request_type": "1",
+        "requested_model": "grok-4.5",
+        "stream": false,
+        "total_cost": "0.0000565000"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000570000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000000000",
+        "cache_creation_tokens": 0,
+        "cache_read_cost": "0.0000025000",
+        "cache_read_tokens": 5,
+        "input_cost": "0.0000300000",
+        "input_tokens": 15,
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/grok_sse",
+        "model": "grok-4.5",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000240000",
+        "output_tokens": 4,
+        "rate_multiplier": "1.0000",
+        "request_type": "2",
+        "requested_model": "grok-4.5",
+        "stream": true,
+        "total_cost": "0.0000565000"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000710000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000000000",
+        "cache_creation_tokens": 0,
+        "cache_read_cost": "0.0000012000",
+        "cache_read_tokens": 4,
+        "input_cost": "0.0000240000",
+        "input_tokens": 8,
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/kimi_json",
+        "model": "k3",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000450000",
+        "output_tokens": 3,
+        "rate_multiplier": "1.0000",
+        "request_type": "1",
+        "requested_model": "k3",
+        "stream": false,
+        "total_cost": "0.0000702000"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000710000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000000000",
+        "cache_creation_tokens": 0,
+        "cache_read_cost": "0.0000012000",
+        "cache_read_tokens": 4,
+        "input_cost": "0.0000240000",
+        "input_tokens": 8,
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/kimi_sse",
+        "model": "k3",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000450000",
+        "output_tokens": 3,
+        "rate_multiplier": "1.0000",
+        "request_type": "2",
+        "requested_model": "k3",
+        "stream": true,
+        "total_cost": "0.0000702000"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000040000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000000000",
+        "cache_creation_tokens": 0,
+        "cache_read_cost": "0.0000003000",
+        "cache_read_tokens": 4,
+        "input_cost": "0.0000012000",
+        "input_tokens": 8,
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/openai_json",
+        "model": "gpt-4o-mini",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000018000",
+        "output_tokens": 3,
+        "rate_multiplier": "1.0000",
+        "request_type": "1",
+        "requested_model": "gpt-4o-mini",
+        "stream": false,
+        "total_cost": "0.0000033000"
+      },
+      {
+        "account_rate_multiplier": "2.0000",
+        "actual_cost": "0.0000040000",
+        "billing_mode": "token",
+        "billing_type": 0,
+        "cache_creation_1h_tokens": "0",
+        "cache_creation_5m_tokens": "0",
+        "cache_creation_cost": "0.0000000000",
+        "cache_creation_tokens": 0,
+        "cache_read_cost": "0.0000003000",
+        "cache_read_tokens": 4,
+        "input_cost": "0.0000012000",
+        "input_tokens": 8,
+        "marker": "sub2api-dual-diff/settlement-baseline-bca3f7ff064d/openai_sse",
+        "model": "gpt-4o-mini",
+        "openai_ws_mode": "false",
+        "output_cost": "0.0000018000",
+        "output_tokens": 3,
+        "rate_multiplier": "1.0000",
+        "request_type": "2",
+        "requested_model": "gpt-4o-mini",
+        "stream": true,
+        "total_cost": "0.0000033000"
+      }
+    ],
+    "users": [
+      {
+        "balance": "99.99962400",
+        "email": "settlement-admin@local.test",
+        "frozen_balance": "0.00000000"
+      }
+    ]
+  },
+  "summary": {
+    "all_active_cases_200": true,
+    "all_successes_persisted": true,
+    "case_count": 10,
+    "gemini_retired_explicit": true,
+    "http_200": 10,
+    "usage_log_count": 10
+  }
+}

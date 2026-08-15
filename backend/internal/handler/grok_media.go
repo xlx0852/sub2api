@@ -238,7 +238,23 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 					accountReleaseFunc()
 				}
 			}()
-			return h.gatewayService.ForwardGrokMedia(requestCtx, c, account, endpoint, requestID, body, contentType)
+			attemptCtx := requestCtx
+			if shouldRecordGrokMediaUsage(endpoint, requestModel) {
+				payloadForHash := body
+				if len(payloadForHash) == 0 && strings.TrimSpace(requestID) != "" {
+					payloadForHash = []byte(requestID)
+				}
+				attemptCtx = h.gatewayService.WithUsageSettlementAttempt(requestCtx, service.UsageSettlementStartInput{
+					RequestPayloadHash: service.HashUsageRequestPayload(payloadForHash),
+					APIKey:             apiKey,
+					User:               apiKey.User,
+					Account:            account,
+					RequestType:        service.RequestTypeSync,
+					InboundEndpoint:    GetInboundEndpoint(c),
+					UpstreamEndpoint:   GetUpstreamEndpoint(c, account.Platform),
+				})
+			}
+			return h.gatewayService.ForwardGrokMedia(attemptCtx, c, account, endpoint, requestID, body, contentType)
 		}()
 
 		forwardDurationMs := time.Since(forwardStart).Milliseconds()
@@ -358,7 +374,7 @@ func recordGrokMediaUsage(
 		OriginalModel:      requestModel,
 		ChannelMappedModel: requestModel,
 	}
-	h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
+	h.submitOpenAIUsageRecordTask(usageSettlementTaskContext(c), result, func(ctx context.Context) {
 		if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 			Result:             result,
 			APIKey:             apiKey,

@@ -1,0 +1,96 @@
+{
+  "backend_url": "http://127.0.0.1:58082",
+  "checks": {
+    "old_binary_request_succeeded": true,
+    "old_binary_started_with_additive_schema": true,
+    "old_binary_usage_persisted": true,
+    "old_frontend_asset_served": true,
+    "old_frontend_built": true,
+    "old_frontend_cors_preflight_succeeded": true,
+    "old_frontend_login_route_served": true,
+    "old_frontend_login_succeeded": true,
+    "old_frontend_public_settings_succeeded": true,
+    "old_frontend_targets_old_backend": true
+  },
+  "frontend_probes": {
+    "asset_status": 200,
+    "cors_origin": "http://127.0.0.1:58171",
+    "cors_status": 204,
+    "login_payload_type": "dict",
+    "login_route_content_type": "text/html",
+    "login_status": 200,
+    "public_settings_payload_type": "dict",
+    "public_settings_status": 200
+  },
+  "frontend_url": "http://127.0.0.1:58171",
+  "new_binary_restored": true,
+  "old_ref": "f94204d8a",
+  "passed": true,
+  "request": {
+    "content_type": "application/json",
+    "error": "",
+    "event_count": 1,
+    "finished_at": "2026-08-15T03:13:13.902098+00:00",
+    "format": "json",
+    "marker": "sub2api-dual-diff/settlement-additive-rollback-9fd985451085/openai_json",
+    "normalized_sha256": "90f61410fde301d15448793fa8dc3d6033d489e5d7da5c1db00f18745ad5c938",
+    "schema": [
+      "$.created_at",
+      "$.id",
+      "$.model",
+      "$.object",
+      "$.output[].content[].annotations[]",
+      "$.output[].content[].text",
+      "$.output[].content[].type",
+      "$.output[].id",
+      "$.output[].role",
+      "$.output[].status",
+      "$.output[].type",
+      "$.status",
+      "$.store",
+      "$.usage.input_tokens",
+      "$.usage.input_tokens_details.cached_tokens",
+      "$.usage.output_tokens",
+      "$.usage.output_tokens_details.reasoning_tokens",
+      "$.usage.total_tokens"
+    ],
+    "semantic": {
+      "event_types": [
+        "response"
+      ],
+      "models": [
+        "gpt-4o-mini"
+      ],
+      "usage": {
+        "cache_creation_tokens": null,
+        "cache_read_tokens": 5,
+        "input_tokens": 20,
+        "output_tokens": 4,
+        "reasoning_tokens": 1,
+        "total_tokens": 24
+      }
+    },
+    "started_at": "2026-08-15T03:13:13.879787+00:00",
+    "status": 200
+  },
+  "run_id": "settlement-additive-rollback-9fd985451085",
+  "snapshot": {
+    "account": {
+      "name": "settlement-openai",
+      "quota_limit": "50",
+      "quota_used": "0.250088"
+    },
+    "api_key": {
+      "name": "settlement-openai",
+      "quota_used": "0.12504800",
+      "status": "active"
+    },
+    "dedup_count": 27,
+    "usage_count": 1,
+    "user": {
+      "balance": "99.87386200",
+      "email": "settlement-admin@local.test",
+      "frozen_balance": "0.00000000"
+    }
+  }
+}

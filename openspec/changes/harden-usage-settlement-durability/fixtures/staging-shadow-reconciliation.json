@@ -1,0 +1,27 @@
+{
+  "attempt_count": 6,
+  "balance_after": "1.95365300",
+  "balance_before": "1.95518800",
+  "balance_delta": "0.00153500",
+  "checks": {
+    "balance_delta_equals_usage": true,
+    "key_quota_delta_equals_usage": true,
+    "one_identity_each": true,
+    "payload_matches_legacy_usage": true,
+    "single_billing_dedup_each": true,
+    "single_legacy_usage_each": true,
+    "six_ready_attempts": true
+  },
+  "dedup_count": 6,
+  "group_scope": [2, 3, 5],
+  "identity_count": 6,
+  "key_quota_after": "0.04006500",
+  "key_quota_before": "0.03853000",
+  "key_quota_delta": "0.00153500",
+  "mode": "shadow",
+  "ready_count": 6,
+  "run_id": "staging-shadow-2c96f7b53200",
+  "settled_count": 0,
+  "usage_actual_cost_sum": "0.0015350000",
+  "usage_count": 6
+}

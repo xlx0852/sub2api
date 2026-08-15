@@ -1,0 +1,976 @@
+{
+  "cases": [
+    {
+      "checks": {
+        "new_client_received_partial": true,
+        "new_terminal_drained": true,
+        "new_usage_persisted": true,
+        "old_client_received_partial": true,
+        "old_terminal_drained": true,
+        "old_usage_persisted": true,
+        "snapshot_equal": true
+      },
+      "name": "anthropic_sse",
+      "new": {
+        "client": {
+          "closed_after_ms": 13.513,
+          "content_type": "text/event-stream",
+          "first_event_line_count": 3,
+          "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-anthropic/anthropic_sse_disconnect",
+          "saw_first_event": true,
+          "status": 200
+        },
+        "fixture_after_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [],
+          "terminal_delivery_count": 1,
+          "terminal_released": true
+        },
+        "fixture_before_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [],
+          "terminal_delivery_count": 0,
+          "terminal_released": false
+        },
+        "snapshot": {
+          "accounts": [
+            {
+              "name": "settlement-anthropic",
+              "platform": "anthropic",
+              "quota_limit": "50",
+              "quota_used": "0.000018",
+              "type": "apikey"
+            }
+          ],
+          "api_keys": [
+            {
+              "name": "settlement-anthropic",
+              "quota": "50.00000000",
+              "quota_used": "0.00000900",
+              "status": "active",
+              "usage_1d": "0.00000000",
+              "usage_5h": "0.00000000",
+              "usage_7d": "0.00000000"
+            }
+          ],
+          "marker_prefix": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-anthropic/anthropic_sse_disconnect",
+          "profit_contribution": {
+            "metered_cost": "0.00000505680000",
+            "profit": "-0.00000205680000",
+            "requests": 1,
+            "revenue": "0.0000030000"
+          },
+          "usage_logs": [
+            {
+              "account_rate_multiplier": "2.0000",
+              "actual_cost": "0.0000030000",
+              "billing_mode": "token",
+              "billing_type": 0,
+              "cache_creation_1h_tokens": "0",
+              "cache_creation_5m_tokens": "0",
+              "cache_creation_cost": "0.0000000000",
+              "cache_creation_tokens": 2,
+              "cache_read_cost": "0.0000000084",
+              "cache_read_tokens": 3,
+              "input_cost": "0.0000014000",
+              "input_tokens": 10,
+              "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-anthropic/anthropic_sse_disconnect",
+              "model": "deepseek-v4-flash",
+              "openai_ws_mode": "false",
+              "output_cost": "0.0000011200",
+              "output_tokens": 4,
+              "rate_multiplier": "1.0000",
+              "request_type": "2",
+              "requested_model": "deepseek-v4-flash",
+              "stream": true,
+              "total_cost": "0.0000025284"
+            }
+          ],
+          "users": [
+            {
+              "balance": "99.99960500",
+              "email": "settlement-admin@local.test",
+              "frozen_balance": "0.00000000"
+            }
+          ]
+        }
+      },
+      "old": {
+        "client": {
+          "closed_after_ms": 13.172,
+          "content_type": "text/event-stream",
+          "first_event_line_count": 3,
+          "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-anthropic/anthropic_sse_disconnect",
+          "saw_first_event": true,
+          "status": 200
+        },
+        "fixture_after_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [],
+          "terminal_delivery_count": 1,
+          "terminal_released": true
+        },
+        "fixture_before_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [],
+          "terminal_delivery_count": 0,
+          "terminal_released": false
+        },
+        "snapshot": {
+          "accounts": [
+            {
+              "name": "settlement-anthropic",
+              "platform": "anthropic",
+              "quota_limit": "50",
+              "quota_used": "0.000018",
+              "type": "apikey"
+            }
+          ],
+          "api_keys": [
+            {
+              "name": "settlement-anthropic",
+              "quota": "50.00000000",
+              "quota_used": "0.00000900",
+              "status": "active",
+              "usage_1d": "0.00000000",
+              "usage_5h": "0.00000000",
+              "usage_7d": "0.00000000"
+            }
+          ],
+          "marker_prefix": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-anthropic/anthropic_sse_disconnect",
+          "profit_contribution": {
+            "metered_cost": "0.00000505680000",
+            "profit": "-0.00000205680000",
+            "requests": 1,
+            "revenue": "0.0000030000"
+          },
+          "usage_logs": [
+            {
+              "account_rate_multiplier": "2.0000",
+              "actual_cost": "0.0000030000",
+              "billing_mode": "token",
+              "billing_type": 0,
+              "cache_creation_1h_tokens": "0",
+              "cache_creation_5m_tokens": "0",
+              "cache_creation_cost": "0.0000000000",
+              "cache_creation_tokens": 2,
+              "cache_read_cost": "0.0000000084",
+              "cache_read_tokens": 3,
+              "input_cost": "0.0000014000",
+              "input_tokens": 10,
+              "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-anthropic/anthropic_sse_disconnect",
+              "model": "deepseek-v4-flash",
+              "openai_ws_mode": "false",
+              "output_cost": "0.0000011200",
+              "output_tokens": 4,
+              "rate_multiplier": "1.0000",
+              "request_type": "2",
+              "requested_model": "deepseek-v4-flash",
+              "stream": true,
+              "total_cost": "0.0000025284"
+            }
+          ],
+          "users": [
+            {
+              "balance": "99.99960500",
+              "email": "settlement-admin@local.test",
+              "frozen_balance": "0.00000000"
+            }
+          ]
+        }
+      },
+      "passed": true,
+      "platform": "anthropic"
+    },
+    {
+      "checks": {
+        "new_client_received_partial": true,
+        "new_terminal_drained": true,
+        "new_usage_persisted": true,
+        "old_client_received_partial": true,
+        "old_terminal_drained": true,
+        "old_usage_persisted": true,
+        "snapshot_equal": true
+      },
+      "name": "openai_sse",
+      "new": {
+        "client": {
+          "closed_after_ms": 29.02,
+          "content_type": "text/event-stream",
+          "first_event_line_count": 3,
+          "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-openai/openai_sse_disconnect",
+          "saw_first_event": true,
+          "status": 200
+        },
+        "fixture_after_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [
+            "resp_fixture_openai"
+          ],
+          "terminal_delivery_count": 1,
+          "terminal_released": true
+        },
+        "fixture_before_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [
+            "resp_fixture_openai"
+          ],
+          "terminal_delivery_count": 0,
+          "terminal_released": false
+        },
+        "snapshot": {
+          "accounts": [
+            {
+              "name": "settlement-openai",
+              "platform": "openai",
+              "quota_limit": "50",
+              "quota_used": "0.000055",
+              "type": "apikey"
+            }
+          ],
+          "api_keys": [
+            {
+              "name": "settlement-openai",
+              "quota": "50.00000000",
+              "quota_used": "0.00003000",
+              "status": "active",
+              "usage_1d": "0.00000000",
+              "usage_5h": "0.00000000",
+              "usage_7d": "0.00000000"
+            }
+          ],
+          "marker_prefix": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-openai/openai_sse_disconnect",
+          "profit_contribution": {
+            "metered_cost": "0.00001005000000",
+            "profit": "-0.00000405000000",
+            "requests": 1,
+            "revenue": "0.0000060000"
+          },
+          "usage_logs": [
+            {
+              "account_rate_multiplier": "2.0000",
+              "actual_cost": "0.0000060000",
+              "billing_mode": "token",
+              "billing_type": 0,
+              "cache_creation_1h_tokens": "0",
+              "cache_creation_5m_tokens": "0",
+              "cache_creation_cost": "0.0000000000",
+              "cache_creation_tokens": 0,
+              "cache_read_cost": "0.0000003750",
+              "cache_read_tokens": 5,
+              "input_cost": "0.0000022500",
+              "input_tokens": 15,
+              "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-openai/openai_sse_disconnect",
+              "model": "gpt-4o-mini",
+              "openai_ws_mode": "false",
+              "output_cost": "0.0000024000",
+              "output_tokens": 4,
+              "rate_multiplier": "1.0000",
+              "request_type": "2",
+              "requested_model": "gpt-4o-mini",
+              "stream": true,
+              "total_cost": "0.0000050250"
+            }
+          ],
+          "users": [
+            {
+              "balance": "99.99959900",
+              "email": "settlement-admin@local.test",
+              "frozen_balance": "0.00000000"
+            }
+          ]
+        }
+      },
+      "old": {
+        "client": {
+          "closed_after_ms": 24.254,
+          "content_type": "text/event-stream",
+          "first_event_line_count": 3,
+          "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-openai/openai_sse_disconnect",
+          "saw_first_event": true,
+          "status": 200
+        },
+        "fixture_after_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [
+            "resp_fixture_openai"
+          ],
+          "terminal_delivery_count": 1,
+          "terminal_released": true
+        },
+        "fixture_before_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [
+            "resp_fixture_openai"
+          ],
+          "terminal_delivery_count": 0,
+          "terminal_released": false
+        },
+        "snapshot": {
+          "accounts": [
+            {
+              "name": "settlement-openai",
+              "platform": "openai",
+              "quota_limit": "50",
+              "quota_used": "0.000055",
+              "type": "apikey"
+            }
+          ],
+          "api_keys": [
+            {
+              "name": "settlement-openai",
+              "quota": "50.00000000",
+              "quota_used": "0.00003000",
+              "status": "active",
+              "usage_1d": "0.00000000",
+              "usage_5h": "0.00000000",
+              "usage_7d": "0.00000000"
+            }
+          ],
+          "marker_prefix": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-openai/openai_sse_disconnect",
+          "profit_contribution": {
+            "metered_cost": "0.00001005000000",
+            "profit": "-0.00000405000000",
+            "requests": 1,
+            "revenue": "0.0000060000"
+          },
+          "usage_logs": [
+            {
+              "account_rate_multiplier": "2.0000",
+              "actual_cost": "0.0000060000",
+              "billing_mode": "token",
+              "billing_type": 0,
+              "cache_creation_1h_tokens": "0",
+              "cache_creation_5m_tokens": "0",
+              "cache_creation_cost": "0.0000000000",
+              "cache_creation_tokens": 0,
+              "cache_read_cost": "0.0000003750",
+              "cache_read_tokens": 5,
+              "input_cost": "0.0000022500",
+              "input_tokens": 15,
+              "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-openai/openai_sse_disconnect",
+              "model": "gpt-4o-mini",
+              "openai_ws_mode": "false",
+              "output_cost": "0.0000024000",
+              "output_tokens": 4,
+              "rate_multiplier": "1.0000",
+              "request_type": "2",
+              "requested_model": "gpt-4o-mini",
+              "stream": true,
+              "total_cost": "0.0000050250"
+            }
+          ],
+          "users": [
+            {
+              "balance": "99.99959900",
+              "email": "settlement-admin@local.test",
+              "frozen_balance": "0.00000000"
+            }
+          ]
+        }
+      },
+      "passed": true,
+      "platform": "openai"
+    },
+    {
+      "checks": {
+        "new_client_received_partial": true,
+        "new_terminal_drained": true,
+        "new_usage_persisted": true,
+        "old_client_received_partial": true,
+        "old_terminal_drained": true,
+        "old_usage_persisted": true,
+        "snapshot_equal": true
+      },
+      "name": "antigravity_sse",
+      "new": {
+        "client": {
+          "closed_after_ms": 25.819,
+          "content_type": "text/event-stream",
+          "first_event_line_count": 3,
+          "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-antigravity/antigravity_sse_disconnect",
+          "saw_first_event": true,
+          "status": 200
+        },
+        "fixture_after_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [],
+          "terminal_delivery_count": 1,
+          "terminal_released": true
+        },
+        "fixture_before_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [],
+          "terminal_delivery_count": 0,
+          "terminal_released": false
+        },
+        "snapshot": {
+          "accounts": [
+            {
+              "name": "settlement-antigravity",
+              "platform": "antigravity",
+              "quota_limit": "50",
+              "quota_used": "0.000318",
+              "type": "apikey"
+            }
+          ],
+          "api_keys": [
+            {
+              "name": "settlement-antigravity",
+              "quota": "50.00000000",
+              "quota_used": "0.00015900",
+              "status": "active",
+              "usage_1d": "0.00000000",
+              "usage_5h": "0.00000000",
+              "usage_7d": "0.00000000"
+            }
+          ],
+          "marker_prefix": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-antigravity/antigravity_sse_disconnect",
+          "profit_contribution": {
+            "metered_cost": "0.00010575000000",
+            "profit": "-0.00005275000000",
+            "requests": 1,
+            "revenue": "0.0000530000"
+          },
+          "usage_logs": [
+            {
+              "account_rate_multiplier": "2.0000",
+              "actual_cost": "0.0000530000",
+              "billing_mode": "token",
+              "billing_type": 0,
+              "cache_creation_1h_tokens": "0",
+              "cache_creation_5m_tokens": "0",
+              "cache_creation_cost": "0.0000000000",
+              "cache_creation_tokens": 2,
+              "cache_read_cost": "0.0000003750",
+              "cache_read_tokens": 3,
+              "input_cost": "0.0000125000",
+              "input_tokens": 10,
+              "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-antigravity/antigravity_sse_disconnect",
+              "model": "gemini-2.5-pro",
+              "openai_ws_mode": "false",
+              "output_cost": "0.0000400000",
+              "output_tokens": 4,
+              "rate_multiplier": "1.0000",
+              "request_type": "2",
+              "requested_model": "gemini-2.5-pro",
+              "stream": true,
+              "total_cost": "0.0000528750",
+              "upstream_model": "gemini-pro-agent"
+            }
+          ],
+          "users": [
+            {
+              "balance": "99.99954600",
+              "email": "settlement-admin@local.test",
+              "frozen_balance": "0.00000000"
+            }
+          ]
+        }
+      },
+      "old": {
+        "client": {
+          "closed_after_ms": 20.597,
+          "content_type": "text/event-stream",
+          "first_event_line_count": 3,
+          "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-antigravity/antigravity_sse_disconnect",
+          "saw_first_event": true,
+          "status": 200
+        },
+        "fixture_after_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [],
+          "terminal_delivery_count": 1,
+          "terminal_released": true
+        },
+        "fixture_before_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [],
+          "terminal_delivery_count": 0,
+          "terminal_released": false
+        },
+        "snapshot": {
+          "accounts": [
+            {
+              "name": "settlement-antigravity",
+              "platform": "antigravity",
+              "quota_limit": "50",
+              "quota_used": "0.000318",
+              "type": "apikey"
+            }
+          ],
+          "api_keys": [
+            {
+              "name": "settlement-antigravity",
+              "quota": "50.00000000",
+              "quota_used": "0.00015900",
+              "status": "active",
+              "usage_1d": "0.00000000",
+              "usage_5h": "0.00000000",
+              "usage_7d": "0.00000000"
+            }
+          ],
+          "marker_prefix": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-antigravity/antigravity_sse_disconnect",
+          "profit_contribution": {
+            "metered_cost": "0.00010575000000",
+            "profit": "-0.00005275000000",
+            "requests": 1,
+            "revenue": "0.0000530000"
+          },
+          "usage_logs": [
+            {
+              "account_rate_multiplier": "2.0000",
+              "actual_cost": "0.0000530000",
+              "billing_mode": "token",
+              "billing_type": 0,
+              "cache_creation_1h_tokens": "0",
+              "cache_creation_5m_tokens": "0",
+              "cache_creation_cost": "0.0000000000",
+              "cache_creation_tokens": 2,
+              "cache_read_cost": "0.0000003750",
+              "cache_read_tokens": 3,
+              "input_cost": "0.0000125000",
+              "input_tokens": 10,
+              "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-antigravity/antigravity_sse_disconnect",
+              "model": "gemini-2.5-pro",
+              "openai_ws_mode": "false",
+              "output_cost": "0.0000400000",
+              "output_tokens": 4,
+              "rate_multiplier": "1.0000",
+              "request_type": "2",
+              "requested_model": "gemini-2.5-pro",
+              "stream": true,
+              "total_cost": "0.0000528750",
+              "upstream_model": "gemini-pro-agent"
+            }
+          ],
+          "users": [
+            {
+              "balance": "99.99954600",
+              "email": "settlement-admin@local.test",
+              "frozen_balance": "0.00000000"
+            }
+          ]
+        }
+      },
+      "passed": true,
+      "platform": "antigravity"
+    },
+    {
+      "checks": {
+        "new_client_received_partial": true,
+        "new_terminal_drained": true,
+        "new_usage_persisted": true,
+        "old_client_received_partial": true,
+        "old_terminal_drained": true,
+        "old_usage_persisted": true,
+        "snapshot_equal": true
+      },
+      "name": "grok_sse",
+      "new": {
+        "client": {
+          "closed_after_ms": 29.025,
+          "content_type": "text/event-stream",
+          "first_event_line_count": 3,
+          "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-grok/grok_sse_disconnect",
+          "saw_first_event": true,
+          "status": 200
+        },
+        "fixture_after_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [
+            "resp_fixture_grok"
+          ],
+          "terminal_delivery_count": 1,
+          "terminal_released": true
+        },
+        "fixture_before_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [
+            "resp_fixture_grok"
+          ],
+          "terminal_delivery_count": 0,
+          "terminal_released": false
+        },
+        "snapshot": {
+          "accounts": [
+            {
+              "name": "settlement-grok",
+              "platform": "grok",
+              "quota_limit": "50",
+              "quota_used": "0.000339",
+              "type": "apikey"
+            }
+          ],
+          "api_keys": [
+            {
+              "name": "settlement-grok",
+              "quota": "50.00000000",
+              "quota_used": "0.00017100",
+              "status": "active",
+              "usage_1d": "0.00000000",
+              "usage_5h": "0.00000000",
+              "usage_7d": "0.00000000"
+            }
+          ],
+          "marker_prefix": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-grok/grok_sse_disconnect",
+          "profit_contribution": {
+            "metered_cost": "0.00011300000000",
+            "profit": "-0.00005600000000",
+            "requests": 1,
+            "revenue": "0.0000570000"
+          },
+          "usage_logs": [
+            {
+              "account_rate_multiplier": "2.0000",
+              "actual_cost": "0.0000570000",
+              "billing_mode": "token",
+              "billing_type": 0,
+              "cache_creation_1h_tokens": "0",
+              "cache_creation_5m_tokens": "0",
+              "cache_creation_cost": "0.0000000000",
+              "cache_creation_tokens": 0,
+              "cache_read_cost": "0.0000025000",
+              "cache_read_tokens": 5,
+              "input_cost": "0.0000300000",
+              "input_tokens": 15,
+              "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-grok/grok_sse_disconnect",
+              "model": "grok-4.5",
+              "openai_ws_mode": "false",
+              "output_cost": "0.0000240000",
+              "output_tokens": 4,
+              "rate_multiplier": "1.0000",
+              "request_type": "2",
+              "requested_model": "grok-4.5",
+              "stream": true,
+              "total_cost": "0.0000565000"
+            }
+          ],
+          "users": [
+            {
+              "balance": "99.99948900",
+              "email": "settlement-admin@local.test",
+              "frozen_balance": "0.00000000"
+            }
+          ]
+        }
+      },
+      "old": {
+        "client": {
+          "closed_after_ms": 27.789,
+          "content_type": "text/event-stream",
+          "first_event_line_count": 3,
+          "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-grok/grok_sse_disconnect",
+          "saw_first_event": true,
+          "status": 200
+        },
+        "fixture_after_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [
+            "resp_fixture_grok"
+          ],
+          "terminal_delivery_count": 1,
+          "terminal_released": true
+        },
+        "fixture_before_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [
+            "resp_fixture_grok"
+          ],
+          "terminal_delivery_count": 0,
+          "terminal_released": false
+        },
+        "snapshot": {
+          "accounts": [
+            {
+              "name": "settlement-grok",
+              "platform": "grok",
+              "quota_limit": "50",
+              "quota_used": "0.000339",
+              "type": "apikey"
+            }
+          ],
+          "api_keys": [
+            {
+              "name": "settlement-grok",
+              "quota": "50.00000000",
+              "quota_used": "0.00017100",
+              "status": "active",
+              "usage_1d": "0.00000000",
+              "usage_5h": "0.00000000",
+              "usage_7d": "0.00000000"
+            }
+          ],
+          "marker_prefix": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-grok/grok_sse_disconnect",
+          "profit_contribution": {
+            "metered_cost": "0.00011300000000",
+            "profit": "-0.00005600000000",
+            "requests": 1,
+            "revenue": "0.0000570000"
+          },
+          "usage_logs": [
+            {
+              "account_rate_multiplier": "2.0000",
+              "actual_cost": "0.0000570000",
+              "billing_mode": "token",
+              "billing_type": 0,
+              "cache_creation_1h_tokens": "0",
+              "cache_creation_5m_tokens": "0",
+              "cache_creation_cost": "0.0000000000",
+              "cache_creation_tokens": 0,
+              "cache_read_cost": "0.0000025000",
+              "cache_read_tokens": 5,
+              "input_cost": "0.0000300000",
+              "input_tokens": 15,
+              "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-grok/grok_sse_disconnect",
+              "model": "grok-4.5",
+              "openai_ws_mode": "false",
+              "output_cost": "0.0000240000",
+              "output_tokens": 4,
+              "rate_multiplier": "1.0000",
+              "request_type": "2",
+              "requested_model": "grok-4.5",
+              "stream": true,
+              "total_cost": "0.0000565000"
+            }
+          ],
+          "users": [
+            {
+              "balance": "99.99948900",
+              "email": "settlement-admin@local.test",
+              "frozen_balance": "0.00000000"
+            }
+          ]
+        }
+      },
+      "passed": true,
+      "platform": "grok"
+    },
+    {
+      "checks": {
+        "new_client_received_partial": true,
+        "new_terminal_drained": true,
+        "new_usage_persisted": true,
+        "old_client_received_partial": true,
+        "old_terminal_drained": true,
+        "old_usage_persisted": true,
+        "snapshot_equal": true
+      },
+      "name": "kimi_sse",
+      "new": {
+        "client": {
+          "closed_after_ms": 36.926,
+          "content_type": "text/event-stream",
+          "first_event_line_count": 2,
+          "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-kimi/kimi_sse_disconnect",
+          "saw_first_event": true,
+          "status": 200
+        },
+        "fixture_after_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [],
+          "terminal_delivery_count": 1,
+          "terminal_released": true
+        },
+        "fixture_before_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [],
+          "terminal_delivery_count": 0,
+          "terminal_released": false
+        },
+        "snapshot": {
+          "accounts": [
+            {
+              "name": "settlement-kimi",
+              "platform": "kimi",
+              "type": "oauth"
+            }
+          ],
+          "api_keys": [
+            {
+              "name": "settlement-kimi",
+              "quota": "50.00000000",
+              "quota_used": "0.00021300",
+              "status": "active",
+              "usage_1d": "0.00000000",
+              "usage_5h": "0.00000000",
+              "usage_7d": "0.00000000"
+            }
+          ],
+          "marker_prefix": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-kimi/kimi_sse_disconnect",
+          "profit_contribution": {
+            "metered_cost": "0.00014040000000",
+            "profit": "-0.00006940000000",
+            "requests": 1,
+            "revenue": "0.0000710000"
+          },
+          "usage_logs": [
+            {
+              "account_rate_multiplier": "2.0000",
+              "actual_cost": "0.0000710000",
+              "billing_mode": "token",
+              "billing_type": 0,
+              "cache_creation_1h_tokens": "0",
+              "cache_creation_5m_tokens": "0",
+              "cache_creation_cost": "0.0000000000",
+              "cache_creation_tokens": 0,
+              "cache_read_cost": "0.0000012000",
+              "cache_read_tokens": 4,
+              "input_cost": "0.0000240000",
+              "input_tokens": 8,
+              "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-kimi/kimi_sse_disconnect",
+              "model": "k3",
+              "openai_ws_mode": "false",
+              "output_cost": "0.0000450000",
+              "output_tokens": 3,
+              "rate_multiplier": "1.0000",
+              "request_type": "2",
+              "requested_model": "k3",
+              "stream": true,
+              "total_cost": "0.0000702000"
+            }
+          ],
+          "users": [
+            {
+              "balance": "99.99941800",
+              "email": "settlement-admin@local.test",
+              "frozen_balance": "0.00000000"
+            }
+          ]
+        }
+      },
+      "old": {
+        "client": {
+          "closed_after_ms": 50.235,
+          "content_type": "text/event-stream",
+          "first_event_line_count": 2,
+          "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-kimi/kimi_sse_disconnect",
+          "saw_first_event": true,
+          "status": 200
+        },
+        "fixture_after_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [],
+          "terminal_delivery_count": 1,
+          "terminal_released": true
+        },
+        "fixture_before_release": {
+          "partial_delivery_count": 1,
+          "request_count": 1,
+          "scenario": "hold_before_terminal",
+          "stored_response_ids": [],
+          "terminal_delivery_count": 0,
+          "terminal_released": false
+        },
+        "snapshot": {
+          "accounts": [
+            {
+              "name": "settlement-kimi",
+              "platform": "kimi",
+              "type": "oauth"
+            }
+          ],
+          "api_keys": [
+            {
+              "name": "settlement-kimi",
+              "quota": "50.00000000",
+              "quota_used": "0.00021300",
+              "status": "active",
+              "usage_1d": "0.00000000",
+              "usage_5h": "0.00000000",
+              "usage_7d": "0.00000000"
+            }
+          ],
+          "marker_prefix": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-kimi/kimi_sse_disconnect",
+          "profit_contribution": {
+            "metered_cost": "0.00014040000000",
+            "profit": "-0.00006940000000",
+            "requests": 1,
+            "revenue": "0.0000710000"
+          },
+          "usage_logs": [
+            {
+              "account_rate_multiplier": "2.0000",
+              "actual_cost": "0.0000710000",
+              "billing_mode": "token",
+              "billing_type": 0,
+              "cache_creation_1h_tokens": "0",
+              "cache_creation_5m_tokens": "0",
+              "cache_creation_cost": "0.0000000000",
+              "cache_creation_tokens": 0,
+              "cache_read_cost": "0.0000012000",
+              "cache_read_tokens": 4,
+              "input_cost": "0.0000240000",
+              "input_tokens": 8,
+              "marker": "sub2api-dual-diff/settlement-disconnect-dee5761ebfad-kimi/kimi_sse_disconnect",
+              "model": "k3",
+              "openai_ws_mode": "false",
+              "output_cost": "0.0000450000",
+              "output_tokens": 3,
+              "rate_multiplier": "1.0000",
+              "request_type": "2",
+              "requested_model": "k3",
+              "stream": true,
+              "total_cost": "0.0000702000"
+            }
+          ],
+          "users": [
+            {
+              "balance": "99.99941800",
+              "email": "settlement-admin@local.test",
+              "frozen_balance": "0.00000000"
+            }
+          ]
+        }
+      },
+      "passed": true,
+      "platform": "kimi"
+    }
+  ],
+  "new_url": "http://127.0.0.1:58082",
+  "old_url": "http://127.0.0.1:58081",
+  "run_id": "settlement-disconnect-dee5761ebfad",
+  "summary": {
+    "all_passed": true,
+    "case_count": 5,
+    "passed_count": 5
+  }
+}

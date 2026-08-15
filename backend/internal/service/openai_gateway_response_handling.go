@@ -384,6 +384,9 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 		eventType := strings.TrimSpace(gjson.GetBytes(dataBytes, "type").String())
 		if responseID == "" {
 			responseID = extractOpenAIResponseIDFromJSONBytes(dataBytes)
+			if responseID != "" && openAIResponseStored(dataBytes) {
+				notifyUsageSettlementProviderRequestID(ctx, responseID)
+			}
 		}
 		if responseModel == "" {
 			responseModel = extractOpenAIResponseModelFromJSONBytes(dataBytes)
@@ -687,6 +690,19 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 		}
 	}
 
+}
+
+func openAIResponseStored(body []byte) bool {
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return false
+	}
+	for _, path := range []string{"store", "response.store"} {
+		value := gjson.GetBytes(body, path)
+		if value.Exists() && value.Type == gjson.True {
+			return true
+		}
+	}
+	return false
 }
 
 // extractOpenAISSEDataLine 低开销提取 SSE `data:` 行内容。

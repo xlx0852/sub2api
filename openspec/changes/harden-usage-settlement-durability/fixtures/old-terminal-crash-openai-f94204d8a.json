@@ -1,0 +1,115 @@
+{
+  "after": {
+    "account": {
+      "name": "settlement-openai",
+      "quota_limit": "50",
+      "quota_used": "0.000021"
+    },
+    "api_key": {
+      "name": "settlement-openai",
+      "quota_used": "0.00001200",
+      "status": "active"
+    },
+    "dedup_count": 11,
+    "usage_count": 0,
+    "user": {
+      "balance": "99.99962000",
+      "email": "settlement-admin@local.test",
+      "frozen_balance": "0.00000000"
+    }
+  },
+  "after_restart": {
+    "account": {
+      "name": "settlement-openai",
+      "quota_limit": "50",
+      "quota_used": "0.000021"
+    },
+    "api_key": {
+      "name": "settlement-openai",
+      "quota_used": "0.00001200",
+      "status": "active"
+    },
+    "dedup_count": 11,
+    "usage_count": 0,
+    "user": {
+      "balance": "99.99962000",
+      "email": "settlement-admin@local.test",
+      "frozen_balance": "0.00000000"
+    }
+  },
+  "before": {
+    "account": {
+      "name": "settlement-openai",
+      "quota_limit": "50",
+      "quota_used": "0.000014"
+    },
+    "api_key": {
+      "name": "settlement-openai",
+      "quota_used": "0.00000800",
+      "status": "active"
+    },
+    "dedup_count": 10,
+    "usage_count": 0,
+    "user": {
+      "balance": "99.99962400",
+      "email": "settlement-admin@local.test",
+      "frozen_balance": "0.00000000"
+    }
+  },
+  "case": "openai_json",
+  "client_finished": true,
+  "client_result": {
+    "content_type": "application/json",
+    "error": "",
+    "event_count": 1,
+    "finished_at": "2026-08-14T18:56:38.320511+00:00",
+    "format": "json",
+    "marker": "sub2api-dual-diff/settlement-crash-47b4ba9773bb/openai_json",
+    "normalized_sha256": "5dc3fed1bfddc6cae04cca76407e8375603f24a0a1a36fee708ef38fd0d56f4a",
+    "schema": [
+      "$.id",
+      "$.model",
+      "$.object",
+      "$.output[].content[].text",
+      "$.output[].content[].type",
+      "$.output[].id",
+      "$.output[].role",
+      "$.output[].status",
+      "$.output[].type",
+      "$.status",
+      "$.usage.input_tokens",
+      "$.usage.input_tokens_details.cached_tokens",
+      "$.usage.output_tokens",
+      "$.usage.total_tokens"
+    ],
+    "semantic": {
+      "event_types": [
+        "response"
+      ],
+      "models": [
+        "gpt-4o-mini"
+      ],
+      "usage": {
+        "cache_creation_tokens": null,
+        "cache_read_tokens": 4,
+        "input_tokens": 12,
+        "output_tokens": 3,
+        "reasoning_tokens": null,
+        "total_tokens": 15
+      }
+    },
+    "started_at": "2026-08-14T18:56:38.277713+00:00",
+    "status": 200
+  },
+  "kill_returncode": 0,
+  "marker": "sub2api-dual-diff/settlement-crash-47b4ba9773bb/openai_json",
+  "platform": "openai",
+  "restart_observation": {
+    "balance_changed": false,
+    "dedup_changed": false,
+    "health_status": 200,
+    "usage_recovered": false
+  },
+  "run_id": "settlement-crash-47b4ba9773bb",
+  "terminal_delivery_count": 1
+}

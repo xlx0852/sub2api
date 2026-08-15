@@ -20,6 +20,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/testfailpoint"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/setup"
 	"github.com/Wei-Shaw/sub2api/internal/web"
@@ -60,7 +61,12 @@ func main() {
 	// Parse command line flags
 	setupMode := flag.Bool("setup", false, "Run setup wizard in CLI mode")
 	showVersion := flag.Bool("version", false, "Show version information")
+	settlementTestFailpoint := flag.String("settlement-test-failpoint", "", "Internal settlement crash-test stage")
+	settlementTestFailpointDir := flag.String("settlement-test-failpoint-dir", "", "Internal settlement crash-test marker directory")
 	flag.Parse()
+	if err := testfailpoint.ConfigureSettlement(*settlementTestFailpoint, *settlementTestFailpointDir); err != nil {
+		log.Fatalf("Invalid settlement test failpoint: %v", err)
+	}
 
 	if *showVersion {
 		log.Printf("Sub2API %s (commit: %s, built: %s)\n", Version, Commit, Date)

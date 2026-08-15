@@ -716,6 +716,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		return nil, fmt.Errorf("upstream http bridge error: status=%d message=%s", resp.StatusCode, upstreamMsg)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	notifyUsageSettlementUpstreamAccepted(upstreamCtx)
 
 	logOpenAIWSModeInfo(
 		"ingress_ws_http_bridge_upstream_ok account_id=%d turn=%d status=%d payload_bytes=%d header_ms=%d",
@@ -992,28 +993,28 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		if needModelReplace && len(mappedModelBytes) > 0 && openAIWSEventMayContainModel(eventType) && strings.Contains(trimmedData, mappedModel) {
 			upstreamMessage = replaceOpenAIWSMessageModel(upstreamMessage, mappedModel, originalModel)
 		}
-if s.toolCorrector != nil && openAIWSEventMayContainToolCalls(eventType) && openAIWSMessageLikelyContainsToolCalls(upstreamMessage) {
-				if corrected, changed := s.toolCorrector.CorrectToolCallsInSSEBytes(upstreamMessage); changed {
-					upstreamMessage = corrected
-				}
+		if s.toolCorrector != nil && openAIWSEventMayContainToolCalls(eventType) && openAIWSMessageLikelyContainsToolCalls(upstreamMessage) {
+			if corrected, changed := s.toolCorrector.CorrectToolCallsInSSEBytes(upstreamMessage); changed {
+				upstreamMessage = corrected
 			}
+		}
 
-			restoredMessage, restoreErr := restoreOpenAIResponsesNamespacePayload(c, upstreamMessage)
-			if restoreErr != nil {
-				return resultWithUsage(), fmt.Errorf("restore http bridge namespace response: %w", restoreErr)
-			}
-			upstreamMessage = restoredMessage
+		restoredMessage, restoreErr := restoreOpenAIResponsesNamespacePayload(c, upstreamMessage)
+		if restoreErr != nil {
+			return resultWithUsage(), fmt.Errorf("restore http bridge namespace response: %w", restoreErr)
+		}
+		upstreamMessage = restoredMessage
 
-			// 上游自生成的 fc_ call_id 还原为 codex 的 call_id（工具名配对），
-			// 必须在 replayCollector 之前完成：重放序列注入下一轮 input 时也要
-			// 带 codex call_id，否则客户端 custom_tool_call_output(call_*) 与
-			// 重放 function_call(fc_*) 断链 → 上游 No tool call found。
-			if callIDMapper != nil {
-				if restored, changed := callIDMapper.restoreBridgeResponseCallIDs(upstreamMessage); changed {
-					upstreamMessage = restored
-				}
+		// 上游自生成的 fc_ call_id 还原为 codex 的 call_id（工具名配对），
+		// 必须在 replayCollector 之前完成：重放序列注入下一轮 input 时也要
+		// 带 codex call_id，否则客户端 custom_tool_call_output(call_*) 与
+		// 重放 function_call(fc_*) 断链 → 上游 No tool call found。
+		if callIDMapper != nil {
+			if restored, changed := callIDMapper.restoreBridgeResponseCallIDs(upstreamMessage); changed {
+				upstreamMessage = restored
 			}
-			replayCollector.AddEvent(eventType, upstreamMessage)
+		}
+		replayCollector.AddEvent(eventType, upstreamMessage)
 
 		if !clientDisconnected {
 			if err := writeClientMessage(upstreamMessage); err != nil {

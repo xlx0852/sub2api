@@ -64,6 +64,7 @@ type RelayOptions struct {
 	StartClientAfterFirstDownstream bool
 	OnUsageParseFailure             func(eventType string, usageRaw string)
 	OnTurnComplete                  func(turn RelayTurnResult)
+	OnUpstreamEvent                 func(turn int, eventType, responseID string)
 	BeforeWriteClient               func(msgType coderws.MessageType, payload []byte, wroteDownstream bool) error
 	ReadClientFrame                 func(ctx context.Context, clientConn FrameConn) (coderws.MessageType, []byte, error)
 	OnTrace                         func(event RelayTraceEvent)
@@ -88,6 +89,8 @@ type relayState struct {
 	firstTokenMs      *int
 	turnTimingByID    map[string]*relayTurnTiming
 	activeTurn        *relayTurnTiming
+	completedTurns    int
+	onUpstreamEvent   func(turn int, eventType, responseID string)
 }
 
 type relayExitSignal struct {
@@ -143,7 +146,7 @@ func Relay(
 		firstMessageType = coderws.MessageText
 	}
 	startAt := nowFn()
-	state := &relayState{requestModel: result.RequestModel}
+	state := &relayState{requestModel: result.RequestModel, onUpstreamEvent: options.OnUpstreamEvent}
 	onTrace := options.OnTrace
 
 	relayCtx, relayCancel := context.WithCancel(ctx)
@@ -475,6 +478,11 @@ func runUpstreamToClient(
 		case coderws.MessageBinary:
 			// binary frame 直接透传，不进入 JSON 观测路径（避免无效解析开销）。
 		}
+		if state != nil && state.onUpstreamEvent != nil && observedEvent.eventType != "" {
+			turn := 1
+			turn = state.completedTurns + 1
+			state.onUpstreamEvent(turn, observedEvent.eventType, observedEvent.responseID)
+		}
 		emitTurnComplete(onTurnComplete, state, observedEvent)
 		if dropDownstreamWrites != nil && dropDownstreamWrites.Load() {
 			if droppedFrames != nil {
@@ -673,7 +681,7 @@ func emitTurnComplete(
 	state *relayState,
 	observed observedUpstreamEvent,
 ) {
-	if onTurnComplete == nil || !observed.terminal {
+	if !observed.terminal {
 		return
 	}
 	responseID := strings.TrimSpace(observed.responseID)
@@ -684,14 +692,19 @@ func emitTurnComplete(
 	if state != nil {
 		requestModel = state.requestModel
 	}
-	onTurnComplete(RelayTurnResult{
-		RequestModel:      requestModel,
-		Usage:             observed.usage,
-		RequestID:         responseID,
-		TerminalEventType: observed.eventType,
-		Duration:          observed.duration,
-		FirstTokenMs:      openAIWSRelayCloneIntPtr(observed.firstToken),
-	})
+	if onTurnComplete != nil {
+		onTurnComplete(RelayTurnResult{
+			RequestModel:      requestModel,
+			Usage:             observed.usage,
+			RequestID:         responseID,
+			TerminalEventType: observed.eventType,
+			Duration:          observed.duration,
+			FirstTokenMs:      openAIWSRelayCloneIntPtr(observed.firstToken),
+		})
+	}
+	if state != nil {
+		state.completedTurns++
+	}
 }
 
 func openAIWSRelayGetOrInitTurnTiming(state *relayState, responseID string, now time.Time) *relayTurnTiming {

@@ -1,0 +1,31 @@
+{
+  "checks": {
+    "api_key_quota_equal": true,
+    "balance_equal": true,
+    "billing_dedup_equal": true,
+    "default_new_mode_writes_no_journal": true,
+    "profit_contribution_equal": true,
+    "usage_digest_equal": true
+  },
+  "new": {
+    "dedup_count": 6,
+    "metered_cost": "0",
+    "profit": "0.0015350000",
+    "selected_key_quota_sum": "0.03786000",
+    "usage_cost": "0.0015350000",
+    "usage_count": 6,
+    "usage_digest": "aa5d463851fdc0b6cacff1a07f964e45",
+    "user_balance": "1.95585800"
+  },
+  "old": {
+    "dedup_count": 6,
+    "metered_cost": "0",
+    "profit": "0.0015350000",
+    "selected_key_quota_sum": "0.03786000",
+    "usage_cost": "0.0015350000",
+    "usage_count": 6,
+    "usage_digest": "aa5d463851fdc0b6cacff1a07f964e45",
+    "user_balance": "1.95585800"
+  },
+  "run_id": "staging-real-http-diff-20260815"
+}

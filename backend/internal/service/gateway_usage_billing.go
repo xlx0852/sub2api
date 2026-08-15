@@ -713,11 +713,11 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	isSubscriptionBilling := false
 	billingType := BillingTypeBalance
 
-// 创建使用日志
-		accountRateMultiplier := account.BillingRateMultiplier()
-		usageLog := s.buildRecordUsageLog(ctx, input, result, apiKey, user, account, subscription,
-			requestedModel, multiplier, imageMultiplier, accountRateMultiplier, billingType, cacheTTLOverridden, cost, opts)
-		// Account-side cost uses total_cost × account_rate_multiplier only (no policy COGS overlay).
+	// 创建使用日志
+	accountRateMultiplier := account.BillingRateMultiplier()
+	usageLog := s.buildRecordUsageLog(ctx, input, result, apiKey, user, account, subscription,
+		requestedModel, multiplier, imageMultiplier, accountRateMultiplier, billingType, cacheTTLOverridden, cost, opts)
+	// Account-side cost uses total_cost × account_rate_multiplier only (no policy COGS overlay).
 
 	// 配额平台由 handler 在请求 ctx 内经 QuotaPlatform() 算定并通过 input 传入；
 	// 后扣运行在 worker 池的 background ctx 上，无法再从 ctx 取 ForcePlatform。
@@ -727,7 +727,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		quotaPlatform = PlatformFromAPIKey(apiKey)
 	}
 	requestID := usageLog.RequestID
-	_, billingErr := applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
+	billingParams := &postUsageBillingParams{
 		Cost:                  cost,
 		User:                  user,
 		APIKey:                apiKey,
@@ -738,6 +738,23 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		AccountRateMultiplier: accountRateMultiplier,
 		APIKeyService:         input.APIKeyService,
 		Platform:              quotaPlatform,
+	}
+	if authoritative, err := handoffUsageSettlement(ctx, s.usageSettlement, usageLog, billingParams, quotaPlatform); err != nil {
+		return err
+	} else if authoritative {
+		return nil
+	}
+	_, billingErr := applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
+		Cost:                  billingParams.Cost,
+		User:                  billingParams.User,
+		APIKey:                billingParams.APIKey,
+		Account:               billingParams.Account,
+		Subscription:          billingParams.Subscription,
+		RequestPayloadHash:    billingParams.RequestPayloadHash,
+		IsSubscriptionBill:    billingParams.IsSubscriptionBill,
+		AccountRateMultiplier: billingParams.AccountRateMultiplier,
+		APIKeyService:         billingParams.APIKeyService,
+		Platform:              billingParams.Platform,
 	}, s.billingDeps(), s.usageBillingRepo)
 
 	if billingErr != nil {

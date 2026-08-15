@@ -1,0 +1,114 @@
+{
+  "attempt_after_deadline": {
+    "billing_identity": "client:85ba6ef1-7ca2-4857-8c61-beb5429f5b43",
+    "id": 4,
+    "last_error_code": "TERMINAL_USAGE_MISSING",
+    "last_error_message": "complete terminal usage was not persisted before the reconciliation deadline",
+    "reconciliation_deadline": "2026-08-15T10:47:26.809837+08:00",
+    "retry_count": 0,
+    "state": "reconciliation_required"
+  },
+  "attempt_before_deadline": {
+    "billing_identity": "client:85ba6ef1-7ca2-4857-8c61-beb5429f5b43",
+    "id": 4,
+    "reconciliation_deadline": "2026-08-16T10:47:27.787656+08:00",
+    "retry_count": 0,
+    "state": "started"
+  },
+  "billing_after": {
+    "account": {
+      "name": "settlement-openai",
+      "quota_limit": "50",
+      "quota_used": "0.000110"
+    },
+    "api_key": {
+      "name": "settlement-openai",
+      "quota_used": "0.00006000",
+      "status": "active"
+    },
+    "dedup_count": 42,
+    "usage_count": 0,
+    "user": {
+      "balance": "99.99822000",
+      "email": "settlement-admin@local.test",
+      "frozen_balance": "0.00000000"
+    }
+  },
+  "billing_before": {
+    "account": {
+      "name": "settlement-openai",
+      "quota_limit": "50",
+      "quota_used": "0.000110"
+    },
+    "api_key": {
+      "name": "settlement-openai",
+      "quota_used": "0.00006000",
+      "status": "active"
+    },
+    "dedup_count": 42,
+    "usage_count": 0,
+    "user": {
+      "balance": "99.99822000",
+      "email": "settlement-admin@local.test",
+      "frozen_balance": "0.00000000"
+    }
+  },
+  "case": "openai_sse",
+  "checks": {
+    "account_quota_unchanged": true,
+    "api_key_quota_unchanged": true,
+    "balance_unchanged": true,
+    "missing_terminal_audited": true,
+    "no_billing_dedup": true,
+    "no_payload_invented": true,
+    "no_usage_log": true,
+    "reconciliation_required": true,
+    "request_reached_upstream": true,
+    "started_without_payload": true,
+    "store_false_has_no_retrieve_identity": true
+  },
+  "passed": true,
+  "request": {
+    "content_type": "text/event-stream",
+    "error": "",
+    "event_count": 3,
+    "finished_at": "2026-08-15T02:47:27.771285+00:00",
+    "format": "sse",
+    "marker": "sub2api-dual-diff/settlement-missing-terminal-b2c00d2cd4a4/openai_sse",
+    "normalized_sha256": "000f29d63ee18a9ef5408e3ead5c247c41d91004fa4903478dcca35964c0581d",
+    "schema": [
+      "$[].content_index",
+      "$[].delta",
+      "$[].item_id",
+      "$[].output_index",
+      "$[].response.created_at",
+      "$[].response.error.code",
+      "$[].response.error.message",
+      "$[].response.id",
+      "$[].response.model",
+      "$[].response.object",
+      "$[].response.output[]",
+      "$[].response.status",
+      "$[].response.store",
+      "$[].response.usage",
+      "$[].sequence_number",
+      "$[].type"
+    ],
+    "semantic": {
+      "event_types": [
+        "response.created",
+        "response.failed",
+        "response.output_text.delta",
+        "response.status:failed",
+        "response.status:in_progress"
+      ],
+      "models": [
+        "gpt-4o-mini"
+      ],
+      "usage": null
+    },
+    "started_at": "2026-08-15T02:47:27.746463+00:00",
+    "status": 200
+  },
+  "run_id": "settlement-missing-terminal-b2c00d2cd4a4"
+}

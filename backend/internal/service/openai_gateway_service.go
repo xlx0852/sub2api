@@ -19,6 +19,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/cespare/xxhash/v2"
 	"github.com/gin-gonic/gin"
@@ -434,6 +435,7 @@ type OpenAIGatewayService struct {
 	balanceNotifyService  *BalanceNotifyService
 	settingService        *SettingService
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+	usageSettlement       ports.UsageSettlementCoordinator
 	codexIdentity         *CodexIdentity
 
 	openaiWSPoolOnce              sync.Once
@@ -457,6 +459,12 @@ type OpenAIGatewayService struct {
 	openaiCompatSessionResponses        sync.Map
 	openaiCompatAnthropicDigestSessions sync.Map
 	codexManifestCache                  sync.Map // key: int64(groupID), value: codexManifestCacheEntry
+}
+
+func (s *OpenAIGatewayService) SetUsageSettlementCoordinator(coordinator ports.UsageSettlementCoordinator) {
+	if s != nil {
+		s.usageSettlement = coordinator
+	}
 }
 
 func (s *OpenAIGatewayService) SetKimiQuotaService(service KimiQuotaQuerier) {
@@ -524,7 +532,7 @@ func NewOpenAIGatewayService(
 			nil,
 			"service.openai_gateway",
 		),
-		httpUpstream:          httpUpstream,
+		httpUpstream:          withUsageSettlementHTTPUpstream(httpUpstream),
 		deferredService:       deferredService,
 		openAITokenProvider:   openAITokenProvider,
 		grokTokenProvider:     grokTokenProvider,

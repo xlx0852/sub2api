@@ -35,6 +35,32 @@ Parse → Admission → Select → Rewrite → Transport → Relay → Settle
 
 装配由 Wire + `app/lifecycle.Registry` 负责；`cmd/server/cleanup.go` 由注册表生成。
 
+## 持久化 usage 结算（上线门禁中）
+
+终态 usage 可以通过加法 PostgreSQL 表 `usage_settlement_attempts` 持久交接。这条路径不替换两套平台费用计算器：它保存现有计算器产生的标量 billing command 与 usage-log 快照，再在同一事务内提交账务幂等、余额/配额变更、usage log 和终态 `settled`。
+
+`started` → `ready` → `processing` → `settled`
+
+其他终态为 `failed_retryable`、`failed_terminal` 和 `reconciliation_required`。processing 租约过期后可由其他实例接管；Redis 和进程内队列只是唤醒加速器。事务后的缓存刷新与通知不属于账务原子性边界，可从 PostgreSQL 真相源重建。
+
+启动 setting `usage_settlement_durability_mode` 有三个值：
+
+| 模式 | 写 journal | Durable claim | 扣费权威 |
+|------|-------------|---------------|----------|
+| `off`（默认） | 否 | 否 | 现有非持久路径 |
+| `shadow` | 是 | 否 | 仍由现有路径扣费，journal 只用于对比 |
+| `authoritative` | 是 | 是 | PostgreSQL durable worker |
+
+`shadow` 或 `authoritative` 还必须配置第二个数据库 setting `usage_settlement_durability_group_ids`。它接受正整数 group ID 的 JSON 数组；显式 `*` 只供隔离环境的整实例测试。同一 scope 同时约束 handler handoff、journal 写入、是否跳过旧路径和 PostgreSQL claim。未选中 group 不写 journal，并保持现有 worker-pool 结算路径。active scope 缺失、读取失败、空、格式非法或含非正整数都 fail-closed 为 `off`。
+
+每条 attempt 还会在创建时固化不可变的 claim 资格。shadow 与迁移前历史行均为 `authoritative=false`，永久只作差分证据；同一 group 后续切到 authoritative 不会升级或 claim 这些行。只有在该 group 已处于 authoritative 时新建的 `authoritative=true` attempt 才可被 worker claim。group scope 是第二层过滤，不能替代这条逐事件门禁。
+
+两个 setting 都只在实例启动时读取一次，不是 YAML/env 键，不改变默认部署。生产应从一个低风险测试 group 开始，禁止用 `*` 冒充生产 canary。
+
+默认对账窗口为 24 小时。terminal 前的精确恢复是条件式能力：仅官方 OpenAI API-key 和 xAI API-key 的 `store=true` stored Responses 可按 response ID 取回。`store=false`、OAuth/Codex、Chat Completions、Anthropic、Gemini、Antigravity、Kimi 及其他不支持路径进入 `reconciliation_required`，绝不猜测 partial/zero usage。journal payload 只保存版本化计费/审计标量与 hash，不保存提示词、响应正文或凭据。
+
+当前没有 Prometheus/OTel 或公网 settlement 端点。现有结构化日志每分钟输出积压数、最老积压时间、重试/终止失败累计、待对账累计和 provider 恢复累计。运维流程见 `docs/USAGE_SETTLEMENT_OPERATIONS_CN.md`。
+
 ## 前后端契约
 
 | 面 | 契约 |
@@ -75,3 +101,4 @@ SPA 启动时拉取公开配置。`window.__APP_CONFIG__` 只作首屏缓存（V
 - 控制面规格：`openapi/README.md`
 - 分离代理：`deploy/nginx/README.md`
 - Compose overlay：`deploy/docker-compose.separated.yml`
+- 持久结算运维手册：`docs/USAGE_SETTLEMENT_OPERATIONS_CN.md`

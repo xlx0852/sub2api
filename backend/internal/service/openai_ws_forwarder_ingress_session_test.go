@@ -73,11 +73,15 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 	}
 
 	serverErrCh := make(chan error, 1)
-	turnWSModeCh := make(chan bool, 2)
+	turnResultCh := make(chan *OpenAIForwardResult, 2)
+	acceptedBillingIDCh := make(chan string, 2)
 	hooks := &OpenAIWSIngressHooks{
+		UpstreamAccepted: func(_ int, billingRequestID, _ string) {
+			acceptedBillingIDCh <- billingRequestID
+		},
 		AfterTurn: func(_ int, result *OpenAIForwardResult, turnErr error) {
 			if turnErr == nil && result != nil {
-				turnWSModeCh <- result.OpenAIWSMode
+				turnResultCh <- result
 			}
 		},
 	}
@@ -147,8 +151,31 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 	secondTurnEvent := readMessage()
 	require.Equal(t, "response.completed", gjson.GetBytes(secondTurnEvent, "type").String())
 	require.Equal(t, "resp_ingress_turn_2", gjson.GetBytes(secondTurnEvent, "response.id").String())
-	require.True(t, <-turnWSModeCh, "首轮 turn 应标记为 WS 模式")
-	require.True(t, <-turnWSModeCh, "第二轮 turn 应标记为 WS 模式")
+	receiveTurnResult := func() *OpenAIForwardResult {
+		select {
+		case result := <-turnResultCh:
+			return result
+		case <-time.After(3 * time.Second):
+			t.Fatal("等待 WS turn result 超时")
+			return nil
+		}
+	}
+	receiveBillingID := func() string {
+		select {
+		case billingID := <-acceptedBillingIDCh:
+			return billingID
+		case <-time.After(3 * time.Second):
+			t.Fatal("等待 WS accepted billing ID 超时")
+			return ""
+		}
+	}
+	firstTurnResult := receiveTurnResult()
+	secondTurnResult := receiveTurnResult()
+	require.True(t, firstTurnResult.OpenAIWSMode, "首轮 turn 应标记为 WS 模式")
+	require.True(t, secondTurnResult.OpenAIWSMode, "第二轮 turn 应标记为 WS 模式")
+	require.Equal(t, receiveBillingID(), firstTurnResult.BillingRequestID)
+	require.Equal(t, receiveBillingID(), secondTurnResult.BillingRequestID)
+	require.NotEqual(t, firstTurnResult.BillingRequestID, secondTurnResult.BillingRequestID)
 
 	_ = clientConn.Close(coderws.StatusNormalClosure, "done")
 

@@ -539,7 +539,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			// ForceCacheBilling 提前拍成标量，避免 worker 闭包保活 failover 状态里的响应体。
 			forceCacheBilling := fs.ForceCacheBilling
 			quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
-			h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
+			h.submitUsageRecordTask(usageSettlementTaskContext(c), func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 					Result:             result,
 					QuotaPlatform:      quotaPlatform,
@@ -801,7 +801,29 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			// 用 wrapReleaseOnDone 确保 context 取消时自动释放（仅 serialize 模式有 queueRelease）
 			queueRelease = wrapReleaseOnDone(c.Request.Context(), queueRelease)
 			// 注入回调到 ParsedRequest：使用外层 wrapper 以便提前清理 AfterFunc
-			attemptParsedReq.OnUpstreamAccepted = queueRelease
+			attemptParsedReq.OnUpstreamAccepted = func() {
+				if queueRelease != nil {
+					queueRelease()
+				}
+				requestType := service.RequestTypeSync
+				if reqStream {
+					requestType = service.RequestTypeStream
+				}
+				if startErr := h.gatewayService.StartUsageSettlementAttempt(c.Request.Context(), service.UsageSettlementStartInput{
+					RequestPayloadHash: service.HashUsageRequestPayload(attemptParsedReq.Body.Bytes()),
+					APIKey:             currentAPIKey,
+					User:               currentAPIKey.User,
+					Account:            account,
+					RequestType:        requestType,
+					InboundEndpoint:    GetInboundEndpoint(c),
+					UpstreamEndpoint:   GetUpstreamEndpoint(c, account.Platform),
+				}); startErr != nil {
+					reqLog.Error("gateway.usage_settlement_start_failed",
+						zap.Int64("account_id", account.ID),
+						zap.Error(startErr),
+					)
+				}
+			}
 			// ===== 用户消息串行队列 END =====
 
 			// 渠道模型映射只作用于本次账号尝试，避免 failover 后污染原始 ParsedRequest。
@@ -834,6 +856,26 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			}
 			// 记录 Forward 前已写入字节数，Forward 后若增加则说明 SSE 内容已发，禁止 failover
 			writerSizeBeforeForward := c.Writer.Size()
+			requestType := service.RequestTypeSync
+			if reqStream {
+				requestType = service.RequestTypeStream
+			}
+			// GatewayService consumes ParsedRequest.OnUpstreamAccepted after its
+			// final model/body rewrite, so do not also register the earlier HTTP
+			// context callback: the two request hashes can legitimately differ.
+			// Antigravity's dedicated OAuth path does not consume ParsedRequest and
+			// therefore still needs the HTTP accepted decorator.
+			if account.Platform == service.PlatformAntigravity && account.Type != service.AccountTypeAPIKey {
+				requestCtx = h.gatewayService.WithUsageSettlementAttempt(requestCtx, service.UsageSettlementStartInput{
+					RequestPayloadHash: service.HashUsageRequestPayload(attemptParsedReq.Body.Bytes()),
+					APIKey:             currentAPIKey,
+					User:               currentAPIKey.User,
+					Account:            account,
+					RequestType:        requestType,
+					InboundEndpoint:    GetInboundEndpoint(c),
+					UpstreamEndpoint:   GetUpstreamEndpoint(c, account.Platform),
+				})
+			}
 			if account.Platform == service.PlatformAntigravity && account.Type != service.AccountTypeAPIKey {
 				result, err = h.antigravityGatewayService.Forward(requestCtx, c, account, attemptBody, hasBoundSession)
 			} else {
@@ -994,7 +1036,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			// ForceCacheBilling 提前拍成标量，避免 worker 闭包保活 failover 状态里的响应体。
 			forceCacheBilling := fs.ForceCacheBilling
 			quotaPlatform := service.QuotaPlatform(c.Request.Context(), currentAPIKey)
-			h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
+			h.submitUsageRecordTask(usageSettlementTaskContext(c), func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 					Result:             result,
 					QuotaPlatform:      quotaPlatform,
@@ -2240,6 +2282,20 @@ func (h *GatewayHandler) submitUsageRecordTask(parent context.Context, task serv
 		return
 	}
 	task = wrapUsageRecordTaskContext(parent, task)
+	if h.gatewayService != nil && h.gatewayService.UsageSettlementEnabledFor(service.UsageSettlementGroupIDFromContext(parent)) {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				logger.L().With(
+					zap.String("component", "handler.gateway.messages"),
+					zap.Any("panic", recovered),
+				).Error("gateway.durable_usage_handoff_panic_recovered")
+			}
+		}()
+		task(ctx)
+		return
+	}
 	if h.usageRecordWorkerPool != nil {
 		h.usageRecordWorkerPool.Submit(task)
 		return

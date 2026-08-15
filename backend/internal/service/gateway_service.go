@@ -20,6 +20,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/cespare/xxhash/v2"
 	gocache "github.com/patrickmn/go-cache"
@@ -694,6 +695,13 @@ type GatewayService struct {
 	tlsFPProfileService   *TLSFingerprintProfileService
 	balanceNotifyService  *BalanceNotifyService
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+	usageSettlement       ports.UsageSettlementCoordinator
+}
+
+func (s *GatewayService) SetUsageSettlementCoordinator(coordinator ports.UsageSettlementCoordinator) {
+	if s != nil {
+		s.usageSettlement = coordinator
+	}
 }
 
 // NewGatewayService creates a new GatewayService
@@ -746,7 +754,7 @@ func NewGatewayService(
 		rateLimitService:      rateLimitService,
 		billingCacheService:   billingCacheService,
 		identityService:       identityService,
-		httpUpstream:          httpUpstream,
+		httpUpstream:          withUsageSettlementHTTPUpstream(httpUpstream),
 		deferredService:       deferredService,
 		claudeTokenProvider:   claudeTokenProvider,
 		sessionLimitCache:     sessionLimitCache,

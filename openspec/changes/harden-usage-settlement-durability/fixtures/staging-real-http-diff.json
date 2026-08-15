@@ -1,0 +1,1285 @@
+{
+  "run_id": "staging-real-http-diff-20260815",
+  "started_at": "2026-08-15T05:08:49.605202+00:00",
+  "old_url": "http://127.0.0.1:18281",
+  "new_url": "http://127.0.0.1:18282",
+  "cases": [
+    {
+      "name": "anthropic_json",
+      "platform": "anthropic",
+      "request": {
+        "model": "deepseek-v4-flash",
+        "max_tokens": 1,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Reply only OK"
+          }
+        ],
+        "stream": false
+      },
+      "old": {
+        "started_at": "2026-08-15T05:08:49.608227+00:00",
+        "finished_at": "2026-08-15T05:08:54.445689+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/anthropic_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.content[].signature",
+          "$.content[].thinking",
+          "$.content[].type",
+          "$.hook_results.after_request_hooks[]",
+          "$.hook_results.before_request_hooks[].async",
+          "$.hook_results.before_request_hooks[].checks[].created_at",
+          "$.hook_results.before_request_hooks[].checks[].data.explanation",
+          "$.hook_results.before_request_hooks[].checks[].data.requestContext.timeout",
+          "$.hook_results.before_request_hooks[].checks[].data.verdict",
+          "$.hook_results.before_request_hooks[].checks[].data.webhookUrl",
+          "$.hook_results.before_request_hooks[].checks[].execution_time",
+          "$.hook_results.before_request_hooks[].checks[].fail_on_error",
+          "$.hook_results.before_request_hooks[].checks[].id",
+          "$.hook_results.before_request_hooks[].checks[].log",
+          "$.hook_results.before_request_hooks[].checks[].transformed",
+          "$.hook_results.before_request_hooks[].checks[].verdict",
+          "$.hook_results.before_request_hooks[].created_at",
+          "$.hook_results.before_request_hooks[].deny",
+          "$.hook_results.before_request_hooks[].execution_time",
+          "$.hook_results.before_request_hooks[].feedback",
+          "$.hook_results.before_request_hooks[].id",
+          "$.hook_results.before_request_hooks[].softDeny200",
+          "$.hook_results.before_request_hooks[].transformed",
+          "$.hook_results.before_request_hooks[].type",
+          "$.hook_results.before_request_hooks[].verdict",
+          "$.id",
+          "$.model",
+          "$.role",
+          "$.stop_reason",
+          "$.stop_sequence",
+          "$.type",
+          "$.usage.cache_creation_input_tokens",
+          "$.usage.cache_read_input_tokens",
+          "$.usage.input_tokens",
+          "$.usage.output_tokens",
+          "$.usage.service_tier"
+        ],
+        "normalized_sha256": "824e20a3c9f188d59c0a367d1d0b5ac0370584a7f247757d6a1df83aa96f5808",
+        "semantic": {
+          "event_types": [
+            "message"
+          ],
+          "models": [
+            "deepseek-v4-flash"
+          ],
+          "usage": {
+            "input_tokens": 86,
+            "output_tokens": 1,
+            "total_tokens": null,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+            "reasoning_tokens": null
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T05:08:49.608383+00:00",
+        "finished_at": "2026-08-15T05:08:53.454149+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/anthropic_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.content[].signature",
+          "$.content[].thinking",
+          "$.content[].type",
+          "$.hook_results.after_request_hooks[]",
+          "$.hook_results.before_request_hooks[].async",
+          "$.hook_results.before_request_hooks[].checks[].created_at",
+          "$.hook_results.before_request_hooks[].checks[].data.explanation",
+          "$.hook_results.before_request_hooks[].checks[].data.requestContext.timeout",
+          "$.hook_results.before_request_hooks[].checks[].data.verdict",
+          "$.hook_results.before_request_hooks[].checks[].data.webhookUrl",
+          "$.hook_results.before_request_hooks[].checks[].execution_time",
+          "$.hook_results.before_request_hooks[].checks[].fail_on_error",
+          "$.hook_results.before_request_hooks[].checks[].id",
+          "$.hook_results.before_request_hooks[].checks[].log",
+          "$.hook_results.before_request_hooks[].checks[].transformed",
+          "$.hook_results.before_request_hooks[].checks[].verdict",
+          "$.hook_results.before_request_hooks[].created_at",
+          "$.hook_results.before_request_hooks[].deny",
+          "$.hook_results.before_request_hooks[].execution_time",
+          "$.hook_results.before_request_hooks[].feedback",
+          "$.hook_results.before_request_hooks[].id",
+          "$.hook_results.before_request_hooks[].softDeny200",
+          "$.hook_results.before_request_hooks[].transformed",
+          "$.hook_results.before_request_hooks[].type",
+          "$.hook_results.before_request_hooks[].verdict",
+          "$.id",
+          "$.model",
+          "$.role",
+          "$.stop_reason",
+          "$.stop_sequence",
+          "$.type",
+          "$.usage.cache_creation_input_tokens",
+          "$.usage.cache_read_input_tokens",
+          "$.usage.input_tokens",
+          "$.usage.output_tokens",
+          "$.usage.service_tier"
+        ],
+        "normalized_sha256": "f720ee972e3ecbc6f9fc9339a0454b4e4d345f2053f1913bf21f65d48384669d",
+        "semantic": {
+          "event_types": [
+            "message"
+          ],
+          "models": [
+            "deepseek-v4-flash"
+          ],
+          "usage": {
+            "input_tokens": 86,
+            "output_tokens": 1,
+            "total_tokens": null,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+            "reasoning_tokens": null
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": false,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "anthropic_sse",
+      "platform": "anthropic",
+      "request": {
+        "model": "deepseek-v4-flash",
+        "max_tokens": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Reply only OK"
+          }
+        ],
+        "stream": true
+      },
+      "old": {
+        "started_at": "2026-08-15T05:08:54.447577+00:00",
+        "finished_at": "2026-08-15T05:08:58.086508+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/anthropic_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 9,
+        "schema": [
+          "$[].content_block.signature",
+          "$[].content_block.thinking",
+          "$[].content_block.type",
+          "$[].delta.signature",
+          "$[].delta.stop_reason",
+          "$[].delta.stop_sequence",
+          "$[].delta.thinking",
+          "$[].delta.type",
+          "$[].index",
+          "$[].message.content[]",
+          "$[].message.id",
+          "$[].message.model",
+          "$[].message.role",
+          "$[].message.stop_reason",
+          "$[].message.stop_sequence",
+          "$[].message.type",
+          "$[].message.usage.cache_creation_input_tokens",
+          "$[].message.usage.cache_read_input_tokens",
+          "$[].message.usage.input_tokens",
+          "$[].message.usage.output_tokens",
+          "$[].message.usage.service_tier",
+          "$[].type",
+          "$[].usage.cache_creation_input_tokens",
+          "$[].usage.cache_read_input_tokens",
+          "$[].usage.input_tokens",
+          "$[].usage.output_tokens",
+          "$[].usage.service_tier"
+        ],
+        "normalized_sha256": "387c3c59e1b5efc27540ce6e39d98150c574ee5eef033278aa75569f1fb04e0e",
+        "semantic": {
+          "event_types": [
+            "content_block_delta",
+            "content_block_start",
+            "content_block_stop",
+            "message_delta",
+            "message_start",
+            "message_stop",
+            "ping"
+          ],
+          "models": [],
+          "usage": {
+            "input_tokens": 86,
+            "output_tokens": 2,
+            "total_tokens": null,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+            "reasoning_tokens": null
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T05:08:54.447901+00:00",
+        "finished_at": "2026-08-15T05:08:57.262108+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/anthropic_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 9,
+        "schema": [
+          "$[].content_block.signature",
+          "$[].content_block.thinking",
+          "$[].content_block.type",
+          "$[].delta.signature",
+          "$[].delta.stop_reason",
+          "$[].delta.stop_sequence",
+          "$[].delta.thinking",
+          "$[].delta.type",
+          "$[].index",
+          "$[].message.content[]",
+          "$[].message.id",
+          "$[].message.model",
+          "$[].message.role",
+          "$[].message.stop_reason",
+          "$[].message.stop_sequence",
+          "$[].message.type",
+          "$[].message.usage.cache_creation_input_tokens",
+          "$[].message.usage.cache_read_input_tokens",
+          "$[].message.usage.input_tokens",
+          "$[].message.usage.output_tokens",
+          "$[].message.usage.service_tier",
+          "$[].type",
+          "$[].usage.cache_creation_input_tokens",
+          "$[].usage.cache_read_input_tokens",
+          "$[].usage.input_tokens",
+          "$[].usage.output_tokens",
+          "$[].usage.service_tier"
+        ],
+        "normalized_sha256": "c7c9dd8e5f583edf560de73564a60b1dcb5aabf3fb3d51217274f737a5bb8e21",
+        "semantic": {
+          "event_types": [
+            "content_block_delta",
+            "content_block_start",
+            "content_block_stop",
+            "message_delta",
+            "message_start",
+            "message_stop",
+            "ping"
+          ],
+          "models": [],
+          "usage": {
+            "input_tokens": 86,
+            "output_tokens": 2,
+            "total_tokens": null,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+            "reasoning_tokens": null
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": false,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "openai_json",
+      "platform": "openai",
+      "request": {
+        "model": "gpt-4o-mini",
+        "input": "Reply only OK",
+        "max_output_tokens": 1,
+        "stream": false
+      },
+      "old": {
+        "started_at": "2026-08-15T05:08:58.087815+00:00",
+        "finished_at": "2026-08-15T05:09:00.833366+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/openai_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.background",
+          "$.billing.payer",
+          "$.completed_at",
+          "$.created_at",
+          "$.error",
+          "$.frequency_penalty",
+          "$.id",
+          "$.incomplete_details",
+          "$.instructions",
+          "$.max_output_tokens",
+          "$.max_tool_calls",
+          "$.metadata{}",
+          "$.model",
+          "$.moderation",
+          "$.object",
+          "$.output[].content[].annotations[]",
+          "$.output[].content[].logprobs[]",
+          "$.output[].content[].text",
+          "$.output[].content[].type",
+          "$.output[].id",
+          "$.output[].role",
+          "$.output[].status",
+          "$.output[].type",
+          "$.parallel_tool_calls",
+          "$.presence_penalty",
+          "$.previous_response_id",
+          "$.prompt_cache_key",
+          "$.prompt_cache_retention",
+          "$.reasoning.context",
+          "$.reasoning.effort",
+          "$.reasoning.summary",
+          "$.safety_identifier",
+          "$.service_tier",
+          "$.status",
+          "$.store",
+          "$.temperature",
+          "$.text.format.type",
+          "$.text.verbosity",
+          "$.tool_choice",
+          "$.tool_usage.image_gen.input_tokens",
+          "$.tool_usage.image_gen.input_tokens_details.image_tokens",
+          "$.tool_usage.image_gen.input_tokens_details.text_tokens",
+          "$.tool_usage.image_gen.output_tokens",
+          "$.tool_usage.image_gen.output_tokens_details.image_tokens",
+          "$.tool_usage.image_gen.output_tokens_details.text_tokens",
+          "$.tool_usage.image_gen.total_tokens",
+          "$.tool_usage.web_search.num_requests",
+          "$.tools[]",
+          "$.top_logprobs",
+          "$.top_p",
+          "$.truncation",
+          "$.usage.input_tokens",
+          "$.usage.input_tokens_details.cache_write_tokens",
+          "$.usage.input_tokens_details.cached_tokens",
+          "$.usage.output_tokens",
+          "$.usage.output_tokens_details.reasoning_tokens",
+          "$.usage.total_tokens",
+          "$.user"
+        ],
+        "normalized_sha256": "05a6e00ff420f3308b0566d3d411b6928023f1f21476b29c1fb4061152a1d940",
+        "semantic": {
+          "event_types": [
+            "response"
+          ],
+          "models": [
+            "gpt-4o-mini-2024-07-18"
+          ],
+          "usage": {
+            "input_tokens": 4390,
+            "output_tokens": 2,
+            "total_tokens": 4392,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 0
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T05:08:58.088014+00:00",
+        "finished_at": "2026-08-15T05:09:02.354687+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/openai_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.background",
+          "$.billing.payer",
+          "$.completed_at",
+          "$.created_at",
+          "$.error",
+          "$.frequency_penalty",
+          "$.id",
+          "$.incomplete_details",
+          "$.instructions",
+          "$.max_output_tokens",
+          "$.max_tool_calls",
+          "$.metadata{}",
+          "$.model",
+          "$.moderation",
+          "$.object",
+          "$.output[].content[].annotations[]",
+          "$.output[].content[].logprobs[]",
+          "$.output[].content[].text",
+          "$.output[].content[].type",
+          "$.output[].id",
+          "$.output[].role",
+          "$.output[].status",
+          "$.output[].type",
+          "$.parallel_tool_calls",
+          "$.presence_penalty",
+          "$.previous_response_id",
+          "$.prompt_cache_key",
+          "$.prompt_cache_retention",
+          "$.reasoning.context",
+          "$.reasoning.effort",
+          "$.reasoning.summary",
+          "$.safety_identifier",
+          "$.service_tier",
+          "$.status",
+          "$.store",
+          "$.temperature",
+          "$.text.format.type",
+          "$.text.verbosity",
+          "$.tool_choice",
+          "$.tool_usage.image_gen.input_tokens",
+          "$.tool_usage.image_gen.input_tokens_details.image_tokens",
+          "$.tool_usage.image_gen.input_tokens_details.text_tokens",
+          "$.tool_usage.image_gen.output_tokens",
+          "$.tool_usage.image_gen.output_tokens_details.image_tokens",
+          "$.tool_usage.image_gen.output_tokens_details.text_tokens",
+          "$.tool_usage.image_gen.total_tokens",
+          "$.tool_usage.web_search.num_requests",
+          "$.tools[]",
+          "$.top_logprobs",
+          "$.top_p",
+          "$.truncation",
+          "$.usage.input_tokens",
+          "$.usage.input_tokens_details.cache_write_tokens",
+          "$.usage.input_tokens_details.cached_tokens",
+          "$.usage.output_tokens",
+          "$.usage.output_tokens_details.reasoning_tokens",
+          "$.usage.total_tokens",
+          "$.user"
+        ],
+        "normalized_sha256": "88316c978935fccbf82109eb27e518d52e06951dc7009e4a26cd7fdd1a0a1e19",
+        "semantic": {
+          "event_types": [
+            "response"
+          ],
+          "models": [
+            "gpt-4o-mini-2024-07-18"
+          ],
+          "usage": {
+            "input_tokens": 4390,
+            "output_tokens": 2,
+            "total_tokens": 4392,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 0
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": false,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "openai_sse",
+      "platform": "openai",
+      "request": {
+        "model": "gpt-4o-mini",
+        "input": "Reply only OK",
+        "max_output_tokens": 2,
+        "stream": true
+      },
+      "old": {
+        "started_at": "2026-08-15T05:09:02.356472+00:00",
+        "finished_at": "2026-08-15T05:09:04.356077+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/openai_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 9,
+        "schema": [
+          "$[].content_index",
+          "$[].delta",
+          "$[].item.content[]",
+          "$[].item.content[].annotations[]",
+          "$[].item.content[].logprobs[]",
+          "$[].item.content[].text",
+          "$[].item.content[].type",
+          "$[].item.id",
+          "$[].item.role",
+          "$[].item.status",
+          "$[].item.type",
+          "$[].item_id",
+          "$[].logprobs[]",
+          "$[].obfuscation",
+          "$[].output_index",
+          "$[].part.annotations[]",
+          "$[].part.logprobs[]",
+          "$[].part.text",
+          "$[].part.type",
+          "$[].response.background",
+          "$[].response.completed_at",
+          "$[].response.created_at",
+          "$[].response.error",
+          "$[].response.frequency_penalty",
+          "$[].response.id",
+          "$[].response.incomplete_details",
+          "$[].response.instructions",
+          "$[].response.max_output_tokens",
+          "$[].response.max_tool_calls",
+          "$[].response.metadata{}",
+          "$[].response.model",
+          "$[].response.moderation",
+          "$[].response.object",
+          "$[].response.output[]",
+          "$[].response.output[].content[].annotations[]",
+          "$[].response.output[].content[].logprobs[]",
+          "$[].response.output[].content[].text",
+          "$[].response.output[].content[].type",
+          "$[].response.output[].id",
+          "$[].response.output[].role",
+          "$[].response.output[].status",
+          "$[].response.output[].type",
+          "$[].response.parallel_tool_calls",
+          "$[].response.presence_penalty",
+          "$[].response.previous_response_id",
+          "$[].response.prompt_cache_key",
+          "$[].response.prompt_cache_retention",
+          "$[].response.reasoning.context",
+          "$[].response.reasoning.effort",
+          "$[].response.reasoning.summary",
+          "$[].response.safety_identifier",
+          "$[].response.service_tier",
+          "$[].response.status",
+          "$[].response.store",
+          "$[].response.temperature",
+          "$[].response.text.format.type",
+          "$[].response.text.verbosity",
+          "$[].response.tool_choice",
+          "$[].response.tool_usage.image_gen.input_tokens",
+          "$[].response.tool_usage.image_gen.input_tokens_details.image_tokens",
+          "$[].response.tool_usage.image_gen.input_tokens_details.text_tokens",
+          "$[].response.tool_usage.image_gen.output_tokens",
+          "$[].response.tool_usage.image_gen.output_tokens_details.image_tokens",
+          "$[].response.tool_usage.image_gen.output_tokens_details.text_tokens",
+          "$[].response.tool_usage.image_gen.total_tokens",
+          "$[].response.tool_usage.web_search.num_requests",
+          "$[].response.tools[]",
+          "$[].response.top_logprobs",
+          "$[].response.top_p",
+          "$[].response.truncation",
+          "$[].response.usage",
+          "$[].response.usage.input_tokens",
+          "$[].response.usage.input_tokens_details.cache_write_tokens",
+          "$[].response.usage.input_tokens_details.cached_tokens",
+          "$[].response.usage.output_tokens",
+          "$[].response.usage.output_tokens_details.reasoning_tokens",
+          "$[].response.usage.total_tokens",
+          "$[].response.user",
+          "$[].sequence_number",
+          "$[].text",
+          "$[].type"
+        ],
+        "normalized_sha256": "9179933a4009eb69b31b0509fe78abfc1365935824a94efe908bc1dc1887ebf4",
+        "semantic": {
+          "event_types": [
+            "response.completed",
+            "response.content_part.added",
+            "response.content_part.done",
+            "response.created",
+            "response.in_progress",
+            "response.output_item.added",
+            "response.output_item.done",
+            "response.output_text.delta",
+            "response.output_text.done",
+            "response.status:completed",
+            "response.status:in_progress"
+          ],
+          "models": [
+            "gpt-4o-mini-2024-07-18"
+          ],
+          "usage": {
+            "input_tokens": 4390,
+            "output_tokens": 2,
+            "total_tokens": 4392,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 0
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T05:09:02.356803+00:00",
+        "finished_at": "2026-08-15T05:09:04.603881+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/openai_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 9,
+        "schema": [
+          "$[].content_index",
+          "$[].delta",
+          "$[].item.content[]",
+          "$[].item.content[].annotations[]",
+          "$[].item.content[].logprobs[]",
+          "$[].item.content[].text",
+          "$[].item.content[].type",
+          "$[].item.id",
+          "$[].item.role",
+          "$[].item.status",
+          "$[].item.type",
+          "$[].item_id",
+          "$[].logprobs[]",
+          "$[].obfuscation",
+          "$[].output_index",
+          "$[].part.annotations[]",
+          "$[].part.logprobs[]",
+          "$[].part.text",
+          "$[].part.type",
+          "$[].response.background",
+          "$[].response.completed_at",
+          "$[].response.created_at",
+          "$[].response.error",
+          "$[].response.frequency_penalty",
+          "$[].response.id",
+          "$[].response.incomplete_details",
+          "$[].response.instructions",
+          "$[].response.max_output_tokens",
+          "$[].response.max_tool_calls",
+          "$[].response.metadata{}",
+          "$[].response.model",
+          "$[].response.moderation",
+          "$[].response.object",
+          "$[].response.output[]",
+          "$[].response.output[].content[].annotations[]",
+          "$[].response.output[].content[].logprobs[]",
+          "$[].response.output[].content[].text",
+          "$[].response.output[].content[].type",
+          "$[].response.output[].id",
+          "$[].response.output[].role",
+          "$[].response.output[].status",
+          "$[].response.output[].type",
+          "$[].response.parallel_tool_calls",
+          "$[].response.presence_penalty",
+          "$[].response.previous_response_id",
+          "$[].response.prompt_cache_key",
+          "$[].response.prompt_cache_retention",
+          "$[].response.reasoning.context",
+          "$[].response.reasoning.effort",
+          "$[].response.reasoning.summary",
+          "$[].response.safety_identifier",
+          "$[].response.service_tier",
+          "$[].response.status",
+          "$[].response.store",
+          "$[].response.temperature",
+          "$[].response.text.format.type",
+          "$[].response.text.verbosity",
+          "$[].response.tool_choice",
+          "$[].response.tool_usage.image_gen.input_tokens",
+          "$[].response.tool_usage.image_gen.input_tokens_details.image_tokens",
+          "$[].response.tool_usage.image_gen.input_tokens_details.text_tokens",
+          "$[].response.tool_usage.image_gen.output_tokens",
+          "$[].response.tool_usage.image_gen.output_tokens_details.image_tokens",
+          "$[].response.tool_usage.image_gen.output_tokens_details.text_tokens",
+          "$[].response.tool_usage.image_gen.total_tokens",
+          "$[].response.tool_usage.web_search.num_requests",
+          "$[].response.tools[]",
+          "$[].response.top_logprobs",
+          "$[].response.top_p",
+          "$[].response.truncation",
+          "$[].response.usage",
+          "$[].response.usage.input_tokens",
+          "$[].response.usage.input_tokens_details.cache_write_tokens",
+          "$[].response.usage.input_tokens_details.cached_tokens",
+          "$[].response.usage.output_tokens",
+          "$[].response.usage.output_tokens_details.reasoning_tokens",
+          "$[].response.usage.total_tokens",
+          "$[].response.user",
+          "$[].sequence_number",
+          "$[].text",
+          "$[].type"
+        ],
+        "normalized_sha256": "597bc459724af33d9aed53100b71e6eef9c6b94c8cf3c44a41303b3f879fe304",
+        "semantic": {
+          "event_types": [
+            "response.completed",
+            "response.content_part.added",
+            "response.content_part.done",
+            "response.created",
+            "response.in_progress",
+            "response.output_item.added",
+            "response.output_item.done",
+            "response.output_text.delta",
+            "response.output_text.done",
+            "response.status:completed",
+            "response.status:in_progress"
+          ],
+          "models": [
+            "gpt-4o-mini-2024-07-18"
+          ],
+          "usage": {
+            "input_tokens": 4390,
+            "output_tokens": 2,
+            "total_tokens": 4392,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 0
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": false,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "antigravity_json",
+      "platform": "antigravity",
+      "request": {
+        "model": "gemini-2.5-pro",
+        "max_tokens": 1,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Reply only OK"
+          }
+        ],
+        "stream": false
+      },
+      "old": {
+        "started_at": "2026-08-15T05:09:04.604980+00:00",
+        "finished_at": "2026-08-15T05:09:04.957868+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/antigravity_json",
+        "status": 503,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.error.message",
+          "$.error.type",
+          "$.type"
+        ],
+        "normalized_sha256": "714472d72c3a01ae1b1f823991e67863ba96178188af3a8e38bb0e587446d51f",
+        "semantic": {
+          "event_types": [
+            "error"
+          ],
+          "models": [],
+          "usage": null
+        },
+        "error": "No available accounts: no available accounts"
+      },
+      "new": {
+        "started_at": "2026-08-15T05:09:04.605256+00:00",
+        "finished_at": "2026-08-15T05:09:05.064785+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/antigravity_json",
+        "status": 503,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.error.message",
+          "$.error.type",
+          "$.type"
+        ],
+        "normalized_sha256": "714472d72c3a01ae1b1f823991e67863ba96178188af3a8e38bb0e587446d51f",
+        "semantic": {
+          "event_types": [
+            "error"
+          ],
+          "models": [],
+          "usage": null
+        },
+        "error": "No available accounts: no available accounts"
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "antigravity_sse",
+      "platform": "antigravity",
+      "request": {
+        "model": "gemini-2.5-pro",
+        "max_tokens": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Reply only OK"
+          }
+        ],
+        "stream": true
+      },
+      "old": {
+        "started_at": "2026-08-15T05:09:05.066317+00:00",
+        "finished_at": "2026-08-15T05:09:05.869124+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/antigravity_sse",
+        "status": 503,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.error.message",
+          "$.error.type",
+          "$.type"
+        ],
+        "normalized_sha256": "714472d72c3a01ae1b1f823991e67863ba96178188af3a8e38bb0e587446d51f",
+        "semantic": {
+          "event_types": [
+            "error"
+          ],
+          "models": [],
+          "usage": null
+        },
+        "error": "No available accounts: no available accounts"
+      },
+      "new": {
+        "started_at": "2026-08-15T05:09:05.066773+00:00",
+        "finished_at": "2026-08-15T05:09:05.868964+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/antigravity_sse",
+        "status": 503,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.error.message",
+          "$.error.type",
+          "$.type"
+        ],
+        "normalized_sha256": "714472d72c3a01ae1b1f823991e67863ba96178188af3a8e38bb0e587446d51f",
+        "semantic": {
+          "event_types": [
+            "error"
+          ],
+          "models": [],
+          "usage": null
+        },
+        "error": "No available accounts: no available accounts"
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "grok_json",
+      "platform": "grok",
+      "request": {
+        "model": "grok-4.5",
+        "input": "Reply only OK",
+        "max_output_tokens": 1,
+        "stream": false
+      },
+      "old": {
+        "started_at": "2026-08-15T05:09:05.869634+00:00",
+        "finished_at": "2026-08-15T05:09:06.359432+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/grok_json",
+        "status": 503,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.error.message",
+          "$.error.type"
+        ],
+        "normalized_sha256": "431c90b418e751fbeba9f41c2f9246ca70fbb194510618789ff1e161e3a17c3a",
+        "semantic": {
+          "event_types": [],
+          "models": [],
+          "usage": null
+        },
+        "error": "Service temporarily unavailable"
+      },
+      "new": {
+        "started_at": "2026-08-15T05:09:05.869894+00:00",
+        "finished_at": "2026-08-15T05:09:06.248123+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/grok_json",
+        "status": 503,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.error.message",
+          "$.error.type"
+        ],
+        "normalized_sha256": "431c90b418e751fbeba9f41c2f9246ca70fbb194510618789ff1e161e3a17c3a",
+        "semantic": {
+          "event_types": [],
+          "models": [],
+          "usage": null
+        },
+        "error": "Service temporarily unavailable"
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "grok_sse",
+      "platform": "grok",
+      "request": {
+        "model": "grok-4.5",
+        "input": "Reply only OK",
+        "max_output_tokens": 2,
+        "stream": true
+      },
+      "old": {
+        "started_at": "2026-08-15T05:09:06.359979+00:00",
+        "finished_at": "2026-08-15T05:09:06.828676+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/grok_sse",
+        "status": 503,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.error.message",
+          "$.error.type"
+        ],
+        "normalized_sha256": "431c90b418e751fbeba9f41c2f9246ca70fbb194510618789ff1e161e3a17c3a",
+        "semantic": {
+          "event_types": [],
+          "models": [],
+          "usage": null
+        },
+        "error": "Service temporarily unavailable"
+      },
+      "new": {
+        "started_at": "2026-08-15T05:09:06.360199+00:00",
+        "finished_at": "2026-08-15T05:09:06.713072+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/grok_sse",
+        "status": 503,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.error.message",
+          "$.error.type"
+        ],
+        "normalized_sha256": "431c90b418e751fbeba9f41c2f9246ca70fbb194510618789ff1e161e3a17c3a",
+        "semantic": {
+          "event_types": [],
+          "models": [],
+          "usage": null
+        },
+        "error": "Service temporarily unavailable"
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "kimi_json",
+      "platform": "kimi",
+      "request": {
+        "model": "k3",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Reply only OK"
+          }
+        ],
+        "max_tokens": 1,
+        "stream": false
+      },
+      "old": {
+        "started_at": "2026-08-15T05:09:06.829055+00:00",
+        "finished_at": "2026-08-15T05:09:10.193172+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/kimi_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.choices[].finish_reason",
+          "$.choices[].index",
+          "$.choices[].message.content",
+          "$.choices[].message.reasoning_content",
+          "$.choices[].message.role",
+          "$.created",
+          "$.id",
+          "$.model",
+          "$.object",
+          "$.usage.cached_tokens",
+          "$.usage.completion_tokens",
+          "$.usage.completion_tokens_details.reasoning_tokens",
+          "$.usage.prompt_tokens",
+          "$.usage.prompt_tokens_details.cached_tokens",
+          "$.usage.total_tokens"
+        ],
+        "normalized_sha256": "0a0373dd52e33b26d827a219cf15b7950b8bb61d1943254725db52fbeddcfa1e",
+        "semantic": {
+          "event_types": [
+            "chat.completion"
+          ],
+          "models": [
+            "k3"
+          ],
+          "usage": {
+            "input_tokens": 89,
+            "output_tokens": 4,
+            "total_tokens": 93,
+            "cache_read_tokens": 89,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T05:09:06.829265+00:00",
+        "finished_at": "2026-08-15T05:09:10.405789+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/kimi_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.choices[].finish_reason",
+          "$.choices[].index",
+          "$.choices[].message.content",
+          "$.choices[].message.reasoning_content",
+          "$.choices[].message.role",
+          "$.created",
+          "$.id",
+          "$.model",
+          "$.object",
+          "$.usage.cached_tokens",
+          "$.usage.completion_tokens",
+          "$.usage.completion_tokens_details.reasoning_tokens",
+          "$.usage.prompt_tokens",
+          "$.usage.prompt_tokens_details.cached_tokens",
+          "$.usage.total_tokens"
+        ],
+        "normalized_sha256": "0a0373dd52e33b26d827a219cf15b7950b8bb61d1943254725db52fbeddcfa1e",
+        "semantic": {
+          "event_types": [
+            "chat.completion"
+          ],
+          "models": [
+            "k3"
+          ],
+          "usage": {
+            "input_tokens": 89,
+            "output_tokens": 4,
+            "total_tokens": 93,
+            "cache_read_tokens": 89,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "kimi_sse",
+      "platform": "kimi",
+      "request": {
+        "model": "k3",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Reply only OK"
+          }
+        ],
+        "max_tokens": 2,
+        "stream": true
+      },
+      "old": {
+        "started_at": "2026-08-15T05:09:10.410593+00:00",
+        "finished_at": "2026-08-15T05:09:13.068610+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/kimi_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 5,
+        "schema": [
+          "$[].choices[]",
+          "$[].choices[].delta.content",
+          "$[].choices[].delta.reasoning_content",
+          "$[].choices[].delta.role",
+          "$[].choices[].delta{}",
+          "$[].choices[].finish_reason",
+          "$[].choices[].index",
+          "$[].choices[].usage.cached_tokens",
+          "$[].choices[].usage.completion_tokens",
+          "$[].choices[].usage.completion_tokens_details.reasoning_tokens",
+          "$[].choices[].usage.prompt_tokens",
+          "$[].choices[].usage.prompt_tokens_details.cached_tokens",
+          "$[].choices[].usage.total_tokens",
+          "$[].created",
+          "$[].id",
+          "$[].model",
+          "$[].object",
+          "$[].system_fingerprint",
+          "$[].usage.cached_tokens",
+          "$[].usage.completion_tokens",
+          "$[].usage.completion_tokens_details.reasoning_tokens",
+          "$[].usage.prompt_tokens",
+          "$[].usage.prompt_tokens_details.cached_tokens",
+          "$[].usage.total_tokens"
+        ],
+        "normalized_sha256": "b300ce9c7db8a757c9c3bb1db457c65aa3ab180bfba9123bd8bc39f8ca378ca9",
+        "semantic": {
+          "event_types": [
+            "chat.completion.chunk"
+          ],
+          "models": [
+            "k3"
+          ],
+          "usage": {
+            "input_tokens": 89,
+            "output_tokens": 5,
+            "total_tokens": 94,
+            "cache_read_tokens": 89,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 2
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T05:09:10.411578+00:00",
+        "finished_at": "2026-08-15T05:09:13.177621+00:00",
+        "marker": "sub2api-dual-diff/staging-real-http-diff-20260815/kimi_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 5,
+        "schema": [
+          "$[].choices[]",
+          "$[].choices[].delta.content",
+          "$[].choices[].delta.reasoning_content",
+          "$[].choices[].delta.role",
+          "$[].choices[].delta{}",
+          "$[].choices[].finish_reason",
+          "$[].choices[].index",
+          "$[].choices[].usage.cached_tokens",
+          "$[].choices[].usage.completion_tokens",
+          "$[].choices[].usage.completion_tokens_details.reasoning_tokens",
+          "$[].choices[].usage.prompt_tokens",
+          "$[].choices[].usage.prompt_tokens_details.cached_tokens",
+          "$[].choices[].usage.total_tokens",
+          "$[].created",
+          "$[].id",
+          "$[].model",
+          "$[].object",
+          "$[].system_fingerprint",
+          "$[].usage.cached_tokens",
+          "$[].usage.completion_tokens",
+          "$[].usage.completion_tokens_details.reasoning_tokens",
+          "$[].usage.prompt_tokens",
+          "$[].usage.prompt_tokens_details.cached_tokens",
+          "$[].usage.total_tokens"
+        ],
+        "normalized_sha256": "b300ce9c7db8a757c9c3bb1db457c65aa3ab180bfba9123bd8bc39f8ca378ca9",
+        "semantic": {
+          "event_types": [
+            "chat.completion.chunk"
+          ],
+          "models": [
+            "k3"
+          ],
+          "usage": {
+            "input_tokens": 89,
+            "output_tokens": 5,
+            "total_tokens": 94,
+            "cache_read_tokens": 89,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 2
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    }
+  ],
+  "finished_at": "2026-08-15T05:09:13.178267+00:00",
+  "summary": {
+    "case_count": 10,
+    "transport_success_count": 6,
+    "schema_equal_count": 10,
+    "usage_equal_count": 10
+  }
+}

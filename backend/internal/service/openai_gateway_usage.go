@@ -212,7 +212,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if billingRequestID := strings.TrimSpace(result.BillingRequestID); billingRequestID != "" {
 		requestID = "local:" + billingRequestID
 	}
-	if result.OpenAIWSMode && strings.TrimSpace(result.BillingRequestID) == "" {
+	if result.OpenAIWSMode && strings.TrimSpace(result.BillingRequestID) == "" && (s.usageSettlement == nil || !s.usageSettlement.Enabled()) {
 		if upstreamRequestID := strings.TrimSpace(result.RequestID); upstreamRequestID != "" {
 			requestID = upstreamRequestID
 		}
@@ -326,7 +326,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		usageLog.SubscriptionID = &subscription.ID
 	}
 
-// Account-side cost uses total_cost × account_rate_multiplier only (no policy COGS overlay).
+	// Account-side cost uses total_cost × account_rate_multiplier only (no policy COGS overlay).
 
 	// Async usage billing runs outside the original request context, so it
 	// cannot recover ForcePlatform there. Fall back for internal/test callers.
@@ -334,19 +334,36 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if quotaPlatform == "" {
 		quotaPlatform = PlatformFromAPIKey(apiKey)
 	}
+	billingParams := &postUsageBillingParams{
+		Cost:                  cost,
+		User:                  user,
+		APIKey:                apiKey,
+		Account:               account,
+		Subscription:          subscription,
+		RequestPayloadHash:    resolveUsageBillingPayloadFingerprint(ctx, input.RequestPayloadHash),
+		IsSubscriptionBill:    isSubscriptionBilling,
+		AccountRateMultiplier: accountRateMultiplier,
+		APIKeyService:         input.APIKeyService,
+		Platform:              quotaPlatform,
+	}
+	if authoritative, handoffErr := handoffUsageSettlement(ctx, s.usageSettlement, usageLog, billingParams, quotaPlatform); handoffErr != nil {
+		return handoffErr
+	} else if authoritative {
+		return nil
+	}
 
 	billingErr := func() error {
 		_, err := applyUsageBilling(ctx, requestID, usageLog, &postUsageBillingParams{
-			Cost:                  cost,
-			User:                  user,
-			APIKey:                apiKey,
-			Account:               account,
-			Subscription:          subscription,
-			RequestPayloadHash:    resolveUsageBillingPayloadFingerprint(ctx, input.RequestPayloadHash),
-			IsSubscriptionBill:    isSubscriptionBilling,
-			AccountRateMultiplier: accountRateMultiplier,
-			APIKeyService:         input.APIKeyService,
-			Platform:              quotaPlatform,
+			Cost:                  billingParams.Cost,
+			User:                  billingParams.User,
+			APIKey:                billingParams.APIKey,
+			Account:               billingParams.Account,
+			Subscription:          billingParams.Subscription,
+			RequestPayloadHash:    billingParams.RequestPayloadHash,
+			IsSubscriptionBill:    billingParams.IsSubscriptionBill,
+			AccountRateMultiplier: billingParams.AccountRateMultiplier,
+			APIKeyService:         billingParams.APIKeyService,
+			Platform:              billingParams.Platform,
 		}, s.billingDeps(), s.usageBillingRepo)
 		return err
 	}()
@@ -863,23 +880,22 @@ func (s *OpenAIGatewayService) updateCodexUsageSnapshot(ctx context.Context, acc
 		return
 	}
 
-go func() {
-			updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = s.accountRepo.UpdateExtra(updateCtx, accountID, updates)
-			s.observeCodexQuotaWindows(updateCtx, accountID, updates, now)
-		}()
-	}
+	go func() {
+		updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.accountRepo.UpdateExtra(updateCtx, accountID, updates)
+		s.observeCodexQuotaWindows(updateCtx, accountID, updates, now)
+	}()
+}
 
-	func (s *OpenAIGatewayService) observeCodexQuotaWindows(ctx context.Context, accountID int64, updates map[string]any, now time.Time) {
+func (s *OpenAIGatewayService) observeCodexQuotaWindows(ctx context.Context, accountID int64, updates map[string]any, now time.Time) {
 	if s == nil {
 		return
 	}
 	observeCodexQuotaWindowUpdates(ctx, s.quotaWindowLedger, accountID, updates, now)
 }
 
-
-	func (s *OpenAIGatewayService) UpdateCodexUsageSnapshotFromHeaders(ctx context.Context, accountID int64, headers http.Header) {
+func (s *OpenAIGatewayService) UpdateCodexUsageSnapshotFromHeaders(ctx context.Context, accountID int64, headers http.Header) {
 	if accountID <= 0 || headers == nil {
 		return
 	}

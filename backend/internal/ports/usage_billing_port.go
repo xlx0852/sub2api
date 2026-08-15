@@ -13,3 +13,7 @@ type UsageBillingRepository interface {
 	CaptureBatchImageBalance(ctx context.Context, cmd *domain.BatchImageBalanceHoldCommand) (*domain.BatchImageBalanceHoldResult, error)
 	ReleaseBatchImageBalance(ctx context.Context, cmd *domain.BatchImageBalanceHoldCommand) (*domain.BatchImageBalanceHoldResult, error)
 }
+
+type UsageSettlementBillingRepository interface {
+	ApplySettlement(ctx context.Context, settlementAttemptID int64, leaseOwner string) (*domain.UsageSettlementApplyResult, error)
+}

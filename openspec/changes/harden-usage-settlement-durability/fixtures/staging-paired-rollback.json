@@ -1,0 +1,36 @@
+{
+  "additive_migrations_present": [
+    "195_usage_settlement_attempts.sql",
+    "196_usage_settlement_recovery_context.sql"
+  ],
+  "candidate_restored": {
+    "durability_mode": "off",
+    "frontend": "/opt/sub2api-staging/releases/settlement-f926ae06c/frontend",
+    "health_status": 200,
+    "image": "sub2api-staging:settlement-f926ae06c",
+    "settlement_attempt_count": 0,
+    "version": "0.1.319"
+  },
+  "checks": {
+    "candidate_pair_restored": true,
+    "old_binary_accepts_additive_schema": true,
+    "old_pair_admin_login_succeeds": true,
+    "old_pair_billing_invariant_holds": true,
+    "old_pair_real_request_succeeds": true
+  },
+  "old_pair": {
+    "actual_cost": "0.0006600000",
+    "admin_login_status": 200,
+    "api_key_quota_delta": "0.00066000",
+    "balance_delta": "0.00066000",
+    "dedup_count": 1,
+    "frontend": "/opt/sub2api-staging/releases/refactor-20260814/frontend",
+    "health_status": 200,
+    "image": "sub2api-staging:refactor-20260814",
+    "request_status": 200,
+    "run_id": "staging-rollback-3669c77433a4",
+    "settlement_attempt_count": 0,
+    "usage_count": 1,
+    "version": "0.1.319-staging-refactor-20260814"
+  }
+}

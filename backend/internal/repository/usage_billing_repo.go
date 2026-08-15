@@ -10,6 +10,7 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/testfailpoint"
 )
 
 type usageBillingRepository struct {
@@ -17,6 +18,10 @@ type usageBillingRepository struct {
 }
 
 func NewUsageBillingRepository(_ *dbent.Client, sqlDB *sql.DB) ports.UsageBillingRepository {
+	return &usageBillingRepository{db: sqlDB}
+}
+
+func NewUsageSettlementBillingRepository(sqlDB *sql.DB) ports.UsageSettlementBillingRepository {
 	return &usageBillingRepository{db: sqlDB}
 }
 
@@ -61,6 +66,94 @@ func (r *usageBillingRepository) Apply(ctx context.Context, cmd *domain.UsageBil
 	}
 	tx = nil
 	return result, nil
+}
+
+func (r *usageBillingRepository) ApplySettlement(ctx context.Context, settlementAttemptID int64, leaseOwner string) (_ *domain.UsageSettlementApplyResult, err error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("usage billing repository db is nil")
+	}
+	leaseOwner = strings.TrimSpace(leaseOwner)
+	if settlementAttemptID <= 0 || leaseOwner == "" {
+		return nil, domain.ErrUsageSettlementLeaseConflict
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if tx != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	attempt, err := getUsageSettlementByID(ctx, tx, settlementAttemptID, true)
+	if err != nil {
+		return nil, err
+	}
+	if attempt.State == domain.UsageSettlementStateSettled {
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+		tx = nil
+		return &domain.UsageSettlementApplyResult{AlreadySettled: true}, nil
+	}
+	if attempt.State != domain.UsageSettlementStateProcessing || attempt.LeaseOwner != leaseOwner || attempt.Payload == nil {
+		return nil, domain.ErrUsageSettlementLeaseConflict
+	}
+	_, payloadHash, err := attempt.Payload.CanonicalJSON(attempt.BillingIdentity, attempt.APIKeyID, attempt.UserID, attempt.AccountID)
+	if err != nil {
+		return nil, err
+	}
+	if payloadHash != attempt.PayloadHash {
+		return nil, domain.ErrUsageSettlementPayloadConflict
+	}
+
+	command := attempt.Payload.Billing.Command()
+	command.Normalize()
+	applied, err := r.claimUsageBillingKey(ctx, tx, command)
+	if err != nil {
+		return nil, err
+	}
+	billingResult := domain.UsageBillingApplyResult{Applied: applied}
+	if applied {
+		if err := r.applyUsageBillingEffects(ctx, tx, command, &billingResult); err != nil {
+			return nil, err
+		}
+	}
+
+	usageLog := attempt.Payload.UsageLog.UsageLog()
+	usageLogInserted, err := (&usageLogRepository{}).createSingle(ctx, tx, usageLog)
+	if err != nil {
+		return nil, err
+	}
+	result, err := tx.ExecContext(ctx, `
+		UPDATE usage_settlement_attempts
+		SET state = $1,
+			settled_at = NOW(),
+			lease_owner = NULL,
+			lease_expires_at = NULL,
+			next_attempt_at = NULL,
+			last_error_code = NULL,
+			last_error_message = NULL,
+			updated_at = NOW()
+		WHERE id = $2 AND state = $3 AND lease_owner = $4 AND payload_hash = $5
+	`, domain.UsageSettlementStateSettled, settlementAttemptID, domain.UsageSettlementStateProcessing, leaseOwner, attempt.PayloadHash)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireOneUsageSettlementRow(result); err != nil {
+		return nil, err
+	}
+	testfailpoint.ReachSettlement(testfailpoint.SettlementBillingPreCommit)
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	tx = nil
+	testfailpoint.ReachSettlement(testfailpoint.SettlementCommitPreAck)
+	return &domain.UsageSettlementApplyResult{
+		Billing:          billingResult,
+		UsageLogInserted: usageLogInserted,
+	}, nil
 }
 
 func (r *usageBillingRepository) claimUsageBillingKey(ctx context.Context, tx *sql.Tx, cmd *domain.UsageBillingCommand) (bool, error) {

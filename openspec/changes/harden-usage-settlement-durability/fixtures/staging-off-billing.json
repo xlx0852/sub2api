@@ -1,0 +1,20 @@
+{
+  "api_key_quota_delta": "0.00153500",
+  "api_key_quota_sum_after": "0.04414200",
+  "api_key_quota_sum_before": "0.04260700",
+  "balance_after": "1.95585800",
+  "balance_before": "1.95739300",
+  "balance_delta": "0.00153500",
+  "checks": {
+    "balance_delta_equals_usage": true,
+    "key_quota_delta_equals_usage": true,
+    "off_mode_wrote_no_journal": true,
+    "six_matching_dedup_rows": true,
+    "six_usage_rows": true
+  },
+  "dedup_count": 6,
+  "run_id": "staging-off-3030dbbe90ab",
+  "settlement_attempt_count": 0,
+  "usage_actual_cost_sum": "0.0015350000",
+  "usage_count": 6
+}

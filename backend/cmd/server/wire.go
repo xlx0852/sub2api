@@ -6,6 +6,7 @@ package main
 import (
 	"net/http"
 
+	appbilling "github.com/Wei-Shaw/sub2api/internal/app/billing"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
@@ -29,6 +30,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 
 		// Business layer ProviderSets
 		repository.ProviderSet,
+		appbilling.ProviderSet,
 		service.ProviderSet,
 		payment.ProviderSet,
 		middleware.ProviderSet,
@@ -39,6 +41,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 
 		// Privacy client factory for OpenAI training opt-out
 		providePrivacyClientFactory,
+		provideUsageSettlementBindings,
 
 		// Cleanup function provider
 		provideCleanup,

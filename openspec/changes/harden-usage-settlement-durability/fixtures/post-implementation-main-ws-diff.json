@@ -1,0 +1,1358 @@
+{
+  "run_id": "dual-9b059017f7a0",
+  "started_at": "2026-08-15T02:15:47.130983+00:00",
+  "old_url": "http://127.0.0.1:58081",
+  "new_url": "http://127.0.0.1:58082",
+  "cases": [
+    {
+      "name": "anthropic_json",
+      "platform": "anthropic",
+      "request": {
+        "model": "deepseek-v4-flash",
+        "max_tokens": 1,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Reply only OK"
+          }
+        ],
+        "stream": false
+      },
+      "old": {
+        "started_at": "2026-08-15T02:15:47.132885+00:00",
+        "finished_at": "2026-08-15T02:15:47.195271+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/anthropic_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.content[].text",
+          "$.content[].type",
+          "$.id",
+          "$.model",
+          "$.role",
+          "$.stop_reason",
+          "$.stop_sequence",
+          "$.type",
+          "$.usage.cache_creation_input_tokens",
+          "$.usage.cache_read_input_tokens",
+          "$.usage.input_tokens",
+          "$.usage.output_tokens"
+        ],
+        "normalized_sha256": "401ac15b68192257aa0c96628222db13166bc21d3c71685f029e31f0e4582792",
+        "semantic": {
+          "event_types": [
+            "message"
+          ],
+          "models": [
+            "deepseek-v4-flash"
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "total_tokens": null,
+            "cache_read_tokens": 3,
+            "cache_creation_tokens": 2,
+            "reasoning_tokens": null
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T02:15:47.133052+00:00",
+        "finished_at": "2026-08-15T02:15:47.195609+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/anthropic_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.content[].text",
+          "$.content[].type",
+          "$.id",
+          "$.model",
+          "$.role",
+          "$.stop_reason",
+          "$.stop_sequence",
+          "$.type",
+          "$.usage.cache_creation_input_tokens",
+          "$.usage.cache_read_input_tokens",
+          "$.usage.input_tokens",
+          "$.usage.output_tokens"
+        ],
+        "normalized_sha256": "401ac15b68192257aa0c96628222db13166bc21d3c71685f029e31f0e4582792",
+        "semantic": {
+          "event_types": [
+            "message"
+          ],
+          "models": [
+            "deepseek-v4-flash"
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "total_tokens": null,
+            "cache_read_tokens": 3,
+            "cache_creation_tokens": 2,
+            "reasoning_tokens": null
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "anthropic_sse",
+      "platform": "anthropic",
+      "request": {
+        "model": "deepseek-v4-flash",
+        "max_tokens": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Reply only OK"
+          }
+        ],
+        "stream": true
+      },
+      "old": {
+        "started_at": "2026-08-15T02:15:47.195987+00:00",
+        "finished_at": "2026-08-15T02:15:47.215486+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/anthropic_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 4,
+        "schema": [
+          "$[].delta.stop_reason",
+          "$[].delta.text",
+          "$[].delta.type",
+          "$[].index",
+          "$[].message.content[]",
+          "$[].message.id",
+          "$[].message.model",
+          "$[].message.role",
+          "$[].message.stop_reason",
+          "$[].message.stop_sequence",
+          "$[].message.type",
+          "$[].message.usage.cache_creation_input_tokens",
+          "$[].message.usage.cache_read_input_tokens",
+          "$[].message.usage.input_tokens",
+          "$[].message.usage.output_tokens",
+          "$[].type",
+          "$[].usage.cache_creation_input_tokens",
+          "$[].usage.cache_read_input_tokens",
+          "$[].usage.input_tokens",
+          "$[].usage.output_tokens"
+        ],
+        "normalized_sha256": "77993f289ee1eb7df5ef99168a8f6b3796067d959ebf2f9331deeb449c037862",
+        "semantic": {
+          "event_types": [
+            "content_block_delta",
+            "message_delta",
+            "message_start",
+            "message_stop"
+          ],
+          "models": [],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "total_tokens": null,
+            "cache_read_tokens": 3,
+            "cache_creation_tokens": 2,
+            "reasoning_tokens": null
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T02:15:47.196217+00:00",
+        "finished_at": "2026-08-15T02:15:47.218344+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/anthropic_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 4,
+        "schema": [
+          "$[].delta.stop_reason",
+          "$[].delta.text",
+          "$[].delta.type",
+          "$[].index",
+          "$[].message.content[]",
+          "$[].message.id",
+          "$[].message.model",
+          "$[].message.role",
+          "$[].message.stop_reason",
+          "$[].message.stop_sequence",
+          "$[].message.type",
+          "$[].message.usage.cache_creation_input_tokens",
+          "$[].message.usage.cache_read_input_tokens",
+          "$[].message.usage.input_tokens",
+          "$[].message.usage.output_tokens",
+          "$[].type",
+          "$[].usage.cache_creation_input_tokens",
+          "$[].usage.cache_read_input_tokens",
+          "$[].usage.input_tokens",
+          "$[].usage.output_tokens"
+        ],
+        "normalized_sha256": "77993f289ee1eb7df5ef99168a8f6b3796067d959ebf2f9331deeb449c037862",
+        "semantic": {
+          "event_types": [
+            "content_block_delta",
+            "message_delta",
+            "message_start",
+            "message_stop"
+          ],
+          "models": [],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "total_tokens": null,
+            "cache_read_tokens": 3,
+            "cache_creation_tokens": 2,
+            "reasoning_tokens": null
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "openai_json",
+      "platform": "openai",
+      "request": {
+        "model": "gpt-4o-mini",
+        "input": "Reply only OK",
+        "max_output_tokens": 1,
+        "stream": false
+      },
+      "old": {
+        "started_at": "2026-08-15T02:15:47.218781+00:00",
+        "finished_at": "2026-08-15T02:15:47.239964+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/openai_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.created_at",
+          "$.id",
+          "$.model",
+          "$.object",
+          "$.output[].content[].annotations[]",
+          "$.output[].content[].text",
+          "$.output[].content[].type",
+          "$.output[].id",
+          "$.output[].role",
+          "$.output[].status",
+          "$.output[].type",
+          "$.status",
+          "$.store",
+          "$.usage.input_tokens",
+          "$.usage.input_tokens_details.cached_tokens",
+          "$.usage.output_tokens",
+          "$.usage.output_tokens_details.reasoning_tokens",
+          "$.usage.total_tokens"
+        ],
+        "normalized_sha256": "90f61410fde301d15448793fa8dc3d6033d489e5d7da5c1db00f18745ad5c938",
+        "semantic": {
+          "event_types": [
+            "response"
+          ],
+          "models": [
+            "gpt-4o-mini"
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 4,
+            "total_tokens": 24,
+            "cache_read_tokens": 5,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T02:15:47.218918+00:00",
+        "finished_at": "2026-08-15T02:15:47.239833+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/openai_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.created_at",
+          "$.id",
+          "$.model",
+          "$.object",
+          "$.output[].content[].annotations[]",
+          "$.output[].content[].text",
+          "$.output[].content[].type",
+          "$.output[].id",
+          "$.output[].role",
+          "$.output[].status",
+          "$.output[].type",
+          "$.status",
+          "$.store",
+          "$.usage.input_tokens",
+          "$.usage.input_tokens_details.cached_tokens",
+          "$.usage.output_tokens",
+          "$.usage.output_tokens_details.reasoning_tokens",
+          "$.usage.total_tokens"
+        ],
+        "normalized_sha256": "90f61410fde301d15448793fa8dc3d6033d489e5d7da5c1db00f18745ad5c938",
+        "semantic": {
+          "event_types": [
+            "response"
+          ],
+          "models": [
+            "gpt-4o-mini"
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 4,
+            "total_tokens": 24,
+            "cache_read_tokens": 5,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "openai_sse",
+      "platform": "openai",
+      "request": {
+        "model": "gpt-4o-mini",
+        "input": "Reply only OK",
+        "max_output_tokens": 2,
+        "stream": true
+      },
+      "old": {
+        "started_at": "2026-08-15T02:15:47.240327+00:00",
+        "finished_at": "2026-08-15T02:15:47.255698+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/openai_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 3,
+        "schema": [
+          "$[].content_index",
+          "$[].delta",
+          "$[].item_id",
+          "$[].output_index",
+          "$[].response.created_at",
+          "$[].response.id",
+          "$[].response.model",
+          "$[].response.object",
+          "$[].response.output[]",
+          "$[].response.output[].content[].annotations[]",
+          "$[].response.output[].content[].text",
+          "$[].response.output[].content[].type",
+          "$[].response.output[].id",
+          "$[].response.output[].role",
+          "$[].response.output[].status",
+          "$[].response.output[].type",
+          "$[].response.status",
+          "$[].response.store",
+          "$[].response.usage",
+          "$[].response.usage.input_tokens",
+          "$[].response.usage.input_tokens_details.cached_tokens",
+          "$[].response.usage.output_tokens",
+          "$[].response.usage.output_tokens_details.reasoning_tokens",
+          "$[].response.usage.total_tokens",
+          "$[].sequence_number",
+          "$[].type"
+        ],
+        "normalized_sha256": "1f73b87a77c0c0a37512b9f4d75c06213a571ef39b8cc9ec8dfeab13fd284fcc",
+        "semantic": {
+          "event_types": [
+            "response.completed",
+            "response.created",
+            "response.output_text.delta",
+            "response.status:completed",
+            "response.status:in_progress"
+          ],
+          "models": [
+            "gpt-4o-mini"
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 4,
+            "total_tokens": 24,
+            "cache_read_tokens": 5,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T02:15:47.240527+00:00",
+        "finished_at": "2026-08-15T02:15:47.256899+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/openai_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 3,
+        "schema": [
+          "$[].content_index",
+          "$[].delta",
+          "$[].item_id",
+          "$[].output_index",
+          "$[].response.created_at",
+          "$[].response.id",
+          "$[].response.model",
+          "$[].response.object",
+          "$[].response.output[]",
+          "$[].response.output[].content[].annotations[]",
+          "$[].response.output[].content[].text",
+          "$[].response.output[].content[].type",
+          "$[].response.output[].id",
+          "$[].response.output[].role",
+          "$[].response.output[].status",
+          "$[].response.output[].type",
+          "$[].response.status",
+          "$[].response.store",
+          "$[].response.usage",
+          "$[].response.usage.input_tokens",
+          "$[].response.usage.input_tokens_details.cached_tokens",
+          "$[].response.usage.output_tokens",
+          "$[].response.usage.output_tokens_details.reasoning_tokens",
+          "$[].response.usage.total_tokens",
+          "$[].sequence_number",
+          "$[].type"
+        ],
+        "normalized_sha256": "1f73b87a77c0c0a37512b9f4d75c06213a571ef39b8cc9ec8dfeab13fd284fcc",
+        "semantic": {
+          "event_types": [
+            "response.completed",
+            "response.created",
+            "response.output_text.delta",
+            "response.status:completed",
+            "response.status:in_progress"
+          ],
+          "models": [
+            "gpt-4o-mini"
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 4,
+            "total_tokens": 24,
+            "cache_read_tokens": 5,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "antigravity_json",
+      "platform": "antigravity",
+      "request": {
+        "model": "gemini-2.5-pro",
+        "max_tokens": 1,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Reply only OK"
+          }
+        ],
+        "stream": false
+      },
+      "old": {
+        "started_at": "2026-08-15T02:15:47.257251+00:00",
+        "finished_at": "2026-08-15T02:15:47.279284+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/antigravity_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.content[].text",
+          "$.content[].type",
+          "$.id",
+          "$.model",
+          "$.role",
+          "$.stop_reason",
+          "$.stop_sequence",
+          "$.type",
+          "$.usage.cache_creation_input_tokens",
+          "$.usage.cache_read_input_tokens",
+          "$.usage.input_tokens",
+          "$.usage.output_tokens"
+        ],
+        "normalized_sha256": "5081b20835f42c49b41b3da388ab73c93c1bf99538b2f5ffd3080ef596aa729d",
+        "semantic": {
+          "event_types": [
+            "message"
+          ],
+          "models": [
+            "gemini-2.5-pro"
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "total_tokens": null,
+            "cache_read_tokens": 3,
+            "cache_creation_tokens": 2,
+            "reasoning_tokens": null
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T02:15:47.257407+00:00",
+        "finished_at": "2026-08-15T02:15:47.277450+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/antigravity_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.content[].text",
+          "$.content[].type",
+          "$.id",
+          "$.model",
+          "$.role",
+          "$.stop_reason",
+          "$.stop_sequence",
+          "$.type",
+          "$.usage.cache_creation_input_tokens",
+          "$.usage.cache_read_input_tokens",
+          "$.usage.input_tokens",
+          "$.usage.output_tokens"
+        ],
+        "normalized_sha256": "5081b20835f42c49b41b3da388ab73c93c1bf99538b2f5ffd3080ef596aa729d",
+        "semantic": {
+          "event_types": [
+            "message"
+          ],
+          "models": [
+            "gemini-2.5-pro"
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "total_tokens": null,
+            "cache_read_tokens": 3,
+            "cache_creation_tokens": 2,
+            "reasoning_tokens": null
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "antigravity_sse",
+      "platform": "antigravity",
+      "request": {
+        "model": "gemini-2.5-pro",
+        "max_tokens": 2,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Reply only OK"
+          }
+        ],
+        "stream": true
+      },
+      "old": {
+        "started_at": "2026-08-15T02:15:47.279621+00:00",
+        "finished_at": "2026-08-15T02:15:47.293459+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/antigravity_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 4,
+        "schema": [
+          "$[].delta.stop_reason",
+          "$[].delta.text",
+          "$[].delta.type",
+          "$[].index",
+          "$[].message.content[]",
+          "$[].message.id",
+          "$[].message.model",
+          "$[].message.role",
+          "$[].message.stop_reason",
+          "$[].message.stop_sequence",
+          "$[].message.type",
+          "$[].message.usage.cache_creation_input_tokens",
+          "$[].message.usage.cache_read_input_tokens",
+          "$[].message.usage.input_tokens",
+          "$[].message.usage.output_tokens",
+          "$[].type",
+          "$[].usage.cache_creation_input_tokens",
+          "$[].usage.cache_read_input_tokens",
+          "$[].usage.input_tokens",
+          "$[].usage.output_tokens"
+        ],
+        "normalized_sha256": "309817d16e231a3cfeed97e0183b1a26d0ab26fa99b02642e5c1a386db1a5fc1",
+        "semantic": {
+          "event_types": [
+            "content_block_delta",
+            "message_delta",
+            "message_start",
+            "message_stop"
+          ],
+          "models": [],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "total_tokens": null,
+            "cache_read_tokens": 3,
+            "cache_creation_tokens": 2,
+            "reasoning_tokens": null
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T02:15:47.279846+00:00",
+        "finished_at": "2026-08-15T02:15:47.295065+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/antigravity_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 4,
+        "schema": [
+          "$[].delta.stop_reason",
+          "$[].delta.text",
+          "$[].delta.type",
+          "$[].index",
+          "$[].message.content[]",
+          "$[].message.id",
+          "$[].message.model",
+          "$[].message.role",
+          "$[].message.stop_reason",
+          "$[].message.stop_sequence",
+          "$[].message.type",
+          "$[].message.usage.cache_creation_input_tokens",
+          "$[].message.usage.cache_read_input_tokens",
+          "$[].message.usage.input_tokens",
+          "$[].message.usage.output_tokens",
+          "$[].type",
+          "$[].usage.cache_creation_input_tokens",
+          "$[].usage.cache_read_input_tokens",
+          "$[].usage.input_tokens",
+          "$[].usage.output_tokens"
+        ],
+        "normalized_sha256": "309817d16e231a3cfeed97e0183b1a26d0ab26fa99b02642e5c1a386db1a5fc1",
+        "semantic": {
+          "event_types": [
+            "content_block_delta",
+            "message_delta",
+            "message_start",
+            "message_stop"
+          ],
+          "models": [],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "total_tokens": null,
+            "cache_read_tokens": 3,
+            "cache_creation_tokens": 2,
+            "reasoning_tokens": null
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "grok_json",
+      "platform": "grok",
+      "request": {
+        "model": "grok-4.5",
+        "input": "Reply only OK",
+        "max_output_tokens": 1,
+        "stream": false
+      },
+      "old": {
+        "started_at": "2026-08-15T02:15:47.295483+00:00",
+        "finished_at": "2026-08-15T02:15:47.320174+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/grok_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.created_at",
+          "$.id",
+          "$.model",
+          "$.object",
+          "$.output[].content[].annotations[]",
+          "$.output[].content[].text",
+          "$.output[].content[].type",
+          "$.output[].id",
+          "$.output[].role",
+          "$.output[].status",
+          "$.output[].type",
+          "$.status",
+          "$.store",
+          "$.usage.input_tokens",
+          "$.usage.input_tokens_details.cached_tokens",
+          "$.usage.output_tokens",
+          "$.usage.output_tokens_details.reasoning_tokens",
+          "$.usage.total_tokens"
+        ],
+        "normalized_sha256": "1ef08ca8a9ea30e57a1b9d543092b595ecc2490cb3f9a11ab4f55dbcd9fc70f0",
+        "semantic": {
+          "event_types": [
+            "response"
+          ],
+          "models": [
+            "grok-4.5"
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 4,
+            "total_tokens": 24,
+            "cache_read_tokens": 5,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T02:15:47.295668+00:00",
+        "finished_at": "2026-08-15T02:15:47.318077+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/grok_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.created_at",
+          "$.id",
+          "$.model",
+          "$.object",
+          "$.output[].content[].annotations[]",
+          "$.output[].content[].text",
+          "$.output[].content[].type",
+          "$.output[].id",
+          "$.output[].role",
+          "$.output[].status",
+          "$.output[].type",
+          "$.status",
+          "$.store",
+          "$.usage.input_tokens",
+          "$.usage.input_tokens_details.cached_tokens",
+          "$.usage.output_tokens",
+          "$.usage.output_tokens_details.reasoning_tokens",
+          "$.usage.total_tokens"
+        ],
+        "normalized_sha256": "1ef08ca8a9ea30e57a1b9d543092b595ecc2490cb3f9a11ab4f55dbcd9fc70f0",
+        "semantic": {
+          "event_types": [
+            "response"
+          ],
+          "models": [
+            "grok-4.5"
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 4,
+            "total_tokens": 24,
+            "cache_read_tokens": 5,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "grok_sse",
+      "platform": "grok",
+      "request": {
+        "model": "grok-4.5",
+        "input": "Reply only OK",
+        "max_output_tokens": 2,
+        "stream": true
+      },
+      "old": {
+        "started_at": "2026-08-15T02:15:47.320544+00:00",
+        "finished_at": "2026-08-15T02:15:47.333652+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/grok_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 3,
+        "schema": [
+          "$[].content_index",
+          "$[].delta",
+          "$[].item_id",
+          "$[].output_index",
+          "$[].response.created_at",
+          "$[].response.id",
+          "$[].response.model",
+          "$[].response.object",
+          "$[].response.output[]",
+          "$[].response.output[].content[].annotations[]",
+          "$[].response.output[].content[].text",
+          "$[].response.output[].content[].type",
+          "$[].response.output[].id",
+          "$[].response.output[].role",
+          "$[].response.output[].status",
+          "$[].response.output[].type",
+          "$[].response.status",
+          "$[].response.store",
+          "$[].response.usage",
+          "$[].response.usage.input_tokens",
+          "$[].response.usage.input_tokens_details.cached_tokens",
+          "$[].response.usage.output_tokens",
+          "$[].response.usage.output_tokens_details.reasoning_tokens",
+          "$[].response.usage.total_tokens",
+          "$[].sequence_number",
+          "$[].type"
+        ],
+        "normalized_sha256": "7d927e00df7746671ea3700fa40520e377055269011699b645bd0c14ea7f005b",
+        "semantic": {
+          "event_types": [
+            "response.completed",
+            "response.created",
+            "response.output_text.delta",
+            "response.status:completed",
+            "response.status:in_progress"
+          ],
+          "models": [
+            "grok-4.5"
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 4,
+            "total_tokens": 24,
+            "cache_read_tokens": 5,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T02:15:47.320733+00:00",
+        "finished_at": "2026-08-15T02:15:47.334156+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/grok_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 3,
+        "schema": [
+          "$[].content_index",
+          "$[].delta",
+          "$[].item_id",
+          "$[].output_index",
+          "$[].response.created_at",
+          "$[].response.id",
+          "$[].response.model",
+          "$[].response.object",
+          "$[].response.output[]",
+          "$[].response.output[].content[].annotations[]",
+          "$[].response.output[].content[].text",
+          "$[].response.output[].content[].type",
+          "$[].response.output[].id",
+          "$[].response.output[].role",
+          "$[].response.output[].status",
+          "$[].response.output[].type",
+          "$[].response.status",
+          "$[].response.store",
+          "$[].response.usage",
+          "$[].response.usage.input_tokens",
+          "$[].response.usage.input_tokens_details.cached_tokens",
+          "$[].response.usage.output_tokens",
+          "$[].response.usage.output_tokens_details.reasoning_tokens",
+          "$[].response.usage.total_tokens",
+          "$[].sequence_number",
+          "$[].type"
+        ],
+        "normalized_sha256": "7d927e00df7746671ea3700fa40520e377055269011699b645bd0c14ea7f005b",
+        "semantic": {
+          "event_types": [
+            "response.completed",
+            "response.created",
+            "response.output_text.delta",
+            "response.status:completed",
+            "response.status:in_progress"
+          ],
+          "models": [
+            "grok-4.5"
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 4,
+            "total_tokens": 24,
+            "cache_read_tokens": 5,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "kimi_json",
+      "platform": "kimi",
+      "request": {
+        "model": "k3",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Reply only OK"
+          }
+        ],
+        "max_tokens": 1,
+        "stream": false
+      },
+      "old": {
+        "started_at": "2026-08-15T02:15:47.334523+00:00",
+        "finished_at": "2026-08-15T02:15:47.355952+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/kimi_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.choices[].finish_reason",
+          "$.choices[].index",
+          "$.choices[].message.content",
+          "$.choices[].message.role",
+          "$.created",
+          "$.id",
+          "$.model",
+          "$.object",
+          "$.usage.completion_tokens",
+          "$.usage.completion_tokens_details.reasoning_tokens",
+          "$.usage.prompt_tokens",
+          "$.usage.prompt_tokens_details.cached_tokens",
+          "$.usage.total_tokens"
+        ],
+        "normalized_sha256": "46b66a751dedb52685a7b57dea05f47d527ea94aacd841b8de392df42e0b5224",
+        "semantic": {
+          "event_types": [
+            "chat.completion"
+          ],
+          "models": [
+            "k3"
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 3,
+            "total_tokens": 15,
+            "cache_read_tokens": 4,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T02:15:47.334715+00:00",
+        "finished_at": "2026-08-15T02:15:47.355440+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/kimi_json",
+        "status": 200,
+        "content_type": "application/json",
+        "format": "json",
+        "event_count": 1,
+        "schema": [
+          "$.choices[].finish_reason",
+          "$.choices[].index",
+          "$.choices[].message.content",
+          "$.choices[].message.role",
+          "$.created",
+          "$.id",
+          "$.model",
+          "$.object",
+          "$.usage.completion_tokens",
+          "$.usage.completion_tokens_details.reasoning_tokens",
+          "$.usage.prompt_tokens",
+          "$.usage.prompt_tokens_details.cached_tokens",
+          "$.usage.total_tokens"
+        ],
+        "normalized_sha256": "46b66a751dedb52685a7b57dea05f47d527ea94aacd841b8de392df42e0b5224",
+        "semantic": {
+          "event_types": [
+            "chat.completion"
+          ],
+          "models": [
+            "k3"
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 3,
+            "total_tokens": 15,
+            "cache_read_tokens": 4,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "kimi_sse",
+      "platform": "kimi",
+      "request": {
+        "model": "k3",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Reply only OK"
+          }
+        ],
+        "max_tokens": 2,
+        "stream": true
+      },
+      "old": {
+        "started_at": "2026-08-15T02:15:47.356268+00:00",
+        "finished_at": "2026-08-15T02:15:47.368957+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/kimi_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 2,
+        "schema": [
+          "$[].choices[].delta.content",
+          "$[].choices[].delta{}",
+          "$[].choices[].finish_reason",
+          "$[].choices[].index",
+          "$[].created",
+          "$[].id",
+          "$[].model",
+          "$[].object",
+          "$[].usage.completion_tokens",
+          "$[].usage.completion_tokens_details.reasoning_tokens",
+          "$[].usage.prompt_tokens",
+          "$[].usage.prompt_tokens_details.cached_tokens",
+          "$[].usage.total_tokens"
+        ],
+        "normalized_sha256": "1878cc9e1044ad90ee72c8f44a2758ac1ca9112cc857c3890396e9e47e63d947",
+        "semantic": {
+          "event_types": [
+            "chat.completion.chunk"
+          ],
+          "models": [
+            "k3"
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 3,
+            "total_tokens": 15,
+            "cache_read_tokens": 4,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T02:15:47.356457+00:00",
+        "finished_at": "2026-08-15T02:15:47.369150+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/kimi_sse",
+        "status": 200,
+        "content_type": "text/event-stream",
+        "format": "sse",
+        "event_count": 2,
+        "schema": [
+          "$[].choices[].delta.content",
+          "$[].choices[].delta{}",
+          "$[].choices[].finish_reason",
+          "$[].choices[].index",
+          "$[].created",
+          "$[].id",
+          "$[].model",
+          "$[].object",
+          "$[].usage.completion_tokens",
+          "$[].usage.completion_tokens_details.reasoning_tokens",
+          "$[].usage.prompt_tokens",
+          "$[].usage.prompt_tokens_details.cached_tokens",
+          "$[].usage.total_tokens"
+        ],
+        "normalized_sha256": "1878cc9e1044ad90ee72c8f44a2758ac1ca9112cc857c3890396e9e47e63d947",
+        "semantic": {
+          "event_types": [
+            "chat.completion.chunk"
+          ],
+          "models": [
+            "k3"
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 3,
+            "total_tokens": 15,
+            "cache_read_tokens": 4,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    },
+    {
+      "name": "openai_ws",
+      "platform": "openai",
+      "request": {
+        "type": "response.create",
+        "model": "gpt-4o-mini",
+        "input": "Reply only OK",
+        "max_output_tokens": 16
+      },
+      "old": {
+        "started_at": "2026-08-15T02:15:47.374346+00:00",
+        "finished_at": "2026-08-15T02:15:47.405256+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/openai_ws",
+        "status": 101,
+        "content_type": "application/websocket",
+        "format": "ws",
+        "event_count": 6,
+        "schema": [
+          "$[].content_index",
+          "$[].delta",
+          "$[].item_id",
+          "$[].output_index",
+          "$[].response.id",
+          "$[].response.model",
+          "$[].response.object",
+          "$[].response.output[]",
+          "$[].response.output[].content[].annotations[]",
+          "$[].response.output[].content[].text",
+          "$[].response.output[].content[].type",
+          "$[].response.output[].id",
+          "$[].response.output[].role",
+          "$[].response.output[].status",
+          "$[].response.output[].type",
+          "$[].response.status",
+          "$[].response.usage",
+          "$[].response.usage.input_tokens",
+          "$[].response.usage.input_tokens_details.cached_tokens",
+          "$[].response.usage.output_tokens",
+          "$[].response.usage.output_tokens_details.reasoning_tokens",
+          "$[].response.usage.total_tokens",
+          "$[].sequence_number",
+          "$[].type"
+        ],
+        "normalized_sha256": "56844a2bfa4a8e93b686db2ee443210e368b748690291d4c868a14f0ee7708cb",
+        "semantic": {
+          "event_types": [
+            "response.completed",
+            "response.created",
+            "response.output_text.delta",
+            "response.status:completed",
+            "response.status:in_progress"
+          ],
+          "models": [
+            "gpt-4o-mini"
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 4,
+            "total_tokens": 24,
+            "cache_read_tokens": 5,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "turns_requested": 2,
+        "turns_completed": 2,
+        "completed_response_ids": [
+          "resp_fixture_ws_1",
+          "resp_fixture_ws_2"
+        ],
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T02:15:47.381239+00:00",
+        "finished_at": "2026-08-15T02:15:47.404188+00:00",
+        "marker": "sub2api-dual-diff/dual-9b059017f7a0/openai_ws",
+        "status": 101,
+        "content_type": "application/websocket",
+        "format": "ws",
+        "event_count": 6,
+        "schema": [
+          "$[].content_index",
+          "$[].delta",
+          "$[].item_id",
+          "$[].output_index",
+          "$[].response.id",
+          "$[].response.model",
+          "$[].response.object",
+          "$[].response.output[]",
+          "$[].response.output[].content[].annotations[]",
+          "$[].response.output[].content[].text",
+          "$[].response.output[].content[].type",
+          "$[].response.output[].id",
+          "$[].response.output[].role",
+          "$[].response.output[].status",
+          "$[].response.output[].type",
+          "$[].response.status",
+          "$[].response.usage",
+          "$[].response.usage.input_tokens",
+          "$[].response.usage.input_tokens_details.cached_tokens",
+          "$[].response.usage.output_tokens",
+          "$[].response.usage.output_tokens_details.reasoning_tokens",
+          "$[].response.usage.total_tokens",
+          "$[].sequence_number",
+          "$[].type"
+        ],
+        "normalized_sha256": "56844a2bfa4a8e93b686db2ee443210e368b748690291d4c868a14f0ee7708cb",
+        "semantic": {
+          "event_types": [
+            "response.completed",
+            "response.created",
+            "response.output_text.delta",
+            "response.status:completed",
+            "response.status:in_progress"
+          ],
+          "models": [
+            "gpt-4o-mini"
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 4,
+            "total_tokens": 24,
+            "cache_read_tokens": 5,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "turns_requested": 2,
+        "turns_completed": 2,
+        "completed_response_ids": [
+          "resp_fixture_ws_1",
+          "resp_fixture_ws_2"
+        ],
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    }
+  ],
+  "finished_at": "2026-08-15T02:15:47.405655+00:00",
+  "summary": {
+    "case_count": 11,
+    "transport_success_count": 11,
+    "schema_equal_count": 11,
+    "usage_equal_count": 11
+  }
+}

@@ -1,0 +1,162 @@
+{
+  "run_id": "dual-a2dc02bcf2d3",
+  "started_at": "2026-08-15T00:41:32.920608+00:00",
+  "old_url": "http://127.0.0.1:58081",
+  "new_url": "http://127.0.0.1:58082",
+  "cases": [
+    {
+      "name": "openai_ws",
+      "platform": "openai",
+      "request": {
+        "type": "response.create",
+        "model": "gpt-4o-mini",
+        "input": "Reply only OK",
+        "max_output_tokens": 16
+      },
+      "old": {
+        "started_at": "2026-08-15T00:41:32.924451+00:00",
+        "finished_at": "2026-08-15T00:41:32.989120+00:00",
+        "marker": "sub2api-dual-diff/dual-a2dc02bcf2d3/openai_ws",
+        "status": 101,
+        "content_type": "application/websocket",
+        "format": "ws",
+        "event_count": 6,
+        "schema": [
+          "$[].content_index",
+          "$[].delta",
+          "$[].item_id",
+          "$[].output_index",
+          "$[].response.id",
+          "$[].response.model",
+          "$[].response.object",
+          "$[].response.output[]",
+          "$[].response.output[].content[].annotations[]",
+          "$[].response.output[].content[].text",
+          "$[].response.output[].content[].type",
+          "$[].response.output[].id",
+          "$[].response.output[].role",
+          "$[].response.output[].status",
+          "$[].response.output[].type",
+          "$[].response.status",
+          "$[].response.usage",
+          "$[].response.usage.input_tokens",
+          "$[].response.usage.input_tokens_details.cached_tokens",
+          "$[].response.usage.output_tokens",
+          "$[].response.usage.output_tokens_details.reasoning_tokens",
+          "$[].response.usage.total_tokens",
+          "$[].sequence_number",
+          "$[].type"
+        ],
+        "normalized_sha256": "56844a2bfa4a8e93b686db2ee443210e368b748690291d4c868a14f0ee7708cb",
+        "semantic": {
+          "event_types": [
+            "response.completed",
+            "response.created",
+            "response.output_text.delta",
+            "response.status:completed",
+            "response.status:in_progress"
+          ],
+          "models": [
+            "gpt-4o-mini"
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 4,
+            "total_tokens": 24,
+            "cache_read_tokens": 5,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "turns_requested": 2,
+        "turns_completed": 2,
+        "completed_response_ids": [
+          "resp_fixture_ws_1",
+          "resp_fixture_ws_2"
+        ],
+        "error": ""
+      },
+      "new": {
+        "started_at": "2026-08-15T00:41:32.930910+00:00",
+        "finished_at": "2026-08-15T00:41:32.986015+00:00",
+        "marker": "sub2api-dual-diff/dual-a2dc02bcf2d3/openai_ws",
+        "status": 101,
+        "content_type": "application/websocket",
+        "format": "ws",
+        "event_count": 6,
+        "schema": [
+          "$[].content_index",
+          "$[].delta",
+          "$[].item_id",
+          "$[].output_index",
+          "$[].response.id",
+          "$[].response.model",
+          "$[].response.object",
+          "$[].response.output[]",
+          "$[].response.output[].content[].annotations[]",
+          "$[].response.output[].content[].text",
+          "$[].response.output[].content[].type",
+          "$[].response.output[].id",
+          "$[].response.output[].role",
+          "$[].response.output[].status",
+          "$[].response.output[].type",
+          "$[].response.status",
+          "$[].response.usage",
+          "$[].response.usage.input_tokens",
+          "$[].response.usage.input_tokens_details.cached_tokens",
+          "$[].response.usage.output_tokens",
+          "$[].response.usage.output_tokens_details.reasoning_tokens",
+          "$[].response.usage.total_tokens",
+          "$[].sequence_number",
+          "$[].type"
+        ],
+        "normalized_sha256": "56844a2bfa4a8e93b686db2ee443210e368b748690291d4c868a14f0ee7708cb",
+        "semantic": {
+          "event_types": [
+            "response.completed",
+            "response.created",
+            "response.output_text.delta",
+            "response.status:completed",
+            "response.status:in_progress"
+          ],
+          "models": [
+            "gpt-4o-mini"
+          ],
+          "usage": {
+            "input_tokens": 20,
+            "output_tokens": 4,
+            "total_tokens": 24,
+            "cache_read_tokens": 5,
+            "cache_creation_tokens": null,
+            "reasoning_tokens": 1
+          }
+        },
+        "turns_requested": 2,
+        "turns_completed": 2,
+        "completed_response_ids": [
+          "resp_fixture_ws_1",
+          "resp_fixture_ws_2"
+        ],
+        "error": ""
+      },
+      "comparison": {
+        "status_equal": true,
+        "content_type_equal": true,
+        "format_equal": true,
+        "schema_equal": true,
+        "schema_only_old": [],
+        "schema_only_new": [],
+        "normalized_equal": true,
+        "models_equal": true,
+        "usage_equal": true
+      }
+    }
+  ],
+  "finished_at": "2026-08-15T00:41:32.989570+00:00",
+  "summary": {
+    "case_count": 1,
+    "transport_success_count": 1,
+    "schema_equal_count": 1,
+    "usage_equal_count": 1
+  }
+}

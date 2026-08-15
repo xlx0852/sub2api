@@ -440,6 +440,16 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	}
 
 	completedTurns := atomic.Int32{}
+	turnBillingIDs := make(map[int]string)
+	acceptedTurns := make(map[int]bool)
+	billingIDForTurn := func(turn int) string {
+		if billingID := turnBillingIDs[turn]; billingID != "" {
+			return billingID
+		}
+		billingID := "ws-turn:" + generateRequestID()
+		turnBillingIDs[turn] = billingID
+		return billingID
+	}
 	policyClientConn := &openAIWSPolicyEnforcingFrameConn{
 		inner: &openAIWSClientFrameConn{conn: clientConn},
 		// 注意线程安全：filter 仅在 runClientToUpstream 这一条
@@ -581,7 +591,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				turnResult := &OpenAIForwardResult{
 					RequestID:        turn.RequestID,
 					ResponseID:       turn.RequestID,
-					BillingRequestID: "ws-turn:" + generateRequestID(),
+					BillingRequestID: billingIDForTurn(turnNo),
 					Usage: OpenAIUsage{
 						InputTokens:              turn.Usage.InputTokens,
 						OutputTokens:             turn.Usage.OutputTokens,
@@ -612,6 +622,15 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				)
 				if hooks != nil && hooks.AfterTurn != nil {
 					hooks.AfterTurn(turnNo, turnResult, nil)
+				}
+			},
+			OnUpstreamEvent: func(turn int, eventType, providerRequestID string) {
+				if eventType == "error" || acceptedTurns[turn] {
+					return
+				}
+				acceptedTurns[turn] = true
+				if hooks != nil && hooks.UpstreamAccepted != nil {
+					hooks.UpstreamAccepted(turn, billingIDForTurn(turn), providerRequestID)
 				}
 			},
 			BeforeWriteClient: func(msgType coderws.MessageType, payload []byte, wroteDownstream bool) error {

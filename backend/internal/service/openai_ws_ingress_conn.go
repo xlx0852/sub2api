@@ -116,6 +116,8 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 		return nil, errors.New("upstream websocket lease is nil")
 	}
 	turnStart := time.Now()
+	billingRequestID := "ws-turn:" + generateRequestID()
+	acceptedPersisted := false
 	wroteDownstream := false
 	if err := lease.WriteJSONWithContextTimeout(ctx, json.RawMessage(payload), s.openAIWSWriteTimeout()); err != nil {
 		return nil, wrapOpenAIWSIngressTurnError(
@@ -267,6 +269,12 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 				}
 			}
 		}
+		if eventType != "" && eventType != "error" && !acceptedPersisted {
+			acceptedPersisted = true
+			if sess.hooks != nil && sess.hooks.UpstreamAccepted != nil {
+				sess.hooks.UpstreamAccepted(turn, billingRequestID, eventResponseID)
+			}
+		}
 		isTokenEvent := isOpenAIWSTokenEvent(eventType)
 		if isTokenEvent {
 			tokenEventCount++
@@ -363,22 +371,23 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 			payloadBytesValue := int64(payloadBytes)
 			eventCountValue := eventCount
 			result := &OpenAIForwardResult{
-				RequestID:       responseID,
-				Usage:           usage,
-				Model:           originalModel,
-				UpstreamModel:   mappedModel,
-				ServiceTier:     extractOpenAIServiceTierFromBody(payload),
-				ReasoningEffort: ApplyThinkingEnabledFallback(extractOpenAIReasoningEffortFromBody(payload, firstNonEmpty(mappedModel, originalModel)), payload, mappedModel),
-				Stream:          reqStream,
-				OpenAIWSMode:    true,
-				ResponseHeaders: lease.HandshakeHeaders(),
-				Duration:        time.Since(turnStart),
-				FirstTokenMs:    firstTokenMs,
-				WSPayloadBytes:  &payloadBytesValue,
-				WSEventCount:    &eventCountValue,
-				WSConnReused:    &reused,
-				WSConnPickMs:    &connPickMs,
-				WSQueueWaitMs:   &queueWaitMs,
+				RequestID:        responseID,
+				BillingRequestID: billingRequestID,
+				Usage:            usage,
+				Model:            originalModel,
+				UpstreamModel:    mappedModel,
+				ServiceTier:      extractOpenAIServiceTierFromBody(payload),
+				ReasoningEffort:  ApplyThinkingEnabledFallback(extractOpenAIReasoningEffortFromBody(payload, firstNonEmpty(mappedModel, originalModel)), payload, mappedModel),
+				Stream:           reqStream,
+				OpenAIWSMode:     true,
+				ResponseHeaders:  lease.HandshakeHeaders(),
+				Duration:         time.Since(turnStart),
+				FirstTokenMs:     firstTokenMs,
+				WSPayloadBytes:   &payloadBytesValue,
+				WSEventCount:     &eventCountValue,
+				WSConnReused:     &reused,
+				WSConnPickMs:     &connPickMs,
+				WSQueueWaitMs:    &queueWaitMs,
 			}
 			if replayInput := normalizeOpenAIReplayItemsForAccount(account, replayCollector.Items()); len(replayInput) > 0 {
 				result.wsReplayInput = replayInput

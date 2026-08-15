@@ -1,0 +1,42 @@
+{
+  "environment": "japan-staging-main",
+  "mode": "authoritative",
+  "selected_group_ids": [3],
+  "historical_shadow_guard": {
+    "ready_before": 6,
+    "ready_after": 6,
+    "authoritative": false,
+    "settled_after": 0,
+    "passed": true
+  },
+  "selected_group_traffic": {
+    "protocols": {
+      "openai_json": 200,
+      "openai_sse": 200,
+      "openai_ws": 101,
+      "openai_ws_turns": 2
+    },
+    "authoritative_settled": 4,
+    "usage_count": 4,
+    "dedup_count": 4,
+    "actual_cost": "0.0013300000",
+    "balance_delta": "0.00133000",
+    "api_key_quota_delta": "0.00133000",
+    "error_backlog": 0,
+    "passed": true
+  },
+  "unselected_group_traffic": {
+    "group_id": 2,
+    "platform": "anthropic",
+    "http_status": 200,
+    "journal_attempts_before": 10,
+    "journal_attempts_after": 10,
+    "usage_count": 1,
+    "dedup_count": 1,
+    "actual_cost": "0.0000130000",
+    "balance_delta": "0.00001300",
+    "api_key_quota_delta": "0.00001300",
+    "passed": true
+  },
+  "all_passed": true
+}

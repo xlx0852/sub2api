@@ -1,0 +1,211 @@
+{
+  "cases": [
+    {
+      "after": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0.000022"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00000600",
+          "status": "active"
+        },
+        "dedup_count": 3,
+        "usage_count": 1,
+        "user": {
+          "balance": "99.99993100",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "attempt": {
+        "billing_identity": "client:ec908c1d-7059-4d01-a481-82e5f3b84ac2",
+        "id": 5,
+        "payload_hash": "8131154ca2ad1e0e7f1c252f4430166cc09401f599516c6dcba1b94144296c71",
+        "retry_count": 0,
+        "state": "settled"
+      },
+      "before": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0.000011"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00000000",
+          "status": "active"
+        },
+        "dedup_count": 2,
+        "usage_count": 0,
+        "user": {
+          "balance": "99.99993700",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "checks": {
+        "exactly_one_billing_dedup": true,
+        "exactly_one_usage_log": true,
+        "request_succeeded": true,
+        "selected_group_settled_by_journal": true,
+        "unselected_group_has_no_journal": true
+      },
+      "group_id": 5,
+      "name": "openai_json",
+      "passed": true,
+      "platform": "openai",
+      "request": {
+        "content_type": "application/json",
+        "error": "",
+        "event_count": 1,
+        "finished_at": "2026-08-15T04:01:55.490524+00:00",
+        "format": "json",
+        "marker": "sub2api-dual-diff/settlement-group-rollout-4286f6ad6037/openai_json",
+        "normalized_sha256": "90f61410fde301d15448793fa8dc3d6033d489e5d7da5c1db00f18745ad5c938",
+        "schema": [
+          "$.created_at",
+          "$.id",
+          "$.model",
+          "$.object",
+          "$.output[].content[].annotations[]",
+          "$.output[].content[].text",
+          "$.output[].content[].type",
+          "$.output[].id",
+          "$.output[].role",
+          "$.output[].status",
+          "$.output[].type",
+          "$.status",
+          "$.store",
+          "$.usage.input_tokens",
+          "$.usage.input_tokens_details.cached_tokens",
+          "$.usage.output_tokens",
+          "$.usage.output_tokens_details.reasoning_tokens",
+          "$.usage.total_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "response"
+          ],
+          "models": [
+            "gpt-4o-mini"
+          ],
+          "usage": {
+            "cache_creation_tokens": null,
+            "cache_read_tokens": 5,
+            "input_tokens": 20,
+            "output_tokens": 4,
+            "reasoning_tokens": 1,
+            "total_tokens": 24
+          }
+        },
+        "started_at": "2026-08-15T04:01:55.463311+00:00",
+        "status": 200
+      },
+      "selected": true
+    },
+    {
+      "after": {
+        "account": {
+          "name": "settlement-anthropic",
+          "quota_limit": "50",
+          "quota_used": "0.000006"
+        },
+        "api_key": {
+          "name": "settlement-anthropic",
+          "quota_used": "0.00000300",
+          "status": "active"
+        },
+        "dedup_count": 4,
+        "usage_count": 1,
+        "user": {
+          "balance": "99.99992800",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "attempt": {},
+      "before": {
+        "account": {
+          "name": "settlement-anthropic",
+          "quota_limit": "50",
+          "quota_used": "0"
+        },
+        "api_key": {
+          "name": "settlement-anthropic",
+          "quota_used": "0.00000000",
+          "status": "active"
+        },
+        "dedup_count": 3,
+        "usage_count": 0,
+        "user": {
+          "balance": "99.99993100",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "checks": {
+        "exactly_one_billing_dedup": true,
+        "exactly_one_usage_log": true,
+        "request_succeeded": true,
+        "selected_group_settled_by_journal": true,
+        "unselected_group_has_no_journal": true
+      },
+      "group_id": 2,
+      "name": "anthropic_json",
+      "passed": true,
+      "platform": "anthropic",
+      "request": {
+        "content_type": "application/json",
+        "error": "",
+        "event_count": 1,
+        "finished_at": "2026-08-15T04:01:55.578986+00:00",
+        "format": "json",
+        "marker": "sub2api-dual-diff/settlement-group-rollout-9623d06a3e11/anthropic_json",
+        "normalized_sha256": "401ac15b68192257aa0c96628222db13166bc21d3c71685f029e31f0e4582792",
+        "schema": [
+          "$.content[].text",
+          "$.content[].type",
+          "$.id",
+          "$.model",
+          "$.role",
+          "$.stop_reason",
+          "$.stop_sequence",
+          "$.type",
+          "$.usage.cache_creation_input_tokens",
+          "$.usage.cache_read_input_tokens",
+          "$.usage.input_tokens",
+          "$.usage.output_tokens"
+        ],
+        "semantic": {
+          "event_types": [
+            "message"
+          ],
+          "models": [
+            "deepseek-v4-flash"
+          ],
+          "usage": {
+            "cache_creation_tokens": 2,
+            "cache_read_tokens": 3,
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "reasoning_tokens": null,
+            "total_tokens": null
+          }
+        },
+        "started_at": "2026-08-15T04:01:55.556218+00:00",
+        "status": 200
+      },
+      "selected": false
+    }
+  ],
+  "legacy_group_id": 2,
+  "selected_group_id": 5,
+  "summary": {
+    "all_passed": true,
+    "case_count": 2,
+    "passed_count": 2
+  }
+}

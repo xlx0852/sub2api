@@ -1,0 +1,455 @@
+{
+  "selected_group_id": 5,
+  "stages": [
+    {
+      "after_restart": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0.000033"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00001200",
+          "status": "active"
+        },
+        "dedup_count": 5,
+        "usage_count": 1,
+        "user": {
+          "balance": "99.99992200",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "at_crash": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0.000022"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00000600",
+          "status": "active"
+        },
+        "dedup_count": 4,
+        "usage_count": 0,
+        "user": {
+          "balance": "99.99992800",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "attempt_after_restart": {
+        "billing_identity": "client:e12a996c-09f6-4c39-940d-339061de8b01",
+        "id": 7,
+        "payload_hash": "9cbcb7001867f1af426b53be812a86cccce4634c66d161b3fb103a2c7dd8176d",
+        "retry_count": 0,
+        "state": "settled"
+      },
+      "attempt_at_crash": {
+        "billing_identity": "client:e12a996c-09f6-4c39-940d-339061de8b01",
+        "id": 7,
+        "payload_hash": "9cbcb7001867f1af426b53be812a86cccce4634c66d161b3fb103a2c7dd8176d",
+        "retry_count": 0,
+        "state": "ready"
+      },
+      "before": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0.000022"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00000600",
+          "status": "active"
+        },
+        "dedup_count": 4,
+        "usage_count": 0,
+        "user": {
+          "balance": "99.99992800",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "marker": "sub2api-dual-diff/settlement-durable-crash-2acbc2d0eacd/openai_json",
+      "passed": true,
+      "request": {
+        "value": {
+          "content_type": "",
+          "error": "RemoteDisconnected: Remote end closed connection without response",
+          "event_count": 0,
+          "finished_at": "2026-08-15T04:02:59.671029+00:00",
+          "format": "transport_error",
+          "marker": "sub2api-dual-diff/settlement-durable-crash-2acbc2d0eacd/openai_json",
+          "normalized_sha256": "",
+          "schema": [],
+          "semantic": {
+            "event_types": [],
+            "models": [],
+            "usage": null
+          },
+          "started_at": "2026-08-15T04:02:59.561690+00:00",
+          "status": 0
+        }
+      },
+      "run_id": "settlement-durable-crash-2acbc2d0eacd",
+      "stage": "terminal_parsed"
+    },
+    {
+      "after_restart": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0.000044"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00001800",
+          "status": "active"
+        },
+        "dedup_count": 6,
+        "usage_count": 1,
+        "user": {
+          "balance": "99.99991600",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "at_crash": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0.000033"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00001200",
+          "status": "active"
+        },
+        "dedup_count": 5,
+        "usage_count": 0,
+        "user": {
+          "balance": "99.99992200",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "attempt_after_restart": {
+        "billing_identity": "client:f061e5cd-20d2-4b3f-a768-b7a204275998",
+        "id": 9,
+        "payload_hash": "77ac7d2c07c81968b5a3edb36c7bf7b724676fb58569fd7ba99d94726ded696d",
+        "retry_count": 0,
+        "state": "settled"
+      },
+      "attempt_at_crash": {
+        "billing_identity": "client:f061e5cd-20d2-4b3f-a768-b7a204275998",
+        "id": 9,
+        "payload_hash": "77ac7d2c07c81968b5a3edb36c7bf7b724676fb58569fd7ba99d94726ded696d",
+        "retry_count": 0,
+        "state": "ready"
+      },
+      "before": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0.000033"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00001200",
+          "status": "active"
+        },
+        "dedup_count": 5,
+        "usage_count": 0,
+        "user": {
+          "balance": "99.99992200",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "marker": "sub2api-dual-diff/settlement-durable-crash-2ab802425fe3/openai_json",
+      "passed": true,
+      "request": {
+        "value": {
+          "content_type": "",
+          "error": "RemoteDisconnected: Remote end closed connection without response",
+          "event_count": 0,
+          "finished_at": "2026-08-15T04:03:27.737024+00:00",
+          "format": "transport_error",
+          "marker": "sub2api-dual-diff/settlement-durable-crash-2ab802425fe3/openai_json",
+          "normalized_sha256": "",
+          "schema": [],
+          "semantic": {
+            "event_types": [],
+            "models": [],
+            "usage": null
+          },
+          "started_at": "2026-08-15T04:03:27.628541+00:00",
+          "status": 0
+        }
+      },
+      "run_id": "settlement-durable-crash-2ab802425fe3",
+      "stage": "event_persisted"
+    },
+    {
+      "after_restart": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0.000055"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00002400",
+          "status": "active"
+        },
+        "dedup_count": 7,
+        "usage_count": 1,
+        "user": {
+          "balance": "99.99991000",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "at_crash": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0.000044"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00001800",
+          "status": "active"
+        },
+        "dedup_count": 6,
+        "usage_count": 0,
+        "user": {
+          "balance": "99.99991600",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "attempt_after_restart": {
+        "billing_identity": "client:7fd78b5e-b25d-490d-b695-0c4be58dd9b9",
+        "id": 11,
+        "payload_hash": "6396f8b005d6b700c3666d99733e449ba6b2c88f6852ebca3a8e4f56f80ecd25",
+        "retry_count": 0,
+        "state": "settled"
+      },
+      "attempt_at_crash": {
+        "billing_identity": "client:7fd78b5e-b25d-490d-b695-0c4be58dd9b9",
+        "id": 11,
+        "lease_owner": "settlement-worker-1786766649181696283",
+        "payload_hash": "6396f8b005d6b700c3666d99733e449ba6b2c88f6852ebca3a8e4f56f80ecd25",
+        "retry_count": 0,
+        "state": "processing"
+      },
+      "before": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0.000044"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00001800",
+          "status": "active"
+        },
+        "dedup_count": 6,
+        "usage_count": 0,
+        "user": {
+          "balance": "99.99991600",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "marker": "sub2api-dual-diff/settlement-durable-crash-5820dc004646/openai_json",
+      "passed": true,
+      "request": {
+        "value": {
+          "content_type": "application/json",
+          "error": "",
+          "event_count": 1,
+          "finished_at": "2026-08-15T04:04:07.585536+00:00",
+          "format": "json",
+          "marker": "sub2api-dual-diff/settlement-durable-crash-5820dc004646/openai_json",
+          "normalized_sha256": "90f61410fde301d15448793fa8dc3d6033d489e5d7da5c1db00f18745ad5c938",
+          "schema": [
+            "$.created_at",
+            "$.id",
+            "$.model",
+            "$.object",
+            "$.output[].content[].annotations[]",
+            "$.output[].content[].text",
+            "$.output[].content[].type",
+            "$.output[].id",
+            "$.output[].role",
+            "$.output[].status",
+            "$.output[].type",
+            "$.status",
+            "$.store",
+            "$.usage.input_tokens",
+            "$.usage.input_tokens_details.cached_tokens",
+            "$.usage.output_tokens",
+            "$.usage.output_tokens_details.reasoning_tokens",
+            "$.usage.total_tokens"
+          ],
+          "semantic": {
+            "event_types": [
+              "response"
+            ],
+            "models": [
+              "gpt-4o-mini"
+            ],
+            "usage": {
+              "cache_creation_tokens": null,
+              "cache_read_tokens": 5,
+              "input_tokens": 20,
+              "output_tokens": 4,
+              "reasoning_tokens": 1,
+              "total_tokens": 24
+            }
+          },
+          "started_at": "2026-08-15T04:04:07.561090+00:00",
+          "status": 200
+        }
+      },
+      "run_id": "settlement-durable-crash-5820dc004646",
+      "stage": "billing_before_commit"
+    },
+    {
+      "after_restart": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0.000066"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00003000",
+          "status": "active"
+        },
+        "dedup_count": 8,
+        "usage_count": 1,
+        "user": {
+          "balance": "99.99990400",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "at_crash": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0.000066"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00003000",
+          "status": "active"
+        },
+        "dedup_count": 8,
+        "usage_count": 1,
+        "user": {
+          "balance": "99.99990400",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "attempt_after_restart": {
+        "billing_identity": "client:c336eaa8-d0f3-44ed-b19a-78b306a4faf9",
+        "id": 13,
+        "payload_hash": "6cc715c8013e512317e53a1d1c84229770fd512a6fa13a943aa3f63a26c23b4a",
+        "retry_count": 0,
+        "state": "settled"
+      },
+      "attempt_at_crash": {
+        "billing_identity": "client:c336eaa8-d0f3-44ed-b19a-78b306a4faf9",
+        "id": 13,
+        "payload_hash": "6cc715c8013e512317e53a1d1c84229770fd512a6fa13a943aa3f63a26c23b4a",
+        "retry_count": 0,
+        "state": "settled"
+      },
+      "before": {
+        "account": {
+          "name": "settlement-openai",
+          "quota_limit": "50",
+          "quota_used": "0.000055"
+        },
+        "api_key": {
+          "name": "settlement-openai",
+          "quota_used": "0.00002400",
+          "status": "active"
+        },
+        "dedup_count": 7,
+        "usage_count": 0,
+        "user": {
+          "balance": "99.99991000",
+          "email": "settlement-admin@local.test",
+          "frozen_balance": "0.00000000"
+        }
+      },
+      "marker": "sub2api-dual-diff/settlement-durable-crash-1ceb3ae3e665/openai_json",
+      "passed": true,
+      "request": {
+        "value": {
+          "content_type": "application/json",
+          "error": "",
+          "event_count": 1,
+          "finished_at": "2026-08-15T04:04:57.968550+00:00",
+          "format": "json",
+          "marker": "sub2api-dual-diff/settlement-durable-crash-1ceb3ae3e665/openai_json",
+          "normalized_sha256": "90f61410fde301d15448793fa8dc3d6033d489e5d7da5c1db00f18745ad5c938",
+          "schema": [
+            "$.created_at",
+            "$.id",
+            "$.model",
+            "$.object",
+            "$.output[].content[].annotations[]",
+            "$.output[].content[].text",
+            "$.output[].content[].type",
+            "$.output[].id",
+            "$.output[].role",
+            "$.output[].status",
+            "$.output[].type",
+            "$.status",
+            "$.store",
+            "$.usage.input_tokens",
+            "$.usage.input_tokens_details.cached_tokens",
+            "$.usage.output_tokens",
+            "$.usage.output_tokens_details.reasoning_tokens",
+            "$.usage.total_tokens"
+          ],
+          "semantic": {
+            "event_types": [
+              "response"
+            ],
+            "models": [
+              "gpt-4o-mini"
+            ],
+            "usage": {
+              "cache_creation_tokens": null,
+              "cache_read_tokens": 5,
+              "input_tokens": 20,
+              "output_tokens": 4,
+              "reasoning_tokens": 1,
+              "total_tokens": 24
+            }
+          },
+          "started_at": "2026-08-15T04:04:57.943553+00:00",
+          "status": 200
+        }
+      },
+      "run_id": "settlement-durable-crash-1ceb3ae3e665",
+      "stage": "commit_before_ack"
+    }
+  ],
+  "summary": {
+    "all_passed": true,
+    "passed_count": 4,
+    "stage_count": 4
+  }
+}

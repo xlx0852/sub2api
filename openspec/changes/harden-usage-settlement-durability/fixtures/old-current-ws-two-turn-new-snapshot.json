@@ -1,0 +1,86 @@
+{
+  "accounts": [
+    {
+      "name": "settlement-openai",
+      "platform": "openai",
+      "quota_limit": "50",
+      "quota_used": "0.000022",
+      "type": "apikey"
+    }
+  ],
+  "api_keys": [
+    {
+      "name": "settlement-openai",
+      "quota": "50.00000000",
+      "quota_used": "0.00001200",
+      "status": "active",
+      "usage_1d": "0.00000000",
+      "usage_5h": "0.00000000",
+      "usage_7d": "0.00000000"
+    }
+  ],
+  "marker_prefix": "sub2api-dual-diff/dual-a2dc02bcf2d3/openai_ws",
+  "profit_contribution": {
+    "metered_cost": "0.00002010000000",
+    "profit": "-0.00000810000000",
+    "requests": 2,
+    "revenue": "0.0000120000"
+  },
+  "usage_logs": [
+    {
+      "account_rate_multiplier": "2.0000",
+      "actual_cost": "0.0000060000",
+      "billing_mode": "token",
+      "billing_type": 0,
+      "cache_creation_1h_tokens": "0",
+      "cache_creation_5m_tokens": "0",
+      "cache_creation_cost": "0.0000000000",
+      "cache_creation_tokens": 0,
+      "cache_read_cost": "0.0000003750",
+      "cache_read_tokens": 5,
+      "input_cost": "0.0000022500",
+      "input_tokens": 15,
+      "marker": "sub2api-dual-diff/dual-a2dc02bcf2d3/openai_ws",
+      "model": "gpt-4o-mini",
+      "openai_ws_mode": "true",
+      "output_cost": "0.0000024000",
+      "output_tokens": 4,
+      "rate_multiplier": "1.0000",
+      "request_type": "3",
+      "requested_model": "gpt-4o-mini",
+      "stream": true,
+      "total_cost": "0.0000050250"
+    },
+    {
+      "account_rate_multiplier": "2.0000",
+      "actual_cost": "0.0000060000",
+      "billing_mode": "token",
+      "billing_type": 0,
+      "cache_creation_1h_tokens": "0",
+      "cache_creation_5m_tokens": "0",
+      "cache_creation_cost": "0.0000000000",
+      "cache_creation_tokens": 0,
+      "cache_read_cost": "0.0000003750",
+      "cache_read_tokens": 5,
+      "input_cost": "0.0000022500",
+      "input_tokens": 15,
+      "marker": "sub2api-dual-diff/dual-a2dc02bcf2d3/openai_ws",
+      "model": "gpt-4o-mini",
+      "openai_ws_mode": "true",
+      "output_cost": "0.0000024000",
+      "output_tokens": 4,
+      "rate_multiplier": "1.0000",
+      "request_type": "3",
+      "requested_model": "gpt-4o-mini",
+      "stream": true,
+      "total_cost": "0.0000050250"
+    }
+  ],
+  "users": [
+    {
+      "balance": "99.99998800",
+      "email": "settlement-admin@local.test",
+      "frozen_balance": "0.00000000"
+    }
+  ]
+}

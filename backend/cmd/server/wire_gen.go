@@ -7,6 +7,7 @@
 package main
 
 import (
+	appbilling "github.com/Wei-Shaw/sub2api/internal/app/billing"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
@@ -43,6 +44,9 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	redisClient := repository.ProvideRedis(configConfig)
 	v3 := repository.NewRefreshTokenCache(redisClient)
 	v4 := repository.NewSettingRepository(client)
+	usageSettlementRepository := repository.NewUsageSettlementRepository(db)
+	usageSettlementBillingRepository := repository.NewUsageSettlementBillingRepository(db)
+	durableSettlement := appbilling.ProvideDurableSettlement(usageSettlementRepository, usageSettlementBillingRepository, v4)
 	v5 := repository.NewGroupRepository(client, db)
 	v6 := repository.NewProxyRepository(client, db)
 	settingService := service.ProvideSettingService(v4, v5, v6, configConfig)
@@ -149,6 +153,9 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	kimiOAuthService := service.NewKimiOAuthService(v6, v48, v49)
 	kimiTokenProvider := service.ProvideKimiTokenProvider(v18, v35, kimiOAuthService, oAuthRefreshAPI)
 	openAIGatewayService := service.NewOpenAIGatewayService(v18, v26, v28, v, v11, v14, v29, configConfig, schedulerSnapshotService, concurrencyService, billingService, rateLimitService, billingCacheService, v38, deferredService, openAITokenProvider, grokTokenProvider, kimiTokenProvider, modelPricingResolver, channelService, balanceNotifyService, settingService, v15)
+	usageSettlementPostCommit := service.NewUsageSettlementPostCommit(v, v18, v12, billingCacheService, deferredService, balanceNotifyService, apiKeyAuthCacheInvalidator, v15, configConfig)
+	usageSettlementRecovery := service.NewUsageSettlementRecovery(openAIGatewayService, v18, v12)
+	usageSettlementBindings := provideUsageSettlementBindings(gatewayService, openAIGatewayService, durableSettlement, usageSettlementPostCommit, usageSettlementRecovery)
 	v50 := repository.NewGeminiOAuthClient(configConfig, reqClientPool)
 	v51 := repository.NewGeminiCliCodeAssistClient()
 	v52 := repository.NewGeminiDriveClient()
@@ -284,7 +291,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	paymentOrderExpiryService := service.ProvidePaymentOrderExpiryService(paymentService, v58, db)
 	userPlatformQuotaUsageFlusher := service.ProvideUserPlatformQuotaUsageFlusher(configConfig, v10, v15, timingWheelService)
 	quotaWindowSweepService := service.ProvideQuotaWindowSweepService(v18, openAIQuotaService, kimiQuotaService, grokQuotaService, v4)
-	v75 := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, openAIStatusCollectorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, schedulerSnapshotService, tokenRefreshService, accountExpiryService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, subscriptionAutoRenewService, batchImageCleanupService, batchImageWorkerRuntime, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, userPlatformQuotaUsageFlusher, upstreamBillingProbeService, quotaWindowSweepService)
+	v75 := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, openAIStatusCollectorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, schedulerSnapshotService, tokenRefreshService, accountExpiryService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, subscriptionAutoRenewService, batchImageCleanupService, batchImageWorkerRuntime, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, usageSettlementBindings, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, userPlatformQuotaUsageFlusher, upstreamBillingProbeService, quotaWindowSweepService)
 	application := &Application{
 		Server:  httpServer,
 		Cleanup: v75,

@@ -1,0 +1,39 @@
+{
+  "environment": "japan-staging-main",
+  "mode_during_test": "authoritative",
+  "selected_group_ids": [2, 3, 5],
+  "requests": [
+    {"name": "anthropic_json", "status": 200, "usage_terminal": true},
+    {"name": "anthropic_sse", "status": 200, "usage_terminal": true},
+    {"name": "openai_json", "status": 200, "usage_terminal": true},
+    {"name": "openai_sse", "status": 200, "usage_terminal": true},
+    {"name": "kimi_json", "status": 200, "usage_terminal": true},
+    {"name": "kimi_sse", "status": 200, "usage_terminal": true},
+    {"name": "openai_ws", "status": 101, "turns_completed": 2, "usage_terminal": true}
+  ],
+  "invariants": {
+    "attempt_delta": 8,
+    "settled_delta": 8,
+    "usage_delta": 8,
+    "dedup_delta": 8,
+    "actual_cost": "0.001545",
+    "payload_balance_cost": "0.001545",
+    "payload_api_key_quota_cost": "0.001545",
+    "balance_delta": "0.001545",
+    "anthropic_key_quota_delta": "0.000026",
+    "openai_key_quota_delta": "0.001330",
+    "kimi_key_quota_delta": "0.000189",
+    "payload_account_quota_cost": "0",
+    "historical_shadow_ready": 6,
+    "error_backlog": 0,
+    "passed": true
+  },
+  "final_state": {
+    "mode": "off",
+    "authoritative_settled": 12,
+    "historical_shadow_ready": 6,
+    "processing_or_retryable": 0,
+    "health_status": 200
+  },
+  "all_passed": true
+}

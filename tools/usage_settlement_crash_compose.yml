@@ -1,0 +1,50 @@
+services:
+  postgres-old:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sub2api_old
+      POSTGRES_USER: sub2api
+      POSTGRES_PASSWORD: settlement-test-only
+    ports:
+      - "127.0.0.1:55441:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sub2api -d sub2api_old"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  postgres-new:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sub2api_new
+      POSTGRES_USER: sub2api
+      POSTGRES_PASSWORD: settlement-test-only
+    ports:
+      - "127.0.0.1:55442:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sub2api -d sub2api_new"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  redis-old:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:56381:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  redis-new:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:56382:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
