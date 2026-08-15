@@ -793,7 +793,7 @@ func (e *OpenAIFastBlockedError) Error() string { return e.Message }
 // (BetaPolicyActionPass, "") so callers can short-circuit safely.
 //
 // Matching rules:
-//   - Scope filters by account type (all / oauth / apikey / bedrock)
+//   - Scope filters by account type (all / oauth / apikey; retired bedrock never matches)
 //   - ServiceTier must be empty (= any), "all", or equal the normalized tier
 //   - ModelWhitelist narrows the rule to specific models; FallbackAction
 //     handles the non-matching case (default: pass)
@@ -834,9 +834,8 @@ func evaluateOpenAIFastPolicyWithSettings(settings *OpenAIFastPolicySettings, ac
 		return BetaPolicyActionPass, ""
 	}
 	isOAuth := account != nil && account.IsOAuth()
-	isBedrock := account != nil && account.IsBedrock()
 	for _, rule := range settings.Rules {
-		if !betaPolicyScopeMatches(rule.Scope, isOAuth, isBedrock) {
+		if !betaPolicyScopeMatches(rule.Scope, isOAuth) {
 			continue
 		}
 		ruleTier := strings.ToLower(strings.TrimSpace(rule.ServiceTier))

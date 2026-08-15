@@ -56,7 +56,6 @@ const (
 	AccountTypeSetupToken     = "setup-token"     // Setup Token类型账号（inference only scope）
 	AccountTypeAPIKey         = "apikey"          // API Key类型账号
 	AccountTypeUpstream       = "upstream"        // 上游透传类型账号（通过 Base URL + API Key 连接上游）
-	AccountTypeBedrock        = "bedrock"         // AWS Bedrock 类型账号（通过 SigV4 签名或 API Key 连接 Bedrock，由 credentials.auth_mode 区分）
 	AccountTypeServiceAccount = "service_account" // Google Service Account 类型账号（用于 Vertex AI）
 )
 
@@ -100,21 +99,10 @@ const AntigravityGemini31ProAgentModel = "gemini-pro-agent"
 // 当账号未配置 model_mapping 时使用此默认值（由 modelcatalog JSON 填充）。
 var DefaultAntigravityModelMapping map[string]string
 
-// DefaultBedrockModelMapping 是 AWS Bedrock 平台的默认模型映射
-// 将 Anthropic 标准模型名映射到 Bedrock 模型 ID（由 modelcatalog JSON 填充）。
-// 注意：此处的 "us." 前缀仅为默认值，ResolveBedrockModelID 会根据账号配置的
-// aws_region 自动调整为匹配的区域前缀（如 eu.、apac.、jp. 等）
-var DefaultBedrockModelMapping map[string]string
-
 func init() {
 	DefaultAntigravityModelMapping = modelcatalog.AntigravityDefaultMapping()
-	DefaultBedrockModelMapping = modelcatalog.BedrockDefaultMapping()
 }
 
 func CurrentDefaultAntigravityModelMapping() map[string]string {
 	return modelcatalog.AntigravityDefaultMapping()
-}
-
-func CurrentDefaultBedrockModelMapping() map[string]string {
-	return modelcatalog.BedrockDefaultMapping()
 }

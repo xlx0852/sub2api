@@ -17,7 +17,7 @@ import (
 
 // ForwardCountTokens 转发 count_tokens 请求到上游 API。
 // 特点：不记录使用量、仅支持非流式响应。
-// Anthropic API Key passthrough 与 Bedrock 仍走入口短路径；主路径走
+// Anthropic API Key passthrough 仍走入口短路径；主路径走
 // parse → rewrite → transport → relay → settle。
 func (s *GatewayService) ForwardCountTokens(ctx context.Context, c *gin.Context, account *Account, parsed *ParsedRequest) error {
 	if parsed == nil {
@@ -34,12 +34,6 @@ func (s *GatewayService) ForwardCountTokens(ctx context.Context, c *gin.Context,
 			}
 		}
 		return s.forwardCountTokensAnthropicAPIKeyPassthrough(ctx, c, account, passthroughBody)
-	}
-
-	// Bedrock 不支持 count_tokens 端点
-	if account != nil && account.IsBedrock() {
-		s.countTokensError(c, http.StatusNotFound, "not_found_error", "count_tokens endpoint is not supported for Bedrock")
-		return nil
 	}
 
 	st := &claudeCountTokensState{

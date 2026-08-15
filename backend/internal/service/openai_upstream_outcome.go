@@ -160,7 +160,7 @@ func OpenAIAccountCredentialClass(account *Account) OpenAICredentialClass {
 	if account.IsOpenAIOAuth() {
 		return OpenAICredentialClassOAuth
 	}
-	if account.IsOpenAI() && (account.Type == AccountTypeAPIKey || account.IsAPIKeyOrBedrock()) {
+	if account.IsOpenAI() && account.Type == AccountTypeAPIKey {
 		return OpenAICredentialClassAPIKey
 	}
 	if account.IsOpenAICompatible() && account.Type == AccountTypeAPIKey {
@@ -247,8 +247,8 @@ func OpenAIAccountCredentialGeneration(account *Account) int64 {
 
 // apiKeyPoolState is a small CAS helper for multi-key 429 rotation.
 type apiKeyPoolState struct {
-	liveKey      string
-	cooledUntil  map[string]int64 // key -> unix ms
+	liveKey     string
+	cooledUntil map[string]int64 // key -> unix ms
 }
 
 func newAPIKeyPoolState(liveKey string) *apiKeyPoolState {

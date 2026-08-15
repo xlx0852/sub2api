@@ -29,7 +29,7 @@ cp backend/resources/model-catalog/catalog.json backend/internal/pkg/modelcatalo
 | Field | Purpose |
 |-------|---------|
 | `platforms.<name>.models` | Default model catalog for that platform |
-| `platforms.*.default_mapping` | Account empty-mapping defaults (Grok, Antigravity, Bedrock) |
+| `platforms.*.default_mapping` | Account empty-mapping defaults (Grok, Antigravity) |
 | `platforms.openai.retired_ids` | Hidden from selectable lists |
 | `fallback_pricing` | USD per-token fallback (LiteLLM-compatible keys); `alias_of` for shared prices |
 | `image_defaults` | Default per-image unit pricing |

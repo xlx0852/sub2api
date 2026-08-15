@@ -97,6 +97,7 @@ var ErrAccountNilInput = domain.ErrAccountNilInput
 var ErrAccountNotFound = domain.ErrAccountNotFound
 var ErrAccountNotInFallback = domain.ErrAccountNotInFallback
 var ErrAccountNotSchedulable = domain.ErrAccountNotSchedulable
+var ErrRetiredBedrockAccount = domain.ErrRetiredBedrockAccount
 var ErrAffiliateCodeInvalid = domain.ErrAffiliateCodeInvalid
 var ErrAffiliateCodeTaken = domain.ErrAffiliateCodeTaken
 var ErrAffiliateProfileNotFound = domain.ErrAffiliateProfileNotFound

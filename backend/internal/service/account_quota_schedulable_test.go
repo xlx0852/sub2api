@@ -100,19 +100,6 @@ func TestAccountIsSchedulable_QuotaExceeded(t *testing.T) {
 			},
 			want: true,
 		},
-		{
-			name: "bedrock quota exceeded",
-			account: &Account{
-				Status:      StatusActive,
-				Schedulable: true,
-				Type:        AccountTypeBedrock,
-				Extra: map[string]any{
-					"quota_limit": 200.0,
-					"quota_used":  200.0,
-				},
-			},
-			want: false,
-		},
 	}
 
 	for _, tt := range tests {

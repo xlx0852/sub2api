@@ -295,7 +295,7 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 		}
 	}
 
-	if cmd.AccountQuotaCost > 0 && (strings.EqualFold(cmd.AccountType, domain.AccountTypeAPIKey) || strings.EqualFold(cmd.AccountType, domain.AccountTypeBedrock)) {
+	if cmd.AccountQuotaCost > 0 && strings.EqualFold(cmd.AccountType, domain.AccountTypeAPIKey) {
 		quotaState, err := incrementUsageBillingAccountQuota(ctx, tx, cmd.AccountID, cmd.AccountQuotaCost)
 		if err != nil {
 			return err

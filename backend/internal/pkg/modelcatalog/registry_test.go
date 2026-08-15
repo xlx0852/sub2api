@@ -30,9 +30,6 @@ func TestEmbeddedCatalogLoads(t *testing.T) {
 	if m := AntigravityDefaultMapping(); len(m) == 0 {
 		t.Fatalf("expected antigravity mapping")
 	}
-	if m := BedrockDefaultMapping(); len(m) == 0 {
-		t.Fatalf("expected bedrock mapping")
-	}
 	entry, ok := ResolvePriceEntry("grok-4.5")
 	if !ok || entry.InputCostPerToken <= 0 {
 		t.Fatalf("expected grok-4.5 fallback pricing, got %+v ok=%v", entry, ok)

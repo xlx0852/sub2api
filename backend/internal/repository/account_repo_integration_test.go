@@ -648,6 +648,36 @@ func (s *AccountRepoSuite) TestSetSchedulable() {
 	s.Require().Equal(account.ID, cacheRecorder.setAccounts[0].ID)
 }
 
+func (s *AccountRepoSuite) TestRetiredBedrockAccountCannotBeReactivated() {
+	account := mustCreateAccount(s.T(), s.client, &domain.Account{
+		Name:         "retired-bedrock",
+		Type:         domain.RetiredAccountTypeBedrock,
+		Status:       domain.StatusError,
+		Schedulable:  false,
+		ErrorMessage: "retired",
+	})
+	// The shared fixture defaults schedulable=false to true; force the post-migration state.
+	s.Require().NoError(s.client.Account.UpdateOneID(account.ID).SetSchedulable(false).Exec(s.ctx))
+	account.Schedulable = false
+
+	err := s.repo.ClearError(s.ctx, account.ID)
+	s.Require().ErrorIs(err, domain.ErrRetiredBedrockAccount)
+
+	err = s.repo.SetSchedulable(s.ctx, account.ID, true)
+	s.Require().ErrorIs(err, domain.ErrRetiredBedrockAccount)
+
+	account.Status = domain.StatusActive
+	account.Schedulable = true
+	err = s.repo.Update(s.ctx, account)
+	s.Require().ErrorIs(err, domain.ErrRetiredBedrockAccount)
+
+	got, err := s.repo.GetByID(s.ctx, account.ID)
+	s.Require().NoError(err)
+	s.Require().Equal(domain.StatusError, got.Status)
+	s.Require().False(got.Schedulable)
+	s.Require().Equal("retired", got.ErrorMessage)
+}
+
 func (s *AccountRepoSuite) TestBulkUpdate_SyncSchedulerSnapshotOnDisabled() {
 	account1 := mustCreateAccount(s.T(), s.client, &domain.Account{Name: "bulk-1", Status: domain.StatusActive, Schedulable: true})
 	account2 := mustCreateAccount(s.T(), s.client, &domain.Account{Name: "bulk-2", Status: domain.StatusActive, Schedulable: true})

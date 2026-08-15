@@ -33,7 +33,6 @@ func TestIsHeaderOverrideEligible(t *testing.T) {
 		{"grok apikey", PlatformGrok, AccountTypeAPIKey, true},
 		{"grok oauth", PlatformGrok, AccountTypeOAuth, true},
 		{"antigravity apikey", PlatformAntigravity, AccountTypeAPIKey, false},
-		{"anthropic bedrock", PlatformAnthropic, AccountTypeBedrock, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -61,7 +61,7 @@ func (s *GatewayService) ReportGatewayAccountScheduleResult(accountID int64, suc
 }
 
 func gatewayQuotaHeadroom(account *Account) (float64, bool) {
-	if account == nil || !account.IsAPIKeyOrBedrock() {
+	if account == nil || account.Type != AccountTypeAPIKey {
 		return 0, false
 	}
 	headroom := 1.0

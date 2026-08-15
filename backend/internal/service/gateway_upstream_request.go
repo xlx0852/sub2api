@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -93,7 +94,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	//   1) 算 finalBeta（纯函数，不依赖 req.Header；mimicry 路径会忽略客户端 beta，
 	//      与原“OAuth + mimicClaudeCode 跳过白名单透传”行为对齐）
 	//   2) 按 finalBeta 做能力维度 body sanitize（如 context-management beta 缺失 →
-	//      strip body.context_management，与 Bedrock 路径对称）
+	//      strip body.context_management）
 	//   3) CCH 签名（必须使用 strip 后的 body，否则 hash 与最终 body 不一致 →
 	//      被 Anthropic 判 third-party）
 	//   4) NewRequest（body 至此最终敲定）
@@ -210,8 +211,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 }
 
 // vertexSupportedBetaTokens 是 Vertex AI 的 Anthropic 端点接受的 anthropic-beta
-// 白名单。Vertex 对任何未知 token 直接 HTTP 400，故采用白名单（与 Bedrock 的
-// bedrockSupportedBetaTokens 同思路）而非黑名单：未来 Claude Code 新增的、Vertex 尚未
+// 白名单。Vertex 对任何未知 token 直接 HTTP 400，故采用白名单而非黑名单：未来 Claude Code 新增的、Vertex 尚未
 // 支持的 token 天然被剥离。当 Vertex 新增支持某 beta 时在此补充。
 //
 // 明确排除（issue #3358 中 Vertex 报 400 的 token）：advisor-tool-2026-03-01、
@@ -223,6 +223,33 @@ var vertexSupportedBetaTokens = map[string]bool{
 	"context-management-2025-06-27":          true,
 	"fine-grained-tool-streaming-2025-05-14": true,
 	"interleaved-thinking-2025-05-14":        true,
+}
+
+func parseAnthropicBetaHeader(header string) []string {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return nil
+	}
+	if strings.HasPrefix(header, "[") && strings.HasSuffix(header, "]") {
+		var parsed []any
+		if err := json.Unmarshal([]byte(header), &parsed); err == nil {
+			tokens := make([]string, 0, len(parsed))
+			for _, item := range parsed {
+				token := strings.TrimSpace(fmt.Sprint(item))
+				if token != "" {
+					tokens = append(tokens, token)
+				}
+			}
+			return tokens
+		}
+	}
+	tokens := make([]string, 0, strings.Count(header, ",")+1)
+	for _, part := range strings.Split(header, ",") {
+		if token := strings.TrimSpace(part); token != "" {
+			tokens = append(tokens, token)
+		}
+	}
+	return tokens
 }
 
 // filterVertexBetaTokens 解析 client 的 anthropic-beta header，先剔除 drop 集合中的
@@ -269,9 +296,8 @@ func (s *GatewayService) buildUpstreamRequestAnthropicVertex(
 	// beta token，未知 token 会直接 HTTP 400——近期 Claude Code CLI 透传的
 	// advisor-tool-2026-03-01 / prompt-caching-scope-2026-01-05 /
 	// redact-thinking-2026-02-12 / thinking-token-count-2026-05-13 都不被 Vertex 接受
-	// （issue #3358）。这里复用 BetaPolicy 的 block 检查（与 Bedrock 的
-	// resolveBedrockBetaTokensForRequest 对称），再按 vertexSupportedBetaTokens 白名单
-	// 剥离其余 token，使该路径与 Anthropic 直连 / Bedrock 路径行为一致。
+	// （issue #3358）。这里复用 BetaPolicy 的 block 检查，再按
+	// vertexSupportedBetaTokens 白名单剥离其余 token，使该路径与 Anthropic 直连行为一致。
 	clientBeta := ""
 	if c != nil && c.Request != nil {
 		clientBeta = getHeaderRaw(c.Request.Header, "anthropic-beta")
@@ -283,7 +309,7 @@ func (s *GatewayService) buildUpstreamRequestAnthropicVertex(
 	finalBeta := filterVertexBetaTokens(clientBeta, mergeDropSets(policy.filterSet))
 
 	// 能力维度 sanitize：基于最终 beta（而非原始 client 值）决定是否保留 body 中的
-	// context_management，与 Anthropic 直连 / Bedrock 路径对称。
+	// context_management，与 Anthropic 直连路径对称。
 	if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(vertexBody, finalBeta); changed {
 		vertexBody = sanitized
 	}
@@ -630,10 +656,9 @@ func (s *GatewayService) evaluateBetaPolicy(ctx context.Context, betaHeader stri
 		return betaPolicyResult{}
 	}
 	isOAuth := account.IsOAuth()
-	isBedrock := account.IsBedrock()
 	var result betaPolicyResult
 	for _, rule := range settings.Rules {
-		if !betaPolicyScopeMatches(rule.Scope, isOAuth, isBedrock) {
+		if !betaPolicyScopeMatches(rule.Scope, isOAuth) {
 			continue
 		}
 		effectiveAction, effectiveErrMsg := resolveRuleAction(rule, model)
@@ -694,16 +719,16 @@ func (s *GatewayService) getBetaPolicyFilterSet(ctx context.Context, c *gin.Cont
 }
 
 // betaPolicyScopeMatches checks whether a rule's scope matches the current account type.
-func betaPolicyScopeMatches(scope string, isOAuth bool, isBedrock bool) bool {
+func betaPolicyScopeMatches(scope string, isOAuth bool) bool {
 	switch scope {
 	case BetaPolicyScopeAll:
 		return true
 	case BetaPolicyScopeOAuth:
 		return isOAuth
 	case BetaPolicyScopeAPIKey:
-		return !isOAuth && !isBedrock
+		return !isOAuth
 	case BetaPolicyScopeBedrock:
-		return isBedrock
+		return false
 	default:
 		return true // unknown scope → match all (fail-open)
 	}
@@ -772,65 +797,6 @@ func filterBetaTokens(tokens []string, filterSet map[string]struct{}) []string {
 		}
 	}
 	return kept
-}
-
-func (s *GatewayService) resolveBedrockBetaTokensForRequest(
-	ctx context.Context,
-	account *Account,
-	betaHeader string,
-	body []byte,
-	modelID string,
-) ([]string, error) {
-	// 1. 对原始 header 中的 beta token 做 block 检查（快速失败）
-	policy := s.evaluateBetaPolicy(ctx, betaHeader, account, modelID)
-	if policy.blockErr != nil {
-		return nil, policy.blockErr
-	}
-
-	// 2. 解析 header + body 自动注入 + Bedrock 转换/过滤
-	betaTokens := ResolveBedrockBetaTokens(betaHeader, body, modelID)
-
-	// 3. 对最终 token 列表再做 block 检查，捕获通过 body 自动注入绕过 header block 的情况。
-	//    例如：管理员 block 了 interleaved-thinking，客户端不在 header 中带该 token，
-	//    但请求体中包含 thinking 字段 → autoInjectBedrockBetaTokens 会自动补齐 →
-	//    如果不做此检查，block 规则会被绕过。
-	if blockErr := s.checkBetaPolicyBlockForTokens(ctx, betaTokens, account, modelID); blockErr != nil {
-		return nil, blockErr
-	}
-
-	return filterBetaTokens(betaTokens, policy.filterSet), nil
-}
-
-// checkBetaPolicyBlockForTokens 检查 token 列表中是否有被管理员 block 规则命中的 token。
-// 用于补充 evaluateBetaPolicy 对 header 的检查，覆盖 body 自动注入的 token。
-func (s *GatewayService) checkBetaPolicyBlockForTokens(ctx context.Context, tokens []string, account *Account, model string) *BetaBlockedError {
-	if s.settingService == nil || len(tokens) == 0 {
-		return nil
-	}
-	settings, err := s.settingService.GetBetaPolicySettings(ctx)
-	if err != nil || settings == nil {
-		return nil
-	}
-	isOAuth := account.IsOAuth()
-	isBedrock := account.IsBedrock()
-	tokenSet := buildBetaTokenSet(tokens)
-	for _, rule := range settings.Rules {
-		effectiveAction, effectiveErrMsg := resolveRuleAction(rule, model)
-		if effectiveAction != BetaPolicyActionBlock {
-			continue
-		}
-		if !betaPolicyScopeMatches(rule.Scope, isOAuth, isBedrock) {
-			continue
-		}
-		if _, present := tokenSet[rule.BetaToken]; present {
-			msg := effectiveErrMsg
-			if msg == "" {
-				msg = "beta feature " + rule.BetaToken + " is not allowed"
-			}
-			return &BetaBlockedError{Message: msg}
-		}
-	}
-	return nil
 }
 
 func buildBetaTokenSet(tokens []string) map[string]struct{} {

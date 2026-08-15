@@ -176,7 +176,7 @@ func (s *AccountTestService) buildGrokUpstreamModelsRequest(ctx context.Context,
 }
 
 func (s *AccountTestService) buildAnthropicUpstreamModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {
-	if account.IsBedrock() || account.Type == AccountTypeServiceAccount {
+	if account.Type == AccountTypeServiceAccount {
 		return nil, newUpstreamModelSyncUnsupportedError(
 			fmt.Sprintf("Unsupported Anthropic account type for upstream model sync: %s", account.Type), nil,
 		)

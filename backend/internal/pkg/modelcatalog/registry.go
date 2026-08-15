@@ -226,12 +226,6 @@ func KimiDefaultTestModel() string {
 	return "k3"
 }
 
-// --- Bedrock ---
-
-func BedrockDefaultMapping() map[string]string {
-	return copyStringMap(platform("bedrock").DefaultMapping)
-}
-
 // --- Pricing ---
 
 func FallbackPricing() map[string]PriceEntry {

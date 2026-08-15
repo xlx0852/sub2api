@@ -218,6 +218,22 @@ func TestMigration179AddsAuditableSubscriptionBanSettlementLedgers(t *testing.T)
 	require.NotContains(t, sql, "UPDATE accounts")
 }
 
+func TestMigration198RetiresBedrockAccountsWithoutDeletingHistory(t *testing.T) {
+	content, err := FS.ReadFile("198_retire_aws_bedrock_accounts.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "UPDATE accounts")
+	require.Contains(t, sql, "status = 'inactive'")
+	require.Contains(t, sql, "schedulable = FALSE")
+	require.Contains(t, sql, "LOWER(TRIM(type)) = 'bedrock'")
+	require.Contains(t, sql, "status <> 'inactive' OR schedulable = TRUE")
+	require.NotContains(t, sql, "DELETE FROM")
+	require.NotContains(t, sql, "DROP TABLE")
+	require.NotContains(t, sql, "usage_logs")
+	require.NotContains(t, sql, "usage_settlement_attempts")
+}
+
 func TestMigration154AddsSparkShadowColumnsAndConstraintsWithoutHotIndexes(t *testing.T) {
 	content, err := FS.ReadFile("154_account_spark_shadow.sql")
 	require.NoError(t, err)

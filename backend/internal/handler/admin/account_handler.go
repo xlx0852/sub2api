@@ -105,7 +105,7 @@ type CreateAccountRequest struct {
 	Name                    string         `json:"name" binding:"required"`
 	Notes                   *string        `json:"notes"`
 	Platform                string         `json:"platform" binding:"required"`
-	Type                    string         `json:"type" binding:"required,oneof=oauth setup-token apikey upstream bedrock service_account"`
+	Type                    string         `json:"type" binding:"required,oneof=oauth setup-token apikey upstream service_account"`
 	Credentials             map[string]any `json:"credentials" binding:"required"`
 	Extra                   map[string]any `json:"extra"`
 	ProxyID                 *int64         `json:"proxy_id"`
@@ -124,7 +124,7 @@ type CreateAccountRequest struct {
 type UpdateAccountRequest struct {
 	Name                    string         `json:"name"`
 	Notes                   *string        `json:"notes"`
-	Type                    string         `json:"type" binding:"omitempty,oneof=oauth setup-token apikey upstream bedrock service_account"`
+	Type                    string         `json:"type" binding:"omitempty,oneof=oauth setup-token apikey upstream service_account"`
 	Credentials             map[string]any `json:"credentials"`
 	Extra                   map[string]any `json:"extra"`
 	ProxyID                 *int64         `json:"proxy_id"`
@@ -1064,8 +1064,8 @@ func (h *AccountHandler) CleanupOAuthEmailDuplicates(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{
-		"kept_groups":    kept,
-		"deleted_count":  deleted,
+		"kept_groups":   kept,
+		"deleted_count": deleted,
 	})
 }
 
@@ -2748,9 +2748,9 @@ func (h *AccountHandler) RefreshTier(c *gin.Context) {
 		return
 	}
 
-_ = h.geminiOAuthService.RefreshAccountGoogleOneTier(ctx, account)
-		response.Error(c, http.StatusGone, "gemini platform/OAuth has been retired")
-	}
+	_ = h.geminiOAuthService.RefreshAccountGoogleOneTier(ctx, account)
+	response.Error(c, http.StatusGone, "gemini platform/OAuth has been retired")
+}
 
 // BatchRefreshTierRequest represents batch tier refresh request
 type BatchRefreshTierRequest struct {
@@ -2825,7 +2825,10 @@ func (h *AccountHandler) BatchRefreshTier(c *gin.Context) {
 				return nil
 			}
 			// retired: never succeeds
-			mu.Lock(); failedCount++; mu.Unlock(); return nil
+			mu.Lock()
+			failedCount++
+			mu.Unlock()
+			return nil
 			_, updateErr := h.adminService.UpdateAccount(gctx, acc.ID, &service.UpdateAccountInput{
 				Credentials: nil,
 				Extra:       nil,

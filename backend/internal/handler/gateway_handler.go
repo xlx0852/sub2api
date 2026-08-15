@@ -834,11 +834,6 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					return
 				}
 			}
-			// Bedrock CC 兼容：清理 body 专有字段 + 过滤 anthropic-beta header，适用于所有转发路径
-			if err := attemptParsedReq.ReplaceBody(h.gatewayService.ApplyBedrockCCCompat(c, attemptParsedReq.Body.Bytes(), attemptParsedReq.Model, account, apiKey.GroupID)); err != nil {
-				h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")
-				return
-			}
 			attemptBody := attemptParsedReq.Body.Bytes()
 			upstreamBillingModel := account.GetMappedModel(attemptParsedReq.Model)
 			if err := h.gatewayService.ValidatePricingAdmission(c.Request.Context(), currentAPIKey.GroupID, channelMapping.BillingModelSource, reqModel, attemptParsedReq.Model, upstreamBillingModel); err != nil {

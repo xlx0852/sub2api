@@ -528,8 +528,6 @@ func DefaultRateLimit429CooldownSettings() *RateLimit429CooldownSettings {
 //     （如 "claude-sonnet-5"、"claude-sonnet-5-YYYYMMDD"、"claude-sonnet-5-thinking"）。
 //   - Vertex AI：normalizeVertexAnthropicModelID 会把 "-YYYYMMDD" 后缀转成 "@YYYYMMDD"
 //     （如 "claude-sonnet-5@YYYYMMDD"）。
-//   - AWS Bedrock：ResolveBedrockModelID 会输出带跨区域前缀的模型 ID
-//     （us./eu./apac./jp./au./us-gov./global. 或无前缀的 "anthropic." 形式）。
 //
 // 白名单只用后缀通配符（matchModelPattern 语义），因此每个路径都需要显式列出前缀。
 // 精确匹配 "claude-sonnet-5" + 后缀 "-*" 与 "@*"，可覆盖直连/Vertex 场景，同时避免误伤
@@ -552,16 +550,6 @@ func DefaultBetaPolicySettings() *BetaPolicySettings {
 					"claude-sonnet-5-*",
 					// Vertex AI 走 normalizeVertexAnthropicModelID 后 "@YYYYMMDD" 格式
 					"claude-sonnet-5@*",
-					// AWS Bedrock cross-region inference profile
-					"us.anthropic.claude-sonnet-5*",
-					"eu.anthropic.claude-sonnet-5*",
-					"apac.anthropic.claude-sonnet-5*",
-					"jp.anthropic.claude-sonnet-5*",
-					"au.anthropic.claude-sonnet-5*",
-					"us-gov.anthropic.claude-sonnet-5*",
-					"global.anthropic.claude-sonnet-5*",
-					// AWS Bedrock 无 cross-region 前缀
-					"anthropic.claude-sonnet-5*",
 				},
 				FallbackAction: BetaPolicyActionFilter,
 			},

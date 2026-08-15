@@ -341,6 +341,10 @@ func (r *accountRepository) Update(ctx context.Context, account *domain.Account)
 	if account == nil {
 		return nil
 	}
+	if strings.EqualFold(strings.TrimSpace(account.Type), domain.RetiredAccountTypeBedrock) &&
+		(account.Status == domain.StatusActive || account.Schedulable) {
+		return domain.ErrRetiredBedrockAccount
+	}
 	schedulable := account.Schedulable
 	if account.Status == domain.StatusError {
 		schedulable = false
@@ -1103,7 +1107,14 @@ func (r *accountRepository) syncSchedulerAccountSnapshots(ctx context.Context, a
 }
 
 func (r *accountRepository) ClearError(ctx context.Context, id int64) error {
-	_, err := r.client.Account.Update().
+	retired, err := r.isRetiredBedrockAccount(ctx, id)
+	if err != nil {
+		return err
+	}
+	if retired {
+		return domain.ErrRetiredBedrockAccount
+	}
+	_, err = r.client.Account.Update().
 		Where(dbaccount.IDEQ(id)).
 		SetStatus(domain.StatusActive).
 		SetErrorMessage("").
@@ -1122,12 +1133,15 @@ func (r *accountRepository) ClearError(ctx context.Context, id int64) error {
 // 若账号仅是封禁/错误态（未软删除），则等同于 ClearError。
 func (r *accountRepository) Restore(ctx context.Context, id int64) error {
 	queryCtx := mixins.SkipSoftDelete(ctx)
-	exists, err := r.client.Account.Query().Where(dbaccount.IDEQ(id)).Exist(queryCtx)
+	accountType, err := r.client.Account.Query().Where(dbaccount.IDEQ(id)).Select(dbaccount.FieldType).String(queryCtx)
 	if err != nil {
+		if dbent.IsNotFound(err) {
+			return domain.ErrAccountNotFound
+		}
 		return err
 	}
-	if !exists {
-		return domain.ErrAccountNotFound
+	if strings.EqualFold(strings.TrimSpace(accountType), domain.RetiredAccountTypeBedrock) {
+		return domain.ErrRetiredBedrockAccount
 	}
 
 	// 若存在成本配置手动封号，先撤销未冲销的 termination，再恢复服役。
@@ -1723,6 +1737,15 @@ func (r *accountRepository) UpdateSessionWindowEnd(ctx context.Context, id int64
 }
 
 func (r *accountRepository) SetSchedulable(ctx context.Context, id int64, schedulable bool) error {
+	if schedulable {
+		retired, err := r.isRetiredBedrockAccount(ctx, id)
+		if err != nil {
+			return err
+		}
+		if retired {
+			return domain.ErrRetiredBedrockAccount
+		}
+	}
 	upd := r.client.Account.Update().Where(dbaccount.IDEQ(id))
 	if schedulable {
 		// 仅 active 账号允许打开调度；error/disabled 等永久异常账号不可打开
@@ -1742,6 +1765,20 @@ func (r *accountRepository) SetSchedulable(ctx context.Context, id int64, schedu
 		r.syncSchedulerAccountSnapshot(ctx, id)
 	}
 	return nil
+}
+
+func (r *accountRepository) isRetiredBedrockAccount(ctx context.Context, id int64) (bool, error) {
+	accountType, err := r.client.Account.Query().
+		Where(dbaccount.IDEQ(id)).
+		Select(dbaccount.FieldType).
+		String(ctx)
+	if err != nil {
+		if dbent.IsNotFound(err) {
+			return false, domain.ErrAccountNotFound
+		}
+		return false, err
+	}
+	return strings.EqualFold(strings.TrimSpace(accountType), domain.RetiredAccountTypeBedrock), nil
 }
 
 func (r *accountRepository) SetExpiresAt(ctx context.Context, id int64, expiresAt *time.Time) error {

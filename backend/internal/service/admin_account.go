@@ -331,6 +331,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 		if err := rejectDeprecatedGeminiPlatform(input.Platform); err != nil {
 			return nil, err
 		}
+		if err := rejectDeprecatedBedrockType(input.Type); err != nil {
+			return nil, err
+		}
 	}
 	// OAuth/setup-token：同平台同邮箱合并到最后登录账号，避免重复建号。
 	if input != nil && (input.Type == AccountTypeOAuth || input.Type == AccountTypeSetupToken) {
@@ -493,8 +496,16 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 }
 
 func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *UpdateAccountInput) (*Account, error) {
+	if input != nil {
+		if err := rejectDeprecatedBedrockType(input.Type); err != nil {
+			return nil, err
+		}
+	}
 	account, err := s.accountRepo.GetByID(ctx, id)
 	if err != nil {
+		return nil, err
+	}
+	if err := rejectRetiredBedrockAccount(account); err != nil {
 		return nil, err
 	}
 	// 安全/身份不变量(影子账号):通用更新路径被 edit/re-auth/refresh/batch 共用,
@@ -716,12 +727,17 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 
 	// 预取所有目标账号，供凭据守卫/代理守卫/混合渠道检查共用，避免多次 DB 查询。
 	var cachedTargets []*Account
-	if len(input.Credentials) > 0 || input.ProxyID != nil || needMixedChannelCheck {
+	if len(input.AccountIDs) > 0 {
 		loaded, err := s.accountRepo.GetByIDs(ctx, input.AccountIDs)
 		if err != nil {
 			return nil, err
 		}
 		cachedTargets = loaded
+	}
+	for _, account := range cachedTargets {
+		if err := rejectRetiredBedrockAccount(account); err != nil {
+			return nil, err
+		}
 	}
 
 	// 影子账号绝不持有凭据:批量更新携带凭据时,目标中不得含影子(外审 G5,与单账号
@@ -955,6 +971,11 @@ func (s *adminServiceImpl) RefreshAccountCredentials(ctx context.Context, id int
 }
 
 func (s *adminServiceImpl) RestoreAccount(ctx context.Context, id int64) (*Account, error) {
+	if account, err := s.accountRepo.GetByID(ctx, id); err == nil {
+		if err := rejectRetiredBedrockAccount(account); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.accountRepo.Restore(ctx, id); err != nil {
 		return nil, err
 	}
@@ -970,6 +991,13 @@ func (s *adminServiceImpl) RestoreAccount(ctx context.Context, id int64) (*Accou
 }
 
 func (s *adminServiceImpl) ClearAccountError(ctx context.Context, id int64) (*Account, error) {
+	account, err := s.accountRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := rejectRetiredBedrockAccount(account); err != nil {
+		return nil, err
+	}
 	if err := s.accountRepo.ClearError(ctx, id); err != nil {
 		return nil, err
 	}
@@ -999,6 +1027,9 @@ func (s *adminServiceImpl) SetAccountSchedulable(ctx context.Context, id int64, 
 	if schedulable {
 		account, err := s.accountRepo.GetByID(ctx, id)
 		if err != nil {
+			return nil, err
+		}
+		if err := rejectRetiredBedrockAccount(account); err != nil {
 			return nil, err
 		}
 		if account == nil || account.Status != StatusActive || account.SubscriptionBanned {

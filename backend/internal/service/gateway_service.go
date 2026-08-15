@@ -1122,8 +1122,6 @@ func (s *GatewayService) GetAccessToken(ctx context.Context, account *Account) (
 			return "", "", errors.New("api_key not found in credentials")
 		}
 		return apiKey, "apikey", nil
-	case AccountTypeBedrock:
-		return "", "bedrock", nil // Bedrock 使用 SigV4 签名或 API Key，由 forwardBedrock 处理
 	case AccountTypeServiceAccount:
 		if account.Platform != PlatformAnthropic {
 			return "", "", fmt.Errorf("unsupported service account platform: %s", account.Platform)

@@ -934,7 +934,7 @@ func decodeUpstreamBillingProbeSnapshot(extra map[string]any) *UpstreamBillingPr
 // in to the upstream billing probe. `/v1/sub2api/billing` is a key-scoped
 // sub2api convention shared by the five supported API-key platforms.
 // Non-sub2api upstreams return 404 and the snapshot records "unsupported".
-// Only AccountTypeAPIKey is in scope. OAuth/Bedrock hold no static API key to
+// Only AccountTypeAPIKey is in scope. OAuth accounts hold no static API key to
 // present at all; AccountTypeUpstream (antigravity relay accounts) does carry
 // a base_url plus a static api_key, but it is deliberately left out of the
 // current supported set. New antigravity relay accounts are created with

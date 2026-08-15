@@ -46,7 +46,7 @@ func (s *AntigravityGatewayService) ForwardUpstream(ctx context.Context, c *gin.
 
 	// 能力维度 sanitize：Anthropic-compatible 上游透传路径也需要保证 body↔beta header
 	// 对称。客户端 anthropic-beta header 不含 context-management-2025-06-27 但 body 带
-	// context_management 时 strip，与 Anthropic 直连 / Bedrock / Vertex 路径保持一致。
+	// context_management 时 strip，与 Anthropic 直连 / Vertex 路径保持一致。
 	clientBeta := c.GetHeader("anthropic-beta")
 	if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(body, clientBeta); changed {
 		body = sanitized

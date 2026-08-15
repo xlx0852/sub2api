@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,23 +55,6 @@ func TestClaudeOpus5HardcodedFallbackPricing(t *testing.T) {
 	assert.InDelta(t, opus5CacheReadPricePerToken, opus5.CacheReadPricePerToken, 1e-12)
 }
 
-func TestClaudeOpus5BedrockCapabilityAndThinking(t *testing.T) {
-	for _, modelID := range []string{"claude-opus-5", "us.anthropic.claude-opus-5-v1", "eu.anthropic.claude-opus-5-v1"} {
-		assert.True(t, isBedrockClaude45OrNewer(modelID), modelID)
-		assert.True(t, bedrockModelSupportsToolSearch(modelID), modelID)
-		assert.True(t, isBedrockOpus47OrNewer(modelID), modelID)
-	}
-	assert.False(t, isBedrockOpus47OrNewer("claude-sonnet-5"))
-	assert.False(t, isBedrockClaude45OrNewer("anthropic.claude-opus-4-1-v1"))
-
-	body := []byte(`{"thinking":{"type":"enabled","budget_tokens":10000}}`)
-	got := sanitizeBedrockThinking(body, "us.anthropic.claude-opus-5-v1")
-	assert.JSONEq(t, `{"thinking":{"type":"adaptive"}}`, string(got))
-}
-
-func TestClaudeOpus5CatalogAndBedrockMapping(t *testing.T) {
+func TestClaudeOpus5Catalog(t *testing.T) {
 	assert.Contains(t, claude.DefaultModelIDs(), "claude-opus-5")
-	mapped, ok := domain.CurrentDefaultBedrockModelMapping()["claude-opus-5"]
-	require.True(t, ok)
-	assert.Equal(t, "us.anthropic.claude-opus-5-v1", mapped)
 }

@@ -1,9 +1,9 @@
 package service
 
 import (
-	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"context"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -63,6 +63,9 @@ func NewAccountService(accountRepo AccountRepository, groupRepo GroupRepository)
 // Create 创建账号
 func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (*Account, error) {
 	if err := rejectDeprecatedGeminiPlatform(req.Platform); err != nil {
+		return nil, err
+	}
+	if err := rejectDeprecatedBedrockType(req.Type); err != nil {
 		return nil, err
 	}
 	// 验证分组是否存在（如果指定了分组）
@@ -160,6 +163,9 @@ func (s *AccountService) Update(ctx context.Context, id int64, req UpdateAccount
 	account, err := s.accountRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get account: %w", err)
+	}
+	if err := rejectRetiredBedrockAccount(account); err != nil {
+		return nil, err
 	}
 
 	// 更新字段
@@ -297,6 +303,9 @@ func (s *AccountService) UpdateStatus(ctx context.Context, id int64, status stri
 	account, err := s.accountRepo.GetByID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get account: %w", err)
+	}
+	if err := rejectRetiredBedrockAccount(account); err != nil {
+		return err
 	}
 
 	account.Status = status

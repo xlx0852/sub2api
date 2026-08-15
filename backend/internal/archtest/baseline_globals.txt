@@ -55,7 +55,6 @@ internal/service: var windowCostPrefetchFallbackTotal
 
 # ---- service 包级可变状态：测试注入缝隙（函数值）与只读数据指针 ----
 internal/service: var createPaymentProviderFromInstance
-internal/service: var crc32IEEETable
 internal/service: var newTimingWheel
 internal/service: var openAIGPT54FallbackPricing
 internal/service: var openAIGPT54MiniFallbackPricing

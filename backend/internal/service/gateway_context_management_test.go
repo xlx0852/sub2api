@@ -26,8 +26,7 @@ import (
 // 否则报：
 //   "context_management: Extra inputs are not permitted"
 //
-// 本仓采用能力维度对称约束（与 Bedrock 路径的 sanitizeBedrockFieldsForBetaTokens
-// 对称）：在所有 Anthropic 直连出口，按最终 anthropic-beta header 是否含上述 token
+// 本仓采用能力维度对称约束：在所有 Anthropic 直连出口，按最终 anthropic-beta header 是否含上述 token
 // 决定 body 是否保留同名字段。
 //
 // 本文件覆盖：

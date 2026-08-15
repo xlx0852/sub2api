@@ -280,21 +280,6 @@ func TestBuildAntigravityAPIKeyModelsRequestRejectsOfficialCloudCodeBase(t *test
 	require.Contains(t, syncErr.SafeMessage(), "compatible gateway")
 }
 
-func TestBuildAnthropicUpstreamModelsRequestRejectsBedrock(t *testing.T) {
-	t.Parallel()
-
-	svc := &AccountTestService{cfg: upstreamModelSyncTestConfig()}
-	_, err := svc.buildAnthropicUpstreamModelsRequest(context.Background(), &Account{
-		Platform: PlatformAnthropic,
-		Type:     AccountTypeBedrock,
-	})
-	require.Error(t, err)
-
-	var syncErr *UpstreamModelSyncError
-	require.True(t, errors.As(err, &syncErr))
-	require.Equal(t, UpstreamModelSyncErrorUnsupported, syncErr.Kind)
-}
-
 func TestFetchUpstreamSupportedModelsParsesOpenAIResponse(t *testing.T) {
 	t.Parallel()
 

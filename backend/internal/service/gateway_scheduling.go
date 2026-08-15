@@ -1029,9 +1029,9 @@ func (s *GatewayService) withWindowCostPrefetch(ctx context.Context, accounts []
 }
 
 // isAccountSchedulableForQuota 检查账号是否在配额限制内
-// 适用于配置了 quota_limit 的 apikey 和 bedrock 类型账号
+// 适用于配置了 quota_limit 的 apikey 类型账号
 func (s *GatewayService) accountPassesQuota(account *Account) bool {
-	if !account.IsAPIKeyOrBedrock() {
+	if account == nil || account.Type != AccountTypeAPIKey {
 		return true
 	}
 	return !account.IsQuotaExceeded()
@@ -1526,10 +1526,6 @@ func (s *GatewayService) isModelSupportedByAccount(account *Account, requestedMo
 			return true
 		}
 		return mapAntigravityModel(account, requestedModel) != ""
-	}
-	if account.IsBedrock() {
-		_, ok := ResolveBedrockModelID(account, requestedModel)
-		return ok
 	}
 	// OpenAI 透传模式：仅替换认证，允许所有模型
 	if account.Platform == PlatformOpenAI && account.IsOpenAIPassthroughEnabled() {

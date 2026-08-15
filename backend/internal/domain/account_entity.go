@@ -176,7 +176,7 @@ func (a *Account) IsSchedulable() bool {
 	if a.TempUnschedulableUntil != nil && now.Before(*a.TempUnschedulableUntil) {
 		return false
 	}
-	if a.IsAPIKeyOrBedrock() && a.IsQuotaExceeded() {
+	if a.Type == AccountTypeAPIKey && a.IsQuotaExceeded() {
 		return false
 	}
 	return true
@@ -582,7 +582,6 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 		if a.Platform == PlatformGrok {
 			return xai.DefaultModelMapping()
 		}
-		// Bedrock 默认映射由 forwardBedrock 统一处理（需配合 region prefix 调整）
 		return nil
 	}
 	if len(rawMapping) == 0 {
@@ -1040,7 +1039,7 @@ func (a *Account) IsCustomErrorCodesEnabled() bool {
 // IsPoolMode 检查 API Key 账号是否启用池模式。
 // 池模式下，上游错误不标记本地账号状态，而是在同一账号上重试。
 func (a *Account) IsPoolMode() bool {
-	if !a.IsAPIKeyOrBedrock() || a.Credentials == nil {
+	if a.Type != AccountTypeAPIKey || a.Credentials == nil {
 		return false
 	}
 	if v, ok := a.Credentials["pool_mode"]; ok {
@@ -1228,19 +1227,6 @@ func (a *Account) IsInterceptWarmupEnabled() bool {
 		}
 	}
 	return false
-}
-
-func (a *Account) IsBedrock() bool {
-	return a.Platform == PlatformAnthropic && a.Type == AccountTypeBedrock
-}
-
-func (a *Account) IsBedrockAPIKey() bool {
-	return a.IsBedrock() && a.GetCredential("auth_mode") == "apikey"
-}
-
-// IsAPIKeyOrBedrock 返回账号类型是否支持配额和池模式等特性
-func (a *Account) IsAPIKeyOrBedrock() bool {
-	return a.Type == AccountTypeAPIKey || a.Type == AccountTypeBedrock
 }
 
 func (a *Account) IsOpenAI() bool {

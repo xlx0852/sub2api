@@ -70,7 +70,7 @@ func readRequestBodyForTest(t *testing.T, req *http.Request) []byte {
 // Vertex 路径回归保护：同样需要
 // body↔beta header 能力维度对称。客户端 header 不带 context-management beta
 // 但 body 带 context_management 字段 → Vertex builder 必须 strip 字段，与 Anthropic
-// 直连 / Bedrock 路径保持一致。
+// 与 Anthropic 直连路径保持一致。
 func TestGatewayService_BuildAnthropicVertexServiceAccount_StripsContextManagementWhenBetaMissing(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()

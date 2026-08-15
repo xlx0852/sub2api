@@ -1,8 +1,10 @@
 package service
 
 import (
+	"context"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 
 	"github.com/stretchr/testify/require"
@@ -263,8 +265,7 @@ func TestDefaultBetaPolicy_Context1M_Sonnet5Whitelist(t *testing.T) {
 	require.NotEmpty(t, rule.ModelWhitelist, "context-1m must be scoped to sonnet-5+ via whitelist")
 
 	// 表驱动：模型 → 期望 action
-	// 覆盖每种上游路径下的模型 ID 变形：直连 Anthropic API、Vertex AI（"@YYYYMMDD" 后缀）、
-	// AWS Bedrock 跨区域推理（us./eu./apac./jp./au./us-gov./global./anthropic. 前缀）。
+	// 覆盖直连 Anthropic API 与 Vertex AI（"@YYYYMMDD" 后缀）的模型 ID 变形。
 	cases := []struct {
 		model      string
 		wantAction string
@@ -276,29 +277,15 @@ func TestDefaultBetaPolicy_Context1M_Sonnet5Whitelist(t *testing.T) {
 		{"claude-sonnet-5-thinking", BetaPolicyActionPass, "sonnet-5 thinking variant matches wildcard"},
 		// —— Vertex AI 归一化后的 sonnet-5 —— 也应放行
 		{"claude-sonnet-5@20260701", BetaPolicyActionPass, "sonnet-5 Vertex-normalized dated form"},
-		// —— AWS Bedrock 各跨区域前缀 sonnet-5 —— 也应放行
-		{"us.anthropic.claude-sonnet-5-v1", BetaPolicyActionPass, "bedrock us. sonnet-5"},
-		{"eu.anthropic.claude-sonnet-5-20260701-v1:0", BetaPolicyActionPass, "bedrock eu. sonnet-5 dated"},
-		{"apac.anthropic.claude-sonnet-5-v1", BetaPolicyActionPass, "bedrock apac. sonnet-5"},
-		{"jp.anthropic.claude-sonnet-5-v1", BetaPolicyActionPass, "bedrock jp. sonnet-5"},
-		{"au.anthropic.claude-sonnet-5-v1", BetaPolicyActionPass, "bedrock au. sonnet-5"},
-		{"us-gov.anthropic.claude-sonnet-5-v1", BetaPolicyActionPass, "bedrock us-gov. sonnet-5"},
-		{"global.anthropic.claude-sonnet-5-v1", BetaPolicyActionPass, "bedrock global. sonnet-5"},
-		{"anthropic.claude-sonnet-5-v1", BetaPolicyActionPass, "bedrock no-region sonnet-5"},
-
 		// —— sonnet-4.x 及以下必须过滤 ——
 		{"claude-sonnet-4-6", BetaPolicyActionFilter, "sonnet-4.6 must be filtered"},
 		{"claude-sonnet-4-5-20250929", BetaPolicyActionFilter, "sonnet-4.5 dated must be filtered"},
 		{"claude-sonnet-4", BetaPolicyActionFilter, "sonnet-4 must be filtered"},
 		{"claude-sonnet-4-5@20250929", BetaPolicyActionFilter, "sonnet-4.5 Vertex format must be filtered"},
-		{"us.anthropic.claude-sonnet-4-6", BetaPolicyActionFilter, "bedrock us. sonnet-4.6 must be filtered"},
-		{"us.anthropic.claude-sonnet-4-5-20250929-v1:0", BetaPolicyActionFilter, "bedrock us. sonnet-4.5 must be filtered"},
 		// —— Opus / Haiku 必须过滤（无 1M） ——
 		{"claude-opus-4-8", BetaPolicyActionFilter, "opus must be filtered"},
 		{"claude-opus-4-7", BetaPolicyActionFilter, "opus 4.7 must be filtered"},
-		{"us.anthropic.claude-opus-4-8-v1", BetaPolicyActionFilter, "bedrock opus 4.8 must be filtered"},
 		{"claude-haiku-4-5", BetaPolicyActionFilter, "haiku must be filtered"},
-		{"us.anthropic.claude-haiku-4-5-20251001-v1:0", BetaPolicyActionFilter, "bedrock haiku must be filtered"},
 		{"claude-3-5-sonnet-20241022", BetaPolicyActionFilter, "legacy sonnet 3.5 must be filtered"},
 		// —— 特殊边界：不应把 "claude-sonnet-50" / "claude-sonnet-5.1" 之类意外命名误放行 ——
 		{"claude-sonnet-50", BetaPolicyActionFilter, "must not over-match a hypothetical sonnet-50"},
@@ -310,4 +297,20 @@ func TestDefaultBetaPolicy_Context1M_Sonnet5Whitelist(t *testing.T) {
 			require.Equal(t, tc.wantAction, action, tc.desc)
 		})
 	}
+}
+
+func TestRetiredBedrockPolicyScopeRoundTripsButNeverMatches(t *testing.T) {
+	repo := &betaPolicySettingRepoStub{values: map[string]string{}}
+	svc := NewSettingService(repo, &config.Config{})
+	settings := &BetaPolicySettings{Rules: []BetaPolicyRule{{
+		BetaToken: "legacy-bedrock-token",
+		Action:    BetaPolicyActionFilter,
+		Scope:     BetaPolicyScopeBedrock,
+	}}}
+	require.NoError(t, svc.SetBetaPolicySettings(context.Background(), settings))
+	loaded, err := svc.GetBetaPolicySettings(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, BetaPolicyScopeBedrock, loaded.Rules[0].Scope)
+	require.False(t, betaPolicyScopeMatches(BetaPolicyScopeBedrock, false))
+	require.False(t, betaPolicyScopeMatches(BetaPolicyScopeBedrock, true))
 }

@@ -122,7 +122,7 @@ func (s *GatewayService) shouldRectifySignatureError(ctx context.Context, accoun
 		}
 		return matchSignaturePatterns(respBody, settings.APIKeySignaturePatterns)
 	}
-	// OAuth/SetupToken/Upstream/Bedrock 等：保持原有行为（内置模式 + 原开关）
+	// OAuth/SetupToken/Upstream 等：保持原有行为（内置模式 + 原开关）
 	return s.isThinkingBlockSignatureError(respBody) && s.settingService.IsSignatureRectifierEnabled(ctx)
 }
 

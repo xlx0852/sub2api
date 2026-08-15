@@ -857,8 +857,7 @@ func removeThinkingDependentContextStrategies(body []byte) []byte {
 const anthropicBetaContextManagementToken = "context-management-2025-06-27"
 
 // sanitizeAnthropicBodyForBetaTokens 是对 Anthropic 直连路径上 body↔beta header
-// **能力维度**对称约束的统一实现，与 Bedrock 路径的
-// `sanitizeBedrockFieldsForBetaTokens` 对称。
+// **能力维度**对称约束的统一实现。
 //
 // 问题场景：
 //   - context_management 是 Claude Code CLI 2.1.87+ 默认携带的 beta 字段

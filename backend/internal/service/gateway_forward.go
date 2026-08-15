@@ -81,7 +81,7 @@ func sleepWithContext(ctx context.Context, d time.Duration) error {
 }
 
 // Forward 转发请求到 Claude API。
-// Web Search 模拟、Anthropic API Key passthrough、Bedrock 仍走入口短路径；
+// Web Search 模拟与 Anthropic API Key passthrough 仍走入口短路径；
 // 主 Anthropic Messages 路径走 parse → rewrite → transport → relay → settle。
 func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, parsed *ParsedRequest) (*ForwardResult, error) {
 	startTime := time.Now()
@@ -112,10 +112,6 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 			RequestStream: parsed.Stream,
 			StartTime:     startTime,
 		})
-	}
-
-	if account != nil && account.IsBedrock() {
-		return s.forwardBedrock(ctx, c, account, parsed, startTime)
 	}
 
 	st := &claudeForwardState{

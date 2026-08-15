@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
 )
@@ -28,20 +29,30 @@ type accountRepoStub struct {
 	existsErr  error   // ExistsByID 的错误返回值
 	deleteErr  error   // Delete 的错误返回值
 	deletedIDs []int64 // 记录已删除的账号 ID 列表
+	account    *Account
+	created    *Account
+	updated    *Account
 }
 
 // 以下方法在本测试中不应被调用，使用 panic 确保测试失败时能快速定位问题
 
 func (s *accountRepoStub) Create(ctx context.Context, account *Account) error {
-	panic("unexpected Create call")
+	s.created = account
+	return nil
 }
 
 func (s *accountRepoStub) GetByID(ctx context.Context, id int64) (*Account, error) {
-	panic("unexpected GetByID call")
+	if s.account == nil {
+		return nil, ErrAccountNotFound
+	}
+	return s.account, nil
 }
 
 func (s *accountRepoStub) GetByIDs(ctx context.Context, ids []int64) ([]*Account, error) {
-	panic("unexpected GetByIDs call")
+	if s.account == nil {
+		return nil, nil
+	}
+	return []*Account{s.account}, nil
 }
 
 // ExistsByID 返回预设的存在性检查结果。
@@ -71,7 +82,8 @@ func (s *accountRepoStub) ListCRSAccountIDs(ctx context.Context) (map[string]int
 }
 
 func (s *accountRepoStub) Update(ctx context.Context, account *Account) error {
-	panic("unexpected Update call")
+	s.updated = account
+	return nil
 }
 
 // Delete 记录被删除的账号 ID 并返回预设的错误。
@@ -176,6 +188,45 @@ func (s *accountRepoStub) ListSchedulableByGroupIDAndPlatforms(ctx context.Conte
 
 func (s *accountRepoStub) ListSchedulableUngroupedByPlatform(ctx context.Context, platform string) ([]Account, error) {
 	panic("unexpected ListSchedulableUngroupedByPlatform call")
+}
+
+func TestRetiredBedrockAccountWritePathsFailClosed(t *testing.T) {
+	ctx := context.Background()
+	repo := &accountRepoStub{account: &Account{
+		ID:          91,
+		Platform:    PlatformAnthropic,
+		Type:        domain.RetiredAccountTypeBedrock,
+		Status:      StatusDisabled,
+		Schedulable: false,
+	}}
+
+	accountService := NewAccountService(repo, nil)
+	_, err := accountService.Create(ctx, CreateAccountRequest{
+		Platform: PlatformAnthropic,
+		Type:     domain.RetiredAccountTypeBedrock,
+	})
+	require.ErrorIs(t, err, ErrRetiredBedrockAccount)
+	require.Nil(t, repo.created)
+
+	active := StatusActive
+	_, err = accountService.Update(ctx, repo.account.ID, UpdateAccountRequest{Status: &active})
+	require.ErrorIs(t, err, ErrRetiredBedrockAccount)
+	require.Nil(t, repo.updated)
+	require.ErrorIs(t, accountService.UpdateStatus(ctx, repo.account.ID, StatusActive, ""), ErrRetiredBedrockAccount)
+
+	admin := &adminServiceImpl{accountRepo: repo}
+	_, err = admin.CreateAccount(ctx, &CreateAccountInput{Platform: PlatformAnthropic, Type: domain.RetiredAccountTypeBedrock})
+	require.ErrorIs(t, err, ErrRetiredBedrockAccount)
+	_, err = admin.UpdateAccount(ctx, repo.account.ID, &UpdateAccountInput{Status: StatusActive})
+	require.ErrorIs(t, err, ErrRetiredBedrockAccount)
+	_, err = admin.BulkUpdateAccounts(ctx, &BulkUpdateAccountsInput{AccountIDs: []int64{repo.account.ID}, Status: StatusActive})
+	require.ErrorIs(t, err, ErrRetiredBedrockAccount)
+	_, err = admin.RestoreAccount(ctx, repo.account.ID)
+	require.ErrorIs(t, err, ErrRetiredBedrockAccount)
+	_, err = admin.ClearAccountError(ctx, repo.account.ID)
+	require.ErrorIs(t, err, ErrRetiredBedrockAccount)
+	_, err = admin.SetAccountSchedulable(ctx, repo.account.ID, true)
+	require.ErrorIs(t, err, ErrRetiredBedrockAccount)
 }
 
 func (s *accountRepoStub) ListSchedulableUngroupedByPlatforms(ctx context.Context, platforms []string) ([]Account, error) {

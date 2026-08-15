@@ -23,6 +23,22 @@ type openAIFastPolicyRepoStub struct {
 	values map[string]string
 }
 
+func TestRetiredBedrockFastPolicyScopeRoundTripsButNeverMatches(t *testing.T) {
+	repo := &openAIFastPolicyRepoStub{values: map[string]string{}}
+	svc := NewSettingService(repo, &config.Config{})
+	settings := &OpenAIFastPolicySettings{Rules: []OpenAIFastPolicyRule{{
+		ServiceTier: OpenAIFastTierPriority,
+		Action:      BetaPolicyActionFilter,
+		Scope:       BetaPolicyScopeBedrock,
+	}}}
+	require.NoError(t, svc.SetOpenAIFastPolicySettings(context.Background(), settings))
+	loaded, err := svc.GetOpenAIFastPolicySettings(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, BetaPolicyScopeBedrock, loaded.Rules[0].Scope)
+	action, _ := evaluateOpenAIFastPolicyWithSettings(loaded, &Account{Type: AccountTypeAPIKey}, "gpt-5", OpenAIFastTierPriority)
+	require.Equal(t, BetaPolicyActionPass, action)
+}
+
 func TestForwardGrokResponses_APIKeyForceFastInjectsPriorityAndRecordsTier(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{"model":"grok-4.6","input":"hi","stream":true}`)

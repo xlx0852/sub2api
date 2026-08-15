@@ -92,7 +92,6 @@ const (
 	AccountTypeSetupToken     = domain.AccountTypeSetupToken     // Setup Token类型账号（inference only scope）
 	AccountTypeAPIKey         = domain.AccountTypeAPIKey         // API Key类型账号
 	AccountTypeUpstream       = domain.AccountTypeUpstream       // 上游透传类型账号（通过 Base URL + API Key 连接上游）
-	AccountTypeBedrock        = domain.AccountTypeBedrock        // AWS Bedrock 类型账号（通过 SigV4 签名或 API Key 连接 Bedrock，由 credentials.auth_mode 区分）
 	AccountTypeServiceAccount = domain.AccountTypeServiceAccount // Google Service Account 类型账号（用于 Vertex AI）
 )
 
@@ -556,4 +555,18 @@ func rejectDeprecatedGeminiPlatform(platform string) error {
 		return fmt.Errorf("gemini platform has been retired (Gemini CLI discontinued); use antigravity or other providers")
 	}
 	return nil
+}
+
+func rejectDeprecatedBedrockType(accountType string) error {
+	if strings.EqualFold(strings.TrimSpace(accountType), domain.RetiredAccountTypeBedrock) {
+		return ErrRetiredBedrockAccount
+	}
+	return nil
+}
+
+func rejectRetiredBedrockAccount(account *Account) error {
+	if account == nil {
+		return nil
+	}
+	return rejectDeprecatedBedrockType(account.Type)
 }
