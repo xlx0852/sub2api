@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
@@ -445,30 +446,30 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		{
 			name:              "deepseek v4 pro",
 			model:             "deepseek-v4-pro",
-			expectedInput:     4.35e-7,
-			expectedOutput:    floatPtr(8.7e-7),
-			expectedCacheRead: floatPtr(3.625e-9),
+			expectedInput:     1.32e-6,
+			expectedOutput:    floatPtr(3.96e-6),
+			expectedCacheRead: floatPtr(0.044e-6),
 		},
 		{
 			name:              "deepseek v4 flash",
 			model:             "deepseek-v4-flash",
-			expectedInput:     1.4e-7,
-			expectedOutput:    floatPtr(2.8e-7),
-			expectedCacheRead: floatPtr(2.8e-9),
+			expectedInput:     0.44e-6,
+			expectedOutput:    floatPtr(1.32e-6),
+			expectedCacheRead: floatPtr(0.014e-6),
 		},
 		{
 			name:              "deepseek chat alias → flash",
 			model:             "deepseek-chat",
-			expectedInput:     1.4e-7,
-			expectedOutput:    floatPtr(2.8e-7),
-			expectedCacheRead: floatPtr(2.8e-9),
+			expectedInput:     0.44e-6,
+			expectedOutput:    floatPtr(1.32e-6),
+			expectedCacheRead: floatPtr(0.014e-6),
 		},
 		{
 			name:              "deepseek reasoner alias → flash",
 			model:             "deepseek-reasoner",
-			expectedInput:     1.4e-7,
-			expectedOutput:    floatPtr(2.8e-7),
-			expectedCacheRead: floatPtr(2.8e-9),
+			expectedInput:     0.44e-6,
+			expectedOutput:    floatPtr(1.32e-6),
+			expectedCacheRead: floatPtr(0.014e-6),
 		},
 
 		// ---- 智谱 GLM（z.ai USD 口径）----
@@ -732,6 +733,119 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDeepSeekOfficialPeakWindows(t *testing.T) {
+	tests := []struct {
+		name string
+		hour int
+		peak bool
+	}{
+		{name: "before first peak", hour: 0, peak: false},
+		{name: "first peak start", hour: 1, peak: true},
+		{name: "first peak end", hour: 4, peak: false},
+		{name: "second peak start", hour: 6, peak: true},
+		{name: "second peak last hour", hour: 9, peak: true},
+		{name: "second peak end", hour: 10, peak: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			now := time.Date(2026, time.August, 17, tt.hour, 0, 0, 0, time.UTC)
+			require.Equal(t, tt.peak, isDeepSeekPeakTime(now))
+		})
+	}
+}
+
+func TestCalculateCost_DeepSeekOfficialPeakAndOffPeakRates(t *testing.T) {
+	svc := newTestBillingService()
+	tokens := UsageTokens{
+		InputTokens:         1_000_000,
+		OutputTokens:        1_000_000,
+		CacheCreationTokens: 1_000_000,
+		CacheReadTokens:     1_000_000,
+	}
+
+	svc.now = func() time.Time {
+		return time.Date(2026, time.August, 17, 1, 0, 0, 0, time.UTC)
+	}
+	peak, err := svc.CalculateCost("deepseek-v4-pro", tokens, 1)
+	require.NoError(t, err)
+	require.InDelta(t, 1.32, peak.InputCost, 1e-12)
+	require.InDelta(t, 3.96, peak.OutputCost, 1e-12)
+	require.InDelta(t, 1.32, peak.CacheCreationCost, 1e-12)
+	require.InDelta(t, 0.044, peak.CacheReadCost, 1e-12)
+
+	svc.now = func() time.Time {
+		return time.Date(2026, time.August, 17, 4, 0, 0, 0, time.UTC)
+	}
+	offPeak, err := svc.CalculateCost("deepseek-v4-pro", tokens, 1)
+	require.NoError(t, err)
+	require.InDelta(t, peak.TotalCost*0.5, offPeak.TotalCost, 1e-12)
+}
+
+func TestCalculateCost_DeepSeekChannelPriceDoesNotInheritOfficialOffPeakDiscount(t *testing.T) {
+	svc := newTestBillingService()
+	svc.now = func() time.Time {
+		return time.Date(2026, time.August, 17, 4, 0, 0, 0, time.UTC)
+	}
+	inputPrice := 2e-6
+	outputPrice := 4e-6
+	cost, err := svc.calculateCostInternal(
+		"deepseek-v4-pro",
+		UsageTokens{InputTokens: 1_000_000, OutputTokens: 1_000_000},
+		1,
+		"",
+		&ChannelModelPricing{InputPrice: &inputPrice, OutputPrice: &outputPrice},
+	)
+	require.NoError(t, err)
+	require.InDelta(t, 2.0, cost.InputCost, 1e-12)
+	require.InDelta(t, 4.0, cost.OutputCost, 1e-12)
+}
+
+func TestCalculateCostUnified_DeepSeekTimePricingRespectsPricingSource(t *testing.T) {
+	svc := newTestBillingService()
+	svc.now = func() time.Time {
+		return time.Date(2026, time.August, 17, 4, 0, 0, 0, time.UTC)
+	}
+	resolver := &ModelPricingResolver{}
+	tokens := UsageTokens{InputTokens: 1_000_000, OutputTokens: 1_000_000}
+
+	official, err := svc.CalculateCostUnified(CostInput{
+		Model:          "deepseek-v4-flash",
+		Tokens:         tokens,
+		RateMultiplier: 1,
+		Resolver:       resolver,
+		Resolved: &ResolvedPricing{
+			Mode:   BillingModeToken,
+			Source: PricingSourceFallback,
+			BasePricing: &ModelPricing{
+				InputPricePerToken:  0.44e-6,
+				OutputPricePerToken: 1.32e-6,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.InDelta(t, 0.22, official.InputCost, 1e-12)
+	require.InDelta(t, 0.66, official.OutputCost, 1e-12)
+
+	channel, err := svc.CalculateCostUnified(CostInput{
+		Model:          "deepseek-v4-flash",
+		Tokens:         tokens,
+		RateMultiplier: 1,
+		Resolver:       resolver,
+		Resolved: &ResolvedPricing{
+			Mode:   BillingModeToken,
+			Source: PricingSourceChannel,
+			BasePricing: &ModelPricing{
+				InputPricePerToken:  2e-6,
+				OutputPricePerToken: 4e-6,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.InDelta(t, 2.0, channel.InputCost, 1e-12)
+	require.InDelta(t, 4.0, channel.OutputCost, 1e-12)
 }
 
 // doubao-embedding-vision 是首个图文不同价的 embedding：文本 ¥0.7/MTok、图片 ¥1.8/MTok。

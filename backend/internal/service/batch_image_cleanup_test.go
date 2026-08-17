@@ -188,7 +188,7 @@ func TestBatchImageDownloadAfterOutputDeletedReturnsGone(t *testing.T) {
 func newTestBatchImageCleanupService() (*BatchImageCleanupService, *fakeBatchImageRepository, *publicBatchImageProvider) {
 	repo := newFakeBatchImageRepository()
 	repo.jobs["imgbatch_cleanup"] = cleanupTestJob("imgbatch_cleanup", BatchImageJobStatusCompleted)
-	provider := &publicBatchImageProvider{name: BatchImageProviderGeminiAPI}
+	provider := &publicBatchImageProvider{name: BatchImageProviderVertex}
 	accountID := int64(101)
 	svc := &BatchImageCleanupService{
 		Repo:             repo,
@@ -208,7 +208,7 @@ func cleanupTestJob(batchID, status string) *BatchImageJob {
 		UserID:            11,
 		APIKeyID:          &apiKeyID,
 		AccountID:         &accountID,
-		Provider:          BatchImageProviderGeminiAPI,
+		Provider:          BatchImageProviderVertex,
 		Model:             "gemini-2.5-flash-image",
 		Status:            status,
 		ProviderJobName:   batchImageStringPtr("providers/internal/job"),

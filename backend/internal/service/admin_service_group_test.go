@@ -237,9 +237,9 @@ func TestAdminService_CreateGroup_DisablesBatchImageWhenImageGenerationDisabled(
 	svc := &adminServiceImpl{groupRepo: repo}
 
 	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
-		Name:                      "gemini-no-image",
-		Description:               "Gemini group without image generation",
-		Platform:                  PlatformGemini,
+		Name:                      "antigravity-no-image",
+		Description:               "Antigravity group without image generation",
+		Platform:                  PlatformAntigravity,
 		RateMultiplier:            1.0,
 		AllowImageGeneration:      false,
 		AllowBatchImageGeneration: true,
@@ -479,7 +479,7 @@ func TestAdminService_CreateGroup_BatchImagePricingSettings(t *testing.T) {
 
 	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
 		Name:                         "batch-image-pricing",
-		Platform:                     PlatformGemini,
+		Platform:                     PlatformAntigravity,
 		RateMultiplier:               1,
 		BatchImageDiscountMultiplier: &discount,
 		BatchImageHoldMultiplier:     &hold,
@@ -501,7 +501,7 @@ func TestAdminService_CreateGroup_RejectsHoldBelowDiscount(t *testing.T) {
 	// 结算永远失败，必须在配置入口拒绝。
 	_, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
 		Name:                         "batch-image-pricing-invalid",
-		Platform:                     PlatformGemini,
+		Platform:                     PlatformAntigravity,
 		RateMultiplier:               1,
 		BatchImageDiscountMultiplier: &discount,
 		BatchImageHoldMultiplier:     &hold,

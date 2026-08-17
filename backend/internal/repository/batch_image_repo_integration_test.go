@@ -29,7 +29,7 @@ func TestBatchImageRepository_CreateJobAndDuplicates(t *testing.T) {
 	job, err := repo.CreateBatchImageJob(ctx, domain.CreateBatchImageJobParams{
 		BatchID:       batchID,
 		UserID:        1001,
-		Provider:      domain.BatchImageProviderGeminiAPI,
+		Provider:      domain.BatchImageProviderVertex,
 		Model:         "gemini-2.5-flash-image",
 		ItemCount:     2,
 		EstimatedCost: 0.02,
@@ -42,7 +42,7 @@ func TestBatchImageRepository_CreateJobAndDuplicates(t *testing.T) {
 	_, err = repo.CreateBatchImageJob(ctx, domain.CreateBatchImageJobParams{
 		BatchID:   batchID,
 		UserID:    1001,
-		Provider:  domain.BatchImageProviderGeminiAPI,
+		Provider:  domain.BatchImageProviderVertex,
 		Model:     "gemini-2.5-flash-image",
 		ItemCount: 1,
 	})
@@ -108,7 +108,7 @@ func TestBatchImageRepository_InvalidTransition(t *testing.T) {
 	_, err := repo.CreateBatchImageJob(ctx, domain.CreateBatchImageJobParams{
 		BatchID:   batchID,
 		UserID:    1001,
-		Provider:  domain.BatchImageProviderGeminiAPI,
+		Provider:  domain.BatchImageProviderVertex,
 		Model:     "gemini-2.5-flash-image",
 		ItemCount: 1,
 	})
@@ -128,7 +128,7 @@ func TestBatchImageRepository_TerminalStatusCannotMoveBack(t *testing.T) {
 	_, err := repo.CreateBatchImageJob(ctx, domain.CreateBatchImageJobParams{
 		BatchID:   batchID,
 		UserID:    1001,
-		Provider:  domain.BatchImageProviderGeminiAPI,
+		Provider:  domain.BatchImageProviderVertex,
 		Model:     "gemini-2.5-flash-image",
 		Status:    domain.BatchImageJobStatusCompleted,
 		ItemCount: 1,
@@ -151,7 +151,7 @@ func TestBatchImageRepository_ItemCustomIDUniqueness(t *testing.T) {
 		_, err := repo.CreateBatchImageJob(ctx, domain.CreateBatchImageJobParams{
 			BatchID:   batchID,
 			UserID:    1001,
-			Provider:  domain.BatchImageProviderGeminiAPI,
+			Provider:  domain.BatchImageProviderVertex,
 			Model:     "gemini-2.5-flash-image",
 			ItemCount: 1,
 		})
@@ -202,7 +202,7 @@ func TestBatchImageRepository_ReplaceBatchImageItemsForJob(t *testing.T) {
 	_, err := repo.CreateBatchImageJob(ctx, domain.CreateBatchImageJobParams{
 		BatchID:   batchID,
 		UserID:    1001,
-		Provider:  domain.BatchImageProviderGeminiAPI,
+		Provider:  domain.BatchImageProviderVertex,
 		Model:     "gemini-2.5-flash-image",
 		ItemCount: 2,
 	})
@@ -257,7 +257,7 @@ func TestBatchImageRepository_MarkBatchImageJobSettled(t *testing.T) {
 		UserID:            1001,
 		APIKeyID:          &apiKeyID,
 		AccountID:         &accountID,
-		Provider:          domain.BatchImageProviderGeminiAPI,
+		Provider:          domain.BatchImageProviderVertex,
 		Model:             "gemini-image",
 		Status:            domain.BatchImageJobStatusSettling,
 		ProviderJobName:   &providerJob,
@@ -301,7 +301,7 @@ func TestBatchImageRepository_SetBatchImageJobSettlementFailed(t *testing.T) {
 	_, err := repo.CreateBatchImageJob(ctx, domain.CreateBatchImageJobParams{
 		BatchID:      batchID,
 		UserID:       1001,
-		Provider:     domain.BatchImageProviderGeminiAPI,
+		Provider:     domain.BatchImageProviderVertex,
 		Model:        "gemini-image",
 		Status:       domain.BatchImageJobStatusSettling,
 		ItemCount:    1,

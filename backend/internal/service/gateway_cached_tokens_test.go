@@ -38,6 +38,15 @@ func TestReconcileCachedTokens_KimiStyle(t *testing.T) {
 	assert.Equal(t, float64(23), usage["cache_read_input_tokens"])
 }
 
+func TestReconcileCachedTokens_DeepSeekStyle(t *testing.T) {
+	usage := map[string]any{
+		"input_tokens":            float64(100),
+		"prompt_cache_hit_tokens": float64(64),
+	}
+	assert.True(t, reconcileCachedTokens(usage))
+	assert.Equal(t, float64(64), usage["cache_read_input_tokens"])
+}
+
 func TestReconcileCachedTokens_NoCachedTokens(t *testing.T) {
 	// 无 cached_tokens 字段（原生 Claude）
 	usage := map[string]any{

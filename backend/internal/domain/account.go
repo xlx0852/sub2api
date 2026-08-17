@@ -8,10 +8,14 @@ import (
 )
 
 var (
-	ErrAccountNotFound       = infraerrors.NotFound("ACCOUNT_NOT_FOUND", "account not found")
-	ErrAccountNilInput       = infraerrors.BadRequest("ACCOUNT_NIL_INPUT", "account input cannot be nil")
-	ErrAccountNotInFallback  = infraerrors.BadRequest("ACCOUNT_NOT_IN_FALLBACK", "account is not in proxy fallback state")
-	ErrRetiredBedrockAccount = infraerrors.BadRequest("BEDROCK_ACCOUNT_RETIRED", "aws bedrock account type has been retired; use anthropic api-key or other providers")
+	ErrAccountNotFound                        = infraerrors.NotFound("ACCOUNT_NOT_FOUND", "account not found")
+	ErrAccountNilInput                        = infraerrors.BadRequest("ACCOUNT_NIL_INPUT", "account input cannot be nil")
+	ErrAccountNotInFallback                   = infraerrors.BadRequest("ACCOUNT_NOT_IN_FALLBACK", "account is not in proxy fallback state")
+	ErrRetiredBedrockAccount                  = infraerrors.BadRequest("BEDROCK_ACCOUNT_RETIRED", "aws bedrock account type has been retired; use anthropic api-key or other providers")
+	ErrVertexServiceAccountOnboardingDisabled = infraerrors.BadRequest(
+		"VERTEX_SERVICE_ACCOUNT_ONBOARDING_DISABLED",
+		"vertex service account onboarding has been retired; existing accounts remain supported",
+	)
 	// ErrAccountNotSchedulable 表示账号处于 error/disabled 等不可打开调度的状态。
 	ErrAccountNotSchedulable = errors.New("account cannot be enabled for scheduling in current status")
 )

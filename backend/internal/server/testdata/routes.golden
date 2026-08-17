@@ -128,6 +128,7 @@ GET /api/v1/admin/ops/request-errors/:id/upstream-errors
 GET /api/v1/admin/ops/requests
 GET /api/v1/admin/ops/runtime/alert
 GET /api/v1/admin/ops/runtime/logging
+GET /api/v1/admin/ops/runtime/openai-compatibility-fallbacks
 GET /api/v1/admin/ops/settings/metric-thresholds
 GET /api/v1/admin/ops/system-logs
 GET /api/v1/admin/ops/system-logs/health

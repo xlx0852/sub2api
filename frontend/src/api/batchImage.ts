@@ -31,7 +31,7 @@ export interface BatchImageSubmitRequest {
   model: string
   task_name?: string
   parent_batch_id?: string
-  provider?: '' | 'gemini_api' | 'vertex' | string
+  provider?: '' | 'vertex' | string
   image_size?: '1K' | '2K' | '4K' | string
   response_mime_type?: string
   aspect_ratio?: string

@@ -56,3 +56,20 @@ func TestInsertObservation_IsIdempotentByWindowAndPercent(t *testing.T) {
 	require.True(t, inserted)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestListByAccountExceptKind_ExcludesFiveHourWindowsBeforeLimit(t *testing.T) {
+	db, mock := newSQLMock(t)
+	repo := &accountQuotaWindowRepository{db: db}
+
+	mock.ExpectQuery(`WHERE account_id = \$1 AND kind <> \$2[\s\S]*LIMIT \$3`).
+		WithArgs(int64(107), "5h", 36).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "account_id", "platform", "kind", "start_at", "end_at", "window_minutes", "source",
+			"closed_reason", "used_percent_open", "used_percent_close", "is_open", "created_at", "updated_at",
+		}))
+
+	rows, err := repo.ListByAccountExceptKind(context.Background(), 107, "5h", 36)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+	require.NoError(t, mock.ExpectationsWereMet())
+}

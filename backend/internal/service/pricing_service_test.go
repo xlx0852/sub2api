@@ -259,8 +259,8 @@ func TestDefaultPricingIncludesOfficialDeepSeekV4RatesAndLimits(t *testing.T) {
 		model                 string
 		input, cached, output float64
 	}{
-		{model: "deepseek-v4-pro", input: 0.435e-6, cached: 0.003625e-6, output: 0.87e-6},
-		{model: "deepseek-v4-flash", input: 0.14e-6, cached: 0.0028e-6, output: 0.28e-6},
+		{model: "deepseek-v4-pro", input: 1.32e-6, cached: 0.044e-6, output: 3.96e-6},
+		{model: "deepseek-v4-flash", input: 0.44e-6, cached: 0.014e-6, output: 1.32e-6},
 	}
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {

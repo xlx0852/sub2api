@@ -51,6 +51,24 @@ func (r *accountQuotaWindowRepository) ListByAccount(ctx context.Context, accoun
 	return scanAccountQuotaWindows(rows)
 }
 
+func (r *accountQuotaWindowRepository) ListByAccountExceptKind(ctx context.Context, accountID int64, excludedKind string, limit int) ([]*domain.AccountQuotaWindow, error) {
+	if limit <= 0 {
+		limit = 36
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, account_id, platform, kind, start_at, end_at, window_minutes, source,
+		       COALESCE(closed_reason,''), used_percent_open, used_percent_close, is_open, created_at, updated_at
+		FROM account_quota_windows
+		WHERE account_id = $1 AND kind <> $2
+		ORDER BY start_at DESC
+		LIMIT $3`, accountID, excludedKind, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanAccountQuotaWindows(rows)
+}
+
 func (r *accountQuotaWindowRepository) ListOpenByAccount(ctx context.Context, accountID int64) ([]*domain.AccountQuotaWindow, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, account_id, platform, kind, start_at, end_at, window_minutes, source,

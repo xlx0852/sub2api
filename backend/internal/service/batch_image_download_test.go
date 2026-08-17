@@ -198,7 +198,7 @@ func newTestBatchImageDownloadService() (*BatchImageDownloadService, *fakeBatchI
 		UserID:            11,
 		APIKeyID:          &apiKeyID,
 		AccountID:         &accountID,
-		Provider:          BatchImageProviderGeminiAPI,
+		Provider:          BatchImageProviderVertex,
 		Model:             "gemini-2.5-flash-image",
 		Status:            BatchImageJobStatusCompleted,
 		ProviderJobName:   batchImageStringPtr("providers/internal/job"),
@@ -219,7 +219,7 @@ func newTestBatchImageDownloadService() (*BatchImageDownloadService, *fakeBatchI
 		{JobID: "imgbatch_download", CustomID: "bad", Status: BatchImageItemStatusFailed, ErrorCode: &code, ErrorMessage: &msg},
 		{JobID: "imgbatch_download", CustomID: "ok_2", Status: BatchImageItemStatusSuccess, MimeType: &webp, FileExtension: &webpExt, ImageCount: 1},
 	}
-	provider := &publicBatchImageProvider{name: BatchImageProviderGeminiAPI, result: batchImageDownloadResultJSONL()}
+	provider := &publicBatchImageProvider{name: BatchImageProviderVertex, result: batchImageDownloadResultJSONL()}
 	limiter := &fakeBatchImageDownloadLimiter{}
 	svc := &BatchImageDownloadService{
 		Repo:             repo,

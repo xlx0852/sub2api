@@ -1255,19 +1255,14 @@ func HashBatchImageSubmitRequest(req BatchImageSubmitRequest) string {
 }
 
 func batchImageProviderPlatform(provider string) string {
-	switch provider {
-	case BatchImageProviderGeminiAPI, BatchImageProviderVertex:
-		return PlatformGemini
-	default:
-		return PlatformGemini
-	}
+	return PlatformGemini
 }
 
 func batchImageProviderSelectionOrder(requestedProvider string) []string {
 	if strings.TrimSpace(requestedProvider) != "" {
 		return []string{strings.TrimSpace(requestedProvider)}
 	}
-	return []string{BatchImageProviderGeminiAPI, BatchImageProviderVertex}
+	return []string{BatchImageProviderVertex}
 }
 
 func batchImageModelsFromAccountMapping(account *Account) []string {

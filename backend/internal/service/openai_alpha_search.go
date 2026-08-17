@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 const (
@@ -94,6 +95,10 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 }
 
 func (s *OpenAIGatewayService) buildOpenAIAlphaSearchRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token string) (*http.Request, error) {
+	// Alpha Search 的独立协议不接受 Responses 请求体中的 client_metadata。
+	// 无论该字段来自客户端还是指纹收敛逻辑，都必须在转发前移除；
+	// 头部指纹收敛仍由通用构造器正常执行。
+	body = stripOpenAIAlphaSearchClientMetadata(body)
 	clientBeta := ""
 	if c != nil {
 		clientBeta = c.GetHeader("OpenAI-Beta")
@@ -131,6 +136,29 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchRequest(ctx context.Context
 		req.Header.Set("Version", codexCLIVersion)
 	}
 	return req, nil
+}
+
+func isOpenAIAlphaSearchRequest(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	switch strings.TrimRight(c.Request.URL.Path, "/") {
+	case "/alpha/search", "/v1/alpha/search", "/backend-api/codex/alpha/search":
+		return true
+	default:
+		return false
+	}
+}
+
+func stripOpenAIAlphaSearchClientMetadata(body []byte) []byte {
+	if len(body) == 0 || !gjson.GetBytes(body, "client_metadata").Exists() {
+		return body
+	}
+	cleaned, err := sjson.DeleteBytes(body, "client_metadata")
+	if err != nil {
+		return body
+	}
+	return cleaned
 }
 
 // isOpenAIAlphaSearchEndpointUnsupported 识别「API key 上游没有实现

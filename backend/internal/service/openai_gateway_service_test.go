@@ -3052,6 +3052,12 @@ func TestParseSSEUsage_SelectiveParsing(t *testing.T) {
 	require.Equal(t, 21, usage.InputTokens)
 	require.Equal(t, 8, usage.OutputTokens)
 	require.Equal(t, 6, usage.CacheReadInputTokens)
+
+	// DeepSeek 原生 usage 把缓存命中 token 放在顶层字段。
+	svc.parseSSEUsage(`{"type":"response.completed","response":{"usage":{"prompt_tokens":34,"completion_tokens":9,"prompt_cache_hit_tokens":12}}}`, usage)
+	require.Equal(t, 34, usage.InputTokens)
+	require.Equal(t, 9, usage.OutputTokens)
+	require.Equal(t, 12, usage.CacheReadInputTokens)
 }
 
 func TestExtractOpenAIUsageFromJSONBytes_AcceptsResponseAndChatUsageShapes(t *testing.T) {

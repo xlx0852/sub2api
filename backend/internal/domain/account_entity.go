@@ -84,7 +84,7 @@ type Account struct {
 type OpenAIEndpointCapability string
 
 // openAILongContextBillingEnabledKey 控制 OpenAI 账号是否启用整会话长上下文加价。
-// 0.1.155 起默认关闭：仅当账号 extra 显式设为 true 时才加倍计费。
+// OpenAI 账号默认开启；可在 extra 中显式设为 false 关闭。
 const openAILongContextBillingEnabledKey = "openai_long_context_billing_enabled"
 
 const OpenAILongContextBillingEnabledKey = openAILongContextBillingEnabledKey
@@ -1235,14 +1235,21 @@ func (a *Account) IsOpenAI() bool {
 
 // IsOpenAILongContextBillingEnabled reports whether this OpenAI account should
 // apply whole-session long-context multipliers (gpt-5.4/5.5/... above threshold).
-// Default is false: missing/invalid extra keeps billing at base rates to avoid
-// unexpected double-charging on large contexts.
+// OpenAI accounts default to enabled when the setting is missing or invalid;
+// an explicit false remains an account-level opt-out. Other providers are never
+// enabled by this OpenAI-specific switch.
 func (a *Account) IsOpenAILongContextBillingEnabled() bool {
-	if a == nil || !a.IsOpenAI() || a.Extra == nil {
+	if a == nil || !a.IsOpenAI() {
 		return false
 	}
+	if a.Extra == nil {
+		return true
+	}
 	enabled, ok := a.Extra[openAILongContextBillingEnabledKey].(bool)
-	return ok && enabled
+	if !ok {
+		return true
+	}
+	return enabled
 }
 
 func (a *Account) IsAnthropic() bool {

@@ -1926,10 +1926,15 @@ func roundMoney(v float64) float64 {
 func (s *ProfitService) fillAccountQuotaWindows(ctx context.Context, summary *AccountProfitSummary, acc *Account, now time.Time, anchor profitWindowAnchor) {
 	summary.QuotaAvailabilitySpans = profitAvailabilitySpans(anchor)
 	fillProfitQuotaWindowsWithAnchor(summary, acc, now, anchor)
+	// The profit quota timeline is based on long provider windows. Five-hour
+	// windows are deliberately excluded here: their high turnover would drown
+	// out the 7d/30d history and they are not part of this view's statistics.
+	summary.FiveHourUtilization = nil
+	summary.QuotaWindows = profitQuotaWindowsExceptKind(summary.QuotaWindows, "5h")
 	if s == nil || s.quotaWindowRepo == nil || summary == nil || acc == nil {
 		return
 	}
-	rows, err := s.quotaWindowRepo.ListByAccount(ctx, acc.ID, "", 36)
+	rows, err := s.quotaWindowRepo.ListByAccountExceptKind(ctx, acc.ID, "5h", 36)
 	if err != nil || len(rows) == 0 {
 		return
 	}
@@ -2009,6 +2014,19 @@ func (s *ProfitService) fillAccountQuotaWindows(ctx context.Context, summary *Ac
 	if len(capped) > 0 {
 		summary.QuotaWindows = capped
 	}
+}
+
+func profitQuotaWindowsExceptKind(windows []ProfitQuotaWindow, excludedKind string) []ProfitQuotaWindow {
+	if len(windows) == 0 {
+		return windows
+	}
+	filtered := windows[:0]
+	for _, window := range windows {
+		if window.Kind != excludedKind {
+			filtered = append(filtered, window)
+		}
+	}
+	return filtered
 }
 
 func deriveWaitingActivationGaps(windows []ProfitQuotaWindow, now time.Time) []ProfitQuotaWindow {

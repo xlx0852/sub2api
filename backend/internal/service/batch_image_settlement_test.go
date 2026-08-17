@@ -395,7 +395,7 @@ func testSettlingBatchImageJob(batchID string) *BatchImageJob {
 		UserID:            123,
 		APIKeyID:          &apiKeyID,
 		AccountID:         &accountID,
-		Provider:          BatchImageProviderGeminiAPI,
+		Provider:          BatchImageProviderVertex,
 		Model:             "gemini-image",
 		Status:            BatchImageJobStatusSettling,
 		ProviderJobName:   &providerJobName,

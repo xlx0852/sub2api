@@ -564,6 +564,13 @@ func rejectDeprecatedBedrockType(accountType string) error {
 	return nil
 }
 
+func rejectRetiredVertexServiceAccountOnboarding(accountType string) error {
+	if strings.EqualFold(strings.TrimSpace(accountType), AccountTypeServiceAccount) {
+		return ErrVertexServiceAccountOnboardingDisabled
+	}
+	return nil
+}
+
 func rejectRetiredBedrockAccount(account *Account) error {
 	if account == nil {
 		return nil

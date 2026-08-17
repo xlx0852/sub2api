@@ -68,6 +68,7 @@ type openAIWSIngressSession struct {
 	sessionLease           *openAIWSConnLease
 	sessionConnID          string
 	pinnedSessionConnID    string
+	lastCompletedConnID    string
 	lastTurnClean          bool
 
 	turn                               int

@@ -18,6 +18,26 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+func TestOpenAIWSIngressSession_TurnConnReused(t *testing.T) {
+	sess := &openAIWSIngressSession{lastCompletedConnID: "conn-previous"}
+	tests := []struct {
+		name  string
+		lease *openAIWSConnLease
+		want  bool
+	}{
+		{name: "nil lease", lease: nil, want: false},
+		{name: "first fresh connection", lease: &openAIWSConnLease{conn: &openAIWSConn{id: "conn-fresh"}}, want: false},
+		{name: "same connection across turns", lease: &openAIWSConnLease{conn: &openAIWSConn{id: "conn-previous"}}, want: true},
+		{name: "new connection after failover", lease: &openAIWSConnLease{conn: &openAIWSConn{id: "conn-failover"}}, want: false},
+		{name: "idle pool connection", lease: &openAIWSConnLease{conn: &openAIWSConn{id: "conn-pooled"}, reused: true}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, sess.turnConnReused(tt.lease))
+		})
+	}
+}
+
 func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossTurns(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -173,6 +193,10 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 	secondTurnResult := receiveTurnResult()
 	require.True(t, firstTurnResult.OpenAIWSMode, "首轮 turn 应标记为 WS 模式")
 	require.True(t, secondTurnResult.OpenAIWSMode, "第二轮 turn 应标记为 WS 模式")
+	require.NotNil(t, firstTurnResult.WSConnReused)
+	require.False(t, *firstTurnResult.WSConnReused, "首轮新建上游连接不应记为复用")
+	require.NotNil(t, secondTurnResult.WSConnReused)
+	require.True(t, *secondTurnResult.WSConnReused, "后续 turn 沿用同一上游连接应记为复用")
 	require.Equal(t, receiveBillingID(), firstTurnResult.BillingRequestID)
 	require.Equal(t, receiveBillingID(), secondTurnResult.BillingRequestID)
 	require.NotEqual(t, firstTurnResult.BillingRequestID, secondTurnResult.BillingRequestID)

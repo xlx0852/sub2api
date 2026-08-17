@@ -103,3 +103,23 @@ The system SHALL resolve and persist `previous_response_id` → account affinity
 - **WHEN** scheduling runs
 - **THEN** the gateway falls through to session sticky or load-balance
 - **AND** does not error solely because affinity is missing
+
+### Requirement: Legacy Sticky Compatibility Is Observable Per Instance
+
+The system SHALL expose an administrator-only, read-only snapshot of the
+process-local legacy session-hash compatibility counters. The snapshot SHALL
+include legacy read attempts, read hits, dual writes, hit rate, the effective
+read/dual-write switches, and the maximum legacy-key TTL. Reading the snapshot
+MUST NOT reset counters or mutate sticky state.
+
+Operators MUST treat the snapshot as process-local and query every API instance
+before approving removal of legacy reads or writes.
+
+#### Scenario: Operator reads compatibility retirement evidence
+
+- **GIVEN** an administrator queries one API instance
+- **WHEN** the compatibility snapshot is returned
+- **THEN** it identifies its scope as process-local
+- **AND** it reports monotonic legacy read, hit, and dual-write counters
+- **AND** it reports the effective compatibility switches and legacy TTL cap
+- **AND** no counter or sticky binding is changed by the query

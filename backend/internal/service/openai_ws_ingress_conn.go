@@ -107,6 +107,14 @@ func (sess *openAIWSIngressSession) acquireTurnLease(turn int, preferred string,
 	return lease, nil
 }
 
+func (sess *openAIWSIngressSession) turnConnReused(lease *openAIWSConnLease) bool {
+	if lease == nil {
+		return false
+	}
+	connID := strings.TrimSpace(lease.ConnID())
+	return lease.Reused() || (sess.lastCompletedConnID != "" && connID == sess.lastCompletedConnID)
+}
+
 func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLease, payload []byte, payloadBytes int, originalModel string, imageBillingModel string, imageSizeTier string, imageInputSize string, allowIndexedCompatibilityRetry bool) (*OpenAIForwardResult, error) {
 	s := sess.svc
 	ctx := sess.ctx
@@ -365,7 +373,11 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 				)
 			}
 			imageCount := imageCounter.Count()
-			reused := lease.Reused()
+			// lease.Reused reports whether this lease came from an already-idle pool
+			// connection. An ingress session keeps the same lease across turns, so
+			// later turns must also be recorded as reused when they run on the
+			// connection that completed the previous turn.
+			reused := sess.turnConnReused(lease)
 			connPickMs := int(lease.ConnPickDuration().Milliseconds())
 			queueWaitMs := int(lease.QueueWaitDuration().Milliseconds())
 			payloadBytesValue := int64(payloadBytes)

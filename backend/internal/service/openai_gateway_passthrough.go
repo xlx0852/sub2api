@@ -321,7 +321,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	body []byte,
 	token string,
 ) (*http.Request, error) {
-	if account.Type == AccountTypeOAuth && !isOpenAIResponsesCompactPath(c) {
+	if account.Type == AccountTypeOAuth && !isOpenAIResponsesCompactPath(c) && !isOpenAIAlphaSearchRequest(c) {
 		body = applyCodexFingerprintJSONBytes(body, resolveCodexFingerprintIDsFromContext(c, account))
 	}
 	targetURL := openaiPlatformAPIURL

@@ -34,10 +34,14 @@
 - [ ] 4.1 observe 模式：只记指标不改路由/终态
 - [ ] 4.2 管理 setting / 分组 flag 分阶段 enforce
 - [x] 4.3 跑 scheduler、ratelimit、WS sticky、HTTP responses stream 相关单测
-- [ ] 4.4 补充运维说明：class 含义、sticky re-eval、stall 配置与排障
+- [x] 4.4 补充运维说明：class 含义、sticky re-eval、stall 配置与排障
 
 ## Implementation notes
 
+- 2026-08-16: WS ingress usage 复用口径缺陷已修复：首次新建 lease 记 `false`，同一入站长会话的后续 turn 仅在沿用上一轮成功 `conn_id` 时记 `true`，failover 新连接仍记 `false`。定向/race 回归通过；API `0.1.323` 已以 backend-only 蓝绿方式发布到美国生产 18248，候选直连 WS 两轮 usage 实证 `false → true`，公网 HTTP/SSE/WS 成功且结算入库；`0.1.322`/18247 完整保留为独立回滚。TTFT 权重是全局 setting，未按 group 4 名义修改生产全局权重；4.1 仍保持未勾选。
+- 2026-08-16: 4.1 的可观测基础已增加管理员只读、进程级 sticky legacy 快照，包含读回退/命中/双写计数、开关与 TTL 上限；observe 模式整体验收仍未完成，故 4.1 保持未勾选。
+- 2026-08-16: 4.4 已新增 `docs/OPENAI_GATEWAY_OPERATIONS.md`，记录 outcome class、60s/80% sticky re-eval、每实例 legacy 快照与先停双写后停旧读的退出步骤，以及 first-output/stall/client-disconnect 排障边界；未修改配置默认值。
+- 2026-08-16: 进程级 compatibility snapshot 随 API `0.1.322` 后端单独发布到美国生产 18247；未授权请求返回预期 401，证明路由存在且管理员边界生效。未使用管理员凭据读取快照，故 4.1 observe 仍保持未勾选。
 - Sticky invalidation uses process-local epoch bump on credential/quota outcomes + epoch side-channel in session/response cache.
 - HTTP previous_response_id is accepted for local affinity; force_http still ignores it; upstream wire may still strip non-WSv2 previous_response_id.
 - Full cross-node reverse index sticky clear is deferred; unschedulable/rate-limit paths continue to clear on next sticky hit.

@@ -741,6 +741,7 @@ func (sess *openAIWSIngressSession) runWSTurns(firstPayload openAIWSClientPayloa
 			return errors.New("websocket turn result is nil")
 		}
 		responseID := strings.TrimSpace(result.RequestID)
+		sess.lastCompletedConnID = connID
 		sess.lastTurnResponseID = responseID
 		sess.lastTurnPayload = cloneOpenAIWSPayloadBytes(sess.currentPayload)
 		sess.lastTurnReplayInput = cloneOpenAIWSRawMessages(sess.currentTurnReplayInput)

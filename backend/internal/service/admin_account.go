@@ -328,6 +328,9 @@ func (s *adminServiceImpl) CleanupOAuthEmailDuplicates(ctx context.Context) (kep
 
 func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccountInput) (*Account, error) {
 	if input != nil {
+		if err := rejectRetiredVertexServiceAccountOnboarding(input.Type); err != nil {
+			return nil, err
+		}
 		if err := rejectDeprecatedGeminiPlatform(input.Platform); err != nil {
 			return nil, err
 		}

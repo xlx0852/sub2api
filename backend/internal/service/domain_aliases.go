@@ -66,7 +66,6 @@ const BatchImageJobStatusRunning = domain.BatchImageJobStatusRunning
 const BatchImageJobStatusSettling = domain.BatchImageJobStatusSettling
 const BatchImageJobStatusSubmitted = domain.BatchImageJobStatusSubmitted
 const BatchImageJobStatusUploading = domain.BatchImageJobStatusUploading
-const BatchImageProviderGeminiAPI = domain.BatchImageProviderGeminiAPI
 const BatchImageProviderVertex = domain.BatchImageProviderVertex
 
 type BatchImageTransitionOptions = domain.BatchImageTransitionOptions
@@ -98,6 +97,7 @@ var ErrAccountNotFound = domain.ErrAccountNotFound
 var ErrAccountNotInFallback = domain.ErrAccountNotInFallback
 var ErrAccountNotSchedulable = domain.ErrAccountNotSchedulable
 var ErrRetiredBedrockAccount = domain.ErrRetiredBedrockAccount
+var ErrVertexServiceAccountOnboardingDisabled = domain.ErrVertexServiceAccountOnboardingDisabled
 var ErrAffiliateCodeInvalid = domain.ErrAffiliateCodeInvalid
 var ErrAffiliateCodeTaken = domain.ErrAffiliateCodeTaken
 var ErrAffiliateProfileNotFound = domain.ErrAffiliateProfileNotFound

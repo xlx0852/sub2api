@@ -312,12 +312,6 @@ const purple = {
   selectedIconBg: 'bg-purple-500 text-white',
   hoverBorder: 'border-gray-200 hover:border-purple-300 dark:border-dark-600 dark:hover:border-purple-700'
 }
-const sky = {
-  selectedBorder: 'border-sky-500 bg-sky-50 dark:bg-sky-900/20',
-  selectedBg: 'bg-sky-500 text-white',
-  selectedIconBg: 'bg-sky-500 text-white',
-  hoverBorder: 'border-gray-200 hover:border-sky-300 dark:border-dark-600 dark:hover:border-sky-700'
-}
 const green = {
   selectedBorder: 'border-green-500 bg-green-50 dark:bg-green-900/20',
   selectedBg: 'bg-green-500 text-white',
@@ -334,7 +328,7 @@ const zinc = {
 export const ACCOUNT_CATEGORY_PICKERS: Record<string, CategoryPickerConfig> = {
   anthropic: {
     model: 'accountCategory',
-    layoutClass: 'grid-cols-2 sm:grid-cols-4',
+    layoutClass: 'grid-cols-2',
     options: [
       {
         id: 'oauth-based',
@@ -349,16 +343,6 @@ export const ACCOUNT_CATEGORY_PICKERS: Record<string, CategoryPickerConfig> = {
         subtitleKey: 'admin.accounts.apiKey',
         icon: 'key',
         ...purple
-      },
-      {
-        id: 'service_account',
-        title: 'Vertex',
-        subtitle: 'Service Account',
-        icon: 'cloud',
-        ...sky,
-        noteKey: 'admin.accounts.vertexAnthropicHint',
-        noteClass:
-          'mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-800/40 dark:bg-sky-900/20 dark:text-sky-200'
       }
     ]
   },
@@ -441,7 +425,7 @@ export const ACCOUNT_CATEGORY_PICKERS: Record<string, CategoryPickerConfig> = {
   },
   gemini: {
     model: 'accountCategory',
-    layoutClass: 'grid-cols-3',
+    layoutClass: 'grid-cols-2',
     helpKey: 'admin.accounts.gemini.helpButton',
     options: [
       {
@@ -460,16 +444,6 @@ export const ACCOUNT_CATEGORY_PICKERS: Record<string, CategoryPickerConfig> = {
         subtitleKey: 'admin.accounts.gemini.accountType.apiKeyDesc',
         icon: 'key',
         ...purple
-      },
-      {
-        id: 'service_account',
-        title: 'Vertex',
-        subtitle: 'Service Account',
-        icon: 'cloud',
-        ...sky,
-        noteKey: 'admin.accounts.vertexGeminiHint',
-        noteClass:
-          'mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-800/40 dark:bg-sky-900/20 dark:text-sky-200'
       }
     ]
   }

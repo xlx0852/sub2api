@@ -48,8 +48,7 @@ describe('account form registry', () => {
   it('drives every platform subtype block from registry without exposing Gemini in the create picker', () => {
     expect(platformCategoryPicker('anthropic')?.options.map((item) => item.id)).toEqual([
       'oauth-based',
-      'apikey',
-      'service_account'
+      'apikey'
     ])
     expect(platformCategoryPicker('openai')?.model).toBe('accountCategory')
     expect(platformCategoryPicker('grok')?.hintKey).toBe('admin.accounts.grok.accountTypeHint')
@@ -57,13 +56,13 @@ describe('account form registry', () => {
     expect(platformCategoryPicker('antigravity')?.model).toBe('antigravityAccountType')
     expect(platformCategoryPicker('gemini')?.options.map((item) => item.id)).toEqual([
       'oauth-based',
-      'apikey',
-      'service_account'
+      'apikey'
     ])
     expect(platformCategoryPicker('gemini')?.helpKey).toBe('admin.accounts.gemini.helpButton')
-    expect(platformCategoryPicker('gemini')?.options.find((item) => item.id === 'service_account')?.noteKey).toBe(
-      'admin.accounts.vertexGeminiHint'
-    )
+    expect(platformCategoryPicker('anthropic')?.options.some((item) => item.id === 'service_account')).toBe(false)
+    expect(platformCategoryPicker('gemini')?.options.some((item) => item.id === 'service_account')).toBe(false)
+    expect(platformCategoryPicker('anthropic')?.layoutClass).toBe('grid-cols-2')
+    expect(platformCategoryPicker('gemini')?.layoutClass).toBe('grid-cols-2')
     expect(createPickerPlatforms().some((item) => item.id === 'gemini')).toBe(false)
   })
 

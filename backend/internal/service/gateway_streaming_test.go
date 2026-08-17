@@ -45,6 +45,14 @@ func TestParseSSEUsage_MessageStart(t *testing.T) {
 	require.Equal(t, 0, usage.OutputTokens, "message_start 不应设置 output_tokens")
 }
 
+func TestParseSSEUsage_DeepSeekPromptCacheHitTokens(t *testing.T) {
+	svc := newMinimalGatewayService()
+	usage := &ClaudeUsage{}
+
+	svc.parseSSEUsage(`{"type":"message_start","message":{"usage":{"input_tokens":100,"prompt_cache_hit_tokens":64}}}`, usage)
+	require.Equal(t, 64, usage.CacheReadInputTokens)
+}
+
 func TestParseSSEUsage_MessageDelta(t *testing.T) {
 	svc := newMinimalGatewayService()
 	usage := &ClaudeUsage{}

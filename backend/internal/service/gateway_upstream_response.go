@@ -1227,6 +1227,10 @@ func (s *GatewayService) extractSSEUsagePatch(event map[string]any) *sseUsagePat
 		patch.hasCacheReadInput = true
 		if v, ok := parseSSEUsageInt(usageObj["cache_read_input_tokens"]); ok {
 			patch.cacheReadInputTokens = v
+		} else if v, ok := parseSSEUsageInt(usageObj["cached_tokens"]); ok {
+			patch.cacheReadInputTokens = v
+		} else if v, ok := parseSSEUsageInt(usageObj["prompt_cache_hit_tokens"]); ok {
+			patch.cacheReadInputTokens = v
 		}
 		if cc, ok := usageObj["cache_creation"].(map[string]any); ok {
 			if v, exists := parseSSEUsageInt(cc["ephemeral_5m_input_tokens"]); exists {
@@ -1260,6 +1264,12 @@ func (s *GatewayService) extractSSEUsagePatch(event map[string]any) *sseUsagePat
 			patch.hasCacheCreationInput = true
 		}
 		if v, ok := parseSSEUsageInt(usageObj["cache_read_input_tokens"]); ok && v > 0 {
+			patch.cacheReadInputTokens = v
+			patch.hasCacheReadInput = true
+		} else if v, ok := parseSSEUsageInt(usageObj["cached_tokens"]); ok && v > 0 {
+			patch.cacheReadInputTokens = v
+			patch.hasCacheReadInput = true
+		} else if v, ok := parseSSEUsageInt(usageObj["prompt_cache_hit_tokens"]); ok && v > 0 {
 			patch.cacheReadInputTokens = v
 			patch.hasCacheReadInput = true
 		}
@@ -1434,6 +1444,9 @@ func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *h
 	// 兼容 Kimi cached_tokens → cache_read_input_tokens
 	if response.Usage.CacheReadInputTokens == 0 {
 		cachedTokens := gjson.GetBytes(body, "usage.cached_tokens").Int()
+		if cachedTokens <= 0 {
+			cachedTokens = gjson.GetBytes(body, "usage.prompt_cache_hit_tokens").Int()
+		}
 		if cachedTokens > 0 {
 			response.Usage.CacheReadInputTokens = int(cachedTokens)
 			if newBody, err := sjson.SetBytes(body, "usage.cache_read_input_tokens", cachedTokens); err == nil {
@@ -1502,6 +1515,9 @@ func reconcileCachedTokens(usage map[string]any) bool {
 		return false // 已有标准字段，无需处理
 	}
 	cached, _ := usage["cached_tokens"].(float64)
+	if cached <= 0 {
+		cached, _ = usage["prompt_cache_hit_tokens"].(float64)
+	}
 	if cached <= 0 {
 		return false
 	}

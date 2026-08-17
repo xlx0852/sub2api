@@ -90,6 +90,23 @@ func (m *memQuotaWindowRepo) ListByAccount(_ context.Context, accountID int64, k
 	}
 	return out, nil
 }
+func (m *memQuotaWindowRepo) ListByAccountExceptKind(_ context.Context, accountID int64, excludedKind string, limit int) ([]*AccountQuotaWindow, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []*AccountQuotaWindow
+	for i := len(m.rows) - 1; i >= 0; i-- {
+		r := m.rows[i]
+		if r.AccountID != accountID || r.Kind == excludedKind {
+			continue
+		}
+		cp := *r
+		out = append(out, &cp)
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
 func (m *memQuotaWindowRepo) ListOpenByAccount(ctx context.Context, accountID int64) ([]*AccountQuotaWindow, error) {
 	all, _ := m.ListByAccount(ctx, accountID, "", 100)
 	var out []*AccountQuotaWindow

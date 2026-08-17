@@ -17,6 +17,8 @@ type openAILegacySessionHashContextKey struct{}
 
 var openAILegacySessionHashKey = openAILegacySessionHashContextKey{}
 
+const openAIStickyLegacyTTLMax = 10 * time.Minute
+
 var (
 	openAIStickyLegacyReadFallbackTotal atomic.Int64
 	openAIStickyLegacyReadFallbackHit   atomic.Int64
@@ -113,8 +115,8 @@ func (s *OpenAIGatewayService) openAIStickyLegacyTTL(ttl time.Duration) time.Dur
 	if legacyTTL <= 0 {
 		legacyTTL = openaiStickySessionTTL
 	}
-	if legacyTTL > 10*time.Minute {
-		return 10 * time.Minute
+	if legacyTTL > openAIStickyLegacyTTLMax {
+		return openAIStickyLegacyTTLMax
 	}
 	return legacyTTL
 }
@@ -219,7 +221,6 @@ func (s *OpenAIGatewayService) deleteStickySessionAccountID(ctx context.Context,
 	}
 	return err
 }
-
 
 func (s *OpenAIGatewayService) setStickySessionAccountEpoch(ctx context.Context, groupID *int64, sessionHash string, account *Account, ttl time.Duration) {
 	if s == nil || s.cache == nil || account == nil {

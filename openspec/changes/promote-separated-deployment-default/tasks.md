@@ -48,4 +48,5 @@
   - 2026-08-16: Root `make build`, targeted version/route Go tests, embed compatibility compile, frontend semver tests (7), deploy/nginx tests (11), real `nginx:1.27-alpine nginx -t`, Compose v2 default/embedded topology assertions, YAML parse, Python compile, `git diff --check`, and strict OpenSpec validation passed. Existing Vite chunk warnings remain non-fatal.
 - [ ] 5.2 In staging, execute frontend-only, backend-only, and both deployments; verify login/settings, public config/version, HTTP/SSE/WS, and independent rollbacks.
 - [ ] 5.3 Migrate production only after staging evidence and explicit approval; retain the embedded deployment as rollback through the observation window.
+  - 2026-08-16: Explicitly approved backend-only production rollout of API `0.1.322` completed on alternate port 18247; frontend `0.1.321` symlink/marker was unchanged. API `0.1.321` on 18246 is retained as the independent rollback container/release. This does not satisfy or waive the missing staging matrix in 5.2, so 5.3 remains unchecked.
 - [ ] 5.4 After production verification, update component markers/retention and archive the change; do not claim completion earlier.

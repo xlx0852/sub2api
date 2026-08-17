@@ -1,15 +1,18 @@
 # Batch Image MVP
 
-Sub2API Batch Image MVP provides asynchronous Gemini image batch generation through a unified API surface backed by Redis workers, PostgreSQL state, and provider-specific batch backends.
+Sub2API Batch Image MVP provides asynchronous Vertex-hosted Gemini image batch generation through a unified service layer backed by Redis workers, PostgreSQL state, and a Vertex batch backend.
 
 Supported providers:
 
-- `gemini_api`
 - `vertex`
 
-API users do not see Gemini file names, Vertex job names, GCS paths, signed URLs, API keys, or service account material. Downloads are proxied through Sub2API in this MVP.
+`gemini_api` is retired and is rejected as an unsupported batch-image provider. This retirement does not affect ordinary Gemini/Antigravity HTTP or SSE gateway requests.
+
+API users do not see Vertex job names, GCS paths, signed URLs, API keys, or service account material. Downloads are proxied through Sub2API in this MVP.
 
 ## API Routes
+
+The current default server does not register these public routes. The service contracts are retained for Vertex worker, settlement, download, and cleanup behavior and must not be treated as a publicly enabled API without a separately approved route change.
 
 ```text
 POST   /v1/images/batches
@@ -26,7 +29,7 @@ Submit request:
 ```json
 {
   "model": "gemini-2.5-flash-image",
-  "provider": "gemini_api",
+  "provider": "vertex",
   "items": [
     {
       "custom_id": "cover_001",
@@ -74,7 +77,7 @@ Public batch response:
   "object": "image.batch",
   "status": "queued",
   "model": "gemini-2.5-flash-image",
-  "provider": "gemini_api",
+  "provider": "vertex",
   "item_count": 1,
   "success_count": 0,
   "fail_count": 0,
@@ -164,7 +167,7 @@ MVP billing rules:
 - Settlement runs after result indexing.
 - Only successful images are charged.
 - Failed items are not charged.
-- Reference images are sent to Gemini as input and can create small upstream input-token and temporary storage cost. They are counted once per expanded output request when `output_count > 1`, but the public MVP billing model does not add a separate reference-image surcharge. User-facing estimated, held, and settled amounts are still based on the output image count and configured batch image unit price.
+- Reference images are sent to the Vertex-hosted Gemini model as input and can create small upstream input-token and temporary storage cost. They are counted once per expanded output request when `output_count > 1`, but the public MVP billing model does not add a separate reference-image surcharge. User-facing estimated, held, and settled amounts are still based on the output image count and configured batch image unit price.
 - Settlement request id is `batch_image_settlement:{batch_id}`.
 - Settlement is idempotent; re-running settlement must not double charge.
 - Settlement billing failures are retried with a bounded retry limit. After the retry limit is reached, the job is failed and the remaining hold is released through the idempotent release path.
@@ -195,14 +198,6 @@ For the managed Vertex/GCS batch bucket, disable Cloud Storage soft delete or co
 
 ## Provider Notes
 
-`gemini_api`:
-
-- Uses Gemini Batch API with JSONL file mode.
-- Supports Gemini `apikey` upstream accounts with a configured API key.
-- Result file refs are internal.
-- API keys are never returned.
-- The provider can be selected and submitted through Sub2API when an administrator configures a Gemini API-key upstream account. In the 2026-07-07 PR validation, this path was verified as selectable/callable, but successful image generation was not continued because the test API key had no prepayment.
-
 `vertex`:
 
 - Uses Vertex `BatchPredictionJob` with managed GCS JSONL.
@@ -212,33 +207,23 @@ For the managed Vertex/GCS batch bucket, disable Cloud Storage soft delete or co
 - Batch image output should be treated as `1K`/default only in MVP.
 - Do not promise `2K` or `4K`.
 
-Other Gemini account/login types are not selected by the current batch image providers unless they expose equivalent API-key or service-account credentials through the same provider flow. They were not covered by the 2026-07-07 PR validation.
+Gemini API-key and OAuth account types are not selected by the batch-image provider. Vertex requires a compatible Gemini `service_account` account and the configured Google Cloud resources.
 
 ## Official Google Enablement
 
-Operators must enable Gemini/Vertex capability in Google's official console before turning on Sub2API batch image for any group. Sub2API feature flags and group switches do not create Google-side access by themselves.
+Operators must enable Vertex AI capability in Google's official console before turning on Sub2API batch image for any group. Sub2API feature flags and group switches do not create Google-side access by themselves.
 
 Recommended production path:
 
 - Use a Google Cloud project with billing enabled.
-- Enable the relevant Gemini API / Vertex AI APIs for the project.
+- Enable the relevant Vertex AI APIs for the project.
 - Use a service account or Application Default Credentials for the Sub2API runtime.
 - Create one fixed Cloud Storage bucket for batch image input and output, then grant the runtime and Vertex service agent the minimum required bucket permissions.
 - Configure Sub2API with the project id, location, managed bucket, provider account, model whitelist, and pricing.
 - Enable `BATCH_IMAGE_ENABLED` globally, enable image generation on the intended Gemini group, then enable `allow_batch_image_generation` for that group. Non-Gemini groups are not eligible for batch image generation, and the admin UI only shows the batch image group switch after image generation is enabled on a Gemini group.
 
-API-key path:
-
-- Google API keys are suitable for Gemini API development and supported Gemini methods.
-- The Sub2API `x-goog-api-key` compatibility header still expects a Sub2API key, not a plain Google key.
-- Plain Google API keys should not be documented as the default production credential for Vertex service-account batch jobs.
-- If an administrator configures a Gemini API-key upstream account, validate it with one low-cost batch image after the Google account has the required billing/prepayment state. If it has no prepayment, record only that the provider is selectable/callable and that failed submit releases hold.
-
 Official references:
 
-- Gemini API key guide: https://ai.google.dev/gemini-api/docs/api-key
-- Gemini API Batch API: https://ai.google.dev/gemini-api/docs/batch-api
-- Gemini API image generation and batch image notes: https://ai.google.dev/gemini-api/docs/image-generation
 - Vertex/Gemini batch inference: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/capabilities/batch-inference
 - Vertex batch predictions API: https://docs.cloud.google.com/gemini-enterprise-agent-platform/reference/models/batch-prediction-api
 
@@ -344,7 +329,7 @@ go test ./internal/config ./internal/service ./internal/repository ./internal/ha
 go test ./... -run '^$'
 ```
 
-These commands should not require Docker, testcontainers, Redis, GCP, Gemini, Vertex, or GCS.
+The unit and compile-only commands should not require Docker, testcontainers, Redis, GCP, Vertex, or GCS. Integration-tag repository tests use testcontainers and therefore require a working Docker runtime.
 
 ## PR Hygiene Checklist
 

@@ -62,6 +62,9 @@ func NewAccountService(accountRepo AccountRepository, groupRepo GroupRepository)
 
 // Create 创建账号
 func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (*Account, error) {
+	if err := rejectRetiredVertexServiceAccountOnboarding(req.Type); err != nil {
+		return nil, err
+	}
 	if err := rejectDeprecatedGeminiPlatform(req.Platform); err != nil {
 		return nil, err
 	}

@@ -7,6 +7,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	appbilling "github.com/Wei-Shaw/sub2api/internal/app/billing"
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -65,6 +66,62 @@ func serviceTierCostMultiplier(serviceTier string) float64 {
 	}
 }
 
+// DeepSeek V4 官方以峰值价作为标准价，谷时段价格为峰值价的 50%。
+// 峰值时段固定使用 UTC：[01:00,04:00) 和 [06:00,10:00)。
+const deepSeekOffPeakMultiplier = 0.5
+
+func isDeepSeekV4OfficialModel(model string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(model))
+	return strings.Contains(normalized, "deepseek-v4-pro") ||
+		strings.Contains(normalized, "deepseek-v4-flash") ||
+		normalized == "deepseek-chat" || normalized == "deepseek-reasoner"
+}
+
+func isDeepSeekPeakTime(now time.Time) bool {
+	hour := now.UTC().Hour()
+	return (hour >= 1 && hour < 4) || (hour >= 6 && hour < 10)
+}
+
+// applyDeepSeekOfficialPeakPricing pins the official V4 peak prices so a stale
+// remote LiteLLM snapshot cannot silently override DeepSeek's current rates.
+// Channel pricing is applied after this method and therefore remains authoritative.
+func applyDeepSeekOfficialPeakPricing(model string, pricing *ModelPricing) *ModelPricing {
+	if pricing == nil || !isDeepSeekV4OfficialModel(model) {
+		return pricing
+	}
+
+	cloned := *pricing
+	normalized := strings.ToLower(strings.TrimSpace(model))
+	if strings.Contains(normalized, "deepseek-v4-pro") {
+		cloned.InputPricePerToken = 1.32e-6
+		cloned.OutputPricePerToken = 3.96e-6
+		cloned.CacheCreationPricePerToken = 1.32e-6
+		cloned.CacheReadPricePerToken = 0.044e-6
+	} else {
+		// deepseek-chat / deepseek-reasoner are official aliases of V4 Flash.
+		cloned.InputPricePerToken = 0.44e-6
+		cloned.OutputPricePerToken = 1.32e-6
+		cloned.CacheCreationPricePerToken = 0.44e-6
+		cloned.CacheReadPricePerToken = 0.014e-6
+	}
+	return &cloned
+}
+
+func applyDeepSeekTimeOfDayPricing(model string, pricing *ModelPricing, now time.Time) *ModelPricing {
+	if pricing == nil || !isDeepSeekV4OfficialModel(model) || isDeepSeekPeakTime(now) {
+		return pricing
+	}
+
+	cloned := *pricing
+	cloned.InputPricePerToken *= deepSeekOffPeakMultiplier
+	cloned.OutputPricePerToken *= deepSeekOffPeakMultiplier
+	cloned.CacheCreationPricePerToken *= deepSeekOffPeakMultiplier
+	cloned.CacheReadPricePerToken *= deepSeekOffPeakMultiplier
+	cloned.CacheCreation5mPrice *= deepSeekOffPeakMultiplier
+	cloned.CacheCreation1hPrice *= deepSeekOffPeakMultiplier
+	return &cloned
+}
+
 type UsageTokens = appbilling.UsageTokens
 type CostBreakdown = appbilling.CostBreakdown
 
@@ -77,6 +134,7 @@ type BillingService struct {
 	cfg            *config.Config
 	pricingService *PricingService
 	fallbackPrices map[string]*ModelPricing // 硬编码回退价格
+	now            func() time.Time
 
 	// fallbackWarnSeen 记录已打过 fallback 警告日志的(已小写化)模型名,
 	// 让 "[Billing] Using fallback pricing" 每个模型每进程最多打一条,
@@ -90,6 +148,7 @@ func NewBillingService(cfg *config.Config, pricingService *PricingService) *Bill
 		cfg:            cfg,
 		pricingService: pricingService,
 		fallbackPrices: make(map[string]*ModelPricing),
+		now:            time.Now,
 	}
 
 	// 初始化硬编码回退价格（当动态价格不可用时使用）
@@ -366,7 +425,7 @@ func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
 			price5m := litellmPricing.CacheCreationInputTokenCost
 			price1h := litellmPricing.CacheCreationInputTokenCostAbove1hr
 			enableBreakdown := price1h > 0 && price1h > price5m
-			return s.applyModelSpecificPricingPolicy(model, &ModelPricing{
+			pricing := s.applyModelSpecificPricingPolicy(model, &ModelPricing{
 				InputPricePerToken:                 litellmPricing.InputCostPerToken,
 				InputPricePerTokenPriority:         litellmPricing.InputCostPerTokenPriority,
 				OutputPricePerToken:                litellmPricing.OutputCostPerToken,
@@ -382,7 +441,8 @@ func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
 				LongContextInputMultiplier:         litellmPricing.LongContextInputCostMultiplier,
 				LongContextOutputMultiplier:        litellmPricing.LongContextOutputCostMultiplier,
 				ImageOutputPricePerToken:           litellmPricing.OutputCostPerImageToken,
-			}), nil
+			})
+			return applyDeepSeekOfficialPeakPricing(model, pricing), nil
 		}
 	}
 
@@ -394,7 +454,8 @@ func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
 		if _, seen := s.fallbackWarnSeen.LoadOrStore(model, struct{}{}); !seen {
 			log.Printf("[Billing] Using fallback pricing for model: %s", model)
 		}
-		return s.applyModelSpecificPricingPolicy(model, fallback), nil
+		pricing := s.applyModelSpecificPricingPolicy(model, fallback)
+		return applyDeepSeekOfficialPeakPricing(model, pricing), nil
 	}
 
 	return nil, fmt.Errorf("%w for model: %s", ErrModelPricingUnavailable, model)
@@ -513,6 +574,9 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 	}
 
 	pricing = s.applyModelSpecificPricingPolicy(input.Model, pricing)
+	if resolved.Source != PricingSourceChannel {
+		pricing = applyDeepSeekTimeOfDayPricing(input.Model, pricing, s.billingNow())
+	}
 
 	// 长上下文定价仅在无区间定价时应用（区间定价已包含上下文分层）
 	applyLongCtx := len(resolved.Intervals) == 0
@@ -697,6 +761,9 @@ func (s *BillingService) calculateCostInternal(model string, tokens UsageTokens,
 	if err != nil {
 		return nil, err
 	}
+	if channelPricing == nil {
+		pricing = applyDeepSeekTimeOfDayPricing(model, pricing, s.billingNow())
+	}
 
 	applyLongCtx := true
 	if len(longContextBillingEnabled) > 0 {
@@ -704,6 +771,13 @@ func (s *BillingService) calculateCostInternal(model string, tokens UsageTokens,
 	}
 	// 旧路径默认检查长上下文定价（无区间定价概念）；OpenAI 网关可显式关闭。
 	return s.computeTokenBreakdown(pricing, tokens, rateMultiplier, serviceTier, applyLongCtx), nil
+}
+
+func (s *BillingService) billingNow() time.Time {
+	if s != nil && s.now != nil {
+		return s.now()
+	}
+	return time.Now()
 }
 
 func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *ModelPricing) *ModelPricing {

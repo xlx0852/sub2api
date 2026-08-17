@@ -1120,33 +1120,39 @@ func TestOpenAIGatewayServiceRecordUsage_GPT56SeparatesCacheWriteForBillingAndSt
 	require.InDelta(t, QuantizeUsageBillingAmount(usageRepo.lastLog.TotalCost*1.1), usageRepo.lastLog.ActualCost, 1e-12)
 }
 
-func TestOpenAIGatewayServiceRecordUsage_Gpt54LongContextBillingDisabledByDefault(t *testing.T) {
+func TestOpenAIGatewayServiceRecordUsage_GPT56LongContextBillingEnabledByDefault(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 	userRepo := &openAIRecordUsageUserRepoStub{}
 	subRepo := &openAIRecordUsageSubRepoStub{}
 	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, subRepo, nil)
+	svc.billingService = NewBillingService(svc.cfg, &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"gpt-5.6-sol": {
+			InputCostPerToken:       5e-6,
+			OutputCostPerToken:      30e-6,
+			CacheReadInputTokenCost: 0.5e-6,
+		},
+	}})
 
 	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 		Result: &OpenAIForwardResult{
-			RequestID: "resp_gpt54_long_context",
+			RequestID: "resp_gpt56_long_context_default",
 			Usage: OpenAIUsage{
 				InputTokens:  300000,
 				OutputTokens: 2000,
 			},
-			Model:    "gpt-5.4-2026-03-05",
+			Model:    "gpt-5.6-sol",
 			Duration: time.Second,
 		},
-		APIKey:  &APIKey{ID: 1014},
-		User:    &User{ID: 2014},
-		Account: &Account{ID: 3014, Platform: PlatformOpenAI},
+		APIKey:  &APIKey{ID: 1057},
+		User:    &User{ID: 2057},
+		Account: &Account{ID: 3057, Platform: PlatformOpenAI},
 	})
 
 	require.NoError(t, err)
 	require.NotNil(t, usageRepo.lastLog)
 
-	// 默认关闭整会话长上下文加价，避免大上下文意外翻倍扣费。
-	expectedInput := 300000 * 2.5e-6
-	expectedOutput := 2000 * 15e-6
+	expectedInput := 300000 * 5e-6 * 2.0
+	expectedOutput := 2000 * 30e-6 * 1.5
 	require.InDelta(t, expectedInput, usageRepo.lastLog.InputCost, 1e-10)
 	require.InDelta(t, expectedOutput, usageRepo.lastLog.OutputCost, 1e-10)
 	require.InDelta(t, expectedInput+expectedOutput, usageRepo.lastLog.TotalCost, 1e-10)
@@ -1154,36 +1160,43 @@ func TestOpenAIGatewayServiceRecordUsage_Gpt54LongContextBillingDisabledByDefaul
 	require.Equal(t, 1, userRepo.deductCalls)
 }
 
-func TestOpenAIGatewayServiceRecordUsage_Gpt54LongContextBillingEnabledPerAccount(t *testing.T) {
+func TestOpenAIGatewayServiceRecordUsage_GPT56LongContextBillingExplicitlyDisabled(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 	userRepo := &openAIRecordUsageUserRepoStub{}
 	subRepo := &openAIRecordUsageSubRepoStub{}
 	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, subRepo, nil)
+	svc.billingService = NewBillingService(svc.cfg, &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"gpt-5.6-sol": {
+			InputCostPerToken:       5e-6,
+			OutputCostPerToken:      30e-6,
+			CacheReadInputTokenCost: 0.5e-6,
+		},
+	}})
 
 	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 		Result: &OpenAIForwardResult{
-			RequestID: "resp_gpt54_long_context_enabled",
+			RequestID: "resp_gpt56_long_context_disabled",
 			Usage: OpenAIUsage{
 				InputTokens:  300000,
 				OutputTokens: 2000,
 			},
-			Model:    "gpt-5.4-2026-03-05",
+			Model:    "gpt-5.6-sol",
 			Duration: time.Second,
 		},
-		APIKey: &APIKey{ID: 1015},
-		User:   &User{ID: 2015},
+		APIKey: &APIKey{ID: 1058},
+		User:   &User{ID: 2058},
 		Account: &Account{
-			ID:       3015,
+			ID:       3058,
 			Platform: PlatformOpenAI,
-			Extra:    map[string]any{openAILongContextBillingEnabledKey: true},
+			Extra:    map[string]any{openAILongContextBillingEnabledKey: false},
 		},
 	})
 
 	require.NoError(t, err)
 	require.NotNil(t, usageRepo.lastLog)
 
-	expectedInput := 300000 * 2.5e-6 * 2.0
-	expectedOutput := 2000 * 15e-6 * 1.5
+	expectedInput := 300000 * 5e-6
+	expectedOutput := 2000 * 30e-6
 	require.InDelta(t, expectedInput, usageRepo.lastLog.InputCost, 1e-10)
 	require.InDelta(t, expectedOutput, usageRepo.lastLog.OutputCost, 1e-10)
 	require.InDelta(t, expectedInput+expectedOutput, usageRepo.lastLog.TotalCost, 1e-10)

@@ -197,6 +197,7 @@ func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 			runtime.GET("/logging", h.Admin.Ops.GetRuntimeLogConfig)
 			runtime.PUT("/logging", h.Admin.Ops.UpdateRuntimeLogConfig)
 			runtime.POST("/logging/reset", h.Admin.Ops.ResetRuntimeLogConfig)
+			runtime.GET("/openai-compatibility-fallbacks", h.Admin.Ops.GetOpenAICompatibilityFallbackMetrics)
 		}
 
 		// Advanced settings (DB-backed)

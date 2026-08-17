@@ -692,14 +692,16 @@
       "cache_read_input_token_cost_priority": 3e-07
     },
     "deepseek-v4-pro": {
-      "input_cost_per_token": 4.35e-07,
-      "output_cost_per_token": 8.7e-07,
-      "cache_read_input_token_cost": 3.625e-09
+      "input_cost_per_token": 1.32e-06,
+      "output_cost_per_token": 3.96e-06,
+      "cache_creation_input_token_cost": 1.32e-06,
+      "cache_read_input_token_cost": 4.4e-08
     },
     "deepseek-v4-flash": {
-      "input_cost_per_token": 1.4e-07,
-      "output_cost_per_token": 2.8e-07,
-      "cache_read_input_token_cost": 2.8e-09
+      "input_cost_per_token": 4.4e-07,
+      "output_cost_per_token": 1.32e-06,
+      "cache_creation_input_token_cost": 4.4e-07,
+      "cache_read_input_token_cost": 1.4e-08
     },
     "glm-5.1": {
       "input_cost_per_token": 1.4e-06,

@@ -11,6 +11,7 @@ import (
 // AccountQuotaWindowRepository persists real quota-window history.
 type AccountQuotaWindowRepository interface {
 	ListByAccount(ctx context.Context, accountID int64, kind string, limit int) ([]*domain.AccountQuotaWindow, error)
+	ListByAccountExceptKind(ctx context.Context, accountID int64, excludedKind string, limit int) ([]*domain.AccountQuotaWindow, error)
 	ListOpenByAccount(ctx context.Context, accountID int64) ([]*domain.AccountQuotaWindow, error)
 	GetOpen(ctx context.Context, accountID int64, kind string) (*domain.AccountQuotaWindow, error)
 	// CloseAndOpen atomically closes the open row (if any) and inserts a new open row.

@@ -21,7 +21,7 @@ func TestBatchImageMVPFlow(t *testing.T) {
 	repo := newFakeBatchImageRepository()
 	queue := &publicBatchImageQueue{}
 	provider := &batchImageSmokeProvider{
-		name: BatchImageProviderGeminiAPI,
+		name: BatchImageProviderVertex,
 		states: []BatchProviderInternalState{
 			BatchProviderStateRunning,
 			BatchProviderStateSucceeded,

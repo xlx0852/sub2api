@@ -7,6 +7,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestProfitQuotaWindowsExceptKind_RemovesFiveHourWindows(t *testing.T) {
+	windows := []ProfitQuotaWindow{{Kind: "5h"}, {Kind: "7d"}, {Kind: "30d"}}
+	filtered := profitQuotaWindowsExceptKind(windows, "5h")
+	require.Equal(t, []ProfitQuotaWindow{{Kind: "7d"}, {Kind: "30d"}}, filtered)
+}
+
 func TestFillProfitQuotaWindows_Codex(t *testing.T) {
 	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
 	reset5h := now.Add(2 * time.Hour)
