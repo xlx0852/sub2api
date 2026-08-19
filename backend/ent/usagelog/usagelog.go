@@ -66,6 +66,8 @@ const (
 	FieldActualCost = "actual_cost"
 	// FieldRateMultiplier holds the string denoting the rate_multiplier field in the database.
 	FieldRateMultiplier = "rate_multiplier"
+	// FieldPricingCurrency holds the string denoting the pricing_currency field in the database.
+	FieldPricingCurrency = "pricing_currency"
 	// FieldAccountRateMultiplier holds the string denoting the account_rate_multiplier field in the database.
 	FieldAccountRateMultiplier = "account_rate_multiplier"
 	// FieldBillingType holds the string denoting the billing_type field in the database.
@@ -192,6 +194,7 @@ var Columns = []string{
 	FieldTotalCost,
 	FieldActualCost,
 	FieldRateMultiplier,
+	FieldPricingCurrency,
 	FieldAccountRateMultiplier,
 	FieldBillingType,
 	FieldStream,
@@ -269,6 +272,8 @@ var (
 	DefaultActualCost float64
 	// DefaultRateMultiplier holds the default value on creation for the "rate_multiplier" field.
 	DefaultRateMultiplier float64
+	// PricingCurrencyValidator is a validator for the "pricing_currency" field. It is called by the builders before save.
+	PricingCurrencyValidator func(string) error
 	// DefaultBillingType holds the default value on creation for the "billing_type" field.
 	DefaultBillingType int8
 	// DefaultStream holds the default value on creation for the "stream" field.
@@ -433,6 +438,11 @@ func ByActualCost(opts ...sql.OrderTermOption) OrderOption {
 // ByRateMultiplier orders the results by the rate_multiplier field.
 func ByRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRateMultiplier, opts...).ToFunc()
+}
+
+// ByPricingCurrency orders the results by the pricing_currency field.
+func ByPricingCurrency(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPricingCurrency, opts...).ToFunc()
 }
 
 // ByAccountRateMultiplier orders the results by the account_rate_multiplier field.

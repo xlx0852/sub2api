@@ -100,6 +100,11 @@ func (UsageLog) Fields() []ent.Field {
 		field.Float("rate_multiplier").
 			Default(1).
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}),
+		field.String("pricing_currency").
+			MaxLen(3).
+			Optional().
+			Nillable().
+			Comment("模型基础价格币种快照：USD/CNY；仅用于展示，不自动换汇"),
 
 		// account_rate_multiplier: 账号计费倍率快照（NULL 表示按 1.0 处理）
 		field.Float("account_rate_multiplier").

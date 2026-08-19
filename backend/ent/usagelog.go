@@ -75,6 +75,8 @@ type UsageLog struct {
 	ActualCost float64 `json:"actual_cost,omitempty"`
 	// RateMultiplier holds the value of the "rate_multiplier" field.
 	RateMultiplier float64 `json:"rate_multiplier,omitempty"`
+	// 模型基础价格币种快照：USD/CNY；仅用于展示，不自动换汇
+	PricingCurrency *string `json:"pricing_currency,omitempty"`
 	// AccountRateMultiplier holds the value of the "account_rate_multiplier" field.
 	AccountRateMultiplier *float64 `json:"account_rate_multiplier,omitempty"`
 	// BillingType holds the value of the "billing_type" field.
@@ -214,7 +216,7 @@ func (*UsageLog) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case usagelog.FieldID, usagelog.FieldUserID, usagelog.FieldAPIKeyID, usagelog.FieldAccountID, usagelog.FieldChannelID, usagelog.FieldGroupID, usagelog.FieldSubscriptionID, usagelog.FieldInputTokens, usagelog.FieldOutputTokens, usagelog.FieldCacheCreationTokens, usagelog.FieldCacheReadTokens, usagelog.FieldCacheCreation5mTokens, usagelog.FieldCacheCreation1hTokens, usagelog.FieldBillingType, usagelog.FieldDurationMs, usagelog.FieldFirstTokenMs, usagelog.FieldWsPreflightFailCount, usagelog.FieldWsConnPickMs, usagelog.FieldWsPayloadBytes, usagelog.FieldWsEventCount, usagelog.FieldWsQueueWaitMs, usagelog.FieldImageCount, usagelog.FieldVideoCount, usagelog.FieldVideoDurationSeconds:
 			values[i] = new(sql.NullInt64)
-		case usagelog.FieldRequestID, usagelog.FieldModel, usagelog.FieldRequestedModel, usagelog.FieldUpstreamModel, usagelog.FieldModelMappingChain, usagelog.FieldBillingTier, usagelog.FieldBillingMode, usagelog.FieldUserAgent, usagelog.FieldIPAddress, usagelog.FieldImageSize, usagelog.FieldImageInputSize, usagelog.FieldImageOutputSize, usagelog.FieldImageSizeSource, usagelog.FieldVideoResolution:
+		case usagelog.FieldRequestID, usagelog.FieldModel, usagelog.FieldRequestedModel, usagelog.FieldUpstreamModel, usagelog.FieldModelMappingChain, usagelog.FieldBillingTier, usagelog.FieldBillingMode, usagelog.FieldPricingCurrency, usagelog.FieldUserAgent, usagelog.FieldIPAddress, usagelog.FieldImageSize, usagelog.FieldImageInputSize, usagelog.FieldImageOutputSize, usagelog.FieldImageSizeSource, usagelog.FieldVideoResolution:
 			values[i] = new(sql.NullString)
 		case usagelog.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -402,6 +404,13 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field rate_multiplier", values[i])
 			} else if value.Valid {
 				_m.RateMultiplier = value.Float64
+			}
+		case usagelog.FieldPricingCurrency:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field pricing_currency", values[i])
+			} else if value.Valid {
+				_m.PricingCurrency = new(string)
+				*_m.PricingCurrency = value.String
 			}
 		case usagelog.FieldAccountRateMultiplier:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
@@ -720,6 +729,11 @@ func (_m *UsageLog) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("rate_multiplier=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RateMultiplier))
+	builder.WriteString(", ")
+	if v := _m.PricingCurrency; v != nil {
+		builder.WriteString("pricing_currency=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	if v := _m.AccountRateMultiplier; v != nil {
 		builder.WriteString("account_rate_multiplier=")

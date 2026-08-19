@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"log/slog"
+
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 )
 
 // PricingSource 定价来源标识
@@ -16,6 +18,8 @@ const (
 type ResolvedPricing struct {
 	// Mode 计费模式
 	Mode BillingMode
+	// Currency is source-price metadata only. Billing never performs FX conversion.
+	Currency domain.PricingCurrency
 
 	// Token 模式：基础定价（来自 LiteLLM 或 fallback）
 	BasePricing *ModelPricing
@@ -75,6 +79,7 @@ func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) 
 			if mode == BillingModePerRequest || mode == BillingModeImage {
 				resolved := &ResolvedPricing{
 					Mode:           mode,
+					Currency:       domain.NormalizePricingCurrency(string(chPricing.Currency)),
 					Source:         PricingSourceChannel,
 					channelPricing: chPricing,
 				}
@@ -89,9 +94,13 @@ func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) 
 
 	resolved := &ResolvedPricing{
 		Mode:                   BillingModeToken,
+		Currency:               domain.PricingCurrencyUSD,
 		BasePricing:            basePricing,
 		Source:                 source,
 		SupportsCacheBreakdown: basePricing != nil && basePricing.SupportsCacheBreakdown,
+	}
+	if basePricing != nil {
+		resolved.Currency = domain.NormalizePricingCurrency(string(basePricing.Currency))
 	}
 
 	// 2. 如果有 GroupID，尝试渠道覆盖
@@ -125,6 +134,7 @@ func (r *ModelPricingResolver) applyChannelOverrides(ctx context.Context, groupI
 	}
 
 	resolved.Source = PricingSourceChannel
+	resolved.Currency = domain.NormalizePricingCurrency(string(chPricing.Currency))
 	resolved.channelPricing = chPricing
 	resolved.Mode = chPricing.BillingMode
 	if resolved.Mode == "" {
@@ -141,6 +151,7 @@ func (r *ModelPricingResolver) applyChannelOverrides(ctx context.Context, groupI
 
 // applyTokenOverrides 应用 token 模式的渠道覆盖
 func (r *ModelPricingResolver) applyTokenOverrides(chPricing *ChannelModelPricing, resolved *ResolvedPricing) {
+	resolved.Currency = domain.NormalizePricingCurrency(string(chPricing.Currency))
 	// 过滤掉所有价格字段都为空的无效 interval
 	validIntervals := filterValidIntervals(chPricing.Intervals)
 
@@ -149,7 +160,7 @@ func (r *ModelPricingResolver) applyTokenOverrides(chPricing *ChannelModelPricin
 		resolved.Intervals = validIntervals
 		// 区间不匹配时回退到 BasePricing，也需要覆盖图片价格
 		if resolved.BasePricing == nil {
-			resolved.BasePricing = &ModelPricing{}
+			resolved.BasePricing = &ModelPricing{Currency: resolved.Currency}
 		} else {
 			// 防止修改 fallbackPrices 中的共享指针
 			cloned := *resolved.BasePricing
@@ -166,12 +177,13 @@ func (r *ModelPricingResolver) applyTokenOverrides(chPricing *ChannelModelPricin
 
 	// 否则用 flat 字段覆盖 BasePricing
 	if resolved.BasePricing == nil {
-		resolved.BasePricing = &ModelPricing{}
+		resolved.BasePricing = &ModelPricing{Currency: resolved.Currency}
 	} else {
 		// 防止修改 fallbackPrices 中的共享指针
 		cloned := *resolved.BasePricing
 		resolved.BasePricing = &cloned
 	}
+	resolved.BasePricing.Currency = resolved.Currency
 
 	if chPricing.InputPrice != nil {
 		resolved.BasePricing.InputPricePerToken = *chPricing.InputPrice

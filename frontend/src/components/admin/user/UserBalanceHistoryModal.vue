@@ -31,7 +31,7 @@
           <div class="flex-shrink-0 text-right">
             <p class="text-xs text-gray-500 dark:text-dark-400">{{ t('admin.users.currentBalance') }}</p>
             <p class="text-xl font-bold text-gray-900 dark:text-white">
-              ${{ user.balance?.toFixed(2) || '0.00' }}
+              {{ user.balance?.toFixed(2) || '0.00' }}
             </p>
           </div>
         </div>

@@ -1404,6 +1404,7 @@ export interface UsageLog {
   total_cost: number
   actual_cost: number
   rate_multiplier: number
+  pricing_currency?: 'USD' | 'CNY'
   billing_type: number
 
   request_type?: UsageRequestType

@@ -18,7 +18,7 @@
     <div data-testid="usage-stat-billing" class="contents">
       <span class="usage-metric usage-metric-amber" :title="t('usage.accountBilled')">
         <span class="usage-metric-label">{{ t('usage.accountCost') }}</span>
-        <strong>A ${{ accountCost }}</strong>
+		<strong>A {{ accountCost }}</strong>
       </span>
       <span
         v-if="userCost != null"
@@ -26,7 +26,7 @@
         :title="t('usage.userBilled')"
       >
         <span class="usage-metric-label">{{ t('usage.userBilled') }}</span>
-        <strong>U ${{ userCost }}</strong>
+		<strong>U {{ userCost }}</strong>
       </span>
     </div>
   </div>

@@ -24,6 +24,7 @@ export interface PricingInterval {
 export interface ChannelModelPricing {
   id?: number
   platform: string
+  currency?: 'USD' | 'CNY'
   models: string[]
   billing_mode: BillingMode
   input_price: number | null
@@ -126,6 +127,7 @@ export async function remove(id: number): Promise<void> {
 
 export interface ModelDefaultPricing {
   found: boolean
+  currency?: 'USD' | 'CNY'
   input_price?: number    // per-token price
   output_price?: number
   cache_write_price?: number

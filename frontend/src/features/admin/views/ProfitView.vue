@@ -53,16 +53,16 @@
           <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" :class="loading ? 'opacity-60' : ''">
             <div class="rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-700 dark:bg-dark-800">
               <div class="text-sm text-gray-500 dark:text-dark-400">{{ t('admin.profit.totalRevenue') }}</div>
-              <div class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">${{ fmt(data?.total_revenue) }}</div>
+              <div class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{{ fmt(data?.total_revenue) }}</div>
             </div>
             <div class="rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-700 dark:bg-dark-800">
               <div class="text-sm text-gray-500 dark:text-dark-400">{{ t('admin.profit.amortizedCost') }}</div>
-              <div class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">${{ fmt(data?.total_cost) }}</div>
+              <div class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{{ fmt(data?.total_cost) }}</div>
             </div>
             <div class="rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-700 dark:bg-dark-800">
               <div class="text-sm text-gray-500 dark:text-dark-400">{{ t('admin.profit.totalProfit') }}</div>
               <div class="mt-1 text-2xl font-bold" :class="(data?.total_profit ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'">
-                ${{ fmt(data?.total_profit) }}
+                {{ fmt(data?.total_profit) }}
               </div>
             </div>
             <div
@@ -71,7 +71,7 @@
               data-testid="profit-current-user-balance"
             >
               <div class="text-sm text-gray-500 dark:text-dark-400">{{ t('admin.profit.currentUserBalance') }}</div>
-              <div class="mt-1 text-2xl font-bold text-sky-600 dark:text-sky-400">${{ fmt(currentUserBalance) }}</div>
+              <div class="mt-1 text-2xl font-bold text-sky-600 dark:text-sky-400">{{ fmt(currentUserBalance) }}</div>
             </div>
           </section>
 
@@ -432,13 +432,13 @@ const chartOptions = computed<ChartOptions<'bar'>>(() => {
               .filter((ds) => !ds.hidden)
               .reduce((sum, ds) => sum + (Number(ds.data[ctx.dataIndex]) || 0), 0)
             const pct = stacked !== 0 ? Math.round((raw / stacked) * 1000) / 10 : 0
-            const money = `$${raw.toFixed(2)}`
+            const money = `${raw.toFixed(2)}`
             return `${ctx.dataset.label}: ${money} (${t('admin.profit.trendShare', { pct })})`
           },
           footer(items: TooltipItem<'bar'>[]) {
             if (!items.length) return ''
             const total = items.reduce((sum, it) => sum + (Number(it.raw) || 0), 0)
-            return `Σ $${total.toFixed(2)}`
+            return `Σ ${total.toFixed(2)}`
           }
         }
       }
@@ -456,7 +456,7 @@ const chartOptions = computed<ChartOptions<'bar'>>(() => {
           callback: (value) => {
             const n = Number(value)
             if (Number.isNaN(n)) return value
-            return n >= 1000 || n <= -1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n}`
+            return n >= 1000 || n <= -1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`
           }
         },
         grid: { color: grid }

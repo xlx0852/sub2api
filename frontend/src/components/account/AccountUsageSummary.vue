@@ -48,7 +48,7 @@
           {{ formatCompactNumber(presentation.today.tokens) }}
         </span>
         <span class="rounded bg-amber-50 px-1.5 py-0.5 font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
-          A ${{ presentation.today.cost.toFixed(2) }}
+          A {{ presentation.today.cost.toFixed(2) }}
         </span>
       </div>
 
@@ -60,7 +60,7 @@
       <div v-if="presentation.today && primaryWindows.length" class="flex items-center gap-2 text-[9px] leading-3 text-gray-400 dark:text-gray-500 tabular-nums">
         <span>{{ formatCompactNumber(presentation.today.requests, { allowBillions: false }) }} req</span>
         <span>{{ formatCompactNumber(presentation.today.tokens) }}</span>
-        <span>A ${{ presentation.today.cost.toFixed(2) }}</span>
+        <span>A {{ presentation.today.cost.toFixed(2) }}</span>
       </div>
     </div>
   </button>

@@ -78,7 +78,8 @@ import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import { useClipboard } from '@/composables/useClipboard'
 import { getPublicPricing, type PublicPricingModel } from '@/api/publicPricing'
 import { BILLING_MODE_IMAGE, BILLING_MODE_TOKEN } from '@/constants/channel'
-import { formatScaled } from '@/utils/pricing'
+import { formatScaledAmount } from '@/utils/pricing'
+import { pricingCurrencySymbol } from '@/utils/usagePricing'
 
 const { t, locale } = useI18n()
 const { copyToClipboard } = useClipboard()
@@ -89,8 +90,8 @@ const errorMessage = ref('')
 const query = ref('')
 const selectedPlatform = ref('all')
 
-function displayPrice(value: number | null | undefined, scale = 1_000_000) {
-  return value == null ? '-' : formatScaled(value, scale)
+function displayPrice(value: number | null | undefined, currency: string | null | undefined, scale = 1_000_000) {
+  return value == null ? '-' : `${pricingCurrencySymbol(currency)}${formatScaledAmount(value, scale)}`
 }
 
 const rows = computed(() => models.value.map((model) => {
@@ -99,11 +100,11 @@ const rows = computed(() => models.value.map((model) => {
   const unit = perToken ? t('availableChannels.pricing.unitPerMillion') : t('availableChannels.pricing.unitPerRequest')
   const prices = perToken
     ? [
-        { label: t('availableChannels.pricing.inputPrice'), value: displayPrice(pricing?.input_price) },
-        { label: t('availableChannels.pricing.outputPrice'), value: displayPrice(pricing?.output_price) },
-        { label: t('availableChannels.pricing.cacheReadPrice'), value: displayPrice(pricing?.cache_read_price) },
+        { label: t('availableChannels.pricing.inputPrice'), value: displayPrice(pricing?.input_price, pricing?.currency) },
+        { label: t('availableChannels.pricing.outputPrice'), value: displayPrice(pricing?.output_price, pricing?.currency) },
+        { label: t('availableChannels.pricing.cacheReadPrice'), value: displayPrice(pricing?.cache_read_price, pricing?.currency) },
       ]
-    : [{ label: pricing?.billing_mode === BILLING_MODE_IMAGE ? t('availableChannels.pricing.imageOutputPrice') : t('availableChannels.pricing.perRequestPrice'), value: displayPrice(pricing?.image_output_price ?? pricing?.per_request_price, 1) }]
+    : [{ label: pricing?.billing_mode === BILLING_MODE_IMAGE ? t('availableChannels.pricing.imageOutputPrice') : t('availableChannels.pricing.perRequestPrice'), value: displayPrice(pricing?.image_output_price ?? pricing?.per_request_price, pricing?.currency, 1) }]
   return { key: `${model.platform}::${model.name}`, name: model.name, displayName: model.display_name || model.name, platform: model.platform, prices, unit }
 }))
 

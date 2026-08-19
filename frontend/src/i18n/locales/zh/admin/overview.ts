@@ -947,7 +947,7 @@ export default {
         openPolicyLibrary: '打开分组售价配置',
         sharedWith: '该策略同时绑定：{names}',
         modelPreview: '模型售价预览',
-        unitHint: '单位 $ / 1M tokens；实扣 = 售价 × 分组倍率',
+		unitHint: '模型基础价单位为 $ 或 ¥ / 1M tokens；实扣数值 = 售价 × 分组倍率',
         noModelOverrides: '策略已绑定，但尚未配置模型售价条目（命中时仍回退官方）。',
         noPolicyModels: '未绑定策略，无售价覆盖条目。',
         colModel: '模型',

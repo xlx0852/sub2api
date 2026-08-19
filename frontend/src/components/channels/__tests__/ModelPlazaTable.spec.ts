@@ -43,4 +43,20 @@ describe('ModelPlazaTable', () => {
     expect(wrapper.text()).not.toContain('内部渠道')
     expect(wrapper.text()).not.toContain('availableChannels.columns.channels')
   })
+
+  it('根据定价币种展示人民币符号，缺失币种默认美元', () => {
+    const base = { billing_mode: 'token' as const, input_price: 0.000003, output_price: 0.000009, cache_read_price: null, cache_write_price: null, image_output_price: null, per_request_price: null, intervals: [] }
+    const makeOffer = (id: number, pricing: typeof base & { currency?: 'USD' | 'CNY' }) => ({ id, name: `offer-${id}`, platform: 'deepseek', subscription_type: 'standard', channel_name: '', channel_description: '', rate_multiplier: 1, peak_rate_enabled: false, peak_start: '', peak_end: '', peak_rate_multiplier: 1, is_exclusive: false, base_pricing: pricing, effective_pricing: pricing })
+    const cnyOffer = makeOffer(1, { ...base, currency: 'CNY' })
+    const legacyOffer = makeOffer(2, base)
+    const wrapper = mount(ModelPlazaTable, {
+      props: { loading: false, emptyLabel: 'empty', rows: [
+        { key: 'deepseek:cny', name: 'cny', display_name: 'CNY model', platform: 'deepseek', tags: [], offers: [cnyOffer], best_offer: cnyOffer },
+        { key: 'openai:legacy', name: 'legacy', display_name: 'Legacy model', platform: 'openai', tags: [], offers: [legacyOffer], best_offer: legacyOffer },
+      ] },
+      global: { stubs: { Icon: true, ModelIcon: true, PlatformIcon: true } },
+    })
+    expect(wrapper.text()).toContain('¥3')
+    expect(wrapper.text()).toContain('$3')
+  })
 })

@@ -4,6 +4,7 @@ import { perTokenToMTok, toNullableNumber } from './types'
 
 export type OfficialTokenPricing = {
   found: boolean
+  currency?: 'USD' | 'CNY'
   input_price?: number | null
   output_price?: number | null
   cache_write_price?: number | null
@@ -12,6 +13,7 @@ export type OfficialTokenPricing = {
 }
 
 export type TokenPriceFields = {
+  currency?: 'USD' | 'CNY'
   input_price: number | string | null
   output_price: number | string | null
   cache_write_price: number | string | null
@@ -40,25 +42,27 @@ export function hasAnyTokenPrice(entry: Pick<PricingFormEntry, (typeof TOKEN_PRI
 
 /** 折叠卡片/列表用的价格摘要（已是 $/MTok 表单值） */
 export function formatTokenPriceSummary(
-  entry: Pick<PricingFormEntry, (typeof TOKEN_PRICE_KEYS)[number] | 'billing_mode' | 'per_request_price'>,
+	entry: Pick<PricingFormEntry, (typeof TOKEN_PRICE_KEYS)[number] | 'billing_mode' | 'per_request_price' | 'currency'>,
   emptyLabel = '回退官方',
 ): string {
+	const symbol = entry.currency === 'CNY' ? '¥' : '$'
   if (entry.billing_mode === 'per_request' || entry.billing_mode === 'image') {
     const price = toNullableNumber(entry.per_request_price)
-    return price == null ? emptyLabel : `$${trimNum(price)} / 次`
+    return price == null ? emptyLabel : `${symbol}${trimNum(price)} / 次`
   }
   const input = toNullableNumber(entry.input_price)
   const output = toNullableNumber(entry.output_price)
   if (input == null && output == null) return emptyLabel
   const parts: string[] = []
-  if (input != null) parts.push(`in $${trimNum(input)}`)
-  if (output != null) parts.push(`out $${trimNum(output)}`)
+  if (input != null) parts.push(`in ${symbol}${trimNum(input)}`)
+  if (output != null) parts.push(`out ${symbol}${trimNum(output)}`)
   return `${parts.join(' / ')} / MTok`
 }
 
 export function officialPricingToFormMTok(official: OfficialTokenPricing): TokenPriceFields | null {
   if (!official.found) return null
   return {
+		currency: official.currency === 'CNY' ? 'CNY' : 'USD',
     input_price: perTokenToMTok(official.input_price ?? null),
     output_price: perTokenToMTok(official.output_price ?? null),
     cache_write_price: perTokenToMTok(official.cache_write_price ?? null),
@@ -136,6 +140,7 @@ export function summarizeChannelPricing(
     }
     const formLike = {
       billing_mode: rule.billing_mode,
+		currency: rule.currency === 'CNY' ? 'CNY' as const : 'USD' as const,
       input_price: perTokenToMTok(rule.input_price),
       output_price: perTokenToMTok(rule.output_price),
       cache_write_price: perTokenToMTok(rule.cache_write_price),

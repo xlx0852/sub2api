@@ -6,6 +6,8 @@ import (
 	"math"
 	"sort"
 	"strings"
+
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 )
 
 // Sell price source constants for admin pricing summary.
@@ -32,12 +34,15 @@ type GroupSellPriceSource struct {
 
 // GroupPricingModelPreview is one model row in the group pricing summary.
 type GroupPricingModelPreview struct {
-	Model          string   `json:"model"`
-	BillingMode    string   `json:"billing_mode"`
-	OfficialInput  *float64 `json:"official_input"`  // USD / 1M tokens (token mode)
-	OfficialOutput *float64 `json:"official_output"` // USD / 1M tokens
-	SellInput      *float64 `json:"sell_input"`
-	SellOutput     *float64 `json:"sell_output"`
+	Model             string   `json:"model"`
+	BillingMode       string   `json:"billing_mode"`
+	OfficialCurrency  string   `json:"official_currency"`
+	SellCurrency      string   `json:"sell_currency"`
+	EffectiveCurrency string   `json:"effective_currency"`
+	OfficialInput     *float64 `json:"official_input"`  // source currency / 1M tokens (token mode)
+	OfficialOutput    *float64 `json:"official_output"` // source currency / 1M tokens
+	SellInput         *float64 `json:"sell_input"`
+	SellOutput        *float64 `json:"sell_output"`
 	// Source for this model: official | policy
 	Source string `json:"source"`
 	// Effective = sell unit × group rate (what user is charged per 1M before cache etc.)
@@ -420,14 +425,18 @@ func buildModelPreviews(policy *Channel, group *Group, billing *BillingService, 
 			seen[key] = struct{}{}
 
 			p := GroupPricingModelPreview{
-				Model:       model,
-				BillingMode: mode,
-				Source:      SellPriceSourceOfficial,
+				Model:             model,
+				BillingMode:       mode,
+				Source:            SellPriceSourceOfficial,
+				OfficialCurrency:  string(domain.PricingCurrencyUSD),
+				SellCurrency:      string(domain.NormalizePricingCurrency(string(entry.Currency))),
+				EffectiveCurrency: string(domain.PricingCurrencyUSD),
 			}
 
 			// Official
 			if billing != nil {
 				if mp, err := billing.GetModelPricing(model); err == nil && mp != nil {
+					p.OfficialCurrency = string(domain.NormalizePricingCurrency(string(mp.Currency)))
 					p.OfficialInput = floatPtr(mp.InputPricePerToken * 1_000_000)
 					p.OfficialOutput = floatPtr(mp.OutputPricePerToken * 1_000_000)
 				}
@@ -443,6 +452,9 @@ func buildModelPreviews(policy *Channel, group *Group, billing *BillingService, 
 
 			if policyEffective && (entry.InputPrice != nil || entry.OutputPrice != nil || len(entry.Intervals) > 0 || entry.PerRequestPrice != nil) {
 				p.Source = SellPriceSourcePolicy
+				p.EffectiveCurrency = p.SellCurrency
+			} else {
+				p.EffectiveCurrency = p.OfficialCurrency
 			}
 
 			// Effective unit for user = sell (or official if sell empty) × rate

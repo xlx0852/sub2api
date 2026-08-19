@@ -11,30 +11,32 @@ import (
 
 	appbilling "github.com/Wei-Shaw/sub2api/internal/app/billing"
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 )
 
 // ModelPricing 模型价格配置（per-token价格，与LiteLLM格式一致）
 type ModelPricing struct {
-	InputPricePerToken                 float64 // 每token输入价格 (USD)
-	InputPricePerTokenPriority         float64 // priority service tier 下每token输入价格 (USD)
-	ImageInputPricePerToken            float64 // 图片输入 token 价格 (USD)，用于多模态 embedding 等图文不同价场景；为 0 时回退到 InputPricePerToken
-	OutputPricePerToken                float64 // 每token输出价格 (USD)
-	OutputPricePerTokenPriority        float64 // priority service tier 下每token输出价格 (USD)
-	CacheCreationPricePerToken         float64 // 缓存创建每token价格 (USD)
-	CacheCreationPricePerTokenPriority float64 // priority service tier 下缓存创建每token价格 (USD)
-	CacheCreationPriceExplicit         bool    // 是否由渠道/区间定价显式设定（为 true 时即使 == 0 也不回退）
-	CacheReadPricePerToken             float64 // 缓存读取每token价格 (USD)
-	CacheReadPricePerTokenPriority     float64 // priority service tier 下缓存读取每token价格 (USD)
-	CacheCreation5mPrice               float64 // 5分钟缓存创建每token价格 (USD)
-	CacheCreation1hPrice               float64 // 1小时缓存创建每token价格 (USD)
-	SupportsCacheBreakdown             bool    // 是否支持详细的缓存分类
-	LongContextInputThreshold          int     // 超过阈值后按整次会话提升输入价格
-	LongContextInputMultiplier         float64 // 长上下文整次会话输入倍率
-	LongContextOutputMultiplier        float64 // 长上下文整次会话输出倍率
-	ImageOutputPricePerToken           float64 // 图片输出 token 价格 (USD)
-	ImageOutputPriceExplicit           bool    // 是否由渠道定价显式设定（为 true 时即使 == 0 也不回退）
+	Currency                           domain.PricingCurrency // 基础价格币种，仅用于快照与展示；不自动换汇
+	InputPricePerToken                 float64                // 每token输入价格
+	InputPricePerTokenPriority         float64                // priority service tier 下每token输入价格 (USD)
+	ImageInputPricePerToken            float64                // 图片输入 token 价格 (USD)，用于多模态 embedding 等图文不同价场景；为 0 时回退到 InputPricePerToken
+	OutputPricePerToken                float64                // 每token输出价格 (USD)
+	OutputPricePerTokenPriority        float64                // priority service tier 下每token输出价格 (USD)
+	CacheCreationPricePerToken         float64                // 缓存创建每token价格 (USD)
+	CacheCreationPricePerTokenPriority float64                // priority service tier 下缓存创建每token价格 (USD)
+	CacheCreationPriceExplicit         bool                   // 是否由渠道/区间定价显式设定（为 true 时即使 == 0 也不回退）
+	CacheReadPricePerToken             float64                // 缓存读取每token价格 (USD)
+	CacheReadPricePerTokenPriority     float64                // priority service tier 下缓存读取每token价格 (USD)
+	CacheCreation5mPrice               float64                // 5分钟缓存创建每token价格 (USD)
+	CacheCreation1hPrice               float64                // 1小时缓存创建每token价格 (USD)
+	SupportsCacheBreakdown             bool                   // 是否支持详细的缓存分类
+	LongContextInputThreshold          int                    // 超过阈值后按整次会话提升输入价格
+	LongContextInputMultiplier         float64                // 长上下文整次会话输入倍率
+	LongContextOutputMultiplier        float64                // 长上下文整次会话输出倍率
+	ImageOutputPricePerToken           float64                // 图片输出 token 价格 (USD)
+	ImageOutputPriceExplicit           bool                   // 是否由渠道定价显式设定（为 true 时即使 == 0 也不回退）
 }
 
 const (
@@ -91,18 +93,19 @@ func applyDeepSeekOfficialPeakPricing(model string, pricing *ModelPricing) *Mode
 	}
 
 	cloned := *pricing
+	cloned.Currency = domain.PricingCurrencyCNY
 	normalized := strings.ToLower(strings.TrimSpace(model))
 	if strings.Contains(normalized, "deepseek-v4-pro") {
-		cloned.InputPricePerToken = 1.32e-6
-		cloned.OutputPricePerToken = 3.96e-6
-		cloned.CacheCreationPricePerToken = 1.32e-6
-		cloned.CacheReadPricePerToken = 0.044e-6
+		cloned.InputPricePerToken = 9.0e-6
+		cloned.OutputPricePerToken = 27.0e-6
+		cloned.CacheCreationPricePerToken = 9.0e-6
+		cloned.CacheReadPricePerToken = 0.30e-6
 	} else {
 		// deepseek-chat / deepseek-reasoner are official aliases of V4 Flash.
-		cloned.InputPricePerToken = 0.44e-6
-		cloned.OutputPricePerToken = 1.32e-6
-		cloned.CacheCreationPricePerToken = 0.44e-6
-		cloned.CacheReadPricePerToken = 0.014e-6
+		cloned.InputPricePerToken = 3.0e-6
+		cloned.OutputPricePerToken = 9.0e-6
+		cloned.CacheCreationPricePerToken = 3.0e-6
+		cloned.CacheReadPricePerToken = 0.10e-6
 	}
 	return &cloned
 }
@@ -177,6 +180,7 @@ func (s *BillingService) initFallbackPricing() {
 
 func priceEntryToModelPricing(e modelcatalog.PriceEntry) *ModelPricing {
 	return &ModelPricing{
+		Currency:                       domain.NormalizePricingCurrency(e.Currency),
 		InputPricePerToken:             e.InputCostPerToken,
 		InputPricePerTokenPriority:     e.InputCostPerTokenPriority,
 		ImageInputPricePerToken:        e.ImageInputCostPerToken,
@@ -426,6 +430,7 @@ func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
 			price1h := litellmPricing.CacheCreationInputTokenCostAbove1hr
 			enableBreakdown := price1h > 0 && price1h > price5m
 			pricing := s.applyModelSpecificPricingPolicy(model, &ModelPricing{
+				Currency:                           domain.NormalizePricingCurrency(litellmPricing.Currency),
 				InputPricePerToken:                 litellmPricing.InputCostPerToken,
 				InputPricePerTokenPriority:         litellmPricing.InputCostPerTokenPriority,
 				OutputPricePerToken:                litellmPricing.OutputCostPerToken,
@@ -474,6 +479,7 @@ func (s *BillingService) GetModelPricingWithChannel(model string, channelPricing
 	// 防止修改 fallbackPrices 中的共享指针
 	cloned := *pricing
 	pricing = &cloned
+	pricing.Currency = domain.NormalizePricingCurrency(string(channelPricing.Currency))
 	if channelPricing.InputPrice != nil {
 		pricing.InputPricePerToken = *channelPricing.InputPrice
 		pricing.InputPricePerTokenPriority = *channelPricing.InputPrice
@@ -556,6 +562,7 @@ func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, 
 		breakdown, err = s.calculateTokenCost(resolved, input)
 	}
 	if err == nil && breakdown != nil {
+		breakdown.PricingCurrency = domain.NormalizePricingCurrency(string(resolved.Currency))
 		breakdown.BillingMode = string(resolved.Mode)
 		if breakdown.BillingMode == "" {
 			breakdown.BillingMode = string(BillingModeToken)
@@ -635,7 +642,7 @@ func (s *BillingService) computeTokenBreakdown(
 		cacheCreationMultiplier = pricing.LongContextInputMultiplier
 	}
 
-	bd := &CostBreakdown{}
+	bd := &CostBreakdown{PricingCurrency: domain.NormalizePricingCurrency(string(pricing.Currency))}
 	// 分离图片输入 token 与文本输入 token（多模态 embedding 等图文不同价场景）。
 	// ImageInputTokens 为 0 时（绝大多数 chat/vision 流量）走原始单价路径，行为不变。
 	if tokens.ImageInputTokens > 0 {
@@ -732,8 +739,9 @@ func (s *BillingService) calculatePerRequestCost(resolved *ResolvedPricing, inpu
 	actualCost := totalCost * input.RateMultiplier
 
 	return &CostBreakdown{
-		TotalCost:  totalCost,
-		ActualCost: actualCost,
+		PricingCurrency: domain.NormalizePricingCurrency(string(resolved.Currency)),
+		TotalCost:       totalCost,
+		ActualCost:      actualCost,
 	}, nil
 }
 
@@ -912,6 +920,7 @@ func (s *BillingService) CalculateCostWithLongContext(model string, tokens Usage
 
 	// 合并成本
 	return &CostBreakdown{
+		PricingCurrency:   inRangeCost.PricingCurrency,
 		InputCost:         inRangeCost.InputCost + outRangeCost.InputCost,
 		OutputCost:        inRangeCost.OutputCost,
 		ImageOutputCost:   inRangeCost.ImageOutputCost,
@@ -1032,9 +1041,10 @@ func (s *BillingService) CalculateImageCost(model string, imageSize string, imag
 	actualCost := totalCost * rateMultiplier
 
 	return &CostBreakdown{
-		TotalCost:   totalCost,
-		ActualCost:  actualCost,
-		BillingMode: string(BillingModeImage),
+		PricingCurrency: domain.PricingCurrencyUSD,
+		TotalCost:       totalCost,
+		ActualCost:      actualCost,
+		BillingMode:     string(BillingModeImage),
 	}
 }
 
@@ -1061,9 +1071,10 @@ func (s *BillingService) CalculateVideoCost(model string, resolution string, vid
 	actualCost := totalCost * rateMultiplier
 
 	return &CostBreakdown{
-		TotalCost:   totalCost,
-		ActualCost:  actualCost,
-		BillingMode: string(BillingModeVideo),
+		PricingCurrency: domain.PricingCurrencyUSD,
+		TotalCost:       totalCost,
+		ActualCost:      actualCost,
+		BillingMode:     string(BillingModeVideo),
 	}
 }
 

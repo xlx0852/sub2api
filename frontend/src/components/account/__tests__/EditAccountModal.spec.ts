@@ -291,6 +291,38 @@ function mountModal(account = buildAccount()) {
 }
 
 describe('EditAccountModal', () => {
+  it('keeps comprehensive cost multiplier operator-controlled and removes legacy auto-sync', async () => {
+    const account = buildAccount()
+    account.rate_multiplier = 7.1
+    account.extra = {
+      upstream_billing_probe_enabled: true,
+      upstream_billing_rate_sync_enabled: true
+    }
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="edit-account-tab-cost"]').trigger('click')
+    const input = wrapper.get<HTMLInputElement>('[data-testid="edit-account-rate-multiplier"]')
+    expect(input.attributes('disabled')).toBeUndefined()
+    expect(input.element.value).toBe('7.1')
+    const preview = wrapper.get('[data-testid="account-cost-preview"]')
+    expect(preview.text()).toContain('1.0000')
+    expect(preview.text()).toContain('7.1000')
+    expect(preview.text()).toContain('-6.1000')
+    expect(preview.text()).not.toContain('$')
+    expect(preview.text()).not.toContain('¥')
+
+    await input.setValue('7.25')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.rate_multiplier).toBe(7.25)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('upstream_billing_rate_sync_enabled')
+  })
+
   it('reopening the same account rehydrates the OpenAI whitelist from props', async () => {
     const account = buildAccount()
     updateAccountMock.mockReset()

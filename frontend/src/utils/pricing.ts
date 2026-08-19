@@ -9,5 +9,10 @@
  */
 export function formatScaled(value: number | null, scale: number): string {
   if (value == null) return '-'
-  return `$${(value * scale).toPrecision(10).replace(/\.?0+$/, '')}`
+  return `$${formatScaledAmount(value, scale)}`
+}
+
+/** Currency-neutral numeric portion used when the caller owns the symbol. */
+export function formatScaledAmount(value: number, scale: number): string {
+  return (value * scale).toPrecision(10).replace(/\.?0+$/, '')
 }

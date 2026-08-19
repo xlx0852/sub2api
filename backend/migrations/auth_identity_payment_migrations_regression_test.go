@@ -16,6 +16,21 @@ func TestMigration112UsesIdempotentAddColumn(t *testing.T) {
 	require.NotContains(t, sql, "ADD COLUMN provider_key VARCHAR(30);")
 }
 
+func TestMigration199AddsCurrencyMetadataWithoutRewritingMoney(t *testing.T) {
+	content, err := FS.ReadFile("199_mixed_currency_pricing.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS currency VARCHAR(3) NOT NULL DEFAULT 'USD'")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS pricing_currency VARCHAR(3)")
+	require.Contains(t, sql, "extra - 'upstream_billing_rate_sync_enabled'")
+	require.NotContains(t, sql, "UPDATE users")
+	require.NotContains(t, sql, "UPDATE usage_logs")
+	require.NotContains(t, sql, "rate_multiplier =")
+	require.NotContains(t, sql, "balance =")
+	require.NotContains(t, sql, "quota =")
+}
+
 func TestMigration118DoesNotForceOverwriteAuthSourceGrantDefaults(t *testing.T) {
 	content, err := FS.ReadFile("118_wechat_dual_mode_and_auth_source_defaults.sql")
 	require.NoError(t, err)

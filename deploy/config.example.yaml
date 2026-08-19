@@ -1020,6 +1020,8 @@ rate_limit:
 # 定价数据源（可选）
 # =============================================================================
 pricing:
+  # 生产使用发布物中固定价格时可关闭，防止远程价格覆盖本地币种和数值。
+  remote_enabled: true
   # URL to fetch model pricing data (own model-price-repo)
   # 获取模型定价数据的 URL（自有 model-price-repo）
   remote_url: "https://raw.githubusercontent.com/xlx0852/model-price-repo/main/model_prices_and_context_window.json"

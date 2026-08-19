@@ -37859,6 +37859,7 @@ type UsageLogMutation struct {
 	addactual_cost              *float64
 	rate_multiplier             *float64
 	addrate_multiplier          *float64
+	pricing_currency            *string
 	account_rate_multiplier     *float64
 	addaccount_rate_multiplier  *float64
 	billing_type                *int8
@@ -39328,6 +39329,55 @@ func (m *UsageLogMutation) AddedRateMultiplier() (r float64, exists bool) {
 func (m *UsageLogMutation) ResetRateMultiplier() {
 	m.rate_multiplier = nil
 	m.addrate_multiplier = nil
+}
+
+// SetPricingCurrency sets the "pricing_currency" field.
+func (m *UsageLogMutation) SetPricingCurrency(s string) {
+	m.pricing_currency = &s
+}
+
+// PricingCurrency returns the value of the "pricing_currency" field in the mutation.
+func (m *UsageLogMutation) PricingCurrency() (r string, exists bool) {
+	v := m.pricing_currency
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPricingCurrency returns the old "pricing_currency" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldPricingCurrency(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPricingCurrency is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPricingCurrency requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPricingCurrency: %w", err)
+	}
+	return oldValue.PricingCurrency, nil
+}
+
+// ClearPricingCurrency clears the value of the "pricing_currency" field.
+func (m *UsageLogMutation) ClearPricingCurrency() {
+	m.pricing_currency = nil
+	m.clearedFields[usagelog.FieldPricingCurrency] = struct{}{}
+}
+
+// PricingCurrencyCleared returns if the "pricing_currency" field was cleared in this mutation.
+func (m *UsageLogMutation) PricingCurrencyCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldPricingCurrency]
+	return ok
+}
+
+// ResetPricingCurrency resets all changes to the "pricing_currency" field.
+func (m *UsageLogMutation) ResetPricingCurrency() {
+	m.pricing_currency = nil
+	delete(m.clearedFields, usagelog.FieldPricingCurrency)
 }
 
 // SetAccountRateMultiplier sets the "account_rate_multiplier" field.
@@ -40846,7 +40896,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 50)
+	fields := make([]string, 0, 51)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -40924,6 +40974,9 @@ func (m *UsageLogMutation) Fields() []string {
 	}
 	if m.rate_multiplier != nil {
 		fields = append(fields, usagelog.FieldRateMultiplier)
+	}
+	if m.pricing_currency != nil {
+		fields = append(fields, usagelog.FieldPricingCurrency)
 	}
 	if m.account_rate_multiplier != nil {
 		fields = append(fields, usagelog.FieldAccountRateMultiplier)
@@ -41057,6 +41110,8 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.ActualCost()
 	case usagelog.FieldRateMultiplier:
 		return m.RateMultiplier()
+	case usagelog.FieldPricingCurrency:
+		return m.PricingCurrency()
 	case usagelog.FieldAccountRateMultiplier:
 		return m.AccountRateMultiplier()
 	case usagelog.FieldBillingType:
@@ -41166,6 +41221,8 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldActualCost(ctx)
 	case usagelog.FieldRateMultiplier:
 		return m.OldRateMultiplier(ctx)
+	case usagelog.FieldPricingCurrency:
+		return m.OldPricingCurrency(ctx)
 	case usagelog.FieldAccountRateMultiplier:
 		return m.OldAccountRateMultiplier(ctx)
 	case usagelog.FieldBillingType:
@@ -41404,6 +41461,13 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRateMultiplier(v)
+		return nil
+	case usagelog.FieldPricingCurrency:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPricingCurrency(v)
 		return nil
 	case usagelog.FieldAccountRateMultiplier:
 		v, ok := value.(float64)
@@ -41942,6 +42006,9 @@ func (m *UsageLogMutation) ClearedFields() []string {
 	if m.FieldCleared(usagelog.FieldSubscriptionID) {
 		fields = append(fields, usagelog.FieldSubscriptionID)
 	}
+	if m.FieldCleared(usagelog.FieldPricingCurrency) {
+		fields = append(fields, usagelog.FieldPricingCurrency)
+	}
 	if m.FieldCleared(usagelog.FieldAccountRateMultiplier) {
 		fields = append(fields, usagelog.FieldAccountRateMultiplier)
 	}
@@ -42033,6 +42100,9 @@ func (m *UsageLogMutation) ClearField(name string) error {
 		return nil
 	case usagelog.FieldSubscriptionID:
 		m.ClearSubscriptionID()
+		return nil
+	case usagelog.FieldPricingCurrency:
+		m.ClearPricingCurrency()
 		return nil
 	case usagelog.FieldAccountRateMultiplier:
 		m.ClearAccountRateMultiplier()
@@ -42173,6 +42243,9 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldRateMultiplier:
 		m.ResetRateMultiplier()
+		return nil
+	case usagelog.FieldPricingCurrency:
+		m.ResetPricingCurrency()
 		return nil
 	case usagelog.FieldAccountRateMultiplier:
 		m.ResetAccountRateMultiplier()

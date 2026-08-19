@@ -3,7 +3,25 @@ export const TOKENS_PER_MILLION = 1_000_000
 interface TokenPriceFormatOptions {
   fractionDigits?: number
   withCurrencySymbol?: boolean
+  currency?: string | null
   emptyValue?: string
+}
+
+export function normalizePricingCurrency(value: string | null | undefined): 'USD' | 'CNY' {
+  return String(value || '').trim().toUpperCase() === 'CNY' ? 'CNY' : 'USD'
+}
+
+export function pricingCurrencySymbol(value: string | null | undefined): '$' | '¥' {
+  return normalizePricingCurrency(value) === 'CNY' ? '¥' : '$'
+}
+
+export function formatPricingAmount(
+  value: number | null | undefined,
+  currency: string | null | undefined,
+  fractionDigits = 6,
+): string {
+  const amount = typeof value === 'number' && Number.isFinite(value) ? value : 0
+  return `${pricingCurrencySymbol(currency)}${amount.toFixed(fractionDigits)}`
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -45,5 +63,7 @@ export function formatTokenPricePerMillion(
 
   const fractionDigits = options.fractionDigits ?? 4
   const formatted = pricePerMillion.toFixed(fractionDigits)
-  return options.withCurrencySymbol == false ? formatted : `$${formatted}`
+  return options.withCurrencySymbol == false
+    ? formatted
+    : `${pricingCurrencySymbol(options.currency)}${formatted}`
 }

@@ -66,7 +66,7 @@
               data-testid="drawer-revenue-segment"
             />
           </div>
-          <span class="text-right font-medium tabular-nums text-gray-800 dark:text-dark-100">${{ fmt(revenue) }}</span>
+          <span class="text-right font-medium tabular-nums text-gray-800 dark:text-dark-100">{{ fmt(revenue) }}</span>
         </div>
         <div class="grid grid-cols-[3.25rem_minmax(80px,1fr)_5.5rem] items-center gap-2 text-xs">
           <span class="text-gray-500 dark:text-dark-400">{{ primaryCostLabel }}</span>
@@ -80,7 +80,7 @@
               data-testid="drawer-cost-segment"
             />
           </div>
-          <span class="text-right font-medium tabular-nums text-gray-600 dark:text-dark-300">${{ fmt(cost) }}</span>
+          <span class="text-right font-medium tabular-nums text-gray-600 dark:text-dark-300">{{ fmt(cost) }}</span>
         </div>
       </div>
 
@@ -90,7 +90,7 @@
           class="mt-0.5 text-lg font-bold tabular-nums"
           :class="profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
         >
-          {{ profit >= 0 ? '+' : '-' }}${{ fmt(Math.abs(profit)) }}
+          {{ profit >= 0 ? '+' : '-' }}{{ fmt(Math.abs(profit)) }}
         </div>
         <div class="mt-0.5 text-xs font-medium tabular-nums" :class="profit < 0 ? 'text-red-500' : 'text-gray-500 dark:text-dark-300'">
           {{ marginLabel }}
@@ -143,10 +143,10 @@
                   class="text-xs font-bold tabular-nums"
                   :class="item.profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
                 >
-                  {{ item.profit >= 0 ? '+' : '-' }}${{ fmt(Math.abs(item.profit)) }}
+                  {{ item.profit >= 0 ? '+' : '-' }}{{ fmt(Math.abs(item.profit)) }}
                 </div>
                 <div class="text-[10px] tabular-nums text-gray-400">
-                  ${{ fmt(item.revenue) }} / ${{ fmt(item.cost) }}
+                  {{ fmt(item.revenue) }} / {{ fmt(item.cost) }}
                 </div>
               </div>
             </div>

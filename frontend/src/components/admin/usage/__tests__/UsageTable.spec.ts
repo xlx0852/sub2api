@@ -9,6 +9,7 @@ vi.mock('@/utils/ipGeoLookup', () => ipGeoMocks)
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
+import { createPinia, setActivePinia } from 'pinia'
 
 import UsageTable from '../UsageTable.vue'
 
@@ -115,6 +116,7 @@ const baseImageRow = {
 
 describe('admin UsageTable tooltip', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       x: 0,
       y: 0,
@@ -126,6 +128,39 @@ describe('admin UsageTable tooltip', () => {
       height: 20,
       toJSON: () => ({}),
     } as DOMRect)
+  })
+
+  it('uses CNY for base prices while user and account settlement stay unitless', async () => {
+    const row = {
+      request_id: 'req-admin-cny',
+      pricing_currency: 'CNY',
+      actual_cost: 1.2,
+      total_cost: 10,
+      account_rate_multiplier: 7.1,
+      rate_multiplier: 0.12,
+      input_cost: 3,
+      output_cost: 9,
+      cache_creation_cost: 0,
+      cache_read_cost: 0,
+      input_tokens: 1_000_000,
+      output_tokens: 1_000_000,
+    }
+    const wrapper = mount(UsageTable, {
+      props: { data: [row], loading: false, columns: [] },
+      global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
+    })
+
+    const tooltipTriggers = wrapper.findAll('.group.relative')
+    await tooltipTriggers[tooltipTriggers.length - 1].trigger('mouseenter')
+    await nextTick()
+
+    const text = wrapper.text()
+    expect(text).toContain('¥3.000000')
+    expect(text).toContain('¥3.0000 / 1M tokens')
+    expect(text).toContain('User billed1.200000')
+    expect(text).toContain('Account billed71.000000')
+    expect(text).not.toContain('User billed¥')
+    expect(text).not.toContain('Account billed¥')
   })
 
   it('shows service tier and billing breakdown in cost tooltip', async () => {
@@ -720,11 +755,11 @@ describe('admin UsageTable mobile-card layout', () => {
     })
 
     expect(wrapper.text()).toContain('gpt-5.6-luna')
-    expect(wrapper.text()).toContain('$0.001234')
+    expect(wrapper.text()).toContain('0.001234')
+    expect(wrapper.text()).not.toContain('$0.001234')
     expect(wrapper.text()).toContain('1,200')
     expect(wrapper.text()).toContain('340')
     expect(wrapper.text()).toContain('main-key')
     expect(wrapper.text()).toContain('default')
   })
 })
-

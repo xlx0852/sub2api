@@ -289,7 +289,7 @@ export default {
     actualCost: 'Actual',
     accountCost: 'Cost',
     userBilled: 'User billed',
-    accountBilled: 'Account billed',
+	accountBilled: 'Account cost',
     resetNow: 'Now',
     resetPending: 'Pending refresh',
     fullUtilizationEstimate: 'API list-price-equivalent estimate',
@@ -300,7 +300,7 @@ export default {
       medium: 'Medium confidence',
       high: 'High confidence'
     },
-    accountMultiplier: 'Account rate',
+	accountMultiplier: 'Comprehensive cost multiplier',
     avgDuration: 'Avg Duration',
     inSelectedRange: 'in selected range',
     perRequest: 'per request',

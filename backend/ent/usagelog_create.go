@@ -351,6 +351,20 @@ func (_c *UsageLogCreate) SetNillableRateMultiplier(v *float64) *UsageLogCreate 
 	return _c
 }
 
+// SetPricingCurrency sets the "pricing_currency" field.
+func (_c *UsageLogCreate) SetPricingCurrency(v string) *UsageLogCreate {
+	_c.mutation.SetPricingCurrency(v)
+	return _c
+}
+
+// SetNillablePricingCurrency sets the "pricing_currency" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillablePricingCurrency(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetPricingCurrency(*v)
+	}
+	return _c
+}
+
 // SetAccountRateMultiplier sets the "account_rate_multiplier" field.
 func (_c *UsageLogCreate) SetAccountRateMultiplier(v float64) *UsageLogCreate {
 	_c.mutation.SetAccountRateMultiplier(v)
@@ -908,6 +922,11 @@ func (_c *UsageLogCreate) check() error {
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		return &ValidationError{Name: "rate_multiplier", err: errors.New(`ent: missing required field "UsageLog.rate_multiplier"`)}
 	}
+	if v, ok := _c.mutation.PricingCurrency(); ok {
+		if err := usagelog.PricingCurrencyValidator(v); err != nil {
+			return &ValidationError{Name: "pricing_currency", err: fmt.Errorf(`ent: validator failed for field "UsageLog.pricing_currency": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.BillingType(); !ok {
 		return &ValidationError{Name: "billing_type", err: errors.New(`ent: missing required field "UsageLog.billing_type"`)}
 	}
@@ -1080,6 +1099,10 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
 		_node.RateMultiplier = value
+	}
+	if value, ok := _c.mutation.PricingCurrency(); ok {
+		_spec.SetField(usagelog.FieldPricingCurrency, field.TypeString, value)
+		_node.PricingCurrency = &value
 	}
 	if value, ok := _c.mutation.AccountRateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldAccountRateMultiplier, field.TypeFloat64, value)
@@ -1755,6 +1778,24 @@ func (u *UsageLogUpsert) UpdateRateMultiplier() *UsageLogUpsert {
 // AddRateMultiplier adds v to the "rate_multiplier" field.
 func (u *UsageLogUpsert) AddRateMultiplier(v float64) *UsageLogUpsert {
 	u.Add(usagelog.FieldRateMultiplier, v)
+	return u
+}
+
+// SetPricingCurrency sets the "pricing_currency" field.
+func (u *UsageLogUpsert) SetPricingCurrency(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldPricingCurrency, v)
+	return u
+}
+
+// UpdatePricingCurrency sets the "pricing_currency" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdatePricingCurrency() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldPricingCurrency)
+	return u
+}
+
+// ClearPricingCurrency clears the value of the "pricing_currency" field.
+func (u *UsageLogUpsert) ClearPricingCurrency() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldPricingCurrency)
 	return u
 }
 
@@ -2774,6 +2815,27 @@ func (u *UsageLogUpsertOne) AddRateMultiplier(v float64) *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) UpdateRateMultiplier() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetPricingCurrency sets the "pricing_currency" field.
+func (u *UsageLogUpsertOne) SetPricingCurrency(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetPricingCurrency(v)
+	})
+}
+
+// UpdatePricingCurrency sets the "pricing_currency" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdatePricingCurrency() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdatePricingCurrency()
+	})
+}
+
+// ClearPricingCurrency clears the value of the "pricing_currency" field.
+func (u *UsageLogUpsertOne) ClearPricingCurrency() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearPricingCurrency()
 	})
 }
 
@@ -4035,6 +4097,27 @@ func (u *UsageLogUpsertBulk) AddRateMultiplier(v float64) *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) UpdateRateMultiplier() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetPricingCurrency sets the "pricing_currency" field.
+func (u *UsageLogUpsertBulk) SetPricingCurrency(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetPricingCurrency(v)
+	})
+}
+
+// UpdatePricingCurrency sets the "pricing_currency" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdatePricingCurrency() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdatePricingCurrency()
+	})
+}
+
+// ClearPricingCurrency clears the value of the "pricing_currency" field.
+func (u *UsageLogUpsertBulk) ClearPricingCurrency() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearPricingCurrency()
 	})
 }
 

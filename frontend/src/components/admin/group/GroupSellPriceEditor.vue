@@ -231,10 +231,10 @@
                     >×{{ row.markup_n }}</span>
                   </td>
                   <td class="whitespace-nowrap px-3 py-2 text-gray-600 dark:text-gray-300">
-                    {{ formatPair(row.official_input, row.official_output) }}
+                    {{ formatPair(row.official_input, row.official_output, row.official_currency) }}
                   </td>
                   <td class="whitespace-nowrap px-3 py-2 text-gray-600 dark:text-gray-300">
-                    {{ formatPair(row.sell_input, row.sell_output) }}
+                    {{ formatPair(row.sell_input, row.sell_output, row.sell_currency) }}
                   </td>
                   <td class="px-3 py-2">
                     <span
@@ -253,7 +253,7 @@
                     </span>
                   </td>
                   <td class="whitespace-nowrap px-3 py-2 font-medium text-emerald-700 dark:text-emerald-300">
-                    {{ formatPair(row.effective_input, row.effective_output) }}
+                    {{ formatPair(row.effective_input, row.effective_output, row.effective_currency) }}
                   </td>
                 </tr>
               </tbody>
@@ -370,16 +370,17 @@ function formatRate(n: number | null | undefined) {
   return Number.isInteger(n) ? String(n) : String(n)
 }
 
-function formatPrice(v: number | null | undefined) {
+function formatPrice(v: number | null | undefined, currency: string | null | undefined = 'USD') {
   if (v == null || Number.isNaN(v)) return '—'
-  if (v === 0) return '$0'
-  if (v >= 1) return `$${v.toFixed(2)}`
-  if (v >= 0.01) return `$${v.toFixed(4)}`
-  return `$${v.toFixed(6)}`
+	const symbol = currency === 'CNY' ? '¥' : '$'
+  if (v === 0) return `${symbol}0`
+  if (v >= 1) return `${symbol}${v.toFixed(2)}`
+  if (v >= 0.01) return `${symbol}${v.toFixed(4)}`
+  return `${symbol}${v.toFixed(6)}`
 }
 
-function formatPair(input: number | null | undefined, output: number | null | undefined) {
-  return `${formatPrice(input)} / ${formatPrice(output)}`
+function formatPair(input: number | null | undefined, output: number | null | undefined, currency: string | null | undefined = 'USD') {
+  return `${formatPrice(input, currency)} / ${formatPrice(output, currency)}`
 }
 
 function pricingToForm(channel: Channel | null, platform: GroupPlatform): PricingFormEntry[] {
@@ -389,6 +390,7 @@ function pricingToForm(channel: Channel | null, platform: GroupPlatform): Pricin
     .map((entry) => ({
       models: [...(entry.models || [])],
       billing_mode: (entry.billing_mode || 'token') as PricingFormEntry['billing_mode'],
+		currency: entry.currency === 'CNY' ? 'CNY' : 'USD',
       input_price: perTokenToMTok(entry.input_price),
       output_price: perTokenToMTok(entry.output_price),
       cache_write_price: perTokenToMTok(entry.cache_write_price),
@@ -415,6 +417,7 @@ function formToModelPricing(platform: GroupPlatform): ChannelModelPricing[] {
     if (entry.models.length === 0) continue
     out.push({
       platform,
+		currency: entry.currency === 'CNY' ? 'CNY' : 'USD',
       models: entry.models,
       billing_mode: entry.billing_mode,
       input_price: mTokToPerToken(entry.input_price),
@@ -488,6 +491,7 @@ function addPricingEntry() {
   form.model_pricing.push({
     models: [],
     billing_mode: 'token',
+		currency: 'USD',
     input_price: null,
     output_price: null,
     cache_write_price: null,
@@ -530,6 +534,7 @@ async function syncLatestModels() {
         const entry: PricingFormEntry = {
           models: [model],
           billing_mode: 'token',
+			currency: official?.currency === 'CNY' ? 'CNY' : 'USD',
           input_price: null,
           output_price: null,
           cache_write_price: null,
@@ -553,6 +558,7 @@ async function syncLatestModels() {
         form.model_pricing.push({
           models: [model],
           billing_mode: 'token',
+			currency: 'USD',
           input_price: null,
           output_price: null,
           cache_write_price: null,

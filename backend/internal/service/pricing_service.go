@@ -1,7 +1,6 @@
 package service
 
 import (
-	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 	"go.uber.org/zap"
 )
@@ -54,8 +54,8 @@ var (
 		SupportsPromptCaching:               true,
 	}
 	openAIGPT56TerraFallbackPricing = &LiteLLMModelPricing{
-		InputCostPerToken:                   2e-06,  // $2.00 per MTok (2026-07-30)
-		InputCostPerTokenPriority:           4e-06,  // $4.00 per MTok
+		InputCostPerToken:                   2e-06,   // $2.00 per MTok (2026-07-30)
+		InputCostPerTokenPriority:           4e-06,   // $4.00 per MTok
 		OutputCostPerToken:                  1.2e-05, // $12.00 per MTok
 		OutputCostPerTokenPriority:          2.4e-05, // $24.00 per MTok
 		CacheCreationInputTokenCost:         2.5e-06,
@@ -72,8 +72,8 @@ var (
 	}
 	openAIGPT56LunaFallbackPricing = &LiteLLMModelPricing{
 		// 官方基准价 $0.20/$1.20 per MTok；售卖加价走 channel_model_pricing，勿抬高此处以免污染利润成本
-		InputCostPerToken:                   2e-07,  // $0.20 per MTok
-		InputCostPerTokenPriority:           4e-07,  // $0.40 per MTok
+		InputCostPerToken:                   2e-07,   // $0.20 per MTok
+		InputCostPerTokenPriority:           4e-07,   // $0.40 per MTok
 		OutputCostPerToken:                  1.2e-06, // $1.20 per MTok
 		OutputCostPerTokenPriority:          2.4e-06, // $2.40 per MTok
 		CacheCreationInputTokenCost:         2.5e-07,
@@ -109,6 +109,7 @@ var (
 // LiteLLMModelPricing LiteLLM价格数据结构
 // 只保留我们需要的字段，使用指针来处理可能缺失的值
 type LiteLLMModelPricing struct {
+	Currency                            string  `json:"currency,omitempty"`
 	InputCostPerToken                   float64 `json:"input_cost_per_token"`
 	InputCostPerTokenPriority           float64 `json:"input_cost_per_token_priority"`
 	OutputCostPerToken                  float64 `json:"output_cost_per_token"`
@@ -139,6 +140,7 @@ type PricingRemoteClient = ports.PricingRemoteClient
 
 // LiteLLMRawEntry 用于解析原始JSON数据
 type LiteLLMRawEntry struct {
+	Currency                            *string  `json:"currency"`
 	InputCostPerToken                   *float64 `json:"input_cost_per_token"`
 	InputCostPerTokenPriority           *float64 `json:"input_cost_per_token_priority"`
 	OutputCostPerToken                  *float64 `json:"output_cost_per_token"`
@@ -218,6 +220,10 @@ func (s *PricingService) Stop() {
 
 // startUpdateScheduler 启动定时更新调度器
 func (s *PricingService) startUpdateScheduler() {
+	if s == nil || s.cfg == nil || !s.cfg.Pricing.RemoteEnabled {
+		logger.LegacyPrintf("service.pricing", "%s", "[Pricing] Remote update scheduler disabled")
+		return
+	}
 	// 定期检查哈希更新
 	hashInterval := time.Duration(s.cfg.Pricing.HashCheckIntervalMinutes) * time.Minute
 	if hashInterval < time.Minute {
@@ -259,6 +265,9 @@ func (s *PricingService) checkAndUpdatePricing() error {
 	if err := s.loadPricingData(pricingFile); err != nil {
 		logger.LegacyPrintf("service.pricing", "[Pricing] Failed to load local file, downloading: %v", err)
 		return s.downloadPricingData()
+	}
+	if !s.cfg.Pricing.RemoteEnabled {
+		return nil
 	}
 
 	// 如果配置了哈希URL，通过远程哈希检查是否有更新
@@ -442,11 +451,15 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 		}
 
 		pricing := &LiteLLMModelPricing{
+			Currency:              "USD",
 			LiteLLMProvider:       entry.LiteLLMProvider,
 			Mode:                  entry.Mode,
 			SupportsPromptCaching: entry.SupportsPromptCaching,
 			SupportsServiceTier:   entry.SupportsServiceTier,
 			TokenPricingAbsent:    entry.InputCostPerToken == nil && entry.OutputCostPerToken == nil,
+		}
+		if entry.Currency != nil {
+			pricing.Currency = strings.ToUpper(strings.TrimSpace(*entry.Currency))
 		}
 
 		if entry.InputCostPerToken != nil {

@@ -32,14 +32,15 @@ type ChannelModelPricing struct {
 	ID               int64
 	ChannelID        int64
 	Platform         string            // 所属平台（anthropic/openai/gemini/...）
+	Currency         PricingCurrency   // 基础价格币种；缺失时兼容为 USD，不参与自动换汇
 	Models           []string          // 绑定的模型列表
 	BillingMode      BillingMode       // 计费模式
-	InputPrice       *float64          // 每 token 输入价格（USD）— 向后兼容 flat 定价
-	OutputPrice      *float64          // 每 token 输出价格（USD）
+	InputPrice       *float64          // 每 token 输入价格——币种由 Currency 定义
+	OutputPrice      *float64          // 每 token 输出价格——币种由 Currency 定义
 	CacheWritePrice  *float64          // 缓存写入价格
 	CacheReadPrice   *float64          // 缓存读取价格
 	ImageOutputPrice *float64          // 图片输出价格（向后兼容）
-	PerRequestPrice  *float64          // 默认按次计费价格（USD）
+	PerRequestPrice  *float64          // 默认按次计费价格——币种由 Currency 定义
 	Intervals        []PricingInterval // 区间定价列表
 	CreatedAt        time.Time
 	UpdatedAt        time.Time

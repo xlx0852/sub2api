@@ -190,11 +190,11 @@
                 <section v-if="isColumnVisible('usage')" class="grid grid-cols-2 gap-2">
                   <div class="rounded-md bg-black/[0.025] p-3 dark:bg-white/[0.04]">
                     <p class="text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.groups.usageToday') }}</p>
-                    <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">${{ formatCost(usageMap.get(row.id)?.today_cost ?? 0) }}</p>
+                    <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ formatCost(usageMap.get(row.id)?.today_cost ?? 0) }}</p>
                   </div>
                   <div class="rounded-md bg-black/[0.025] p-3 text-right dark:bg-white/[0.04]">
                     <p class="text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.groups.usageTotal') }}</p>
-                    <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">${{ formatCost(usageMap.get(row.id)?.total_cost ?? 0) }}</p>
+                    <p class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ formatCost(usageMap.get(row.id)?.total_cost ?? 0) }}</p>
                   </div>
                 </section>
               </div>
@@ -343,7 +343,7 @@
                   t("admin.groups.usageToday")
                 }}</span>
                 <span class="ml-1 font-medium text-gray-700 dark:text-gray-300"
-                  >${{
+                  >{{
                     formatCost(usageMap.get(row.id)?.today_cost ?? 0)
                   }}</span
                 >
@@ -353,7 +353,7 @@
                   t("admin.groups.usageTotal")
                 }}</span>
                 <span class="ml-1 font-medium text-gray-700 dark:text-gray-300"
-                  >${{
+                  >{{
                     formatCost(usageMap.get(row.id)?.total_cost ?? 0)
                   }}</span
                 >
@@ -4263,7 +4263,7 @@ const formatImagePricePreview = (value: number | string | null | undefined) => {
   if (!Number.isFinite(price) || price < 0) {
     return t("admin.groups.imagePricing.notConfigured");
   }
-  return `$${price.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`;
+  return `${price.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}`;
 };
 
 const formatVideoPricePreview = (
@@ -4276,7 +4276,7 @@ const formatVideoPricePreview = (
   if (!Number.isFinite(price) || price < 0) {
     return t(videoPricingI18nKey("notConfigured"));
   }
-  return `$${price.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}/s`;
+  return `${price.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")}/s`;
 };
 
 const buildImageFinalPricePreview = (form: ImagePricingFormState) => {

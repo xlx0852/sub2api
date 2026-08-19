@@ -33,26 +33,26 @@
               <div class="font-semibold">{{ t('admin.profit.banSettled') }}</div>
               <div class="mt-0.5">{{ t('admin.profit.terminatedCycleScope', { time: new Date(financialMetrics.terminatedAt).toLocaleString() }) }}</div>
               <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                <span>{{ t('admin.profit.receivedRefund') }} <strong>${{ formatCost(financialMetrics.refundTotal) }}</strong></span>
+                <span>{{ t('admin.profit.receivedRefund') }} <strong>{{ formatCost(financialMetrics.refundTotal) }}</strong></span>
                 <span>{{ t('admin.profit.recoveryProgress') }} <strong>{{ financialMetrics.recoveryProgress.toFixed(1) }}%</strong></span>
-                <span>{{ t('admin.profit.confirmedLoss') }} <strong>${{ formatCost(financialMetrics.loss) }}</strong></span>
+                <span>{{ t('admin.profit.confirmedLoss') }} <strong>{{ formatCost(financialMetrics.loss) }}</strong></span>
               </div>
             </div>
             <div class="grid grid-cols-3 gap-3">
               <div class="min-w-0">
                 <p class="text-[11px] text-gray-400 dark:text-dark-400">{{ financialMetrics.revenueLabel }}</p>
-                <p class="mt-1 truncate text-lg font-semibold text-gray-950 dark:text-white">${{ formatCost(financialMetrics.revenue) }}</p>
+                <p class="mt-1 truncate text-lg font-semibold text-gray-950 dark:text-white">{{ formatCost(financialMetrics.revenue) }}</p>
               </div>
               <div class="min-w-0">
                 <p class="text-[11px] text-gray-400 dark:text-dark-400">{{ financialMetrics.costLabel }}</p>
                 <p class="mt-1 truncate text-lg font-semibold text-gray-950 dark:text-white">
-                  {{ financialMetrics.cost == null ? '-' : `$${formatCost(financialMetrics.cost)}` }}
+                  {{ financialMetrics.cost == null ? '-' : `${formatCost(financialMetrics.cost)}` }}
                 </p>
               </div>
               <div class="min-w-0">
                 <p class="text-[11px] text-gray-400 dark:text-dark-400">{{ financialMetrics.profitLabel }}</p>
                 <p v-if="financialMetrics.profit != null" class="mt-1 truncate text-lg font-semibold" :class="financialMetrics.profit >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'">
-                  {{ financialMetrics.profit >= 0 ? '+' : '' }}${{ formatCost(financialMetrics.profit) }}
+                  {{ financialMetrics.profit >= 0 ? '+' : '' }}{{ formatCost(financialMetrics.profit) }}
                 </p>
                 <p v-else class="mt-1 text-lg font-semibold text-gray-400 dark:text-dark-400">-</p>
               </div>
@@ -111,10 +111,10 @@
               </span>
             </div>
             <p class="mt-4 truncate text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">
-              ${{ formatCost(stats.summary.total_cost) }}
+              {{ formatCost(stats.summary.total_cost) }}
             </p>
             <p class="mt-1 truncate text-[11px] text-gray-400 dark:text-dark-400">
-              {{ t('usage.userBilled') }} ${{ formatCost(stats.summary.total_user_cost) }}
+              {{ t('usage.userBilled') }} {{ formatCost(stats.summary.total_user_cost) }}
             </p>
           </div>
 
@@ -139,10 +139,10 @@
               </span>
             </div>
             <p class="mt-4 truncate text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">
-              ${{ formatCost(stats.summary.avg_daily_cost) }}
+              {{ formatCost(stats.summary.avg_daily_cost) }}
             </p>
             <p class="mt-1 truncate text-[11px] text-gray-400 dark:text-dark-400">
-              {{ t('usage.userBilled') }} ${{ formatCost(stats.summary.avg_daily_user_cost) }}
+              {{ t('usage.userBilled') }} {{ formatCost(stats.summary.avg_daily_user_cost) }}
             </p>
           </div>
 
@@ -172,11 +172,11 @@
           <dl class="grid grid-cols-2 gap-x-4 gap-y-3">
             <div>
               <dt class="text-[11px] text-gray-400 dark:text-dark-400">{{ t('usage.accountBilled') }}</dt>
-              <dd class="mt-1 text-sm font-semibold text-gray-950 dark:text-white">${{ formatCost(stats.summary.today?.cost || 0) }}</dd>
+              <dd class="mt-1 text-sm font-semibold text-gray-950 dark:text-white">{{ formatCost(stats.summary.today?.cost || 0) }}</dd>
             </div>
             <div>
               <dt class="text-[11px] text-gray-400 dark:text-dark-400">{{ t('usage.userBilled') }}</dt>
-              <dd class="mt-1 text-sm font-semibold text-gray-950 dark:text-white">${{ formatCost(stats.summary.today?.user_cost || 0) }}</dd>
+              <dd class="mt-1 text-sm font-semibold text-gray-950 dark:text-white">{{ formatCost(stats.summary.today?.user_cost || 0) }}</dd>
             </div>
             <div>
               <dt class="text-[11px] text-gray-400 dark:text-dark-400">{{ t('admin.accounts.stats.requests') }}</dt>
@@ -203,7 +203,7 @@
             </div>
             <div class="flex items-center justify-between gap-3">
               <dt class="text-xs text-gray-400 dark:text-dark-400">{{ t('usage.accountBilled') }}</dt>
-              <dd class="text-sm font-semibold text-gray-950 dark:text-white">${{ formatCost(stats.summary.highest_cost_day?.cost || 0) }}</dd>
+              <dd class="text-sm font-semibold text-gray-950 dark:text-white">{{ formatCost(stats.summary.highest_cost_day?.cost || 0) }}</dd>
             </div>
             <div class="flex items-center justify-between gap-3">
               <dt class="text-xs text-gray-400 dark:text-dark-400">{{ t('admin.accounts.stats.requests') }}</dt>
@@ -230,7 +230,7 @@
             </div>
             <div class="flex items-center justify-between gap-3">
               <dt class="text-xs text-gray-400 dark:text-dark-400">{{ t('usage.accountBilled') }}</dt>
-              <dd class="text-sm font-medium text-gray-950 dark:text-white">${{ formatCost(stats.summary.highest_request_day?.cost || 0) }}</dd>
+              <dd class="text-sm font-medium text-gray-950 dark:text-white">{{ formatCost(stats.summary.highest_request_day?.cost || 0) }}</dd>
             </div>
           </dl>
         </section>
@@ -501,7 +501,7 @@ const lineChartOptions = computed(() => ({
           const label = context.dataset.label || ''
           const value = context.raw
           if (label.includes('USD')) {
-            return `${label}: $${formatCost(value)}`
+            return `${label}: ${formatCost(value)}`
           }
           return `${label}: ${formatNumber(value)}`
         }

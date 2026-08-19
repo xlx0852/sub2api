@@ -40,17 +40,18 @@ import ModelIcon from '@/components/common/ModelIcon.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import type { GroupPlatform } from '@/types'
 import { platformBadgeClass } from '@/utils/platformColors'
-import { formatScaled } from '@/utils/pricing'
+import { formatScaledAmount } from '@/utils/pricing'
 import { BILLING_MODE_TOKEN, BILLING_MODE_IMAGE, BILLING_MODE_VIDEO } from '@/constants/channel'
 import type { ModelPlazaGroupOffer, ModelPlazaRow } from '@/utils/modelPlaza'
 import { useClipboard } from '@/composables/useClipboard'
+import { pricingCurrencySymbol } from '@/utils/usagePricing'
 
 const props = withDefaults(defineProps<{ rows: ModelPlazaRow[]; loading: boolean; emptyLabel: string; maxOffers?: number; showOffers?: boolean }>(), { maxOffers: 2, showOffers: true })
 const { t } = useI18n()
 const { copyToClipboard } = useClipboard()
 
 function tagLabel(tag: string) { const key = `availableChannels.tags.${tag}`; const translated = t(key); return translated === key ? tag : translated }
-function displayPrice(value: number | null | undefined, scale = 1_000_000) { return value == null ? '-' : `${formatScaled(value, scale)} ${scale === 1 ? t('availableChannels.pricing.unitPerRequest') : t('availableChannels.pricing.unitPerMillion')}` }
+function displayPrice(value: number | null | undefined, currency: string | null | undefined, scale = 1_000_000) { return value == null ? '-' : `${pricingCurrencySymbol(currency)}${formatScaledAmount(value, scale)} ${scale === 1 ? t('availableChannels.pricing.unitPerRequest') : t('availableChannels.pricing.unitPerMillion')}` }
 function prices(row: ModelPlazaRow) {
   const pricing = row.best_offer?.effective_pricing
   if (!pricing) return [{ label: t('availableChannels.pricing.inputPrice'), value: '-' }, { label: t('availableChannels.pricing.outputPrice'), value: '-' }]
@@ -60,14 +61,14 @@ function prices(row: ModelPlazaRow) {
       label: isVideo ? t('availableChannels.pricing.videoOutputPrice') : pricing.billing_mode === BILLING_MODE_IMAGE ? t('availableChannels.pricing.imageOutputPrice') : t('availableChannels.pricing.perRequestPrice'),
       value: pricing.image_output_price == null && pricing.per_request_price == null
         ? '-'
-        : `${formatScaled(pricing.image_output_price ?? pricing.per_request_price ?? 0, 1)} ${isVideo ? t('availableChannels.pricing.unitPerSecond') : t('availableChannels.pricing.unitPerRequest')}`,
+        : `${pricingCurrencySymbol(pricing.currency)}${formatScaledAmount(pricing.image_output_price ?? pricing.per_request_price ?? 0, 1)} ${isVideo ? t('availableChannels.pricing.unitPerSecond') : t('availableChannels.pricing.unitPerRequest')}`,
     }]
   }
   return [
-    { label: t('availableChannels.pricing.inputPrice'), value: displayPrice(pricing.input_price) },
-    { label: t('availableChannels.pricing.outputPrice'), value: displayPrice(pricing.output_price) },
-    { label: t('availableChannels.pricing.cacheReadPrice'), value: displayPrice(pricing.cache_read_price) },
-    { label: t('availableChannels.pricing.cacheWritePrice'), value: displayPrice(pricing.cache_write_price) },
+    { label: t('availableChannels.pricing.inputPrice'), value: displayPrice(pricing.input_price, pricing.currency) },
+    { label: t('availableChannels.pricing.outputPrice'), value: displayPrice(pricing.output_price, pricing.currency) },
+    { label: t('availableChannels.pricing.cacheReadPrice'), value: displayPrice(pricing.cache_read_price, pricing.currency) },
+    { label: t('availableChannels.pricing.cacheWritePrice'), value: displayPrice(pricing.cache_write_price, pricing.currency) },
   ]
 }
 function discountLabel(row: ModelPlazaRow) {

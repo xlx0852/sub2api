@@ -2322,15 +2322,43 @@
             step="0.001"
             class="input disabled:cursor-not-allowed disabled:opacity-60"
             data-testid="edit-account-rate-multiplier"
-            :disabled="upstreamBillingRateSyncEnabled"
           />
-          <p class="input-hint">
-            {{
-              upstreamBillingRateSyncEnabled
-                ? t('admin.accounts.upstreamBilling.syncRateManagedHint')
-                : t('admin.accounts.rateMultiplierCostHint')
-            }}
+		  <p class="input-hint">{{ t('admin.accounts.rateMultiplierCostHint') }}</p>
+        </div>
+
+        <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-600" data-testid="account-cost-preview">
+          <p class="text-sm font-medium text-gray-900 dark:text-white">
+            {{ t('admin.accounts.costPreview.title') }}
           </p>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.costPreview.hint') }}
+          </p>
+          <div class="mt-3 grid gap-3 sm:grid-cols-2">
+            <label class="text-xs text-gray-600 dark:text-gray-300">
+              {{ t('admin.accounts.costPreview.basePrice') }}
+              <input v-model.number="costPreview.basePrice" type="number" min="0" step="0.01" class="input mt-1" />
+            </label>
+            <label class="text-xs text-gray-600 dark:text-gray-300">
+              {{ t('admin.accounts.costPreview.salesMultiplier') }}
+              <input v-model.number="costPreview.salesMultiplier" type="number" min="0" step="0.01" class="input mt-1" />
+            </label>
+          </div>
+          <div class="mt-3 grid grid-cols-3 gap-2 text-xs">
+            <div class="rounded bg-gray-50 p-2 dark:bg-dark-700">
+              <span class="block text-gray-500">{{ t('admin.accounts.costPreview.userCharge') }}</span>
+              <strong class="mt-1 block tabular-nums">{{ formatPreviewNumber(costPreviewUserCharge) }}</strong>
+            </div>
+            <div class="rounded bg-gray-50 p-2 dark:bg-dark-700">
+              <span class="block text-gray-500">{{ t('admin.accounts.costPreview.accountCost') }}</span>
+              <strong class="mt-1 block tabular-nums">{{ formatPreviewNumber(costPreviewAccountCost) }}</strong>
+            </div>
+            <div class="rounded bg-gray-50 p-2 dark:bg-dark-700">
+              <span class="block text-gray-500">{{ t('admin.accounts.costPreview.grossMargin') }}</span>
+              <strong class="mt-1 block tabular-nums" :class="costPreviewGrossMargin < 0 ? 'text-red-600' : 'text-emerald-600'">
+                {{ formatPreviewNumber(costPreviewGrossMargin) }}
+              </strong>
+            </div>
+          </div>
         </div>
 
         <!-- 上游 Sub2API 计费倍率探测（仅 API Key 账号） -->
@@ -2347,20 +2375,6 @@
               data-testid="upstream-billing-auto-probe"
               :aria-label="t('admin.accounts.upstreamBilling.autoProbe')"
               @update:model-value="handleUpstreamBillingAutoProbeChange"
-            />
-          </div>
-          <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-3 dark:border-dark-700">
-            <div>
-              <label class="input-label mb-0">{{ t('admin.accounts.upstreamBilling.syncRate') }}</label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {{ t('admin.accounts.upstreamBilling.syncRateHint') }}
-              </p>
-            </div>
-            <Toggle
-              :model-value="upstreamBillingRateSyncEnabled"
-              data-testid="upstream-billing-rate-sync"
-              :aria-label="t('admin.accounts.upstreamBilling.syncRate')"
-              @update:model-value="handleUpstreamBillingRateSyncChange"
             />
           </div>
         </div>
@@ -3046,22 +3060,18 @@ const form = reactive({
   expires_at: null as number | null
 })
 
-// 上游 Sub2API 计费倍率探测：自动探测与倍率同步开关（仅存 extra，不动 rate_multiplier 列）
-const upstreamBillingAutoProbeEnabled = ref(false)
-const upstreamBillingRateSyncEnabled = ref(false)
+const costPreview = reactive({ basePrice: 1, salesMultiplier: 1 })
+const normalizedPreviewNumber = (value: number) => Number.isFinite(value) && value > 0 ? value : 0
+const costPreviewUserCharge = computed(() => normalizedPreviewNumber(costPreview.basePrice) * normalizedPreviewNumber(costPreview.salesMultiplier))
+const costPreviewAccountCost = computed(() => normalizedPreviewNumber(costPreview.basePrice) * normalizedPreviewNumber(form.rate_multiplier))
+const costPreviewGrossMargin = computed(() => costPreviewUserCharge.value - costPreviewAccountCost.value)
+const formatPreviewNumber = (value: number) => Number.isFinite(value) ? value.toFixed(4) : '0.0000'
 
-const handleUpstreamBillingRateSyncChange = (enabled: boolean) => {
-  upstreamBillingRateSyncEnabled.value = enabled
-  if (enabled) {
-    upstreamBillingAutoProbeEnabled.value = true
-  }
-}
+// 上游 Sub2API 计费信息仅自动探测供参考，不回写综合成本倍率。
+const upstreamBillingAutoProbeEnabled = ref(false)
 
 const handleUpstreamBillingAutoProbeChange = (enabled: boolean) => {
   upstreamBillingAutoProbeEnabled.value = enabled
-  if (!enabled) {
-    upstreamBillingRateSyncEnabled.value = false
-  }
 }
 
 const statusOptions = computed(() => {
@@ -3158,8 +3168,6 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   // 回填上游计费倍率探测开关（extra）
   const probeExtra = newAccount.extra as Record<string, unknown> | undefined
   upstreamBillingAutoProbeEnabled.value = probeExtra?.upstream_billing_probe_enabled === true
-  upstreamBillingRateSyncEnabled.value =
-    upstreamBillingAutoProbeEnabled.value && probeExtra?.upstream_billing_rate_sync_enabled === true
 
   // Load intercept warmup requests setting (applies to all account types)
   const credentials = newAccount.credentials as Record<string, unknown> | undefined
@@ -4381,22 +4389,13 @@ const handleSubmit = async () => {
       const currentExtra = (updatePayload.extra as Record<string, unknown>) ||
         (props.account.extra as Record<string, unknown>) || {}
       const newExtra: Record<string, unknown> = { ...currentExtra }
-      // 上游计费倍率探测开关。
-      if (props.account.type === 'apikey') {
-        if (upstreamBillingAutoProbeEnabled.value) {
-          newExtra.upstream_billing_probe_enabled = true
-          if (upstreamBillingRateSyncEnabled.value) {
-            newExtra.upstream_billing_rate_sync_enabled = true
-            // 倍率归上游所有：避免手工值与下一次探测回写互相覆盖
-            delete updatePayload.rate_multiplier
-          } else {
-            delete newExtra.upstream_billing_rate_sync_enabled
-          }
-        } else {
-          delete newExtra.upstream_billing_probe_enabled
-          delete newExtra.upstream_billing_rate_sync_enabled
-        }
+      // 上游计费信息只做观测；永久清理旧的倍率写回开关。
+      if (upstreamBillingAutoProbeEnabled.value) {
+        newExtra.upstream_billing_probe_enabled = true
+      } else {
+        delete newExtra.upstream_billing_probe_enabled
       }
+      delete newExtra.upstream_billing_rate_sync_enabled
       // Total quota
       if (editQuotaLimit.value != null && editQuotaLimit.value > 0) {
         newExtra.quota_limit = editQuotaLimit.value

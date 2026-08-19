@@ -145,6 +145,8 @@ type TokenRefreshConfig struct {
 }
 
 type PricingConfig struct {
+	// 是否允许远程价格文件覆盖本地发布价格。
+	RemoteEnabled bool `mapstructure:"remote_enabled"`
 	// 价格数据远程URL（默认使用LiteLLM镜像）
 	RemoteURL string `mapstructure:"remote_url"`
 	// 哈希校验文件URL

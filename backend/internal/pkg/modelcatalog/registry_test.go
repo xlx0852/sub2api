@@ -46,7 +46,7 @@ func TestEmbeddedCatalogLoads(t *testing.T) {
 		t.Fatalf("expected current DeepSeek V4 catalog, got %+v", deepseek)
 	}
 	entry, ok = ResolvePriceEntry("deepseek-v4-pro")
-	if !ok || entry.InputCostPerToken != 1.32e-6 || entry.OutputCostPerToken != 3.96e-6 || entry.CacheReadInputTokenCost != 0.044e-6 {
+	if !ok || entry.Currency != "CNY" || entry.InputCostPerToken != 9e-6 || entry.OutputCostPerToken != 27e-6 || entry.CacheReadInputTokenCost != 0.30e-6 {
 		t.Fatalf("expected official deepseek-v4-pro fallback pricing, got %+v ok=%v", entry, ok)
 	}
 	// alias chain

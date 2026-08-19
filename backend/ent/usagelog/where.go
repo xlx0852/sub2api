@@ -185,6 +185,11 @@ func RateMultiplier(v float64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldRateMultiplier, v))
 }
 
+// PricingCurrency applies equality check predicate on the "pricing_currency" field. It's identical to PricingCurrencyEQ.
+func PricingCurrency(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldPricingCurrency, v))
+}
+
 // AccountRateMultiplier applies equality check predicate on the "account_rate_multiplier" field. It's identical to AccountRateMultiplierEQ.
 func AccountRateMultiplier(v float64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldAccountRateMultiplier, v))
@@ -1493,6 +1498,81 @@ func RateMultiplierLT(v float64) predicate.UsageLog {
 // RateMultiplierLTE applies the LTE predicate on the "rate_multiplier" field.
 func RateMultiplierLTE(v float64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldLTE(FieldRateMultiplier, v))
+}
+
+// PricingCurrencyEQ applies the EQ predicate on the "pricing_currency" field.
+func PricingCurrencyEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldPricingCurrency, v))
+}
+
+// PricingCurrencyNEQ applies the NEQ predicate on the "pricing_currency" field.
+func PricingCurrencyNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldPricingCurrency, v))
+}
+
+// PricingCurrencyIn applies the In predicate on the "pricing_currency" field.
+func PricingCurrencyIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldPricingCurrency, vs...))
+}
+
+// PricingCurrencyNotIn applies the NotIn predicate on the "pricing_currency" field.
+func PricingCurrencyNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldPricingCurrency, vs...))
+}
+
+// PricingCurrencyGT applies the GT predicate on the "pricing_currency" field.
+func PricingCurrencyGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldPricingCurrency, v))
+}
+
+// PricingCurrencyGTE applies the GTE predicate on the "pricing_currency" field.
+func PricingCurrencyGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldPricingCurrency, v))
+}
+
+// PricingCurrencyLT applies the LT predicate on the "pricing_currency" field.
+func PricingCurrencyLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldPricingCurrency, v))
+}
+
+// PricingCurrencyLTE applies the LTE predicate on the "pricing_currency" field.
+func PricingCurrencyLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldPricingCurrency, v))
+}
+
+// PricingCurrencyContains applies the Contains predicate on the "pricing_currency" field.
+func PricingCurrencyContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldPricingCurrency, v))
+}
+
+// PricingCurrencyHasPrefix applies the HasPrefix predicate on the "pricing_currency" field.
+func PricingCurrencyHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldPricingCurrency, v))
+}
+
+// PricingCurrencyHasSuffix applies the HasSuffix predicate on the "pricing_currency" field.
+func PricingCurrencyHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldPricingCurrency, v))
+}
+
+// PricingCurrencyIsNil applies the IsNil predicate on the "pricing_currency" field.
+func PricingCurrencyIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldPricingCurrency))
+}
+
+// PricingCurrencyNotNil applies the NotNil predicate on the "pricing_currency" field.
+func PricingCurrencyNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldPricingCurrency))
+}
+
+// PricingCurrencyEqualFold applies the EqualFold predicate on the "pricing_currency" field.
+func PricingCurrencyEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldPricingCurrency, v))
+}
+
+// PricingCurrencyContainsFold applies the ContainsFold predicate on the "pricing_currency" field.
+func PricingCurrencyContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldPricingCurrency, v))
 }
 
 // AccountRateMultiplierEQ applies the EQ predicate on the "account_rate_multiplier" field.

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
 	"github.com/stretchr/testify/require"
 )
 
@@ -446,30 +448,30 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		{
 			name:              "deepseek v4 pro",
 			model:             "deepseek-v4-pro",
-			expectedInput:     1.32e-6,
-			expectedOutput:    floatPtr(3.96e-6),
-			expectedCacheRead: floatPtr(0.044e-6),
+			expectedInput:     9e-6,
+			expectedOutput:    floatPtr(27e-6),
+			expectedCacheRead: floatPtr(0.30e-6),
 		},
 		{
 			name:              "deepseek v4 flash",
 			model:             "deepseek-v4-flash",
-			expectedInput:     0.44e-6,
-			expectedOutput:    floatPtr(1.32e-6),
-			expectedCacheRead: floatPtr(0.014e-6),
+			expectedInput:     3e-6,
+			expectedOutput:    floatPtr(9e-6),
+			expectedCacheRead: floatPtr(0.10e-6),
 		},
 		{
 			name:              "deepseek chat alias → flash",
 			model:             "deepseek-chat",
-			expectedInput:     0.44e-6,
-			expectedOutput:    floatPtr(1.32e-6),
-			expectedCacheRead: floatPtr(0.014e-6),
+			expectedInput:     3e-6,
+			expectedOutput:    floatPtr(9e-6),
+			expectedCacheRead: floatPtr(0.10e-6),
 		},
 		{
 			name:              "deepseek reasoner alias → flash",
 			model:             "deepseek-reasoner",
-			expectedInput:     0.44e-6,
-			expectedOutput:    floatPtr(1.32e-6),
-			expectedCacheRead: floatPtr(0.014e-6),
+			expectedInput:     3e-6,
+			expectedOutput:    floatPtr(9e-6),
+			expectedCacheRead: floatPtr(0.10e-6),
 		},
 
 		// ---- 智谱 GLM（z.ai USD 口径）----
@@ -771,10 +773,11 @@ func TestCalculateCost_DeepSeekOfficialPeakAndOffPeakRates(t *testing.T) {
 	}
 	peak, err := svc.CalculateCost("deepseek-v4-pro", tokens, 1)
 	require.NoError(t, err)
-	require.InDelta(t, 1.32, peak.InputCost, 1e-12)
-	require.InDelta(t, 3.96, peak.OutputCost, 1e-12)
-	require.InDelta(t, 1.32, peak.CacheCreationCost, 1e-12)
-	require.InDelta(t, 0.044, peak.CacheReadCost, 1e-12)
+	require.Equal(t, domain.PricingCurrencyCNY, peak.PricingCurrency)
+	require.InDelta(t, 9.0, peak.InputCost, 1e-12)
+	require.InDelta(t, 27.0, peak.OutputCost, 1e-12)
+	require.InDelta(t, 9.0, peak.CacheCreationCost, 1e-12)
+	require.InDelta(t, 0.30, peak.CacheReadCost, 1e-12)
 
 	svc.now = func() time.Time {
 		return time.Date(2026, time.August, 17, 4, 0, 0, 0, time.UTC)
@@ -782,6 +785,52 @@ func TestCalculateCost_DeepSeekOfficialPeakAndOffPeakRates(t *testing.T) {
 	offPeak, err := svc.CalculateCost("deepseek-v4-pro", tokens, 1)
 	require.NoError(t, err)
 	require.InDelta(t, peak.TotalCost*0.5, offPeak.TotalCost, 1e-12)
+}
+
+func TestCalculateCost_DeepSeekFlashAndProExactCNYComponents(t *testing.T) {
+	for _, tt := range []struct {
+		model                                   string
+		input, output, cacheCreation, cacheRead float64
+	}{
+		{model: "deepseek-v4-flash", input: 3, output: 9, cacheCreation: 3, cacheRead: 0.10},
+		{model: "deepseek-v4-pro", input: 9, output: 27, cacheCreation: 9, cacheRead: 0.30},
+	} {
+		t.Run(tt.model, func(t *testing.T) {
+			svc := newTestBillingService()
+			tokens := UsageTokens{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheCreationTokens: 1_000_000, CacheReadTokens: 1_000_000}
+			svc.now = func() time.Time { return time.Date(2026, time.August, 17, 1, 0, 0, 0, time.UTC) }
+			peak, err := svc.CalculateCost(tt.model, tokens, 1)
+			require.NoError(t, err)
+			require.Equal(t, domain.PricingCurrencyCNY, peak.PricingCurrency)
+			require.InDelta(t, tt.input, peak.InputCost, 1e-12)
+			require.InDelta(t, tt.output, peak.OutputCost, 1e-12)
+			require.InDelta(t, tt.cacheCreation, peak.CacheCreationCost, 1e-12)
+			require.InDelta(t, tt.cacheRead, peak.CacheReadCost, 1e-12)
+
+			svc.now = func() time.Time { return time.Date(2026, time.August, 17, 4, 0, 0, 0, time.UTC) }
+			offPeak, err := svc.CalculateCost(tt.model, tokens, 1)
+			require.NoError(t, err)
+			require.InDelta(t, tt.input*0.5, offPeak.InputCost, 1e-12)
+			require.InDelta(t, tt.output*0.5, offPeak.OutputCost, 1e-12)
+			require.InDelta(t, tt.cacheCreation*0.5, offPeak.CacheCreationCost, 1e-12)
+			require.InDelta(t, tt.cacheRead*0.5, offPeak.CacheReadCost, 1e-12)
+		})
+	}
+}
+
+func TestPriceEntryCurrencyDefaultsToUSDAndSalesMultiplierRemainsNumeric(t *testing.T) {
+	pricing := priceEntryToModelPricing(modelcatalog.PriceEntry{InputCostPerToken: 5e-6, OutputCostPerToken: 30e-6})
+	require.Equal(t, domain.PricingCurrencyUSD, pricing.Currency)
+
+	svc := newTestBillingService()
+	inputPrice, outputPrice := 5e-6, 30e-6
+	cost, err := svc.calculateCostInternal("gpt-5.6-sol", UsageTokens{InputTokens: 1_000_000, OutputTokens: 1_000_000}, 0.12, "", &ChannelModelPricing{
+		Currency: domain.PricingCurrencyUSD, InputPrice: &inputPrice, OutputPrice: &outputPrice,
+	})
+	require.NoError(t, err)
+	require.Equal(t, domain.PricingCurrencyUSD, cost.PricingCurrency)
+	require.InDelta(t, 35.0, cost.TotalCost, 1e-12)
+	require.InDelta(t, 4.2, cost.ActualCost, 1e-12)
 }
 
 func TestCalculateCost_DeepSeekChannelPriceDoesNotInheritOfficialOffPeakDiscount(t *testing.T) {
@@ -817,17 +866,19 @@ func TestCalculateCostUnified_DeepSeekTimePricingRespectsPricingSource(t *testin
 		RateMultiplier: 1,
 		Resolver:       resolver,
 		Resolved: &ResolvedPricing{
-			Mode:   BillingModeToken,
-			Source: PricingSourceFallback,
+			Mode:     BillingModeToken,
+			Currency: domain.PricingCurrencyCNY,
+			Source:   PricingSourceFallback,
 			BasePricing: &ModelPricing{
-				InputPricePerToken:  0.44e-6,
-				OutputPricePerToken: 1.32e-6,
+				Currency:            domain.PricingCurrencyCNY,
+				InputPricePerToken:  3e-6,
+				OutputPricePerToken: 9e-6,
 			},
 		},
 	})
 	require.NoError(t, err)
-	require.InDelta(t, 0.22, official.InputCost, 1e-12)
-	require.InDelta(t, 0.66, official.OutputCost, 1e-12)
+	require.InDelta(t, 1.5, official.InputCost, 1e-12)
+	require.InDelta(t, 4.5, official.OutputCost, 1e-12)
 
 	channel, err := svc.CalculateCostUnified(CostInput{
 		Model:          "deepseek-v4-flash",

@@ -36,10 +36,4 @@ type UpstreamBillingProbeSnapshot struct {
 	FailureCount  int            `json:"failure_count,omitempty"`
 	HTTPStatus    int            `json:"http_status,omitempty"`
 	LastError     string         `json:"last_error,omitempty"`
-	// SyncedRateMultiplier records the value this probe wrote into
-	// accounts.rate_multiplier. It is only set when the account opted into rate
-	// sync and the declared value passed the write-back range check, so the
-	// stored snapshot always answers "did this probe move the account rate, and
-	// to what" without a separate history table.
-	SyncedRateMultiplier *float64 `json:"synced_rate_multiplier,omitempty"`
 }

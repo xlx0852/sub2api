@@ -10,7 +10,7 @@ import {
 } from '../channelPricingTools'
 
 describe('channelPricingTools', () => {
-  it('converts official per-token prices to $/MTok form fields', () => {
+  it('converts official per-token prices to currency-aware /MTok form fields', () => {
     const form = officialPricingToFormMTok({
       found: true,
       input_price: 2e-7,
@@ -20,12 +20,24 @@ describe('channelPricingTools', () => {
       image_output_price: 0,
     })
     expect(form).toEqual({
+      currency: 'USD',
       input_price: 0.2,
       output_price: 1.2,
       cache_write_price: 0.25,
       cache_read_price: 0.02,
       image_output_price: 0,
     })
+  })
+
+  it('preserves CNY for official pricing forms', () => {
+    expect(
+      officialPricingToFormMTok({
+        found: true,
+        currency: 'CNY',
+        input_price: 3e-6,
+        output_price: 9e-6,
+      }),
+    ).toMatchObject({ currency: 'CNY', input_price: 3, output_price: 9 })
   })
 
   it('scales official prices by multiplier for sell markup', () => {

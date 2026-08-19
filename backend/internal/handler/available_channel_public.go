@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	publicPricingCacheVersion = 2
-	publicPricingRedisKey     = "public:pricing:snapshot:v2"
-	publicPricingLockKey      = "public:pricing:rebuild-lock:v2"
+	publicPricingCacheVersion = 3
+	publicPricingRedisKey     = "public:pricing:snapshot:v3"
+	publicPricingLockKey      = "public:pricing:rebuild-lock:v3"
 	publicPricingFreshTTL     = time.Hour
 	publicPricingRedisTTL     = 24 * time.Hour
 )

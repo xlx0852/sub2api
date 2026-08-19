@@ -192,7 +192,7 @@ export default {
         capacity: 'Capacity',
         notes: 'Notes',
         priority: 'Priority',
-        billingRateMultiplier: 'Billing Rate',
+		billingRateMultiplier: 'Comprehensive Cost Multiplier',
         weight: 'Weight',
         schedulerScore: 'Scheduler Score',
         status: 'Status',
@@ -727,21 +727,26 @@ export default {
       loadFactorHint: 'Higher load factor increases scheduling frequency',
       priority: 'Priority',
       priorityHint: 'Lower value accounts are used first',
-      billingRateMultiplier: 'Billing Rate Multiplier',
-      billingRateMultiplierHint: '0 = free, affects account billing only',
+	  billingRateMultiplier: 'Comprehensive Cost Multiplier',
+	  billingRateMultiplierHint: 'Manually include FX treatment, upstream discount, fees, and risk buffer; 0 records zero cost',
       expiresAt: 'Expires At',
       expiresAtHint: 'Leave empty for no expiration',
       expiresAtFollowsCostCycle: 'For subscription accounts, expiry follows the cost cycle (starts_at + period_days; ban settlement time if terminated)',
       expiresAtFollowsCostCycleShort: 'Follows cost cycle',
-      rateMultiplierCostHint: 'Account billing multiplier used in cost and profit calculations',
+	  rateMultiplierCostHint: 'Comprehensive cost multiplier = actual procurement cost number ÷ model base-price number. It is maintained manually; the platform does not convert FX.',
+	  costPreview: {
+		title: 'Cost and margin example',
+		hint: 'Live calculator only. Base price and sales multiplier are not saved; all results are unitless numbers.',
+		basePrice: 'Example base price',
+		salesMultiplier: 'Sales multiplier',
+		userCharge: 'User charge',
+		accountCost: 'Account cost',
+		grossMargin: 'Gross margin'
+	  },
       upstreamBilling: {
         autoProbe: 'Auto-probe upstream declared rate',
         autoProbeHint:
-          'Periodically refreshes the billing multiplier declared by the upstream site; this toggle alone does not change the account rate.',
-        syncRate: 'Sync upstream declared rate',
-        syncRateHint:
-          'After a successful probe, automatically updates the account billing multiplier (the base rate without peak factor). Unchanged when the probe fails or the declared value is out of range. Enabling this also turns on auto-probe.',
-        syncRateManagedHint: 'Current rate is maintained automatically from the upstream-declared base rate (no peak factor).'
+		  'Periodically refreshes upstream-declared billing information for reference only; it never changes the comprehensive cost multiplier.'
       },
 
       higherPriorityFirst: 'Lower value means higher priority',

@@ -65,6 +65,7 @@ type UsageTokens = Usage
 // CostBreakdown is the canonical scalar result shared by calculation, usage
 // logging, durable handoff, and legacy persistence.
 type CostBreakdown struct {
+	PricingCurrency   domain.PricingCurrency
 	InputCost         float64
 	OutputCost        float64
 	ImageOutputCost   float64

@@ -12,6 +12,10 @@ import (
 // request identity before calling it.
 func BuildUsageLog(input RecordInput, cost *CostBreakdown, effectiveRateMultiplier float64) *domain.UsageLog {
 	durationMs := int(input.Duration.Milliseconds())
+	pricingCurrency := string(domain.PricingCurrencyUSD)
+	if cost != nil {
+		pricingCurrency = string(domain.NormalizePricingCurrency(string(cost.PricingCurrency)))
+	}
 	usageLog := &domain.UsageLog{
 		UserID:                input.User.ID,
 		APIKeyID:              input.APIKey.ID,
@@ -32,6 +36,7 @@ func BuildUsageLog(input RecordInput, cost *CostBreakdown, effectiveRateMultipli
 		CacheCreation1hTokens: input.Usage.CacheCreation1hTokens,
 		ImageOutputTokens:     input.Usage.ImageOutputTokens,
 		RateMultiplier:        effectiveRateMultiplier,
+		PricingCurrency:       &pricingCurrency,
 		AccountRateMultiplier: &input.AccountRateMultiplier,
 		BillingType:           input.BillingType,
 		BillingMode:           resolveBillingMode(input.ImageCount, cost),

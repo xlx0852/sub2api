@@ -75,7 +75,7 @@
       :class="{ 'collapsible-content--collapsed': collapsed }"
     >
       <div class="collapsible-inner">
-        <!-- Header: Models + Billing Mode -->
+        <!-- Header: Models + Billing Mode + Currency -->
         <div class="mt-3 flex items-start gap-2">
           <div class="flex-1">
             <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
@@ -100,6 +100,17 @@
               class="mt-1"
             />
           </div>
+			<div class="w-28">
+				<label class="text-xs font-medium text-gray-500 dark:text-gray-400">
+					{{ t('admin.channels.form.currency') }}
+				</label>
+				<Select
+					:modelValue="entry.currency || 'USD'"
+					@update:modelValue="emit('update', { ...entry, currency: $event as 'USD' | 'CNY' })"
+					:options="currencyOptions"
+					class="mt-1"
+				/>
+			</div>
         </div>
 
         <!-- Token mode -->
@@ -157,7 +168,7 @@
           <!-- Default prices (fallback when no interval matches) -->
           <label class="mt-3 block text-xs font-medium text-gray-500 dark:text-gray-400">
             {{ t('admin.channels.form.defaultPrices') }}
-            <span class="ml-1 font-normal text-gray-400">$ / 1M tokens</span>
+            <span class="ml-1 font-normal text-gray-400">{{ currencySymbol }} / 1M tokens</span>
           </label>
           <div class="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-5">
             <div>
@@ -217,7 +228,7 @@
           <!-- Default per-request price -->
           <label class="mt-3 block text-xs font-medium text-gray-500 dark:text-gray-400">
             {{ t('admin.channels.form.defaultPerRequestPrice') }}
-            <span class="ml-1 font-normal text-gray-400">$</span>
+            <span class="ml-1 font-normal text-gray-400">{{ currencySymbol }}</span>
           </label>
           <div class="mt-1 w-48">
             <input :value="entry.per_request_price" @input="emitField('per_request_price', ($event.target as HTMLInputElement).value)"
@@ -253,7 +264,7 @@
           <!-- Default image price (per-request, same as per_request mode) -->
           <label class="mt-3 block text-xs font-medium text-gray-500 dark:text-gray-400">
             {{ t('admin.channels.form.defaultImagePrice') }}
-            <span class="ml-1 font-normal text-gray-400">$</span>
+            <span class="ml-1 font-normal text-gray-400">{{ currencySymbol }}</span>
           </label>
           <div class="mt-1 w-48">
             <input :value="entry.per_request_price" @input="emitField('per_request_price', ($event.target as HTMLInputElement).value)"
@@ -327,6 +338,13 @@ const billingModeOptions = computed(() => [
   { value: 'per_request', label: t('admin.channels.billingMode.perRequest') },
   { value: 'image', label: t('admin.channels.billingMode.image') }
 ])
+
+const currencyOptions = [
+	{ value: 'USD', label: 'USD ($)' },
+	{ value: 'CNY', label: 'CNY (¥)' },
+]
+
+const currencySymbol = computed(() => props.entry.currency === 'CNY' ? '¥' : '$')
 
 const billingModeLabel = computed(() => {
   const opt = billingModeOptions.value.find(o => o.value === props.entry.billing_mode)
@@ -448,6 +466,7 @@ async function onModelsUpdate(newModels: string[]) {
       emit('update', {
         ...props.entry,
         models: newModels,
+			currency: result.currency === 'CNY' ? 'CNY' : 'USD',
         input_price: perTokenToMTok(result.input_price ?? null),
         output_price: perTokenToMTok(result.output_price ?? null),
         cache_write_price: perTokenToMTok(result.cache_write_price ?? null),

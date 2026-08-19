@@ -289,7 +289,7 @@ const estimateConfidenceLabel = computed(() => {
 const estimateRange = computed(() => {
   const estimate = props.windowStats?.full_estimate
   if (estimate?.lower_cost == null || estimate.upper_cost == null) return ''
-  return `$${estimate.lower_cost.toFixed(2)}–$${estimate.upper_cost.toFixed(2)}`
+  return `${estimate.lower_cost.toFixed(2)}–${estimate.upper_cost.toFixed(2)}`
 })
 const estimateSpan = computed(() => props.windowStats?.full_estimate?.used_percent_span?.toFixed(1) ?? '0.0')
 

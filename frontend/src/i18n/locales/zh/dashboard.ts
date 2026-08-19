@@ -293,7 +293,7 @@ export default {
     actualCost: '实际',
     accountCost: '成本',
     userBilled: '用户扣费',
-    accountBilled: '账号计费',
+	accountBilled: '账号成本',
     resetNow: '现在',
     resetPending: '待刷新',
     fullUtilizationEstimate: 'API 标价等值满额预估',
@@ -304,7 +304,7 @@ export default {
       medium: '中置信度',
       high: '高置信度'
     },
-    accountMultiplier: '账号倍率',
+	accountMultiplier: '综合成本倍率',
     avgDuration: '平均耗时',
     inSelectedRange: '所选范围内',
     perRequest: '每次请求',

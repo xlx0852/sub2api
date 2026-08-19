@@ -139,7 +139,7 @@ export default {
         capacity: '容量',
         notes: '备注',
         priority: '优先级',
-        billingRateMultiplier: '账号倍率',
+		billingRateMultiplier: '综合成本倍率',
         weight: '权重',
         schedulerScore: '调度权值',
         status: '状态',
@@ -926,20 +926,25 @@ export default {
       loadFactorHint: '提高负载因子可以提高对账号的调度频率',
       priority: '优先级',
       priorityHint: '优先级越小的账号优先使用',
-      billingRateMultiplier: '账号计费倍率',
-      billingRateMultiplierHint: '0 表示不计费，仅影响账号计费',
+	  billingRateMultiplier: '综合成本倍率',
+	  billingRateMultiplierHint: '手动纳入汇率、上游折扣、手续费和风险缓冲；0 表示成本记为 0',
       expiresAt: '过期时间',
       expiresAtHint: '留空表示不过期',
       expiresAtFollowsCostCycle: '订阅账号过期时间跟随成本周期（starts_at + period_days；封号则为结算时间）',
       expiresAtFollowsCostCycleShort: '跟随成本周期',
-      rateMultiplierCostHint: '账号计费倍率，影响利润与成本核算',
+	  rateMultiplierCostHint: '综合成本倍率 = 实际采购成本数值 ÷ 模型基础价格数值；由管理员手动维护，平台不自动换汇',
+	  costPreview: {
+		title: '成本与毛利样例',
+		hint: '仅用于即时试算，不保存基础价格和销售倍率，数值均不带货币单位。',
+		basePrice: '样例基础价格',
+		salesMultiplier: '销售倍率',
+		userCharge: '用户扣费',
+		accountCost: '账号成本',
+		grossMargin: '毛利'
+	  },
       upstreamBilling: {
         autoProbe: '自动探测上游声明倍率',
-        autoProbeHint: '启用后按全局周期刷新上游声明的计费倍率；此开关本身不会修改账号倍率。',
-        syncRate: '同步上游声明倍率',
-        syncRateHint:
-          '成功探测后自动更新账号计费倍率（同步的是不含高峰的基准倍率）；探测失败或声明超出允许范围时保持不变。开启本项会同时打开「自动探测上游声明倍率」。',
-        syncRateManagedHint: '当前倍率由上游声明的基准倍率（不含高峰）自动维护。'
+		autoProbeHint: '启用后按全局周期刷新上游声明的计费信息，仅供参考，不会修改综合成本倍率。'
       },
 
       higherPriorityFirst: '数值越小优先级越高',

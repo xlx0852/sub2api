@@ -2950,25 +2950,21 @@ func (r *accountRepository) UpdateUpstreamBillingProbeSnapshot(
 	ctx context.Context,
 	account *domain.Account,
 	snapshot *domain.UpstreamBillingProbeSnapshot,
-	rateMultiplier *float64,
 ) error {
 	if account == nil || snapshot == nil {
 		return domain.ErrAccountNilInput
 	}
-	if snapshot.Status != domain.UpstreamBillingProbeStatusOK {
-		rateMultiplier = nil
-	}
 	if dbent.TxFromContext(ctx) == nil {
 		tx, err := r.client.Tx(ctx)
 		if errors.Is(err, dbent.ErrTxStarted) {
-			return r.updateUpstreamBillingProbeSnapshotInTx(ctx, account, snapshot, rateMultiplier)
+			return r.updateUpstreamBillingProbeSnapshotInTx(ctx, account, snapshot)
 		}
 		if err != nil {
 			return err
 		}
 		defer func() { _ = tx.Rollback() }()
 
-		if err := r.updateUpstreamBillingProbeSnapshotInTx(dbent.NewTxContext(ctx, tx), account, snapshot, rateMultiplier); err != nil {
+		if err := r.updateUpstreamBillingProbeSnapshotInTx(dbent.NewTxContext(ctx, tx), account, snapshot); err != nil {
 			return err
 		}
 		if err := tx.Commit(); err != nil {
@@ -2979,14 +2975,13 @@ func (r *accountRepository) UpdateUpstreamBillingProbeSnapshot(
 		r.syncSchedulerAccountSnapshot(ctx, account.ID)
 		return nil
 	}
-	return r.updateUpstreamBillingProbeSnapshotInTx(ctx, account, snapshot, rateMultiplier)
+	return r.updateUpstreamBillingProbeSnapshotInTx(ctx, account, snapshot)
 }
 
 func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 	ctx context.Context,
 	account *domain.Account,
 	snapshot *domain.UpstreamBillingProbeSnapshot,
-	rateMultiplier *float64,
 ) error {
 	payload, err := json.Marshal(map[string]any{domain.UpstreamBillingProbeExtraKey: snapshot})
 	if err != nil {
@@ -3012,14 +3007,6 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 	if err != nil {
 		return err
 	}
-	var expectedRateSyncEnabled any
-	if account.Extra != nil {
-		expectedRateSyncEnabled = account.Extra[domain.UpstreamBillingRateSyncEnabledExtraKey]
-	}
-	expectedRateSyncEnabledJSON, err := json.Marshal(expectedRateSyncEnabled)
-	if err != nil {
-		return err
-	}
 	client := clientFromContext(ctx, r.client)
 	proxyMatches, err := lockAndMatchProbeProxyIdentity(ctx, client, account)
 	if err != nil {
@@ -3036,13 +3023,6 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 		UPDATE accounts
 		SET
 			extra = COALESCE(extra, '{}'::jsonb) || $1::jsonb,
-			rate_multiplier = CASE
-				WHEN $10::numeric IS NOT NULL
-					AND extra @> '{"upstream_billing_probe_enabled": true}'::jsonb
-					AND extra @> '{"upstream_billing_rate_sync_enabled": true}'::jsonb
-				THEN $10::numeric
-				ELSE rate_multiplier
-			END,
 			updated_at = NOW()
 		WHERE id = $2
 			AND platform = $3
@@ -3051,9 +3031,8 @@ func (r *accountRepository) updateUpstreamBillingProbeSnapshotInTx(
 			AND proxy_id IS NOT DISTINCT FROM $6
 			AND COALESCE(extra -> 'upstream_billing_probe', 'null'::jsonb) = $7::jsonb
 			AND COALESCE(extra -> 'upstream_billing_probe_enabled', 'null'::jsonb) = $8::jsonb
-			AND COALESCE(extra -> 'upstream_billing_rate_sync_enabled', 'null'::jsonb) = $9::jsonb
 			AND deleted_at IS NULL
-	`, string(payload), account.ID, account.Platform, account.Type, string(credentials), proxyID, string(expectedSnapshotJSON), string(expectedEnabledJSON), string(expectedRateSyncEnabledJSON), rateMultiplier)
+	`, string(payload), account.ID, account.Platform, account.Type, string(credentials), proxyID, string(expectedSnapshotJSON), string(expectedEnabledJSON))
 	if err != nil {
 		return err
 	}

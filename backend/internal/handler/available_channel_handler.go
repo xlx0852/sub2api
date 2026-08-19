@@ -4,6 +4,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
@@ -79,6 +80,7 @@ type userAvailableGroup struct {
 // userSupportedModelPricing 用户可见的定价字段白名单。
 type userSupportedModelPricing struct {
 	BillingMode      string                   `json:"billing_mode"`
+	Currency         string                   `json:"currency"`
 	InputPrice       *float64                 `json:"input_price"`
 	OutputPrice      *float64                 `json:"output_price"`
 	CacheWritePrice  *float64                 `json:"cache_write_price"`
@@ -291,6 +293,7 @@ func toUserPricing(p *service.ChannelModelPricing) *userSupportedModelPricing {
 	}
 	return &userSupportedModelPricing{
 		BillingMode:      billingMode,
+		Currency:         string(domain.NormalizePricingCurrency(string(p.Currency))),
 		InputPrice:       p.InputPrice,
 		OutputPrice:      p.OutputPrice,
 		CacheWritePrice:  p.CacheWritePrice,

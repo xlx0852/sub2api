@@ -285,6 +285,7 @@ type UsageLogSnapshot struct {
 	TotalCost             float64        `json:"total_cost"`
 	ActualCost            float64        `json:"actual_cost"`
 	RateMultiplier        float64        `json:"rate_multiplier"`
+	PricingCurrency       *string        `json:"pricing_currency,omitempty"`
 	AccountRateMultiplier *float64       `json:"account_rate_multiplier,omitempty"`
 	BillingType           int8           `json:"billing_type"`
 	RequestType           RequestType    `json:"request_type"`
@@ -336,7 +337,7 @@ func NewUsageLogSnapshot(log *UsageLog) UsageLogSnapshot {
 		CacheCreation1hTokens: log.CacheCreation1hTokens, ImageOutputTokens: log.ImageOutputTokens,
 		ImageOutputCost: log.ImageOutputCost, InputCost: log.InputCost, OutputCost: log.OutputCost,
 		CacheCreationCost: log.CacheCreationCost, CacheReadCost: log.CacheReadCost, TotalCost: log.TotalCost,
-		ActualCost: log.ActualCost, RateMultiplier: log.RateMultiplier, AccountRateMultiplier: log.AccountRateMultiplier,
+		ActualCost: log.ActualCost, RateMultiplier: log.RateMultiplier, PricingCurrency: log.PricingCurrency, AccountRateMultiplier: log.AccountRateMultiplier,
 		BillingType: log.BillingType, RequestType: log.RequestType, Stream: log.Stream, OpenAIWSMode: log.OpenAIWSMode,
 		DurationMs: log.DurationMs, FirstTokenMs: log.FirstTokenMs, WSConnReused: log.WSConnReused,
 		WSPreflightFailCount: log.WSPreflightFailCount, WSConnPickMs: log.WSConnPickMs,
@@ -366,7 +367,7 @@ func (s UsageLogSnapshot) UsageLog() *UsageLog {
 		CacheCreation5mTokens: s.CacheCreation5mTokens, CacheCreation1hTokens: s.CacheCreation1hTokens,
 		ImageOutputTokens: s.ImageOutputTokens, ImageOutputCost: s.ImageOutputCost, InputCost: s.InputCost,
 		OutputCost: s.OutputCost, CacheCreationCost: s.CacheCreationCost, CacheReadCost: s.CacheReadCost,
-		TotalCost: s.TotalCost, ActualCost: s.ActualCost, RateMultiplier: s.RateMultiplier,
+		TotalCost: s.TotalCost, ActualCost: s.ActualCost, RateMultiplier: s.RateMultiplier, PricingCurrency: s.PricingCurrency,
 		AccountRateMultiplier: s.AccountRateMultiplier, BillingType: s.BillingType, RequestType: s.RequestType,
 		Stream: s.Stream, OpenAIWSMode: s.OpenAIWSMode, DurationMs: s.DurationMs, FirstTokenMs: s.FirstTokenMs,
 		WSConnReused: s.WSConnReused, WSPreflightFailCount: s.WSPreflightFailCount, WSConnPickMs: s.WSConnPickMs,

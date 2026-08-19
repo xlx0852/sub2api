@@ -344,6 +344,9 @@ export async function getUsageSummary(
 	export interface GroupPricingModelPreview {
 	  model: string
 	  billing_mode: string
+	  official_currency?: 'USD' | 'CNY'
+	  sell_currency?: 'USD' | 'CNY'
+	  effective_currency?: 'USD' | 'CNY'
 	  official_input: number | null
 	  official_output: number | null
 	  sell_input: number | null

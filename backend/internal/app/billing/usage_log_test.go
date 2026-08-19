@@ -38,3 +38,15 @@ func TestBuildUsageLogPreservesVideoAttributionWhenCountIsZero(t *testing.T) {
 	require.Equal(t, 1, *log.VideoDurationSeconds)
 	require.Nil(t, log.ImageSize)
 }
+
+func TestBuildUsageLogSnapshotsPricingCurrencyAndDefaultsLegacyCostToUSD(t *testing.T) {
+	input := RecordInput{User: &domain.User{ID: 1}, APIKey: &domain.APIKey{ID: 2}, Account: &domain.Account{ID: 3}}
+
+	cny := BuildUsageLog(input, &CostBreakdown{PricingCurrency: domain.PricingCurrencyCNY}, 1)
+	require.NotNil(t, cny.PricingCurrency)
+	require.Equal(t, "CNY", *cny.PricingCurrency)
+
+	legacy := BuildUsageLog(input, &CostBreakdown{}, 1)
+	require.NotNil(t, legacy.PricingCurrency)
+	require.Equal(t, "USD", *legacy.PricingCurrency)
+}

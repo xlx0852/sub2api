@@ -294,6 +294,10 @@ func validateCatalog(cat *Catalog) error {
 		}
 	}
 	for name, entry := range cat.FallbackPricing {
+		currency := strings.ToUpper(strings.TrimSpace(entry.Currency))
+		if currency != "" && currency != "USD" && currency != "CNY" {
+			return fmt.Errorf("unsupported fallback pricing currency %q for %s", entry.Currency, name)
+		}
 		if entry.InputCostPerToken < 0 || entry.OutputCostPerToken < 0 || entry.OutputCostPerImage < 0 {
 			return fmt.Errorf("negative fallback price for %s", name)
 		}

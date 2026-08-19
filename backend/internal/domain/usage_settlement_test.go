@@ -28,11 +28,12 @@ func TestUsageSettlementTransitions(t *testing.T) {
 
 func TestUsageSettlementPayloadRoundTripExcludesRelations(t *testing.T) {
 	createdAt := time.Unix(1700000000, 0).UTC()
+	pricingCurrency := string(PricingCurrencyCNY)
 	command := &UsageBillingCommand{RequestID: "local:turn-1", APIKeyID: 2, UserID: 3, AccountID: 4, AccountType: AccountTypeAPIKey, InputTokens: 10, BalanceCost: 0.1}
 	command.Normalize()
 	log := &UsageLog{
 		UserID: 3, APIKeyID: 2, AccountID: 4, RequestID: "local:turn-1", Model: "gpt-test",
-		InputTokens: 10, ActualCost: 0.1, CreatedAt: createdAt,
+		InputTokens: 10, ActualCost: 0.1, PricingCurrency: &pricingCurrency, CreatedAt: createdAt,
 		User:    &User{Email: "must-not-be-serialized@example.com"},
 		Account: &Account{Credentials: map[string]any{"access_token": "secret"}},
 	}
@@ -48,6 +49,7 @@ func TestUsageSettlementPayloadRoundTripExcludesRelations(t *testing.T) {
 	require.Equal(t, command.RequestFingerprint, decoded.Billing.RequestFingerprint)
 	require.Equal(t, createdAt, decoded.UsageLog.CreatedAt)
 	require.Equal(t, log.RequestID, decoded.UsageLog.UsageLog().RequestID)
+	require.Equal(t, pricingCurrency, *decoded.UsageLog.UsageLog().PricingCurrency)
 }
 
 func TestUsageSettlementPayloadRejectsIdentityMismatch(t *testing.T) {

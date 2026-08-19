@@ -7,6 +7,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -17,26 +18,26 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockChannelRepository struct {
-	listAllFn                  func(ctx context.Context) ([]Channel, error)
-	getGroupPlatformsFn        func(ctx context.Context, groupIDs []int64) (map[int64]string, error)
-	createFn                   func(ctx context.Context, channel *Channel) error
-	getByIDFn                  func(ctx context.Context, id int64) (*Channel, error)
-	updateFn                   func(ctx context.Context, channel *Channel) error
-	deleteFn                   func(ctx context.Context, id int64) error
-	listFn                     func(ctx context.Context, params pagination.PaginationParams, status, search string) ([]Channel, *pagination.PaginationResult, error)
-	existsByNameFn             func(ctx context.Context, name string) (bool, error)
-	existsByNameExcludingFn    func(ctx context.Context, name string, excludeID int64) (bool, error)
-	getGroupIDsFn              func(ctx context.Context, channelID int64) ([]int64, error)
-	setGroupIDsFn              func(ctx context.Context, channelID int64, groupIDs []int64) error
-	getChannelIDByGroupIDFn     func(ctx context.Context, groupID int64) (int64, error)
-	getChannelIDsByGroupIDsFn   func(ctx context.Context, groupIDs []int64) (map[int64]int64, error)
+	listAllFn                         func(ctx context.Context) ([]Channel, error)
+	getGroupPlatformsFn               func(ctx context.Context, groupIDs []int64) (map[int64]string, error)
+	createFn                          func(ctx context.Context, channel *Channel) error
+	getByIDFn                         func(ctx context.Context, id int64) (*Channel, error)
+	updateFn                          func(ctx context.Context, channel *Channel) error
+	deleteFn                          func(ctx context.Context, id int64) error
+	listFn                            func(ctx context.Context, params pagination.PaginationParams, status, search string) ([]Channel, *pagination.PaginationResult, error)
+	existsByNameFn                    func(ctx context.Context, name string) (bool, error)
+	existsByNameExcludingFn           func(ctx context.Context, name string, excludeID int64) (bool, error)
+	getGroupIDsFn                     func(ctx context.Context, channelID int64) ([]int64, error)
+	setGroupIDsFn                     func(ctx context.Context, channelID int64, groupIDs []int64) error
+	getChannelIDByGroupIDFn           func(ctx context.Context, groupID int64) (int64, error)
+	getChannelIDsByGroupIDsFn         func(ctx context.Context, groupIDs []int64) (map[int64]int64, error)
 	listGroupIDsWithSellPricePolicyFn func(ctx context.Context) (map[int64]int64, error)
-	getGroupsInOtherChannelsFn func(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error)
-	listModelPricingFn         func(ctx context.Context, channelID int64) ([]ChannelModelPricing, error)
-	createModelPricingFn       func(ctx context.Context, pricing *ChannelModelPricing) error
-	updateModelPricingFn       func(ctx context.Context, pricing *ChannelModelPricing) error
-	deleteModelPricingFn       func(ctx context.Context, id int64) error
-	replaceModelPricingFn      func(ctx context.Context, channelID int64, pricingList []ChannelModelPricing) error
+	getGroupsInOtherChannelsFn        func(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error)
+	listModelPricingFn                func(ctx context.Context, channelID int64) ([]ChannelModelPricing, error)
+	createModelPricingFn              func(ctx context.Context, pricing *ChannelModelPricing) error
+	updateModelPricingFn              func(ctx context.Context, pricing *ChannelModelPricing) error
+	deleteModelPricingFn              func(ctx context.Context, id int64) error
+	replaceModelPricingFn             func(ctx context.Context, channelID int64, pricingList []ChannelModelPricing) error
 }
 
 func (m *mockChannelRepository) Create(ctx context.Context, channel *Channel) error {
@@ -110,38 +111,38 @@ func (m *mockChannelRepository) SetGroupIDs(ctx context.Context, channelID int64
 }
 
 func (m *mockChannelRepository) GetChannelIDByGroupID(ctx context.Context, groupID int64) (int64, error) {
-		if m.getChannelIDByGroupIDFn != nil {
-			return m.getChannelIDByGroupIDFn(ctx, groupID)
-		}
-		return 0, nil
+	if m.getChannelIDByGroupIDFn != nil {
+		return m.getChannelIDByGroupIDFn(ctx, groupID)
 	}
+	return 0, nil
+}
 
-	func (m *mockChannelRepository) GetChannelIDsByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]int64, error) {
-		if m.getChannelIDsByGroupIDsFn != nil {
-			return m.getChannelIDsByGroupIDsFn(ctx, groupIDs)
-		}
-		// Default: derive from GetChannelIDByGroupID for each id.
-		out := make(map[int64]int64, len(groupIDs))
-		for _, gid := range groupIDs {
-			id, err := m.GetChannelIDByGroupID(ctx, gid)
-			if err != nil {
-				return nil, err
-			}
-			if id > 0 {
-				out[gid] = id
-			}
-		}
-		return out, nil
+func (m *mockChannelRepository) GetChannelIDsByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]int64, error) {
+	if m.getChannelIDsByGroupIDsFn != nil {
+		return m.getChannelIDsByGroupIDsFn(ctx, groupIDs)
 	}
-
-	func (m *mockChannelRepository) ListGroupIDsWithSellPricePolicy(ctx context.Context) (map[int64]int64, error) {
-		if m.listGroupIDsWithSellPricePolicyFn != nil {
-			return m.listGroupIDsWithSellPricePolicyFn(ctx)
+	// Default: derive from GetChannelIDByGroupID for each id.
+	out := make(map[int64]int64, len(groupIDs))
+	for _, gid := range groupIDs {
+		id, err := m.GetChannelIDByGroupID(ctx, gid)
+		if err != nil {
+			return nil, err
 		}
-		return map[int64]int64{}, nil
+		if id > 0 {
+			out[gid] = id
+		}
 	}
+	return out, nil
+}
 
-	func (m *mockChannelRepository) GetGroupsInOtherChannels(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error) {
+func (m *mockChannelRepository) ListGroupIDsWithSellPricePolicy(ctx context.Context) (map[int64]int64, error) {
+	if m.listGroupIDsWithSellPricePolicyFn != nil {
+		return m.listGroupIDsWithSellPricePolicyFn(ctx)
+	}
+	return map[int64]int64{}, nil
+}
+
+func (m *mockChannelRepository) GetGroupsInOtherChannels(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error) {
 	if m.getGroupsInOtherChannelsFn != nil {
 		return m.getGroupsInOtherChannelsFn(ctx, channelID, groupIDs)
 	}
@@ -1647,6 +1648,14 @@ func TestUpdate_DuplicateModel(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "claude-opus-4")
+}
+
+func TestValidatePricingEntriesRejectsUnsupportedCurrencyAndAllowsLegacyDefault(t *testing.T) {
+	require.NoError(t, validatePricingEntries([]ChannelModelPricing{{Platform: "openai", Models: []string{"gpt-test"}}}))
+	require.NoError(t, validatePricingEntries([]ChannelModelPricing{{Platform: "deepseek", Models: []string{"deepseek-test"}, Currency: domain.PricingCurrencyCNY}}))
+	err := validatePricingEntries([]ChannelModelPricing{{Platform: "openai", Models: []string{"gpt-test"}, Currency: domain.PricingCurrency("EUR")}})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported currency")
 }
 
 func TestUpdate_InvalidPricingIntervals(t *testing.T) {

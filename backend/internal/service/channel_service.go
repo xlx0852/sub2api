@@ -1,7 +1,6 @@
 package service
 
 import (
-	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"context"
 	"fmt"
 	"log/slog"
@@ -9,8 +8,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 	"golang.org/x/sync/singleflight"
@@ -625,6 +626,11 @@ func validateChannelConfig(pricing []ChannelModelPricing, mapping map[string]map
 // validatePricingEntries 校验定价条目（冲突检测 + 区间校验 + 计费模式校验），
 // 用于售价策略模型定价校验。
 func validatePricingEntries(pricing []ChannelModelPricing) error {
+	for i, p := range pricing {
+		if string(p.Currency) != "" && !domain.IsSupportedPricingCurrency(string(p.Currency)) {
+			return fmt.Errorf("model_pricing[%d]: unsupported currency %q (allowed: USD, CNY)", i, p.Currency)
+		}
+	}
 	if err := validateNoConflictingModels(pricing); err != nil {
 		return err
 	}

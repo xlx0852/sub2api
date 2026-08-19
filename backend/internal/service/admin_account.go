@@ -616,13 +616,6 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		if *input.RateMultiplier < 0 {
 			return nil, errors.New("rate_multiplier must be >= 0")
 		}
-		// 同步开启时倍率归上游所有，手工值活不过下一次成功探测（表现为"改了又自己
-		// 变回去"），与批量路径一样直接拒绝。判断的是本次请求生效后的状态：上面
-		// 已把请求携带的 extra 合并落进 account.Extra，所以"同一请求关闭同步 + 改倍率"
-		// （用户显式收回所有权）会走到这里时读到 false，正常放行。
-		if upstreamBillingRateSyncEnabled(account) {
-			return nil, ErrUpstreamBillingRateSyncConflict
-		}
 		account.RateMultiplier = input.RateMultiplier
 	}
 	if input.LoadFactor != nil {
@@ -792,26 +785,6 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	if input.RateMultiplier != nil {
 		if *input.RateMultiplier < 0 {
 			return nil, errors.New("rate_multiplier must be >= 0")
-		}
-		// 倍率同步开启的账号，其倍率归上游探测所有：批量改值会在下一次成功探测时
-		// 被静默覆盖（表现为"改了又自己变回去"）。除非本请求同时关闭同步开关
-		// （extra 里显式置 upstream_billing_rate_sync_enabled=false），否则拒绝。
-		bulkDisablesSync := false
-		if input.Extra != nil {
-			if v, ok := input.Extra[UpstreamBillingRateSyncEnabledExtraKey].(bool); ok && !v {
-				bulkDisablesSync = true
-			}
-			if v, ok := input.Extra[UpstreamBillingProbeEnabledExtraKey].(bool); ok && !v {
-				// 关闭探测会连带关闭同步（见 SetAccountEnabled 的归零语义）。
-				bulkDisablesSync = true
-			}
-		}
-		if !bulkDisablesSync {
-			for _, acc := range cachedTargets {
-				if acc != nil && upstreamBillingRateSyncEnabled(acc) {
-					return nil, ErrUpstreamBillingRateSyncBulkConflict
-				}
-			}
 		}
 	}
 

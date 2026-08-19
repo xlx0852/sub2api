@@ -542,6 +542,26 @@ func (_u *UsageLogUpdate) AddRateMultiplier(v float64) *UsageLogUpdate {
 	return _u
 }
 
+// SetPricingCurrency sets the "pricing_currency" field.
+func (_u *UsageLogUpdate) SetPricingCurrency(v string) *UsageLogUpdate {
+	_u.mutation.SetPricingCurrency(v)
+	return _u
+}
+
+// SetNillablePricingCurrency sets the "pricing_currency" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillablePricingCurrency(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetPricingCurrency(*v)
+	}
+	return _u
+}
+
+// ClearPricingCurrency clears the value of the "pricing_currency" field.
+func (_u *UsageLogUpdate) ClearPricingCurrency() *UsageLogUpdate {
+	_u.mutation.ClearPricingCurrency()
+	return _u
+}
+
 // SetAccountRateMultiplier sets the "account_rate_multiplier" field.
 func (_u *UsageLogUpdate) SetAccountRateMultiplier(v float64) *UsageLogUpdate {
 	_u.mutation.ResetAccountRateMultiplier()
@@ -1172,6 +1192,11 @@ func (_u *UsageLogUpdate) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "UsageLog.billing_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.PricingCurrency(); ok {
+		if err := usagelog.PricingCurrencyValidator(v); err != nil {
+			return &ValidationError{Name: "pricing_currency", err: fmt.Errorf(`ent: validator failed for field "UsageLog.pricing_currency": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.UserAgent(); ok {
 		if err := usagelog.UserAgentValidator(v); err != nil {
 			return &ValidationError{Name: "user_agent", err: fmt.Errorf(`ent: validator failed for field "UsageLog.user_agent": %w`, err)}
@@ -1353,6 +1378,12 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.PricingCurrency(); ok {
+		_spec.SetField(usagelog.FieldPricingCurrency, field.TypeString, value)
+	}
+	if _u.mutation.PricingCurrencyCleared() {
+		_spec.ClearField(usagelog.FieldPricingCurrency, field.TypeString)
 	}
 	if value, ok := _u.mutation.AccountRateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldAccountRateMultiplier, field.TypeFloat64, value)
@@ -2188,6 +2219,26 @@ func (_u *UsageLogUpdateOne) AddRateMultiplier(v float64) *UsageLogUpdateOne {
 	return _u
 }
 
+// SetPricingCurrency sets the "pricing_currency" field.
+func (_u *UsageLogUpdateOne) SetPricingCurrency(v string) *UsageLogUpdateOne {
+	_u.mutation.SetPricingCurrency(v)
+	return _u
+}
+
+// SetNillablePricingCurrency sets the "pricing_currency" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillablePricingCurrency(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetPricingCurrency(*v)
+	}
+	return _u
+}
+
+// ClearPricingCurrency clears the value of the "pricing_currency" field.
+func (_u *UsageLogUpdateOne) ClearPricingCurrency() *UsageLogUpdateOne {
+	_u.mutation.ClearPricingCurrency()
+	return _u
+}
+
 // SetAccountRateMultiplier sets the "account_rate_multiplier" field.
 func (_u *UsageLogUpdateOne) SetAccountRateMultiplier(v float64) *UsageLogUpdateOne {
 	_u.mutation.ResetAccountRateMultiplier()
@@ -2831,6 +2882,11 @@ func (_u *UsageLogUpdateOne) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "UsageLog.billing_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.PricingCurrency(); ok {
+		if err := usagelog.PricingCurrencyValidator(v); err != nil {
+			return &ValidationError{Name: "pricing_currency", err: fmt.Errorf(`ent: validator failed for field "UsageLog.pricing_currency": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.UserAgent(); ok {
 		if err := usagelog.UserAgentValidator(v); err != nil {
 			return &ValidationError{Name: "user_agent", err: fmt.Errorf(`ent: validator failed for field "UsageLog.user_agent": %w`, err)}
@@ -3029,6 +3085,12 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(usagelog.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.PricingCurrency(); ok {
+		_spec.SetField(usagelog.FieldPricingCurrency, field.TypeString, value)
+	}
+	if _u.mutation.PricingCurrencyCleared() {
+		_spec.ClearField(usagelog.FieldPricingCurrency, field.TypeString)
 	}
 	if value, ok := _u.mutation.AccountRateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldAccountRateMultiplier, field.TypeFloat64, value)

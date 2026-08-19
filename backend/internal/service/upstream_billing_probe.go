@@ -41,7 +41,6 @@ const (
 	// /v1/sub2api/billing，按常规 interval 重排只会持续占满每周期
 	// upstreamBillingProbeMaxPerCycle 个名额。
 	upstreamBillingProbeUnsupportedDelayFactor = 8
-	upstreamBillingProbeAccountRateScale       = 10000.0
 	upstreamBillingProbeLeaderLockKey          = "upstream:billing:probe:leader"
 	upstreamBillingProbeLeaderLockTTL          = 2 * time.Minute
 )
@@ -49,35 +48,12 @@ const (
 // UpstreamBillingProbeMaxBatchSize limits one manual batch and one runner cycle.
 const UpstreamBillingProbeMaxBatchSize = upstreamBillingProbeMaxPerCycle
 
-// upstreamBillingRateSyncMaxMultiplier bounds the value the automatic
-// write-back may push into accounts.rate_multiplier.
-//
-// No other code path bounds that column from above — admins may type any
-// non-negative number and the only ceiling is the DECIMAL(10,4) column itself
-// (999999.9999). That ceiling is meaningless as a guard: rate_multiplier
-// scales the per-request account cost that feeds quota_used, so a single
-// declared 999999 would exhaust any account quota on the first request and
-// poison cost reporting. 100 is picked as a deliberately generous bound: it is
-// two orders of magnitude above the 1.0 default and far above any plausible
-// upstream resale markup, so no legitimate declaration is rejected while an
-// absurd or hostile one cannot reach the quota control plane unattended.
-// It only constrains the automatic path; manual edits keep their old range.
-const upstreamBillingRateSyncMaxMultiplier = 100.0
-
 var (
 	ErrUpstreamBillingProbeUnavailable = infraerrors.ServiceUnavailable(
 		"UPSTREAM_BILLING_PROBE_UNAVAILABLE", "upstream billing probe is unavailable",
 	)
 	ErrUpstreamBillingProbeAccountInvalid = infraerrors.BadRequest(
 		"UPSTREAM_BILLING_PROBE_ACCOUNT_INVALID", "account is not an API key account",
-	)
-	ErrUpstreamBillingRateSyncBulkConflict = infraerrors.Conflict(
-		"UPSTREAM_BILLING_RATE_SYNC_BULK_CONFLICT",
-		"account rate multiplier cannot be changed in bulk while upstream billing rate sync is enabled",
-	)
-	ErrUpstreamBillingRateSyncConflict = infraerrors.Conflict(
-		"UPSTREAM_BILLING_RATE_SYNC_CONFLICT",
-		"account rate multiplier cannot be changed while upstream billing rate sync is enabled",
 	)
 )
 
@@ -195,7 +171,7 @@ type UpstreamBillingProbeService struct {
 }
 
 type upstreamBillingProbeSnapshotWriter interface {
-	UpdateUpstreamBillingProbeSnapshot(context.Context, *Account, *UpstreamBillingProbeSnapshot, *float64) error
+	UpdateUpstreamBillingProbeSnapshot(context.Context, *Account, *UpstreamBillingProbeSnapshot) error
 }
 
 type upstreamBillingProbeDueAccountLister interface {
@@ -648,35 +624,15 @@ func (s *UpstreamBillingProbeService) probeLoadedAccount(ctx context.Context, ac
 	// 账号级值域与精度只在真要写回时才有影响：只观察上游声明、未开启同步的
 	// 账号不因声明值不适配 accounts.rate_multiplier 而被记成探测失败并进入
 	// 指数退避——探测本身成功了，原始声明照常存进快照供展示。
-	var syncRate *float64
-	previousRate := account.BillingRateMultiplier()
 	if upstreamBillingRateSyncEnabled(account) {
-		if value, valid := upstreamBillingProbeSyncRate(data); valid {
-			syncRate = &value
-			snapshot.SyncedRateMultiplier = &value
-		} else {
-			declared, _ := resolveAccountExtraNumber(data, "resolved_rate_multiplier")
-			slog.Warn("upstream_billing_rate_sync_rejected",
-				"source", "upstream_billing_probe",
-				"account_id", account.ID,
-				"declared_resolved_rate_multiplier", declared,
-				"max_rate_multiplier", upstreamBillingRateSyncMaxMultiplier,
-				"current_rate_multiplier", previousRate,
-			)
-		}
-	}
-	if err := s.updateSnapshot(ctx, account, snapshot, syncRate); err != nil {
-		return nil, err
-	}
-	if syncRate != nil {
-		// 写回是后台任务的裸 SQL，不经过管理端路由，因此不会产生 audit_logs 行。
-		// old_rate_multiplier 是本次探测开始时读到的值（写回的 CAS 不比对该列）。
-		slog.Info("upstream_billing_rate_sync_applied",
+		slog.Warn("upstream_billing_rate_sync_ignored",
 			"source", "upstream_billing_probe",
 			"account_id", account.ID,
-			"old_rate_multiplier", previousRate,
-			"new_rate_multiplier", *syncRate,
+			"current_comprehensive_cost_multiplier", account.BillingRateMultiplier(),
 		)
+	}
+	if err := s.updateSnapshot(ctx, account, snapshot); err != nil {
+		return nil, err
 	}
 	return snapshot, nil
 }
@@ -717,7 +673,7 @@ func (s *UpstreamBillingProbeService) persistProbeFailure(
 			snapshot.FreshUntil = probeTimePtr(previous.ReceivedAt.Add(2 * time.Duration(intervalMinutes) * time.Minute))
 		}
 	}
-	if err := s.updateSnapshot(ctx, account, snapshot, nil); err != nil {
+	if err := s.updateSnapshot(ctx, account, snapshot); err != nil {
 		return nil, err
 	}
 	return snapshot, nil
@@ -727,13 +683,12 @@ func (s *UpstreamBillingProbeService) updateSnapshot(
 	ctx context.Context,
 	account *Account,
 	snapshot *UpstreamBillingProbeSnapshot,
-	rateMultiplier *float64,
 ) error {
 	writer, ok := s.accountRepo.(upstreamBillingProbeSnapshotWriter)
 	if !ok {
 		return ErrUpstreamBillingProbeUnavailable
 	}
-	return writer.UpdateUpstreamBillingProbeSnapshot(ctx, account, snapshot, rateMultiplier)
+	return writer.UpdateUpstreamBillingProbeSnapshot(ctx, account, snapshot)
 }
 
 func parseUpstreamBillingProbeResponse(body []byte) (map[string]any, error) {
@@ -833,37 +788,6 @@ func upstreamBillingRateAt(data map[string]any, now time.Time) (float64, bool) {
 		return 0, false
 	}
 	return base, true
-}
-
-// upstreamBillingProbeSyncRate converts the declared multiplier into the value
-// the automatic write-back may store in accounts.rate_multiplier, at the
-// precision that column supports (DECIMAL(10,4)).
-//
-// It reads resolved_rate_multiplier, not effective_rate_multiplier: the
-// effective value folds in the peak coefficient that happened to apply at the
-// instant of the probe, so writing it would freeze one probe cycle's peak (or
-// off-peak) factor into a static column, while display and scheduling
-// recompute the peak factor for the current time through upstreamBillingRateAt.
-//
-// The accepted range is deliberately narrower than the column:
-//   - 0 is rejected. accountCost multiplies the request cost by this value, so
-//     an upstream-declared 0 would stop quota_used from ever growing and every
-//     admin-configured account quota and cost alert would silently stop
-//     working. Admins may still set 0 by hand; only the automatic path refuses.
-//   - anything above upstreamBillingRateSyncMaxMultiplier is rejected.
-//
-// A rejected declaration leaves the current multiplier untouched; the probe
-// still records an OK snapshot carrying the raw declaration for display.
-func upstreamBillingProbeSyncRate(data map[string]any) (float64, bool) {
-	value, ok := resolveAccountExtraNumber(data, "resolved_rate_multiplier")
-	if !ok || math.IsNaN(value) || math.IsInf(value, 0) {
-		return 0, false
-	}
-	rounded := math.Round(value*upstreamBillingProbeAccountRateScale) / upstreamBillingProbeAccountRateScale
-	if rounded <= 0 || rounded > upstreamBillingRateSyncMaxMultiplier {
-		return 0, false
-	}
-	return rounded, true
 }
 
 func upstreamBillingPeakMultiplierAt(data map[string]any, now time.Time) (float64, bool) {

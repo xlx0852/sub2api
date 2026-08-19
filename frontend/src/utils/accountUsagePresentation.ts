@@ -233,7 +233,7 @@ export const buildAccountUsagePresentation = ({
         quota.resetAt,
         quota.color,
         null,
-        `$${quota.used.toFixed(2)} / $${quota.limit.toFixed(2)}`
+		`${quota.used.toFixed(2)} / ${quota.limit.toFixed(2)}`
       ))
     }
   }

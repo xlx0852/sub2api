@@ -303,7 +303,7 @@
                   <div>
                     <p class="text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('admin.users.columns.balance') }}</p>
                     <button class="mt-1 text-lg font-semibold text-gray-950 underline decoration-dashed decoration-gray-300 underline-offset-4 dark:text-white dark:decoration-dark-500" @click.stop="handleBalanceHistory(row)">
-                      ${{ row.balance.toFixed(2) }}
+                      {{ row.balance.toFixed(2) }}
                     </button>
                   </div>
                   <button class="inline-flex items-center justify-center whitespace-nowrap rounded-md border border-black/[0.08] px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-black/[0.04] dark:border-white/[0.1] dark:text-dark-200 dark:hover:bg-white/[0.06]" @click.stop="handleDeposit(row)">
