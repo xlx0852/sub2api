@@ -70,6 +70,9 @@ func persistUsageBilling(
 	} else if authoritative {
 		return nil
 	}
+	if coordinator != nil && usageLog != nil && coordinator.AuthoritativeFor(usageLog.GroupID) {
+		return errors.New("authoritative usage settlement did not take over billing")
+	}
 	if _, err := applyUsageBilling(ctx, usageLog.RequestID, usageLog, params, deps, billingRepo); err != nil {
 		return err
 	}

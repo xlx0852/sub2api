@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -444,6 +445,8 @@ func TestRelay_OnTurnComplete_PerTerminalEvent(t *testing.T) {
 	require.Len(t, turns, 2)
 	require.Equal(t, 1, turns[0].Turn)
 	require.Equal(t, 2, turns[1].Turn)
+	require.Equal(t, "ws-turn:1", turns[0].BillingRequestID)
+	require.Equal(t, "ws-turn:2", turns[1].BillingRequestID)
 	require.Equal(t, "resp_turn_1", turns[0].RequestID)
 	require.Equal(t, "response.completed", turns[0].TerminalEventType)
 	require.Equal(t, 2, turns[0].Usage.InputTokens)
@@ -476,8 +479,9 @@ func TestRelay_OnUpstreamEventUsesPerTurnNumbersBeforeCompletion(t *testing.T) {
 	}
 	events := make([]observed, 0, 4)
 	_, relayExit := Relay(ctx, clientConn, upstreamConn, []byte(`{"type":"response.create","model":"gpt-5.4"}`), RelayOptions{
-		OnUpstreamEvent: func(turn int, eventType, responseID string) {
+		OnUpstreamEvent: func(turn int, eventType, responseID, billingRequestID string) {
 			events = append(events, observed{turn: turn, eventType: eventType, responseID: responseID})
+			require.Equal(t, "ws-turn:"+strconv.Itoa(turn), billingRequestID)
 		},
 	})
 	require.Nil(t, relayExit)

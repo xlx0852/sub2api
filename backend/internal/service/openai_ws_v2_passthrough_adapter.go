@@ -440,16 +440,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	}
 
 	completedTurns := atomic.Int32{}
-	turnBillingIDs := make(map[int]string)
 	acceptedTurns := make(map[int]bool)
-	billingIDForTurn := func(turn int) string {
-		if billingID := turnBillingIDs[turn]; billingID != "" {
-			return billingID
-		}
-		billingID := "ws-turn:" + generateRequestID()
-		turnBillingIDs[turn] = billingID
-		return billingID
-	}
 	policyClientConn := &openAIWSPolicyEnforcingFrameConn{
 		inner: &openAIWSClientFrameConn{conn: clientConn},
 		// 注意线程安全：filter 仅在 runClientToUpstream 这一条
@@ -465,8 +456,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			}
 			if strings.TrimSpace(gjson.GetBytes(payload, "type").String()) == "response.create" && hooks != nil && hooks.BeforeRequest != nil {
 				turnNo := int(completedTurns.Load()) + 1
-				if turnNo < 2 {
-					turnNo = 2
+				if turnNo < 1 {
+					turnNo = 1
 				}
 				requestModel := usageMeta.requestModelForFrame(payload)
 				if requestModel == "" {
@@ -586,6 +577,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					truncateOpenAIWSLogValue(usageRaw, openAIWSLogValueMaxLen),
 				)
 			},
+			NewBillingRequestID: func() string {
+				return "ws-turn:" + generateRequestID()
+			},
 			OnTurnComplete: func(turn openaiwsv2.RelayTurnResult) {
 				turnNo := turn.Turn
 				if turnNo <= 0 {
@@ -593,10 +587,14 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				} else {
 					completedTurns.Store(int32(turnNo))
 				}
+				billingRequestID := strings.TrimSpace(turn.BillingRequestID)
+				if billingRequestID == "" {
+					billingRequestID = "ws-turn:" + generateRequestID()
+				}
 				turnResult := &OpenAIForwardResult{
 					RequestID:        turn.RequestID,
 					ResponseID:       turn.RequestID,
-					BillingRequestID: billingIDForTurn(turnNo),
+					BillingRequestID: billingRequestID,
 					Usage: OpenAIUsage{
 						InputTokens:              turn.Usage.InputTokens,
 						OutputTokens:             turn.Usage.OutputTokens,
@@ -629,13 +627,13 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					hooks.AfterTurn(turnNo, turnResult, nil)
 				}
 			},
-			OnUpstreamEvent: func(turn int, eventType, providerRequestID string) {
+			OnUpstreamEvent: func(turn int, eventType, providerRequestID, billingRequestID string) {
 				if eventType == "error" || acceptedTurns[turn] {
 					return
 				}
 				acceptedTurns[turn] = true
 				if hooks != nil && hooks.UpstreamAccepted != nil {
-					hooks.UpstreamAccepted(turn, billingIDForTurn(turn), providerRequestID)
+					hooks.UpstreamAccepted(turn, billingRequestID, providerRequestID)
 				}
 			},
 			BeforeWriteClient: func(msgType coderws.MessageType, payload []byte, wroteDownstream bool) error {

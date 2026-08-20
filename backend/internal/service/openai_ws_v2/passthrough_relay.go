@@ -42,6 +42,7 @@ type RelayResult struct {
 
 type RelayTurnResult struct {
 	Turn              int
+	BillingRequestID  string
 	RequestModel      string
 	Usage             Usage
 	RequestID         string
@@ -65,7 +66,8 @@ type RelayOptions struct {
 	StartClientAfterFirstDownstream bool
 	OnUsageParseFailure             func(eventType string, usageRaw string)
 	OnTurnComplete                  func(turn RelayTurnResult)
-	OnUpstreamEvent                 func(turn int, eventType, responseID string)
+	OnUpstreamEvent                 func(turn int, eventType, responseID, billingRequestID string)
+	NewBillingRequestID             func() string
 	BeforeWriteClient               func(msgType coderws.MessageType, payload []byte, wroteDownstream bool) error
 	ReadClientFrame                 func(ctx context.Context, clientConn FrameConn) (coderws.MessageType, []byte, error)
 	OnTrace                         func(event RelayTraceEvent)
@@ -91,7 +93,9 @@ type relayState struct {
 	turnTimingByID    map[string]*relayTurnTiming
 	activeTurn        *relayTurnTiming
 	completedTurns    int
-	onUpstreamEvent   func(turn int, eventType, responseID string)
+	turnBillingIDs    map[int]string
+	newBillingID      func() string
+	onUpstreamEvent   func(turn int, eventType, responseID, billingRequestID string)
 }
 
 type relayExitSignal struct {
@@ -147,7 +151,11 @@ func Relay(
 		firstMessageType = coderws.MessageText
 	}
 	startAt := nowFn()
-	state := &relayState{requestModel: result.RequestModel, onUpstreamEvent: options.OnUpstreamEvent}
+	state := &relayState{
+		requestModel:    result.RequestModel,
+		onUpstreamEvent: options.OnUpstreamEvent,
+		newBillingID:    options.NewBillingRequestID,
+	}
 	onTrace := options.OnTrace
 
 	relayCtx, relayCancel := context.WithCancel(ctx)
@@ -480,9 +488,8 @@ func runUpstreamToClient(
 			// binary frame 直接透传，不进入 JSON 观测路径（避免无效解析开销）。
 		}
 		if state != nil && state.onUpstreamEvent != nil && observedEvent.eventType != "" {
-			turn := 1
-			turn = state.completedTurns + 1
-			state.onUpstreamEvent(turn, observedEvent.eventType, observedEvent.responseID)
+			turn := state.completedTurns + 1
+			state.onUpstreamEvent(turn, observedEvent.eventType, observedEvent.responseID, state.billingRequestID(turn))
 		}
 		emitTurnComplete(onTurnComplete, state, observedEvent)
 		if dropDownstreamWrites != nil && dropDownstreamWrites.Load() {
@@ -695,9 +702,14 @@ func emitTurnComplete(
 		requestModel = state.requestModel
 		turn = state.completedTurns + 1
 	}
+	billingRequestID := ""
+	if state != nil {
+		billingRequestID = state.billingRequestID(turn)
+	}
 	if onTurnComplete != nil {
 		onTurnComplete(RelayTurnResult{
 			Turn:              turn,
+			BillingRequestID:  billingRequestID,
 			RequestModel:      requestModel,
 			Usage:             observed.usage,
 			RequestID:         responseID,
@@ -709,6 +721,30 @@ func emitTurnComplete(
 	if state != nil {
 		state.completedTurns++
 	}
+}
+
+func (state *relayState) billingRequestID(turn int) string {
+	if state == nil {
+		return ""
+	}
+	if turn <= 0 {
+		turn = 1
+	}
+	if state.turnBillingIDs == nil {
+		state.turnBillingIDs = make(map[int]string, 8)
+	}
+	if id := strings.TrimSpace(state.turnBillingIDs[turn]); id != "" {
+		return id
+	}
+	id := ""
+	if state.newBillingID != nil {
+		id = strings.TrimSpace(state.newBillingID())
+	}
+	if id == "" {
+		id = "ws-turn:" + strconv.Itoa(turn)
+	}
+	state.turnBillingIDs[turn] = id
+	return id
 }
 
 func openAIWSRelayGetOrInitTurnTiming(state *relayState, responseID string, now time.Time) *relayTurnTiming {
