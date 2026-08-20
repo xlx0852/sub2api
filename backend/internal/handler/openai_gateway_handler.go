@@ -162,6 +162,9 @@ func usageRecordContext(parent context.Context, base context.Context) context.Co
 	if requestID, _ := parent.Value(ctxkey.RequestID).(string); strings.TrimSpace(requestID) != "" {
 		base = context.WithValue(base, ctxkey.RequestID, strings.TrimSpace(requestID))
 	}
+	if groupID := service.UsageSettlementGroupIDFromContext(parent); groupID != nil {
+		base = service.WithUsageSettlementGroupID(base, groupID)
+	}
 	return base
 }
 

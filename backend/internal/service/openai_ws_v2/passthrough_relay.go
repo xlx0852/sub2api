@@ -41,6 +41,7 @@ type RelayResult struct {
 }
 
 type RelayTurnResult struct {
+	Turn              int
 	RequestModel      string
 	Usage             Usage
 	RequestID         string
@@ -689,11 +690,14 @@ func emitTurnComplete(
 		return
 	}
 	requestModel := ""
+	turn := 1
 	if state != nil {
 		requestModel = state.requestModel
+		turn = state.completedTurns + 1
 	}
 	if onTurnComplete != nil {
 		onTurnComplete(RelayTurnResult{
+			Turn:              turn,
 			RequestModel:      requestModel,
 			Usage:             observed.usage,
 			RequestID:         responseID,

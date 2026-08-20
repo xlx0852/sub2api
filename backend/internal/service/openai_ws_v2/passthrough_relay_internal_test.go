@@ -378,6 +378,7 @@ func TestEmitTurnCompleteCoverage(t *testing.T) {
 		usage:      Usage{InputTokens: 2, OutputTokens: 3},
 	})
 	require.Equal(t, 1, called)
+	require.Equal(t, 1, got.Turn)
 	require.Equal(t, "resp_emit", got.RequestID)
 	require.Equal(t, "response.completed", got.TerminalEventType)
 	require.Equal(t, 2, got.Usage.InputTokens)

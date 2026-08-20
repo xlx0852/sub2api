@@ -442,6 +442,8 @@ func TestRelay_OnTurnComplete_PerTerminalEvent(t *testing.T) {
 	})
 	require.Nil(t, relayExit)
 	require.Len(t, turns, 2)
+	require.Equal(t, 1, turns[0].Turn)
+	require.Equal(t, 2, turns[1].Turn)
 	require.Equal(t, "resp_turn_1", turns[0].RequestID)
 	require.Equal(t, "response.completed", turns[0].TerminalEventType)
 	require.Equal(t, 2, turns[0].Usage.InputTokens)
