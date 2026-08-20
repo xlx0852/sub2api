@@ -94,7 +94,11 @@ func (s *UsageSettlementPostCommit) updatePlatformQuotaMirror(ctx context.Contex
 	if s.cfg != nil && s.cfg.Database.UserPlatformQuotaFlusherEnabled {
 		return
 	}
-	if err := s.userPlatformQuotaRepo.IncrementUsageWithReset(ctx, userID, platform, cost, time.Now().UTC()); err != nil {
+	// Billing already committed. Do not bind the DB mirror write to the
+	// worker lease ctx — a just-expired lease would drop this increment.
+	dbCtx, cancel := detachedBillingContext(ctx)
+	defer cancel()
+	if err := s.userPlatformQuotaRepo.IncrementUsageWithReset(dbCtx, userID, platform, cost, time.Now().UTC()); err != nil {
 		userPlatformQuotaDBIncrErrorTotal.Add(1)
 		slog.Error("persist platform quota mirror after durable settlement failed", "user_id", userID, "platform", platform, "cost", cost, "error", err)
 	}

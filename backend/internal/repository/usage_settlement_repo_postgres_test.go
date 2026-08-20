@@ -290,7 +290,9 @@ func TestUsageSettlementRepositoryPostgresExpiresOnlyOverdueStartedAttempts(t *t
 	require.Len(t, recoverable, 1)
 	require.Equal(t, "resp_overdue", recoverable[0].ProviderRequestID)
 
-	expired, err := repo.ExpireStarted(ctx, now, 10)
+	// ListExpiredRecoverable claims a 30s recovery lease by bumping the
+	// deadline. Expire after that lease so this still covers the overdue path.
+	expired, err := repo.ExpireStarted(ctx, now.Add(31*time.Second), 10)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, expired)
 	overdueAfter, err := repo.GetByIdentity(ctx, overdue.BillingIdentity, overdue.APIKeyID)

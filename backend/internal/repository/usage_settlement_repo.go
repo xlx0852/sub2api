@@ -342,18 +342,35 @@ func (r *usageSettlementRepository) ListExpiredRecoverable(ctx context.Context, 
 	if limit > 1000 {
 		limit = 1000
 	}
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT `+usageSettlementSelectColumns+`
-		FROM usage_settlement_attempts
-		WHERE state = $1
-			AND reconciliation_deadline IS NOT NULL
-			AND reconciliation_deadline <= $2
-			AND provider_request_id IS NOT NULL
-			AND provider_request_id <> ''
-			AND recovery_context IS NOT NULL
-		ORDER BY reconciliation_deadline, id
-		LIMIT $3
-	`, domain.UsageSettlementStateStarted, now.UTC(), limit)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	// Claim overdue started attempts for one worker: bump the deadline so a
+	// peer instance cannot recover the same provider request concurrently.
+	const recoveryLease = 30 * time.Second
+	rows, err := tx.QueryContext(ctx, `
+			WITH candidates AS (
+				SELECT id
+				FROM usage_settlement_attempts
+				WHERE state = $1
+					AND reconciliation_deadline IS NOT NULL
+					AND reconciliation_deadline <= $2
+					AND provider_request_id IS NOT NULL
+					AND provider_request_id <> ''
+					AND recovery_context IS NOT NULL
+				ORDER BY reconciliation_deadline, id
+				FOR UPDATE SKIP LOCKED
+				LIMIT $3
+			)
+			UPDATE usage_settlement_attempts AS attempt
+			SET reconciliation_deadline = $4,
+				updated_at = NOW()
+			FROM candidates
+			WHERE attempt.id = candidates.id
+			RETURNING `+prefixedUsageSettlementColumns("attempt"),
+		domain.UsageSettlementStateStarted, now.UTC(), limit, now.UTC().Add(recoveryLease))
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +383,16 @@ func (r *usageSettlementRepository) ListExpiredRecoverable(ctx context.Context, 
 		}
 		result = append(result, *attempt)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (r *usageSettlementRepository) BacklogStats(ctx context.Context) (*ports.UsageSettlementBacklogStats, error) {
