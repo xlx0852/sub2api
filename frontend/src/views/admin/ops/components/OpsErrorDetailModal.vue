@@ -133,6 +133,54 @@
         </div>
       </div>
 
+      <!-- Request flow: which stage the request died at -->
+      <div class="rounded-xl bg-gray-50 p-6 dark:bg-dark-900">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white">{{ t('admin.ops.errorDetail.requestFlow') }}</h3>
+          <div class="font-mono text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.ops.errorDetail.latency') }}: {{ requestDurationLabel }}
+          </div>
+        </div>
+        <ol class="mt-5 space-y-0">
+          <li v-for="(step, idx) in flowSteps" :key="step.key" class="relative flex gap-3 pb-6 last:pb-0">
+            <div v-if="idx < flowSteps.length - 1" class="absolute left-[11px] top-6 bottom-0 w-px bg-gray-200 dark:bg-dark-700"></div>
+            <div
+              class="relative mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white"
+              :class="step.status === 'failed' ? 'bg-red-500' : step.status === 'passed' ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-dark-600'"
+            >
+              <Icon
+                :name="step.status === 'failed' ? 'x' : step.status === 'passed' ? 'check' : 'clock'"
+                size="xs"
+                :stroke-width="3"
+              />
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-sm font-bold text-gray-900 dark:text-white">{{ step.label }}</span>
+                <span
+                  v-if="step.status === 'failed'"
+                  class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-black ring-1 ring-inset bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-500/30"
+                >
+                  {{ t('admin.ops.errorDetail.diedHere') }}
+                </span>
+                <span v-else-if="step.latency != null" class="font-mono text-[11px] text-gray-500 dark:text-gray-400">
+                  {{ step.latency }}ms
+                </span>
+                <span v-else-if="step.status === 'passed'" class="text-[11px] text-emerald-600 dark:text-emerald-400">
+                  {{ t('admin.ops.errorDetail.flowPassed') }}
+                </span>
+                <span v-else class="text-[11px] text-gray-400 dark:text-gray-500">
+                  {{ t('admin.ops.errorDetail.flowNotReached') }}
+                </span>
+              </div>
+              <div v-if="step.status === 'failed' && step.detail" class="mt-1 break-words text-sm font-medium text-red-700 dark:text-red-400">
+                {{ step.detail }}
+              </div>
+            </div>
+          </li>
+        </ol>
+      </div>
+
       <!-- Response content (client request -> error_body; upstream -> upstream_error_detail/message) -->
       <div class="rounded-xl bg-gray-50 p-6 dark:bg-dark-900">
         <h3 class="text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white">{{ t('admin.ops.errorDetail.responseBody') }}</h3>
@@ -245,6 +293,17 @@ const showUpstreamList = computed(() => props.errorType === 'request')
 
 const requestId = computed(() => detail.value?.request_id || detail.value?.client_request_id || '')
 
+// 请求总时长优先取 response 延迟；没有则用最近一个有值的阶段延迟兜底。
+const requestDurationLabel = computed(() => {
+  const d = detail.value
+  if (!d) return '—'
+  const candidates = [d.response_latency_ms, d.upstream_latency_ms, d.routing_latency_ms, d.auth_latency_ms]
+  for (const v of candidates) {
+    if (v != null) return `${v}ms`
+  }
+  return '—'
+})
+
 const primaryResponseBody = computed(() => {
   return resolvePrimaryResponseBody(detail.value, props.errorType)
 })
@@ -290,6 +349,65 @@ function displayModel(d: OpsErrorDetail | null): string {
   if (requested) return requested
   return String(d.model || '').trim()
 }
+
+type FlowStepStatus = 'passed' | 'failed' | 'not_reached'
+
+interface FlowStep {
+  key: string
+  label: string
+  status: FlowStepStatus
+  latency?: number | null
+  detail?: string
+}
+
+const flowSteps = computed<FlowStep[]>(() => {
+  const d = detail.value
+  if (!d) return []
+  const phase = String(d.phase || '').toLowerCase()
+  const authLatency = d.auth_latency_ms
+  const routingLatency = d.routing_latency_ms
+  const upstreamLatency = d.upstream_latency_ms
+  const responseLatency = d.response_latency_ms
+
+  const authStatus: FlowStepStatus = phase === 'auth' ? 'failed' : authLatency != null ? 'passed' : 'passed'
+  const routingStatus: FlowStepStatus = phase === 'routing' ? 'failed' : routingLatency != null ? 'passed' : 'not_reached'
+  const upstreamStatus: FlowStepStatus =
+    phase === 'upstream' ? 'failed' : upstreamLatency != null ? 'passed' : 'not_reached'
+  const responseStatus: FlowStepStatus = responseLatency != null ? 'passed' : 'not_reached'
+
+  // 失败原因优先用上游细节；网关本地失败则展示 phase + 消息，便于一眼定位。
+  const failureDetail = d.upstream_error_message || d.message
+
+  return [
+    {
+      key: 'auth',
+      label: t('admin.ops.errorDetail.auth'),
+      status: authStatus,
+      latency: authLatency,
+      detail: authStatus === 'failed' ? failureDetail : undefined,
+    },
+    {
+      key: 'routing',
+      label: t('admin.ops.errorDetail.routing'),
+      status: routingStatus,
+      latency: routingLatency,
+      detail: routingStatus === 'failed' ? failureDetail : undefined,
+    },
+    {
+      key: 'upstream',
+      label: t('admin.ops.errorDetail.upstream'),
+      status: upstreamStatus,
+      latency: upstreamLatency,
+      detail: upstreamStatus === 'failed' ? failureDetail : undefined,
+    },
+    {
+      key: 'response',
+      label: t('admin.ops.errorDetail.response'),
+      status: responseStatus,
+      latency: responseLatency,
+    },
+  ]
+})
 
 const correlatedUpstream = ref<OpsErrorDetail[]>([])
 const correlatedUpstreamLoading = ref(false)
