@@ -237,10 +237,14 @@ def install_backend(
     root: Path,
     verify_command: str | None,
     switch_command: str | None,
+    retire_command: str | None,
     db_backup_command: str | None,
 ) -> None:
-    if not verify_command or not switch_command:
-        raise DeployError("backend deploy requires --backend-verify-command and --backend-switch-command")
+    if not verify_command or not switch_command or not retire_command:
+        raise DeployError(
+            "backend deploy requires --backend-verify-command, "
+            "--backend-switch-command, and --backend-retire-command"
+        )
     component = manifest["backend"]
     if component.get("db_change") is True:
         if not db_backup_command:
@@ -261,11 +265,20 @@ def install_backend(
         "min_frontend_version": require_text(component, "min_frontend_version", "backend"),
         "sha256": sha256(artifact),
     }
+    current = root / "api" / "current"
+    previous_release = current.resolve() if current.is_symlink() and current.exists() else None
     run_hook(switch_command, release)
     switch_release(root, "api", release, marker)
+    if previous_release is not None and previous_release != release.resolve():
+        run_hook(retire_command, previous_release)
 
 
-def rollback(root: Path, component: str, switch_command: str | None) -> None:
+def rollback(
+    root: Path,
+    component: str,
+    switch_command: str | None,
+    retire_command: str | None = None,
+) -> None:
     name = "api" if component == "backend" else "frontend"
     component_root = root / name
     current = component_root / "current"
@@ -275,8 +288,10 @@ def rollback(root: Path, component: str, switch_command: str | None) -> None:
     current_target = current.resolve() if current.is_symlink() and current.exists() else None
     previous_target = previous.resolve()
     if component == "backend":
-        if not switch_command:
-            raise DeployError("backend rollback requires --backend-switch-command")
+        if not switch_command or not retire_command:
+            raise DeployError(
+                "backend rollback requires --backend-switch-command and --backend-retire-command"
+            )
         run_hook(switch_command, previous_target)
     atomic_symlink(current, previous_target)
     if current_target:
@@ -288,6 +303,8 @@ def rollback(root: Path, component: str, switch_command: str | None) -> None:
         os.replace(rollback_marker, current_marker)
         if current_data is not None:
             rollback_marker.write_bytes(current_data)
+    if component == "backend" and current_target is not None and current_target != previous_target:
+        run_hook(retire_command, current_target)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -301,11 +318,13 @@ def parser() -> argparse.ArgumentParser:
         command.add_argument("--live-backend-metadata", type=Path)
         command.add_argument("--backend-verify-command")
         command.add_argument("--backend-switch-command")
+        command.add_argument("--backend-retire-command")
         command.add_argument("--db-backup-command")
     command = subcommands.add_parser("rollback")
     command.add_argument("component", choices=("frontend", "backend"))
     command.add_argument("--root", type=Path, default=Path("/opt/sub2api"))
     command.add_argument("--backend-switch-command")
+    command.add_argument("--backend-retire-command")
     return result
 
 
@@ -313,7 +332,12 @@ def main() -> int:
     args = parser().parse_args()
     try:
         if args.command == "rollback":
-            rollback(args.root.resolve(), args.component, args.backend_switch_command)
+            rollback(
+                args.root.resolve(),
+                args.component,
+                args.backend_switch_command,
+                args.backend_retire_command,
+            )
             return 0
         manifest = load_json(args.manifest.resolve())
         root = args.root.resolve()
@@ -328,6 +352,7 @@ def main() -> int:
                 root,
                 args.backend_verify_command,
                 args.backend_switch_command,
+                args.backend_retire_command,
                 args.db_backup_command,
             )
         if scope in {"frontend", "both"}:

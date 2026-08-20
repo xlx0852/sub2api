@@ -83,7 +83,7 @@
               >
                 {{ t('admin.profit.breakEvenDetail', {
                   kind: profitSummary.break_even_window_kind || '—',
-                  used: Math.round(profitSummary.break_even_used_percent ?? 0),
+                  used: roundUsagePercent(profitSummary.break_even_used_percent ?? 0).toFixed(2),
                   full: (profitSummary.break_even_full_window_revenue ?? 0).toFixed(2),
                   windows: (profitSummary.break_even_windows_per_period ?? 0).toFixed(1),
                   capacity: (profitSummary.break_even_capacity_revenue ?? 0).toFixed(2)
@@ -316,6 +316,7 @@ import Icon from '@/components/icons/Icon.vue'
 import { adminAPI } from '@/api/admin'
 import type { Account, AccountUsageStatsResponse } from '@/types'
 import type { AccountProfitSummary } from '@/api/admin/profit'
+import { roundUsagePercent } from '@/utils/usagePercent'
 
 ChartJS.register(
   CategoryScale,

@@ -550,7 +550,7 @@ func buildPassiveUsageWindow(extra map[string]any, utilKey, resetKey string) *Us
 		}
 	}
 	return &UsageProgress{
-		Utilization:      util * 100,
+		Utilization:      roundUsagePercent2(util * 100),
 		ResetsAt:         resetAt,
 		RemainingSeconds: remaining,
 	}
@@ -562,16 +562,16 @@ func (s *AccountUsageService) syncActiveToPassive(ctx context.Context, accountID
 	extraUpdates := make(map[string]any, 4)
 
 	if usage.FiveHour != nil {
-		extraUpdates["session_window_utilization"] = usage.FiveHour.Utilization / 100
+		extraUpdates["session_window_utilization"] = roundUsageRatio2(usage.FiveHour.Utilization / 100)
 	}
 	if usage.SevenDay != nil {
-		extraUpdates["passive_usage_7d_utilization"] = usage.SevenDay.Utilization / 100
+		extraUpdates["passive_usage_7d_utilization"] = roundUsageRatio2(usage.SevenDay.Utilization / 100)
 		if usage.SevenDay.ResetsAt != nil {
 			extraUpdates["passive_usage_7d_reset"] = usage.SevenDay.ResetsAt.Unix()
 		}
 	}
 	if usage.SevenDayFable != nil {
-		extraUpdates["passive_usage_7d_oi_utilization"] = usage.SevenDayFable.Utilization / 100
+		extraUpdates["passive_usage_7d_oi_utilization"] = roundUsageRatio2(usage.SevenDayFable.Utilization / 100)
 		if usage.SevenDayFable.ResetsAt != nil {
 			extraUpdates["passive_usage_7d_oi_reset"] = usage.SevenDayFable.ResetsAt.Unix()
 		}
@@ -1811,6 +1811,7 @@ func attachFullWindowEstimate(stats *WindowStats, utilization float64) {
 	stats.FullUserCost = nil
 	stats.FullEstimate = nil
 
+	utilization = roundUsagePercent2(utilization)
 	if utilization < 5 || utilization > 100 {
 		stats.FullEstimate = &FullWindowEstimateMeta{Method: "insufficient", Confidence: "insufficient"}
 		return
@@ -1841,6 +1842,7 @@ func attachFullWindowEstimate(stats *WindowStats, utilization float64) {
 }
 
 func attachFullWindowEstimateFromObservations(stats *WindowStats, utilization float64, observations []*AccountQuotaUsageObservation) {
+	utilization = roundUsagePercent2(utilization)
 	attachFullWindowEstimate(stats, utilization)
 	if stats == nil || utilization < 5 || len(observations) < 2 {
 		if stats != nil && stats.FullEstimate != nil {
@@ -1968,7 +1970,7 @@ func buildCodexUsageProgressFromExtra(extra map[string]any, window string, now t
 		return nil
 	}
 
-	progress := &UsageProgress{Utilization: parseExtraFloat64(usedRaw)}
+	progress := &UsageProgress{Utilization: roundUsagePercent2(parseExtraFloat64(usedRaw))}
 	mins := defaultMinutes
 	if windowMinutesKey != "" {
 		if m := parseExtraInt(extra[windowMinutesKey]); m > 0 {
@@ -2115,7 +2117,7 @@ func (s *AccountUsageService) buildUsageInfo(resp *ClaudeUsageResponse, updatedA
 
 	// 5小时窗口 - 始终创建对象（即使 ResetsAt 为空）
 	info.FiveHour = &UsageProgress{
-		Utilization: resp.FiveHour.Utilization,
+		Utilization: roundUsagePercent2(resp.FiveHour.Utilization),
 	}
 	if resp.FiveHour.ResetsAt != "" {
 		if fiveHourReset, err := parseTime(resp.FiveHour.ResetsAt); err == nil {
@@ -2130,14 +2132,14 @@ func (s *AccountUsageService) buildUsageInfo(resp *ClaudeUsageResponse, updatedA
 	if resp.SevenDay.ResetsAt != "" {
 		if sevenDayReset, err := parseTime(resp.SevenDay.ResetsAt); err == nil {
 			info.SevenDay = &UsageProgress{
-				Utilization:      resp.SevenDay.Utilization,
+				Utilization:      roundUsagePercent2(resp.SevenDay.Utilization),
 				ResetsAt:         &sevenDayReset,
 				RemainingSeconds: int(time.Until(sevenDayReset).Seconds()),
 			}
 		} else {
 			log.Printf("Failed to parse SevenDay.ResetsAt: %s, error: %v", resp.SevenDay.ResetsAt, err)
 			info.SevenDay = &UsageProgress{
-				Utilization: resp.SevenDay.Utilization,
+				Utilization: roundUsagePercent2(resp.SevenDay.Utilization),
 			}
 		}
 	}
@@ -2146,14 +2148,14 @@ func (s *AccountUsageService) buildUsageInfo(resp *ClaudeUsageResponse, updatedA
 	if resp.SevenDaySonnet.ResetsAt != "" {
 		if sonnetReset, err := parseTime(resp.SevenDaySonnet.ResetsAt); err == nil {
 			info.SevenDaySonnet = &UsageProgress{
-				Utilization:      resp.SevenDaySonnet.Utilization,
+				Utilization:      roundUsagePercent2(resp.SevenDaySonnet.Utilization),
 				ResetsAt:         &sonnetReset,
 				RemainingSeconds: int(time.Until(sonnetReset).Seconds()),
 			}
 		} else {
 			log.Printf("Failed to parse SevenDaySonnet.ResetsAt: %s, error: %v", resp.SevenDaySonnet.ResetsAt, err)
 			info.SevenDaySonnet = &UsageProgress{
-				Utilization: resp.SevenDaySonnet.Utilization,
+				Utilization: roundUsagePercent2(resp.SevenDaySonnet.Utilization),
 			}
 		}
 	}
@@ -2162,14 +2164,14 @@ func (s *AccountUsageService) buildUsageInfo(resp *ClaudeUsageResponse, updatedA
 	if fable := resp.SevenDayOverageIncluded; fable.ResetsAt != "" {
 		if fableReset, err := parseTime(fable.ResetsAt); err == nil {
 			info.SevenDayFable = &UsageProgress{
-				Utilization:      fable.Utilization,
+				Utilization:      roundUsagePercent2(fable.Utilization),
 				ResetsAt:         &fableReset,
 				RemainingSeconds: int(time.Until(fableReset).Seconds()),
 			}
 		} else {
 			log.Printf("Failed to parse SevenDayFable.ResetsAt: %s, error: %v", fable.ResetsAt, err)
 			info.SevenDayFable = &UsageProgress{
-				Utilization: fable.Utilization,
+				Utilization: roundUsagePercent2(fable.Utilization),
 			}
 		}
 	}
@@ -2215,7 +2217,7 @@ func (s *AccountUsageService) estimateSetupTokenUsage(account *Account) *UsageIn
 		}
 
 		info.FiveHour = &UsageProgress{
-			Utilization:      utilization,
+			Utilization:      roundUsagePercent2(utilization),
 			ResetsAt:         account.SessionWindowEnd,
 			RemainingSeconds: remaining,
 		}
@@ -2245,7 +2247,7 @@ func buildGeminiUsageProgress(used, limit int64, resetAt time.Time, tokens int64
 	if limit <= 0 {
 		return nil
 	}
-	utilization := (float64(used) / float64(limit)) * 100
+	utilization := roundUsagePercent2((float64(used) / float64(limit)) * 100)
 	remainingSeconds := int(resetAt.Sub(now).Seconds())
 	if remainingSeconds < 0 {
 		remainingSeconds = 0

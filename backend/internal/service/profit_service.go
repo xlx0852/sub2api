@@ -886,7 +886,7 @@ func fillBreakEvenRate(summary *AccountProfitSummary, cycle *AccountSubscription
 	}
 	used := 0.0
 	if win.UsedPercent != nil {
-		used = *win.UsedPercent
+		used = roundUsagePercent2(*win.UsedPercent)
 	}
 	if used <= 0 {
 		return
@@ -930,7 +930,7 @@ func fillBreakEvenRate(summary *AccountProfitSummary, cycle *AccountSubscription
 		summary.BreakEvenWindowKind = win.Label
 	}
 	summary.BreakEvenWindowMinutes = &mins
-	usedCopy := used
+	usedCopy := roundUsagePercent2(used)
 	summary.BreakEvenUsedPercent = &usedCopy
 	summary.BreakEvenFullWindowRevenue = &fullRevRounded
 	summary.BreakEvenWindowsPerPeriod = &windowsRounded
@@ -1960,10 +1960,10 @@ func (s *ProfitService) fillAccountQuotaWindows(ctx context.Context, summary *Ac
 		}
 		var used *float64
 		if row.IsOpen {
-			used = row.UsedPercentOpen
+			used = roundUsagePercent2Ptr(row.UsedPercentOpen)
 			// Prefer fresher live used% from extra snapshot when present.
 			if live, ok := byKindLive[row.Kind]; ok && live.UsedPercent != nil {
-				used = live.UsedPercent
+				used = roundUsagePercent2Ptr(live.UsedPercent)
 			}
 			if live, ok := byKindLive[row.Kind]; ok && live.EndAt != nil {
 				// Only absorb small countdown calibration here. A large jump is a
@@ -1973,9 +1973,9 @@ func (s *ProfitService) fillAccountQuotaWindows(ctx context.Context, summary *Ac
 				}
 			}
 		} else {
-			used = row.UsedPercentClose
+			used = roundUsagePercent2Ptr(row.UsedPercentClose)
 			if used == nil {
-				used = row.UsedPercentOpen
+				used = roundUsagePercent2Ptr(row.UsedPercentOpen)
 			}
 		}
 		kind, label := classifyQuotaWindow(row.Kind, mins)
@@ -2373,7 +2373,7 @@ func hasProfitWindowKind(windows []ProfitQuotaWindow, kind string) bool {
 }
 
 func profitWindowFromExtra(extra map[string]any, prefix, id, kind string, defaultMinutes int, now time.Time) *ProfitQuotaWindow {
-	used := extraFloat(extra, prefix+"_used_percent")
+	used := roundUsagePercent2Ptr(extraFloat(extra, prefix+"_used_percent"))
 	resetAt := extraTime(extra, prefix+"_reset_at")
 	resetAfter := extraInt(extra, prefix+"_reset_after_seconds")
 	windowMinutes := extraInt(extra, prefix+"_window_minutes")
@@ -2481,7 +2481,7 @@ func almostEqualFloat(a, b, eps float64) bool {
 }
 
 func profitWindowFromKimi(extra map[string]any, name, kind string, defaultMinutes int, now time.Time) *ProfitQuotaWindow {
-	used := extraFloat(extra, "kimi_quota_"+name+"_utilization")
+	used := roundUsagePercent2Ptr(extraFloat(extra, "kimi_quota_"+name+"_utilization"))
 	resetAt := extraTime(extra, "kimi_quota_"+name+"_reset_at")
 	if used == nil && resetAt == nil {
 		return nil
@@ -2509,7 +2509,7 @@ func profitWindowFromAnthropicPassive(extra map[string]any, now time.Time) *Prof
 	}
 	var used *float64
 	if usedRatio != nil {
-		value := math.Max(0, math.Min(100, *usedRatio*100))
+		value := roundUsagePercent2(math.Max(0, math.Min(100, *usedRatio*100)))
 		used = &value
 	}
 	mins := 10080
@@ -2592,7 +2592,7 @@ func grokBillingUsedPercent(billing map[string]any) *float64 {
 	}
 	// Keep the profit timeline aligned with the account usage view: both show
 	// the provider's top-level quota-window utilization, not a product slice.
-	return anyToFloat64(billing["usage_percent"])
+	return roundUsagePercent2Ptr(anyToFloat64(billing["usage_percent"]))
 }
 
 func profitWindowFromGrokUsageSnapshot(extra map[string]any, now time.Time, allowFree24hFallback bool) *ProfitQuotaWindow {

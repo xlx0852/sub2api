@@ -121,14 +121,14 @@ func (s *RateLimitService) SetTokenCacheInvalidator(invalidator TokenCacheInvali
 }
 
 func (s *RateLimitService) SetAccountRuntimeBlocker(blocker AccountRuntimeBlocker) {
-		s.runtimeBlocker = blocker
-	}
+	s.runtimeBlocker = blocker
+}
 
-	func (s *RateLimitService) SetQuotaWindowLedger(ledger *QuotaWindowLedger) {
-		if s != nil {
-			s.quotaWindowLedger = ledger
-		}
+func (s *RateLimitService) SetQuotaWindowLedger(ledger *QuotaWindowLedger) {
+	if s != nil {
+		s.quotaWindowLedger = ledger
 	}
+}
 
 func (s *RateLimitService) IsOpenAIAdvancedSchedulerStickyWeightedEnabled(ctx context.Context) bool {
 	if s == nil || s.settingService == nil {
@@ -430,7 +430,7 @@ func (s *RateLimitService) PreCheckUsage(ctx context.Context, account *Account, 
 		return true, nil
 	}
 
-now := time.Now()
+	now := time.Now()
 	modelClass := geminiModelClassFromName(requestedModel)
 
 	// 1) Daily quota precheck (RPD; resets at PST midnight)
@@ -1573,17 +1573,17 @@ func (s *RateLimitService) persistOpenAICodexSnapshot(ctx context.Context, accou
 		return
 	}
 	now := time.Now()
-		updates := buildCodexUsageExtraUpdates(snapshot, now)
-		if len(updates) == 0 {
-			return
-		}
-		if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
-			slog.Warn("openai_codex_snapshot_persist_failed", "account_id", account.ID, "error", err)
-			return
-		}
-		// Same sensor as gateway/usage probe: feed ledger for passive official resets.
-		observeCodexQuotaWindowUpdates(ctx, s.quotaWindowLedger, account.ID, updates, now)
+	updates := buildCodexUsageExtraUpdates(snapshot, now)
+	if len(updates) == 0 {
+		return
 	}
+	if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
+		slog.Warn("openai_codex_snapshot_persist_failed", "account_id", account.ID, "error", err)
+		return
+	}
+	// Same sensor as gateway/usage probe: feed ledger for passive official resets.
+	observeCodexQuotaWindowUpdates(ctx, s.quotaWindowLedger, account.ID, updates, now)
+}
 
 // parseOpenAIRateLimitResetTime 解析 OpenAI 格式的 429 响应，返回重置时间的 Unix 时间戳
 // OpenAI 的 usage_limit_reached 错误格式：
@@ -1925,7 +1925,7 @@ func (s *RateLimitService) observeAnthropicQuotaWindows(ctx context.Context, acc
 				}
 				acc.Extra = cp
 			}
-			acc.Extra["session_window_utilization"] = util
+			acc.Extra["session_window_utilization"] = roundUsageRatio2(util)
 		}
 	}
 	ObserveAccountQuotaWindows(ctx, s.quotaWindowLedger, &acc, now)
@@ -1940,7 +1940,7 @@ func (s *RateLimitService) observeAnthropicQuotaWindows(ctx context.Context, acc
 			var used *float64
 			if utilStr := headers.Get("anthropic-ratelimit-unified-7d-utilization"); utilStr != "" {
 				if util, err := strconv.ParseFloat(utilStr, 64); err == nil {
-					pct := util * 100
+					pct := roundUsagePercent2(util * 100)
 					used = &pct
 				}
 			}
@@ -1970,13 +1970,13 @@ func (s *RateLimitService) samplePassiveUsageFromHeaders(ctx context.Context, ac
 	// 5h utilization（0-1 小数），供 estimateSetupTokenUsage 使用
 	if utilStr := headers.Get("anthropic-ratelimit-unified-5h-utilization"); utilStr != "" {
 		if util, err := strconv.ParseFloat(utilStr, 64); err == nil {
-			extraUpdates["session_window_utilization"] = util
+			extraUpdates["session_window_utilization"] = roundUsageRatio2(util)
 		}
 	}
 	// 7d utilization（0-1 小数）
 	if utilStr := headers.Get("anthropic-ratelimit-unified-7d-utilization"); utilStr != "" {
 		if util, err := strconv.ParseFloat(utilStr, 64); err == nil {
-			extraUpdates["passive_usage_7d_utilization"] = util
+			extraUpdates["passive_usage_7d_utilization"] = roundUsageRatio2(util)
 		}
 	}
 	// 7d reset timestamp
@@ -1991,7 +1991,7 @@ func (s *RateLimitService) samplePassiveUsageFromHeaders(ctx context.Context, ac
 	// 7d_oi (Fable 专属 7d 窗口) utilization（0-1 小数）
 	if utilStr := headers.Get("anthropic-ratelimit-unified-7d_oi-utilization"); utilStr != "" {
 		if util, err := strconv.ParseFloat(utilStr, 64); err == nil {
-			extraUpdates["passive_usage_7d_oi_utilization"] = util
+			extraUpdates["passive_usage_7d_oi_utilization"] = roundUsageRatio2(util)
 		}
 	}
 	// 7d_oi reset timestamp

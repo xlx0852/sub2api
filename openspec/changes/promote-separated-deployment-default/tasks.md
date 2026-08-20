@@ -26,6 +26,7 @@
   - 2026-08-16: Added frontend artifact build/upload procedure, metadata/file validation, atomic switch/rollback, and a regression asserting API marker/DB state remain unchanged.
 - [x] 3.3 Implement backend-only non-embed build, upload, alternate-port verification, switch, and rollback without rebuilding or replacing frontend files.
   - 2026-08-16: Added non-embed artifact procedure plus mandatory explicit alternate-port verify and switch hooks; unit coverage proves frontend state is unchanged.
+  - 2026-08-20: Production incident review found four retained API containers still running shared background workers. Backend deploy/rollback now requires an explicit retire hook after switch; the hook must disable automatic restart and stop the replaced runtime while retaining rollback assets. Added tracked deploy/rollback retirement regression coverage.
 - [x] 3.4 Implement `both` ordering and rollback, forcing coupled deployment only when compatibility/contract checks require it.
   - 2026-08-16: `both` verifies backward-compatible API transition first, switches API, then frontend. `contract_change=true` rejects single-component scope.
 - [x] 3.5 Scope PostgreSQL backup to backend releases that may migrate or mutate persisted state; frontend-only releases must not touch DB/API runtime state.

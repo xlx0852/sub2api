@@ -613,6 +613,7 @@ import type { Account, AccountUsageInfo, GeminiCredentials, WindowStats } from '
 import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { enqueueUsageRequest } from '@/utils/usageLoadQueue'
 import { formatCompactNumber } from '@/utils/format'
+import { roundUsagePercent } from '@/utils/usagePercent'
 import UsageProgressBar from './UsageProgressBar.vue'
 import UsageStatLine from './UsageStatLine.vue'
 import AccountQuotaInfo from './AccountQuotaInfo.vue'
@@ -1114,7 +1115,7 @@ const grokWeeklyBar = computed((): GrokQuotaBarInfo | null => {
   const period = (b.period_type || '').toLowerCase()
   if (period !== 'weekly') return null
   return {
-    utilization: Math.max(0, Math.min(100, b.usage_percent)),
+    utilization: roundUsagePercent(Math.max(0, Math.min(100, b.usage_percent))),
     resetsAt: b.period_end || null
   }
 })
@@ -1333,7 +1334,7 @@ const makeQuotaBar = (
   limit: number,
   startKey?: string
 ): QuotaBarInfo => {
-  const utilization = limit > 0 ? (used / limit) * 100 : 0
+  const utilization = limit > 0 ? roundUsagePercent((used / limit) * 100) : 0
   let resetsAt: string | null = null
   if (startKey) {
     const extra = props.account.extra as Record<string, unknown> | undefined

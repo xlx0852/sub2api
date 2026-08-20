@@ -416,6 +416,9 @@ func ParseCodexRateLimitHeaders(headers http.Header) *OpenAICodexUsageSnapshot {
 		}
 		return nil
 	}
+	parseUsedPercent := func(key string) *float64 {
+		return roundUsagePercent2Ptr(parseFloat(key))
+	}
 
 	// Helper to parse int from header
 	parseInt := func(key string) *int {
@@ -428,7 +431,7 @@ func ParseCodexRateLimitHeaders(headers http.Header) *OpenAICodexUsageSnapshot {
 	}
 
 	// Primary (weekly) limits
-	if v := parseFloat("x-codex-primary-used-percent"); v != nil {
+	if v := parseUsedPercent("x-codex-primary-used-percent"); v != nil {
 		snapshot.PrimaryUsedPercent = v
 		hasData = true
 	}
@@ -442,7 +445,7 @@ func ParseCodexRateLimitHeaders(headers http.Header) *OpenAICodexUsageSnapshot {
 	}
 
 	// Secondary (5h) limits
-	if v := parseFloat("x-codex-secondary-used-percent"); v != nil {
+	if v := parseUsedPercent("x-codex-secondary-used-percent"); v != nil {
 		snapshot.SecondaryUsedPercent = v
 		hasData = true
 	}
@@ -516,7 +519,7 @@ func buildCodexUsageExtraUpdates(snapshot *OpenAICodexUsageSnapshot, fallbackNow
 
 	// 保存原始 primary/secondary 字段，便于排查问题
 	if snapshot.PrimaryUsedPercent != nil {
-		updates["codex_primary_used_percent"] = *snapshot.PrimaryUsedPercent
+		updates["codex_primary_used_percent"] = roundUsagePercent2(*snapshot.PrimaryUsedPercent)
 	}
 	if snapshot.PrimaryResetAfterSeconds != nil {
 		updates["codex_primary_reset_after_seconds"] = *snapshot.PrimaryResetAfterSeconds
@@ -525,7 +528,7 @@ func buildCodexUsageExtraUpdates(snapshot *OpenAICodexUsageSnapshot, fallbackNow
 		updates["codex_primary_window_minutes"] = *snapshot.PrimaryWindowMinutes
 	}
 	if snapshot.SecondaryUsedPercent != nil {
-		updates["codex_secondary_used_percent"] = *snapshot.SecondaryUsedPercent
+		updates["codex_secondary_used_percent"] = roundUsagePercent2(*snapshot.SecondaryUsedPercent)
 	}
 	if snapshot.SecondaryResetAfterSeconds != nil {
 		updates["codex_secondary_reset_after_seconds"] = *snapshot.SecondaryResetAfterSeconds
@@ -555,7 +558,7 @@ func buildCodexUsageExtraUpdates(snapshot *OpenAICodexUsageSnapshot, fallbackNow
 			updates["codex_7d_reset_at"] = nil
 		}
 		if normalized.Used5hPercent != nil {
-			updates["codex_5h_used_percent"] = *normalized.Used5hPercent
+			updates["codex_5h_used_percent"] = roundUsagePercent2(*normalized.Used5hPercent)
 		}
 		if normalized.Reset5hSeconds != nil {
 			updates["codex_5h_reset_after_seconds"] = *normalized.Reset5hSeconds
@@ -564,7 +567,7 @@ func buildCodexUsageExtraUpdates(snapshot *OpenAICodexUsageSnapshot, fallbackNow
 			updates["codex_5h_window_minutes"] = *normalized.Window5hMinutes
 		}
 		if normalized.Used7dPercent != nil {
-			updates["codex_7d_used_percent"] = *normalized.Used7dPercent
+			updates["codex_7d_used_percent"] = roundUsagePercent2(*normalized.Used7dPercent)
 		}
 		if normalized.Reset7dSeconds != nil {
 			updates["codex_7d_reset_after_seconds"] = *normalized.Reset7dSeconds

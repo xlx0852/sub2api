@@ -1,4 +1,5 @@
 import type { AccountProfitSummary, ProfitQuotaWindow } from '@/api/admin/profit'
+import { roundUsagePercent } from '@/utils/usagePercent'
 
 export type TimelineWindow = ProfitQuotaWindow & { startMs: number; endMs: number }
 
@@ -246,7 +247,7 @@ function synthesizeFromUtil(
     id: kind,
     label: kind,
     kind,
-    used_percent: usedPercent,
+    used_percent: roundUsagePercent(usedPercent),
     start_at: new Date(endMs - minutes * 60_000).toISOString(),
     end_at: new Date(endMs).toISOString(),
     window_minutes: minutes

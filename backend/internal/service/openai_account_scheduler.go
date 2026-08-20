@@ -467,6 +467,35 @@ func (s *defaultOpenAIAccountScheduler) Select(
 	}
 
 	selection, candidateCount, topK, loadSkew, err := s.selectByLoadBalance(ctx, req)
+	if err != nil && errors.Is(err, ErrNoAvailableAccounts) && len(req.ExcludedIDs) == 0 && s.service != nil && s.service.schedulerSnapshot != nil {
+		refreshed, _, refreshErr := s.service.schedulerSnapshot.RefreshSchedulableAccounts(ctx, req.GroupID, normalizeOpenAICompatiblePlatform(req.Platform), false)
+		if refreshErr == nil {
+			slog.Warn("openai_scheduler_empty_pool_db_recheck",
+				"group_id", derefGroupID(req.GroupID),
+				"platform", normalizeOpenAICompatiblePlatform(req.Platform),
+				"model", req.RequestedModel,
+				"snapshot_candidate_count", candidateCount,
+				"db_candidate_count", len(refreshed),
+			)
+			selection, candidateCount, topK, loadSkew, err = s.selectByLoadBalance(ctx, req)
+			if err != nil {
+				slog.Warn("openai_scheduler_empty_pool_db_recheck_unrecovered",
+					"group_id", derefGroupID(req.GroupID),
+					"platform", normalizeOpenAICompatiblePlatform(req.Platform),
+					"model", req.RequestedModel,
+					"db_candidate_count", len(refreshed),
+					"error", err,
+				)
+			}
+		} else if !errors.Is(refreshErr, ErrSchedulerFallbackLimited) {
+			slog.Warn("openai_scheduler_empty_pool_db_recheck_failed",
+				"group_id", derefGroupID(req.GroupID),
+				"platform", normalizeOpenAICompatiblePlatform(req.Platform),
+				"model", req.RequestedModel,
+				"error", refreshErr,
+			)
+		}
+	}
 	decision.Layer = openAIAccountScheduleLayerLoadBalance
 	decision.CandidateCount = candidateCount
 	decision.TopK = topK
@@ -2587,10 +2616,12 @@ func openAIQuotaHeadroomFactor(account *Account, now time.Time) float64 {
 	if !ok || openAIQuotaWindowResetAny(account.Extra, now, "primary", "7d") {
 		return openAIQuotaHeadroomNeutralFactor
 	}
+	primaryUsedPercent = roundUsagePercent2(primaryUsedPercent)
 
 	factor := 1 - clamp01(primaryUsedPercent/100)
 	if secondaryUsedPercent, ok := resolveAccountExtraNumber(account.Extra, "codex_secondary_used_percent", "codex_5h_used_percent"); ok &&
 		!openAIQuotaWindowResetAny(account.Extra, now, "secondary", "5h") {
+		secondaryUsedPercent = roundUsagePercent2(secondaryUsedPercent)
 		secondaryRemaining := 1 - clamp01(secondaryUsedPercent/100)
 		if secondaryRemaining < openAIQuotaHeadroomSecondaryLowRemain {
 			factor *= openAIQuotaHeadroomNeutralFactor
@@ -2625,10 +2656,10 @@ func grokBillingHeadroomFactor(snapshot *xai.BillingSnapshot, now time.Time) (fl
 		return 0, false
 	}
 	if snapshot.UsagePercent != nil {
-		return 1 - clamp01(*snapshot.UsagePercent/100), true
+		return 1 - clamp01(roundUsagePercent2(*snapshot.UsagePercent)/100), true
 	}
 	if snapshot.UsedPercent != nil {
-		return 1 - clamp01(*snapshot.UsedPercent/100), true
+		return 1 - clamp01(roundUsagePercent2(*snapshot.UsedPercent)/100), true
 	}
 	if snapshot.MonthlyLimitCents != nil && *snapshot.MonthlyLimitCents > 0 && snapshot.UsedCents != nil {
 		return 1 - clamp01(float64(*snapshot.UsedCents)/float64(*snapshot.MonthlyLimitCents)), true

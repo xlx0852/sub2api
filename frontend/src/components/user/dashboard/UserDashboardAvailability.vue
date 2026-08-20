@@ -1,30 +1,29 @@
 <template>
-  <section class="rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-700 dark:bg-dark-800">
-    <div class="mb-5 flex items-center justify-between gap-3">
+  <section class="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-700 dark:bg-dark-800">
+    <div class="mb-4 flex items-center justify-between gap-3">
       <div>
         <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('channelStatus.availabilityTitle') }}</h2>
         <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">{{ t('channelStatus.availabilitySubtitle') }}</p>
       </div>
-      <div class="flex items-center gap-2">
-        <button
-          type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-400 dark:hover:bg-dark-700 dark:hover:text-white"
-          :disabled="loading"
-          :title="t('common.refresh')"
-          :aria-label="t('common.refresh')"
-          @click="emit('refresh')"
-        >
-          <Icon name="refresh" size="xs" :class="loading ? 'animate-spin' : ''" />
-        </button>
-      </div>
     </div>
 
-    <div class="mb-4 flex flex-wrap gap-2">
+    <div class="mb-4 flex flex-wrap items-center gap-2">
       <button v-for="option in platformOptions" :key="option.value" type="button" class="rounded-full border px-3 py-1.5 text-xs font-medium transition-colors" :class="platform === option.value ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300' : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-dark-600 dark:text-gray-300 dark:hover:bg-dark-700'" @click="emit('update:platform', option.value)">{{ option.label }}</button>
+      <button
+        type="button"
+        class="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-dark-700 dark:hover:text-white"
+        :disabled="loading"
+        :title="t('common.refresh')"
+        :aria-label="t('common.refresh')"
+        @click="emit('refresh')"
+      >
+        <Icon name="refresh" size="xs" :class="loading ? 'animate-spin' : ''" />
+      </button>
     </div>
 
-    <div v-if="loading && !data" class="h-40 animate-pulse rounded-lg bg-gray-100 dark:bg-dark-700" />
+    <div v-if="loading && !data" class="h-40 flex-1 animate-pulse rounded-lg bg-gray-100 dark:bg-dark-700" />
     <template v-else>
+      <div class="flex flex-1 flex-col">
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div v-for="metric in metrics" :key="metric.label" class="rounded-lg border border-gray-100 bg-gray-50/70 px-4 py-3 dark:border-dark-700 dark:bg-dark-900/40">
           <div class="text-xs text-gray-500 dark:text-dark-400">{{ metric.label }}</div>
@@ -36,8 +35,9 @@
         <span v-for="point in displayPoints" :key="point.key" class="aspect-square min-h-2.5 rounded-[3px]" :class="pointClass(point.status)" :title="point.title" />
       </div>
 
-      <div class="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-gray-500 dark:text-dark-400">
+      <div class="mt-auto flex flex-wrap items-center gap-x-5 gap-y-2 pt-4 text-xs text-gray-500 dark:text-dark-400">
         <span v-for="legend in legends" :key="legend.label" class="inline-flex items-center gap-1.5"><i class="h-2.5 w-2.5 rounded-[3px]" :class="legend.class" />{{ legend.label }}</span>
+      </div>
       </div>
     </template>
   </section>

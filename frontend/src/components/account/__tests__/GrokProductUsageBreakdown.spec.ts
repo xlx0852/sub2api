@@ -21,11 +21,11 @@ describe('GrokProductUsageBreakdown', () => {
       }
     })
 
-    expect(wrapper.get('[data-product="api:0"]').text()).toContain('96%')
-    expect(wrapper.get('[data-product="grokbuild:1"]').text()).toContain('4%')
+    expect(wrapper.get('[data-product="api:0"]').text()).toContain('96.00%')
+    expect(wrapper.get('[data-product="grokbuild:1"]').text()).toContain('4.00%')
     expect(wrapper.get('[data-product="grokchat:2"]').text()).toContain('--')
     expect(wrapper.get('[data-product="partnerrelay:3"]').text()).toContain('PartnerRelay')
-    expect(wrapper.get('[data-product="partnerrelay:3"]').text()).toContain('12%')
+    expect(wrapper.get('[data-product="partnerrelay:3"]').text()).toContain('12.40%')
   })
 
   it('没有产品数据时不占据抽屉空间', () => {

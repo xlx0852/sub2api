@@ -48,6 +48,7 @@ export default {
     noUsageRecords: 'No usage records',
     startUsingApi: 'Start using the API to see your usage history here.',
     viewAllUsage: 'View all usage',
+    time: 'Time',
     quickActions: 'Quick Actions',
     createApiKey: 'Create API Key',
     generateNewKey: 'Generate a new API key',

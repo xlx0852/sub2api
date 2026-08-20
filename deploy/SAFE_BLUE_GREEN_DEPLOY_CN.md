@@ -102,13 +102,14 @@ nginx -t && nginx -s reload
 
 ## Backend-only
 
-候选 API 必须在备用 loopback 端口通过 `/health`、public config/version、未登录 401，以及与改动相关的 HTTP/SSE/WS/结算门禁。工具要求显式 verify/switch hook；`{release}` 替换为候选 release 绝对路径。
+候选 API 必须在备用 loopback 端口通过 `/health`、public config/version、未登录 401，以及与改动相关的 HTTP/SSE/WS/结算门禁。工具要求显式 verify/switch/retire hook；`{release}` 替换为对应 release 绝对路径。`retire` 必须将被替换容器设置为 `restart=no` 后正常停止，但不得删除容器、镜像、二进制或回滚配置；回滚容器只允许在执行回滚时启动，不能与 current 同时运行后台 worker。
 
 ```bash
 python3 /tmp/sub2api-release/component_deploy.py deploy \
   --manifest /tmp/sub2api-release/component-manifest.json --root /opt/sub2api \
   --backend-verify-command 'sudo /opt/sub2api/bin/verify-api-candidate {release}' \
-  --backend-switch-command 'sudo /opt/sub2api/bin/switch-api-release {release}'
+  --backend-switch-command 'sudo /opt/sub2api/bin/switch-api-release {release}' \
+  --backend-retire-command 'sudo /opt/sub2api/bin/retire-api-release {release}'
 ```
 
 仅当 manifest 为 `db_change: true` 时才添加：
@@ -121,7 +122,8 @@ python3 /tmp/sub2api-release/component_deploy.py deploy \
 
 ```bash
 python3 /opt/sub2api/deploy/component_deploy.py rollback backend --root /opt/sub2api \
-  --backend-switch-command 'sudo /opt/sub2api/bin/switch-api-release {release}'
+  --backend-switch-command 'sudo /opt/sub2api/bin/switch-api-release {release}' \
+  --backend-retire-command 'sudo /opt/sub2api/bin/retire-api-release {release}'
 ```
 
 ## Both

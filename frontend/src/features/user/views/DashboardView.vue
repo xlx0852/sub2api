@@ -3,19 +3,27 @@
     <div class="space-y-5">
       <div v-if="loading" class="flex items-center justify-center py-12"><LoadingSpinner /></div>
       <template v-else-if="stats">
-		<UserDashboardStats :stats="stats" :balance="user?.balance || 0" :platform-quotas="platformQuotas" />
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <!-- 核心统计 + 按平台拆分 -->
+        <UserDashboardStats :stats="stats" :balance="user?.balance || 0" :platform-quotas="platformQuotas" />
+
+        <!-- 趋势图（主视觉） + 快捷操作 -->
+        <div class="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
           <div class="min-w-0 lg:col-span-2">
-            <UserDashboardCharts v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" :models="modelStats" @dateRangeChange="loadCharts" @granularityChange="loadCharts" @refresh="refreshAll" />
+            <UserDashboardCharts v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" @dateRangeChange="loadCharts" @granularityChange="loadCharts" @refresh="refreshAll" />
           </div>
           <div class="lg:col-span-1">
             <UserDashboardQuickActions :show-affiliate="affiliateEnabled" />
           </div>
         </div>
-        <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+
+        <!-- 模型分布 / 服务可用性 / 分组可用性 三列等高 -->
+        <div class="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
+          <UserDashboardModelDistribution :loading="loadingCharts" :models="modelStats" />
           <UserDashboardAvailability :data="availability" :loading="availabilityLoading" :platform="availabilityPlatform" @update:platform="changeAvailabilityPlatform" @refresh="loadAvailability" />
           <UserGroupAvailability />
         </div>
+
+        <!-- 最近使用 -->
         <UserDashboardRecentUsage :data="recentUsage" :loading="loadingUsage" />
       </template>
     </div>
@@ -29,6 +37,7 @@ import UserDashboardStats from '@/components/user/dashboard/UserDashboardStats.v
 import UserDashboardRecentUsage from '@/components/user/dashboard/UserDashboardRecentUsage.vue'; import UserDashboardQuickActions from '@/components/user/dashboard/UserDashboardQuickActions.vue'
 import UserDashboardAvailability from '@/components/user/dashboard/UserDashboardAvailability.vue'
 import UserGroupAvailability from '@/components/user/dashboard/UserGroupAvailability.vue'
+import UserDashboardModelDistribution from '@/components/user/dashboard/UserDashboardModelDistribution.vue'
 import type { TrafficAvailability } from '@/api/usage'
 import type { UsageLog, TrendDataPoint, ModelStat, PlatformQuotaItem } from '@/types'
 import { getMyPlatformQuotas } from '@/api/user'

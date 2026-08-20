@@ -25,6 +25,16 @@ type schedulerTestOpenAIAccountRepo struct {
 	accounts []Account
 }
 
+type countingSchedulerTestOpenAIAccountRepo struct {
+	schedulerTestOpenAIAccountRepo
+	listCalls int
+}
+
+func (r *countingSchedulerTestOpenAIAccountRepo) ListSchedulableByGroupIDAndPlatform(ctx context.Context, groupID int64, platform string) ([]Account, error) {
+	r.listCalls++
+	return r.schedulerTestOpenAIAccountRepo.ListSchedulableByGroupIDAndPlatform(ctx, groupID, platform)
+}
+
 func (r schedulerTestOpenAIAccountRepo) GetByID(ctx context.Context, id int64) (*Account, error) {
 	for i := range r.accounts {
 		if r.accounts[i].ID == id {
@@ -293,6 +303,19 @@ func (s *openAISnapshotCacheStub) GetSnapshot(ctx context.Context, bucket Schedu
 	return out, true, nil
 }
 
+func (s *openAISnapshotCacheStub) SetSnapshot(ctx context.Context, bucket SchedulerBucket, accounts []Account) error {
+	s.snapshotAccounts = make([]*Account, 0, len(accounts))
+	if s.accountsByID == nil {
+		s.accountsByID = make(map[int64]*Account, len(accounts))
+	}
+	for i := range accounts {
+		cloned := accounts[i]
+		s.snapshotAccounts = append(s.snapshotAccounts, &cloned)
+		s.accountsByID[cloned.ID] = &cloned
+	}
+	return nil
+}
+
 func (s *openAISnapshotCacheStub) GetAccount(ctx context.Context, accountID int64) (*Account, error) {
 	if s.accountsByID == nil {
 		return nil, nil
@@ -303,6 +326,91 @@ func (s *openAISnapshotCacheStub) GetAccount(ctx context.Context, accountID int6
 	}
 	cloned := *account
 	return &cloned, nil
+}
+
+func TestOpenAIAccountSchedulerRepairsStaleSnapshotAfterEmptySelection(t *testing.T) {
+	groupID := int64(4)
+	stale := &Account{
+		ID:          70001,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 2,
+		GroupIDs:    []int64{groupID},
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{"gpt-5.5": "gpt-5.5"},
+		},
+	}
+	fresh := Account{
+		ID:          70002,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Status:      StatusActive,
+		Schedulable: true,
+		Concurrency: 2,
+		GroupIDs:    []int64{groupID},
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{"gpt-5.6-sol": "gpt-5.6-sol"},
+		},
+	}
+	cache := &openAISnapshotCacheStub{
+		snapshotAccounts: []*Account{stale},
+		accountsByID:     map[int64]*Account{stale.ID: stale},
+	}
+	repo := schedulerTestOpenAIAccountRepo{accounts: []Account{fresh}}
+	snapshot := NewSchedulerSnapshotService(cache, nil, repo, nil, nil)
+	svc := &OpenAIGatewayService{
+		accountRepo:        repo,
+		schedulerSnapshot:  snapshot,
+		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
+		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true"),
+		cfg:                &config.Config{},
+	}
+
+	selection, _, err := svc.SelectAccountWithSchedulerForCapability(
+		context.Background(),
+		&groupID,
+		"",
+		"",
+		"gpt-5.6-sol",
+		nil,
+		OpenAIUpstreamTransportAny,
+		OpenAIEndpointCapabilityChatCompletions,
+		false,
+		false,
+		PlatformOpenAI,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, selection)
+	require.NotNil(t, selection.Account)
+	require.Equal(t, fresh.ID, selection.Account.ID)
+}
+
+func TestNoAvailableOpenAISelectionErrorPreservesSentinelAndMessage(t *testing.T) {
+	err := noAvailableOpenAISelectionError("gpt-5.6-sol", false)
+	require.ErrorIs(t, err, ErrNoAvailableAccounts)
+	require.Equal(t, "no available OpenAI accounts supporting model: gpt-5.6-sol", err.Error())
+}
+
+func TestSchedulerSnapshotForcedRefreshIsRateBoundPerBucket(t *testing.T) {
+	groupID := int64(4)
+	repo := &countingSchedulerTestOpenAIAccountRepo{
+		schedulerTestOpenAIAccountRepo: schedulerTestOpenAIAccountRepo{accounts: []Account{{
+			ID:          71001,
+			Platform:    PlatformOpenAI,
+			Status:      StatusActive,
+			Schedulable: true,
+		}}},
+	}
+	snapshot := NewSchedulerSnapshotService(&openAISnapshotCacheStub{}, nil, repo, nil, nil)
+
+	accounts, _, err := snapshot.RefreshSchedulableAccounts(context.Background(), &groupID, PlatformOpenAI, false)
+	require.NoError(t, err)
+	require.Len(t, accounts, 1)
+	_, _, err = snapshot.RefreshSchedulableAccounts(context.Background(), &groupID, PlatformOpenAI, false)
+	require.ErrorIs(t, err, ErrSchedulerFallbackLimited)
+	require.Equal(t, 1, repo.listCalls)
 }
 
 func TestOpenAIGatewayService_OpenAIAdvancedSchedulerRuntimeSettings_DBOverridesConfig(t *testing.T) {

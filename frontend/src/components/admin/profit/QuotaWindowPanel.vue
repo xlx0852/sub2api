@@ -216,6 +216,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { AccountProfitSummary } from '@/api/admin/profit'
+import { formatUsagePercent } from '@/utils/usagePercent'
 import {
   inferWindowMinutes,
   prepareQuotaAccounts,
@@ -462,7 +463,7 @@ const laneSeries = computed(() => {
       const { account, preferred } = prepared
       const windows = windowsForRange(prepared, start, end)
       const used = preferred.used_percent
-      const usedLabel = used == null || Number.isNaN(Number(used)) ? '—' : `${Math.round(Number(used))}%`
+      const usedLabel = used == null || Number.isNaN(Number(used)) ? '—' : formatUsagePercent(Number(used))
       const colors = palette[index % palette.length]
       const accountName = account.account_name || `#${account.account_id}`
       return {
@@ -528,7 +529,7 @@ function buildBar(
 
   const used = win.used_percent
   const percentLabel = status === 'current' && used != null && !Number.isNaN(Number(used))
-    ? `${Math.round(Number(used))}%`
+    ? formatUsagePercent(Number(used))
     : ''
 
   const title = [

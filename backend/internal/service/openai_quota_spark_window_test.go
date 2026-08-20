@@ -132,6 +132,28 @@ func TestBuildCodexSparkWindowExtraUpdates_ContainsCodexKeys(t *testing.T) {
 	require.InDelta(t, 0.15, updates["codex_7d_used_percent"], 1e-9)
 }
 
+func TestBuildCodexSparkWindowExtraUpdates_RoundsUsedPercentToTwoDecimals(t *testing.T) {
+	updates := buildCodexSparkWindowExtraUpdates(&OpenAIQuotaUsage{
+		AdditionalRateLimits: []OpenAIAdditionalRateLimit{{
+			MeteredFeature: "codex_bengalfox",
+			RateLimit: &OpenAIRateLimit{
+				PrimaryWindow: &OpenAIRateLimitWindow{
+					UsedPercent:        12.345,
+					LimitWindowSeconds: 18000,
+					ResetAfterSeconds:  3600,
+				},
+				SecondaryWindow: &OpenAIRateLimitWindow{
+					UsedPercent:        7.144,
+					LimitWindowSeconds: 604800,
+					ResetAfterSeconds:  86400,
+				},
+			},
+		}},
+	}, time.Now().UTC())
+	require.Equal(t, 12.35, updates["codex_5h_used_percent"])
+	require.Equal(t, 7.14, updates["codex_7d_used_percent"])
+}
+
 func TestBuildCodexSparkWindowExtraUpdates_WeeklyOnlyClearsFiveHourWindow(t *testing.T) {
 	usage := &OpenAIQuotaUsage{
 		AdditionalRateLimits: []OpenAIAdditionalRateLimit{{

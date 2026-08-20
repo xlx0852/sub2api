@@ -192,11 +192,11 @@ func ComputeOpenAIUsageScore(account *Account, now time.Time) float64 {
 	values := make([]float64, 0, 2)
 	if primary, ok := resolveAccountExtraNumber(account.Extra, "codex_primary_used_percent", "codex_7d_used_percent"); ok &&
 		!openAIQuotaWindowResetAny(account.Extra, now, "primary", "7d") {
-		values = append(values, clamp01(primary/100)*100)
+		values = append(values, roundUsagePercent2(clamp01(primary/100)*100))
 	}
 	if secondary, ok := resolveAccountExtraNumber(account.Extra, "codex_secondary_used_percent", "codex_5h_used_percent"); ok &&
 		!openAIQuotaWindowResetAny(account.Extra, now, "secondary", "5h") {
-		values = append(values, clamp01(secondary/100)*100)
+		values = append(values, roundUsagePercent2(clamp01(secondary/100)*100))
 	}
 	if len(values) == 0 {
 		return openAIUnknownUsageScore

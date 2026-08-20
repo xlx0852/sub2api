@@ -40,7 +40,7 @@ interface BuildOptions {
   t: Translator
 }
 
-const clampPercent = (value: number): number => Math.max(0, Math.min(100, value))
+const clampPercent = (value: number): number => Math.max(0, Math.min(100, Math.round(value * 100) / 100))
 
 const makeQuotaWindow = (
   key: string,

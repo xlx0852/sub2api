@@ -30,6 +30,20 @@ The frontend and backend SHALL have independent version sources, immutable artif
 - **WHEN** a newly switched API violates its health or behavior gate while the frontend remains compatible
 - **THEN** the operator restores the previous API container/port without changing the served frontend artifact
 
+### Requirement: Exactly one active backend runtime
+
+The production deployment workflow SHALL leave exactly one backend runtime active after a successful traffic switch or rollback. Retained rollback containers and historical backend containers MUST be stopped with automatic restart disabled so they cannot continue scheduler, diagnostics, quota, cleanup, or settlement workers against the shared database and cache.
+
+#### Scenario: Backend release succeeds
+- **WHEN** nginx has switched to the verified candidate backend
+- **THEN** the deployment workflow stops the replaced backend and disables its automatic restart
+- **AND** retains its container, artifact, configuration, and rollback metadata
+
+#### Scenario: Backend rollback succeeds
+- **WHEN** the retained rollback backend is restored and passes health verification
+- **THEN** the formerly current backend is stopped with automatic restart disabled
+- **AND** only the restored backend continues background workers
+
 ## MODIFIED Requirements
 
 ### Requirement: Default separated deployment

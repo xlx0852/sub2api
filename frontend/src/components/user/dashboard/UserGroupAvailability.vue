@@ -1,5 +1,5 @@
 <template>
-  <div class="card">
+  <div class="card flex h-full flex-col">
     <div class="border-b border-gray-100 px-4 py-4 dark:border-dark-700 sm:px-6">
       <div class="flex items-center justify-between gap-2">
         <div class="min-w-0">
@@ -21,7 +21,7 @@
       </div>
     </div>
 
-    <div class="p-4 sm:p-6">
+    <div class="flex-1 overflow-y-auto p-4 sm:p-6 lg:max-h-[380px]">
       <div v-if="loading && !items.length" class="flex items-center justify-center py-8 text-sm text-gray-500">
         <Icon name="refresh" size="md" class="mr-2 animate-spin" />
         {{ t('common.loading') }}

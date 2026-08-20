@@ -85,6 +85,7 @@ import { useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import type { WindowStats } from '@/types'
 import { formatCompactNumber } from '@/utils/format'
+import { formatUsagePercent } from '@/utils/usagePercent'
 import UsageStatLine from './UsageStatLine.vue'
 
 interface ExtraStat {
@@ -141,10 +142,9 @@ const barWidth = computed(() => {
 
 // Display percentage (cap at 999% for readability)
 const displayPercent = computed(() => {
-  if (props.displayPercent != null) return props.displayPercent
-  const percent = Math.round(props.utilization)
-  return percent > 999 ? '>999%' : `${percent}%`
-})
+	  if (props.displayPercent != null) return props.displayPercent
+	  return formatUsagePercent(props.utilization)
+	})
 
 const progressToneClass = computed(() => {
   if (props.utilization >= 100) return 'bg-red-500 dark:bg-red-400'

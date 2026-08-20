@@ -43,6 +43,34 @@ func TestParseBillingResponseWeeklyAndProducts(t *testing.T) {
 	require.InDelta(t, 0, *snapshot.ProductUsage[2].UsagePercent, 0.001)
 }
 
+func TestParseBillingResponseRoundsUsagePercentToTwoDecimals(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{
+			"config": {
+				"creditUsagePercent": 12.345,
+				"currentPeriod": {
+					"type": "weekly",
+					"start": "2026-07-05T14:38:00Z",
+					"end": "2026-07-12T14:38:00Z"
+				},
+				"productUsage": [
+					{"product": "GrokBuild", "usagePercent": 7.144}
+				],
+				"monthlyLimit": 15000,
+				"used": 7473
+			}
+		}`)
+	snapshot, err := ParseBillingResponse(body)
+	require.NoError(t, err)
+	require.NotNil(t, snapshot.UsagePercent)
+	require.Equal(t, 12.35, *snapshot.UsagePercent)
+	require.NotNil(t, snapshot.ProductUsage[0].UsagePercent)
+	require.Equal(t, 7.14, *snapshot.ProductUsage[0].UsagePercent)
+	require.NotNil(t, snapshot.UsedPercent)
+	require.Equal(t, 49.82, *snapshot.UsedPercent)
+}
+
 func TestParseBillingResponsePrefersExplicitSubscriptionTier(t *testing.T) {
 	t.Parallel()
 

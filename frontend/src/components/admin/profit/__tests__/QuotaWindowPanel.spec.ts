@@ -106,7 +106,7 @@ describe('QuotaWindowPanel', () => {
     expect(wrapper.find('[data-testid="profit-quota-window-panel"]').exists()).toBe(true)
     expect(wrapper.findAll('[data-testid="profit-quota-window-lane"]')).toHaveLength(1)
     expect(wrapper.text()).toContain('codex-main')
-    expect(wrapper.text()).toContain('46%')
+    expect(wrapper.text()).toContain('46.00%')
   })
 
   it('labels long free rolling windows as 30d from window_minutes', () => {

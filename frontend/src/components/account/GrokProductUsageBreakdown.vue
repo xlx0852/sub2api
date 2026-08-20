@@ -32,6 +32,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { GrokBillingProductUsage } from '@/api/admin/grok'
+import { formatUsagePercent } from '@/utils/usagePercent'
 
 const props = defineProps<{
   products?: GrokBillingProductUsage[] | null
@@ -62,7 +63,7 @@ const rows = computed(() => (props.products || [])
       key: `${product.product.toLowerCase()}:${index}`,
       label: productLabel(product.product.trim()),
       utilization,
-      displayPercent: hasPercent ? `${Math.round(Math.max(0, rawPercent))}%` : '--',
+      displayPercent: hasPercent ? formatUsagePercent(Math.max(0, rawPercent)) : '--',
       toneClass: utilization >= 100
         ? 'bg-red-500 dark:bg-red-400'
         : utilization >= 80

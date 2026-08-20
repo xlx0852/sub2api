@@ -176,7 +176,7 @@ func (f *AntigravityQuotaFetcher) buildUsageInfo(modelsResp *antigravity.FetchAv
 	priorityModels := []string{"claude-sonnet-4-20250514", "claude-sonnet-4", "gemini-2.5-pro"}
 	for _, modelName := range priorityModels {
 		if modelInfo, ok := modelsResp.Models[modelName]; ok && modelInfo.QuotaInfo != nil {
-			utilization := (1.0 - modelInfo.QuotaInfo.RemainingFraction) * 100
+			utilization := roundUsagePercent2((1.0 - modelInfo.QuotaInfo.RemainingFraction) * 100)
 			progress := &UsageProgress{
 				Utilization: utilization,
 			}

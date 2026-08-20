@@ -98,6 +98,23 @@ In `shadow`, the legacy selector SHALL be the only component allowed to acquire 
 - **THEN** subsequent selections use the legacy selector without restart
 - **AND** scorer runtime statistics do not alter the legacy result
 
+### Requirement: Empty cached selection is strongly rechecked
+
+When a first-hop account selection produces no eligible candidate from a scheduler snapshot, the OpenAI scheduler SHALL perform one rate-bounded database recheck for the affected group and platform before returning a capacity error. A successful recheck MUST repair the affected snapshot and retry selection once. Failover attempts that already excluded an account MUST NOT trigger this recheck.
+
+#### Scenario: Snapshot is stale while database has an eligible account
+- **GIVEN** the cached bucket contains no account eligible for the requested model
+- **AND** the database contains an active, schedulable, model-compatible account
+- **WHEN** first-hop selection would otherwise return no available account
+- **THEN** the scheduler refreshes the bucket from the database and retries once
+- **AND** selects the eligible account without returning a false 503
+
+#### Scenario: Model is genuinely unsupported
+- **GIVEN** both the cached bucket and database have no eligible account for the requested model
+- **WHEN** clients retry the request repeatedly
+- **THEN** the database recheck is rate-bounded per scheduler bucket
+- **AND** the scheduler returns the no-account result without unbounded database amplification
+
 ### Requirement: Legacy Schedulers Are Removed Only After Full Gates
 
 The Gateway and OpenAI legacy scheduler bodies MUST remain available for shadow comparison and rollback until all target platforms pass local replay, staging HTTP/SSE/WS, representative normal and peak windows, scoped canary, fault injection, billing invariance, and paired rollback gates.

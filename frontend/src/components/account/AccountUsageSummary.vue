@@ -29,13 +29,13 @@
         <div
           v-for="window in primaryWindows"
           :key="window.key"
-          class="grid grid-cols-[42px_minmax(56px,1fr)_34px_48px] items-center gap-1.5 text-[10px] leading-4 tabular-nums"
+          class="grid grid-cols-[42px_minmax(56px,1fr)_52px_48px] items-center gap-1.5 text-[10px] leading-4 tabular-nums"
         >
           <span class="truncate font-medium text-gray-600 dark:text-gray-300" :title="window.label">{{ window.label }}</span>
           <span class="h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
             <span :class="['block h-full rounded-full', windowBarClass(window.utilization)]" :style="{ width: `${Math.min(window.utilization, 100)}%` }" />
           </span>
-          <span :class="windowValueClass(window.utilization)">{{ Math.round(window.utilization) }}%</span>
+          <span :class="windowValueClass(window.utilization)">{{ formatUsagePercent(window.utilization) }}</span>
           <span class="truncate text-gray-400 dark:text-gray-500" :title="formatResetTime(window.resetsAt)">{{ formatResetTime(window.resetsAt) }}</span>
         </div>
       </div>
@@ -72,6 +72,7 @@ import { useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import { formatCompactNumber } from '@/utils/format'
+import { formatUsagePercent } from '@/utils/usagePercent'
 import type { AccountUsagePresentation } from '@/utils/accountUsagePresentation'
 
 const props = withDefaults(defineProps<{

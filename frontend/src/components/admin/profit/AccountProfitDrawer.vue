@@ -165,6 +165,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { AccountProfitSummary, ProfitWindowEconomicsItem } from '@/api/admin/profit'
+import { roundUsagePercent } from '@/utils/usagePercent'
 import BaseDialog from '@/ui/BaseDialog.vue'
 import LoadingSpinner from '@/ui/LoadingSpinner.vue'
 
@@ -363,7 +364,7 @@ const breakEvenTitle = computed(() => {
   if (a.break_even_full_window_revenue != null && a.break_even_windows_per_period != null) {
     parts.push(t('admin.profit.breakEvenDetail', {
       kind: a.break_even_window_kind || '—',
-      used: Math.round(a.break_even_used_percent ?? 0),
+      used: roundUsagePercent(a.break_even_used_percent ?? 0).toFixed(2),
       full: fmt(a.break_even_full_window_revenue),
       windows: (a.break_even_windows_per_period ?? 0).toFixed(1),
       capacity: fmt(a.break_even_capacity_revenue)

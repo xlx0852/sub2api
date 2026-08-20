@@ -1,17 +1,18 @@
 <template>
-  <div class="card p-4">
-    <h3 class="mb-4 text-sm font-semibold text-gray-900 dark:text-white">
+  <div :class="embedded ? 'flex h-full min-h-0 flex-col' : 'card p-4'">
+    <h3 v-if="!embedded" class="mb-4 text-sm font-semibold text-gray-900 dark:text-white">
       {{ t('admin.dashboard.tokenUsageTrend') }}
     </h3>
-    <div v-if="loading" class="flex h-48 items-center justify-center">
+    <div v-if="loading" class="flex items-center justify-center" :class="embedded ? 'min-h-0 flex-1' : 'h-48'">
       <LoadingSpinner />
     </div>
-    <div v-else-if="trendData.length > 0 && chartData" class="h-48">
+    <div v-else-if="trendData.length > 0 && chartData" :class="embedded ? 'min-h-0 flex-1' : 'h-48'">
       <Line :data="chartData" :options="lineOptions" />
     </div>
     <div
       v-else
-      class="flex h-48 items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      class="flex items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+      :class="embedded ? 'min-h-0 flex-1' : 'h-48'"
     >
       {{ t('admin.dashboard.noDataAvailable') }}
     </div>
@@ -52,6 +53,8 @@ const { t } = useI18n()
 const props = defineProps<{
   trendData: TrendDataPoint[]
   loading?: boolean
+  // 嵌入模式：去掉卡片外壳与标题，填满父容器高度
+  embedded?: boolean
 }>()
 
 const isDarkMode = computed(() => {

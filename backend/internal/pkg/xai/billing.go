@@ -3,6 +3,7 @@ package xai
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"runtime"
 	"strings"
@@ -258,12 +259,12 @@ func parseBillingConfig(cfg map[string]any) *BillingSnapshot {
 
 	var monthlyUsedPercent *float64
 	if monthlyLimit != nil && *monthlyLimit > 0 && includedUsed != nil {
-		p := float64(*includedUsed) / float64(*monthlyLimit) * 100
+		p := roundUsagePercent2(float64(*includedUsed) / float64(*monthlyLimit) * 100)
 		monthlyUsedPercent = &p
 	}
 	var onDemandPercent *float64
 	if onDemandCap != nil && *onDemandCap > 0 && onDemandUsed != nil {
-		p := float64(*onDemandUsed) / float64(*onDemandCap) * 100
+		p := roundUsagePercent2(float64(*onDemandUsed) / float64(*onDemandCap) * 100)
 		onDemandPercent = &p
 	}
 
@@ -497,19 +498,19 @@ func parseFloatPtr(raw any) *float64 {
 	case nil:
 		return nil
 	case float64:
-		return &v
+		return roundUsagePercent2Ptr(&v)
 	case float32:
 		f := float64(v)
-		return &f
+		return roundUsagePercent2Ptr(&f)
 	case int:
 		f := float64(v)
-		return &f
+		return roundUsagePercent2Ptr(&f)
 	case int64:
 		f := float64(v)
-		return &f
+		return roundUsagePercent2Ptr(&f)
 	case json.Number:
 		if f, err := v.Float64(); err == nil {
-			return &f
+			return roundUsagePercent2Ptr(&f)
 		}
 	case string:
 		s := strings.TrimSpace(v)
@@ -521,10 +522,25 @@ func parseFloatPtr(raw any) *float64 {
 		}
 		var f float64
 		if _, err := fmt.Sscan(s, &f); err == nil {
-			return &f
+			return roundUsagePercent2Ptr(&f)
 		}
 	}
 	return nil
+}
+
+func roundUsagePercent2(v float64) float64 {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return v
+	}
+	return math.Round(v*100) / 100
+}
+
+func roundUsagePercent2Ptr(v *float64) *float64 {
+	if v == nil {
+		return nil
+	}
+	r := roundUsagePercent2(*v)
+	return &r
 }
 
 func asObject(raw any) map[string]any {

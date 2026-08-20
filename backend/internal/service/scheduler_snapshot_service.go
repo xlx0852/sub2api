@@ -21,6 +21,7 @@ var (
 const (
 	outboxEventTimeout          = 2 * time.Minute
 	schedulerOutboxCleanupBatch = 5000
+	schedulerForcedRefreshGap   = time.Second
 )
 
 // batchSeenKey tracks which (groupID, platform) bucket sets have already been
@@ -43,6 +44,8 @@ type SchedulerSnapshotService struct {
 	fallbackLimit *fallbackLimiter
 	lagMu         sync.Mutex
 	lagFailures   int
+	refreshMu     sync.Mutex
+	refreshLastAt map[string]time.Time
 
 	fullRebuildRunMu     sync.Mutex
 	fullRebuildStateMu   sync.Mutex
@@ -70,6 +73,7 @@ func NewSchedulerSnapshotService(
 		cfg:           cfg,
 		stopCh:        make(chan struct{}),
 		fallbackLimit: newFallbackLimiter(maxQPS),
+		refreshLastAt: make(map[string]time.Time),
 	}
 }
 
@@ -145,6 +149,52 @@ func (s *SchedulerSnapshotService) ListSchedulableAccounts(ctx context.Context, 
 		}
 	}
 
+	return accounts, useMixed, nil
+}
+
+// RefreshSchedulableAccounts bypasses a cache hit and repairs the affected
+// scheduler bucket from the database. It is reserved for a first-hop empty
+// selection result, where a stale but non-empty snapshot would otherwise keep
+// returning 503 without exercising the normal cache-miss fallback.
+func (s *SchedulerSnapshotService) RefreshSchedulableAccounts(ctx context.Context, groupID *int64, platform string, hasForcePlatform bool) ([]Account, bool, error) {
+	if s == nil {
+		return nil, false, ErrSchedulerCacheNotReady
+	}
+	useMixed := (platform == PlatformAnthropic || platform == PlatformGemini) && !hasForcePlatform
+	mode := s.resolveMode(platform, hasForcePlatform)
+	bucket := s.bucketFor(groupID, platform, mode)
+
+	// A real unsupported-model request can be retried aggressively by clients.
+	// Bound the strong recheck per bucket so the recovery path cannot become a
+	// database amplification path while still healing transient snapshot drift.
+	now := time.Now()
+	s.refreshMu.Lock()
+	if s.refreshLastAt == nil {
+		s.refreshLastAt = make(map[string]time.Time)
+	}
+	lastAt := s.refreshLastAt[bucket.String()]
+	if !lastAt.IsZero() && now.Sub(lastAt) < schedulerForcedRefreshGap {
+		s.refreshMu.Unlock()
+		return nil, useMixed, ErrSchedulerFallbackLimited
+	}
+	s.refreshLastAt[bucket.String()] = now
+	s.refreshMu.Unlock()
+
+	if err := s.guardFallback(ctx); err != nil {
+		return nil, useMixed, err
+	}
+	fallbackCtx, cancel := s.withFallbackTimeout(ctx)
+	defer cancel()
+
+	accounts, err := s.loadAccountsFromDB(fallbackCtx, bucket, useMixed)
+	if err != nil {
+		return nil, useMixed, err
+	}
+	if s.cache != nil {
+		if err := s.cache.SetSnapshot(fallbackCtx, bucket, accounts); err != nil {
+			logger.LegacyPrintf("service.scheduler_snapshot", "[Scheduler] forced cache repair failed: bucket=%s err=%v", bucket.String(), err)
+		}
+	}
 	return accounts, useMixed, nil
 }
 

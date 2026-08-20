@@ -6,7 +6,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -187,14 +186,26 @@ func normalizeOpenAICompatiblePlatform(platform string) string {
 	return PlatformOpenAI
 }
 
+type noAvailableOpenAIAccountError struct {
+	requestedModel string
+}
+
+func (e *noAvailableOpenAIAccountError) Error() string {
+	if e == nil || e.requestedModel == "" {
+		return "no available OpenAI accounts"
+	}
+	return fmt.Sprintf("no available OpenAI accounts supporting model: %s", e.requestedModel)
+}
+
+func (e *noAvailableOpenAIAccountError) Unwrap() error {
+	return ErrNoAvailableAccounts
+}
+
 func noAvailableOpenAISelectionError(requestedModel string, compactBlocked bool) error {
 	if compactBlocked {
 		return ErrNoAvailableCompactAccounts
 	}
-	if requestedModel != "" {
-		return fmt.Errorf("no available OpenAI accounts supporting model: %s", requestedModel)
-	}
-	return errors.New("no available OpenAI accounts")
+	return &noAvailableOpenAIAccountError{requestedModel: requestedModel}
 }
 
 // openAICompactSupportTier classifies an OpenAI account by compact capability.
@@ -539,7 +550,7 @@ func readOpenAIQuotaUsedPercent(extra map[string]any, window string) float64 {
 		return 0
 	}
 	if value, ok := resolveAccountExtraNumber(extra, "codex_"+window+"_used_percent"); ok {
-		return value
+		return roundUsagePercent2(value)
 	}
 	return 0
 }

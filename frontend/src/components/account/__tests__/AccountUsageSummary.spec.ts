@@ -32,9 +32,11 @@ describe('AccountUsageSummary', () => {
 
     expect(wrapper.text()).toContain('5h')
     expect(wrapper.text()).toContain('7d')
+    expect(wrapper.text()).toContain('12.00%')
+    expect(wrapper.text()).toContain('82.00%')
     expect(wrapper.text()).not.toContain('extra')
     expect(wrapper.text()).toContain('282 req')
-    expect(wrapper.text()).toContain('A $49.09')
+    expect(wrapper.text()).toContain('A 49.09')
   })
 
   it('点击摘要会请求打开详情', async () => {

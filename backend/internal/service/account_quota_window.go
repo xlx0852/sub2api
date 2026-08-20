@@ -1,8 +1,8 @@
 package service
 
 import (
-	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"log/slog"
 	"math"
 	"strconv"
@@ -64,6 +64,7 @@ func (l *QuotaWindowLedger) RecordUsageObservation(ctx context.Context, accountI
 	if l == nil || l.repo == nil || l.observationRepo == nil || stats == nil || accountID <= 0 || kind == "" {
 		return nil
 	}
+	usedPercent = roundUsagePercent2(usedPercent)
 	if math.IsNaN(usedPercent) || math.IsInf(usedPercent, 0) || usedPercent < 0 || usedPercent > 100 {
 		return nil
 	}
@@ -159,6 +160,7 @@ func (l *QuotaWindowLedger) ObserveUpstream(ctx context.Context, obs QuotaWindow
 	if obs.AccountID <= 0 || obs.Kind == "" || obs.EndAt.IsZero() {
 		return nil
 	}
+	obs.UsedPercent = roundUsagePercent2Ptr(obs.UsedPercent)
 	now := obs.ObservedAt
 	if now.IsZero() {
 		now = time.Now()
@@ -354,9 +356,9 @@ func (l *QuotaWindowLedger) ForceResetCard(ctx context.Context, accountID int64,
 		plat = open.Platform
 	}
 	next.Platform = plat
-	used := usedAtClose
+	used := roundUsagePercent2Ptr(usedAtClose)
 	if used == nil {
-		used = open.UsedPercentOpen
+		used = roundUsagePercent2Ptr(open.UsedPercentOpen)
 	}
 	_, err = l.repo.CloseAndOpen(ctx, open.ID, closeEnd, QuotaWindowCloseResetCard, used, next)
 	return err
@@ -473,7 +475,7 @@ func ObserveAccountQuotaWindows(ctx context.Context, ledger *QuotaWindowLedger, 
 			if acc.Extra != nil {
 				if u := extraFloat(acc.Extra, "session_window_utilization"); u != nil {
 					// stored 0-1
-					v := *u * 100
+					v := roundUsagePercent2(*u * 100)
 					if v < 0 {
 						v = 0
 					}
@@ -543,16 +545,16 @@ func ForceResetAccountWindows(ctx context.Context, ledger *QuotaWindowLedger, ac
 				if v := extraInt(acc.Extra, "codex_7d_window_minutes"); v != nil {
 					mins = *v
 				}
-				used = extraFloat(acc.Extra, "codex_7d_used_percent")
+				used = roundUsagePercent2Ptr(extraFloat(acc.Extra, "codex_7d_used_percent"))
 			case platform == PlatformOpenAI && kind == "5h":
 				if v := extraInt(acc.Extra, "codex_5h_window_minutes"); v != nil {
 					mins = *v
 				}
-				used = extraFloat(acc.Extra, "codex_5h_used_percent")
+				used = roundUsagePercent2Ptr(extraFloat(acc.Extra, "codex_5h_used_percent"))
 			case platform == PlatformKimi && kind == "7d":
-				used = extraFloat(acc.Extra, "kimi_quota_7d_utilization")
+				used = roundUsagePercent2Ptr(extraFloat(acc.Extra, "kimi_quota_7d_utilization"))
 			case platform == PlatformKimi && kind == "5h":
-				used = extraFloat(acc.Extra, "kimi_quota_5h_utilization")
+				used = roundUsagePercent2Ptr(extraFloat(acc.Extra, "kimi_quota_5h_utilization"))
 			}
 		}
 		if mins <= 0 {
@@ -588,6 +590,7 @@ func observationFromFlatUpdate(accountID int64, platform string, updates map[str
 				if spec.UsedIsUtilization {
 					f = f * 100
 				}
+				f = roundUsagePercent2(f)
 				if f < 0 {
 					f = 0
 				}
@@ -721,7 +724,7 @@ func observeOpenAIQuotaUsage(ctx context.Context, ledger *QuotaWindowLedger, acc
 		// Reuse snapshot normalizer via a tiny synthetic extra map when possible.
 		snap := &OpenAICodexUsageSnapshot{}
 		if w := rl.PrimaryWindow; w != nil {
-			p := w.UsedPercent
+			p := roundUsagePercent2(w.UsedPercent)
 			snap.PrimaryUsedPercent = &p
 			ra := int(w.ResetAfterSeconds)
 			snap.PrimaryResetAfterSeconds = &ra
@@ -731,7 +734,7 @@ func observeOpenAIQuotaUsage(ctx context.Context, ledger *QuotaWindowLedger, acc
 			}
 		}
 		if w := rl.SecondaryWindow; w != nil {
-			p := w.UsedPercent
+			p := roundUsagePercent2(w.UsedPercent)
 			snap.SecondaryUsedPercent = &p
 			ra := int(w.ResetAfterSeconds)
 			snap.SecondaryResetAfterSeconds = &ra
