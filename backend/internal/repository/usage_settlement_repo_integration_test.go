@@ -26,14 +26,18 @@ func settlementAttemptFixture(identity, fingerprint string, apiKeyID int64) *dom
 }
 
 func settlementPayloadFixture(identity string, apiKeyID int64, actualCost float64) *domain.UsageSettlementPayloadV1 {
+	return settlementPayloadFixtureForAccount(identity, apiKeyID, 20001, actualCost)
+}
+
+func settlementPayloadFixtureForAccount(identity string, apiKeyID, accountID int64, actualCost float64) *domain.UsageSettlementPayloadV1 {
 	command := &domain.UsageBillingCommand{
-		RequestID: identity, APIKeyID: apiKeyID, UserID: 10001, AccountID: 20001,
+		RequestID: identity, APIKeyID: apiKeyID, UserID: 10001, AccountID: accountID,
 		AccountType: domain.AccountTypeAPIKey, Model: "gpt-fixture", InputTokens: 10,
 		OutputTokens: 2, BalanceCost: actualCost, APIKeyQuotaCost: actualCost,
 	}
 	command.Normalize()
 	return domain.NewUsageSettlementPayloadV1(command, &domain.UsageLog{
-		UserID: 10001, APIKeyID: apiKeyID, AccountID: 20001, RequestID: identity,
+		UserID: 10001, APIKeyID: apiKeyID, AccountID: accountID, RequestID: identity,
 		Model: "gpt-fixture", RequestedModel: "gpt-fixture", InputTokens: 10,
 		OutputTokens: 2, ActualCost: actualCost, CreatedAt: time.Now().UTC(),
 	}, domain.PlatformOpenAI)
@@ -94,6 +98,33 @@ func TestUsageSettlementRepositoryLifecycleAndIdempotency(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, domain.UsageSettlementStateSettled, settled.State)
 	require.NotNil(t, settled.SettledAt)
+}
+
+func TestUsageSettlementRepositoryRebindsStartedAccountOnFailover(t *testing.T) {
+	ctx := context.Background()
+	repo := NewUsageSettlementRepository(integrationDB)
+	identity := "client:" + uuid.NewString()
+	apiKeyID := time.Now().UnixNano()
+	fingerprint := strings.Repeat("c", 64)
+
+	first := settlementAttemptFixture(identity, fingerprint, apiKeyID)
+	first.AccountID = 108
+	created, inserted, err := repo.CreateStarted(ctx, first)
+	require.NoError(t, err)
+	require.True(t, inserted)
+
+	second := settlementAttemptFixture(identity, fingerprint, apiKeyID)
+	second.AccountID = 73
+	rebound, inserted, err := repo.CreateStarted(ctx, second)
+	require.NoError(t, err)
+	require.False(t, inserted)
+	require.Equal(t, created.ID, rebound.ID)
+	require.Equal(t, int64(73), rebound.AccountID)
+
+	ready, err := repo.MarkReady(ctx, identity, apiKeyID, fingerprint, settlementPayloadFixtureForAccount(identity, apiKeyID, 73, 0.25))
+	require.NoError(t, err)
+	require.Equal(t, domain.UsageSettlementStateReady, ready.State)
+	require.Equal(t, int64(73), ready.AccountID)
 }
 
 func TestUsageSettlementRepositoryExpiredLeaseHasSingleConcurrentWinner(t *testing.T) {

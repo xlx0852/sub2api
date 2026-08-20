@@ -9,6 +9,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestUsageSettlementAttemptCanRebindStartedAccount(t *testing.T) {
+	started := &UsageSettlementAttempt{
+		BillingIdentity: "client:failover", RequestFingerprint: strings.Repeat("a", 64),
+		APIKeyID: 84, UserID: 37, AccountID: 108, State: UsageSettlementStateStarted,
+	}
+	require.True(t, started.CanRebindStartedAccount(37, 73, started.RequestFingerprint))
+	require.False(t, started.CanRebindStartedAccount(37, 108, started.RequestFingerprint))
+	require.False(t, started.CanRebindStartedAccount(38, 73, started.RequestFingerprint))
+	require.False(t, started.CanRebindStartedAccount(37, 73, strings.Repeat("b", 64)))
+
+	started.PayloadHash = strings.Repeat("c", 64)
+	require.False(t, started.CanRebindStartedAccount(37, 73, started.RequestFingerprint))
+
+	ready := &UsageSettlementAttempt{
+		BillingIdentity: "client:failover", RequestFingerprint: strings.Repeat("a", 64),
+		APIKeyID: 84, UserID: 37, AccountID: 108, State: UsageSettlementStateReady,
+	}
+	require.False(t, ready.CanRebindStartedAccount(37, 73, ready.RequestFingerprint))
+}
+
 func TestUsageSettlementAttemptRejectsOversizedRequestFingerprint(t *testing.T) {
 	attempt := &UsageSettlementAttempt{
 		BillingIdentity: "local:test", RequestFingerprint: strings.Repeat("f", 65),

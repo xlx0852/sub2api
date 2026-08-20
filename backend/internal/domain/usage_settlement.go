@@ -195,6 +195,25 @@ func (a *UsageSettlementAttempt) ValidateStarted() error {
 	return nil
 }
 
+// CanRebindStartedAccount reports whether a still-open started row may move to
+// a later accepted account for the same identity, key, user, and fingerprint.
+// Ready or later rows stay pinned; a payload means billing subjects are frozen.
+func (a *UsageSettlementAttempt) CanRebindStartedAccount(userID, accountID int64, fingerprint string) bool {
+	if a == nil || a.State != UsageSettlementStateStarted {
+		return false
+	}
+	if a.Payload != nil || strings.TrimSpace(a.PayloadHash) != "" {
+		return false
+	}
+	if a.RequestFingerprint != strings.TrimSpace(fingerprint) {
+		return false
+	}
+	if a.UserID != userID || userID <= 0 || accountID <= 0 {
+		return false
+	}
+	return a.AccountID != accountID
+}
+
 type UsageBillingSnapshot struct {
 	RequestID           string  `json:"request_id"`
 	APIKeyID            int64   `json:"api_key_id"`

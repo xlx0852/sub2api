@@ -87,6 +87,24 @@ func (r *usageSettlementRepository) CreateStarted(ctx context.Context, attempt *
 	if existing.RequestFingerprint != attempt.RequestFingerprint {
 		return nil, false, domain.ErrUsageSettlementFingerprintConflict
 	}
+	if !existing.CanRebindStartedAccount(attempt.UserID, attempt.AccountID, attempt.RequestFingerprint) {
+		return existing, false, nil
+	}
+	rebound, err := r.rebindStartedAccount(ctx, r.db, existing.ID, startedAccountRebind{
+		AccountID:        attempt.AccountID,
+		Provider:         attempt.Provider,
+		InboundEndpoint:  attempt.InboundEndpoint,
+		UpstreamEndpoint: attempt.UpstreamEndpoint,
+		Fingerprint:      attempt.RequestFingerprint,
+		RecoveryContext:  attempt.RecoveryContext,
+		ReplaceRecovery:  true,
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if rebound != nil {
+		return rebound, false, nil
+	}
 	return existing, false, nil
 }
 
@@ -165,6 +183,33 @@ func (r *usageSettlementRepository) MarkReady(ctx context.Context, billingIdenti
 	}
 	if attempt.RequestFingerprint != requestFingerprint {
 		return nil, domain.ErrUsageSettlementFingerprintConflict
+	}
+	if payload != nil && attempt.CanRebindStartedAccount(payload.Billing.UserID, payload.Billing.AccountID, requestFingerprint) {
+		inbound := attempt.InboundEndpoint
+		if payload.UsageLog.InboundEndpoint != nil {
+			inbound = strings.TrimSpace(*payload.UsageLog.InboundEndpoint)
+		}
+		upstream := attempt.UpstreamEndpoint
+		if payload.UsageLog.UpstreamEndpoint != nil {
+			upstream = strings.TrimSpace(*payload.UsageLog.UpstreamEndpoint)
+		}
+		provider := attempt.Provider
+		if quotaPlatform := strings.TrimSpace(payload.QuotaPlatform); quotaPlatform != "" {
+			provider = quotaPlatform
+		}
+		rebound, rebindErr := r.rebindStartedAccount(ctx, tx, attempt.ID, startedAccountRebind{
+			AccountID:        payload.Billing.AccountID,
+			Provider:         provider,
+			InboundEndpoint:  inbound,
+			UpstreamEndpoint: upstream,
+			Fingerprint:      requestFingerprint,
+		})
+		if rebindErr != nil {
+			return nil, rebindErr
+		}
+		if rebound != nil {
+			attempt = rebound
+		}
 	}
 	encoded, payloadHash, err := payload.CanonicalJSON(billingIdentity, apiKeyID, attempt.UserID, attempt.AccountID)
 	if err != nil {
@@ -514,6 +559,74 @@ func (r *usageSettlementRepository) GetByIdentity(ctx context.Context, billingId
 		return nil, errors.New("usage settlement repository db is nil")
 	}
 	return getUsageSettlementByIdentity(ctx, r.db, strings.TrimSpace(billingIdentity), apiKeyID, false)
+}
+
+type startedAccountRebind struct {
+	AccountID        int64
+	Provider         string
+	InboundEndpoint  string
+	UpstreamEndpoint string
+	Fingerprint      string
+	RecoveryContext  *domain.UsageSettlementRecoveryContextV1
+	ReplaceRecovery  bool
+}
+
+func (r *usageSettlementRepository) rebindStartedAccount(ctx context.Context, queryer usageSettlementQueryer, id int64, next startedAccountRebind) (*domain.UsageSettlementAttempt, error) {
+	if queryer == nil {
+		return nil, errors.New("usage settlement repository db is nil")
+	}
+	if next.AccountID <= 0 {
+		return nil, errors.New("usage settlement rebound account id must be positive")
+	}
+	provider := strings.ToLower(strings.TrimSpace(next.Provider))
+	var recoveryContext any
+	var recoveryContextVersion any
+	if next.ReplaceRecovery {
+		if next.RecoveryContext != nil {
+			encoded, err := json.Marshal(next.RecoveryContext)
+			if err != nil {
+				return nil, err
+			}
+			recoveryContext = encoded
+			recoveryContextVersion = next.RecoveryContext.Version
+		}
+	}
+	query := `
+			UPDATE usage_settlement_attempts
+			SET account_id = $1,
+				provider = COALESCE(NULLIF($2, ''), provider),
+				inbound_endpoint = COALESCE(NULLIF($3, ''), inbound_endpoint),
+				upstream_endpoint = COALESCE(NULLIF($4, ''), upstream_endpoint),
+				provider_request_id = NULL,
+				updated_at = NOW()`
+	args := []any{next.AccountID, provider, strings.TrimSpace(next.InboundEndpoint), strings.TrimSpace(next.UpstreamEndpoint)}
+	if next.ReplaceRecovery {
+		query += `,
+				recovery_context_version = $5,
+				recovery_context = $6::jsonb
+			WHERE id = $7
+				AND state = $8
+				AND payload IS NULL
+				AND request_fingerprint = $9
+			RETURNING ` + usageSettlementSelectColumns
+		args = append(args, recoveryContextVersion, recoveryContext, id, domain.UsageSettlementStateStarted, strings.TrimSpace(next.Fingerprint))
+	} else {
+		query += `
+			WHERE id = $5
+				AND state = $6
+				AND payload IS NULL
+				AND request_fingerprint = $7
+			RETURNING ` + usageSettlementSelectColumns
+		args = append(args, id, domain.UsageSettlementStateStarted, strings.TrimSpace(next.Fingerprint))
+	}
+	updated, err := scanUsageSettlementAttempt(queryer.QueryRowContext(ctx, query, args...))
+	if err == nil {
+		return updated, nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return nil, err
 }
 
 type usageSettlementQueryer interface {
