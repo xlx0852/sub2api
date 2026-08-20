@@ -645,6 +645,8 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		UserAgent:             l.UserAgent,
 		IPAddress:             l.IPAddress,
 		CacheTTLOverridden:    l.CacheTTLOverridden,
+		CacheHitRate:          usageCacheHitRate(l),
+		CacheSavedCost:        usageCacheSavedCost(l),
 		BillingMode:           l.BillingMode,
 		CreatedAt:             l.CreatedAt,
 		User:                  UserFromServiceShallow(l.User),
@@ -652,6 +654,40 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		Group:                 GroupFromServiceShallow(l.Group),
 		Subscription:          UserSubscriptionFromService(l.Subscription),
 	}
+}
+
+// usageCacheHitRate 计算缓存命中率（百分比）：cache_read / (input + cache_read + cache_creation) * 100。
+// 图片计费或无缓存命中时返回 nil。
+func usageCacheHitRate(l *service.UsageLog) *float64 {
+	if l == nil || l.CacheReadTokens <= 0 {
+		return nil
+	}
+	if l.BillingMode != nil && *l.BillingMode != string(service.BillingModeToken) {
+		return nil
+	}
+	total := l.InputTokens + l.CacheReadTokens + l.CacheCreationTokens
+	if total <= 0 {
+		return nil
+	}
+	rate := float64(l.CacheReadTokens) / float64(total) * 100
+	return &rate
+}
+
+// usageCacheSavedCost 计算缓存节省金额：命中 token 按输入单价应付 - 实收缓存读费。
+// 输入单价取该记录的 input_cost/input_tokens 均价；无法推算或为负时返回 nil。
+func usageCacheSavedCost(l *service.UsageLog) *float64 {
+	if usageCacheHitRate(l) == nil {
+		return nil
+	}
+	if l.CacheReadTokens <= 0 || l.InputTokens <= 0 || l.InputCost <= 0 {
+		return nil
+	}
+	fullPrice := float64(l.CacheReadTokens) / float64(l.InputTokens) * l.InputCost
+	saved := fullPrice - l.CacheReadCost
+	if saved <= 0 {
+		return nil
+	}
+	return &saved
 }
 
 // UsageLogFromService converts a service UsageLog to DTO for regular users.

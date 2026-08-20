@@ -351,6 +351,7 @@ export default {
     cacheHit: 'Cache hit',
     cacheCreate: 'Cache create',
     cacheHitRate: 'Cache hit rate',
+    cacheSaved: 'Cache saved',
     inputTokenPrice: 'Input price',
     outputTokenPrice: 'Output price',
     lunaPriceAdjustedNote: '❗ Sell price ×4 (bandwidth)',

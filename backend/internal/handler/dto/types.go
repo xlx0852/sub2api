@@ -538,6 +538,13 @@ type UsageLog struct {
 	// Cache TTL Override 标记
 	CacheTTLOverridden bool `json:"cache_ttl_overridden"`
 
+	// CacheHitRate 缓存命中率（百分比）：cache_read / (input + cache_read + cache_creation) * 100。
+	// 仅在非图片计费且存在缓存命中时有值，否则为 nil。
+	CacheHitRate *float64 `json:"cache_hit_rate,omitempty"`
+	// CacheSavedCost 缓存节省金额：命中 token 按输入单价应付 - 实收缓存读费（pricing_currency 计价）。
+	// 无法推算（无输入费）或为负时为 nil。
+	CacheSavedCost *float64 `json:"cache_saved_cost,omitempty"`
+
 	// BillingMode 计费模式：token/image
 	BillingMode *string `json:"billing_mode,omitempty"`
 

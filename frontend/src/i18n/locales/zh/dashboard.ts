@@ -355,6 +355,7 @@ export default {
     cacheHit: '缓存命中',
     cacheCreate: '缓存创建',
     cacheHitRate: '缓存命中率',
+    cacheSaved: '缓存省',
     inputTokenPrice: '输入单价',
     outputTokenPrice: '输出单价',
     lunaPriceAdjustedNote: '❗ 售价已叠加带宽 · 标价×4',

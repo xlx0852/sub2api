@@ -1432,6 +1432,11 @@ export interface UsageLog {
   // Cache TTL Override
   cache_ttl_overridden: boolean
 
+  // 缓存命中率（百分比，后端计算；无缓存命中/图片计费时为 null）
+  cache_hit_rate?: number | null
+  // 缓存节省金额（pricing_currency 计价，后端计算；无法推算时为 null）
+  cache_saved_cost?: number | null
+
   // 计费模式
   billing_mode?: string | null
 

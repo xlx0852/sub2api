@@ -593,6 +593,7 @@ const allColumns = computed(() => [
   { key: 'stream', label: t('usage.type'), sortable: false },
   { key: 'billing_mode', label: t('admin.usage.billingMode'), sortable: false },
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
+  { key: 'cache_hit', label: t('usage.cacheHit'), sortable: false },
   { key: 'cost', label: t('usage.cost'), sortable: false },
   { key: 'latency', label: t('usage.latency'), sortable: false },
   { key: 'output_rate', label: t('usage.outputRate'), sortable: false },

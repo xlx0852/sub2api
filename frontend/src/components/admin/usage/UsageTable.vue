@@ -397,6 +397,21 @@
           </div>
         </template>
 
+        <template #cell-cache_hit="{ row }">
+          <div v-if="row.cache_hit_rate != null" class="text-sm">
+            <div class="flex items-center gap-1.5">
+              <span class="font-medium tabular-nums text-sky-600 dark:text-sky-400">{{ formatCacheTokens(row.cache_read_tokens) }}</span>
+              <span class="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">
+                {{ row.cache_hit_rate.toFixed(1) }}%
+              </span>
+            </div>
+            <div v-if="row.cache_saved_cost != null" class="mt-0.5 text-[11px] tabular-nums text-emerald-600 dark:text-emerald-400">
+              {{ t('usage.cacheSaved') }} {{ formatPricingAmount(row.cache_saved_cost, row.pricing_currency, 4) }}
+            </div>
+          </div>
+          <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
+        </template>
+
         <template #cell-cost="{ row }">
           <div class="text-sm">
             <div class="flex items-center gap-1.5">

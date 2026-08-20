@@ -251,6 +251,114 @@ func TestUsageLogFromService_PreservesHistoricalMissingImageSize(t *testing.T) {
 	require.NotContains(t, string(body), `"image_size":"2K"`)
 }
 
+func TestUsageLogFromService_CacheHitRateAndSavedCost(t *testing.T) {
+	t.Parallel()
+
+	log := &service.UsageLog{
+		RequestID:         "req_cache_hit",
+		Model:             "claude-sonnet-4",
+		InputTokens:       1000,
+		OutputTokens:      500,
+		CacheReadTokens:   45800,
+		CacheReadCost:     0.001374,
+		InputCost:         0.003,
+		CacheCreationCost: 0,
+	}
+
+	userDTO := UsageLogFromService(log)
+	adminDTO := UsageLogFromServiceAdmin(log)
+
+	// 命中率 = 45800 / (1000 + 45800) * 100
+	require.NotNil(t, userDTO.CacheHitRate)
+	require.InDelta(t, 97.8641, *userDTO.CacheHitRate, 1e-3)
+	require.NotNil(t, adminDTO.CacheHitRate)
+	require.InDelta(t, 97.8641, *adminDTO.CacheHitRate, 1e-3)
+
+	// 节省 = 45800/1000 * 0.003 - 0.001374 = 0.1374 - 0.001374
+	require.NotNil(t, userDTO.CacheSavedCost)
+	require.InDelta(t, 0.136026, *userDTO.CacheSavedCost, 1e-9)
+
+	body, err := json.Marshal(userDTO)
+	require.NoError(t, err)
+	require.Contains(t, string(body), `"cache_hit_rate":`)
+	require.Contains(t, string(body), `"cache_saved_cost":`)
+}
+
+func TestUsageLogFromService_CacheHitRateNilWithoutCacheRead(t *testing.T) {
+	t.Parallel()
+
+	log := &service.UsageLog{
+		RequestID:    "req_no_cache",
+		Model:        "gpt-5.4",
+		InputTokens:  2000,
+		OutputTokens: 300,
+		InputCost:    0.01,
+	}
+
+	userDTO := UsageLogFromService(log)
+	require.Nil(t, userDTO.CacheHitRate)
+	require.Nil(t, userDTO.CacheSavedCost)
+
+	body, err := json.Marshal(userDTO)
+	require.NoError(t, err)
+	require.NotContains(t, string(body), "cache_hit_rate")
+	require.NotContains(t, string(body), "cache_saved_cost")
+}
+
+func TestUsageLogFromService_CacheHitRateNilForImageBilling(t *testing.T) {
+	t.Parallel()
+
+	imageMode := string(service.BillingModeImage)
+	log := &service.UsageLog{
+		RequestID:       "req_image_cache",
+		Model:           "gpt-image-2",
+		BillingMode:     &imageMode,
+		ImageCount:      1,
+		InputTokens:     1000,
+		CacheReadTokens: 5000,
+		InputCost:       0.01,
+	}
+
+	require.Nil(t, UsageLogFromService(log).CacheHitRate)
+	require.Nil(t, UsageLogFromService(log).CacheSavedCost)
+}
+
+func TestUsageLogFromService_CacheSavedCostNilWhenNoInputPrice(t *testing.T) {
+	t.Parallel()
+
+	// 纯缓存命中单（input_tokens = 0）：命中率可算，节省无法推算输入单价
+	log := &service.UsageLog{
+		RequestID:       "req_pure_cache",
+		Model:           "claude-sonnet-4",
+		InputTokens:     0,
+		CacheReadTokens: 45800,
+		CacheReadCost:   0.001,
+	}
+
+	dto := UsageLogFromService(log)
+	require.NotNil(t, dto.CacheHitRate)
+	require.InDelta(t, 100.0, *dto.CacheHitRate, 1e-9)
+	require.Nil(t, dto.CacheSavedCost)
+}
+
+func TestUsageLogFromService_CacheSavedCostNilWhenNegative(t *testing.T) {
+	t.Parallel()
+
+	// 缓存读费高于按输入单价折算的金额（异常定价）时不显示节省
+	log := &service.UsageLog{
+		RequestID:       "req_negative_saved",
+		Model:           "claude-sonnet-4",
+		InputTokens:     1000,
+		CacheReadTokens: 1000,
+		InputCost:       0.001,
+		CacheReadCost:   0.01,
+	}
+
+	dto := UsageLogFromService(log)
+	require.NotNil(t, dto.CacheHitRate)
+	require.Nil(t, dto.CacheSavedCost)
+}
+
 func f64Ptr(value float64) *float64 {
 	return &value
 }
