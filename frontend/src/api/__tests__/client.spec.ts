@@ -281,4 +281,22 @@ describe('API Client', () => {
       ).rejects.toBeDefined()
     })
   })
+
+  describe('apiErrorMessage', () => {
+    it('prefers the interceptor-normalized message', async () => {
+      const { apiErrorMessage } = await import('@/api/client')
+      expect(apiErrorMessage({ status: 400, message: 'Normalized detail' }, 'fallback')).toBe(
+        'Normalized detail'
+      )
+    })
+
+    it('falls back when the normalized message is missing', async () => {
+      const { apiErrorMessage } = await import('@/api/client')
+      expect(apiErrorMessage({ status: 500 }, 'Request failed')).toBe('Request failed')
+      expect(
+        apiErrorMessage({ response: { data: { detail: 'Legacy axios detail' } } }, 'fallback')
+      ).toBe('Legacy axios detail')
+      expect(apiErrorMessage(new Error('network'), '自定义错误提示')).toBe('自定义错误提示')
+    })
+  })
 })

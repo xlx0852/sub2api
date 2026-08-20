@@ -18,13 +18,21 @@ const openAIUpstreamClientErrorFallbackMessage = "Upstream rejected the request"
 
 // isOpenAIDeterministicClientError 判断上游状态码是否表示「请求本身非法」。
 //
-// 只认 400：同一份请求体换任何账号、重试多少次都会得到同样的结果。
-//   - 401/402/403 是网关运营方的凭据/账单问题，继续包成 502，不向客户端暴露上游账号状态。
-//   - 404/405 既可能是模型不存在，也可能是上游 base_url 配错，同属运营方问题，保持现状。
+// 同一份请求体换任何账号、重试多少次都会得到同样的结果：
+//   - 400 / 422：请求体或字段非法。
+//   - 404 且 body 像 model_not_found：模型不存在，重试无意义。
+//   - 401/402/403 是网关运营方的凭据/账单问题，继续包成 502。
+//   - 裸 404（无 model 语义）可能是 base_url 配错，仍按运营方故障处理。
 //   - 429 已有独立分支映射成 429。
-//   - 413 在更上面就按 request-body-too-large 走 failover 了。
-func isOpenAIDeterministicClientError(statusCode int) bool {
-	return statusCode == http.StatusBadRequest
+func isOpenAIDeterministicClientError(statusCode int, body []byte) bool {
+	switch statusCode {
+	case http.StatusBadRequest, http.StatusUnprocessableEntity:
+		return true
+	case http.StatusNotFound:
+		return isUpstreamModelNotFoundError(statusCode, body)
+	default:
+		return false
+	}
 }
 
 // writeOpenAIUpstreamClientError 以 OpenAI 错误体形状回写确定性客户端错误。

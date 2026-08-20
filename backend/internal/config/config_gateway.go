@@ -62,8 +62,9 @@ type GatewayConfig struct {
 	// 等待上游响应头的超时时间（秒），0表示无超时
 	// 注意：这不影响流式数据传输，只控制等待响应头的时间
 	ResponseHeaderTimeout int `mapstructure:"response_header_timeout"`
-	// OpenAIResponseHeaderTimeout: OpenAI/Codex 上游等待响应头的超时时间（秒），0表示无超时
-	// OpenAI/Codex 请求可能在上游排队较久；默认不使用通用响应头超时截断。
+	// OpenAIResponseHeaderTimeout: OpenAI/Codex 上游等待响应头的超时时间（秒）。
+	// 0 表示该路径不设 ResponseHeaderTimeout。默认 600，避免 HTTP/1.1 静默卡住时永久占槽。
+	// 长排队可调大；不要用 http.Client.Timeout，那会截断流式传输。
 	OpenAIResponseHeaderTimeout int `mapstructure:"openai_response_header_timeout"`
 	// OpenAIFirstOutputTimeoutSeconds: native HTTP Responses 首个语义输出超时（秒），0表示禁用。
 	OpenAIFirstOutputTimeoutSeconds int `mapstructure:"openai_first_output_timeout_seconds"`

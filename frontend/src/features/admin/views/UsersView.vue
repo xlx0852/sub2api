@@ -866,6 +866,7 @@ import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()
 import { adminAPI } from '@/api/admin'
+import { apiErrorMessage } from '@/api/client'
 import type { AdminUser, AdminGroup, UserAttributeDefinition } from '@/types'
 import type { BatchUserUsageStats } from '@/api/admin/dashboard'
 import type { PlatformQuotaItem } from '@/api/admin/users'
@@ -1665,7 +1666,7 @@ const loadUsers = async () => {
     if (errorInfo?.name === 'AbortError' || errorInfo?.name === 'CanceledError' || errorInfo?.code === 'ERR_CANCELED') {
       return
     }
-    const message = error.response?.data?.detail || error.message || t('admin.users.failedToLoad')
+    const message = apiErrorMessage(error, t('admin.users.failedToLoad'))
     appStore.showError(message)
     console.error('Error loading users:', error)
   } finally {
@@ -1773,7 +1774,7 @@ const handleToggleStatus = async (user: AdminUser) => {
     )
     loadUsers()
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('admin.users.failedToToggle'))
+    appStore.showError(apiErrorMessage(error, t('admin.users.failedToToggle')))
     console.error('Error toggling user status:', error)
   }
 }
@@ -1825,7 +1826,7 @@ const confirmDelete = async () => {
     deletingUser.value = null
     loadUsers()
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('admin.users.failedToDelete'))
+    appStore.showError(apiErrorMessage(error, t('admin.users.failedToDelete')))
     console.error('Error deleting user:', error)
   }
 }
@@ -1898,3 +1899,4 @@ onUnmounted(() => {
   abortController?.abort()
 })
 </script>
+)

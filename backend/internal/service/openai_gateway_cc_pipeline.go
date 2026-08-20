@@ -99,7 +99,7 @@ func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
 		if maxBytes <= 0 {
 			maxBytes = 2048
 		}
-		upstreamDetail = truncateString(string(respBody), maxBytes)
+		upstreamDetail = redactAndTruncateUpstreamDetail(string(respBody), maxBytes)
 	}
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 		Platform:           account.Platform,

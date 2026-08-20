@@ -706,11 +706,19 @@ func (s *BillingCacheService) QueueUpdateAPIKeyRateLimitUsage(apiKeyID int64, co
 	if s.cache == nil {
 		return
 	}
-	s.enqueueCacheWrite(cacheWriteTask{
+	// 队列满时同步回退。限流执行读 Redis，丢更新会让超限请求被放行直到 TTL。
+	if s.enqueueCacheWrite(cacheWriteTask{
 		kind:     cacheWriteUpdateRateLimitUsage,
 		apiKeyID: apiKeyID,
 		amount:   cost,
-	})
+	}) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), cacheWriteTimeout)
+	defer cancel()
+	if err := s.cache.UpdateAPIKeyRateLimitUsage(ctx, apiKeyID, cost); err != nil {
+		logger.LegacyPrintf("service.billing_cache", "Warning: update rate limit usage cache fallback failed for api key %d: %v", apiKeyID, err)
+	}
 }
 
 // IncrementUserPlatformQuotaUsage 同步累加 user × platform usage 到 Redis 缓存。

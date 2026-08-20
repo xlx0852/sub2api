@@ -494,7 +494,7 @@ func (s *OpenAIGatewayService) handleOpenAICompactV2UpstreamErrorSSE(
 		if maxBytes <= 0 {
 			maxBytes = 2048
 		}
-		upstreamDetail = truncateString(string(respBody), maxBytes)
+		upstreamDetail = redactAndTruncateUpstreamDetail(string(respBody), maxBytes)
 	}
 
 	// cyber_policy 硬阻断：标记供 handler 风控/邮件使用，不冷却账号，直接终止流。

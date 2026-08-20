@@ -258,3 +258,37 @@ func TestReleaseUsageBillingBatchImageBalance_SkipsWhenHoldNeverReserved(t *test
 	require.NoError(t, tx.Commit())
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestApplyPersistsUsageLogInSameTransaction(t *testing.T) {
+	ctx := context.Background()
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &usageBillingRepository{db: db}
+	cmd := &domain.UsageBillingCommand{
+		RequestID: "local:atomic-log", APIKeyID: 2, UserID: 1, AccountID: 3,
+		BalanceCost: 0.25,
+		UsageLog: &domain.UsageLog{
+			UserID: 1, APIKeyID: 2, AccountID: 3, RequestID: "local:atomic-log",
+			Model: "gpt-4o-mini", InputTokens: 10, OutputTokens: 2,
+		},
+	}
+	cmd.Normalize()
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`(?s)INSERT INTO usage_billing_dedup`).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(11)))
+	mock.ExpectQuery(`(?s)SELECT request_fingerprint\s+FROM usage_billing_dedup_archive`).
+		WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery(conditionalBalanceDeductSQL).
+		WithArgs(0.25, int64(1)).
+		WillReturnRows(sqlmock.NewRows([]string{"balance"}).AddRow(9.75))
+	mock.ExpectQuery(`(?s)INSERT INTO usage_logs`).
+		WillReturnError(sql.ErrConnDone)
+	mock.ExpectRollback()
+
+	_, err = repo.Apply(ctx, cmd)
+	require.Error(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}

@@ -2514,9 +2514,32 @@ func (h *OpenAIGatewayHandler) handleFailoverExhaustedSimple(c *gin.Context, sta
 	h.handleStreamingAwareError(c, status, errType, errMsg, streamStarted)
 }
 
+const credentialUnavailableClientMessage = "No healthy account is currently available"
+
 func credentialFailoverClientResponse(failoverErr *service.UpstreamFailoverError) (int, string) {
-	_ = failoverErr
-	return http.StatusServiceUnavailable, service.GrokCredentialUnavailableClientMessage
+	if isGrokCredentialFailure(failoverErr) {
+		return http.StatusServiceUnavailable, service.GrokCredentialUnavailableClientMessage
+	}
+	return http.StatusServiceUnavailable, credentialUnavailableClientMessage
+}
+
+func isGrokCredentialFailure(failoverErr *service.UpstreamFailoverError) bool {
+	if failoverErr == nil {
+		return false
+	}
+	switch failoverErr.Reason {
+	case service.GrokCredentialReasonRevoked,
+		service.GrokCredentialReasonMissing,
+		service.GrokCredentialReasonEntitlement,
+		service.GrokCredentialReasonProxyInvalid,
+		service.GrokCredentialReasonRefreshTransient,
+		service.GrokCredentialReasonProviderConfig,
+		service.GrokCredentialReasonProviderDown,
+		service.GrokCredentialReasonAccountChanged:
+		return true
+	default:
+		return strings.HasPrefix(string(failoverErr.Reason), "grok_oauth_")
+	}
 }
 
 func copyFailoverRetryAfter(c *gin.Context, headers http.Header) {
@@ -2745,7 +2768,8 @@ func closeOpenAIWSFailoverExhausted(conn *coderws.Conn, failoverErr *service.Ups
 		return
 	}
 	if failoverErr.IsCredentialFailure() {
-		closeOpenAIClientWS(conn, coderws.StatusTryAgainLater, service.GrokCredentialUnavailableClientMessage)
+		_, message := credentialFailoverClientResponse(failoverErr)
+		closeOpenAIClientWS(conn, coderws.StatusTryAgainLater, message)
 		return
 	}
 	switch failoverErr.StatusCode {

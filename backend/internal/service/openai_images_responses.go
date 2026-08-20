@@ -835,7 +835,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesErrorResponse(
 		if maxBytes <= 0 {
 			maxBytes = 2048
 		}
-		upstreamDetail = truncateString(string(body), maxBytes)
+		upstreamDetail = redactAndTruncateUpstreamDetail(string(body), maxBytes)
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 

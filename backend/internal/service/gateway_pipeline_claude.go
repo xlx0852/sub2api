@@ -631,7 +631,7 @@ func (s *GatewayService) forwardClaudeTransport(ex *pipeline.Exchange) error {
 					if maxBytes <= 0 {
 						maxBytes = 2048
 					}
-					upstreamDetail = truncateString(string(respBody), maxBytes)
+					upstreamDetail = redactAndTruncateUpstreamDetail(string(respBody), maxBytes)
 				}
 				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 					Platform:           account.Platform,
@@ -702,7 +702,7 @@ func (s *GatewayService) forwardClaudeRelay(ex *pipeline.Exchange) error {
 					if maxBytes <= 0 {
 						maxBytes = 2048
 					}
-					upstreamDetail = truncateString(sseErr.RawData, maxBytes)
+					upstreamDetail = redactAndTruncateUpstreamDetail(sseErr.RawData, maxBytes)
 				}
 
 				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{

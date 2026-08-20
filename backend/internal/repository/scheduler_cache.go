@@ -30,6 +30,10 @@ const (
 	// snapshotGraceTTLSeconds 旧快照过期的宽限期（秒）。
 	// 替代立即 DEL，让正在读取旧版本的 reader 有足够时间完成 ZRANGE。
 	snapshotGraceTTLSeconds = 60
+
+	// schedulerAccountTTL 账号快照 TTL。写失败或 outbox 丢失时，
+	// 无 TTL 的 key 会永久陈旧；24h 后 miss 回源。
+	schedulerAccountTTL = 24 * time.Hour
 )
 
 var (
@@ -281,8 +285,8 @@ func (c *schedulerCache) UpdateLastUsed(ctx context.Context, updates map[int64]t
 			pipe.Del(ctx, keys[i], schedulerAccountMetaKey(strconv.FormatInt(ids[i], 10)))
 			continue
 		}
-		pipe.Set(ctx, keys[i], updated, 0)
-		pipe.Set(ctx, schedulerAccountMetaKey(strconv.FormatInt(ids[i], 10)), metaPayload, 0)
+		pipe.Set(ctx, keys[i], updated, schedulerAccountTTL)
+		pipe.Set(ctx, schedulerAccountMetaKey(strconv.FormatInt(ids[i], 10)), metaPayload, schedulerAccountTTL)
 	}
 	_, err = pipe.Exec(ctx)
 	return err
@@ -409,8 +413,8 @@ func (c *schedulerCache) writeAccounts(ctx context.Context, accounts []domain.Ac
 		}
 
 		id := strconv.FormatInt(account.ID, 10)
-		pipe.Set(ctx, schedulerAccountKey(id), fullPayload, 0)
-		pipe.Set(ctx, schedulerAccountMetaKey(id), metaPayload, 0)
+		pipe.Set(ctx, schedulerAccountKey(id), fullPayload, schedulerAccountTTL)
+		pipe.Set(ctx, schedulerAccountMetaKey(id), metaPayload, schedulerAccountTTL)
 		cacheableAccounts = append(cacheableAccounts, account)
 		pending++
 		if pending >= c.writeChunkSize {

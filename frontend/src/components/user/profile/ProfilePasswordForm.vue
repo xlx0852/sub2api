@@ -71,6 +71,7 @@
 </template>
 
 <script setup lang="ts">
+import { apiErrorMessage } from '@/api/client'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -108,7 +109,7 @@ const handleChangePassword = async () => {
     form.value = { old_password: '', new_password: '', confirm_password: '' }
     appStore.showSuccess(t('profile.passwordChangeSuccess'))
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('profile.passwordChangeFailed'))
+    appStore.showError(apiErrorMessage(error, t('profile.passwordChangeFailed')))
   } finally {
     loading.value = false
   }

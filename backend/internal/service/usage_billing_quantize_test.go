@@ -83,6 +83,7 @@ func TestApplyCanonicalUsageBillingAmountsKeepsCustomerLedgersAligned(t *testing
 	require.Equal(t, cmd.BalanceCost, cmd.APIKeyRateLimitCost)
 	require.Equal(t, cmd.BalanceCost, params.Cost.ActualCost)
 	require.Equal(t, cmd.BalanceCost, usageLog.ActualCost)
+	require.Equal(t, cmd.BalanceCost, usageLog.TotalCost)
 	require.Equal(t, 0.000063, cmd.AccountQuotaCost,
 		"account-side quota keeps its own cost basis while sharing the precision contract")
 }
@@ -90,7 +91,7 @@ func TestApplyCanonicalUsageBillingAmountsKeepsCustomerLedgersAligned(t *testing
 func TestApplyCanonicalUsageBillingAmountsUsesSubscriptionCharge(t *testing.T) {
 	t.Parallel()
 
-	usageLog := &UsageLog{ActualCost: 0.123456001}
+	usageLog := &UsageLog{ActualCost: 0.123456001, TotalCost: 0.123456001}
 	params := &postUsageBillingParams{Cost: &CostBreakdown{ActualCost: 0.123456001}}
 	cmd := &UsageBillingCommand{SubscriptionCost: 0.123456001}
 	cmd.Normalize()
@@ -99,4 +100,5 @@ func TestApplyCanonicalUsageBillingAmountsUsesSubscriptionCharge(t *testing.T) {
 
 	require.Equal(t, 0.123457, params.Cost.ActualCost)
 	require.Equal(t, params.Cost.ActualCost, usageLog.ActualCost)
+	require.Equal(t, 0.123457, usageLog.TotalCost)
 }

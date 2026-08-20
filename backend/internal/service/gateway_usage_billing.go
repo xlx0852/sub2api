@@ -274,7 +274,7 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 	return cmd
 }
 
-func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog, p *postUsageBillingParams, deps *billingDeps, repo UsageBillingRepository) (bool, error) {
+func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog, p *postUsageBillingParams, deps *billingDeps, repo UsageBillingRepository) (usedLegacy bool, err error) {
 	if p == nil || deps == nil {
 		return false, nil
 	}
@@ -285,6 +285,7 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 		postUsageBilling(ctx, p, deps)
 		return true, nil
 	}
+	cmd.UsageLog = usageLog
 
 	billingCtx, cancel := detachedBillingContext(ctx)
 	defer cancel()
@@ -295,7 +296,9 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 	}
 
 	if result == nil || !result.Applied {
-		deps.deferredService.ScheduleLastUsedUpdate(p.Account.ID)
+		if deps.deferredService != nil {
+			deps.deferredService.ScheduleLastUsedUpdate(p.Account.ID)
+		}
 		return false, nil
 	}
 
@@ -306,7 +309,7 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 	}
 
 	finalizePostUsageBilling(billingCtx, p, deps, result)
-	return true, nil
+	return false, nil
 }
 
 // applyCanonicalUsageBillingAmounts makes the persisted customer charge and
@@ -325,6 +328,11 @@ func applyCanonicalUsageBillingAmounts(usageLog *UsageLog, p *postUsageBillingPa
 	p.Cost.ActualCost = canonicalActualCost
 	if usageLog != nil {
 		usageLog.ActualCost = canonicalActualCost
+		if usageLog.TotalCost <= 0 {
+			usageLog.TotalCost = canonicalActualCost
+		} else {
+			usageLog.TotalCost = QuantizeUsageBillingAmount(usageLog.TotalCost)
+		}
 	}
 }
 
@@ -358,24 +366,14 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 		if deps.billingCacheService.HasUserPlatformQuotaLimit(ctx, p.User.ID, p.Platform) {
 			deps.billingCacheService.IncrementUserPlatformQuotaUsage(p.User.ID, p.Platform, p.Cost.ActualCost)
 			if deps.cfg == nil || !deps.cfg.Database.UserPlatformQuotaFlusherEnabled {
-				// 降级路径:flusher 未启用时保留原有异步直写 DB
-				dbCtx, dbCancel := detachUpstreamContext(ctx)
+				// 降级路径:flusher 未启用时同步直写 DB。异步 goroutine 在进程退出时会丢。
+				dbCtx, dbCancel := detachedBillingContext(ctx)
 				userID, platform, cost := p.User.ID, p.Platform, p.Cost.ActualCost
-				go func() {
-					defer func() {
-						if r := recover(); r != nil {
-							logger.LegacyPrintf("service.gateway", "ALERT: panic in user platform quota incr goroutine user=%d platform=%s: %v", userID, platform, r)
-						}
-					}()
-					defer dbCancel()
-					if err := deps.userPlatformQuotaRepo.IncrementUsageWithReset(dbCtx, userID, platform, cost, time.Now().UTC()); err != nil {
-						// 失败计数器:暴露给 GatewayUserPlatformQuotaIncrStats(),由 ops 面板做斜率告警。
-						userPlatformQuotaDBIncrErrorTotal.Add(1)
-						// ALERT 级别:DB 持久化失败意味着 Redis cache 失效后该笔 cost 永久丢失,
-						// 用户配额视图与实际消费会偏差,oncall 需要据此对账或人工补录。
-						logger.LegacyPrintf("service.gateway", "ALERT: incr user platform quota DB failed user=%d platform=%s cost=%f: %v", userID, platform, cost, err)
-					}
-				}()
+				if err := deps.userPlatformQuotaRepo.IncrementUsageWithReset(dbCtx, userID, platform, cost, time.Now().UTC()); err != nil {
+					userPlatformQuotaDBIncrErrorTotal.Add(1)
+					logger.LegacyPrintf("service.gateway", "ALERT: incr user platform quota DB failed user=%d platform=%s cost=%f: %v", userID, platform, cost, err)
+				}
+				dbCancel()
 			}
 			// flusher_enabled=true:不直写 DB,flusher 异步批量刷
 		}

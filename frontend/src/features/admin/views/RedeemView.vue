@@ -553,6 +553,7 @@ import { useClipboard } from '@/composables/useClipboard'
 import { useTableSelection } from '@/composables/useTableSelection'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { adminAPI } from '@/api/admin'
+import { apiErrorMessage } from '@/api/client'
 import { formatDateTime } from '@/utils/format'
 import type {
   RedeemCode,
@@ -934,7 +935,7 @@ const handleGenerateCodes = async () => {
     generateForm.custom_expiry_days = 7
     loadCodes()
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('admin.redeem.failedToGenerate'))
+    appStore.showError(apiErrorMessage(error, t('admin.redeem.failedToGenerate')))
     console.error('Error generating codes:', error)
   } finally {
     generating.value = false
@@ -967,7 +968,7 @@ const handleExportCodes = async () => {
 
     appStore.showSuccess(t('admin.redeem.codesExported'))
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('admin.redeem.failedToExport'))
+    appStore.showError(apiErrorMessage(error, t('admin.redeem.failedToExport')))
     console.error('Error exporting codes:', error)
   }
 }
@@ -987,7 +988,7 @@ const confirmDelete = async () => {
     deletingCode.value = null
     loadCodes()
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('admin.redeem.failedToDelete'))
+    appStore.showError(apiErrorMessage(error, t('admin.redeem.failedToDelete')))
     console.error('Error deleting code:', error)
   }
 }
@@ -1009,7 +1010,7 @@ const confirmDeleteUnused = async () => {
     showDeleteUnusedDialog.value = false
     loadCodes()
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('admin.redeem.failedToDeleteUnused'))
+    appStore.showError(apiErrorMessage(error, t('admin.redeem.failedToDeleteUnused')))
     console.error('Error deleting unused codes:', error)
   }
 }
@@ -1043,7 +1044,7 @@ const handleBatchUpdate = async () => {
     clearSelectedCodes()
     loadCodes()
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('admin.redeem.failedToBatchUpdate'))
+    appStore.showError(apiErrorMessage(error, t('admin.redeem.failedToBatchUpdate')))
     console.error('Error batch updating codes:', error)
   } finally {
     batchUpdating.value = false

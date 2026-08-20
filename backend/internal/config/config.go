@@ -652,7 +652,9 @@ func setDefaults() {
 
 	// Gateway
 	viper.SetDefault("gateway.response_header_timeout", 600) // 600秒(10分钟)等待上游响应头，LLM高负载时可能排队较久
-	viper.SetDefault("gateway.openai_response_header_timeout", 0)
+	// OpenAI/Codex 默认与通用 header timeout 对齐。0 会清掉 OpenAI 路径上的
+	// ResponseHeaderTimeout，HTTP/1.1 静默卡住时会永久占住并发槽。
+	viper.SetDefault("gateway.openai_response_header_timeout", 600)
 	viper.SetDefault("gateway.openai_first_output_timeout_seconds", 0)
 	viper.SetDefault("gateway.openai_high_effort_first_output_timeout_seconds", 0)
 	viper.SetDefault("gateway.log_upstream_error_body", true)
@@ -1413,6 +1415,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.OpenAIResponseHeaderTimeout < 0 {
 		return fmt.Errorf("gateway.openai_response_header_timeout must be non-negative")
+	}
+	if c.Gateway.OpenAIResponseHeaderTimeout == 0 {
+		slog.Warn("gateway.openai_response_header_timeout is 0; OpenAI/Codex HTTP/1.1 stalls can pin concurrency slots indefinitely")
 	}
 	if c.Gateway.OpenAIFirstOutputTimeoutSeconds < 0 || c.Gateway.OpenAIFirstOutputTimeoutSeconds > 600 ||
 		(c.Gateway.OpenAIFirstOutputTimeoutSeconds > 0 && c.Gateway.OpenAIFirstOutputTimeoutSeconds < 30) {

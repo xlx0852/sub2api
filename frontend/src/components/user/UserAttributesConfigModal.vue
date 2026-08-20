@@ -241,6 +241,7 @@ import { ref, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
+import { apiErrorMessage } from '@/api/client'
 import type { UserAttributeDefinition, UserAttributeType, UserAttributeOption } from '@/types'
 import BaseDialog from '@/ui/BaseDialog.vue'
 import ConfirmDialog from '@/ui/ConfirmDialog.vue'
@@ -289,7 +290,7 @@ const loadAttributes = async () => {
   try {
     attributes.value = await adminAPI.userAttributes.listDefinitions()
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('admin.users.attributes.failedToLoad'))
+    appStore.showError(apiErrorMessage(error, t('admin.users.attributes.failedToLoad')))
   } finally {
     loading.value = false
   }
@@ -374,7 +375,7 @@ const handleSave = async () => {
     const msg = editingAttribute.value
       ? t('admin.users.attributes.failedToUpdate')
       : t('admin.users.attributes.failedToCreate')
-    appStore.showError(error.response?.data?.detail || msg)
+    appStore.showError(apiErrorMessage(error, msg))
   } finally {
     saving.value = false
   }
@@ -395,7 +396,7 @@ const handleDelete = async () => {
     deletingAttribute.value = null
     loadAttributes()
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('admin.users.attributes.failedToDelete'))
+    appStore.showError(apiErrorMessage(error, t('admin.users.attributes.failedToDelete')))
   }
 }
 

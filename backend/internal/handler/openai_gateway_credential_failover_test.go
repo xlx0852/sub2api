@@ -37,6 +37,29 @@ func TestCredentialFailoverExhaustionReturnsFixedSafe503(t *testing.T) {
 	require.NotContains(t, recorder.Body.String(), "must-not-leak")
 }
 
+func TestCredentialFailoverExhaustionReturnsGenericSafe503ForNonGrok(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	h := &OpenAIGatewayHandler{}
+
+	h.handleFailoverExhausted(c, &service.UpstreamFailoverError{
+		Stage:             service.GatewayFailureStageAccountAuth,
+		Scope:             service.GatewayFailureScopeAccount,
+		Reason:            "openai_oauth_credential_revoked",
+		NextAccountAction: service.NextAccountRetry,
+		ClientStatusCode:  http.StatusTeapot,
+		ClientMessage:     "invalid_grant refresh_token=must-not-leak",
+	}, false)
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	require.Contains(t, recorder.Body.String(), credentialUnavailableClientMessage)
+	require.NotContains(t, recorder.Body.String(), service.GrokCredentialUnavailableClientMessage)
+	require.NotContains(t, strings.ToLower(recorder.Body.String()), "invalid_grant")
+	require.NotContains(t, recorder.Body.String(), "must-not-leak")
+}
+
 func TestInferenceFailoverExhaustionRestoresRetryAfter(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()

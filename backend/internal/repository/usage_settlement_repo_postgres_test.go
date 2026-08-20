@@ -324,14 +324,34 @@ type settlementBillingState struct {
 
 func settlementHarnessSubjects(t *testing.T, db *sql.DB) (userID, apiKeyID, accountID int64) {
 	t.Helper()
-	require.NoError(t, db.QueryRow(`
+	err := db.QueryRow(`
 		SELECT u.id, k.id, a.id
 		FROM users u
 		JOIN api_keys k ON k.user_id = u.id AND k.name = 'settlement-openai'
 		JOIN accounts a ON a.name = 'settlement-openai'
 		WHERE u.email = 'settlement-admin@local.test'
 		LIMIT 1
-	`).Scan(&userID, &apiKeyID, &accountID))
+	`).Scan(&userID, &apiKeyID, &accountID)
+	if err == nil {
+		return userID, apiKeyID, accountID
+	}
+	require.ErrorIs(t, err, sql.ErrNoRows)
+
+	require.NoError(t, db.QueryRow(`
+		INSERT INTO users (email, password_hash, role, status, balance, concurrency)
+		VALUES ('settlement-admin@local.test', 'hash', 'admin', 'active', 100, 5)
+		RETURNING id
+	`).Scan(&userID))
+	require.NoError(t, db.QueryRow(`
+		INSERT INTO api_keys (user_id, key, name, status, quota, quota_used)
+		VALUES ($1, 'sk-settlement-openai-test', 'settlement-openai', 'active', 100, 0)
+		RETURNING id
+	`, userID).Scan(&apiKeyID))
+	require.NoError(t, db.QueryRow(`
+		INSERT INTO accounts (name, platform, type, status, extra)
+		VALUES ('settlement-openai', 'openai', 'apikey', 'active', '{"quota_used": 0}'::jsonb)
+		RETURNING id
+	`).Scan(&accountID))
 	return userID, apiKeyID, accountID
 }
 

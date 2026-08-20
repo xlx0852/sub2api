@@ -195,7 +195,7 @@ func (s *AntigravityGatewayService) getUpstreamErrorDetail(body []byte) string {
 	if !logBody {
 		return ""
 	}
-	return truncateString(string(body), maxBytes)
+	return redactAndTruncateUpstreamDetail(string(body), maxBytes)
 }
 
 // checkErrorPolicy nil 安全的包装

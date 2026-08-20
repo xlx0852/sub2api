@@ -3440,6 +3440,7 @@ import { useI18n } from "vue-i18n";
 import { useAppStore } from "@/stores/app";
 import { useOnboardingStore } from "@/stores/onboarding";
 import { adminAPI } from "@/api/admin";
+import { apiErrorMessage } from "@/api/client";
 import type { AdminGroup, GroupPlatform, SubscriptionType } from "@/types";
 import type { Column } from "@/components/common/types";
 import AppLayout from "@/components/layout/AppLayout.vue";
@@ -3773,6 +3774,7 @@ const sortState = reactive({
 });
 
 let abortController: AbortController | null = null;
+let groupSummaryGeneration = 0;
 
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
@@ -4380,13 +4382,14 @@ const loadGroups = async () => {
     groups.value = response.items;
     pagination.total = response.total;
     pagination.pages = response.pages;
+    const summaryGeneration = ++groupSummaryGeneration;
     if (hasVisibleUsageColumn.value) {
-      loadUsageSummary();
+      loadUsageSummary(summaryGeneration);
     } else {
       usageLoading.value = false;
     }
     if (hasVisibleCapacityColumn.value) {
-      loadCapacitySummary();
+      loadCapacitySummary(summaryGeneration);
     }
   } catch (error: any) {
     if (
@@ -4411,7 +4414,7 @@ const formatCost = (cost: number): string => {
   return cost.toFixed(2);
 };
 
-const loadUsageSummary = async () => {
+const loadUsageSummary = async (generation = groupSummaryGeneration) => {
   if (!hasVisibleUsageColumn.value) {
     usageLoading.value = false;
     return;
@@ -4420,6 +4423,9 @@ const loadUsageSummary = async () => {
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const data = await adminAPI.groups.getUsageSummary(tz);
+    if (generation !== groupSummaryGeneration) {
+      return;
+    }
     const map = new Map<number, { today_cost: number; total_cost: number }>();
     for (const item of data) {
       map.set(item.group_id, {
@@ -4429,18 +4435,26 @@ const loadUsageSummary = async () => {
     }
     usageMap.value = map;
   } catch (error) {
+    if (generation !== groupSummaryGeneration) {
+      return;
+    }
     console.error("Error loading group usage summary:", error);
   } finally {
-    usageLoading.value = false;
+    if (generation === groupSummaryGeneration) {
+      usageLoading.value = false;
+    }
   }
 };
 
-const loadCapacitySummary = async () => {
+const loadCapacitySummary = async (generation = groupSummaryGeneration) => {
   if (!hasVisibleCapacityColumn.value) {
     return;
   }
   try {
     const data = await adminAPI.groups.getCapacitySummary();
+    if (generation !== groupSummaryGeneration) {
+      return;
+    }
     const map = new Map<
       number,
       {
@@ -4464,6 +4478,9 @@ const loadCapacitySummary = async () => {
     }
     capacityMap.value = map;
   } catch (error) {
+    if (generation !== groupSummaryGeneration) {
+      return;
+    }
     console.error("Error loading group capacity summary:", error);
   }
 };
@@ -4656,7 +4673,7 @@ const handleCreateGroup = async () => {
     }
   } catch (error: any) {
     appStore.showError(
-      error.response?.data?.detail || t("admin.groups.failedToCreate"),
+      apiErrorMessage(error, t("admin.groups.failedToCreate")),
     );
     console.error("Error creating group:", error);
     // Don't advance tour on error
@@ -4842,7 +4859,7 @@ const handleUpdateGroup = async () => {
     loadGroups();
   } catch (error: any) {
     appStore.showError(
-      error.response?.data?.detail || t("admin.groups.failedToUpdate"),
+      apiErrorMessage(error, t("admin.groups.failedToUpdate")),
     );
     console.error("Error updating group:", error);
   } finally {
@@ -4938,7 +4955,7 @@ const confirmDelete = async () => {
     loadGroups();
   } catch (error: any) {
     appStore.showError(
-      error.response?.data?.detail || t("admin.groups.failedToDelete"),
+      apiErrorMessage(error, t("admin.groups.failedToDelete")),
     );
     console.error("Error deleting group:", error);
   }
@@ -5075,7 +5092,7 @@ const saveSortOrder = async () => {
     loadGroups();
   } catch (error: any) {
     appStore.showError(
-      error.response?.data?.detail || t("admin.groups.failedToUpdateSortOrder"),
+      apiErrorMessage(error, t("admin.groups.failedToUpdateSortOrder")),
     );
     console.error("Error updating sort order:", error);
   } finally {

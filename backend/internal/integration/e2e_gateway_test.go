@@ -532,12 +532,12 @@ func testClaudeMessageWithTools(t *testing.T, claudeKey string, model string) {
 
 	// 503 可能是账号限流，不算测试失败
 	if resp.StatusCode == 503 {
-		t.Skipf("账号暂时不可用 (503): %s", string(respBody))
+		t.Fatalf("账号暂时不可用 (503): %s", string(respBody))
 	}
 
 	// 429 是限流
 	if resp.StatusCode == 429 {
-		t.Skipf("请求被限流 (429): %s", string(respBody))
+		t.Fatalf("请求被限流 (429): %s", string(respBody))
 	}
 
 	if resp.StatusCode != 200 {
@@ -660,12 +660,12 @@ func testClaudeThinkingWithToolHistory(t *testing.T, claudeKey string, model str
 
 	// 503 可能是账号限流，不算测试失败
 	if resp.StatusCode == 503 {
-		t.Skipf("账号暂时不可用 (503): %s", string(respBody))
+		t.Fatalf("账号暂时不可用 (503): %s", string(respBody))
 	}
 
 	// 429 是限流
 	if resp.StatusCode == 429 {
-		t.Skipf("请求被限流 (429): %s", string(respBody))
+		t.Fatalf("请求被限流 (429): %s", string(respBody))
 	}
 
 	if resp.StatusCode != 200 {
@@ -792,11 +792,11 @@ func testClaudeWithNoSignature(t *testing.T, claudeKey string, model string) {
 	}
 
 	if resp.StatusCode == 503 {
-		t.Skipf("账号暂时不可用 (503): %s", string(respBody))
+		t.Fatalf("账号暂时不可用 (503): %s", string(respBody))
 	}
 
 	if resp.StatusCode == 429 {
-		t.Skipf("请求被限流 (429): %s", string(respBody))
+		t.Fatalf("请求被限流 (429): %s", string(respBody))
 	}
 
 	if resp.StatusCode != 200 {

@@ -2,14 +2,19 @@ package middleware
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
+	"runtime/debug"
 	"strings"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // Recovery converts panics into the project's standard JSON error envelope.
@@ -28,6 +33,8 @@ func Recovery() gin.HandlerFunc {
 			return
 		}
 
+		logRecoveryPanic(c, recovered)
+
 		if c.Writer.Written() {
 			c.Abort()
 			return
@@ -42,6 +49,29 @@ func Recovery() gin.HandlerFunc {
 		)
 		c.Abort()
 	})
+}
+
+func logRecoveryPanic(c *gin.Context, recovered any) {
+	fields := []zap.Field{
+		zap.Any("panic", recovered),
+		zap.String("stack", string(debug.Stack())),
+	}
+	if c != nil {
+		if c.Request != nil {
+			fields = append(fields,
+				zap.String("method", c.Request.Method),
+				zap.String("path", c.Request.URL.Path),
+			)
+			if reqID, ok := c.Request.Context().Value(ctxkey.RequestID).(string); ok && reqID != "" {
+				fields = append(fields, zap.String("request_id", reqID))
+			}
+		}
+		if userID, exists := c.Get("user_id"); exists {
+			fields = append(fields, zap.Any("user_id", userID))
+		}
+	}
+	logger.L().Error("http.recovery_panic", fields...)
+	fmt.Fprintf(gin.DefaultErrorWriter, "[Recovery] panic recovered: %v\n%s\n", recovered, debug.Stack())
 }
 
 func isBrokenPipe(err error) bool {

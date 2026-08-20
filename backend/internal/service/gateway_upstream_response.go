@@ -471,7 +471,7 @@ func (s *GatewayService) handleErrorResponse(ctx context.Context, resp *http.Res
 		if maxBytes <= 0 {
 			maxBytes = 2048
 		}
-		upstreamDetail = truncateString(string(body), maxBytes)
+		upstreamDetail = redactAndTruncateUpstreamDetail(string(body), maxBytes)
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -647,7 +647,7 @@ func (s *GatewayService) handleRetryExhaustedError(ctx context.Context, resp *ht
 		if maxBytes <= 0 {
 			maxBytes = 2048
 		}
-		upstreamDetail = truncateString(string(respBody), maxBytes)
+		upstreamDetail = redactAndTruncateUpstreamDetail(string(respBody), maxBytes)
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{

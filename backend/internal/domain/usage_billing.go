@@ -109,6 +109,11 @@ type UsageBillingCommand struct {
 	APIKeyQuotaCost     float64
 	APIKeyRateLimitCost float64
 	AccountQuotaCost    float64
+
+	// UsageLog, when set, is inserted in the same billing transaction.
+	// A crash between debit and usage_log persistence is otherwise possible
+	// on the real-time path (issue #3656).
+	UsageLog *UsageLog
 }
 
 const UsageBillingMonetaryScale = 6

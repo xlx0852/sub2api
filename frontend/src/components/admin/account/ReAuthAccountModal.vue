@@ -236,6 +236,7 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
+import { apiErrorMessage } from '@/api/client'
 import {
   useAccountOAuth,
   type AddMethod,
@@ -488,7 +489,7 @@ const handleCompleteKimiAuthorization = async () => {
     kimiOAuth.resetState()
     emit('close')
   } catch (error: any) {
-    kimiOAuth.error.value = error.response?.data?.detail || error.response?.data?.message || t('admin.accounts.oauth.authFailed')
+    kimiOAuth.error.value = apiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
     appStore.showError(kimiOAuth.error.value)
   } finally {
     kimiOAuth.loading.value = false
@@ -555,7 +556,7 @@ const handleExchangeCode = async () => {
       emit('reauthorized', updatedAccount)
       handleClose()
     } catch (error: any) {
-      oauthClient.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
+      oauthClient.error.value = apiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
       appStore.showError(oauthClient.error.value)
     }
   } else if (isGemini.value) {
@@ -588,7 +589,7 @@ const handleExchangeCode = async () => {
       emit('reauthorized', updatedAccount)
       handleClose()
     } catch (error: any) {
-      geminiOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
+      geminiOAuth.error.value = apiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
       appStore.showError(geminiOAuth.error.value)
     }
   } else if (isAntigravity.value) {
@@ -620,7 +621,7 @@ const handleExchangeCode = async () => {
       emit('reauthorized', updatedAccount)
       handleClose()
     } catch (error: any) {
-      antigravityOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
+      antigravityOAuth.error.value = apiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
       appStore.showError(antigravityOAuth.error.value)
     }
   } else if (isGrok.value) {
@@ -653,7 +654,7 @@ const handleExchangeCode = async () => {
       emit('reauthorized', updatedAccount)
       handleClose()
     } catch (error: any) {
-      grokOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
+      grokOAuth.error.value = apiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
       appStore.showError(grokOAuth.error.value)
     }
   } else {
@@ -689,7 +690,7 @@ const handleExchangeCode = async () => {
       emit('reauthorized', updatedAccount)
       handleClose()
     } catch (error: any) {
-      claudeOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
+      claudeOAuth.error.value = apiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
       appStore.showError(claudeOAuth.error.value)
     } finally {
       claudeOAuth.loading.value = false
@@ -729,9 +730,10 @@ const handleCookieAuth = async (sessionKey: string) => {
     handleClose()
   } catch (error: any) {
     claudeOAuth.error.value =
-      error.response?.data?.detail || t('admin.accounts.oauth.cookieAuthFailed')
+      apiErrorMessage(error, t('admin.accounts.oauth.cookieAuthFailed'))
   } finally {
     claudeOAuth.loading.value = false
   }
 }
 </script>
+)

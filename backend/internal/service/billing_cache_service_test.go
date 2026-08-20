@@ -14,6 +14,7 @@ import (
 type billingCacheWorkerStub struct {
 	balanceUpdates      int64
 	subscriptionUpdates int64
+	rateLimitUpdates    int64
 }
 
 func (b *billingCacheWorkerStub) GetUserBalance(ctx context.Context, userID int64) (float64, error) {
@@ -61,6 +62,7 @@ func (b *billingCacheWorkerStub) SetAPIKeyRateLimit(ctx context.Context, keyID i
 }
 
 func (b *billingCacheWorkerStub) UpdateAPIKeyRateLimitUsage(ctx context.Context, keyID int64, cost float64) error {
+	atomic.AddInt64(&b.rateLimitUpdates, 1)
 	return nil
 }
 
@@ -108,6 +110,9 @@ func TestBillingCacheServiceQueueHighLoad(t *testing.T) {
 	require.Less(t, time.Since(start), 2*time.Second)
 
 	svc.QueueUpdateSubscriptionUsage(1, 2, 1.5)
+	for i := 0; i < cacheWriteBufferSize*2; i++ {
+		svc.QueueUpdateAPIKeyRateLimitUsage(1, 1)
+	}
 
 	require.Eventually(t, func() bool {
 		return atomic.LoadInt64(&cache.balanceUpdates) > 0
@@ -115,6 +120,10 @@ func TestBillingCacheServiceQueueHighLoad(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		return atomic.LoadInt64(&cache.subscriptionUpdates) > 0
+	}, 2*time.Second, 10*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return atomic.LoadInt64(&cache.rateLimitUpdates) > 0
 	}, 2*time.Second, 10*time.Millisecond)
 }
 

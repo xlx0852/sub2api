@@ -126,7 +126,7 @@ func (s *OpenAIGatewayService) ForwardCountTokensAsAnthropic(
 			if maxBytes <= 0 {
 				maxBytes = 2048
 			}
-			upstreamDetail = truncateString(string(respBody), maxBytes)
+			upstreamDetail = redactAndTruncateUpstreamDetail(string(respBody), maxBytes)
 		}
 		setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 

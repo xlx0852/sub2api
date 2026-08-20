@@ -88,6 +88,18 @@ func (f *durableSettlementRepoFake) GetByIdentity(context.Context, string, int64
 	return nil, errors.New("not implemented")
 }
 
+func (f *durableSettlementRepoFake) counts() (started, ready, claim, expire, stats, retry, terminal int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.startedCount, f.readyCount, f.claimCount, f.expireCount, f.statsCount, f.retryCount, f.terminalCount
+}
+
+func (f *durableSettlementRepoFake) setClaim(items []domain.UsageSettlementAttempt) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.claim = items
+}
+
 type durableSettlementBillingFake struct {
 	mu      sync.Mutex
 	calls   int
@@ -167,11 +179,13 @@ func TestDurableSettlementGroupScopeControlsWritesAuthorityAndClaims(t *testing.
 	_, inserted, err := worker.StartAttempt(context.Background(), &domain.UsageSettlementAttempt{GroupID: &other})
 	require.NoError(t, err)
 	require.False(t, inserted)
-	require.Zero(t, repo.startedCount)
+	started, _, _, _, _, _, _ := repo.counts()
+	require.Zero(t, started)
 	_, inserted, err = worker.StartAttempt(context.Background(), &domain.UsageSettlementAttempt{GroupID: &selected})
 	require.NoError(t, err)
 	require.True(t, inserted)
-	require.Equal(t, 1, repo.startedCount)
+	started, _, _, _, _, _, _ = repo.counts()
+	require.Equal(t, 1, started)
 	require.NotNil(t, repo.lastStarted)
 	require.True(t, repo.lastStarted.Authoritative)
 
@@ -218,7 +232,8 @@ func TestDurableSettlementModesGateWritesAndClaims(t *testing.T) {
 	_, inserted, err := worker.StartAttempt(context.Background(), &domain.UsageSettlementAttempt{})
 	require.NoError(t, err)
 	require.False(t, inserted)
-	require.Equal(t, 0, repo.startedCount)
+	started, _, _, _, _, _, _ := repo.counts()
+	require.Equal(t, 0, started)
 
 	worker.SetMode(SettlementDurabilityShadow)
 	_, inserted, err = worker.StartAttempt(context.Background(), &domain.UsageSettlementAttempt{})
@@ -226,14 +241,17 @@ func TestDurableSettlementModesGateWritesAndClaims(t *testing.T) {
 	require.True(t, inserted)
 	_, err = worker.HandoffReady(context.Background(), "id", 1, "fp", &domain.UsageSettlementPayloadV1{})
 	require.NoError(t, err)
-	require.Equal(t, 1, repo.readyCount)
+	_, ready, _, _, _, _, _ := repo.counts()
+	require.Equal(t, 1, ready)
 	worker.Start(context.Background())
 	worker.Wake()
-	time.Sleep(20 * time.Millisecond)
-	require.Equal(t, 0, repo.claimCount)
-	require.Equal(t, 1, repo.expireCount, "shadow mode must retain missing-terminal attempts as auditable reconciliation records")
+	require.Eventually(t, func() bool {
+		_, _, claim, expire, _, _, _ := repo.counts()
+		return claim == 0 && expire == 1
+	}, time.Second, 5*time.Millisecond, "shadow mode must retain missing-terminal attempts as auditable reconciliation records")
 	worker.logBacklogStats(context.Background())
-	require.Equal(t, 1, repo.statsCount)
+	_, _, _, _, stats, _, _ := repo.counts()
+	require.Equal(t, 1, stats)
 	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	require.NoError(t, worker.StopAndWait(stopCtx))
@@ -286,12 +304,14 @@ func TestDurableSettlementWorkerRetriesAndClassifiesTerminalErrors(t *testing.T)
 	billing := &durableSettlementBillingFake{err: errors.New("temporary")}
 	worker := NewDurableSettlement(repo, billing, DurableSettlementOptions{})
 	require.NoError(t, worker.drainOnce(context.Background()))
-	require.Equal(t, 1, repo.retryCount)
+	_, _, _, _, _, retry, _ := repo.counts()
+	require.Equal(t, 1, retry)
 
-	repo.claim = []domain.UsageSettlementAttempt{{ID: 2}}
+	repo.setClaim([]domain.UsageSettlementAttempt{{ID: 2}})
 	billing.err = domain.ErrUsageBillingRequestConflict
 	require.NoError(t, worker.drainOnce(context.Background()))
-	require.Equal(t, 1, repo.terminalCount)
+	_, _, _, _, _, _, terminal := repo.counts()
+	require.Equal(t, 1, terminal)
 }
 
 func TestDurableSettlementObserverRunsOnlyAfterSuccessfulCommit(t *testing.T) {

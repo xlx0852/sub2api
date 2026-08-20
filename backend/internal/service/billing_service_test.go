@@ -1139,8 +1139,9 @@ func TestCalculateCostWithConfig(t *testing.T) {
 	cost, err := svc.CalculateCostWithConfig("claude-sonnet-4", tokens)
 	require.NoError(t, err)
 
-	expected, _ := svc.CalculateCost("claude-sonnet-4", tokens, 1.5)
-	require.InDelta(t, expected.ActualCost, cost.ActualCost, 1e-10)
+	// Independent oracle: claude-sonnet-4 fallback $3/$15 per MTok × 1.5.
+	expected := (1000*3e-6 + 500*15e-6) * 1.5
+	require.InDelta(t, expected, cost.ActualCost, 1e-10)
 }
 
 func TestCalculateCostWithConfig_ZeroMultiplier(t *testing.T) {
@@ -1153,8 +1154,7 @@ func TestCalculateCostWithConfig_ZeroMultiplier(t *testing.T) {
 	require.NoError(t, err)
 
 	// 倍率 <=0 时默认 1.0
-	expected, _ := svc.CalculateCost("claude-sonnet-4", tokens, 1.0)
-	require.InDelta(t, expected.ActualCost, cost.ActualCost, 1e-10)
+	require.InDelta(t, 1000*3e-6, cost.ActualCost, 1e-10)
 }
 
 func TestGetEstimatedCost(t *testing.T) {

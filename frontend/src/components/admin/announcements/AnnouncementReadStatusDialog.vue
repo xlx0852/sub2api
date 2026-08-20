@@ -74,6 +74,7 @@ import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
+import { apiErrorMessage } from '@/api/client'
 import { formatDateTime } from '@/utils/format'
 import type { AnnouncementUserReadStatus } from '@/types'
 import type { Column } from '@/components/common/types'
@@ -186,7 +187,7 @@ async function load() {
       return
     }
     console.error('Failed to load read status:', error)
-    appStore.showError(error.response?.data?.detail || t('admin.announcements.failedToLoadReadStatus'))
+    appStore.showError(apiErrorMessage(error, t('admin.announcements.failedToLoadReadStatus')))
   } finally {
     if (currentController === requestController) {
       loading.value = false

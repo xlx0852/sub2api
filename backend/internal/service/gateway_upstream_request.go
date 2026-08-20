@@ -12,6 +12,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 
@@ -842,17 +843,27 @@ func applyClaudeCodeMimicHeaders(req *http.Request, isStream bool) {
 }
 
 func truncateForLog(b []byte, maxBytes int) string {
+	return redactUpstreamErrorDetail(b, maxBytes)
+}
+
+func redactUpstreamErrorDetail(body []byte, maxBytes int) string {
+	return redactAndTruncateUpstreamDetail(string(body), maxBytes)
+}
+
+func redactAndTruncateUpstreamDetail(s string, maxBytes int) string {
 	if maxBytes <= 0 {
 		maxBytes = 2048
 	}
-	if len(b) > maxBytes {
-		b = b[:maxBytes]
+	if s == "" {
+		return ""
 	}
-	s := string(b)
-	// 保持一行，避免污染日志格式
-	s = strings.ReplaceAll(s, "\n", "\\n")
-	s = strings.ReplaceAll(s, "\r", "\\r")
-	return s
+	redacted := logredact.RedactText(s, "authorization", "api_key", "token")
+	if len(redacted) > maxBytes {
+		redacted = redacted[:maxBytes]
+	}
+	redacted = strings.ReplaceAll(redacted, "\n", "\\n")
+	redacted = strings.ReplaceAll(redacted, "\r", "\\r")
+	return redacted
 }
 
 // buildCustomRelayURL 构建自定义中继转发 URL

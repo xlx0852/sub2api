@@ -404,6 +404,7 @@ import { useAppStore } from '@/stores/app'
 import { useClipboard } from '@/composables/useClipboard'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { adminAPI } from '@/api/admin'
+import { apiErrorMessage } from '@/api/client'
 import { formatDateTime } from '@/utils/format'
 import type { PromoCode, PromoCodeUsage } from '@/types'
 import type { Column } from '@/components/common/types'
@@ -623,7 +624,7 @@ const handleCreate = async () => {
     resetCreateForm()
     loadCodes()
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('admin.promo.failedToCreate'))
+    appStore.showError(apiErrorMessage(error, t('admin.promo.failedToCreate')))
   } finally {
     creating.value = false
   }
@@ -671,7 +672,7 @@ const handleUpdate = async () => {
     closeEditDialog()
     loadCodes()
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('admin.promo.failedToUpdate'))
+    appStore.showError(apiErrorMessage(error, t('admin.promo.failedToUpdate')))
   } finally {
     updating.value = false
   }
@@ -713,7 +714,7 @@ const confirmDelete = async () => {
     deletingCode.value = null
     loadCodes()
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('admin.promo.failedToDelete'))
+    appStore.showError(apiErrorMessage(error, t('admin.promo.failedToDelete')))
   }
 }
 
@@ -739,7 +740,7 @@ const loadUsages = async () => {
     usages.value = response.items
     usagesTotal.value = response.total
   } catch (error: any) {
-    appStore.showError(error.response?.data?.detail || t('admin.promo.failedToLoadUsages'))
+    appStore.showError(apiErrorMessage(error, t('admin.promo.failedToLoadUsages')))
   } finally {
     usagesLoading.value = false
   }

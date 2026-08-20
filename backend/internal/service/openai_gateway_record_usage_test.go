@@ -1258,10 +1258,10 @@ func TestOpenAIGatewayServiceRecordUsage_ServiceTierFlexHalvesCost(t *testing.T)
 	require.NoError(t, err)
 	require.NotNil(t, usageRepo.lastLog)
 
-	baseCost, calcErr := svc.billingService.CalculateCost("gpt-5.4", UsageTokens{InputTokens: 80, OutputTokens: 50, CacheReadTokens: 20}, 1.0)
-	require.NoError(t, calcErr)
-	require.InDelta(t, baseCost.TotalCost*0.5, usageRepo.lastLog.TotalCost, 1e-10)
-}
+		baseCost, calcErr := svc.billingService.CalculateCost("gpt-5.4", UsageTokens{InputTokens: 80, OutputTokens: 50, CacheReadTokens: 20}, 1.0)
+		require.NoError(t, calcErr)
+		require.InDelta(t, QuantizeUsageBillingAmount(baseCost.TotalCost*0.5), usageRepo.lastLog.TotalCost, 1e-10)
+	}
 
 func TestNormalizeOpenAIServiceTier(t *testing.T) {
 	t.Run("fast maps to priority", func(t *testing.T) {

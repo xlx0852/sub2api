@@ -249,7 +249,7 @@ func (s *GeminiMessagesCompatService) forwardGeminiMessagesTransport(ex *pipelin
 					if maxBytes <= 0 {
 						maxBytes = 2048
 					}
-					upstreamDetail = truncateString(string(respBody), maxBytes)
+					upstreamDetail = redactAndTruncateUpstreamDetail(string(respBody), maxBytes)
 				}
 				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 					Platform:           account.Platform,
@@ -325,7 +325,7 @@ func (s *GeminiMessagesCompatService) forwardGeminiMessagesTransport(ex *pipelin
 					if maxBytes <= 0 {
 						maxBytes = 2048
 					}
-					upstreamDetail = truncateString(string(respBody), maxBytes)
+					upstreamDetail = redactAndTruncateUpstreamDetail(string(respBody), maxBytes)
 				}
 				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 					Platform:           account.Platform,
@@ -380,7 +380,7 @@ func (s *GeminiMessagesCompatService) forwardGeminiMessagesTransport(ex *pipelin
 					if maxBytes <= 0 {
 						maxBytes = 2048
 					}
-					upstreamDetail = truncateString(string(respBody), maxBytes)
+					upstreamDetail = redactAndTruncateUpstreamDetail(string(respBody), maxBytes)
 				}
 				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 					Platform:           account.Platform,
@@ -411,7 +411,7 @@ func (s *GeminiMessagesCompatService) forwardGeminiMessagesTransport(ex *pipelin
 					if maxBytes <= 0 {
 						maxBytes = 2048
 					}
-					upstreamDetail = truncateString(string(respBody), maxBytes)
+					upstreamDetail = redactAndTruncateUpstreamDetail(string(respBody), maxBytes)
 				}
 				log.Printf("[Gemini] status=400 google_config_error failover=true upstream_message=%q account=%d", upstreamMsg, account.ID)
 				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -440,7 +440,7 @@ func (s *GeminiMessagesCompatService) forwardGeminiMessagesTransport(ex *pipelin
 				if maxBytes <= 0 {
 					maxBytes = 2048
 				}
-				upstreamDetail = truncateString(string(respBody), maxBytes)
+				upstreamDetail = redactAndTruncateUpstreamDetail(string(respBody), maxBytes)
 			}
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,

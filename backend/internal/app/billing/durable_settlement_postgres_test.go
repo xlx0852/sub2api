@@ -29,6 +29,7 @@ func durableSettlementPostgresDB(t *testing.T) *sql.DB {
 	db, err := sql.Open("postgres", dsn)
 	require.NoError(t, err)
 	require.NoError(t, db.PingContext(context.Background()))
+	require.NoError(t, repository.ApplyMigrations(context.Background(), db))
 	_, err = db.ExecContext(context.Background(), "TRUNCATE usage_settlement_attempts RESTART IDENTITY")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
@@ -39,14 +40,32 @@ func TestDurableSettlementPostgresRecoversExpiredProcessingLease(t *testing.T) {
 	ctx := context.Background()
 	db := durableSettlementPostgresDB(t)
 	var userID, apiKeyID, accountID int64
-	require.NoError(t, db.QueryRow(`
-		SELECT u.id, k.id, a.id
-		FROM users u
-		JOIN api_keys k ON k.user_id = u.id AND k.name = 'settlement-openai'
-		JOIN accounts a ON a.name = 'settlement-openai'
-		WHERE u.email = 'settlement-admin@local.test'
-		LIMIT 1
-	`).Scan(&userID, &apiKeyID, &accountID))
+	err := db.QueryRow(`
+			SELECT u.id, k.id, a.id
+			FROM users u
+			JOIN api_keys k ON k.user_id = u.id AND k.name = 'settlement-openai'
+			JOIN accounts a ON a.name = 'settlement-openai'
+			WHERE u.email = 'settlement-admin@local.test'
+			LIMIT 1
+		`).Scan(&userID, &apiKeyID, &accountID)
+	if err != nil {
+		require.ErrorIs(t, err, sql.ErrNoRows)
+		require.NoError(t, db.QueryRow(`
+				INSERT INTO users (email, password_hash, role, status, balance, concurrency)
+				VALUES ('settlement-admin@local.test', 'hash', 'admin', 'active', 100, 5)
+				RETURNING id
+			`).Scan(&userID))
+		require.NoError(t, db.QueryRow(`
+				INSERT INTO api_keys (user_id, key, name, status, quota, quota_used)
+				VALUES ($1, 'sk-settlement-openai-test', 'settlement-openai', 'active', 100, 0)
+				RETURNING id
+			`, userID).Scan(&apiKeyID))
+		require.NoError(t, db.QueryRow(`
+				INSERT INTO accounts (name, platform, type, status, extra)
+				VALUES ('settlement-openai', 'openai', 'apikey', 'active', '{"quota_used": 0}'::jsonb)
+				RETURNING id
+			`).Scan(&accountID))
+	}
 
 	identity := "local:" + uuid.NewString()
 	requestFingerprint := strings.Repeat("9", 64)

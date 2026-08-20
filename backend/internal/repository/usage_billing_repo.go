@@ -52,12 +52,13 @@ func (r *usageBillingRepository) Apply(ctx context.Context, cmd *domain.UsageBil
 	if err != nil {
 		return nil, err
 	}
-	if !applied {
-		return &domain.UsageBillingApplyResult{Applied: false}, nil
+	result := &domain.UsageBillingApplyResult{Applied: applied}
+	if applied {
+		if err := r.applyUsageBillingEffects(ctx, tx, cmd, result); err != nil {
+			return nil, err
+		}
 	}
-
-	result := &domain.UsageBillingApplyResult{Applied: true}
-	if err := r.applyUsageBillingEffects(ctx, tx, cmd, result); err != nil {
+	if err := r.persistUsageLogInTx(ctx, tx, cmd.UsageLog); err != nil {
 		return nil, err
 	}
 
@@ -154,6 +155,14 @@ func (r *usageBillingRepository) ApplySettlement(ctx context.Context, settlement
 		Billing:          billingResult,
 		UsageLogInserted: usageLogInserted,
 	}, nil
+}
+
+func (r *usageBillingRepository) persistUsageLogInTx(ctx context.Context, tx *sql.Tx, usageLog *domain.UsageLog) error {
+	if usageLog == nil {
+		return nil
+	}
+	_, err := (&usageLogRepository{}).createSingle(ctx, tx, usageLog)
+	return err
 }
 
 func (r *usageBillingRepository) claimUsageBillingKey(ctx context.Context, tx *sql.Tx, cmd *domain.UsageBillingCommand) (bool, error) {

@@ -28,6 +28,56 @@ jobs:
         working-directory: backend
         run: make test-integration
 
+  settlement:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.1-alpine3.23
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sub2api_settlement_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d sub2api_settlement_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          check-latest: false
+          cache: true
+          cache-dependency-path: backend/go.sum
+      - name: Verify Go version
+        run: |
+          go version | grep -q 'go1.26.4'
+      - name: Settlement tests
+        working-directory: backend
+        env:
+          SUB2API_SETTLEMENT_TEST_POSTGRES_DSN: postgres://postgres:postgres@127.0.0.1:5432/sub2api_settlement_test?sslmode=disable
+        run: make test-settlement
+
+  race:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          check-latest: false
+          cache: true
+          cache-dependency-path: backend/go.sum
+      - name: Verify Go version
+        run: |
+          go version | grep -q 'go1.26.4'
+      - name: Race detector
+        working-directory: backend
+        run: make test-unit-race
+
   frontend:
     runs-on: ubuntu-latest
     steps:

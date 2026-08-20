@@ -272,7 +272,7 @@ func (s *GeminiMessagesCompatService) forwardGeminiNativeTransport(ex *pipeline.
 					if maxBytes <= 0 {
 						maxBytes = 2048
 					}
-					upstreamDetail = truncateString(string(respBody), maxBytes)
+					upstreamDetail = redactAndTruncateUpstreamDetail(string(respBody), maxBytes)
 				}
 				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 					Platform:           account.Platform,
@@ -347,7 +347,7 @@ func (s *GeminiMessagesCompatService) forwardGeminiNativeTransport(ex *pipeline.
 					if maxBytes <= 0 {
 						maxBytes = 2048
 					}
-					upstreamDetail = truncateString(string(evBody), maxBytes)
+					upstreamDetail = redactAndTruncateUpstreamDetail(string(evBody), maxBytes)
 				}
 				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 					Platform:           account.Platform,
@@ -375,7 +375,7 @@ func (s *GeminiMessagesCompatService) forwardGeminiNativeTransport(ex *pipeline.
 					if maxBytes <= 0 {
 						maxBytes = 2048
 					}
-					upstreamDetail = truncateString(string(evBody), maxBytes)
+					upstreamDetail = redactAndTruncateUpstreamDetail(string(evBody), maxBytes)
 				}
 				log.Printf("[Gemini] status=400 google_config_error failover=true upstream_message=%q account=%d", upstreamMsg, account.ID)
 				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -401,7 +401,7 @@ func (s *GeminiMessagesCompatService) forwardGeminiNativeTransport(ex *pipeline.
 				if maxBytes <= 0 {
 					maxBytes = 2048
 				}
-				upstreamDetail = truncateString(string(evBody), maxBytes)
+				upstreamDetail = redactAndTruncateUpstreamDetail(string(evBody), maxBytes)
 			}
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
@@ -425,7 +425,7 @@ func (s *GeminiMessagesCompatService) forwardGeminiNativeTransport(ex *pipeline.
 			if maxBytes <= 0 {
 				maxBytes = 2048
 			}
-			upstreamDetail = truncateString(string(respBody), maxBytes)
+			upstreamDetail = redactAndTruncateUpstreamDetail(string(respBody), maxBytes)
 			logger.LegacyPrintf("service.gemini_messages_compat", "[Gemini] native upstream error %d: %s", resp.StatusCode, truncateForLog(respBody, s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes))
 		}
 		setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)

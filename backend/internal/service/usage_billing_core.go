@@ -73,6 +73,9 @@ func persistUsageBilling(
 	if _, err := applyUsageBilling(ctx, usageLog.RequestID, usageLog, params, deps, billingRepo); err != nil {
 		return err
 	}
+	// Backup insert: the billing tx already persisted the row when cmd.UsageLog
+	// was set. ON CONFLICT DO NOTHING makes this a no-op after a successful
+	// atomic apply, and still covers the legacy/nil-repo path (issue #3656).
 	writeUsageLogBestEffort(ctx, usageLogRepo, usageLog, component)
 	return nil
 }

@@ -373,7 +373,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		if maxBytes <= 0 {
 			maxBytes = 2048
 		}
-		upstreamDetail = truncateString(string(body), maxBytes)
+		upstreamDetail = redactAndTruncateUpstreamDetail(string(body), maxBytes)
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
@@ -510,7 +510,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 	// 兄弟路径早已这么做：handleCompatErrorResponse（ChatCompletions / Anthropic）
 	// 回真实状态码 + invalid_request_error + 真实 message；/v1/images 还额外透传
 	// code/param。原生 Responses 是唯一漏掉的一条。
-	if isOpenAIDeterministicClientError(resp.StatusCode) {
+	if isOpenAIDeterministicClientError(resp.StatusCode, body) {
 		writeOpenAIUpstreamClientError(c, resp.StatusCode, body, upstreamMsg)
 		if upstreamMsg == "" {
 			return nil, fmt.Errorf("upstream error: %d", resp.StatusCode)
@@ -598,7 +598,7 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 		if maxBytes <= 0 {
 			maxBytes = 2048
 		}
-		upstreamDetail = truncateString(string(body), maxBytes)
+		upstreamDetail = redactAndTruncateUpstreamDetail(string(body), maxBytes)
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 

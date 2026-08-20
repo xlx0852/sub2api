@@ -305,4 +305,49 @@ apiClient.interceptors.response.use(
   }
 )
 
+/**
+ * Read a user-facing message from an apiClient rejection.
+ * The interceptor normalizes errors to a flat `{ status, code, message }` object,
+ * so `error.response?.data?.detail` is never populated for those calls.
+ */
+export function apiErrorMessage(error: unknown, fallback = 'Request failed'): string {
+  if (typeof error === 'string') {
+    const trimmed = error.trim()
+    return trimmed || fallback
+  }
+  if (!error || typeof error !== 'object') {
+    return fallback
+  }
+
+  const record = error as Record<string, unknown>
+  const interceptorMessage =
+    (typeof record.status === 'number' || typeof record.code === 'number' || typeof record.code === 'string') &&
+    typeof record.message === 'string'
+      ? record.message.trim()
+      : ''
+  if (interceptorMessage) {
+    return interceptorMessage
+  }
+
+  const response = record.response as { data?: unknown } | undefined
+  const data = response?.data
+  if (data && typeof data === 'object') {
+    const payload = data as Record<string, unknown>
+    for (const key of ['detail', 'message'] as const) {
+      const value = payload[key]
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim()
+      }
+    }
+  }
+
+  if (fallback.trim()) {
+    return fallback.trim()
+  }
+  if (typeof record.message === 'string' && record.message.trim()) {
+    return record.message.trim()
+  }
+  return 'Request failed'
+}
+
 export default apiClient

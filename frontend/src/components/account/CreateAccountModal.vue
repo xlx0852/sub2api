@@ -2776,6 +2776,7 @@ import {
   isValidWildcardPattern
 } from '@/composables/useModelWhitelist'
 import { adminAPI } from '@/api/admin'
+import { apiErrorMessage } from '@/api/client'
 import { useQuotaNotifyState } from '@/composables/useQuotaNotifyState'
 import {
   useAccountOAuth,
@@ -3832,7 +3833,7 @@ const ensureAntigravityMixedChannelConfirmed = async (onConfirm: () => Promise<v
     })
     return false
   } catch (error: any) {
-    appStore.showError(error.response?.data?.message || error.response?.data?.detail || t('admin.accounts.failedToCreate'))
+    appStore.showError(apiErrorMessage(error, t('admin.accounts.failedToCreate')))
     return false
   }
 }
@@ -4461,7 +4462,7 @@ const handleCreateKimiAccount = async () => {
     appStore.showSuccess(t('admin.accounts.accountCreated'))
     finishCreateSuccess(null, { skipCost: true })
   } catch (error: any) {
-    const message = error.response?.data?.message || error.response?.data?.detail || error.message || t('admin.accounts.failedToCreate')
+    const message = apiErrorMessage(error, t('admin.accounts.failedToCreate'))
     kimiOAuth.error.value = message
     appStore.showError(message)
   } finally {
@@ -4653,7 +4654,7 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
         successCount++
       } catch (error: any) {
         failedCount++
-        const errMsg = error.response?.data?.detail || error.message || 'Unknown error'
+        const errMsg = apiErrorMessage(error, 'Unknown error')
         errors.push(`#${i + 1}: ${errMsg}`)
       }
     }
@@ -4751,7 +4752,7 @@ const handleOpenAIExchange = async (authCode: string) => {
 
     finishCreateSuccess(null, { skipCost: true })
   } catch (error: any) {
-    oauthClient.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
+    oauthClient.error.value = apiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
     appStore.showError(oauthClient.error.value)
   } finally {
     oauthClient.loading.value = false
@@ -4857,10 +4858,7 @@ const handleOpenAIImportCodexSession = async (content: string) => {
     appStore.showError(t('admin.accounts.oauth.openai.codexSessionImportFailed'))
   } catch (error: any) {
     oauthClient.error.value =
-      error.response?.data?.detail ||
-      error.response?.data?.message ||
-      error.message ||
-      t('admin.accounts.oauth.openai.codexSessionImportFailed')
+      apiErrorMessage(error, t('admin.accounts.oauth.openai.codexSessionImportFailed'))
     appStore.showError(oauthClient.error.value)
   } finally {
     oauthClient.loading.value = false
@@ -4904,10 +4902,7 @@ const handleOpenAIImportCodexPAT = async (accessToken: string) => {
     finishCreateSuccess(null, { skipCost: true })
   } catch (error: any) {
     oauthClient.error.value =
-      error.response?.data?.detail ||
-      error.response?.data?.message ||
-      error.message ||
-      t('admin.accounts.oauth.openai.codexPatImportFailed')
+      apiErrorMessage(error, t('admin.accounts.oauth.openai.codexPatImportFailed'))
     appStore.showError(oauthClient.error.value)
   } finally {
     oauthClient.loading.value = false
@@ -4998,7 +4993,7 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
         successCount++
       } catch (error: any) {
         failedCount++
-        const errMsg = error.response?.data?.detail || error.message || 'Unknown error'
+        const errMsg = apiErrorMessage(error, 'Unknown error')
         errors.push(`#${i + 1}: ${errMsg}`)
       }
     }
@@ -5094,7 +5089,7 @@ const handleAntigravityValidateRT = async (refreshTokenInput: string) => {
         successCount++
       } catch (error: any) {
         failedCount++
-        const errMsg = error.response?.data?.detail || error.message || 'Unknown error'
+        const errMsg = apiErrorMessage(error, 'Unknown error')
         errors.push(`#${i + 1}: ${errMsg}`)
       }
     }
@@ -5152,7 +5147,7 @@ const handleGeminiExchange = async (authCode: string) => {
     const extra = geminiOAuth.buildExtraInfo(tokenInfo)
     await createAccountAndFinish('gemini', 'oauth', credentials, extra)
   } catch (error: any) {
-    geminiOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
+    geminiOAuth.error.value = apiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
     appStore.showError(geminiOAuth.error.value)
   } finally {
     geminiOAuth.loading.value = false
@@ -5198,7 +5193,7 @@ const handleAntigravityExchange = async (authCode: string) => {
 		const extra = buildAntigravityExtra()
 		await createAccountAndFinish('antigravity', 'oauth', credentials, extra)
   } catch (error: any) {
-    antigravityOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
+    antigravityOAuth.error.value = apiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
     appStore.showError(antigravityOAuth.error.value)
   } finally {
     antigravityOAuth.loading.value = false
@@ -5233,7 +5228,7 @@ const handleGrokExchange = async (authCode: string) => {
     const extra = grokOAuth.buildExtraInfo(tokenInfo)
     await createAccountAndFinish('grok', 'oauth', credentials, extra)
   } catch (error: any) {
-    grokOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
+    grokOAuth.error.value = apiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
     appStore.showError(grokOAuth.error.value)
   } finally {
     grokOAuth.loading.value = false
@@ -5322,7 +5317,7 @@ const handleAnthropicExchange = async (authCode: string) => {
     applyInterceptWarmup(credentials, interceptWarmupRequests.value, 'create')
     await createAccountAndFinish(form.platform, addMethod.value as AccountType, credentials, extra)
   } catch (error: any) {
-    oauth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
+    oauth.error.value = apiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
     appStore.showError(oauth.error.value)
   } finally {
     oauth.loading.value = false
@@ -5482,7 +5477,7 @@ const handleCookieAuth = async (sessionKey: string) => {
         errors.push(
           t('admin.accounts.oauth.keyAuthFailed', {
             index: i + 1,
-            error: error.response?.data?.detail || t('admin.accounts.oauth.authFailed')
+            error: apiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
           })
         )
       }
@@ -5502,9 +5497,10 @@ const handleCookieAuth = async (sessionKey: string) => {
       oauth.error.value = errors.join('\n')
     }
   } catch (error: any) {
-    oauth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.cookieAuthFailed')
+    oauth.error.value = apiErrorMessage(error, t('admin.accounts.oauth.cookieAuthFailed'))
   } finally {
     oauth.loading.value = false
   }
 }
 </script>
+)

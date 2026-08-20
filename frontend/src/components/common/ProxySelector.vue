@@ -171,6 +171,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
+import { apiErrorMessage } from '@/api/client'
 import Icon from '@/components/icons/Icon.vue'
 import type { Proxy } from '@/types'
 
@@ -261,7 +262,7 @@ const handleTestProxy = async (proxy: Proxy) => {
   } catch (error: any) {
     testResults[proxy.id] = {
       success: false,
-      message: error.response?.data?.detail || 'Test failed'
+      message: apiErrorMessage(error, 'Test failed')
     }
   } finally {
     testingProxyIds.delete(proxy.id)
@@ -282,7 +283,7 @@ const handleBatchTest = async () => {
     } catch (error: any) {
       testResults[proxy.id] = {
         success: false,
-        message: error.response?.data?.detail || 'Test failed'
+        message: apiErrorMessage(error, 'Test failed')
       }
     } finally {
       testingProxyIds.delete(proxy.id)
@@ -424,3 +425,4 @@ onUnmounted(() => {
   transform: translateY(-8px);
 }
 </style>
+)
