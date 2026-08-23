@@ -94,6 +94,11 @@ type GatewayConfig struct {
 	// 「仅按最终 User-Agent 配对 originator」的收口语义，供上游策略变动时回滚。
 	// 取反义命名是为了让零值安全。
 	DisableCodexIdentityEnforcement bool `mapstructure:"disable_codex_identity_enforcement"`
+	// OpenAIUserPinEnabled: OpenAI 调度启用「API Key → 上游账号」用户级钉号。
+	// 同一本地 API Key 的请求固定走同一台上游 OAuth 账号，直到该账号硬失败
+	//（额度尽/被排除/不可调度/能力不匹配）才换号重钉。目的：减少同一用户把
+	// 设备/会话指纹洒到多台 ChatGPT 账号上。默认关闭。
+	OpenAIUserPinEnabled bool `mapstructure:"openai_user_pin_enabled"`
 	// CodexImageGenerationBridgeEnabled: 是否为 Codex `/v1/responses` 自动注入 image_generation 工具和桥接指令。
 	// 默认关闭，避免纯文本 Codex 请求被意外改写；显式携带 image_generation 工具的请求仍按分组能力转发。
 	CodexImageGenerationBridgeEnabled bool `mapstructure:"codex_image_generation_bridge_enabled"`

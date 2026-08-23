@@ -64,4 +64,8 @@ const (
 	// GetByIDs 填充，recheck / parent 解析优先查该 map，避免对每个候选账号裸 GetByID（N+1）。
 	// map 为 nil 或缺失 = 未预取（调用方回退逐账号查询，行为与未优化前一致）。
 	AccountPrefetch Key = "ctx_account_prefetch"
+
+	// OpenAIUserPinAPIKeyID 认证后的本地 API Key ID，由 API Key 认证中间件写入请求
+	// context。OpenAI 调度用它做「同一 Key 钉死同一上游账号」的用户级粘性。
+	OpenAIUserPinAPIKeyID Key = "ctx_openai_user_pin_api_key_id"
 )

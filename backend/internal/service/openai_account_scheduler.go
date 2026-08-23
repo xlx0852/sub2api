@@ -20,6 +20,7 @@ import (
 
 const (
 	openAIAccountScheduleLayerPreviousResponse = "previous_response_id"
+	openAIAccountScheduleLayerUserPin          = "user_pin"
 	openAIAccountScheduleLayerSessionSticky    = "session_hash"
 	openAIAccountScheduleLayerLoadBalance      = "load_balance"
 	openAIAdvancedSchedulerSettingKey          = "openai_advanced_scheduler_enabled"
@@ -79,12 +80,18 @@ type OpenAIAccountScheduleRequest struct {
 	RequireCompact          bool
 	RequiredCredentialClass OpenAICredentialClass
 	ExcludedIDs             map[int64]struct{}
+	// APIKeyID 本地 API Key ID（用户级钉号用）。0 表示未鉴权路径（如管理端探测），跳过钉号。
+	APIKeyID int64
+	// UserPinAccountID 预解析的钉号账号 ID；0 表示未钉或功能关闭。
+	UserPinAccountID int64
 }
 
 type OpenAIAccountScheduleDecision struct {
 	Layer               string
 	StickyPreviousHit   bool
 	StickySessionHit    bool
+	UserPinHit          bool
+	UserPinBroken       string
 	StickyReevalSwitch  bool
 	CandidateCount      int
 	TopK                int
@@ -449,6 +456,29 @@ func (s *defaultOpenAIAccountScheduler) Select(
 		}
 	}
 
+	// 用户级钉号：同一本地 API Key 固定走同一台上游账号，直到硬失败才换。
+	// 优先级在 previous_response（续链必须跟原号）之后、会话粘性之前。
+	// 注意：这里只做硬失败判断（排除/不可调度/能力不匹配），不做用量分、TTFT、
+	// 并发满之类的软换号——那些正是把同一用户洒到多台账号上的来源。
+	if req.UserPinAccountID > 0 && req.APIKeyID > 0 {
+		if selection, brokenReason := s.selectByUserPin(ctx, req); selection != nil && selection.Account != nil {
+			decision.Layer = openAIAccountScheduleLayerUserPin
+			decision.UserPinHit = true
+			decision.SelectedAccountID = selection.Account.ID
+			decision.SelectedAccountType = selection.Account.Type
+			s.service.refreshUserPinTTL(ctx, req.GroupID, req.APIKeyID)
+			return selection, decision, nil
+		} else if brokenReason != "" {
+			decision.UserPinBroken = brokenReason
+			s.service.deleteUserPin(ctx, req.GroupID, req.APIKeyID)
+			slog.Info("openai_user_pin_broken",
+				"api_key_id", req.APIKeyID,
+				"account_id", req.UserPinAccountID,
+				"reason", brokenReason,
+			)
+		}
+	}
+
 	if !req.StickyWeighted {
 		selection, escapedSticky, err := s.selectBySessionHash(ctx, req)
 		if err != nil {
@@ -516,6 +546,74 @@ func (s *defaultOpenAIAccountScheduler) Select(
 		}
 	}
 	return selection, decision, nil
+}
+
+// selectByUserPin 尝试命中用户级钉号。只认硬失败（已在排除集 / 拉不到账号 /
+// 平台或能力不匹配 / 不可调度），不触发会话粘性那套用量分/TTFT/并发软逃逸。
+// 返回 (nil, "") 表示无钉可查（静默走后续层）；(nil, reason) 表示钉住但已硬失败，
+// 调用方据此拆钉；(selection, _) 表示命中。
+func (s *defaultOpenAIAccountScheduler) selectByUserPin(
+	ctx context.Context,
+	req OpenAIAccountScheduleRequest,
+) (*AccountSelectionResult, string) {
+	if s == nil || s.service == nil {
+		return nil, ""
+	}
+	pinnedID := req.UserPinAccountID
+	if pinnedID <= 0 || req.APIKeyID <= 0 {
+		return nil, ""
+	}
+	if scheduling.IsExcluded(req.ExcludedIDs, pinnedID) {
+		// failover 已证明这台号对本请求不可用：硬失败，拆钉。
+		return nil, "excluded_by_failover"
+	}
+	account, err := s.service.getSchedulableAccount(ctx, pinnedID)
+	if err != nil || account == nil {
+		return nil, "account_unavailable"
+	}
+	if !account.IsOpenAICompatible() || account.Platform != normalizeOpenAICompatiblePlatform(req.Platform) {
+		return nil, "platform_mismatch"
+	}
+	if !account.IsSchedulable() {
+		return nil, "unschedulable"
+	}
+	if !openAIStickyAccountMatchesGroup(account, req.GroupID) {
+		return nil, "group_mismatch"
+	}
+	if !OpenAICredentialClassMatches(account, req.RequiredCredentialClass) {
+		return nil, "credential_class_mismatch"
+	}
+	if !s.isAccountTransportCompatible(account, req.RequiredTransport) {
+		return nil, "transport_mismatch"
+	}
+	if !s.isAccountRequestCompatible(ctx, account, req) {
+		// 覆盖模型能力 / 配额窗 / 渠道策略等硬约束（含额度尽、codex_cli_only 类拒绝）。
+		return nil, "request_incompatible"
+	}
+
+	// 并发满不逃逸：要么等这台（WaitPlan），要么模型预算满直接让路。
+	result, acquireErr := s.service.tryAcquireAccountSlot(ctx, req.RequestedModel, account.ID, account.Concurrency)
+	if acquireErr == nil && result != nil && result.Acquired {
+		return &AccountSelectionResult{
+			Account:     account,
+			Acquired:    true,
+			ReleaseFunc: result.ReleaseFunc,
+		}, ""
+	}
+	if acquireErr == nil && result != nil && result.ModelLimited {
+		return &AccountSelectionResult{
+			Account:      account,
+			ModelLimited: true,
+		}, ""
+	}
+	if s.service.concurrencyService != nil {
+		cfg := s.service.schedulingConfig()
+		return &AccountSelectionResult{
+			Account:  account,
+			WaitPlan: newStickyWaitPlan(account.ID, account.Concurrency, cfg),
+		}, ""
+	}
+	return nil, "slot_unavailable"
 }
 
 func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
@@ -2209,7 +2307,9 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerStrategy(
 	requiredCredentialClass := OpenAICredentialClassUnspecified
 	// When failover already chose a credential class via excluded set + first failed account is unavailable here,
 	// keep Unspecified for first hop. If sticky account is known, pin class to that account.
-	for _, id := range []int64{stickyAccountID, stickyPreviousAccountID} {
+	userPinAPIKeyID := openAIUserPinAPIKeyIDFromContext(ctx)
+	userPinAccountID := s.getUserPinnedAccountID(ctx, groupID, userPinAPIKeyID)
+	for _, id := range []int64{stickyAccountID, stickyPreviousAccountID, userPinAccountID} {
 		if id <= 0 {
 			continue
 		}
@@ -2221,7 +2321,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerStrategy(
 		}
 	}
 
-	return scheduler.Select(ctx, OpenAIAccountScheduleRequest{
+	selection, decision, err := scheduler.Select(ctx, OpenAIAccountScheduleRequest{
 		GroupID:                 groupID,
 		Platform:                platform,
 		SessionHash:             sessionHash,
@@ -2238,7 +2338,16 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerStrategy(
 		RequireCompact:          requireCompact,
 		RequiredCredentialClass: requiredCredentialClass,
 		ExcludedIDs:             excludedIDs,
+		APIKeyID:                userPinAPIKeyID,
+		UserPinAccountID:        userPinAccountID,
 	})
+	// 钉号绑定收口：最终选中的账号（钉号命中或负载均衡新选）都重钉/续钉。
+	// 只钉 OAuth 号——API Key 池账号无共享指纹问题，不值得为之牺牲负载均衡。
+	if err == nil && selection != nil && selection.Account != nil &&
+		!decision.UserPinHit && userPinAPIKeyID > 0 && selection.Account.IsOpenAIOAuth() {
+		s.bindUserPinAccount(ctx, groupID, userPinAPIKeyID, selection.Account.ID)
+	}
+	return selection, decision, err
 }
 
 func normalizeOpenAILegacyCompatibilityError(err error, requestedModel string) error {
