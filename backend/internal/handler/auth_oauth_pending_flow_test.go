@@ -1218,7 +1218,7 @@ func TestOAuthExistingUserLoginDoesNotApplyPromoCode(t *testing.T) {
 	ctx := context.Background()
 
 	existingUser, err := client.User.Create().
-		SetEmail("existing-promo@example.com").
+		SetEmail("linuxdo-existing-promo@linuxdo-connect.invalid").
 		SetUsername("existing").
 		SetPasswordHash("hash").
 		SetRole(service.RoleUser).
@@ -1234,7 +1234,7 @@ func TestOAuthExistingUserLoginDoesNotApplyPromoCode(t *testing.T) {
 		"",
 		"",
 		"WELCOME2024",
-		"oidc",
+		"linuxdo",
 	)
 
 	require.NoError(t, err)

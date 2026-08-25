@@ -701,15 +701,15 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testi
 		wantOriginator string
 		wantUA         string
 	}{
-		{name: "official ua pairs originator", userAgent: "Codex Desktop/1.2.3", wantOriginator: "Codex Desktop", wantUA: "Codex Desktop/1.2.3"},
+		{name: "client ua is masked to account identity", userAgent: "Codex Desktop/1.2.3", wantOriginator: "codex_cli_rs", wantUA: derivedAccountCodexUserAgent(129)},
 		{
 			name:           "mismatched originator repaired from ua",
 			userAgent:      "codex-tui/0.140.2 (Mac OS X 14.0; arm64) iTerm (codex-tui; 0.140.2)",
 			originator:     "codex_cli_rs",
-			wantOriginator: "codex-tui",
-			wantUA:         "codex-tui/0.140.2 (Mac OS X 14.0; arm64) iTerm (codex-tui; 0.140.2)",
+			wantOriginator: "codex_cli_rs",
+			wantUA:         derivedAccountCodexUserAgent(129),
 		},
-		{name: "official originator without ua falls back to default identity", originator: "codex_vscode", wantOriginator: "codex_cli_rs", wantUA: codexCLIUserAgent},
+		{name: "official originator without ua falls back to account identity", originator: "codex_vscode", wantOriginator: "codex_cli_rs", wantUA: derivedAccountCodexUserAgent(129)},
 	}
 
 	for _, tt := range tests {

@@ -82,7 +82,7 @@ func TestEmailOAuthCallbackRequiresPendingRegistrationWhenInvitationEnabled(t *t
 	require.NotEmpty(t, findSetCookieValue(recorder.Result().Cookies(), oauthPendingBrowserCookieName))
 }
 
-func TestEmailOAuthCallbackExistingEmailLogsInWhenInvitationEnabled(t *testing.T) {
+func TestEmailOAuthCallbackExistingEmailRequiresOwnershipWhenInvitationEnabled(t *testing.T) {
 	handler, client := newOAuthPendingFlowTestHandler(t, true)
 	ctx := context.Background()
 
@@ -114,19 +114,19 @@ func TestEmailOAuthCallbackExistingEmailLogsInWhenInvitationEnabled(t *testing.T
 
 	require.Equal(t, http.StatusFound, recorder.Code)
 	location := recorder.Header().Get("Location")
-	require.Contains(t, location, "access_token=")
-	require.Contains(t, location, "redirect=%252Fdashboard")
+	require.NotContains(t, location, "access_token=")
+	require.Contains(t, location, "/auth/oauth/callback")
 
 	sessionCount, err := client.PendingAuthSession.Query().Count(ctx)
 	require.NoError(t, err)
-	require.Zero(t, sessionCount)
+	require.Equal(t, 1, sessionCount)
 
 	identityCount, err := client.AuthIdentity.Query().Where(
 		authidentity.ProviderTypeEQ("google"),
 		authidentity.ProviderSubjectEQ("google-123"),
 	).Count(ctx)
 	require.NoError(t, err)
-	require.Equal(t, 1, identityCount)
+	require.Zero(t, identityCount)
 	_ = user
 }
 

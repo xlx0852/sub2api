@@ -350,8 +350,9 @@ func TestApiKeyAuthWithSubscriptionGoogle_QueryKeyAllowedOnV1Beta(t *testing.T) 
 				Key:    key,
 				Status: service.StatusActive,
 				User: &service.User{
-					ID:     123,
-					Status: service.StatusActive,
+					ID:      123,
+					Status:  service.StatusActive,
+					Balance: 1,
 				},
 			}, nil
 		},
