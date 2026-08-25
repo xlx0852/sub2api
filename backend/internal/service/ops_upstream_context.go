@@ -105,7 +105,7 @@ type OpsStreamError struct {
 	// Message 是写入 SSE 帧的对客错误消息。
 	Message string
 	// IntendedStatus 是流若未固化本应返回的 HTTP 状态码（如并发限流的 429）。
-	// 仅用于错误分级(severity/classification)；实际 wire 状态码仍为 200。
+	// 用于错误日志的语义状态和分级；实际 wire 状态码仍为 200/101。
 	IntendedStatus int
 }
 
@@ -116,7 +116,7 @@ func MarkOpsStreamError(c *gin.Context, errType, message string, intendedStatus 
 	if c == nil {
 		return
 	}
-	if _, exists := c.Get(OpsStreamErrorKey); exists {
+	if _, exists := GetOpsStreamError(c); exists {
 		return
 	}
 	c.Set(OpsStreamErrorKey, OpsStreamError{
@@ -124,6 +124,29 @@ func MarkOpsStreamError(c *gin.Context, errType, message string, intendedStatus 
 		Message:        strings.TrimSpace(message),
 		IntendedStatus: intendedStatus,
 	})
+}
+
+// ClearOpsStreamError clears the per-turn marker used by long-lived WebSocket
+// ingress sessions. HTTP requests never need to call it because their gin
+// context ends after one response.
+func ClearOpsStreamError(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	c.Set(OpsStreamErrorKey, nil)
+}
+
+// ClearOpsUpstreamErrorContext resets per-turn upstream evidence after a
+// WebSocket turn has been persisted. Without this, a later successful turn on
+// the same connection could inherit the previous turn's failure metadata.
+func ClearOpsUpstreamErrorContext(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	c.Set(OpsUpstreamStatusCodeKey, nil)
+	c.Set(OpsUpstreamErrorMessageKey, nil)
+	c.Set(OpsUpstreamErrorDetailKey, nil)
+	c.Set(OpsUpstreamErrorsKey, nil)
 }
 
 // GetOpsStreamError 返回本请求记录的就地 SSE 错误（若有）。
@@ -183,6 +206,24 @@ func appendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent) {
 	if v, ok := c.Get(OpsUpstreamErrorsKey); ok {
 		if arr, ok := v.([]*OpsUpstreamErrorEvent); ok {
 			existing = arr
+		}
+	}
+	// OpenAI may emit a compact `error` frame followed by a verbose
+	// `response.failed` frame for the same terminal outcome. Keep one ops event
+	// per upstream response so dashboards do not double-count a single failure.
+	if ev.Kind == "terminal_error" && ev.UpstreamRequestID != "" {
+		for _, current := range existing {
+			if current == nil || current.Kind != ev.Kind ||
+				current.Platform != ev.Platform || current.AccountID != ev.AccountID ||
+				current.UpstreamRequestID != ev.UpstreamRequestID ||
+				current.UpstreamStatusCode != ev.UpstreamStatusCode || current.Message != ev.Message {
+				continue
+			}
+			if ev.Detail != "" {
+				current.Detail = ev.Detail
+			}
+			checkSkipMonitoringForUpstreamEvent(c, current)
+			return
 		}
 	}
 

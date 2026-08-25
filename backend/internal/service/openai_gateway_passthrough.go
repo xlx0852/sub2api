@@ -830,7 +830,10 @@ func openAIStreamFailedEventSemanticStatus(payload []byte, message string) int {
 	}
 	combined := strings.TrimSpace(errType + " " + code + " " + strings.ToLower(strings.TrimSpace(message)))
 	switch {
-	case strings.Contains(errType, "invalid_request"):
+	case strings.Contains(errType, "invalid_request"),
+		strings.Contains(errType, "invalid_prompt"),
+		strings.Contains(code, "invalid_request"),
+		strings.Contains(code, "invalid_prompt"):
 		return http.StatusBadRequest
 	case strings.Contains(combined, "rate_limit"):
 		return http.StatusTooManyRequests
@@ -968,7 +971,11 @@ func (s *OpenAIGatewayService) recordOpenAIStreamUpstreamError(
 		if maxBytes <= 0 {
 			maxBytes = 2048
 		}
-		detail = truncateString(string(payload), maxBytes)
+		detail = truncateString(openAIStreamTerminalErrorDetail(
+			payload,
+			message,
+			openAIStreamFailedEventSemanticStatus(payload, message),
+		), maxBytes)
 	}
 	if c != nil {
 		setOpsUpstreamError(c, http.StatusBadGateway, message, detail)
@@ -1208,9 +1215,9 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 
 		eventType := strings.TrimSpace(gjson.GetBytes(dataBytes, "type").String())
 		forceFlushFailedEvent := false
-		if eventType == "response.failed" {
+		if eventType == "response.failed" || eventType == "error" {
 			failedMessage = extractOpenAISSEErrorMessage(dataBytes)
-			// response.failed 自带上游已消耗的 usage（input token 通常已扣）；必须先解析
+			// response.failed 可能自带上游已消耗的 usage（input token 通常已扣）；必须先解析
 			// 再打 cyber 标记，否则 mark 记到的是解析前的 0，导致流式 cyber 按 0 token 计费。
 			s.parseSSEUsageBytes(dataBytes, usage)
 			if hit, code, msg := detectOpenAICyberPolicy(dataBytes); hit {
@@ -1239,6 +1246,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 					return s.newOpenAIStreamFailoverError(c, account, true, upstreamRequestID, dataBytes, failedMessage)
 				}
 			}
+			s.markOpenAIStreamTerminalError(c, account, true, upstreamRequestID, dataBytes, failedMessage)
 			forceFlushFailedEvent = true
 			sawFailedEvent = true
 		}

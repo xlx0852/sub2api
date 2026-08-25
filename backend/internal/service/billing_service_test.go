@@ -460,6 +460,13 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 			expectedCacheRead: floatPtr(0.10e-6),
 		},
 		{
+			name:              "deepseek v4 flash vision exp",
+			model:             "deepseek-v4-flash-vision-exp",
+			expectedInput:     3e-6,
+			expectedOutput:    floatPtr(9e-6),
+			expectedCacheRead: floatPtr(0.10e-6),
+		},
+		{
 			name:              "deepseek chat alias → flash",
 			model:             "deepseek-chat",
 			expectedInput:     3e-6,
@@ -759,6 +766,14 @@ func TestDeepSeekOfficialPeakWindows(t *testing.T) {
 	}
 }
 
+func TestDeepSeekOfficialPeakWindowsWeekdaysOnly(t *testing.T) {
+	for _, day := range []time.Weekday{time.Saturday, time.Sunday} {
+		now := time.Date(2026, time.August, 22, 2, 0, 0, 0, time.UTC)
+		now = now.AddDate(0, 0, int(day-time.Saturday))
+		require.False(t, isDeepSeekPeakTime(now), "day=%s", day)
+	}
+}
+
 func TestCalculateCost_DeepSeekOfficialPeakAndOffPeakRates(t *testing.T) {
 	svc := newTestBillingService()
 	tokens := UsageTokens{
@@ -793,6 +808,7 @@ func TestCalculateCost_DeepSeekFlashAndProExactCNYComponents(t *testing.T) {
 		input, output, cacheCreation, cacheRead float64
 	}{
 		{model: "deepseek-v4-flash", input: 3, output: 9, cacheCreation: 3, cacheRead: 0.10},
+		{model: "deepseek-v4-flash-vision-exp", input: 3, output: 9, cacheCreation: 3, cacheRead: 0.10},
 		{model: "deepseek-v4-pro", input: 9, output: 27, cacheCreation: 9, cacheRead: 0.30},
 	} {
 		t.Run(tt.model, func(t *testing.T) {

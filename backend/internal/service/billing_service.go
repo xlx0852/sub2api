@@ -80,6 +80,10 @@ func isDeepSeekV4OfficialModel(model string) bool {
 }
 
 func isDeepSeekPeakTime(now time.Time) bool {
+	// Official Chinese pricing defines peak hours on Monday-Friday only.
+	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
+		return false
+	}
 	hour := now.UTC().Hour()
 	return (hour >= 1 && hour < 4) || (hour >= 6 && hour < 10)
 }
@@ -96,12 +100,15 @@ func applyDeepSeekOfficialPeakPricing(model string, pricing *ModelPricing) *Mode
 	cloned.Currency = domain.PricingCurrencyCNY
 	normalized := strings.ToLower(strings.TrimSpace(model))
 	if strings.Contains(normalized, "deepseek-v4-pro") {
+		// Official Chinese pricing: ¥9 / ¥27 / ¥0.30 per MTok
+		// (uncached input / output / cache-hit) at peak.
 		cloned.InputPricePerToken = 9.0e-6
 		cloned.OutputPricePerToken = 27.0e-6
 		cloned.CacheCreationPricePerToken = 9.0e-6
 		cloned.CacheReadPricePerToken = 0.30e-6
 	} else {
-		// deepseek-chat / deepseek-reasoner are official aliases of V4 Flash.
+		// deepseek-chat / deepseek-reasoner and Vision Exp use the official
+		// Chinese V4 Flash price band.
 		cloned.InputPricePerToken = 3.0e-6
 		cloned.OutputPricePerToken = 9.0e-6
 		cloned.CacheCreationPricePerToken = 3.0e-6

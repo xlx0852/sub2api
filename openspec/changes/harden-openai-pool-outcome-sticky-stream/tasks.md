@@ -36,7 +36,16 @@
 - [x] 4.3 跑 scheduler、ratelimit、WS sticky、HTTP responses stream 相关单测
 - [x] 4.4 补充运维说明：class 含义、sticky re-eval、stall 配置与排障
 
+## 5. 生产容量降载终止帧修复
+
+- [x] 5.1 在客户端有效输出前，将紧邻的 `error` / `response.failed` 容量降载帧统一转为可同账号重试的请求级瞬时错误
+- [x] 5.2 终止帧运维详情只保留错误码、类型、状态、response ID 与 token 计数，不持久化 instructions/output/tools 等客户内容
+- [x] 5.3 同一上游响应的紧邻终止帧去重，避免错误看板双计数
+- [x] 5.4 增加 transformed/passthrough 双链路回归与日志脱敏/去重单测
+
 ## Implementation notes
+
+- 2026-08-25: 修复 OpenAI HTTP 200 SSE 先返回紧凑 `type=error` 、后返回完整 `response.failed` 时裸错误帧提前固化客户端响应、阻断 failover 的问题；`server_is_overloaded` / `slow_down` 在首个有效输出前现在会保留响应可重试性。同时将终止帧 ops detail 收缩为脱敏结构投影，并对同一 upstream request ID 去重。定向 streaming、unit 与 ops handler 回归通过；全量 service 套件仍有一条与本修复无关的旧断言失败（invalid-request 默认映射预期 502，当前实现返回 422）。API `0.1.340` 已以 backend-only 蓝绿方式直接发布到美国生产 `18261`，用户已明确要求跳过 staging；前端保持 `0.1.339`，API `0.1.339`/`18260` 作为回滚点且 `restart=no`。候选与公网健康/版本/未授权门禁通过，新容器 healthy、0 重启；切流后首个观察窗 158 个请求中 149 个 200、7 个 WS 101、1 个预期 401 和 1 个运维探测 403，5xx/503 为 0，panic/fatal 为 0。发布前备份位于 `/opt/sub2api/backups/pre-0.1.340-20260825T111132Z`。
 
 - 2026-08-16: WS ingress usage 复用口径缺陷已修复：首次新建 lease 记 `false`，同一入站长会话的后续 turn 仅在沿用上一轮成功 `conn_id` 时记 `true`，failover 新连接仍记 `false`。定向/race 回归通过；API `0.1.323` 已以 backend-only 蓝绿方式发布到美国生产 18248，候选直连 WS 两轮 usage 实证 `false → true`，公网 HTTP/SSE/WS 成功且结算入库；`0.1.322`/18247 完整保留为独立回滚。TTFT 权重是全局 setting，未按 group 4 名义修改生产全局权重；4.1 仍保持未勾选。
 - 2026-08-16: 4.1 的可观测基础已增加管理员只读、进程级 sticky legacy 快照，包含读回退/命中/双写计数、开关与 TTL 上限；observe 模式整体验收仍未完成，故 4.1 保持未勾选。

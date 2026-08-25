@@ -392,7 +392,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			responseModel = extractOpenAIResponseModelFromJSONBytes(dataBytes)
 		}
 		forceFlushFailedEvent := false
-		if eventType == "response.failed" {
+		if eventType == "response.failed" || eventType == "error" {
 			failedMessage = extractOpenAISSEErrorMessage(dataBytes)
 			s.parseSSEUsageBytes(dataBytes, usage)
 			if hit, code, msg := detectOpenAICyberPolicy(dataBytes); hit {
@@ -425,6 +425,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 					return
 				}
 			}
+			s.markOpenAIStreamTerminalError(c, account, false, upstreamRequestID, dataBytes, failedMessage)
 			forceFlushFailedEvent = true
 			sawFailedEvent = true
 		}
