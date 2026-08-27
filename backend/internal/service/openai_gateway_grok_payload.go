@@ -12,8 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const grokToolOutputTruncationMarker = "\n...[truncated by sub2api]...\n"
-const grokRemoveEmptyImageContainerKey = "__sub2api_remove_empty_image_container"
+const grokToolOutputTruncationMarker = "\n...[truncated]...\n"
+const grokRemoveEmptyImageContainerKey = "__remove_empty_image_container"
 
 type grokPayloadKind int
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 	"time"
 
@@ -636,6 +637,13 @@ func (s *OpenAIGatewayService) forwardOpenAITransport(ex *pipeline.Exchange) err
 
 		// Send request
 		upstreamStart := time.Now()
+		markFirstOutputConnectionStart(ex.Ctx)
+		trace := &httptrace.ClientTrace{
+			WroteRequest: func(httptrace.WroteRequestInfo) {
+				markFirstOutputRequestWritten(ex.Ctx)
+			},
+		}
+		upstreamReq = upstreamReq.WithContext(httptrace.WithClientTrace(upstreamReq.Context(), trace))
 		var resp *http.Response
 		if st.bodySignalCompactV2 {
 			// Start downstream SSE+keepalive before headers arrive; legacy compact
@@ -685,6 +693,7 @@ func (s *OpenAIGatewayService) forwardOpenAITransport(ex *pipeline.Exchange) err
 			upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
 			upstreamCode := extractUpstreamErrorCode(respBody)
 			if !agentTaskRecoveryTried && s.isAgentIdentityAccount(ex.Ctx, account) && isAgentIdentityTaskInvalidHTTPResponse(resp.StatusCode, respBody) {
+				markFirstOutputAttemptFailed(ex.Ctx)
 				agentTaskRecoveryTried = true
 				expectedTaskID := account.GetCredential("task_id")
 				if err := s.recoverAgentIdentityTask(ex.Ctx, account, expectedTaskID); err != nil {
@@ -695,6 +704,7 @@ func (s *OpenAIGatewayService) forwardOpenAITransport(ex *pipeline.Exchange) err
 			respBody = s.redactAgentIdentitySensitiveBody(ex.Ctx, account, respBody)
 			resp.Body = io.NopCloser(bytes.NewReader(respBody))
 			if !httpInvalidEncryptedContentRetryTried && resp.StatusCode == http.StatusBadRequest && upstreamCode == "invalid_encrypted_content" {
+				markFirstOutputAttemptFailed(ex.Ctx)
 				decoded, decodeErr := st.ensureReqBody()
 				if decodeErr != nil {
 					return decodeErr
@@ -722,6 +732,7 @@ func (s *OpenAIGatewayService) forwardOpenAITransport(ex *pipeline.Exchange) err
 			if retryBody, reason, changed, retryErr := normalizeOpenAIResponsesRejectedFieldRetryBody(resp.StatusCode, st.body, respBody); retryErr != nil {
 				return fmt.Errorf("normalize rejected Responses field retry st.body: %w", retryErr)
 			} else if changed && rejectedFieldRetryState.AllowForReason(retryBody, reason) {
+				markFirstOutputAttemptFailed(ex.Ctx)
 				st.body = retryBody
 				st.requestView = newOpenAIRequestView(st.body)
 				st.reqBody = nil

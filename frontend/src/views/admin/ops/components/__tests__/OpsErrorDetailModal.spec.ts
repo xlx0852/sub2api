@@ -60,6 +60,24 @@ function routingErrorDetail(): OpsErrorDetail {
   } as OpsErrorDetail
 }
 
+function selectedAccountPolicyErrorDetail(): OpsErrorDetail {
+  return {
+    ...routingErrorDetail(),
+    id: 59564,
+    phase: 'auth', // 历史数据的错误分类，前端应根据实际阶段证据纠正展示
+    status_code: 403,
+    message: 'This account only allows Codex official clients',
+    user_id: 21,
+    user_email: 'user@example.com',
+    account_id: 81,
+    account_name: 'GPT-自有-1',
+    auth_latency_ms: 3,
+    routing_latency_ms: 19,
+    upstream_latency_ms: null,
+    response_latency_ms: 1,
+  } as OpsErrorDetail
+}
+
 function mountModal(errorType: 'request' | 'upstream' = 'request') {
   return mount(OpsErrorDetailModal, {
     props: { show: true, errorId: 59532, errorType },
@@ -93,5 +111,29 @@ describe('OpsErrorDetailModal request flow', () => {
     expect(text).toContain('admin.ops.errorDetail.auth')
     expect(text).toContain('admin.ops.errorDetail.upstream')
     expect(text).toContain('admin.ops.errorDetail.diedHere')
+  })
+
+  it('shows both user and attempted account instead of hiding the account for gateway errors', async () => {
+    vi.mocked(opsAPI.getRequestErrorDetail).mockResolvedValue(selectedAccountPolicyErrorDetail())
+
+    const wrapper = mountModal()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('user@example.com')
+    expect(wrapper.text()).toContain('GPT-自有-1')
+    expect(wrapper.text()).toContain('#81')
+  })
+
+  it('renders a selected-account policy rejection in chronological order', async () => {
+    vi.mocked(opsAPI.getRequestErrorDetail).mockResolvedValue(selectedAccountPolicyErrorDetail())
+
+    const wrapper = mountModal()
+    await flushPromises()
+
+    expect(wrapper.get('[data-flow-step="auth"]').attributes('data-flow-status')).toBe('passed')
+    expect(wrapper.get('[data-flow-step="routing"]').attributes('data-flow-status')).toBe('passed')
+    expect(wrapper.get('[data-flow-step="upstream"]').attributes('data-flow-status')).toBe('blocked')
+    expect(wrapper.get('[data-flow-step="response"]').attributes('data-flow-status')).toBe('passed')
+    expect(wrapper.text()).toContain('admin.ops.errorDetail.blockedBeforeUpstream')
   })
 })

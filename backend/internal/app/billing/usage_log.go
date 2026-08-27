@@ -43,6 +43,7 @@ func BuildUsageLog(input RecordInput, cost *CostBreakdown, effectiveRateMultipli
 		Stream:                input.Stream,
 		DurationMs:            &durationMs,
 		FirstTokenMs:          input.FirstTokenMs,
+		FirstOutputStages:     input.FirstOutputStages,
 		CacheTTLOverridden:    input.CacheTTLOverridden,
 		ChannelID:             optionalInt64(input.ChannelID),
 		ModelMappingChain:     optionalString(input.ModelMappingChain),

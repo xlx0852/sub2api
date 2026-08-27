@@ -230,7 +230,7 @@ func TestOpenAIGatewayHandlerChatCompletions_GrokRetryPinsAccountThenFailsOver(t
 	for _, header := range headers {
 		require.NotEmpty(t, header.Get("X-Grok-Req-Id"))
 		require.NotEmpty(t, header.Get("X-Grok-Session-Id"))
-		require.Equal(t, "sub2api", header.Get("X-Grok-Agent-Id"))
+		require.Equal(t, "grok-proxy", header.Get("X-Grok-Agent-Id"))
 		require.Equal(t, headers[0].Get("X-Grok-Req-Id"), header.Get("X-Grok-Req-Id"))
 		require.Equal(t, headers[0].Get("X-Grok-Session-Id"), header.Get("X-Grok-Session-Id"))
 	}

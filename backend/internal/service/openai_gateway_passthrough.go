@@ -426,11 +426,12 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			setOpenAIIsolatedSessionHeaders(req.Header, isolateOpenAISessionID(apiKeyID, clientSessionID), false)
 		}
 		if clientConversationID != "" {
-			// conversation/thread 与 session 可能不同；分别隔离后双写新旧头名。
+			// conversation/thread 与 session 可能不同；隔离后写官方 thread-id。
 			isolatedConversation := isolateOpenAISessionID(apiKeyID, clientConversationID)
-			req.Header.Set("conversation_id", isolatedConversation)
 			req.Header.Set("thread-id", isolatedConversation)
-			req.Header.Set("thread_id", isolatedConversation)
+			if req.Header.Get("x-client-request-id") == "" {
+				req.Header.Set("x-client-request-id", isolatedConversation)
+			}
 		}
 	} else if isOpenAIResponsesCompactPath(c) {
 		// 透传白名单会放行客户端的 Accept: text/event-stream；compact 上游是
@@ -1278,7 +1279,9 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			openAIResponsesCompletedEventIsEmpty(dataBytes, usage) {
 			return newOpenAIResponsesEmptyCompletedFailoverError(c, account, upstreamRequestID)
 		}
-		if firstTokenMs == nil && openAIStreamDataStartsVisibleOutput(trimmedData, eventType) {
+		startsVisibleOutput := firstTokenMs == nil && openAIStreamDataStartsVisibleOutput(trimmedData, eventType)
+		if startsVisibleOutput {
+			markFirstOutputObserved(ctx)
 			ms := int(time.Since(startTime).Milliseconds())
 			firstTokenMs = &ms
 		}
@@ -1300,6 +1303,9 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			if writeLines(outputLines) {
 				clientOutputStarted = true
 				flusher.Flush()
+				if startsVisibleOutput {
+					markFirstOutputFlushed(ctx)
+				}
 			}
 		}
 		return nil

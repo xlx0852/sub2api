@@ -433,6 +433,25 @@ func TestHandleFailoverError_TempUnschedule(t *testing.T) {
 	})
 }
 
+func TestShouldRetrySameAccountBeforeSwitching(t *testing.T) {
+	tests := []struct {
+		name           string
+		retryable      bool
+		candidateCount int
+		want           bool
+	}{
+		{name: "multiple candidates switch first", retryable: true, candidateCount: 3, want: false},
+		{name: "single candidate can retry", retryable: true, candidateCount: 1, want: true},
+		{name: "pinned or unknown candidate can retry", retryable: true, candidateCount: 0, want: true},
+		{name: "non retryable never retries", retryable: false, candidateCount: 1, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, shouldRetrySameAccountBeforeSwitching(tt.retryable, tt.candidateCount))
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // HandleFailoverError — Context 取消
 // ---------------------------------------------------------------------------

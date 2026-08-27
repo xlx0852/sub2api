@@ -18,7 +18,7 @@ const (
 	grokModelOverrideHeader = "X-Grok-Model-Override"
 	grokUpstreamAttemptKey  = "grok_upstream_attempt"
 	grokRequestSessionKey   = "grok_request_session_identity"
-	grokGatewayAgentID      = "sub2api"
+	grokGatewayAgentID      = "grok-proxy"
 )
 
 func SetGrokUpstreamAttempt(c *gin.Context, attempt int) {

@@ -793,7 +793,7 @@ func TestApplyCodexOAuthTransform_AddsSparkImageUnsupportedInstructions(t *testi
 	require.Contains(t, instructions, "existing instructions")
 	require.Contains(t, instructions, codexSparkImageUnsupportedMarker)
 	require.Contains(t, instructions, "does not support image generation")
-	require.Contains(t, instructions, "switch to a non-Spark Codex model")
+	require.Contains(t, instructions, "switch to a non-Spark model")
 	require.NotContains(t, instructions, codexImageGenerationBridgeMarker)
 }
 

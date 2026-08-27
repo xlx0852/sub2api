@@ -33,6 +33,22 @@ type OpsPercentiles struct {
 	Max *int `json:"max_ms"`
 }
 
+type OpsFirstOutputStageAverage struct {
+	AvgMs       *float64 `json:"avg_ms"`
+	SampleCount int64    `json:"sample_count"`
+	Coverage    float64  `json:"coverage"`
+}
+
+type OpsFirstOutputBreakdown struct {
+	EligibleStreamingRequests int64                      `json:"eligible_streaming_requests"`
+	GatewayPreUpstream        OpsFirstOutputStageAverage `json:"gateway_pre_upstream"`
+	UpstreamConnect           OpsFirstOutputStageAverage `json:"upstream_connect"`
+	UpstreamFirstOutput       OpsFirstOutputStageAverage `json:"upstream_first_output"`
+	RetryFailover             OpsFirstOutputStageAverage `json:"retry_failover"`
+	GatewayFirstOutputWrite   OpsFirstOutputStageAverage `json:"gateway_first_output_write"`
+	GatewayFirstOutputTotal   OpsFirstOutputStageAverage `json:"gateway_first_output_total"`
+}
+
 type OpsDashboardOverview struct {
 	StartTime time.Time `json:"start_time"`
 	EndTime   time.Time `json:"end_time"`
@@ -69,8 +85,9 @@ type OpsDashboardOverview struct {
 	QPS OpsRateSummary `json:"qps"`
 	TPS OpsRateSummary `json:"tps"`
 
-	Duration OpsPercentiles `json:"duration"`
-	TTFT     OpsPercentiles `json:"ttft"`
+	Duration             OpsPercentiles          `json:"duration"`
+	TTFT                 OpsPercentiles          `json:"ttft"`
+	FirstOutputBreakdown OpsFirstOutputBreakdown `json:"first_output_breakdown"`
 }
 
 type OpsLatencyHistogramBucket struct {

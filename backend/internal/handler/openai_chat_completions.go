@@ -26,6 +26,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 	defer h.recoverResponsesPanic(c, &streamStarted)
 
 	requestStart := time.Now()
+	firstOutputTracker := service.NewFirstOutputStageTracker(requestStart)
 
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
 	if !ok {
@@ -232,7 +233,8 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			if reqStream {
 				requestType = service.RequestTypeStream
 			}
-			forwardCtx := h.gatewayService.WithUsageSettlementAttempt(c.Request.Context(), service.UsageSettlementStartInput{
+			forwardCtx := service.WithFirstOutputStageTracker(c.Request.Context(), firstOutputTracker)
+			forwardCtx = h.gatewayService.WithUsageSettlementAttempt(forwardCtx, service.UsageSettlementStartInput{
 				RequestPayloadHash: service.HashUsageRequestPayload(body),
 				APIKey:             apiKey,
 				User:               apiKey.User,
@@ -243,6 +245,12 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			})
 			return h.gatewayService.ForwardAsChatCompletions(forwardCtx, c, account, forwardBody, promptCacheKey, "")
 		}()
+		if err != nil {
+			firstOutputTracker.MarkAttemptFailed()
+		}
+		if result != nil {
+			result.FirstOutputStages = firstOutputTracker.Snapshot()
+		}
 		cyberBlockKeyChat := ""
 		if service.GetOpsCyberPolicy(c) != nil {
 			cyberBlockKeyChat = service.CyberSessionBlockKey(apiKey.ID, c, body)
@@ -306,7 +314,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 						return
 					}
 					// Pool mode: retry on the same account (credential failures skip)
-					if !failoverErr.IsCredentialFailure() && failoverErr.RetryableOnSameAccount && !failoverErr.GrokSameAccountRetry {
+					if !failoverErr.IsCredentialFailure() && shouldRetrySameAccountBeforeSwitching(failoverErr.RetryableOnSameAccount, scheduleDecision.CandidateCount) && !failoverErr.GrokSameAccountRetry {
 						retryLimit := account.GetPoolModeRetryCount()
 						if sameAccountRetryCount[account.ID] < retryLimit {
 							sameAccountRetryCount[account.ID]++
@@ -317,6 +325,8 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 								zap.Int("retry_limit", retryLimit),
 								zap.Int("retry_count", sameAccountRetryCount[account.ID]),
 								zap.Duration("retry_delay", retryDelay),
+								zap.Int("candidate_count", scheduleDecision.CandidateCount),
+								zap.String("retry_strategy", "same_account_single_candidate"),
 							)
 							select {
 							case <-c.Request.Context().Done():
@@ -345,6 +355,8 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 						zap.String("failure_reason", string(failoverErr.Reason)),
 						zap.Int("switch_count", switchCount),
 						zap.Int("max_switches", maxAccountSwitches),
+						zap.Int("candidate_count", scheduleDecision.CandidateCount),
+						zap.String("retry_strategy", "untried_same_group_account"),
 					)
 					continue
 				}

@@ -233,6 +233,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		Stream:                result.Stream,
 		Duration:              result.Duration,
 		FirstTokenMs:          result.FirstTokenMs,
+		FirstOutputStages:     result.FirstOutputStages,
 		ImageCount:            result.ImageCount,
 		ImageSize:             result.ImageSize,
 		ImageInputSize:        result.ImageInputSize,

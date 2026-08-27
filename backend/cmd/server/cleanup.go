@@ -48,6 +48,7 @@ func provideCleanup(
 	quotaFlusher *service.UserPlatformQuotaUsageFlusher,
 	upstreamBillingProbe *service.UpstreamBillingProbeService,
 	quotaWindowSweep *service.QuotaWindowSweepService,
+	retrospectiveRisk *service.RetrospectiveRiskService,
 ) func() {
 	return func() {
 		reg := lifecycle.New()
@@ -243,6 +244,12 @@ func provideCleanup(
 			{"UpstreamBillingProbeService", func() error {
 				if upstreamBillingProbe != nil {
 					upstreamBillingProbe.Stop()
+				}
+				return nil
+			}},
+			{"RetrospectiveRiskService", func() error {
+				if retrospectiveRisk != nil {
+					retrospectiveRisk.Stop()
 				}
 				return nil
 			}},

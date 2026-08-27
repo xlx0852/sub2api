@@ -154,6 +154,15 @@ func registerContentModerationRoutes(admin *gin.RouterGroup, h *handler.Handlers
 		risk.POST("/users/:user_id/unban", h.Admin.ContentModeration.UnbanUser)
 		risk.DELETE("/hashes", h.Admin.ContentModeration.DeleteFlaggedHash)
 		risk.DELETE("/hashes/all", h.Admin.ContentModeration.ClearFlaggedHashes)
+		risk.GET("/retrospective/status", h.Admin.ContentModeration.GetRetrospectiveStatus)
+		risk.POST("/retrospective/runs", h.Admin.ContentModeration.TriggerRetrospectiveReview)
+		risk.GET("/retrospective/runs", h.Admin.ContentModeration.ListRetrospectiveReviewRuns)
+		risk.GET("/retrospective/profiles", h.Admin.ContentModeration.ListRiskProfiles)
+		risk.GET("/retrospective/events", h.Admin.ContentModeration.ListRiskEvents)
+		risk.GET("/retrospective/evidence", h.Admin.ContentModeration.ListRetrospectiveEvidenceCases)
+		risk.POST("/retrospective/evidence/:evidence_id/authorize", h.Admin.ContentModeration.AuthorizeRetrospectiveEvidence)
+		risk.GET("/retrospective/evidence/:evidence_id/raw", h.Admin.ContentModeration.GetRawRetrospectiveEvidence)
+		risk.PUT("/retrospective/profiles/:user_id", h.Admin.ContentModeration.ReviewRiskProfile)
 	}
 }
 

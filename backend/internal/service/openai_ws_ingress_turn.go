@@ -158,6 +158,58 @@ func (sess *openAIWSIngressSession) hasCurrentOrReplayFunctionCallOutput(payload
 	return sess.currentTurnReplayInputExists && openAIWSRawItemsHasFunctionCallOutput(sess.currentTurnReplayInput)
 }
 
+func (sess *openAIWSIngressSession) canRecoverIngressConnectionLimit(payload []byte) bool {
+	if !sess.isStrictAffinityTurn(payload) || !sess.hasCurrentOrReplayFunctionCallOutput(payload) {
+		return true
+	}
+	return sess.currentTurnReplayInputExists &&
+		openAIWSRawItemsHaveToolCallContextForOutputs(sess.currentTurnReplayInput)
+}
+
+func (sess *openAIWSIngressSession) recoverIngressConnectionLimit(relayErr error, turn int, connID string) bool {
+	if !isOpenAIWSIngressConnectionLimitReached(relayErr) ||
+		sess.turnConnectionLimitRecoveryTried ||
+		sess.ctx.Err() != nil ||
+		!sess.canRecoverIngressConnectionLimit(sess.currentPayload) {
+		return false
+	}
+
+	updatedPayload := sess.currentPayload
+	action := "new_connection_retry"
+	if sess.isStrictAffinityTurn(updatedPayload) {
+		withoutPrevious, removed, dropErr := dropPreviousResponseIDFromRawPayload(updatedPayload)
+		if dropErr != nil || !removed {
+			return false
+		}
+		withReplay, setInputErr := setOpenAIWSPayloadInputSequence(
+			withoutPrevious,
+			sess.currentTurnReplayInput,
+			sess.currentTurnReplayInputExists,
+		)
+		if setInputErr != nil {
+			return false
+		}
+		updatedPayload = withReplay
+		action = "drop_previous_response_id_replay_on_new_connection"
+	}
+
+	sess.turnConnectionLimitRecoveryTried = true
+	sess.currentPayload = append([]byte(nil), updatedPayload...)
+	sess.currentPayloadBytes = len(sess.currentPayload)
+	logOpenAIWSModeInfo(
+		"ingress_ws_connection_limit_recovery account_id=%d turn=%d conn_id=%s action=%s retry=1 payload_bytes=%d",
+		sess.account.ID,
+		turn,
+		truncateOpenAIWSLogValue(connID, openAIWSIDValueMaxLen),
+		action,
+		sess.currentPayloadBytes,
+	)
+	sess.resetSessionLease(true)
+	sess.forceNewConnOnRetry = true
+	sess.skipBeforeTurn = true
+	return true
+}
+
 func (sess *openAIWSIngressSession) recoverIngressPrevResponseNotFound(relayErr error, turn int, connID string) bool {
 	s := sess.svc
 	account := sess.account
@@ -385,6 +437,7 @@ func (sess *openAIWSIngressSession) runWSTurns(firstPayload openAIWSClientPayloa
 	sess.turn = 1
 	sess.turnRetry = 0
 	sess.turnPrevRecoveryTried = false
+	sess.turnConnectionLimitRecoveryTried = false
 	sess.turnIndexedCompatibilityRetryTried = false
 	sess.lastTurnFinishedAt = time.Time{}
 	sess.lastTurnResponseID = ""
@@ -716,6 +769,9 @@ func (sess *openAIWSIngressSession) runWSTurns(firstPayload openAIWSClientPayloa
 			if sess.recoverIngressPrevResponseNotFound(relayErr, sess.turn, connID) {
 				continue
 			}
+			if sess.recoverIngressConnectionLimit(relayErr, sess.turn, connID) {
+				continue
+			}
 			if sess.retryIngressTurn(relayErr, sess.turn, connID) {
 				continue
 			}
@@ -731,6 +787,7 @@ func (sess *openAIWSIngressSession) runWSTurns(firstPayload openAIWSClientPayloa
 		}
 		sess.turnRetry = 0
 		sess.turnPrevRecoveryTried = false
+		sess.turnConnectionLimitRecoveryTried = false
 		sess.turnIndexedCompatibilityRetryTried = false
 		sess.lastTurnFinishedAt = time.Now()
 		sess.lastTurnClean = true

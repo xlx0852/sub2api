@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 	"time"
 
@@ -651,6 +652,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	}
 
 	turnStart := time.Now()
+	firstOutputTracker := NewFirstOutputStageTracker(turnStart)
 	maxDuration := openAIWSHTTPBridgeMaxDurationDefault
 	streamDeadline := turnStart.Add(maxDuration)
 	upstreamCtx, releaseUpstreamCtx := openAIWSHTTPBridgeUpstreamContext(ctx, streamDeadline)
@@ -674,6 +676,11 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		if account.Platform != PlatformGrok && isOpenAIResponsesLiteWebSocketPayload(payload) {
 			upstreamReq.Header.Set(responsesLiteHeader, "true")
 		}
+		firstOutputTracker.transition(firstOutputStageConnect, time.Now(), false)
+		trace := &httptrace.ClientTrace{WroteRequest: func(httptrace.WroteRequestInfo) {
+			firstOutputTracker.transition(firstOutputStageUpstream, time.Now(), false)
+		}}
+		upstreamReq = upstreamReq.WithContext(httptrace.WithClientTrace(upstreamReq.Context(), trace))
 
 		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
 		if err != nil {
@@ -698,6 +705,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			return nil, fmt.Errorf("normalize http bridge compatibility retry body: %w", retryErr)
 		}
 		if changed && rejectedFieldRetryState.AllowForReason(retryBody, reason) {
+			firstOutputTracker.transition(firstOutputStageRetry, time.Now(), true)
 			body = retryBody
 			logOpenAIWSModeInfo(
 				"ingress_ws_http_bridge_compatibility_retry account_id=%d turn=%d reason=%s",
@@ -731,6 +739,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	usage := OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
 	var firstTokenMs *int
+	firstOutputPending := false
 	reqStream := openAIWSPayloadBoolFromRaw(body, "stream", true)
 	eventCount := 0
 	tokenEventCount := 0
@@ -757,19 +766,20 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		payloadBytesValue := int64(payloadBytes)
 		eventCountValue := eventCount
 		result := &OpenAIForwardResult{
-			RequestID:       responseID,
-			Usage:           usage,
-			Model:           originalModel,
-			UpstreamModel:   mappedModel,
-			ServiceTier:     extractOpenAIServiceTierFromBody(body),
-			ReasoningEffort: ApplyThinkingEnabledFallback(extractOpenAIReasoningEffortFromBody(body, firstNonEmpty(mappedModel, originalModel)), body, mappedModel),
-			Stream:          reqStream,
-			OpenAIWSMode:    true,
-			ResponseHeaders: cloneHeader(resp.Header),
-			Duration:        time.Since(turnStart),
-			FirstTokenMs:    firstTokenMs,
-			WSPayloadBytes:  &payloadBytesValue,
-			WSEventCount:    &eventCountValue,
+			RequestID:         responseID,
+			Usage:             usage,
+			Model:             originalModel,
+			UpstreamModel:     mappedModel,
+			ServiceTier:       extractOpenAIServiceTierFromBody(body),
+			ReasoningEffort:   ApplyThinkingEnabledFallback(extractOpenAIReasoningEffortFromBody(body, firstNonEmpty(mappedModel, originalModel)), body, mappedModel),
+			Stream:            reqStream,
+			OpenAIWSMode:      true,
+			ResponseHeaders:   cloneHeader(resp.Header),
+			Duration:          time.Since(turnStart),
+			FirstTokenMs:      firstTokenMs,
+			FirstOutputStages: firstOutputTracker.Snapshot(),
+			WSPayloadBytes:    &payloadBytesValue,
+			WSEventCount:      &eventCountValue,
 		}
 		if replayInput := normalizeOpenAIReplayItemsForAccount(account, replayCollector.Items()); len(replayInput) > 0 {
 			result.wsReplayInput = replayInput
@@ -953,6 +963,8 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			if firstTokenMs == nil {
 				ms := int(time.Since(turnStart).Milliseconds())
 				firstTokenMs = &ms
+				firstOutputTracker.transition(firstOutputStageWrite, time.Now(), false)
+				firstOutputPending = true
 			}
 			if tokenEventCount > maxTokenEvents {
 				msg := fmt.Sprintf("upstream stream exceeded max token events %d", maxTokenEvents)
@@ -1004,6 +1016,19 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			return resultWithUsage(), fmt.Errorf("restore http bridge namespace response: %w", restoreErr)
 		}
 		upstreamMessage = restoredMessage
+		if eventType == "response.failed" {
+			if hit, code, msg := detectOpenAICyberPolicy(upstreamMessage); hit {
+				MarkOpsCyberPolicy(c, CyberPolicyMark{
+					Code:           code,
+					Message:        msg,
+					Body:           truncateString(string(upstreamMessage), 4096),
+					UpstreamStatus: http.StatusOK,
+					UpstreamInTok:  usage.InputTokens,
+					UpstreamOutTok: usage.OutputTokens,
+				})
+			}
+			s.markOpenAIStreamTerminalError(c, account, false, resp.Header.Get("X-Request-Id"), upstreamMessage, extractOpenAISSEErrorMessage(upstreamMessage))
+		}
 
 		// 上游自生成的 fc_ call_id 还原为 codex 的 call_id（工具名配对），
 		// 必须在 replayCollector 之前完成：重放序列注入下一轮 input 时也要
@@ -1037,6 +1062,10 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 				}
 			} else {
 				wroteDownstream = true
+				if firstOutputPending {
+					firstOutputTracker.finish(time.Now())
+					firstOutputPending = false
+				}
 			}
 		}
 
@@ -1047,6 +1076,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			if errMessage == "" {
 				errMessage = "upstream error event"
 			}
+			s.markOpenAIStreamTerminalError(c, account, false, resp.Header.Get("X-Request-Id"), upstreamMessage, errMessage)
 			return resultWithUsage(), errors.New(errMessage)
 		}
 		if isOpenAIWSTerminalEvent(eventType) {

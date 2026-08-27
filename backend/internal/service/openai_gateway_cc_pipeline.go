@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 	"time"
 
@@ -217,6 +218,13 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 		applyGrokCacheHeaders(upstreamReq.Header, grokCacheIdentity)
 		applyGrokRequestIdentityHeaders(upstreamReq.Header, c, grokCacheIdentity, gjson.GetBytes(body, "model").String())
 	}
+	markFirstOutputConnectionStart(ctx)
+	trace := &httptrace.ClientTrace{
+		WroteRequest: func(httptrace.WroteRequestInfo) {
+			markFirstOutputRequestWritten(ctx)
+		},
+	}
+	upstreamReq = upstreamReq.WithContext(httptrace.WithClientTrace(upstreamReq.Context(), trace))
 
 	proxyURL := ""
 	if account.Proxy != nil {
@@ -245,6 +253,7 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequestWithKimiRefresh(
 		return resp, err
 	}
 	_ = resp.Body.Close()
+	markFirstOutputAttemptFailed(ctx)
 	refreshedToken, refreshErr := s.kimiTokenProvider.ForceRefresh(ctx, account)
 	if refreshErr != nil {
 		return nil, fmt.Errorf("refresh Kimi token after 401: %w", refreshErr)
@@ -308,11 +317,16 @@ func (s *OpenAIGatewayService) scanCCStream(
 			)
 			continue
 		}
-		if st.FirstTokenMs == nil && !isOpenAIChatUsageOnlyStreamChunk(payload) && chatChunkStartsResponsesOutput(&chunk) {
+		firstOutput := st.FirstTokenMs == nil && !isOpenAIChatUsageOnlyStreamChunk(payload) && chatChunkStartsResponsesOutput(&chunk)
+		if firstOutput {
 			ms := int(time.Since(startTime).Milliseconds())
 			st.FirstTokenMs = &ms
+			markFirstOutputObserved(firstOutputResponseContext(resp))
 		}
 		emit(&chunk)
+		if firstOutput {
+			markFirstOutputFlushed(firstOutputResponseContext(resp))
+		}
 	}
 
 	if err := scanner.Err(); err != nil {

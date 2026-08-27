@@ -151,6 +151,8 @@
           </div>
         </div>
 
+        <RetrospectiveRiskPanel />
+
         <div data-test="elevated-users-card" class="card">
           <div class="flex flex-col gap-4 border-b border-gray-100 px-6 py-4 dark:border-dark-700 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -1193,6 +1195,7 @@ import Select from '@/ui/Select.vue'
 import Toggle from '@/ui/Toggle.vue'
 import Pagination from '@/ui/Pagination.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
+import RetrospectiveRiskPanel from './components/RetrospectiveRiskPanel.vue'
 import { adminAPI } from '@/api/admin'
 import type {
   ContentModerationAPIKeyLoad,

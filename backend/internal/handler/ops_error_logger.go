@@ -636,6 +636,13 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 
 		status := c.Writer.Status()
 		if status < 400 {
+			// A terminal error carried inside an established SSE/WS transport is a
+			// client-visible failure, not a recovered upstream attempt. Prefer the
+			// explicit stream marker even when upstream context is also present.
+			if _, ok := service.GetOpsStreamError(c); ok {
+				logOpsStreamError(c, ops, status)
+				return
+			}
 			// Even when the client request succeeds, we still want to persist upstream error attempts
 			// (retries/failover) so ops can observe upstream instability that gets "covered" by retries.
 			var events []*service.OpsUpstreamErrorEvent
@@ -1085,12 +1092,13 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 }
 
 // logOpsStreamError 记录一次挂在已固化 HTTP 200 SSE 流上的就地错误。
-// 由于 wire 状态码停留在 200，常规的 status>=400 捕获路径永远不会触发；
+// 由于 wire 状态码停留在 200/101，常规的 status>=400 捕获路径永远不会触发；
 // handleStreamingAwareError 通过 service.MarkOpsStreamError 标记这类错误，
-// 此函数据此补记一条错误日志，让并发限流/流内失败在错误看板里可见。
+// 此函数据此补记一条错误日志。StatusCode 使用语义状态，
+// 使用户实际看到的终态失败能进入默认 status>=400 错误列表。
 //
-// 仅在 status<400 且不存在上游错误上下文时调用：上游透传错误已由中间件的
-// upstream-context 分支落库，无需在此重复记录。
+// 仅在 status<400 且存在明确终态标记时调用；若同时有上游错误上下文，
+// 将其作为同一条终态错误的账号和上游证据附加到记录中。
 func logOpsStreamError(c *gin.Context, ops *service.OpsService, wireStatus int) {
 	streamErr, ok := service.GetOpsStreamError(c)
 	if !ok {
@@ -1182,7 +1190,7 @@ func logOpsStreamError(c *gin.Context, ops *service.OpsService, wireStatus int) 
 		ErrorPhase:        phase,
 		ErrorType:         normalizedType,
 		Severity:          classifyOpsSeverity(normalizedType, classifyStatus),
-		StatusCode:        wireStatus,
+		StatusCode:        classifyStatus,
 		IsBusinessLimited: isBusinessLimited,
 		IsCountTokens:     isCountTokensRequest(c),
 
@@ -1193,6 +1201,7 @@ func logOpsStreamError(c *gin.Context, ops *service.OpsService, wireStatus int) 
 
 		CreatedAt: time.Now(),
 	}
+	applyOpsUpstreamContextFromGin(c, entry)
 	applyOpsLatencyFieldsFromContext(c, entry)
 
 	if apiKey != nil {
@@ -1214,6 +1223,42 @@ func logOpsStreamError(c *gin.Context, ops *service.OpsService, wireStatus int) 
 	}
 
 	enqueueOpsErrorLog(ops, entry)
+}
+
+func applyOpsUpstreamContextFromGin(c *gin.Context, entry *service.OpsInsertErrorLogInput) {
+	if c == nil || entry == nil {
+		return
+	}
+	if v, ok := c.Get(service.OpsUpstreamStatusCodeKey); ok {
+		switch status := v.(type) {
+		case int:
+			if status > 0 {
+				entry.UpstreamStatusCode = &status
+			}
+		case int64:
+			if status > 0 {
+				converted := int(status)
+				entry.UpstreamStatusCode = &converted
+			}
+		}
+	}
+	if v, ok := c.Get(service.OpsUpstreamErrorMessageKey); ok {
+		if message, ok := v.(string); ok && strings.TrimSpace(message) != "" {
+			value := strings.TrimSpace(message)
+			entry.UpstreamErrorMessage = &value
+		}
+	}
+	if v, ok := c.Get(service.OpsUpstreamErrorDetailKey); ok {
+		if detail, ok := v.(string); ok && strings.TrimSpace(detail) != "" {
+			value := strings.TrimSpace(detail)
+			entry.UpstreamErrorDetail = &value
+		}
+	}
+	if v, ok := c.Get(service.OpsUpstreamErrorsKey); ok {
+		if events, ok := v.([]*service.OpsUpstreamErrorEvent); ok && len(events) > 0 {
+			entry.UpstreamErrors = events
+		}
+	}
 }
 
 // isCountTokensRequest checks if the request is a count_tokens request
@@ -1452,8 +1497,15 @@ func classifyOpsErrorLog(c *gin.Context, errType, message, code string, status i
 	if upstreamError && !routingCapacityLimited {
 		phase = "upstream"
 	}
+	// 只有发生在入站凭证阶段的限制才属于 auth。模型、功能或账号
+	// 策略拦截可能发生在选号之后，统一改写为 auth 会让时间线出现「认证失败
+	// 但路由已成功」的倒序。
 	if clientBusinessLimited && !upstreamError && !routingCapacityLimited {
-		phase = "auth"
+		if isOpsAuthBusinessLimitReason(c) {
+			phase = "auth"
+		} else {
+			phase = "request"
+		}
 	}
 	if routingCapacityLimited {
 		phase = "routing"
@@ -1465,6 +1517,24 @@ func classifyOpsErrorLog(c *gin.Context, errType, message, code string, status i
 	errorOwner = classifyOpsErrorOwner(phase, message)
 	errorSource = classifyOpsErrorSource(phase, message)
 	return phase, isBusinessLimited, errorOwner, errorSource
+}
+
+func isOpsAuthBusinessLimitReason(c *gin.Context) bool {
+	if c == nil {
+		return true
+	}
+	reasonValue, ok := c.Get(service.OpsClientBusinessLimitedReasonKey)
+	if !ok {
+		return true
+	}
+	reason, _ := reasonValue.(string)
+	switch strings.TrimSpace(reason) {
+	case service.OpsClientBusinessLimitedReasonLocalFeatureGate,
+		service.OpsClientBusinessLimitedReasonLocalPolicyDenied:
+		return false
+	default:
+		return true
+	}
 }
 
 func classifyOpsIsBusinessLimited(errType, phase, code string, status int, message string, localClientAuthError ...bool) bool {

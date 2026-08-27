@@ -243,6 +243,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	setOpenAIClientTransportHTTP(c)
 
 	requestStart := time.Now()
+	firstOutputTracker := service.NewFirstOutputStageTracker(requestStart)
 
 	// Get apiKey and user from context (set by ApiKeyAuth middleware)
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
@@ -527,7 +528,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			service.SetGrokUpstreamAttempt(c, attempt)
 		}
 		writerSizeBeforeForward := service.OpenAICompactKeepaliveAdjustedWrittenSize(c)
-		forwardCtx := c.Request.Context()
+		forwardCtx := service.WithFirstOutputStageTracker(c.Request.Context(), firstOutputTracker)
 		var cancelForward context.CancelFunc
 		compactSoftTimeoutActive := false
 		compactSoftTimeout := h.openAIRemoteCompactSoftTimeout()
@@ -598,6 +599,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			service.SetOpsLatencyMs(c, service.OpsTimeToFirstTokenMsKey, int64(*result.FirstTokenMs))
 		}
 		if err != nil {
+			if result == nil {
+				firstOutputTracker.MarkAttemptFailed()
+			}
 			if errors.Is(err, service.ErrPricingUnavailable) {
 				status, code, message, _ := billingErrorDetails(err)
 				h.handleStreamingAwareError(c, status, code, message, streamStarted)
@@ -690,7 +694,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 						return
 					}
 					// 池模式：同账号重试（凭据失败不走同号重试）
-					if !failoverErr.IsCredentialFailure() && failoverErr.RetryableOnSameAccount && !failoverErr.GrokSameAccountRetry {
+					if !failoverErr.IsCredentialFailure() && shouldRetrySameAccountBeforeSwitching(failoverErr.RetryableOnSameAccount, scheduleDecision.CandidateCount) && !failoverErr.GrokSameAccountRetry {
 						retryLimit := account.GetPoolModeRetryCount()
 						if sameAccountRetryCount[account.ID] < retryLimit {
 							sameAccountRetryCount[account.ID]++
@@ -701,6 +705,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 								zap.Int("retry_limit", retryLimit),
 								zap.Int("retry_count", sameAccountRetryCount[account.ID]),
 								zap.Duration("retry_delay", retryDelay),
+								zap.Int("candidate_count", scheduleDecision.CandidateCount),
+								zap.String("retry_strategy", "same_account_single_candidate"),
 							)
 							select {
 							case <-c.Request.Context().Done():
@@ -729,6 +735,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 						zap.String("failure_reason", string(failoverErr.Reason)),
 						zap.Int("switch_count", switchCount),
 						zap.Int("max_switches", maxAccountSwitches),
+						zap.Int("candidate_count", scheduleDecision.CandidateCount),
+						zap.String("retry_strategy", "untried_same_group_account"),
 					)
 					continue
 				}
@@ -761,6 +769,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			}
 		}
 		if result != nil {
+			result.FirstOutputStages = firstOutputTracker.Snapshot()
 			grokRetry.finishSuccessfulAttempt()
 			if requireCompact {
 				result.CompactRetryCount = compactRetryCount
@@ -1014,6 +1023,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	defer h.recoverAnthropicMessagesPanic(c, &streamStarted)
 
 	requestStart := time.Now()
+	firstOutputTracker := service.NewFirstOutputStageTracker(requestStart)
 
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
 	if !ok {
@@ -1210,7 +1220,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			if channelMappingMsg.Mapped {
 				mappedModel = channelMappingMsg.MappedModel
 			}
-			forwardCtx := c.Request.Context()
+			forwardCtx := service.WithFirstOutputStageTracker(c.Request.Context(), firstOutputTracker)
 			if admissionErr := h.gatewayService.ValidatePricingAdmission(forwardCtx, apiKey.GroupID, channelMappingMsg.BillingModelSource, reqModel, mappedModel, account.GetMappedModel(mappedModel)); admissionErr != nil {
 				return nil, admissionErr
 			}
@@ -1229,6 +1239,12 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			})
 			return h.gatewayService.ForwardAsAnthropic(forwardCtx, c, account, forwardBody, promptCacheKey, defaultMappedModel)
 		}()
+		if err != nil {
+			firstOutputTracker.MarkAttemptFailed()
+		}
+		if result != nil {
+			result.FirstOutputStages = firstOutputTracker.Snapshot()
+		}
 		cyberBlockKeyMsg := ""
 		if service.GetOpsCyberPolicy(c) != nil {
 			cyberBlockKeyMsg = service.CyberSessionBlockKey(apiKey.ID, c, body)
@@ -1265,7 +1281,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 					}
 					h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
 					// 池模式：同账号重试
-					if failoverErr.RetryableOnSameAccount {
+					if shouldRetrySameAccountBeforeSwitching(failoverErr.RetryableOnSameAccount, scheduleDecision.CandidateCount) {
 						retryLimit := account.GetPoolModeRetryCount()
 						if sameAccountRetryCount[account.ID] < retryLimit {
 							sameAccountRetryCount[account.ID]++
@@ -1276,6 +1292,8 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 								zap.Int("retry_limit", retryLimit),
 								zap.Int("retry_count", sameAccountRetryCount[account.ID]),
 								zap.Duration("retry_delay", retryDelay),
+								zap.Int("candidate_count", scheduleDecision.CandidateCount),
+								zap.String("retry_strategy", "same_account_single_candidate"),
 							)
 							select {
 							case <-c.Request.Context().Done():
@@ -1302,6 +1320,8 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 						zap.Int("upstream_status", failoverErr.StatusCode),
 						zap.Int("switch_count", switchCount),
 						zap.Int("max_switches", maxAccountSwitches),
+						zap.Int("candidate_count", scheduleDecision.CandidateCount),
+						zap.String("retry_strategy", "untried_same_group_account"),
 					)
 					continue
 				}
@@ -1868,6 +1888,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		}
 
 		account := selection.Account
+		setOpsSelectedAccount(c, account.ID, account.Platform)
 		accountMaxConcurrency := account.Concurrency
 		if selection.WaitPlan != nil && selection.WaitPlan.MaxConcurrency > 0 {
 			accountMaxConcurrency = selection.WaitPlan.MaxConcurrency
@@ -2063,7 +2084,16 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				// F1: cyber 标记按 turn 生命周期清理——defer 保证任意早返回路径都执行；
 				// CyberBlocked 必须在 submit 前同步预捕获（task 闭包由 worker 池异步执行，
 				// 届时 defer 已清除标记）。
-				defer clearCyberPolicyTurnState(c)
+				defer func() {
+					if _, marked := service.GetOpsStreamError(c); marked {
+						if h.opsService != nil && h.opsService.IsMonitoringEnabled(ctx) {
+							logOpsStreamError(c, h.opsService, http.StatusSwitchingProtocols)
+						}
+						service.ClearOpsStreamError(c)
+						service.ClearOpsUpstreamErrorContext(c)
+					}
+					clearCyberPolicyTurnState(c)
+				}()
 				releaseTurnSlots()
 				turnPayloadHash := getTurnPayloadHash(turn)
 				h.recordCyberPolicyIfMarked(c, apiKey, account, subscription, reqModel, turnErr != nil, cyberBlockKey, channelMappingWS.ToUsageFields(reqModel, ""), turnPayloadHash)

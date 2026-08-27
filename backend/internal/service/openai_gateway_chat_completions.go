@@ -284,6 +284,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 
 	var usage OpenAIUsage
 	var firstTokenMs *int
+	firstOutputPending := false
 	firstChunk := true
 	clientDisconnected := false
 	clientOutputStarted := false
@@ -441,6 +442,10 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 					continue
 				}
 				if !clientOutputStarted {
+					if !firstOutputPending {
+						markFirstOutputObserved(firstOutputResponseContext(resp))
+						firstOutputPending = true
+					}
 					writeStreamHeaders()
 					for _, pending := range pendingSSE {
 						if _, err := fmt.Fprint(c.Writer, pending); err != nil {
@@ -468,6 +473,10 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		}
 		if len(chunks) > 0 && !clientDisconnected && clientOutputStarted {
 			c.Writer.Flush()
+			if firstOutputPending {
+				markFirstOutputFlushed(firstOutputResponseContext(resp))
+				firstOutputPending = false
+			}
 		}
 		return isTerminalEvent
 	}

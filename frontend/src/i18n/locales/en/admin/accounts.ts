@@ -213,7 +213,7 @@ export default {
         ungrouped: 'Ungrouped',
         hint: 'Displayed as "group / base score / sticky bonus". The base score is computed within the current filtered candidate set and includes priority, load, queue depth, error rate, first-token latency, reset window, quota headroom, and related factors. The sticky bonus applies only when sticky weighting is enabled for previous_response_id or session_hash. Higher scores are preferred.'
       },
-      usageWindowsHint: '"5h / 7d" are the upstream account\'s official rolling usage windows (e.g. OpenAI ChatGPT, Claude). They are imposed by the upstream provider on the account itself — not configured by sub2api, and unrelated to the models you map. Usage resets automatically once each window rolls over, and the limit cannot be lifted from within sub2api.',
+      usageWindowsHint: '"5h / 7d" are the upstream account\'s official rolling usage windows (e.g. OpenAI ChatGPT, Claude). They are imposed by the upstream provider on the account itself — not configured by gateway, and unrelated to the models you map. Usage resets automatically once each window rolls over, and the limit cannot be lifted from within gateway.',
       allPrivacyModes: 'All Privacy States',
       privacyUnset: 'Unset',
       privacyTrainingOff: 'Training data sharing disabled',
@@ -585,7 +585,7 @@ export default {
       poolMode: 'Pool Mode',
       poolModeHint: 'Enable when upstream is an account pool; errors won\'t mark local account status',
       poolModeInfo:
-        'When enabled, upstream 429/403/401 errors will auto-retry without marking the account as rate-limited or errored. Suitable for upstream pointing to another sub2api instance.',
+        'When enabled, upstream 429/403/401 errors will auto-retry without marking the account as rate-limited or errored. Suitable for upstream pointing to another gateway instance.',
       poolModeRetryCount: 'Same-Account Retries',
       poolModeRetryCountHint:
         'Only applies in pool mode. Use 0 to disable in-place retry. Default {default}, maximum {max}.',
@@ -976,7 +976,7 @@ export default {
         },
         kimi: {
           title: 'Kimi Device Authorization',
-          description: 'Open the Kimi authorization page and enter the device code. Sub2API will detect completion automatically.',
+          description: 'Open the Kimi authorization page and enter the device code. Gateway will detect completion automatically.',
           start: 'Start Device Authorization',
           starting: 'Generating device code...',
           userCode: 'Device Code',
@@ -1320,7 +1320,7 @@ export default {
         officialQuota: 'Official quota',
         officialQuotaHint: 'Upstream account quota windows, shown separately from local billing statistics.',
         localConsumption: 'Local consumption',
-        localConsumptionHint: 'Requests, tokens, account cost, and user charges recorded by Sub2API.',
+        localConsumptionHint: 'Requests, tokens, account cost, and user charges recorded by Gateway.',
         financialSummary: 'Financial summary',
         profitMargin: 'Margin',
         profitRequests: 'Requests',

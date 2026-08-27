@@ -177,6 +177,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	acquireCtx, acquireCancel := context.WithTimeout(ctx, s.openAIWSAcquireTimeout())
 	defer acquireCancel()
 
+	markFirstOutputConnectionStart(ctx)
 	lease, err := s.getOpenAIWSConnPool().Acquire(acquireCtx, openAIWSAcquireRequest{
 		Account: account,
 		WSURL:   wsURL,
@@ -324,6 +325,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		)
 		return nil, wrapOpenAIWSFallback("write_request", err)
 	}
+	markFirstOutputRequestWritten(ctx)
 	if debugEnabled {
 		logOpenAIWSModeDebug(
 			"write_request_sent account_id=%d conn_id=%s stream=%v payload_bytes=%d previous_response_id=%s",
@@ -375,6 +377,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	}
 
 	clientDisconnected := false
+	firstOutputPending := false
 	flushBatchSize := s.openAIWSEventFlushBatchSize()
 	flushInterval := s.openAIWSEventFlushInterval()
 	pendingFlushEvents := 0
@@ -389,6 +392,10 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			}
 		}
 		flusher.Flush()
+		if firstOutputPending {
+			markFirstOutputFlushed(ctx)
+			firstOutputPending = false
+		}
 		pendingFlushEvents = 0
 		lastFlushAt = time.Now()
 	}
@@ -494,6 +501,8 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			terminalEventCount++
 		}
 		if firstTokenMs == nil && isTokenEvent {
+			markFirstOutputObserved(ctx)
+			firstOutputPending = true
 			ms := int(time.Since(startTime).Milliseconds())
 			firstTokenMs = &ms
 		}
@@ -541,6 +550,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 					UpstreamOutTok: usage.OutputTokens,
 				})
 			}
+			s.markOpenAIStreamTerminalError(c, account, false, responseID, message, extractOpenAISSEErrorMessage(message))
 		}
 
 		if eventType == "error" {
@@ -595,7 +605,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 				return nil, wrapOpenAIWSFallback(fallbackReason, errors.New(errMsg))
 			}
 			statusCode := openAIWSErrorHTTPStatusFromRaw(errCodeRaw, errTypeRaw)
-			setOpsUpstreamError(c, statusCode, errMsg, "")
+			s.markOpenAIStreamTerminalError(c, account, false, responseID, message, errMsg)
 			if reqStream && !clientDisconnected {
 				flushBufferedStreamEvents("error_event")
 				emitStreamMessage(message, true)

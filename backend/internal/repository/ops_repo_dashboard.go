@@ -5,10 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"math"
 	"strings"
 	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 )
 
 const (
@@ -51,6 +52,15 @@ func (r *opsRepository) getDashboardOverviewRaw(ctx context.Context, filter *dom
 	successCount, tokenConsumed, err := r.queryUsageCounts(ctx, filter, start, end)
 	if err != nil {
 		return nil, err
+	}
+	firstOutputBreakdown, err := r.queryFirstOutputBreakdown(ctx, filter, start, end)
+	if err != nil {
+		if isQueryTimeoutErr(err) {
+			degraded = true
+			firstOutputBreakdown = domain.OpsFirstOutputBreakdown{}
+		} else {
+			return nil, err
+		}
 	}
 
 	latencyCtx, cancelLatency := context.WithTimeout(ctx, opsRawLatencyQueryTimeout)
@@ -152,8 +162,9 @@ func (r *opsRepository) getDashboardOverviewRaw(ctx context.Context, filter *dom
 			Avg:     tpsAvg,
 		},
 
-		Duration: duration,
-		TTFT:     ttft,
+		Duration:             duration,
+		TTFT:                 ttft,
+		FirstOutputBreakdown: firstOutputBreakdown,
 	}, nil
 }
 
@@ -170,8 +181,40 @@ type opsDashboardPartial struct {
 
 	tokenConsumed int64
 
-	duration domain.OpsPercentiles
-	ttft     domain.OpsPercentiles
+	duration    domain.OpsPercentiles
+	ttft        domain.OpsPercentiles
+	firstOutput firstOutputAggregate
+}
+
+type firstOutputStageAggregate struct {
+	sumMs int64
+	count int64
+}
+
+type firstOutputAggregate struct {
+	eligible int64
+	pre      firstOutputStageAggregate
+	connect  firstOutputStageAggregate
+	upstream firstOutputStageAggregate
+	retry    firstOutputStageAggregate
+	write    firstOutputStageAggregate
+	total    firstOutputStageAggregate
+}
+
+func (a *firstOutputAggregate) add(other firstOutputAggregate) {
+	a.eligible += other.eligible
+	a.pre.sumMs += other.pre.sumMs
+	a.pre.count += other.pre.count
+	a.connect.sumMs += other.connect.sumMs
+	a.connect.count += other.connect.count
+	a.upstream.sumMs += other.upstream.sumMs
+	a.upstream.count += other.upstream.count
+	a.retry.sumMs += other.retry.sumMs
+	a.retry.count += other.retry.count
+	a.write.sumMs += other.write.sumMs
+	a.write.count += other.write.count
+	a.total.sumMs += other.total.sumMs
+	a.total.count += other.total.count
 }
 
 func (r *opsRepository) getDashboardOverviewPreaggregated(ctx context.Context, filter *domain.OpsDashboardFilter) (*domain.OpsDashboardOverview, error) {
@@ -256,6 +299,11 @@ func (r *opsRepository) getDashboardOverviewPreaggregated(ctx context.Context, f
 	if windowSeconds <= 0 {
 		windowSeconds = 1
 	}
+	degraded := false
+	firstOutput := preagg.firstOutput
+	firstOutput.add(head.firstOutput)
+	firstOutput.add(tail.firstOutput)
+	firstOutputBreakdown := firstOutput.breakdown()
 
 	requestCountTotal := successCount + errorTotal
 	requestCountSLA := successCount + errorCountSLA
@@ -263,8 +311,6 @@ func (r *opsRepository) getDashboardOverviewPreaggregated(ctx context.Context, f
 	sla := safeDivideFloat64(float64(successCount), float64(requestCountSLA))
 	errorRate := safeDivideFloat64(float64(errorCountSLA), float64(requestCountSLA))
 	upstreamErrorRate := safeDivideFloat64(float64(upstreamExcl), float64(requestCountSLA))
-	degraded := false
-
 	// Keep "current" rates as raw, to preserve realtime semantics.
 	qpsCurrent, tpsCurrent, err := r.queryCurrentRates(ctx, filter, end)
 	if err != nil {
@@ -335,9 +381,81 @@ func (r *opsRepository) getDashboardOverviewPreaggregated(ctx context.Context, f
 			Avg:     tpsAvg,
 		},
 
-		Duration: duration,
-		TTFT:     ttft,
+		Duration:             duration,
+		TTFT:                 ttft,
+		FirstOutputBreakdown: firstOutputBreakdown,
 	}, nil
+}
+
+func (r *opsRepository) queryFirstOutputBreakdown(ctx context.Context, filter *domain.OpsDashboardFilter, start, end time.Time) (domain.OpsFirstOutputBreakdown, error) {
+	aggregate, err := r.queryFirstOutputAggregate(ctx, filter, start, end)
+	if err != nil {
+		return domain.OpsFirstOutputBreakdown{}, err
+	}
+	return aggregate.breakdown(), nil
+}
+
+func (r *opsRepository) queryFirstOutputAggregate(ctx context.Context, filter *domain.OpsDashboardFilter, start, end time.Time) (firstOutputAggregate, error) {
+	queryCtx, cancel := context.WithTimeout(ctx, opsRawLatencyQueryTimeout)
+	defer cancel()
+	join, where, args, _ := buildUsageWhere(filter, start, end, 1)
+	q := `
+SELECT
+  COUNT(*) FILTER (WHERE ul.stream = TRUE) AS eligible,
+  COALESCE(SUM((ul.first_output_stages->>'gateway_pre_upstream_ms')::bigint) FILTER (WHERE ul.stream = TRUE), 0),
+  COUNT(ul.first_output_stages->>'gateway_pre_upstream_ms') FILTER (WHERE ul.stream = TRUE),
+  COALESCE(SUM((ul.first_output_stages->>'upstream_connect_ms')::bigint) FILTER (WHERE ul.stream = TRUE), 0),
+  COUNT(ul.first_output_stages->>'upstream_connect_ms') FILTER (WHERE ul.stream = TRUE),
+  COALESCE(SUM((ul.first_output_stages->>'upstream_first_output_ms')::bigint) FILTER (WHERE ul.stream = TRUE), 0),
+  COUNT(ul.first_output_stages->>'upstream_first_output_ms') FILTER (WHERE ul.stream = TRUE),
+  COALESCE(SUM((ul.first_output_stages->>'retry_failover_ms')::bigint) FILTER (WHERE ul.stream = TRUE), 0),
+  COUNT(ul.first_output_stages->>'retry_failover_ms') FILTER (WHERE ul.stream = TRUE),
+  COALESCE(SUM((ul.first_output_stages->>'gateway_first_output_write_ms')::bigint) FILTER (WHERE ul.stream = TRUE), 0),
+  COUNT(ul.first_output_stages->>'gateway_first_output_write_ms') FILTER (WHERE ul.stream = TRUE),
+  COALESCE(SUM((ul.first_output_stages->>'gateway_first_output_total_ms')::bigint) FILTER (WHERE ul.stream = TRUE), 0),
+  COUNT(ul.first_output_stages->>'gateway_first_output_total_ms') FILTER (WHERE ul.stream = TRUE)
+FROM usage_logs ul
+` + join + `
+` + where
+
+	var out firstOutputAggregate
+	if err := r.db.QueryRowContext(queryCtx, q, args...).Scan(
+		&out.eligible,
+		&out.pre.sumMs, &out.pre.count,
+		&out.connect.sumMs, &out.connect.count,
+		&out.upstream.sumMs, &out.upstream.count,
+		&out.retry.sumMs, &out.retry.count,
+		&out.write.sumMs, &out.write.count,
+		&out.total.sumMs, &out.total.count,
+	); err != nil {
+		return firstOutputAggregate{}, err
+	}
+	return out, nil
+}
+
+func (a firstOutputAggregate) breakdown() domain.OpsFirstOutputBreakdown {
+	return domain.OpsFirstOutputBreakdown{
+		EligibleStreamingRequests: a.eligible,
+		GatewayPreUpstream:        firstOutputStageAverage(a.pre, a.eligible),
+		UpstreamConnect:           firstOutputStageAverage(a.connect, a.eligible),
+		UpstreamFirstOutput:       firstOutputStageAverage(a.upstream, a.eligible),
+		RetryFailover:             firstOutputStageAverage(a.retry, a.eligible),
+		GatewayFirstOutputWrite:   firstOutputStageAverage(a.write, a.eligible),
+		GatewayFirstOutputTotal:   firstOutputStageAverage(a.total, a.eligible),
+	}
+}
+
+func firstOutputStageAverage(stage firstOutputStageAggregate, eligible int64) domain.OpsFirstOutputStageAverage {
+	var avgPtr *float64
+	if stage.count > 0 {
+		value := math.Round((float64(stage.sumMs)/float64(stage.count))*100) / 100
+		avgPtr = &value
+	}
+	coverage := 0.0
+	if eligible > 0 {
+		coverage = math.Round((float64(stage.count)/float64(eligible))*10000) / 10000
+	}
+	return domain.OpsFirstOutputStageAverage{AvgMs: avgPtr, SampleCount: stage.count, Coverage: coverage}
 }
 
 type opsHourlyMetricsRow struct {
@@ -368,6 +486,8 @@ type opsHourlyMetricsRow struct {
 	ttftP99 sql.NullInt64
 	ttftAvg sql.NullFloat64
 	ttftMax sql.NullInt64
+
+	firstOutput firstOutputAggregate
 }
 
 func (r *opsRepository) listHourlyMetricsRows(ctx context.Context, filter *domain.OpsDashboardFilter, start, end time.Time) ([]opsHourlyMetricsRow, error) {
@@ -430,7 +550,20 @@ SELECT
   ttft_p99_ms,
   ttft_avg_ms,
   ttft_max_ms,
-  ttft_sample_count
+  ttft_sample_count,
+  first_output_eligible_count,
+  gateway_pre_upstream_sum_ms,
+  gateway_pre_upstream_count,
+  upstream_connect_sum_ms,
+  upstream_connect_count,
+  upstream_first_output_sum_ms,
+  upstream_first_output_count,
+  retry_failover_sum_ms,
+  retry_failover_count,
+  gateway_first_output_write_sum_ms,
+  gateway_first_output_write_count,
+  gateway_first_output_total_sum_ms,
+  gateway_first_output_total_count
 FROM ops_metrics_hourly
 WHERE ` + where + `
 ORDER BY bucket_start ASC`
@@ -467,6 +600,19 @@ ORDER BY bucket_start ASC`
 			&row.ttftAvg,
 			&row.ttftMax,
 			&row.ttftSampleCount,
+			&row.firstOutput.eligible,
+			&row.firstOutput.pre.sumMs,
+			&row.firstOutput.pre.count,
+			&row.firstOutput.connect.sumMs,
+			&row.firstOutput.connect.count,
+			&row.firstOutput.upstream.sumMs,
+			&row.firstOutput.upstream.count,
+			&row.firstOutput.retry.sumMs,
+			&row.firstOutput.retry.count,
+			&row.firstOutput.write.sumMs,
+			&row.firstOutput.write.count,
+			&row.firstOutput.total.sumMs,
+			&row.firstOutput.total.count,
 		); err != nil {
 			return nil, err
 		}
@@ -523,6 +669,7 @@ func aggregateHourlyRows(rows []opsHourlyMetricsRow) opsDashboardPartial {
 		out.upstream529Count += row.upstream529Count
 
 		out.tokenConsumed += row.tokenConsumed
+		out.firstOutput.add(row.firstOutput)
 
 		if row.successCount > 0 {
 			if row.durationP50.Valid {
@@ -638,6 +785,10 @@ func (r *opsRepository) queryRawPartial(ctx context.Context, filter *domain.OpsD
 	if err != nil {
 		return nil, err
 	}
+	firstOutput, err := r.queryFirstOutputAggregate(ctx, filter, start, end)
+	if err != nil && !isQueryTimeoutErr(err) {
+		return nil, err
+	}
 
 	latencyCtx, cancelLatency := context.WithTimeout(ctx, opsRawLatencyQueryTimeout)
 	duration, ttft, ttftSampleCount, err := r.queryUsageLatency(latencyCtx, filter, start, end)
@@ -669,6 +820,7 @@ func (r *opsRepository) queryRawPartial(ctx context.Context, filter *domain.OpsD
 		tokenConsumed:                tokenConsumed,
 		duration:                     duration,
 		ttft:                         ttft,
+		firstOutput:                  firstOutput,
 	}, nil
 }
 

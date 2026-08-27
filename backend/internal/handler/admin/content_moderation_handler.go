@@ -7,16 +7,18 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 )
 
 type ContentModerationHandler struct {
-	service *service.ContentModerationService
+	service       *service.ContentModerationService
+	retrospective *service.RetrospectiveRiskService
 }
 
-func NewContentModerationHandler(svc *service.ContentModerationService) *ContentModerationHandler {
-	return &ContentModerationHandler{service: svc}
+func NewContentModerationHandler(svc *service.ContentModerationService, retrospective *service.RetrospectiveRiskService) *ContentModerationHandler {
+	return &ContentModerationHandler{service: svc, retrospective: retrospective}
 }
 
 type contentModerationConfigRequest struct {
@@ -54,6 +56,7 @@ type contentModerationConfigRequest struct {
 	BlockedKeywords                *[]string                             `json:"blocked_keywords"`
 	KeywordBlockingMode            *string                               `json:"keyword_blocking_mode"`
 	ModelFilter                    *service.ContentModerationModelFilter `json:"model_filter"`
+	Retrospective                  *service.RetrospectiveRiskConfig      `json:"retrospective"`
 }
 
 type contentModerationAPIKeyTestRequest struct {
@@ -117,12 +120,167 @@ func (h *ContentModerationHandler) UpdateConfig(c *gin.Context) {
 		BlockedKeywords:                req.BlockedKeywords,
 		KeywordBlockingMode:            req.KeywordBlockingMode,
 		ModelFilter:                    req.ModelFilter,
+		Retrospective:                  req.Retrospective,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 	response.Success(c, cfg)
+}
+
+func (h *ContentModerationHandler) GetRetrospectiveStatus(c *gin.Context) {
+	if h.retrospective == nil {
+		response.Success(c, map[string]any{"configured": false})
+		return
+	}
+	cfg, err := h.service.GetConfig(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	status, err := h.retrospective.Status(c.Request.Context(), cfg.Retrospective)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, status)
+}
+
+func (h *ContentModerationHandler) TriggerRetrospectiveReview(c *gin.Context) {
+	if h.retrospective == nil {
+		response.BadRequest(c, "Retrospective review is unavailable")
+		return
+	}
+	response.Success(c, h.retrospective.TriggerReview())
+}
+
+func (h *ContentModerationHandler) ListRetrospectiveReviewRuns(c *gin.Context) {
+	page, pageSize := response.ParsePagination(c)
+	items, total, err := h.retrospective.ListRuns(c.Request.Context(), page, pageSize)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, map[string]any{"items": items, "total": total, "page": page, "page_size": pageSize})
+}
+
+func (h *ContentModerationHandler) ListRiskProfiles(c *gin.Context) {
+	page, pageSize := response.ParsePagination(c)
+	items, total, err := h.retrospective.ListProfiles(c.Request.Context(), c.Query("level"), page, pageSize)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, map[string]any{"items": items, "total": total, "page": page, "page_size": pageSize})
+}
+
+func (h *ContentModerationHandler) ListRiskEvents(c *gin.Context) {
+	page, pageSize := response.ParsePagination(c)
+	var userID int64
+	if raw := strings.TrimSpace(c.Query("user_id")); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parsed <= 0 {
+			response.BadRequest(c, "Invalid user_id")
+			return
+		}
+		userID = parsed
+	}
+	items, total, err := h.retrospective.ListEvents(c.Request.Context(), userID, page, pageSize)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, map[string]any{"items": items, "total": total, "page": page, "page_size": pageSize})
+}
+
+func (h *ContentModerationHandler) ListRetrospectiveEvidenceCases(c *gin.Context) {
+	page, pageSize := response.ParsePagination(c)
+	var userID int64
+	if raw := strings.TrimSpace(c.Query("user_id")); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parsed <= 0 {
+			response.BadRequest(c, "Invalid user_id")
+			return
+		}
+		userID = parsed
+	}
+	items, total, err := h.retrospective.ListEvidenceCases(c.Request.Context(), userID, c.Query("status"), page, pageSize)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, map[string]any{"items": items, "total": total, "page": page, "page_size": pageSize})
+}
+
+type retrospectiveEvidenceAuthorizeRequest struct {
+	Password string `json:"password" binding:"required"`
+	Reason   string `json:"reason" binding:"required"`
+}
+
+func (h *ContentModerationHandler) AuthorizeRetrospectiveEvidence(c *gin.Context) {
+	var req retrospectiveEvidenceAuthorizeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request")
+		return
+	}
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.BadRequest(c, "Missing admin identity")
+		return
+	}
+	grant, err := h.retrospective.AuthorizeEvidenceAccess(c.Request.Context(), strings.TrimSpace(c.Param("evidence_id")), subject.UserID, req.Password, req.Reason)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.Success(c, grant)
+}
+
+func (h *ContentModerationHandler) GetRawRetrospectiveEvidence(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.BadRequest(c, "Missing admin identity")
+		return
+	}
+	token := strings.TrimSpace(c.GetHeader("X-Evidence-Access-Token"))
+	result, err := h.retrospective.ReadRawEvidence(c.Request.Context(), strings.TrimSpace(c.Param("evidence_id")), subject.UserID, token)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.Success(c, result)
+}
+
+type retrospectiveProfileReviewRequest struct {
+	Level        string `json:"level"`
+	ReviewStatus string `json:"review_status"`
+	Note         string `json:"note"`
+}
+
+func (h *ContentModerationHandler) ReviewRiskProfile(c *gin.Context) {
+	userID, err := strconv.ParseInt(strings.TrimSpace(c.Param("user_id")), 10, 64)
+	if err != nil || userID <= 0 {
+		response.BadRequest(c, "Invalid user_id")
+		return
+	}
+	var req retrospectiveProfileReviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	var adminID *int64
+	if ok && subject.UserID > 0 {
+		id := subject.UserID
+		adminID = &id
+	}
+	profile, err := h.retrospective.ReviewProfile(c.Request.Context(), userID, strings.TrimSpace(req.Level), strings.TrimSpace(req.ReviewStatus), strings.TrimSpace(req.Note), adminID)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.Success(c, profile)
 }
 
 func (h *ContentModerationHandler) TestAPIKeys(c *gin.Context) {

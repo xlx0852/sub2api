@@ -29,16 +29,21 @@
         </div>
 
         <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
+          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.user') }}</div>
+          <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+            {{ detail.user_email || (detail.user_id != null ? String(detail.user_id) : '—') }}
+          </div>
+        </div>
+
+        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
           <div class="text-xs font-bold uppercase tracking-wider text-gray-400">
-            {{ isUpstreamError(detail) ? t('admin.ops.errorDetail.account') : t('admin.ops.errorDetail.user') }}
+            {{ t('admin.ops.errorDetail.attemptedAccount') }}
           </div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-            <template v-if="isUpstreamError(detail)">
-              {{ detail.account_name || (detail.account_id != null ? String(detail.account_id) : '—') }}
-            </template>
-            <template v-else>
-              {{ detail.user_email || (detail.user_id != null ? String(detail.user_id) : '—') }}
-            </template>
+            {{ detail.account_name || (detail.account_id != null ? `#${detail.account_id}` : t('admin.ops.errorDetail.accountNotSelected')) }}
+          </div>
+          <div v-if="detail.account_id != null && detail.account_name" class="mt-1 font-mono text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.ops.errorDetail.accountId') }}: #{{ detail.account_id }}
           </div>
         </div>
 
@@ -142,14 +147,28 @@
           </div>
         </div>
         <ol class="mt-5 space-y-0">
-          <li v-for="(step, idx) in flowSteps" :key="step.key" class="relative flex gap-3 pb-6 last:pb-0">
+          <li
+            v-for="(step, idx) in flowSteps"
+            :key="step.key"
+            class="relative flex gap-3 pb-6 last:pb-0"
+            :data-flow-step="step.key"
+            :data-flow-status="step.status"
+          >
             <div v-if="idx < flowSteps.length - 1" class="absolute left-[11px] top-6 bottom-0 w-px bg-gray-200 dark:bg-dark-700"></div>
             <div
               class="relative mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white"
-              :class="step.status === 'failed' ? 'bg-red-500' : step.status === 'passed' ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-dark-600'"
+              :class="
+                step.status === 'failed'
+                  ? 'bg-red-500'
+                  : step.status === 'blocked'
+                    ? 'bg-amber-500'
+                    : step.status === 'passed'
+                      ? 'bg-emerald-500'
+                      : 'bg-gray-300 dark:bg-dark-600'
+              "
             >
               <Icon
-                :name="step.status === 'failed' ? 'x' : step.status === 'passed' ? 'check' : 'clock'"
+                :name="step.status === 'failed' || step.status === 'blocked' ? 'x' : step.status === 'passed' ? 'check' : 'clock'"
                 size="xs"
                 :stroke-width="3"
               />
@@ -163,6 +182,12 @@
                 >
                   {{ t('admin.ops.errorDetail.diedHere') }}
                 </span>
+                <span
+                  v-else-if="step.status === 'blocked'"
+                  class="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-500/30"
+                >
+                  {{ t('admin.ops.errorDetail.blockedBeforeUpstream') }}
+                </span>
                 <span v-else-if="step.latency != null" class="font-mono text-[11px] text-gray-500 dark:text-gray-400">
                   {{ step.latency }}ms
                 </span>
@@ -173,7 +198,11 @@
                   {{ t('admin.ops.errorDetail.flowNotReached') }}
                 </span>
               </div>
-              <div v-if="step.status === 'failed' && step.detail" class="mt-1 break-words text-sm font-medium text-red-700 dark:text-red-400">
+              <div
+                v-if="(step.status === 'failed' || step.status === 'blocked') && step.detail"
+                class="mt-1 break-words text-sm font-medium"
+                :class="step.status === 'blocked' ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400'"
+              >
                 {{ step.detail }}
               </div>
             </div>
@@ -318,13 +347,6 @@ const title = computed(() => {
 
 const emptyText = computed(() => t('admin.ops.errorDetail.noErrorSelected'))
 
-function isUpstreamError(d: OpsErrorDetail | null): boolean {
-  if (!d) return false
-  const phase = String(d.phase || '').toLowerCase()
-  const owner = String(d.error_owner || '').toLowerCase()
-  return phase === 'upstream' && owner === 'provider'
-}
-
 function formatRequestTypeLabel(type: number | null | undefined): string {
   switch (type) {
     case 1: return t('admin.ops.errorDetail.requestTypeSync')
@@ -350,7 +372,7 @@ function displayModel(d: OpsErrorDetail | null): string {
   return String(d.model || '').trim()
 }
 
-type FlowStepStatus = 'passed' | 'failed' | 'not_reached'
+type FlowStepStatus = 'passed' | 'failed' | 'blocked' | 'not_reached'
 
 interface FlowStep {
   key: string
@@ -368,11 +390,20 @@ const flowSteps = computed<FlowStep[]>(() => {
   const routingLatency = d.routing_latency_ms
   const upstreamLatency = d.upstream_latency_ms
   const responseLatency = d.response_latency_ms
+  const accountSelected = d.account_id != null
 
-  const authStatus: FlowStepStatus = phase === 'auth' ? 'failed' : authLatency != null ? 'passed' : 'passed'
-  const routingStatus: FlowStepStatus = phase === 'routing' ? 'failed' : routingLatency != null ? 'passed' : 'not_reached'
+  // 旧数据会把「选号后的本地账号策略拦截」记成 auth。
+  // 一旦已有路由/账号/返回客户端证据，入站认证就不可能是失败点。
+  const reachedRouting = routingLatency != null || accountSelected || upstreamLatency != null
+  const reachedUpstream = upstreamLatency != null || phase === 'upstream'
+  const locallyRejected = d.is_business_limited && String(d.error_source || '').toLowerCase() !== 'upstream_http'
+  const localBlockBeforeUpstream =
+    locallyRejected && reachedRouting && !reachedUpstream && responseLatency != null && phase !== 'routing'
+
+  const authStatus: FlowStepStatus = phase === 'auth' && !reachedRouting ? 'failed' : 'passed'
+  const routingStatus: FlowStepStatus = phase === 'routing' ? 'failed' : reachedRouting ? 'passed' : 'not_reached'
   const upstreamStatus: FlowStepStatus =
-    phase === 'upstream' ? 'failed' : upstreamLatency != null ? 'passed' : 'not_reached'
+    phase === 'upstream' ? 'failed' : upstreamLatency != null ? 'passed' : localBlockBeforeUpstream ? 'blocked' : 'not_reached'
   const responseStatus: FlowStepStatus = responseLatency != null ? 'passed' : 'not_reached'
 
   // 失败原因优先用上游细节；网关本地失败则展示 phase + 消息，便于一眼定位。
@@ -398,7 +429,7 @@ const flowSteps = computed<FlowStep[]>(() => {
       label: t('admin.ops.errorDetail.upstream'),
       status: upstreamStatus,
       latency: upstreamLatency,
-      detail: upstreamStatus === 'failed' ? failureDetail : undefined,
+      detail: upstreamStatus === 'failed' || upstreamStatus === 'blocked' ? failureDetail : undefined,
     },
     {
       key: 'response',

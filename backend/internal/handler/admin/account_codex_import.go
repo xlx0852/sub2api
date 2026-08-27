@@ -478,7 +478,7 @@ func flattenCodexImportValues(values []any) []any {
 		if m, ok := value.(map[string]any); ok {
 			// Accept exported account-data envelopes pasted into Codex session import.
 			typeName := strings.TrimSpace(firstCodexString(m, []string{"type"}))
-			if typeName == "" || strings.EqualFold(typeName, "sub2api-data") || strings.EqualFold(typeName, "sub2api-bundle") {
+			if typeName == "" || strings.EqualFold(typeName, "gateway-data") || strings.EqualFold(typeName, "sub2api-data") || strings.EqualFold(typeName, "sub2api-bundle") {
 				if accounts, ok := m["accounts"].([]any); ok && len(accounts) > 0 {
 					for _, item := range accounts {
 						appendValue(item)

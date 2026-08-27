@@ -497,12 +497,15 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			streamEarlyErr = newOpenAIResponsesEmptyCompletedFailoverError(c, account, upstreamRequestID)
 			return
 		}
-		writeLines(outputLines, queueDrained, startsClientOutput)
-
 		startsVisibleOutput := openAIStreamDataStartsVisibleOutput(data, eventType)
 		if firstTokenMs == nil && startsVisibleOutput {
+			markFirstOutputObserved(ctx)
 			ms := int(time.Since(startTime).Milliseconds())
 			firstTokenMs = &ms
+			writeLines(outputLines, queueDrained, startsClientOutput)
+			markFirstOutputFlushed(ctx)
+		} else {
+			writeLines(outputLines, queueDrained, startsClientOutput)
 		}
 		s.parseSSEUsageBytes(dataBytes, usage)
 	}

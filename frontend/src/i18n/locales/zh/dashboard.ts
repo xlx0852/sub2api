@@ -154,13 +154,13 @@ export default {
       },
       grok: {
         description:
-          '将以下配置文件添加到 Codex CLI 配置目录中，通过 Sub2API 的 Grok 分组使用 Grok 模型（OpenAI Responses 兼容）。',
+          '将以下配置文件添加到 Codex CLI 配置目录中，通过 Gateway 的 Grok 分组使用 Grok 模型（OpenAI Responses 兼容）。',
         configTomlHint: '请确保以下内容位于 config.toml 文件的开头部分；默认模型为 grok-4.6',
         note: '请确保配置目录存在。macOS/Linux 用户可运行 mkdir -p ~/.codex 创建目录。auth.json 中的 OPENAI_API_KEY 填写本站 API 密钥。',
         noteWindows:
           '按 Win+R，输入 %userprofile%\\.codex 打开配置目录。如目录不存在，请先手动创建。auth.json 中的 OPENAI_API_KEY 填写本站 API 密钥。',
         cliDescription:
-          '配置 Grok Build、Claude Code、Codex 或 OpenCode，让请求通过当前 Sub2API Grok 分组发送。',
+          '配置 Grok Build、Claude Code、Codex 或 OpenCode，让请求通过当前 Gateway Grok 分组发送。',
         cliConfigHint:
           '如已有 config.toml，请先备份再合并此模型配置。保存后运行 grok inspect 验证生效配置。',
         cliNote:
@@ -168,7 +168,7 @@ export default {
         cliNoteWindows:
           '保存为 %userprofile%\\.grok\\config.toml，然后运行 grok inspect，并在 /model 中选择 grok。',
         claudeDescription:
-          '配置 Claude Code，让 Messages API 请求通过当前 Sub2API Grok 分组发送。',
+          '配置 Claude Code，让 Messages API 请求通过当前 Gateway Grok 分组发送。',
         claudeSettingsHint:
           '用户级持久配置。此文件包含 API 密钥，请勿提交到项目仓库。',
         claudeNote:

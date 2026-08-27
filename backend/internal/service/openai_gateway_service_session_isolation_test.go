@@ -3,6 +3,7 @@ package service
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,13 +32,13 @@ func TestIsolateOpenAISessionID(t *testing.T) {
 		require.NotEqual(t, a, b)
 	})
 
-	t.Run("format_is_16_hex_chars", func(t *testing.T) {
+	t.Run("format_is_uuid", func(t *testing.T) {
 		result := isolateOpenAISessionID(99, "test_session")
-		assert.Len(t, result, 16, "应为 16 字符的 hex 字符串")
-		for _, ch := range result {
-			assert.True(t, (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'),
-				"应仅包含 hex 字符: %c", ch)
-		}
+		// 官方 Codex 客户端的 session-id 是标准 UUID（36 字符带连字符），
+		// 隔离值也应保持该形态，避免 16 位 hex 一眼暴露网关特征。
+		assert.Len(t, result, 36, "应为 36 字符的 UUID 字符串")
+		_, err := uuid.Parse(result)
+		assert.NoError(t, err, "应为合法 UUID")
 	})
 
 	t.Run("zero_apiKeyID_still_works", func(t *testing.T) {

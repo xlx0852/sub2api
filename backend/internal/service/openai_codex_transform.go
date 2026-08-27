@@ -120,10 +120,10 @@ type codexOAuthTransformOptions struct {
 }
 
 const (
-	codexImageGenerationBridgeMarker = "<sub2api-codex-image-generation>"
-	codexImageGenerationBridgeText   = codexImageGenerationBridgeMarker + "\nWhen the user asks for raster image generation or editing, use the OpenAI Responses native `image_generation` tool attached to this request. The local Codex client may not expose an `image_gen` namespace, but that does not mean image generation is unavailable. Do not ask the user to switch to CLI fallback solely because `image_gen` is absent.\n</sub2api-codex-image-generation>"
-	codexSparkImageUnsupportedMarker = "<sub2api-codex-spark-image-unsupported>"
-	codexSparkImageUnsupportedText   = codexSparkImageUnsupportedMarker + "\nThe current model is gpt-5.3-codex-spark, which does not support image generation, image editing, image input, the `image_generation` tool, or Codex `image_gen`/`$imagegen` workflows. If the user asks for image generation or image editing, clearly explain this model limitation and ask them to switch to a non-Spark Codex model such as gpt-5.3-codex or gpt-5.4. Do not claim that the local environment merely lacks image_gen tooling, and do not suggest CLI fallback as the primary fix while the model remains Spark.\n</sub2api-codex-spark-image-unsupported>"
+	codexImageGenerationBridgeMarker = "<image-generation>"
+	codexImageGenerationBridgeText   = codexImageGenerationBridgeMarker + "\nWhen the user asks for raster image generation or editing, use the OpenAI Responses native `image_generation` tool attached to this request. If image generation tooling appears unavailable, note that the native capability is attached to this request and can still be used; do not tell the user the capability is absent.\n</image-generation>"
+	codexSparkImageUnsupportedMarker = "<spark-image-unsupported>"
+	codexSparkImageUnsupportedText   = codexSparkImageUnsupportedMarker + "\nThe current model does not support image generation, image editing, image input, the `image_generation` tool, or image-related workflows. If the user asks for image generation or image editing, clearly explain this model limitation and ask them to switch to a non-Spark model that supports images. Do not claim that the local environment merely lacks image tooling, and do not suggest CLI fallback as the primary fix while the model remains Spark.\n</spark-image-unsupported>"
 )
 
 var openAIChatGPTInternalUnsupportedFields = []string{

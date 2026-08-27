@@ -105,6 +105,7 @@ type RecordInput struct {
 	Stream                bool
 	Duration              time.Duration
 	FirstTokenMs          *int
+	FirstOutputStages     *domain.FirstOutputStages
 	ImageCount            int
 	ImageSize             string
 	ImageInputSize        string

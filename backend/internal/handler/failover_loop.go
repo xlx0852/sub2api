@@ -59,6 +59,13 @@ func sameAccountRetryDelayFor(failoverErr *service.UpstreamFailoverError, retryC
 	return delay
 }
 
+// shouldRetrySameAccountBeforeSwitching prefers an untried account whenever
+// the scheduler saw more than one eligible candidate. This prevents a shared
+// provider overload from being amplified by repeated same-account retries.
+func shouldRetrySameAccountBeforeSwitching(retryable bool, candidateCount int) bool {
+	return retryable && candidateCount <= 1
+}
+
 // FailoverState 跨循环迭代共享的 failover 状态
 type FailoverState struct {
 	SwitchCount           int

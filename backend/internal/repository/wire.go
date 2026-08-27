@@ -88,6 +88,7 @@ var ProviderSet = wire.NewSet(
 	NewTLSFingerprintProfileRepository,
 	NewChannelRepository,
 	NewContentModerationRepository,
+	NewRetrospectiveRiskRepository,
 	NewProfitRepository,
 	NewAccountQuotaWindowRepository,
 	NewAffiliateRepository,
@@ -127,6 +128,7 @@ var ProviderSet = wire.NewSet(
 	NewErrorPassthroughCache,
 	NewTLSFingerprintProfileCache,
 	NewContentModerationHashCache,
+	NewContentModerationEvidenceStore,
 
 	// Encryptors
 	NewAESEncryptor,

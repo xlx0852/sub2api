@@ -366,7 +366,7 @@ func (s *KimiOAuthService) proxyURL(ctx context.Context, proxyID *int64) (string
 func defaultKimiDeviceHeaders(deviceID string) kimi.DeviceHeaders {
 	hostname, _ := os.Hostname()
 	if strings.TrimSpace(hostname) == "" {
-		hostname = "sub2api"
+		hostname = "cli-proxy"
 	}
 	osName := runtime.GOOS
 	switch osName {

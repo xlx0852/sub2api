@@ -66,6 +66,23 @@ export interface OpsDashboardOverview {
 
   duration: OpsPercentiles
   ttft: OpsPercentiles
+  first_output_breakdown?: OpsFirstOutputBreakdown
+}
+
+export interface OpsFirstOutputStageAverage {
+  avg_ms?: number | null
+  sample_count: number
+  coverage: number
+}
+
+export interface OpsFirstOutputBreakdown {
+  eligible_streaming_requests: number
+  gateway_pre_upstream: OpsFirstOutputStageAverage
+  upstream_connect: OpsFirstOutputStageAverage
+  upstream_first_output: OpsFirstOutputStageAverage
+  retry_failover: OpsFirstOutputStageAverage
+  gateway_first_output_write: OpsFirstOutputStageAverage
+  gateway_first_output_total: OpsFirstOutputStageAverage
 }
 
 export interface OpsPercentiles {

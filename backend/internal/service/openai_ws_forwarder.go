@@ -44,6 +44,7 @@ const (
 	openAIWSStoreDisabledConnModeOff      = "off"
 
 	openAIWSIngressStagePreviousResponseNotFound = "previous_response_not_found"
+	openAIWSIngressStageConnectionLimitReached   = "ws_connection_limit_reached"
 	openAIWSMaxPrevResponseIDDeletePasses        = 8
 )
 
@@ -183,6 +184,17 @@ func isOpenAIWSIngressPreviousResponseNotFound(err error) bool {
 		return false
 	}
 	if strings.TrimSpace(turnErr.stage) != openAIWSIngressStagePreviousResponseNotFound {
+		return false
+	}
+	return !turnErr.wroteDownstream
+}
+
+func isOpenAIWSIngressConnectionLimitReached(err error) bool {
+	var turnErr *openAIWSIngressTurnError
+	if !errors.As(err, &turnErr) || turnErr == nil {
+		return false
+	}
+	if strings.TrimSpace(turnErr.stage) != openAIWSIngressStageConnectionLimitReached {
 		return false
 	}
 	return !turnErr.wroteDownstream

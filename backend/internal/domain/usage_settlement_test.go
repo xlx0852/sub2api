@@ -49,13 +49,15 @@ func TestUsageSettlementTransitions(t *testing.T) {
 func TestUsageSettlementPayloadRoundTripExcludesRelations(t *testing.T) {
 	createdAt := time.Unix(1700000000, 0).UTC()
 	pricingCurrency := string(PricingCurrencyCNY)
+	preUpstreamMs, totalMs := 120, 980
 	command := &UsageBillingCommand{RequestID: "local:turn-1", APIKeyID: 2, UserID: 3, AccountID: 4, AccountType: AccountTypeAPIKey, InputTokens: 10, BalanceCost: 0.1}
 	command.Normalize()
 	log := &UsageLog{
 		UserID: 3, APIKeyID: 2, AccountID: 4, RequestID: "local:turn-1", Model: "gpt-test",
 		InputTokens: 10, ActualCost: 0.1, PricingCurrency: &pricingCurrency, CreatedAt: createdAt,
-		User:    &User{Email: "must-not-be-serialized@example.com"},
-		Account: &Account{Credentials: map[string]any{"access_token": "secret"}},
+		FirstOutputStages: &FirstOutputStages{GatewayPreUpstreamMs: &preUpstreamMs, GatewayFirstOutputTotalMs: &totalMs},
+		User:              &User{Email: "must-not-be-serialized@example.com"},
+		Account:           &Account{Credentials: map[string]any{"access_token": "secret"}},
 	}
 	payload := NewUsageSettlementPayloadV1(command, log, "openai")
 	encoded, hash, err := payload.CanonicalJSON("local:turn-1", 2, 3, 4)
@@ -70,6 +72,8 @@ func TestUsageSettlementPayloadRoundTripExcludesRelations(t *testing.T) {
 	require.Equal(t, createdAt, decoded.UsageLog.CreatedAt)
 	require.Equal(t, log.RequestID, decoded.UsageLog.UsageLog().RequestID)
 	require.Equal(t, pricingCurrency, *decoded.UsageLog.UsageLog().PricingCurrency)
+	require.Equal(t, preUpstreamMs, *decoded.UsageLog.UsageLog().FirstOutputStages.GatewayPreUpstreamMs)
+	require.Equal(t, totalMs, *decoded.UsageLog.UsageLog().FirstOutputStages.GatewayFirstOutputTotalMs)
 }
 
 func TestUsageSettlementPayloadRejectsIdentityMismatch(t *testing.T) {

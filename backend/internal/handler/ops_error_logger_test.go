@@ -151,7 +151,8 @@ func setupOpsErrorLogTestQueue(t *testing.T, size int) {
 
 // 就地(in-band) SSE 错误挂在已固化的 HTTP 200 流上：wire 状态码为 200，
 // 常规 status>=400 采集路径不会触发。logOpsStreamError 必须据 MarkOpsStreamError
-// 补记一条错误日志，且用 IntendedStatus(429) 分级、StatusCode 仍记 wire 的 200。
+// 补记一条错误日志，且用 IntendedStatus(429) 分级并作为语义状态码，
+// 使流内终态失败能进入默认 status>=400 错误列表。
 func TestLogOpsStreamError_RecordsInBandConcurrencyLimit(t *testing.T) {
 	setupOpsErrorLogTestQueue(t, 4)
 
@@ -176,10 +177,45 @@ func TestLogOpsStreamError_RecordsInBandConcurrencyLimit(t *testing.T) {
 	require.Equal(t, "request", job.entry.ErrorPhase)
 	require.True(t, job.entry.IsBusinessLimited)
 	require.True(t, job.entry.Stream)
-	require.Equal(t, http.StatusOK, job.entry.StatusCode) // wire 状态码保持 200
-	require.Equal(t, "P1", job.entry.Severity)            // 用 IntendedStatus 429 分级
+	require.Equal(t, http.StatusTooManyRequests, job.entry.StatusCode)
+	require.Equal(t, "P1", job.entry.Severity)
 	require.Equal(t, "test-model", job.entry.Model)
 	require.Equal(t, "Concurrency limit exceeded for account, please retry later", job.entry.ErrorMessage)
+}
+
+func TestOpsErrorLoggerMiddleware_PrefersTerminalStreamErrorOverRecoveredUpstream(t *testing.T) {
+	setupOpsErrorLogTestQueue(t, 4)
+
+	gin.SetMode(gin.TestMode)
+	ops := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	r := gin.New()
+	r.Use(OpsErrorLoggerMiddleware(ops))
+	r.GET("/v1/responses", func(c *gin.Context) {
+		setOpsRequestContext(c, "gpt-5.6-sol", true)
+		service.SetOpsUpstreamError(c, http.StatusBadRequest, "Invalid prompt", `{"error":{"code":"invalid_prompt"}}`)
+		c.Set(service.OpsUpstreamErrorsKey, []*service.OpsUpstreamErrorEvent{{
+			Platform:           service.PlatformOpenAI,
+			UpstreamStatusCode: http.StatusBadRequest,
+			Kind:               "terminal_error",
+			Message:            "Invalid prompt",
+		}})
+		service.MarkOpsStreamError(c, "invalid_request_error", "Invalid prompt", http.StatusBadRequest)
+		c.Status(http.StatusOK)
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, int64(1), OpsErrorLogEnqueuedTotal())
+	job := <-opsErrorLogQueue
+	require.Equal(t, http.StatusBadRequest, job.entry.StatusCode)
+	require.Equal(t, "invalid_request_error", job.entry.ErrorType)
+	require.Equal(t, "upstream", job.entry.ErrorPhase)
+	require.Equal(t, "provider", job.entry.ErrorOwner)
+	require.NotNil(t, job.entry.UpstreamStatusCode)
+	require.Equal(t, http.StatusBadRequest, *job.entry.UpstreamStatusCode)
+	require.Len(t, job.entry.UpstreamErrors, 1)
 }
 
 // 未标记流内错误时 logOpsStreamError 必须是 no-op（不误记正常的 200 流）。
@@ -733,7 +769,7 @@ func TestClassifyOpsIPRestrictionAccessDeniedExcludedFromSLA(t *testing.T) {
 	require.Equal(t, "client_request", errorSource)
 }
 
-func TestClassifyOpsClientBusinessLimitedMarkerExcludesCustomPolicyDenialFromSLA(t *testing.T) {
+func TestClassifyOpsClientBusinessLimitedMarkerKeepsLocalPolicyInRequestPhase(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
@@ -743,7 +779,7 @@ func TestClassifyOpsClientBusinessLimitedMarkerExcludesCustomPolicyDenialFromSLA
 	phase, isBusinessLimited, errorOwner, errorSource := classifyOpsErrorLog(c, errType, "custom admin policy message", "", http.StatusBadRequest)
 
 	require.Equal(t, "invalid_request_error", errType)
-	require.Equal(t, "auth", phase)
+	require.Equal(t, "request", phase)
 	require.True(t, isBusinessLimited)
 	require.Equal(t, "client", errorOwner)
 	require.Equal(t, "client_request", errorSource)

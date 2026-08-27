@@ -676,17 +676,18 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.Equal(t, openAIWSBetaV2Value, captureDialer.lastHeaders.Get("OpenAI-Beta"))
 	require.Equal(t, codexCLIVersion, captureDialer.lastHeaders.Get("version"))
 	require.Equal(t, "remote_compaction_v2", captureDialer.lastHeaders.Get("x-codex-beta-features"))
-	// OAuth 账号的 session_id/conversation_id 应被 isolateOpenAISessionID 隔离，
+	// OAuth 账号的 session/conversation 应被 isolateOpenAISessionID 隔离，
 	// 测试中未设置 api_key 到 context，apiKeyID=0。
-	// 同时双写官方 0.144 session-id/thread-id，并回填 x-client-request-id=thread。
+	// 对齐官方 Codex：只写 session-id/thread-id，回填 x-client-request-id=thread，
+	// 不再写下划线兼容头。
 	isolatedSession := isolateOpenAISessionID(0, "sess-oauth-1")
 	isolatedConversation := isolateOpenAISessionID(0, "conv-oauth-1")
-	require.Equal(t, isolatedSession, captureDialer.lastHeaders.Get("session_id"))
 	require.Equal(t, isolatedSession, captureDialer.lastHeaders.Get("session-id"))
-	require.Equal(t, isolatedConversation, captureDialer.lastHeaders.Get("conversation_id"))
 	require.Equal(t, isolatedConversation, captureDialer.lastHeaders.Get("thread-id"))
-	require.Equal(t, isolatedConversation, captureDialer.lastHeaders.Get("thread_id"))
 	require.Equal(t, isolatedConversation, captureDialer.lastHeaders.Get("x-client-request-id"))
+	require.Empty(t, captureDialer.lastHeaders.Get("session_id"))
+	require.Empty(t, captureDialer.lastHeaders.Get("conversation_id"))
+	require.Empty(t, captureDialer.lastHeaders.Get("thread_id"))
 }
 
 func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testing.T) {
@@ -841,8 +842,8 @@ func TestOpenAIGatewayService_Forward_WSv2_HeaderSessionFallbackFromPromptCacheK
 	require.NotNil(t, result)
 	require.Equal(t, "resp_prompt_cache_key", result.RequestID)
 
-	// OAuth 账号的 session_id 应被 isolateOpenAISessionID 隔离（apiKeyID=0，未在 context 设置）。
-	require.Equal(t, isolateOpenAISessionID(0, "pcache_123"), captureDialer.lastHeaders.Get("session_id"))
+	// OAuth 账号的 session 应被 isolateOpenAISessionID 隔离（apiKeyID=0，未在 context 设置）。
+	require.Equal(t, isolateOpenAISessionID(0, "pcache_123"), captureDialer.lastHeaders.Get("session-id"))
 	require.Empty(t, captureDialer.lastHeaders.Get("conversation_id"))
 	require.NotNil(t, captureConn.lastWrite)
 	require.True(t, gjson.Get(requestToJSONString(captureConn.lastWrite), "stream").Exists())

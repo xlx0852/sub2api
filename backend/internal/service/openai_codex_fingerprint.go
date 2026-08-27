@@ -54,8 +54,16 @@ func GetCodexFingerprintMode(a *Account) codexFingerprintMode {
 
 // deriveStableUUIDv4 从种子确定性派生一个 UUIDv4 格式的字符串。
 // 同一种子永远返回同一值。
+// 派生时混入进程级随机盐：即使种子里的 accountID 自增可被枚举，
+// 不同部署（不同进程/不同实例）也派生不出可跨部署关联的相同值，
+// 且外部无法用公开算法反推/验证种子，避免上游将多个账号关联到同一网关。
+var codexFingerprintSalt = func() string {
+	// 进程启动时生成一次，进程内稳定；多实例 = 多"设备"，符合真实分布。
+	return uuid.NewString()
+}()
+
 func deriveStableUUIDv4(seed string) string {
-	h := sha256.Sum256([]byte(seed))
+	h := sha256.Sum256([]byte(codexFingerprintSalt + "|" + seed))
 	b := h[:16]
 	b[6] = (b[6] & 0x0f) | 0x40 // version 4
 	b[8] = (b[8] & 0x3f) | 0x80 // variant 1
@@ -76,7 +84,7 @@ func resolveConvergedInstallationID(account *Account) string {
 	if deviceID := account.GetOpenAIDeviceID(); deviceID != "" {
 		return deviceID
 	}
-	return deriveStableUUIDv4(fmt.Sprintf("sub2api:codex-install-id:v1:%d", account.ID))
+	return deriveStableUUIDv4(fmt.Sprintf("codex:install-id:v1:%d", account.ID))
 }
 
 // resolveConvergedSessionID 返回账号级恒定的 session_id。
@@ -84,7 +92,7 @@ func resolveConvergedSessionID(account *Account) string {
 	if account == nil {
 		return ""
 	}
-	return deriveStableUUIDv4(fmt.Sprintf("sub2api:codex-session-id:v1:%d", account.ID))
+	return deriveStableUUIDv4(fmt.Sprintf("codex:session-id:v1:%d", account.ID))
 }
 
 // resolveConvergedThreadID 按客户端原始 session-id 确定性派生 thread_id。
@@ -94,7 +102,7 @@ func resolveConvergedThreadID(account *Account, clientSessionID string) string {
 	if account == nil || clientSessionID == "" {
 		return ""
 	}
-	return deriveStableUUIDv4(fmt.Sprintf("sub2api:codex-thread-id:v1:%d:%s", account.ID, clientSessionID))
+	return deriveStableUUIDv4(fmt.Sprintf("codex:thread-id:v1:%d:%s", account.ID, clientSessionID))
 }
 
 // codexFingerprintIDs 收敛后的完整 ID 集合。
@@ -249,9 +257,8 @@ func applyCodexFingerprintHeaders(h http.Header, ids *codexFingerprintIDs) {
 	}
 	h.Set("x-codex-window-id", ids.windowID)
 	h.Set("x-client-request-id", ids.threadID)
-	// 连字符形式和下划线形式都改写，保证一致
+	// 对齐官方 Codex：只写连字符形式，不再写下划线兼容头。
 	h.Set("session-id", ids.sessionID)
-	h.Set("session_id", ids.sessionID)
 	h.Set("thread-id", ids.threadID)
 
 	rewriteCodexTurnMetadata(h, ids, map[string]any{
@@ -299,7 +306,7 @@ func rewriteCodexRelationshipFields(metadata map[string]any, ids *codexFingerpri
 	for _, key := range []string{"root_turn_id", "parent_turn_id"} {
 		original, _ := metadata[key].(string)
 		if strings.TrimSpace(original) != "" {
-			metadata[key] = deriveStableUUIDv4(fmt.Sprintf("sub2api:codex-%s:v1:%d:%s", key, ids.accountID, original))
+			metadata[key] = deriveStableUUIDv4(fmt.Sprintf("codex:%s:v1:%d:%s", key, ids.accountID, original))
 		}
 	}
 }
@@ -311,7 +318,7 @@ func rewriteCodexThreadRelationshipID(key string, original string, ids *codexFin
 	if ids.mode == codexFingerprintFull {
 		return ids.threadID
 	}
-	return deriveStableUUIDv4(fmt.Sprintf("sub2api:codex-%s:v1:%d:%s", key, ids.accountID, original))
+	return deriveStableUUIDv4(fmt.Sprintf("codex:%s:v1:%d:%s", key, ids.accountID, original))
 }
 
 // applyCodexFingerprintClientMetadata 按预计算的收敛 ID 改写请求体中的 client_metadata。

@@ -32,12 +32,13 @@ const (
 	contentModerationAPIKeysModeAppend  = "append"
 	contentModerationAPIKeysModeReplace = "replace"
 
-	ContentModerationActionAllow        = "allow"
-	ContentModerationActionBlock        = "block"
-	ContentModerationActionHashBlock    = "hash_block"
-	ContentModerationActionKeywordBlock = "keyword_block"
-	ContentModerationActionError        = "error"
-	ContentModerationActionCyberPolicy  = "cyber_policy" // cyber_policy 硬阻断的风控日志 action（封号计数排除按此值过滤）
+	ContentModerationActionAllow         = "allow"
+	ContentModerationActionBlock         = "block"
+	ContentModerationActionHashBlock     = "hash_block"
+	ContentModerationActionKeywordBlock  = "keyword_block"
+	ContentModerationActionError         = "error"
+	ContentModerationActionCyberPolicy   = "cyber_policy" // cyber_policy 硬阻断的风控日志 action（封号计数排除按此值过滤）
+	ContentModerationActionRetrospective = "retrospective"
 
 	contentModerationKeywordCategory = "keyword"
 
@@ -171,7 +172,8 @@ type ContentModerationConfig struct {
 	// CyberPolicyExcludeFromBanCount 为 true 时，cyber_policy 命中不参与自动封号计数：
 	// 当次不判定封号，且历史 cyber 行在 CountFlaggedByUserSince 中被排除。
 	// 默认 false（计入，与历史行为一致；旧配置 JSON 无此字段时反序列化为 false）。
-	CyberPolicyExcludeFromBanCount bool `json:"cyber_policy_exclude_from_ban_count"`
+	CyberPolicyExcludeFromBanCount bool                    `json:"cyber_policy_exclude_from_ban_count"`
+	Retrospective                  RetrospectiveRiskConfig `json:"retrospective"`
 }
 
 type ContentModerationConfigView struct {
@@ -207,6 +209,7 @@ type ContentModerationConfigView struct {
 	KeywordBlockingMode            string                          `json:"keyword_blocking_mode"`
 	ModelFilter                    ContentModerationModelFilter    `json:"model_filter"`
 	CyberPolicyExcludeFromBanCount bool                            `json:"cyber_policy_exclude_from_ban_count"`
+	Retrospective                  RetrospectiveRiskConfig         `json:"retrospective"`
 }
 
 type ContentModerationAPIKeyStatus struct {
@@ -296,6 +299,7 @@ type UpdateContentModerationConfigInput struct {
 	KeywordBlockingMode            *string                       `json:"keyword_blocking_mode"`
 	ModelFilter                    *ContentModerationModelFilter `json:"model_filter"`
 	CyberPolicyExcludeFromBanCount *bool                         `json:"cyber_policy_exclude_from_ban_count"`
+	Retrospective                  *RetrospectiveRiskConfig      `json:"retrospective"`
 }
 
 type ContentModerationModelFilter struct {
@@ -479,6 +483,7 @@ type ContentModerationService struct {
 	lastCleanupDeletedNonHit atomic.Int64
 	keyHealthMu              sync.Mutex
 	keyHealth                map[string]*contentModerationKeyHealth
+	retrospective            atomic.Pointer[RetrospectiveRiskService]
 }
 
 func NewContentModerationServiceWithAPIKeyRepository(
@@ -554,6 +559,12 @@ func NewContentModerationService(
 		go svc.cleanupWorker()
 	}
 	return svc
+}
+
+func (s *ContentModerationService) SetRetrospectiveRiskService(retrospective *RetrospectiveRiskService) {
+	if s != nil {
+		s.retrospective.Store(retrospective)
+	}
 }
 
 func (s *ContentModerationService) GetConfig(ctx context.Context) (*ContentModerationConfigView, error) {
@@ -646,6 +657,9 @@ func (s *ContentModerationService) UpdateConfig(ctx context.Context, input Updat
 	}
 	if input.CyberPolicyExcludeFromBanCount != nil {
 		cfg.CyberPolicyExcludeFromBanCount = *input.CyberPolicyExcludeFromBanCount
+	}
+	if input.Retrospective != nil {
+		cfg.Retrospective = *input.Retrospective
 	}
 	if input.Thresholds != nil {
 		cfg.Thresholds = mergeContentModerationThresholds(ContentModerationDefaultThresholds(), *input.Thresholds)
@@ -778,6 +792,9 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			"protocol", input.Protocol,
 			"error", err)
 		return allow, nil
+	}
+	if retrospective := s.retrospective.Load(); retrospective != nil {
+		retrospective.TryCapture(ctx, input, cfg.Retrospective)
 	}
 	inGroupScope := cfg.includesGroup(input.GroupID)
 	inModelScope := cfg.includesModel(input.Model)
@@ -1517,6 +1534,18 @@ func (s *ContentModerationService) validateConfig(ctx context.Context, cfg *Cont
 		return infraerrors.BadRequest("INVALID_CONTENT_MODERATION_CONFIG", "内容审计配置不能为空")
 	}
 	cfg.normalize()
+	if cfg.Retrospective.ElevationEnabled && !cfg.Retrospective.ReviewEnabled {
+		return infraerrors.BadRequest("INVALID_RETROSPECTIVE_RISK_CONFIG", "开启自动升级重点监控前必须先开启每日回溯审查")
+	}
+	if cfg.Retrospective.ReviewEnabled && len(cfg.apiKeys()) == 0 {
+		return infraerrors.BadRequest("INVALID_RETROSPECTIVE_RISK_CONFIG", "开启每日回溯审查前必须配置内容审计 API Key")
+	}
+	if cfg.Retrospective.CaptureEnabled {
+		retrospective := s.retrospective.Load()
+		if retrospective == nil || retrospective.store == nil || !retrospective.store.Configured() {
+			return infraerrors.BadRequest("RETROSPECTIVE_EVIDENCE_STORE_NOT_CONFIGURED", "开启证据采集前必须完成 OSS 专用凭证和加密密钥配置")
+		}
+	}
 	switch cfg.Mode {
 	case ContentModerationModeOff, ContentModerationModeObserve, ContentModerationModePreBlock:
 	default:
@@ -1966,11 +1995,11 @@ func contentModerationEmailVariables(log *ContentModerationLog, cfg *ContentMode
 
 func (s *ContentModerationService) siteName(ctx context.Context) string {
 	if s == nil || s.settingRepo == nil {
-		return "Sub2API"
+		return "Gateway"
 	}
 	name, err := s.settingRepo.GetValue(ctx, SettingKeySiteName)
 	if err != nil || strings.TrimSpace(name) == "" {
-		return "Sub2API"
+		return "Gateway"
 	}
 	return strings.TrimSpace(name)
 }
@@ -2007,6 +2036,7 @@ func defaultContentModerationConfig() *ContentModerationConfig {
 			Models: []string{},
 		},
 		CyberPolicyExcludeFromBanCount: false,
+		Retrospective:                  defaultRetrospectiveRiskConfig(),
 	}
 }
 
@@ -2023,6 +2053,7 @@ func cloneContentModerationConfig(cfg *ContentModerationConfig) *ContentModerati
 		Type:   cfg.ModelFilter.Type,
 		Models: append([]string(nil), cfg.ModelFilter.Models...),
 	}
+	clone.Retrospective = cfg.Retrospective
 	return &clone
 }
 
@@ -2104,6 +2135,7 @@ func (cfg *ContentModerationConfig) normalize() {
 	cfg.BlockedKeywords = normalizeBlockedKeywords(cfg.BlockedKeywords)
 	cfg.KeywordBlockingMode = normalizeKeywordBlockingMode(cfg.KeywordBlockingMode)
 	cfg.ModelFilter = normalizeContentModerationModelFilter(cfg.ModelFilter)
+	cfg.Retrospective.normalize()
 }
 
 func (cfg *ContentModerationConfig) includesGroup(groupID *int64) bool {
@@ -2248,6 +2280,11 @@ func (s *ContentModerationService) shouldForceSampleUser(ctx context.Context, cf
 			slog.Warn("content_moderation.elevated_user_db_failed", "user_id", userID, "error", err)
 		} else {
 			elevated = n > 0
+		}
+	}
+	if !elevated {
+		if retrospective := s.retrospective.Load(); retrospective != nil {
+			elevated = retrospective.IsElevated(ctx, userID)
 		}
 	}
 	s.markElevatedUserSampling(ctx, cfg, userID, elevated)
@@ -2446,6 +2483,7 @@ func (s *ContentModerationService) configView(cfg *ContentModerationConfig) *Con
 		KeywordBlockingMode:            cfg.KeywordBlockingMode,
 		ModelFilter:                    cloneContentModerationModelFilter(cfg.ModelFilter),
 		CyberPolicyExcludeFromBanCount: cfg.CyberPolicyExcludeFromBanCount,
+		Retrospective:                  cfg.Retrospective,
 	}
 }
 

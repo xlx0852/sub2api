@@ -703,7 +703,7 @@ function generateOpenAIWsFiles(baseUrl: string, apiKey: string): FileConfig[] {
   ]
 }
 
-/** Normalize Codex base_url so it ends with /v1 (Sub2API OpenAI-compatible root). */
+/** Normalize Codex base_url so it ends with /v1 (Gateway OpenAI-compatible root). */
 function normalizeCodexBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, '')
   if (trimmed.endsWith('/v1')) return trimmed
@@ -778,7 +778,7 @@ supports_backend_search = true`
   ]
 }
 
-/** Claude Code env pointing model aliases at Grok via Sub2API Messages-compatible endpoint. */
+/** Claude Code env pointing model aliases at Grok via Gateway Messages-compatible endpoint. */
 function generateGrokClaudeFiles(baseUrl: string, apiKey: string): FileConfig[] {
   const model = 'grok-4.6'
   let path: string
@@ -1297,9 +1297,9 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
   } else if (platform === 'openai') {
     provider[platform].models = openaiModels
   } else if (platform === 'grok') {
-    // OpenAI-compatible Responses provider; models are Grok IDs on Sub2API.
+    // OpenAI-compatible Responses provider; models are Grok IDs on this gateway.
     provider[platform].npm = '@ai-sdk/openai'
-    provider[platform].name = 'Grok (Sub2API)'
+    provider[platform].name = 'Grok (Gateway)'
     provider[platform].models = grokModels
   }
 

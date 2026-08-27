@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -17,12 +18,12 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
-	"github.com/cespare/xxhash/v2"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -280,6 +281,7 @@ type OpenAIForwardResult struct {
 	ResponseHeaders       http.Header
 	Duration              time.Duration
 	FirstTokenMs          *int
+	FirstOutputStages     *domain.FirstOutputStages
 	ClientDisconnect      bool
 	WSPayloadBytes        *int64
 	WSEventCount          *int
@@ -1057,15 +1059,14 @@ func getAPIKeyIDFromContext(c *gin.Context) int64 {
 // isolateOpenAISessionID 将 apiKeyID 混入 session 标识符，
 // 确保不同 API Key 的用户即使使用相同的原始 session_id/conversation_id，
 // 到达上游的标识符也不同，防止跨用户会话碰撞。
+// 输出为标准 UUID 格式（与官方 Codex 客户端的 session-id 形态一致），
+// 且对同一 (apiKeyID, raw) 确定，保证同一会话后续请求的标识符稳定。
 func isolateOpenAISessionID(apiKeyID int64, raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return ""
 	}
-	h := xxhash.New()
-	_, _ = fmt.Fprintf(h, "k%d:", apiKeyID)
-	_, _ = h.WriteString(raw)
-	return fmt.Sprintf("%016x", h.Sum64())
+	return generateSessionUUID(fmt.Sprintf("k%d:%s", apiKeyID, raw))
 }
 
 // firstNonEmptyHeader returns the first non-empty header value among keys.
@@ -1084,6 +1085,10 @@ func firstNonEmptyHeader(h http.Header, keys ...string) string {
 // setOpenAIIsolatedSessionHeaders writes isolated session IDs using both legacy
 // underscore names (session_id/conversation_id) and official 0.144 hyphenated
 // names (session-id/thread-id).
+// setOpenAIIsolatedSessionHeaders 写出站会话头，对齐官方 Codex 客户端：
+// 只写 session-id（官方唯一会话头），x-client-request-id 与之一致；
+// withConversation 时额外写 thread-id。不再写 session_id/conversation_id/
+// thread_id 等历史兼容头——同时写多个是网关独有特征，上游一眼可识别。
 func setOpenAIIsolatedSessionHeaders(h http.Header, isolated string, withConversation bool) {
 	if h == nil {
 		return
@@ -1092,12 +1097,10 @@ func setOpenAIIsolatedSessionHeaders(h http.Header, isolated string, withConvers
 	if isolated == "" {
 		return
 	}
-	h.Set("session_id", isolated)
 	h.Set("session-id", isolated)
+	h.Set("x-client-request-id", isolated)
 	if withConversation {
-		h.Set("conversation_id", isolated)
 		h.Set("thread-id", isolated)
-		h.Set("thread_id", isolated)
 	}
 }
 
@@ -1264,11 +1267,46 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 	}
 }
 
-// codexIdentityOverrideUA 返回账号级自定义 User-Agent（管理员显式配置）。
-// 仅贡献客户端名与 OS/架构/终端指纹；版本段由 enforceCodexIdentityHeadersWithUA 用生效版本重建。
+// codexIdentityOverrideUA 返回账号级出站 User-Agent。
+// 管理员显式配置优先（仅贡献客户端名与 OS/架构/终端指纹；版本段由
+// enforceCodexIdentityHeadersWithUA 用生效版本重建）。
+// 未配置时按账号确定性派生一个 OS/架构/终端组合：每个账号固定一个 UA，
+// 跨账号多样，避免所有账号共用同一「机器指纹」暴露网关聚合特征。
+// 派生值仍是官方 Codex 形态（codex_cli_rs/{version} (...); ... 终端），
+// 经 resolveOutboundIdentity 保证 originator/UA 配套（issue #3901）。
 func (s *OpenAIGatewayService) codexIdentityOverrideUA(account *Account) string {
 	if account == nil {
 		return ""
 	}
-	return account.GetOpenAIUserAgent()
+	if ua := account.GetOpenAIUserAgent(); ua != "" {
+		return ua
+	}
+	return derivedAccountCodexUserAgent(account.ID)
+}
+
+// codexUAOSProfiles 是官方 Codex 客户端常见的 OS/架构/终端组合池。
+// 按账号确定性选择一个，模拟不同用户的不同机器。
+var codexUAOSProfiles = []string{
+	" (Ubuntu 22.4.0; x86_64) xterm-256color",
+	" (Ubuntu 24.4.0; x86_64) xterm-256color",
+	" (Ubuntu 22.4.0; aarch64) xterm-256color",
+	" (Debian 12.5.0; x86_64) xterm-256color",
+	" (macOS 14.5.0; aarch64) xterm-256color",
+	" (macOS 15.3.0; aarch64) xterm-256color",
+	" (Windows 10.0.26100; x86_64) xterm-256color",
+	" (Windows 10.0.22631; x86_64) xterm-256color",
+	" (Linux 6.8.0-45-generic; x86_64) xterm-256color",
+	" (Fedora Linux 40.0.0; x86_64) xterm-256color",
+}
+
+// derivedAccountCodexUserAgent 按 accountID 确定性派生 Codex UA。
+// 同账号跨请求稳定；不同账号不同；版本段占位由 resolveOutboundIdentity 重建。
+func derivedAccountCodexUserAgent(accountID int64) string {
+	if accountID <= 0 {
+		return codexCLIUserAgent
+	}
+	// 稳定散列到 profile 池
+	h := sha256.Sum256([]byte(fmt.Sprintf("codex-ua-profile:v1:%d", accountID)))
+	idx := binary.BigEndian.Uint32(h[:4]) % uint32(len(codexUAOSProfiles))
+	return "codex_cli_rs/" + codexCLIVersion + codexUAOSProfiles[idx]
 }

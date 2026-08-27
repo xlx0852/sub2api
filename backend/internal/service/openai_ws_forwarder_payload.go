@@ -123,14 +123,14 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 			conversationID = isolateOpenAISessionID(apiKeyID, conversationID)
 		}
 	}
+	// 会话头对齐官方 Codex：session-id 唯一，thread-id 用于会话延续，
+	// x-client-request-id 与 thread/conversation 一致。不再写
+	// session_id/conversation_id/thread_id 等历史兼容头（网关双写特征）。
 	if sessionID != "" {
-		headers.Set("session_id", sessionID)
 		headers.Set("session-id", sessionID)
 	}
 	if conversationID != "" {
-		headers.Set("conversation_id", conversationID)
 		headers.Set("thread-id", conversationID)
-		headers.Set("thread_id", conversationID)
 	}
 	// 官方：x-client-request-id == thread_id。客户端未带时用 thread/conversation 回填。
 	if headers.Get("x-client-request-id") == "" && conversationID != "" {

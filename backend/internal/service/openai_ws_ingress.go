@@ -74,6 +74,7 @@ type openAIWSIngressSession struct {
 	turn                               int
 	turnRetry                          int
 	turnPrevRecoveryTried              bool
+	turnConnectionLimitRecoveryTried   bool
 	turnIndexedCompatibilityRetryTried bool
 	lastTurnFinishedAt                 time.Time
 	lastTurnResponseID                 string

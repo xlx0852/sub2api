@@ -137,6 +137,8 @@ func codexClientVersionFromUA(ua string) string {
 
 // ensureHeaders 补齐 OAuth（ChatGPT 内部接口）出站请求所需的 Codex 身份头。
 // 已有 User-Agent 与 version 保持不变，交给紧随其后的 enforceHeaders 收口。
+// 不再注入 OpenAI-Beta: responses=experimental：官方自 #5892 起已从 HTTP 移除该头，
+// 仅 WS 路径使用 responses_websockets=2026-02-06（由 WS 转发器单独设置）。
 func (c *CodexIdentity) ensureHeaders(h http.Header) {
 	if h == nil {
 		return
@@ -151,7 +153,6 @@ func (c *CodexIdentity) ensureHeaders(h http.Header) {
 	if strings.TrimSpace(h.Get("version")) == "" {
 		h.Set("version", identity.version)
 	}
-	h.Set("OpenAI-Beta", "responses=experimental")
 }
 
 // applyProbeHeaders 为合成探测请求补齐 Codex 身份和引擎指纹。

@@ -42,6 +42,26 @@ export interface ContentModerationConfig {
   keyword_blocking_mode: KeywordBlockingMode
   model_filter: ContentModerationModelFilter
   cyber_policy_exclude_from_ban_count: boolean
+  retrospective?: RetrospectiveRiskConfig
+}
+
+export interface RetrospectiveRiskConfig {
+  capture_enabled: boolean
+  review_enabled: boolean
+  elevation_enabled: boolean
+  baseline_sample_rate: number
+  queue_size: number
+  per_user_daily_items: number
+  per_user_daily_bytes: number
+  max_item_bytes: number
+  pending_retention_days: number
+  flagged_retention_days: number
+  review_hour: number
+  max_review_items: number
+  max_review_input_tokens: number
+  max_review_cost_units: number
+  risk_ttl_hours: number
+  enforcement_enabled: boolean
 }
 
 export type ContentModerationAPIKeyStatusValue = 'unknown' | 'ok' | 'error' | 'frozen'
@@ -119,7 +139,114 @@ export interface UpdateContentModerationConfig {
   keyword_blocking_mode?: KeywordBlockingMode
   model_filter?: ContentModerationModelFilter
   cyber_policy_exclude_from_ban_count?: boolean
+  retrospective?: RetrospectiveRiskConfig
 }
+
+export interface RetrospectiveReviewRun {
+  id: number
+  run_key: string
+  scheduled_day: string
+  status: 'running' | 'completed' | 'budget_limited' | 'failed'
+  manual: boolean
+  policy_version: string
+  claimed_count: number
+  reviewed_count: number
+  flagged_count: number
+  failed_count: number
+  input_tokens: number
+  cost_units: number
+  error: string
+  started_at: string
+  heartbeat_at: string
+  finished_at?: string
+}
+
+export interface RetrospectiveRiskStatus {
+  configured: boolean
+  connectivity_ok: boolean
+  connectivity_error?: string
+  capture_enabled: boolean
+  review_enabled: boolean
+  queue_size: number
+  queue_length: number
+  enqueued: number
+  dropped: number
+  stored: number
+  storage_errors: number
+  stored_bytes: number
+  evidence_items: number
+  active_risk_profiles: number
+  latest_review_run?: RetrospectiveReviewRun
+}
+
+export type UserRiskLevel = 'normal' | 'watch' | 'high' | 'critical'
+
+export interface UserRiskProfile {
+  user_id: number
+  email: string
+  username: string
+  level: UserRiskLevel
+  score: number
+  confidence: number
+  reason_codes: string[]
+  provenance: string
+  review_status: 'unreviewed' | 'confirmed' | 'cleared'
+  expires_at?: string
+  last_event_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface RiskEvent {
+  id: number
+  event_key: string
+  user_id: number
+  evidence_id?: string
+  review_item_id?: number
+  event_type: string
+  previous_level: UserRiskLevel
+  new_level: UserRiskLevel
+  confidence: number
+  reason_codes: string[]
+  source: string
+  actor_admin_id?: number
+  note: string
+  created_at: string
+}
+
+export interface RetrospectiveEvidenceCase {
+  id: string
+  user_id: number
+  user_email?: string
+  request_id: string
+  endpoint: string
+  provider: string
+  model: string
+  status: string
+  capture_reason: string
+  truncated: boolean
+  captured_at: string
+  expires_at: string
+  review_status?: string
+  flagged: boolean
+  highest_category?: string
+  highest_score: number
+  reason_codes: string[]
+  redacted_summary?: string
+}
+
+export interface RawEvidenceView {
+  evidence_id: string
+  content: string
+  protocol: string
+  model: string
+  captured_at: string
+}
+
+export interface PaginatedRiskProfiles { items: UserRiskProfile[]; total: number; page: number; page_size: number }
+export interface PaginatedRiskEvents { items: RiskEvent[]; total: number; page: number; page_size: number }
+export interface PaginatedReviewRuns { items: RetrospectiveReviewRun[]; total: number; page: number; page_size: number }
+export interface PaginatedEvidenceCases { items: RetrospectiveEvidenceCase[]; total: number; page: number; page_size: number }
 
 export interface ContentModerationRuntimeStatus {
   enabled: boolean
@@ -305,6 +432,53 @@ export async function clearFlaggedHashes(): Promise<ClearFlaggedHashesResponse> 
   return data
 }
 
+export async function getRetrospectiveStatus(): Promise<RetrospectiveRiskStatus> {
+  const { data } = await apiClient.get<RetrospectiveRiskStatus>('/admin/risk-control/retrospective/status')
+  return data
+}
+
+export async function triggerRetrospectiveReview(): Promise<{ accepted: boolean; run_key: string }> {
+  const { data } = await apiClient.post<{ accepted: boolean; run_key: string }>('/admin/risk-control/retrospective/runs')
+  return data
+}
+
+export async function listRetrospectiveReviewRuns(params: { page?: number; page_size?: number } = {}): Promise<PaginatedReviewRuns> {
+  const { data } = await apiClient.get<PaginatedReviewRuns>('/admin/risk-control/retrospective/runs', { params })
+  return data
+}
+
+export async function listRiskProfiles(params: { page?: number; page_size?: number; level?: string } = {}): Promise<PaginatedRiskProfiles> {
+  const { data } = await apiClient.get<PaginatedRiskProfiles>('/admin/risk-control/retrospective/profiles', { params })
+  return data
+}
+
+export async function listRiskEvents(params: { page?: number; page_size?: number; user_id?: number } = {}): Promise<PaginatedRiskEvents> {
+  const { data } = await apiClient.get<PaginatedRiskEvents>('/admin/risk-control/retrospective/events', { params })
+  return data
+}
+
+export async function reviewRiskProfile(userID: number, payload: { level: UserRiskLevel; review_status: string; note?: string }): Promise<UserRiskProfile> {
+  const { data } = await apiClient.put<UserRiskProfile>(`/admin/risk-control/retrospective/profiles/${userID}`, payload)
+  return data
+}
+
+export async function listRetrospectiveEvidence(params: { page?: number; page_size?: number; user_id?: number; status?: string } = {}): Promise<PaginatedEvidenceCases> {
+  const { data } = await apiClient.get<PaginatedEvidenceCases>('/admin/risk-control/retrospective/evidence', { params })
+  return data
+}
+
+export async function authorizeRetrospectiveEvidence(evidenceID: string, payload: { password: string; reason: string }): Promise<{ token: string; expires_at: string }> {
+  const { data } = await apiClient.post<{ token: string; expires_at: string }>(`/admin/risk-control/retrospective/evidence/${evidenceID}/authorize`, payload)
+  return data
+}
+
+export async function getRawRetrospectiveEvidence(evidenceID: string, token: string): Promise<RawEvidenceView> {
+  const { data } = await apiClient.get<RawEvidenceView>(`/admin/risk-control/retrospective/evidence/${evidenceID}/raw`, {
+    headers: { 'X-Evidence-Access-Token': token },
+  })
+  return data
+}
+
 export const riskControlAPI = {
   getConfig,
   updateConfig,
@@ -314,6 +488,15 @@ export const riskControlAPI = {
   unbanUser,
   deleteFlaggedHash,
   clearFlaggedHashes,
+  getRetrospectiveStatus,
+  triggerRetrospectiveReview,
+  listRetrospectiveReviewRuns,
+  listRiskProfiles,
+  listRiskEvents,
+  reviewRiskProfile,
+  listRetrospectiveEvidence,
+  authorizeRetrospectiveEvidence,
+  getRawRetrospectiveEvidence,
 }
 
 export default riskControlAPI

@@ -62,6 +62,62 @@ func TestIsOpenAIWSIngressPreviousResponseNotFound(t *testing.T) {
 	))
 }
 
+func TestIsOpenAIWSIngressConnectionLimitReached(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, isOpenAIWSIngressConnectionLimitReached(nil))
+	require.False(t, isOpenAIWSIngressConnectionLimitReached(errors.New("plain error")))
+	require.False(t, isOpenAIWSIngressConnectionLimitReached(
+		wrapOpenAIWSIngressTurnError(openAIWSIngressStageConnectionLimitReached, errors.New("expired"), true),
+	))
+	require.True(t, isOpenAIWSIngressConnectionLimitReached(
+		wrapOpenAIWSIngressTurnError(openAIWSIngressStageConnectionLimitReached, errors.New("expired"), false),
+	))
+}
+
+func TestOpenAIWSIngressConnectionLimitRecoveryOnlyOnce(t *testing.T) {
+	t.Parallel()
+
+	sess := &openAIWSIngressSession{
+		ctx:            context.Background(),
+		account:        &Account{ID: 110},
+		currentPayload: []byte(`{"type":"response.create","store":false,"input":"hello"}`),
+	}
+	err := wrapOpenAIWSIngressTurnError(
+		openAIWSIngressStageConnectionLimitReached,
+		errors.New("expired"),
+		false,
+	)
+
+	require.True(t, sess.recoverIngressConnectionLimit(err, 40, "old-conn"))
+	require.True(t, sess.forceNewConnOnRetry)
+	require.False(t, sess.recoverIngressConnectionLimit(err, 40, "old-conn"))
+}
+
+func TestOpenAIWSIngressConnectionLimitRecoveryReplaysStoreDisabledContext(t *testing.T) {
+	t.Parallel()
+
+	sess := &openAIWSIngressSession{
+		ctx:                          context.Background(),
+		account:                      &Account{ID: 110},
+		storeDisabled:                true,
+		currentPayload:               []byte(`{"type":"response.create","store":false,"previous_response_id":"resp_old","input":[{"type":"input_text","text":"world"}]}`),
+		currentTurnReplayInput:       []json.RawMessage{json.RawMessage(`{"type":"input_text","text":"hello"}`), json.RawMessage(`{"type":"input_text","text":"world"}`)},
+		currentTurnReplayInputExists: true,
+	}
+	err := wrapOpenAIWSIngressTurnError(
+		openAIWSIngressStageConnectionLimitReached,
+		errors.New("expired"),
+		false,
+	)
+
+	require.True(t, sess.recoverIngressConnectionLimit(err, 40, "old-conn"))
+	require.False(t, gjson.GetBytes(sess.currentPayload, "previous_response_id").Exists())
+	require.False(t, gjson.GetBytes(sess.currentPayload, "store").Bool())
+	require.Equal(t, "hello", gjson.GetBytes(sess.currentPayload, "input.0.text").String())
+	require.Equal(t, "world", gjson.GetBytes(sess.currentPayload, "input.1.text").String())
+}
+
 func TestOpenAIWSIngressPreviousResponseRecoveryEnabled(t *testing.T) {
 	t.Parallel()
 

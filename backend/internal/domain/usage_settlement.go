@@ -272,69 +272,70 @@ func (s UsageBillingSnapshot) Command() *UsageBillingCommand {
 }
 
 type UsageLogSnapshot struct {
-	UserID                int64          `json:"user_id"`
-	APIKeyID              int64          `json:"api_key_id"`
-	AccountID             int64          `json:"account_id"`
-	RequestID             string         `json:"request_id"`
-	Model                 string         `json:"model"`
-	RequestedModel        string         `json:"requested_model,omitempty"`
-	UpstreamModel         *string        `json:"upstream_model,omitempty"`
-	ChannelID             *int64         `json:"channel_id,omitempty"`
-	ModelMappingChain     *string        `json:"model_mapping_chain,omitempty"`
-	BillingTier           *string        `json:"billing_tier,omitempty"`
-	BillingMode           *string        `json:"billing_mode,omitempty"`
-	ServiceTier           *string        `json:"service_tier,omitempty"`
-	ReasoningEffort       *string        `json:"reasoning_effort,omitempty"`
-	InboundEndpoint       *string        `json:"inbound_endpoint,omitempty"`
-	UpstreamEndpoint      *string        `json:"upstream_endpoint,omitempty"`
-	GroupID               *int64         `json:"group_id,omitempty"`
-	SubscriptionID        *int64         `json:"subscription_id,omitempty"`
-	InputTokens           int            `json:"input_tokens"`
-	OutputTokens          int            `json:"output_tokens"`
-	CacheCreationTokens   int            `json:"cache_creation_tokens"`
-	CacheReadTokens       int            `json:"cache_read_tokens"`
-	CacheCreation5mTokens int            `json:"cache_creation_5m_tokens"`
-	CacheCreation1hTokens int            `json:"cache_creation_1h_tokens"`
-	ImageOutputTokens     int            `json:"image_output_tokens"`
-	ImageOutputCost       float64        `json:"image_output_cost"`
-	InputCost             float64        `json:"input_cost"`
-	OutputCost            float64        `json:"output_cost"`
-	CacheCreationCost     float64        `json:"cache_creation_cost"`
-	CacheReadCost         float64        `json:"cache_read_cost"`
-	TotalCost             float64        `json:"total_cost"`
-	ActualCost            float64        `json:"actual_cost"`
-	RateMultiplier        float64        `json:"rate_multiplier"`
-	PricingCurrency       *string        `json:"pricing_currency,omitempty"`
-	AccountRateMultiplier *float64       `json:"account_rate_multiplier,omitempty"`
-	BillingType           int8           `json:"billing_type"`
-	RequestType           RequestType    `json:"request_type"`
-	Stream                bool           `json:"stream"`
-	OpenAIWSMode          bool           `json:"openai_ws_mode"`
-	DurationMs            *int           `json:"duration_ms,omitempty"`
-	FirstTokenMs          *int           `json:"first_token_ms,omitempty"`
-	WSConnReused          *bool          `json:"ws_conn_reused,omitempty"`
-	WSPreflightFailCount  *int           `json:"ws_preflight_fail_count,omitempty"`
-	WSConnPickMs          *int           `json:"ws_conn_pick_ms,omitempty"`
-	WSPayloadBytes        *int64         `json:"ws_payload_bytes,omitempty"`
-	WSEventCount          *int           `json:"ws_event_count,omitempty"`
-	WSQueueWaitMs         *int           `json:"ws_queue_wait_ms,omitempty"`
-	CompactPayloadBytes   *int64         `json:"compact_payload_bytes,omitempty"`
-	CompactRetryCount     *int           `json:"compact_retry_count,omitempty"`
-	CompactClientCanceled *bool          `json:"compact_client_canceled,omitempty"`
-	UserAgent             *string        `json:"user_agent,omitempty"`
-	IPAddress             *string        `json:"ip_address,omitempty"`
-	CacheTTLOverridden    bool           `json:"cache_ttl_overridden"`
-	ImageCount            int            `json:"image_count"`
-	ImageSize             *string        `json:"image_size,omitempty"`
-	ImageInputSize        *string        `json:"image_input_size,omitempty"`
-	ImageOutputSize       *string        `json:"image_output_size,omitempty"`
-	ImageSizeSource       *string        `json:"image_size_source,omitempty"`
-	ImageSizeBreakdown    map[string]int `json:"image_size_breakdown,omitempty"`
-	MediaType             *string        `json:"media_type,omitempty"`
-	VideoCount            int            `json:"video_count"`
-	VideoResolution       *string        `json:"video_resolution,omitempty"`
-	VideoDurationSeconds  *int           `json:"video_duration_seconds,omitempty"`
-	CreatedAt             time.Time      `json:"created_at"`
+	UserID                int64              `json:"user_id"`
+	APIKeyID              int64              `json:"api_key_id"`
+	AccountID             int64              `json:"account_id"`
+	RequestID             string             `json:"request_id"`
+	Model                 string             `json:"model"`
+	RequestedModel        string             `json:"requested_model,omitempty"`
+	UpstreamModel         *string            `json:"upstream_model,omitempty"`
+	ChannelID             *int64             `json:"channel_id,omitempty"`
+	ModelMappingChain     *string            `json:"model_mapping_chain,omitempty"`
+	BillingTier           *string            `json:"billing_tier,omitempty"`
+	BillingMode           *string            `json:"billing_mode,omitempty"`
+	ServiceTier           *string            `json:"service_tier,omitempty"`
+	ReasoningEffort       *string            `json:"reasoning_effort,omitempty"`
+	InboundEndpoint       *string            `json:"inbound_endpoint,omitempty"`
+	UpstreamEndpoint      *string            `json:"upstream_endpoint,omitempty"`
+	GroupID               *int64             `json:"group_id,omitempty"`
+	SubscriptionID        *int64             `json:"subscription_id,omitempty"`
+	InputTokens           int                `json:"input_tokens"`
+	OutputTokens          int                `json:"output_tokens"`
+	CacheCreationTokens   int                `json:"cache_creation_tokens"`
+	CacheReadTokens       int                `json:"cache_read_tokens"`
+	CacheCreation5mTokens int                `json:"cache_creation_5m_tokens"`
+	CacheCreation1hTokens int                `json:"cache_creation_1h_tokens"`
+	ImageOutputTokens     int                `json:"image_output_tokens"`
+	ImageOutputCost       float64            `json:"image_output_cost"`
+	InputCost             float64            `json:"input_cost"`
+	OutputCost            float64            `json:"output_cost"`
+	CacheCreationCost     float64            `json:"cache_creation_cost"`
+	CacheReadCost         float64            `json:"cache_read_cost"`
+	TotalCost             float64            `json:"total_cost"`
+	ActualCost            float64            `json:"actual_cost"`
+	RateMultiplier        float64            `json:"rate_multiplier"`
+	PricingCurrency       *string            `json:"pricing_currency,omitempty"`
+	AccountRateMultiplier *float64           `json:"account_rate_multiplier,omitempty"`
+	BillingType           int8               `json:"billing_type"`
+	RequestType           RequestType        `json:"request_type"`
+	Stream                bool               `json:"stream"`
+	OpenAIWSMode          bool               `json:"openai_ws_mode"`
+	DurationMs            *int               `json:"duration_ms,omitempty"`
+	FirstTokenMs          *int               `json:"first_token_ms,omitempty"`
+	FirstOutputStages     *FirstOutputStages `json:"first_output_stages,omitempty"`
+	WSConnReused          *bool              `json:"ws_conn_reused,omitempty"`
+	WSPreflightFailCount  *int               `json:"ws_preflight_fail_count,omitempty"`
+	WSConnPickMs          *int               `json:"ws_conn_pick_ms,omitempty"`
+	WSPayloadBytes        *int64             `json:"ws_payload_bytes,omitempty"`
+	WSEventCount          *int               `json:"ws_event_count,omitempty"`
+	WSQueueWaitMs         *int               `json:"ws_queue_wait_ms,omitempty"`
+	CompactPayloadBytes   *int64             `json:"compact_payload_bytes,omitempty"`
+	CompactRetryCount     *int               `json:"compact_retry_count,omitempty"`
+	CompactClientCanceled *bool              `json:"compact_client_canceled,omitempty"`
+	UserAgent             *string            `json:"user_agent,omitempty"`
+	IPAddress             *string            `json:"ip_address,omitempty"`
+	CacheTTLOverridden    bool               `json:"cache_ttl_overridden"`
+	ImageCount            int                `json:"image_count"`
+	ImageSize             *string            `json:"image_size,omitempty"`
+	ImageInputSize        *string            `json:"image_input_size,omitempty"`
+	ImageOutputSize       *string            `json:"image_output_size,omitempty"`
+	ImageSizeSource       *string            `json:"image_size_source,omitempty"`
+	ImageSizeBreakdown    map[string]int     `json:"image_size_breakdown,omitempty"`
+	MediaType             *string            `json:"media_type,omitempty"`
+	VideoCount            int                `json:"video_count"`
+	VideoResolution       *string            `json:"video_resolution,omitempty"`
+	VideoDurationSeconds  *int               `json:"video_duration_seconds,omitempty"`
+	CreatedAt             time.Time          `json:"created_at"`
 }
 
 func NewUsageLogSnapshot(log *UsageLog) UsageLogSnapshot {
@@ -358,7 +359,8 @@ func NewUsageLogSnapshot(log *UsageLog) UsageLogSnapshot {
 		CacheCreationCost: log.CacheCreationCost, CacheReadCost: log.CacheReadCost, TotalCost: log.TotalCost,
 		ActualCost: log.ActualCost, RateMultiplier: log.RateMultiplier, PricingCurrency: log.PricingCurrency, AccountRateMultiplier: log.AccountRateMultiplier,
 		BillingType: log.BillingType, RequestType: log.RequestType, Stream: log.Stream, OpenAIWSMode: log.OpenAIWSMode,
-		DurationMs: log.DurationMs, FirstTokenMs: log.FirstTokenMs, WSConnReused: log.WSConnReused,
+		DurationMs: log.DurationMs, FirstTokenMs: log.FirstTokenMs, FirstOutputStages: log.FirstOutputStages,
+		WSConnReused:         log.WSConnReused,
 		WSPreflightFailCount: log.WSPreflightFailCount, WSConnPickMs: log.WSConnPickMs,
 		WSPayloadBytes: log.WSPayloadBytes, WSEventCount: log.WSEventCount, WSQueueWaitMs: log.WSQueueWaitMs,
 		CompactPayloadBytes: log.CompactPayloadBytes, CompactRetryCount: log.CompactRetryCount,
@@ -389,7 +391,8 @@ func (s UsageLogSnapshot) UsageLog() *UsageLog {
 		TotalCost: s.TotalCost, ActualCost: s.ActualCost, RateMultiplier: s.RateMultiplier, PricingCurrency: s.PricingCurrency,
 		AccountRateMultiplier: s.AccountRateMultiplier, BillingType: s.BillingType, RequestType: s.RequestType,
 		Stream: s.Stream, OpenAIWSMode: s.OpenAIWSMode, DurationMs: s.DurationMs, FirstTokenMs: s.FirstTokenMs,
-		WSConnReused: s.WSConnReused, WSPreflightFailCount: s.WSPreflightFailCount, WSConnPickMs: s.WSConnPickMs,
+		FirstOutputStages: s.FirstOutputStages,
+		WSConnReused:      s.WSConnReused, WSPreflightFailCount: s.WSPreflightFailCount, WSConnPickMs: s.WSConnPickMs,
 		WSPayloadBytes: s.WSPayloadBytes, WSEventCount: s.WSEventCount, WSQueueWaitMs: s.WSQueueWaitMs,
 		CompactPayloadBytes: s.CompactPayloadBytes, CompactRetryCount: s.CompactRetryCount,
 		CompactClientCanceled: s.CompactClientCanceled, UserAgent: s.UserAgent, IPAddress: s.IPAddress,

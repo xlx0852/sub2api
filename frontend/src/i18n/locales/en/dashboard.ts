@@ -153,14 +153,14 @@ export default {
       },
       grok: {
         description:
-          'Add the following configuration files to your Codex CLI config directory to use Grok models via this Sub2API Grok group (OpenAI Responses compatible).',
+          'Add the following configuration files to your Codex CLI config directory to use Grok models via this Gateway Grok group (OpenAI Responses compatible).',
         configTomlHint:
           'Make sure the following content is at the beginning of the config.toml file. Default model is grok-4.6.',
         note: 'Make sure the config directory exists. macOS/Linux users can run mkdir -p ~/.codex to create it. Put this site API key in auth.json as OPENAI_API_KEY.',
         noteWindows:
           'Press Win+R and enter %userprofile%\\.codex to open the config directory. Create it manually if it does not exist. Put this site API key in auth.json as OPENAI_API_KEY.',
         cliDescription:
-          'Configure Grok Build, Claude Code, Codex, or OpenCode so requests go through this Sub2API Grok group.',
+          'Configure Grok Build, Claude Code, Codex, or OpenCode so requests go through this Gateway Grok group.',
         cliConfigHint:
           'If config.toml already exists, back it up and merge this model block. Then run grok inspect to verify.',
         cliNote:
@@ -168,7 +168,7 @@ export default {
         cliNoteWindows:
           'Save as %userprofile%\\.grok\\config.toml, run grok inspect, then pick grok in /model.',
         claudeDescription:
-          'Configure Claude Code so Messages API requests go through this Sub2API Grok group.',
+          'Configure Claude Code so Messages API requests go through this Gateway Grok group.',
         claudeSettingsHint:
           'User-level persistent config. This file contains the API key — do not commit it to a project repo.',
         claudeNote:

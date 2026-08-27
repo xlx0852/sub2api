@@ -62,6 +62,11 @@
         @exit-fullscreen="exitFullscreen"
       />
 
+      <OpsFirstOutputBreakdown
+        v-if="opsEnabled && !(loading && !hasLoadedOnce) && (isFullscreen || activeSection === 'overview')"
+        :breakdown="overview?.first_output_breakdown"
+      />
+
       <OpsProviderStatusCard
         v-if="opsEnabled && !(loading && !hasLoadedOnce) && (isFullscreen || activeSection === 'overview')"
         :current="providerStatus"
@@ -198,6 +203,7 @@ import {
 } from '@/api/admin/ops'
 import { useAdminSettingsStore, useAppStore } from '@/stores'
 import OpsDashboardHeader from '@/views/admin/ops/components/OpsDashboardHeader.vue'
+import OpsFirstOutputBreakdown from '@/views/admin/ops/components/OpsFirstOutputBreakdown.vue'
 import OpsDashboardSkeleton from '@/views/admin/ops/components/OpsDashboardSkeleton.vue'
 import OpsConcurrencyCard from '@/views/admin/ops/components/OpsConcurrencyCard.vue'
 import OpsErrorDetailModal from '@/views/admin/ops/components/OpsErrorDetailModal.vue'

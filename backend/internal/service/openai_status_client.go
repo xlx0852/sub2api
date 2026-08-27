@@ -91,7 +91,7 @@ func (c *OpenAIStatusClient) Fetch(ctx context.Context, fetchedAt time.Time) (*P
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "sub2api-provider-status/1")
+	req.Header.Set("User-Agent", "provider-status/1")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch openai status: %w", err)

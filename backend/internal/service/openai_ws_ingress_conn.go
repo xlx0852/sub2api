@@ -124,6 +124,8 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 		return nil, errors.New("upstream websocket lease is nil")
 	}
 	turnStart := time.Now()
+	firstOutputTracker := NewFirstOutputStageTracker(turnStart)
+	firstOutputTracker.transition(firstOutputStageConnect, turnStart, false)
 	billingRequestID := "ws-turn:" + generateRequestID()
 	acceptedPersisted := false
 	wroteDownstream := false
@@ -134,6 +136,7 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 			false,
 		)
 	}
+	firstOutputTracker.transition(firstOutputStageUpstream, time.Now(), false)
 	if sess.debugEnabled {
 		logOpenAIWSModeDebug(
 			"ingress_ws_turn_request_sent account_id=%d turn=%d conn_id=%s payload_bytes=%d",
@@ -148,6 +151,7 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 	usage := OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
 	var firstTokenMs *int
+	firstOutputPending := false
 	reqStream := openAIWSPayloadBoolFromRaw(payload, "stream", true)
 	turnPreviousResponseID := openAIWSPayloadStringFromRaw(payload, "previous_response_id")
 	turnPreviousResponseIDKind := ClassifyOpenAIPreviousResponseIDKind(turnPreviousResponseID)
@@ -212,6 +216,22 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 				}
 			}
 			fallbackReason, _ := classifyOpenAIWSErrorEventFromRaw(errCodeRaw, errTypeRaw, errMsgRaw)
+			recoverableConnectionLimit := fallbackReason == openAIWSIngressStageConnectionLimitReached &&
+				!wroteDownstream &&
+				!sess.turnConnectionLimitRecoveryTried &&
+				sess.canRecoverIngressConnectionLimit(payload)
+			if recoverableConnectionLimit {
+				lease.MarkBroken()
+				errMsg := strings.TrimSpace(errMsgRaw)
+				if errMsg == "" {
+					errMsg = "upstream websocket connection limit reached"
+				}
+				return nil, wrapOpenAIWSIngressTurnError(
+					openAIWSIngressStageConnectionLimitReached,
+					errors.New(errMsg),
+					false,
+				)
+			}
 			errCode, errType, errMessage := summarizeOpenAIWSErrorEventFieldsFromRaw(errCodeRaw, errTypeRaw, errMsgRaw)
 			recoverablePrevNotFound := fallbackReason == openAIWSIngressStagePreviousResponseNotFound &&
 				turnPreviousResponseID != "" &&
@@ -276,6 +296,7 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 					ResponseHeaders: cloneHeader(lease.HandshakeHeaders()),
 				}
 			}
+			s.markOpenAIStreamTerminalError(c, account, false, responseID, upstreamMessage, errMsgRaw)
 		}
 		if eventType != "" && eventType != "error" && !acceptedPersisted {
 			acceptedPersisted = true
@@ -294,6 +315,8 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 		if firstTokenMs == nil && isTokenEvent {
 			ms := int(time.Since(turnStart).Milliseconds())
 			firstTokenMs = &ms
+			firstOutputTracker.transition(firstOutputStageWrite, time.Now(), false)
+			firstOutputPending = true
 		}
 		if openAIWSEventShouldParseUsage(eventType) {
 			parseOpenAIWSResponseUsageFromCompletedEvent(upstreamMessage, &usage)
@@ -311,6 +334,7 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 					UpstreamOutTok: usage.OutputTokens,
 				})
 			}
+			s.markOpenAIStreamTerminalError(c, account, false, responseID, upstreamMessage, extractOpenAISSEErrorMessage(upstreamMessage))
 		}
 
 		if !clientDisconnected {
@@ -344,6 +368,10 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 				}
 			} else {
 				wroteDownstream = true
+				if firstOutputPending {
+					firstOutputTracker.finish(time.Now())
+					firstOutputPending = false
+				}
 			}
 		}
 		if isTerminalEvent {
@@ -383,23 +411,24 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 			payloadBytesValue := int64(payloadBytes)
 			eventCountValue := eventCount
 			result := &OpenAIForwardResult{
-				RequestID:        responseID,
-				BillingRequestID: billingRequestID,
-				Usage:            usage,
-				Model:            originalModel,
-				UpstreamModel:    mappedModel,
-				ServiceTier:      extractOpenAIServiceTierFromBody(payload),
-				ReasoningEffort:  ApplyThinkingEnabledFallback(extractOpenAIReasoningEffortFromBody(payload, firstNonEmpty(mappedModel, originalModel)), payload, mappedModel),
-				Stream:           reqStream,
-				OpenAIWSMode:     true,
-				ResponseHeaders:  lease.HandshakeHeaders(),
-				Duration:         time.Since(turnStart),
-				FirstTokenMs:     firstTokenMs,
-				WSPayloadBytes:   &payloadBytesValue,
-				WSEventCount:     &eventCountValue,
-				WSConnReused:     &reused,
-				WSConnPickMs:     &connPickMs,
-				WSQueueWaitMs:    &queueWaitMs,
+				RequestID:         responseID,
+				BillingRequestID:  billingRequestID,
+				Usage:             usage,
+				Model:             originalModel,
+				UpstreamModel:     mappedModel,
+				ServiceTier:       extractOpenAIServiceTierFromBody(payload),
+				ReasoningEffort:   ApplyThinkingEnabledFallback(extractOpenAIReasoningEffortFromBody(payload, firstNonEmpty(mappedModel, originalModel)), payload, mappedModel),
+				Stream:            reqStream,
+				OpenAIWSMode:      true,
+				ResponseHeaders:   lease.HandshakeHeaders(),
+				Duration:          time.Since(turnStart),
+				FirstTokenMs:      firstTokenMs,
+				FirstOutputStages: firstOutputTracker.Snapshot(),
+				WSPayloadBytes:    &payloadBytesValue,
+				WSEventCount:      &eventCountValue,
+				WSConnReused:      &reused,
+				WSConnPickMs:      &connPickMs,
+				WSQueueWaitMs:     &queueWaitMs,
 			}
 			if replayInput := normalizeOpenAIReplayItemsForAccount(account, replayCollector.Items()); len(replayInput) > 0 {
 				result.wsReplayInput = replayInput

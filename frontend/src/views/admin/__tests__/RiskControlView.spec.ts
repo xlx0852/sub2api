@@ -6,6 +6,10 @@ import type { DOMWrapper, VueWrapper } from '@vue/test-utils'
 import RiskControlView from '@/features/admin/views/RiskControlView.vue'
 import type { ContentModerationConfig, UpdateContentModerationConfig } from '@/api/admin/riskControl'
 
+vi.mock('@/features/admin/views/components/RetrospectiveRiskPanel.vue', () => ({
+  default: defineComponent({ template: '<div data-test="retrospective-risk-panel-stub" />' }),
+}))
+
 const {
   getConfig,
   updateConfig,

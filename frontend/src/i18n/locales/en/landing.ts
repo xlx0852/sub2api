@@ -220,8 +220,8 @@ export default {
 
   // Setup Wizard
   setup: {
-    title: 'Sub2API Setup',
-    description: 'Configure your Sub2API instance',
+    title: 'Gateway Setup',
+    description: 'Configure your Gateway instance',
     database: {
       title: 'Database Configuration',
       description: 'Connect to your PostgreSQL database',

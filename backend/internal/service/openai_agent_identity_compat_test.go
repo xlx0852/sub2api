@@ -132,10 +132,14 @@ func TestOpenAIAgentIdentityPassthroughKeepsSessionAndPromptCacheHeaders(t *test
 	require.Equal(t, "AgentAssertion", strings.SplitN(req.Header.Get("Authorization"), " ", 2)[0])
 	require.Equal(t, "account-agent-passthrough", req.Header.Get("chatgpt-account-id"))
 	// Client session headers take precedence over prompt_cache_key, then get isolated.
-	require.NotEqual(t, "client-session", req.Header.Get("session_id"))
-	require.NotEqual(t, "client-conversation", req.Header.Get("conversation_id"))
-	require.Equal(t, isolateOpenAISessionID(0, "client-session"), req.Header.Get("session_id"))
-	require.Equal(t, isolateOpenAISessionID(0, "client-conversation"), req.Header.Get("conversation_id"))
+	// 对齐官方 Codex：只写 session-id / thread-id，不再写 session_id/conversation_id。
+	require.NotEqual(t, "client-session", req.Header.Get("session-id"))
+	require.NotEqual(t, "client-conversation", req.Header.Get("thread-id"))
+	require.Equal(t, isolateOpenAISessionID(0, "client-session"), req.Header.Get("session-id"))
+	require.Equal(t, isolateOpenAISessionID(0, "client-conversation"), req.Header.Get("thread-id"))
+	require.Empty(t, req.Header.Get("session_id"), "不再写下划线兼容头")
+	require.Empty(t, req.Header.Get("conversation_id"), "不再写下划线兼容头")
+	require.Empty(t, req.Header.Get("thread_id"), "不再写下划线兼容头")
 	// prompt_cache_key remains available as fallback when client session headers are absent.
 	require.Equal(t, isolateOpenAISessionID(0, "cache-agent"), isolateOpenAISessionID(0, "cache-agent"))
 }
@@ -272,7 +276,7 @@ func TestOpenAIAgentIdentityTaskInvalidRetriesExactlyOnce(t *testing.T) {
 	openAIAgentIdentityAuthAPIBaseURL = registerServer.URL
 	t.Cleanup(func() { openAIAgentIdentityAuthAPIBaseURL = oldBase })
 
-// OAuth auto-passthrough forces stream=true, so successful retries must speak SSE.
+	// OAuth auto-passthrough forces stream=true, so successful retries must speak SSE.
 	successBody := "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-agent-retry\",\"object\":\"response\",\"status\":\"completed\",\"model\":\"gpt-5.4\",\"output\":[],\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}\n\n"
 	upstream := &httpUpstreamRecorder{responses: []*http.Response{
 		{StatusCode: http.StatusUnauthorized, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"invalid_task_id"}}`))},

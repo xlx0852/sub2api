@@ -108,6 +108,7 @@ type UsageLog struct {
 	OpenAIWSMode          bool
 	DurationMs            *int
 	FirstTokenMs          *int
+	FirstOutputStages     *FirstOutputStages
 	WSConnReused          *bool
 	WSPreflightFailCount  *int
 	WSConnPickMs          *int

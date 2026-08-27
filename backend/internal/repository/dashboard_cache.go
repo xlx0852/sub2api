@@ -19,7 +19,7 @@ type dashboardCache struct {
 }
 
 func NewDashboardCache(rdb *redis.Client, cfg *config.Config) ports.DashboardStatsCache {
-	prefix := "sub2api:"
+	prefix := "gateway:"
 	if cfg != nil {
 		prefix = strings.TrimSpace(cfg.Dashboard.KeyPrefix)
 	}

@@ -45,7 +45,7 @@ func (c *grokOAuthClient) ExchangeCode(ctx context.Context, code, codeVerifier, 
 	var tokenResp xai.TokenResponse
 	resp, err := client.R().
 		SetContext(ctx).
-		SetHeader("User-Agent", "sub2api-grok-oauth/1.0").
+		SetHeader("User-Agent", "xai-oauth/1.0").
 		SetFormDataFromValues(formData).
 		SetSuccessResult(&tokenResp).
 		Post(c.tokenURL)
@@ -86,7 +86,7 @@ func (c *grokOAuthClient) RefreshTokenAtEndpoint(ctx context.Context, refreshTok
 
 	resp, err := client.R().
 		SetContext(ctx).
-		SetHeader("User-Agent", "sub2api-grok-oauth/1.0").
+		SetHeader("User-Agent", "xai-oauth/1.0").
 		SetFormDataFromValues(formData).
 		SetSuccessResult(&tokenResp).
 		Post(tokenEndpoint)
@@ -121,7 +121,7 @@ func (c *grokOAuthClient) StartDeviceFlow(ctx context.Context, proxyURL, clientI
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("Accept", "application/json").
-		SetHeader("User-Agent", "sub2api-grok-oauth/1.0").
+		SetHeader("User-Agent", "xai-oauth/1.0").
 		SetFormDataFromValues(formData).
 		SetSuccessResult(&device).
 		Post(discovery.DeviceAuthorizationEndpoint)
@@ -160,7 +160,7 @@ func (c *grokOAuthClient) PollDeviceToken(ctx context.Context, deviceCode, token
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("Accept", "application/json").
-		SetHeader("User-Agent", "sub2api-grok-oauth/1.0").
+		SetHeader("User-Agent", "xai-oauth/1.0").
 		SetFormDataFromValues(formData).
 		Post(tokenEndpoint)
 	if err != nil {
@@ -195,7 +195,7 @@ func (c *grokOAuthClient) discover(ctx context.Context, proxyURL string) (*xai.O
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("Accept", "application/json").
-		SetHeader("User-Agent", "sub2api-grok-oauth/1.0").
+		SetHeader("User-Agent", "xai-oauth/1.0").
 		SetSuccessResult(&discovery).
 		Get(discoveryURL)
 	if err != nil {

@@ -2361,7 +2361,7 @@
           </div>
         </div>
 
-        <!-- 上游 Sub2API 计费倍率探测（仅 API Key 账号） -->
+        <!-- 上游网关计费倍率探测（仅 API Key 账号） -->
         <div v-if="account?.type === 'apikey'" class="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-dark-600" data-testid="edit-account-upstream-billing">
           <div class="flex items-center justify-between gap-4">
             <div>
@@ -3067,7 +3067,7 @@ const costPreviewAccountCost = computed(() => normalizedPreviewNumber(costPrevie
 const costPreviewGrossMargin = computed(() => costPreviewUserCharge.value - costPreviewAccountCost.value)
 const formatPreviewNumber = (value: number) => Number.isFinite(value) ? value.toFixed(4) : '0.0000'
 
-// 上游 Sub2API 计费信息仅自动探测供参考，不回写综合成本倍率。
+// 上游网关计费信息仅自动探测供参考，不回写综合成本倍率。
 const upstreamBillingAutoProbeEnabled = ref(false)
 
 const handleUpstreamBillingAutoProbeChange = (enabled: boolean) => {
