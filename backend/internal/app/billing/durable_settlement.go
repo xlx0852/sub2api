@@ -51,13 +51,14 @@ func (m SettlementDurabilityMode) String() string {
 }
 
 type DurableSettlementOptions struct {
-	Owner         string
-	PollInterval  time.Duration
-	LeaseDuration time.Duration
-	BatchSize     int
-	RetryBase     time.Duration
-	RetryMax      time.Duration
-	StatsInterval time.Duration
+	Owner                  string
+	PollInterval           time.Duration
+	ReconciliationInterval time.Duration
+	LeaseDuration          time.Duration
+	BatchSize              int
+	RetryBase              time.Duration
+	RetryMax               time.Duration
+	StatsInterval          time.Duration
 }
 
 type DurableSettlement struct {
@@ -171,6 +172,9 @@ func NewDurableSettlement(attempts ports.UsageSettlementRepository, billing port
 	}
 	if options.PollInterval <= 0 {
 		options.PollInterval = time.Second
+	}
+	if options.ReconciliationInterval <= 0 {
+		options.ReconciliationInterval = time.Minute
 	}
 	if options.LeaseDuration <= 0 {
 		options.LeaseDuration = 30 * time.Second
@@ -365,15 +369,26 @@ func (s *DurableSettlement) run(ctx context.Context, done chan struct{}) {
 	defer close(done)
 	ticker := time.NewTicker(s.options.PollInterval)
 	defer ticker.Stop()
+	reconciliationTicker := time.NewTicker(s.options.ReconciliationInterval)
+	defer reconciliationTicker.Stop()
 	statsTicker := time.NewTicker(s.options.StatsInterval)
 	defer statsTicker.Stop()
+	if s.Mode() != SettlementDurabilityOff {
+		s.reconcileOnce(ctx)
+	}
 	for {
+		drainRequested := false
+		reconciliationRequested := false
 		emitStats := false
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			drainRequested = true
 		case <-s.wake:
+			drainRequested = true
+		case <-reconciliationTicker.C:
+			reconciliationRequested = true
 		case <-statsTicker.C:
 			emitStats = true
 		}
@@ -381,23 +396,29 @@ func (s *DurableSettlement) run(ctx context.Context, done chan struct{}) {
 		if mode == SettlementDurabilityOff {
 			continue
 		}
-		s.recoverExpiredStarted(ctx)
-		expired, expireErr := s.attempts.ExpireStarted(ctx, time.Now().UTC(), s.options.BatchSize)
-		if expireErr != nil && !errors.Is(expireErr, context.Canceled) {
-			slog.Warn("durable settlement reconciliation scan failed", "error", expireErr)
-		} else if expired > 0 {
-			s.reconciliationTotal.Add(uint64(expired))
-			slog.Warn("durable settlement attempts require reconciliation", "count", expired)
+		if reconciliationRequested {
+			s.reconcileOnce(ctx)
 		}
 		if emitStats {
 			s.logBacklogStats(ctx)
 		}
-		if mode != SettlementDurabilityAuthoritative {
+		if mode != SettlementDurabilityAuthoritative || !drainRequested {
 			continue
 		}
 		if err := s.drainOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			slog.Warn("durable settlement worker iteration failed", "error", err)
 		}
+	}
+}
+
+func (s *DurableSettlement) reconcileOnce(ctx context.Context) {
+	s.recoverExpiredStarted(ctx)
+	expired, expireErr := s.attempts.ExpireStarted(ctx, time.Now().UTC(), s.options.BatchSize)
+	if expireErr != nil && !errors.Is(expireErr, context.Canceled) {
+		slog.Warn("durable settlement reconciliation scan failed", "error", expireErr)
+	} else if expired > 0 {
+		s.reconciliationTotal.Add(uint64(expired))
+		slog.Warn("durable settlement attempts require reconciliation", "count", expired)
 	}
 }
 

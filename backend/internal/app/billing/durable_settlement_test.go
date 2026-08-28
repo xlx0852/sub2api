@@ -22,6 +22,7 @@ type durableSettlementRepoFake struct {
 	startedCount  int
 	readyCount    int
 	expireCount   int
+	recoveryScans int
 	statsCount    int
 	lastClaim     ports.UsageSettlementClaimRequest
 	lastStarted   *domain.UsageSettlementAttempt
@@ -60,6 +61,9 @@ func (f *durableSettlementRepoFake) ExpireStarted(context.Context, time.Time, in
 	return 0, nil
 }
 func (f *durableSettlementRepoFake) ListExpiredRecoverable(context.Context, time.Time, int) ([]domain.UsageSettlementAttempt, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.recoveryScans++
 	return nil, nil
 }
 func (f *durableSettlementRepoFake) BacklogStats(context.Context) (*ports.UsageSettlementBacklogStats, error) {
@@ -100,6 +104,12 @@ func (f *durableSettlementRepoFake) setClaim(items []domain.UsageSettlementAttem
 	f.claim = items
 }
 
+func (f *durableSettlementRepoFake) reconciliationCounts() (recovery, expire int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.recoveryScans, f.expireCount
+}
+
 type durableSettlementBillingFake struct {
 	mu      sync.Mutex
 	calls   int
@@ -111,6 +121,12 @@ type durableSettlementBillingFake struct {
 type durableSettlementObserverFake struct {
 	mu    sync.Mutex
 	calls int
+}
+
+type durableSettlementRecovererFake struct{}
+
+func (durableSettlementRecovererFake) RecoverUsageSettlement(context.Context, *domain.UsageSettlementAttempt) (bool, error) {
+	return false, nil
 }
 
 func (f *durableSettlementObserverFake) AfterUsageSettlement(context.Context, *domain.UsageSettlementAttempt, *domain.UsageSettlementApplyResult) {
@@ -252,6 +268,57 @@ func TestDurableSettlementModesGateWritesAndClaims(t *testing.T) {
 	worker.logBacklogStats(context.Background())
 	_, _, _, _, stats, _, _ := repo.counts()
 	require.Equal(t, 1, stats)
+	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	require.NoError(t, worker.StopAndWait(stopCtx))
+}
+
+func TestDurableSettlementWakeDrainsWithoutReconciliationScan(t *testing.T) {
+	repo := &durableSettlementRepoFake{}
+	worker := NewDurableSettlement(repo, &durableSettlementBillingFake{}, DurableSettlementOptions{
+		PollInterval:           time.Hour,
+		ReconciliationInterval: time.Hour,
+		StatsInterval:          time.Hour,
+	})
+	worker.SetMode(SettlementDurabilityAuthoritative)
+	worker.SetTerminalRecoverer(durableSettlementRecovererFake{})
+	worker.Start(context.Background())
+	require.Eventually(t, func() bool {
+		recovery, expire := repo.reconciliationCounts()
+		return recovery == 1 && expire == 1
+	}, time.Second, 5*time.Millisecond)
+
+	_, _, claimsBefore, _, _, _, _ := repo.counts()
+	worker.Wake()
+	require.Eventually(t, func() bool {
+		_, _, claims, _, _, _, _ := repo.counts()
+		return claims > claimsBefore
+	}, time.Second, 5*time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
+	recovery, expire := repo.reconciliationCounts()
+	require.Equal(t, 1, recovery)
+	require.Equal(t, 1, expire)
+
+	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	require.NoError(t, worker.StopAndWait(stopCtx))
+}
+
+func TestDurableSettlementRunsReconciliationPeriodically(t *testing.T) {
+	repo := &durableSettlementRepoFake{}
+	worker := NewDurableSettlement(repo, &durableSettlementBillingFake{}, DurableSettlementOptions{
+		PollInterval:           time.Hour,
+		ReconciliationInterval: 10 * time.Millisecond,
+		StatsInterval:          time.Hour,
+	})
+	worker.SetMode(SettlementDurabilityShadow)
+	worker.SetTerminalRecoverer(durableSettlementRecovererFake{})
+	worker.Start(context.Background())
+	require.Eventually(t, func() bool {
+		recovery, expire := repo.reconciliationCounts()
+		return recovery >= 2 && expire >= 2
+	}, time.Second, 5*time.Millisecond)
+
 	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	require.NoError(t, worker.StopAndWait(stopCtx))
