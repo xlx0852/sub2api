@@ -522,13 +522,13 @@ func (s *ConcurrencyService) TrackAPIKeySlot(ctx context.Context, apiKeyID int64
 		return func() {}
 	}
 
-	return func() {
+	return onceRelease(func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := cache.ReleaseAPIKeySlot(bgCtx, apiKeyID, requestID); err != nil {
 			logger.LegacyPrintf("service.concurrency", "Warning: failed to release api key slot for %d (req=%s): %v", apiKeyID, requestID, err)
 		}
-	}
+	})
 }
 
 // GetAPIKeyConcurrencyBatch gets real-time active request counts for API keys.
