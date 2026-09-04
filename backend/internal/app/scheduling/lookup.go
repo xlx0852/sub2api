@@ -28,6 +28,9 @@ func LookupSchedulable(ctx context.Context, snapshot AccountLookup, fallback Acc
 	if snapshot != nil {
 		return snapshot.GetAccount(ctx, accountID)
 	}
+	if fallback == nil {
+		return nil, fmt.Errorf("account lookup unavailable for account %d", accountID)
+	}
 	return fallback.GetAccount(ctx, accountID)
 }
 

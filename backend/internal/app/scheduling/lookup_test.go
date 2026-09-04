@@ -46,6 +46,13 @@ func TestLookupSchedulableFallsBackWhenSnapshotNil(t *testing.T) {
 	require.True(t, fallback.called)
 }
 
+func TestLookupSchedulableReturnsErrorWhenNoLookupAvailable(t *testing.T) {
+	got, err := LookupSchedulable(context.Background(), nil, nil, 8)
+
+	require.Nil(t, got)
+	require.EqualError(t, err, "account lookup unavailable for account 8")
+}
+
 func TestHydrateSelectedSkipsWhenSnapshotNil(t *testing.T) {
 	account := &domain.Account{ID: 3}
 	got, err := HydrateSelected(context.Background(), nil, account, "gateway")
