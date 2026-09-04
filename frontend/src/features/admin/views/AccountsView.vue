@@ -2192,13 +2192,13 @@ const isSchedulableToggleDisabled = (account: Account) => {
 }
 
 const enterTrashMode = () => {
-  ;(params as any).status = 'trash'
+  (params as any).status = 'trash'
   pagination.page = 1
   reload()
 }
 
 const exitTrashMode = () => {
-  ;(params as any).status = ''
+  (params as any).status = ''
   pagination.page = 1
   reload()
 }
