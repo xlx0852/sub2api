@@ -4,7 +4,6 @@ import Toggle from '@/ui/Toggle.vue'
 import type { AffiliateAdminEntry, SimpleUser } from '@/api/admin/affiliates'
 
 defineProps<{
-  form: Record<string, any>
   affiliateState: Record<string, any>
   affiliateModal: Record<string, any>
   affiliateBatchModal: Record<string, any>
@@ -23,6 +22,8 @@ defineProps<{
   submitAffiliateModal: () => void
   submitAffiliateBatchModal: () => void
 }>()
+
+const form = defineModel<Record<string, any>>('form', { required: true })
 
 const { t } = useI18n()
 </script>

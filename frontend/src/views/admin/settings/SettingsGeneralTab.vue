@@ -4,13 +4,14 @@ import Toggle from '@/ui/Toggle.vue'
 import ImageUpload from '@/components/common/ImageUpload.vue'
 
 defineProps<{
-  form: Record<string, any>
   removeEndpoint: (index: number) => void
   addEndpoint: () => void
   moveMenuItem: (index: number, delta: -1 | 1) => void
   removeMenuItem: (index: number) => void
   addMenuItem: () => void
 }>()
+
+const form = defineModel<Record<string, any>>('form', { required: true })
 
 const tablePageSizeOptionsInput = defineModel<string>('tablePageSizeOptionsInput', { required: true })
 const { t } = useI18n()

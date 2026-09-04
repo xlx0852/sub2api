@@ -6,7 +6,6 @@ import Icon from '@/components/icons/Icon.vue'
 type EmailOAuthProvider = 'github' | 'google'
 
 defineProps<{
-  form: Record<string, any>
   adminApiKeyLoading: boolean
   adminApiKeyExists: boolean
   adminApiKeyMasked: string
@@ -37,6 +36,8 @@ defineProps<{
   handleWeChatMPEnabledChange: (value: boolean) => void
   handleWeChatMobileEnabledChange: (value: boolean) => void
 }>()
+
+const form = defineModel<Record<string, any>>('form', { required: true })
 
 const registrationEmailSuffixWhitelistDraft = defineModel<string>(
   'registrationEmailSuffixWhitelistDraft',

@@ -7,7 +7,6 @@ import PaymentProviderList from '@/components/payment/PaymentProviderList.vue'
 import type { ProviderInstance } from '@/types/payment'
 
 defineProps<{
-  form: Record<string, any>
   paymentGuideHref: string
   paymentMethodsHref: string
   loadBalanceOptions: { value: string; label: string }[]
@@ -30,6 +29,8 @@ defineProps<{
   handleToggleType: (provider: ProviderInstance, type: string) => Promise<void>
   handleReorderProviders: (updates: { id: number; sort_order: number }[]) => Promise<void>
 }>()
+
+const form = defineModel<Record<string, any>>('form', { required: true })
 
 const { t } = useI18n()
 </script>

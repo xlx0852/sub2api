@@ -4,17 +4,18 @@ import Toggle from '@/ui/Toggle.vue'
 import type { LoginAgreementDocument } from '@/types'
 
 defineProps<{
-  form: {
-    login_agreement_enabled: boolean
-    login_agreement_mode: string
-    login_agreement_updated_at: string
-    login_agreement_documents: LoginAgreementDocument[]
-  }
   localText: (zh: string, en: string) => string
   addLoginAgreementDocument: () => void
   removeLoginAgreementDocument: (index: number) => void
   loginAgreementRoutePath: (doc: LoginAgreementDocument, index: number) => string
 }>()
+
+const form = defineModel<{
+    login_agreement_enabled: boolean
+    login_agreement_mode: string
+    login_agreement_updated_at: string
+    login_agreement_documents: LoginAgreementDocument[]
+}>('form', { required: true })
 </script>
 
 <template>

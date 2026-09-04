@@ -5,7 +5,6 @@ import Toggle from '@/ui/Toggle.vue'
 import EmailTemplateEditor from '@/views/admin/settings/EmailTemplateEditor.vue'
 
 defineProps<{
-  form: Record<string, any>
   testingSmtp: boolean
   sendingTestEmail: boolean
   loadFailed: boolean
@@ -14,6 +13,8 @@ defineProps<{
   sendTestEmail: () => void
   addQuotaNotifyEmail: () => void
 }>()
+
+const form = defineModel<Record<string, any>>('form', { required: true })
 
 const testEmailAddress = defineModel<string>('testEmailAddress', { required: true })
 const smtpPasswordManuallyEdited = defineModel<boolean>('smtpPasswordManuallyEdited', { required: true })

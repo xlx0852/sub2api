@@ -8,7 +8,6 @@ import type { WebSearchEmulationConfig, WebSearchProviderConfig } from '@/api/ad
 import type { Proxy } from '@/types'
 
 defineProps<{
-  form: Record<string, any>
   overloadCooldownForm: Record<string, any>
   overloadCooldownLoading: boolean
   overloadCooldownSaving: boolean
@@ -83,6 +82,8 @@ defineProps<{
   addCodexWhitelistRow: () => void
   removeCodexWhitelistRow: (i: number) => void
 }>()
+
+const form = defineModel<Record<string, any>>('form', { required: true })
 
 const wsTestQuery = defineModel<string>('wsTestQuery', { required: true })
 const wsTestDialogOpen = defineModel<boolean>('wsTestDialogOpen', { required: true })
