@@ -62,7 +62,7 @@
         <!-- Tab: Security — Admin API Key -->
         <div v-show="activeTab === 'security'" class="space-y-6">
           <SettingsSecurityTab
-            v-model:form="form"
+            v-model:form="formModel"
             :admin-api-key-loading="adminApiKeyLoading"
             :admin-api-key-exists="adminApiKeyExists"
             :admin-api-key-masked="adminApiKeyMasked"
@@ -100,7 +100,7 @@
         <!-- Tab: Gateway -->
         <div v-show="activeTab === 'gateway'" class="space-y-6">
           <SettingsGatewayTab
-            v-model:form="form"
+            v-model:form="formModel"
             v-model:overloadCooldownForm="overloadCooldownForm"
             :overloadCooldownLoading="overloadCooldownLoading"
             :overloadCooldownSaving="overloadCooldownSaving"
@@ -185,7 +185,7 @@
         <!-- Tab: Users -->
         <div v-show="activeTab === 'users'" class="space-y-6">
           <SettingsUsersTab
-            v-model:form="form"
+            v-model:form="formModel"
             :auth-source-defaults="authSourceDefaults"
             :auth-source-defaults-meta="authSourceDefaultsMeta"
             :subscription-groups="subscriptionGroups"
@@ -203,7 +203,7 @@
         <!-- Tab: General -->
         <div v-show="activeTab === 'general'" class="space-y-6">
           <SettingsGeneralTab
-            v-model:form="form"
+            v-model:form="formModel"
             :remove-endpoint="removeEndpoint"
             :add-endpoint="addEndpoint"
             :move-menu-item="moveMenuItem"
@@ -217,7 +217,7 @@
 	        <!-- Tab: Login Agreement -->
 	        <div v-show="activeTab === 'agreement'">
           <SettingsAgreementTab
-            v-model:form="form"
+            v-model:form="formModel"
             :local-text="localText"
             :add-login-agreement-document="addLoginAgreementDocument"
             :remove-login-agreement-document="removeLoginAgreementDocument"
@@ -229,7 +229,7 @@
 	        <!-- Tab: Features (功能开关) -->
         <div v-show="activeTab === 'features'" class="space-y-6">
           <SettingsFeaturesTab
-            v-model:form="form"
+            v-model:form="formModel"
             :affiliate-state="affiliateState"
             :affiliate-modal="affiliateModal"
             :affiliate-batch-modal="affiliateBatchModal"
@@ -255,7 +255,7 @@
         <!-- Tab: Payment -->
         <div v-show="activeTab === 'payment'" class="space-y-6">
           <SettingsPaymentTab
-            v-model:form="form"
+            v-model:form="formModel"
             :payment-guide-href="paymentGuideHref"
             :payment-methods-href="paymentMethodsHref"
             :load-balance-options="loadBalanceOptions"
@@ -280,7 +280,7 @@
 
         <div v-show="activeTab === 'email'" class="space-y-6">
           <SettingsEmailTab
-            v-model:form="form"
+            v-model:form="formModel"
             :testing-smtp="testingSmtp"
             :sending-test-email="sendingTestEmail"
             :load-failed="loadFailed"
@@ -1340,6 +1340,11 @@ const form = reactive<SettingsForm>({
   affiliate_enabled: false,
   // Allow user view error requests
   allow_user_view_error_requests: false,
+});
+
+const formModel = computed({
+  get: () => form,
+  set: (next: SettingsForm) => Object.assign(form, next),
 });
 
 type OpenAIAdvancedSchedulerOverrideKey =
