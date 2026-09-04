@@ -17,6 +17,15 @@ func TestTryAcquireAccountSlotNilConcurrencyFailOpen(t *testing.T) {
 	got.ReleaseFunc()
 }
 
+func TestOnceReleaseRunsOnlyOnce(t *testing.T) {
+	calls := 0
+	release := onceRelease(func() { calls++ })
+	release()
+	release()
+
+	require.Equal(t, 1, calls)
+}
+
 func TestGatewayAndOpenAISlotAcquireShareHelper(t *testing.T) {
 	gateway := &GatewayService{}
 	openai := &OpenAIGatewayService{}

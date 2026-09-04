@@ -389,7 +389,7 @@ func (s *ConcurrencyService) AcquireModelAwareAccountSlot(ctx context.Context, r
 	}
 	return &AcquireResult{
 		Acquired:    true,
-		ReleaseFunc: func() { accountRelease(); releaseModel() },
+		ReleaseFunc: onceRelease(func() { accountRelease(); releaseModel() }),
 	}, nil
 }
 
@@ -402,6 +402,16 @@ type AcquireResult struct {
 	// 此时 Acquired 为 false，且调用方不应再进入账号等待队列，
 	// 而应直接降级让路（HTTP 429 / WS 1013）。
 	ModelLimited bool
+}
+
+// onceRelease makes distributed-slot cleanup safe when multiple error/finally
+// paths converge on the same selection result.
+func onceRelease(release func()) func() {
+	if release == nil {
+		return nil
+	}
+	var once sync.Once
+	return func() { once.Do(release) }
 }
 
 type AccountWithConcurrency = domain.AccountWithConcurrency
@@ -432,13 +442,13 @@ func (s *ConcurrencyService) AcquireAccountSlot(ctx context.Context, accountID i
 	if acquired {
 		return &AcquireResult{
 			Acquired: true,
-			ReleaseFunc: func() {
+			ReleaseFunc: onceRelease(func() {
 				bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if err := s.cache.ReleaseAccountSlot(bgCtx, accountID, requestID); err != nil {
 					logger.LegacyPrintf("service.concurrency", "Warning: failed to release account slot for %d (req=%s): %v", accountID, requestID, err)
 				}
-			},
+			}),
 		}, nil
 	}
 
@@ -471,13 +481,13 @@ func (s *ConcurrencyService) AcquireUserSlot(ctx context.Context, userID int64, 
 	if acquired {
 		return &AcquireResult{
 			Acquired: true,
-			ReleaseFunc: func() {
+			ReleaseFunc: onceRelease(func() {
 				bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if err := s.cache.ReleaseUserSlot(bgCtx, userID, requestID); err != nil {
 					logger.LegacyPrintf("service.concurrency", "Warning: failed to release user slot for %d (req=%s): %v", userID, requestID, err)
 				}
-			},
+			}),
 		}, nil
 	}
 
