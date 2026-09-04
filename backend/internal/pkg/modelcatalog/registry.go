@@ -72,6 +72,9 @@ func Load(opts *LoadOptions) error {
 	if cat.UIPresets == nil {
 		cat.UIPresets = map[string][]UIPreset{}
 	}
+	if err := validateOpenAICatalog(cat.Platforms["openai"]); err != nil {
+		return err
+	}
 
 	// Expand identity mappings for grok models when only aliases are listed.
 	if p, ok := cat.Platforms["grok"]; ok {
@@ -92,6 +95,27 @@ func Load(opts *LoadOptions) error {
 	globalMu.Lock()
 	global = &cat
 	globalMu.Unlock()
+	return nil
+}
+
+func validateOpenAICatalog(platform PlatformConfig) error {
+	for _, model := range platform.Models {
+		if model.ID != "gpt-6-astra" {
+			continue
+		}
+		if model.ContextWindow != 272000 || model.MaxContextWindow != 872000 || model.MaxOutputTokens != 128000 {
+			return fmt.Errorf("validate gpt-6-astra: expected context 272000/872000 and max output 128000")
+		}
+		want := []string{"low", "medium", "high", "xhigh", "max", "ultra"}
+		if len(model.SupportedReasoningLevels) != len(want) {
+			return fmt.Errorf("validate gpt-6-astra: invalid reasoning levels")
+		}
+		for i := range want {
+			if model.SupportedReasoningLevels[i] != want[i] {
+				return fmt.Errorf("validate gpt-6-astra: invalid reasoning level %q", model.SupportedReasoningLevels[i])
+			}
+		}
+	}
 	return nil
 }
 

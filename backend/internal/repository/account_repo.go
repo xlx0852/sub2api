@@ -1288,7 +1288,6 @@ func (r *accountRepository) ListSchedulable(ctx context.Context) ([]domain.Accou
 			dbaccount.StatusEQ(domain.StatusActive),
 			dbaccount.SchedulableEQ(true),
 			tempUnschedulablePredicate(),
-			notExpiredPredicate(now),
 			dbaccount.Or(dbaccount.OverloadUntilIsNil(), dbaccount.OverloadUntilLTE(now)),
 			dbaccount.Or(dbaccount.RateLimitResetAtIsNil(), dbaccount.RateLimitResetAtLTE(now)),
 		).
@@ -1351,7 +1350,6 @@ func (r *accountRepository) ListSchedulableCapacityByGroupIDs(ctx context.Contex
 			AND a.status = $2
 			AND a.schedulable = TRUE
 			AND (a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until <= $3)
-			AND (a.expires_at IS NULL OR a.expires_at > $3 OR a.auto_pause_on_expired = FALSE)
 			AND (a.overload_until IS NULL OR a.overload_until <= $3)
 			AND (a.rate_limit_reset_at IS NULL OR a.rate_limit_reset_at <= $3)
 		ORDER BY ag.group_id ASC, ag.priority ASC, a.priority ASC, a.id ASC
@@ -1399,7 +1397,6 @@ func (r *accountRepository) ListSchedulableByPlatform(ctx context.Context, platf
 			dbaccount.StatusEQ(domain.StatusActive),
 			dbaccount.SchedulableEQ(true),
 			tempUnschedulablePredicate(),
-			notExpiredPredicate(now),
 			dbaccount.Or(dbaccount.OverloadUntilIsNil(), dbaccount.OverloadUntilLTE(now)),
 			dbaccount.Or(dbaccount.RateLimitResetAtIsNil(), dbaccount.RateLimitResetAtLTE(now)),
 		).
@@ -1433,7 +1430,6 @@ func (r *accountRepository) ListSchedulableByPlatforms(ctx context.Context, plat
 			dbaccount.StatusEQ(domain.StatusActive),
 			dbaccount.SchedulableEQ(true),
 			tempUnschedulablePredicate(),
-			notExpiredPredicate(now),
 			dbaccount.Or(dbaccount.OverloadUntilIsNil(), dbaccount.OverloadUntilLTE(now)),
 			dbaccount.Or(dbaccount.RateLimitResetAtIsNil(), dbaccount.RateLimitResetAtLTE(now)),
 		).
@@ -1454,7 +1450,6 @@ func (r *accountRepository) ListSchedulableUngroupedByPlatform(ctx context.Conte
 			dbaccount.SchedulableEQ(true),
 			dbaccount.Not(dbaccount.HasAccountGroups()),
 			tempUnschedulablePredicate(),
-			notExpiredPredicate(now),
 			dbaccount.Or(dbaccount.OverloadUntilIsNil(), dbaccount.OverloadUntilLTE(now)),
 			dbaccount.Or(dbaccount.RateLimitResetAtIsNil(), dbaccount.RateLimitResetAtLTE(now)),
 		).
@@ -1478,7 +1473,6 @@ func (r *accountRepository) ListSchedulableUngroupedByPlatforms(ctx context.Cont
 			dbaccount.SchedulableEQ(true),
 			dbaccount.Not(dbaccount.HasAccountGroups()),
 			tempUnschedulablePredicate(),
-			notExpiredPredicate(now),
 			dbaccount.Or(dbaccount.OverloadUntilIsNil(), dbaccount.OverloadUntilLTE(now)),
 			dbaccount.Or(dbaccount.RateLimitResetAtIsNil(), dbaccount.RateLimitResetAtLTE(now)),
 		).
@@ -1798,45 +1792,9 @@ func (r *accountRepository) SetExpiresAt(ctx context.Context, id int64, expiresA
 }
 
 func (r *accountRepository) AutoPauseExpiredAccounts(ctx context.Context, now time.Time) (int64, error) {
-	rows, err := r.sql.QueryContext(ctx, `
-		UPDATE accounts
-		SET schedulable = FALSE,
-			updated_at = NOW()
-		WHERE deleted_at IS NULL
-			AND schedulable = TRUE
-			AND auto_pause_on_expired = TRUE
-			AND expires_at IS NOT NULL
-			AND expires_at <= $1
-		RETURNING id
-	`, now)
-	if err != nil {
-		return 0, err
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
-
-	accountIDs := make([]int64, 0)
-	for rows.Next() {
-		var accountID int64
-		if err := rows.Scan(&accountID); err != nil {
-			return 0, err
-		}
-		accountIDs = append(accountIDs, accountID)
-	}
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
-
-	if len(accountIDs) > 0 {
-		// 只刷新本次暂停的账号及其所属分组，避免少量账号到期触发所有调度桶重建。
-		// DB 已提交；outbox 失败时加重试，避免缓存长期保留已过期账号。
-		payload := map[string]any{"account_ids": accountIDs}
-		if err := enqueueSchedulerOutboxWithRetry(ctx, r.sql, domain.SchedulerOutboxEventAccountBulkChanged, nil, nil, payload, 3); err != nil {
-			logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue auto pause account changes failed after retries: err=%v account_ids=%v", err, accountIDs)
-		}
-	}
-	return int64(len(accountIDs)), nil
+	// Expiration is informational. Automatic scheduling pauses were retired;
+	// keep this interface as a compatibility no-op for older callers.
+	return 0, nil
 }
 
 func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates map[string]any) error {
@@ -2064,7 +2022,6 @@ func (r *accountRepository) queryAccountsByGroup(ctx context.Context, groupID in
 		preds = append(preds,
 			dbaccount.SchedulableEQ(true),
 			tempUnschedulablePredicate(),
-			notExpiredPredicate(now),
 			dbaccount.Or(dbaccount.OverloadUntilIsNil(), dbaccount.OverloadUntilLTE(now)),
 			dbaccount.Or(dbaccount.RateLimitResetAtIsNil(), dbaccount.RateLimitResetAtLTE(now)),
 		)
@@ -2180,14 +2137,6 @@ func tempUnschedulablePredicate() dbpredicate.Account {
 			entsql.LTE(col, entsql.Expr("NOW()")),
 		))
 	})
-}
-
-func notExpiredPredicate(now time.Time) dbpredicate.Account {
-	return dbaccount.Or(
-		dbaccount.ExpiresAtIsNil(),
-		dbaccount.ExpiresAtGT(now),
-		dbaccount.AutoPauseOnExpiredEQ(false),
-	)
 }
 
 func (r *accountRepository) loadSubscriptionBannedAccountIDs(ctx context.Context, accounts []*dbent.Account) (map[int64]bool, error) {

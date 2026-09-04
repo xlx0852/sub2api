@@ -8,20 +8,30 @@ import (
 
 // ToolContinuationSignals 聚合工具续链相关信号，避免重复遍历 input。
 type ToolContinuationSignals struct {
-	HasFunctionCallOutput              bool
-	HasFunctionCallOutputMissingCallID bool
-	HasToolCallContext                 bool
-	HasItemReference                   bool
-	HasItemReferenceForAllCallIDs      bool
-	FunctionCallOutputCallIDs          []string
+	HasFunctionCallOutput                bool
+	HasPairedFunctionCallOutput          bool
+	HasStandaloneNamedFunctionCallOutput bool
+	HasFunctionCallOutputMissingCallID   bool
+	HasToolCallContext                   bool
+	HasItemReference                     bool
+	HasItemReferenceForAllCallIDs        bool
+	FunctionCallOutputCallIDs            []string
 }
 
 // FunctionCallOutputValidation 汇总 function_call_output 关联性校验结果。
 type FunctionCallOutputValidation struct {
-	HasFunctionCallOutput              bool
-	HasToolCallContext                 bool
-	HasFunctionCallOutputMissingCallID bool
-	HasItemReferenceForAllCallIDs      bool
+	HasFunctionCallOutput                bool
+	HasPairedFunctionCallOutput          bool
+	HasStandaloneNamedFunctionCallOutput bool
+	HasToolCallContext                   bool
+	HasFunctionCallOutputMissingCallID   bool
+	HasItemReferenceForAllCallIDs        bool
+}
+
+func isStandaloneNamedFunctionCallOutput(itemType, callID, name string) bool {
+	return strings.TrimSpace(itemType) == "function_call_output" &&
+		strings.TrimSpace(callID) == "" &&
+		strings.TrimSpace(name) != ""
 }
 
 func isCodexToolCallContextItemType(typ string) bool {
@@ -116,9 +126,15 @@ func AnalyzeToolContinuationSignals(reqBody map[string]any) ToolContinuationSign
 			callID, _ := itemMap["call_id"].(string)
 			callID = strings.TrimSpace(callID)
 			if callID == "" {
+				name, _ := itemMap["name"].(string)
+				if isStandaloneNamedFunctionCallOutput(itemType, callID, name) {
+					signals.HasStandaloneNamedFunctionCallOutput = true
+					continue
+				}
 				signals.HasFunctionCallOutputMissingCallID = true
 				continue
 			}
+			signals.HasPairedFunctionCallOutput = true
 			if callIDs == nil {
 				callIDs = make(map[string]struct{})
 			}
@@ -178,9 +194,14 @@ func ValidateFunctionCallOutputContextBytes(body []byte) FunctionCallOutputValid
 			result.HasFunctionCallOutput = true
 			callID := strings.TrimSpace(item.Get("call_id").String())
 			if callID == "" {
+				if isStandaloneNamedFunctionCallOutput(itemType, callID, item.Get("name").String()) {
+					result.HasStandaloneNamedFunctionCallOutput = true
+					return true
+				}
 				result.HasFunctionCallOutputMissingCallID = true
 				return true
 			}
+			result.HasPairedFunctionCallOutput = true
 			if callIDs == nil {
 				callIDs = make(map[string]struct{})
 			}
@@ -252,6 +273,9 @@ func AnalyzeToolCallOutputContextCoverageBytes(body []byte) ToolCallOutputContex
 			coverage.HasFunctionCallOutput = true
 			callID := strings.TrimSpace(item.Get("call_id").String())
 			if callID == "" {
+				if isStandaloneNamedFunctionCallOutput(itemType, callID, item.Get("name").String()) {
+					return true
+				}
 				missingCallID = true
 				return true
 			}
@@ -317,6 +341,15 @@ func ValidateFunctionCallOutputContext(reqBody map[string]any) FunctionCallOutpu
 		switch {
 		case isCodexToolCallOutputItemType(itemType):
 			result.HasFunctionCallOutput = true
+			callID, _ := itemMap["call_id"].(string)
+			if strings.TrimSpace(callID) != "" {
+				result.HasPairedFunctionCallOutput = true
+			} else {
+				name, _ := itemMap["name"].(string)
+				if isStandaloneNamedFunctionCallOutput(itemType, callID, name) {
+					result.HasStandaloneNamedFunctionCallOutput = true
+				}
+			}
 		case isCodexToolCallContextItemType(itemType):
 			callID, _ := itemMap["call_id"].(string)
 			if strings.TrimSpace(callID) != "" {
@@ -345,6 +378,10 @@ func ValidateFunctionCallOutputContext(reqBody map[string]any) FunctionCallOutpu
 			callID, _ := itemMap["call_id"].(string)
 			callID = strings.TrimSpace(callID)
 			if callID == "" {
+				name, _ := itemMap["name"].(string)
+				if isStandaloneNamedFunctionCallOutput(itemType, callID, name) {
+					continue
+				}
 				result.HasFunctionCallOutputMissingCallID = true
 				continue
 			}

@@ -331,6 +331,10 @@ func (s *OpenAIGatewayService) openAIWSIngressPreviousResponseRecoveryEnabled() 
 	return true
 }
 
+func (s *OpenAIGatewayService) openAIWSCodexSessionExclusiveEnabled() bool {
+	return s != nil && s.cfg != nil && s.cfg.Gateway.OpenAIWS.CodexSessionExclusiveEnabled
+}
+
 func (s *OpenAIGatewayService) openAIWSReadTimeout() time.Duration {
 	if s != nil && s.cfg != nil && s.cfg.Gateway.OpenAIWS.ReadTimeoutSeconds > 0 {
 		return time.Duration(s.cfg.Gateway.OpenAIWS.ReadTimeoutSeconds) * time.Second

@@ -62,6 +62,25 @@ func TestEmbeddedCatalogLoads(t *testing.T) {
 	if !ok || entry.InputCostPerToken <= 0 {
 		t.Fatalf("expected gpt-5.5 alias pricing, got %+v ok=%v", entry, ok)
 	}
+	entry, ok = ResolvePriceEntry("gpt-6-astra")
+	if !ok || entry.InputCostPerToken != 1e-5 || entry.OutputCostPerToken != 5e-5 {
+		t.Fatalf("expected gpt-6-astra fallback pricing, got %+v ok=%v", entry, ok)
+	}
+	models := OpenAIModels()
+	foundAstra := false
+	for _, model := range models {
+		if model.ID == "gpt-6-astra" {
+			foundAstra = true
+			break
+		}
+	}
+	if !foundAstra {
+		t.Fatalf("expected gpt-6-astra in OpenAI catalog")
+	}
+	astra := Get().Platforms["openai"].Models[0]
+	if astra.ID != "gpt-6-astra" || astra.MaxContextWindow != 872000 || len(astra.SupportedReasoningLevels) != 6 || !astra.UseResponsesLite {
+		t.Fatalf("expected official Astra capability metadata, got %+v", astra)
+	}
 	if !IsOpenAIRetired("gpt-5.2") {
 		t.Fatalf("expected gpt-5.2 retired")
 	}

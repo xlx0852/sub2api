@@ -164,9 +164,6 @@ func (a *Account) IsSchedulable() bool {
 		return false
 	}
 	now := time.Now()
-	if a.AutoPauseOnExpired && a.ExpiresAt != nil && !now.Before(*a.ExpiresAt) {
-		return false
-	}
 	if a.OverloadUntil != nil && now.Before(*a.OverloadUntil) {
 		return false
 	}
@@ -186,7 +183,6 @@ func (a *Account) IsSchedulable() bool {
 //
 // 检查「凭据/账号/传输可用性」:
 //   - 账号 active(非禁用/删除);
-//   - OAuth token 未过期(AutoPauseOnExpired+ExpiresAt);
 //   - 未处于 TempUnschedulableUntil 冷却期 —— 对 OpenAI 账号该字段由 401 鉴权失败 /
 //     token 刷新耗尽 / transport·proxy 故障写入(ratelimit/token_refresh/upstream_transport),
 //     都代表**共享凭据或传输通道坏死**;影子共享母 token+proxy,故母处于该冷却期时影子也不可用。
@@ -199,9 +195,6 @@ func (a *Account) IsCredentialUsableForShadow() bool {
 		return false
 	}
 	now := time.Now()
-	if a.AutoPauseOnExpired && a.ExpiresAt != nil && !now.Before(*a.ExpiresAt) {
-		return false
-	}
 	if a.TempUnschedulableUntil != nil && now.Before(*a.TempUnschedulableUntil) {
 		return false
 	}

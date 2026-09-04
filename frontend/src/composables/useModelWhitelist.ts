@@ -4,6 +4,8 @@
 
 // OpenAI — current flagship generation only (overridden by GET /admin/model-catalog when available)
 let openaiModels = [
+  // GPT-6
+  'gpt-6-astra',
   // GPT-5.6 系列
   'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
   // GPT-5.5 系列

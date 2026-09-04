@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,9 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
 )
+
+//go:embed codex_astra_fallback.json
+var embeddedCodexAstraManifest []byte
 
 // chatgptCodexModelsURL is the ChatGPT Codex models manifest endpoint.
 // Package-level variable so tests can point it at a stub server.
@@ -308,7 +312,7 @@ func (s *OpenAIGatewayService) FetchPreferredCodexModelsManifest(ctx context.Con
 		if cached := s.loadCodexManifestCache(groupID, codexModelsStaleCacheTTL); cached != nil {
 			return applyCodexManifestClientETag(cached, ifNoneMatch), nil
 		}
-		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_CODEX_MODELS_ACCOUNT_REQUIRED", "no schedulable OpenAI OAuth accounts for Codex manifest")
+		return applyCodexManifestClientETag(&CodexModelsManifest{Body: append([]byte(nil), embeddedCodexAstraManifest...)}, ifNoneMatch), nil
 	}
 
 	manifest, err := pickBestCodexManifest(budgetCtx, candidates, func(fetchCtx context.Context, account *Account) (*CodexModelsManifest, error) {
@@ -321,7 +325,7 @@ func (s *OpenAIGatewayService) FetchPreferredCodexModelsManifest(ctx context.Con
 		if cached := s.loadCodexManifestCache(groupID, codexModelsStaleCacheTTL); cached != nil {
 			return applyCodexManifestClientETag(cached, ifNoneMatch), nil
 		}
-		return nil, err
+		return applyCodexManifestClientETag(&CodexModelsManifest{Body: append([]byte(nil), embeddedCodexAstraManifest...)}, ifNoneMatch), nil
 	}
 	s.storeCodexManifestCache(groupID, manifest)
 	return applyCodexManifestClientETag(manifest, ifNoneMatch), nil

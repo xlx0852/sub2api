@@ -394,6 +394,47 @@ func TestCodexInputItemRequiresNameTypesAllowCallID(t *testing.T) {
 	}
 }
 
+func TestApplyCodexOAuthTransform_PreservesStandaloneNamedFunctionCallOutput(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.6-luna",
+		"input": []any{
+			map[string]any{
+				"type":      "function_call_output",
+				"id":        "fco_01a05c2d-d0ab-7093-ad09-712ab5c80c9b",
+				"name":      "notifications",
+				"namespace": "desktop",
+				"output":    "updated",
+			},
+		},
+	}
+
+	applyCodexOAuthTransform(reqBody, true, false)
+
+	input := reqBody["input"].([]any)
+	item := input[0].(map[string]any)
+	require.Equal(t, "fco_01a05c2d-d0ab-7093-ad09-712ab5c80c9b", item["id"])
+	require.Equal(t, "notifications", item["name"])
+	require.Equal(t, "desktop", item["namespace"])
+	require.Equal(t, "updated", item["output"])
+	require.NotContains(t, item, "call_id")
+}
+
+func TestApplyCodexOAuthTransform_PreservesPairedFunctionCallOutputCallID(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.6-sol",
+		"input": []any{
+			map[string]any{"type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "shell", "arguments": "{}"},
+			map[string]any{"type": "function_call_output", "id": "fco_1", "call_id": "call_1", "output": "ok"},
+		},
+	}
+
+	applyCodexOAuthTransform(reqBody, true, false)
+
+	input := reqBody["input"].([]any)
+	require.Equal(t, "call_1", input[0].(map[string]any)["call_id"])
+	require.Equal(t, "call_1", input[1].(map[string]any)["call_id"])
+}
+
 func TestApplyCodexOAuthTransform_ExplicitStoreFalsePreserved(t *testing.T) {
 	// 续链场景：显式 store=false 不再强制为 true，保持 false。
 

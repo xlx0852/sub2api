@@ -103,6 +103,45 @@ func TestHasFunctionCallOutputMissingCallID(t *testing.T) {
 	require.False(t, HasFunctionCallOutputMissingCallID(map[string]any{
 		"input": []any{map[string]any{"type": "tool_search_output", "call_id": "call_1"}},
 	}))
+	require.False(t, HasFunctionCallOutputMissingCallID(map[string]any{
+		"input": []any{map[string]any{
+			"type": "function_call_output",
+			"id":   "fco_standalone",
+			"name": "notifications",
+		}},
+	}))
+}
+
+func TestAnalyzeToolContinuationSignalsDistinguishesStandaloneNamedOutput(t *testing.T) {
+	signals := AnalyzeToolContinuationSignals(map[string]any{
+		"input": []any{
+			map[string]any{"type": "function_call_output", "id": "fco_standalone", "name": "notifications"},
+			map[string]any{"type": "function_call_output", "call_id": "call_1", "output": "ok"},
+		},
+	})
+
+	require.True(t, signals.HasFunctionCallOutput)
+	require.True(t, signals.HasPairedFunctionCallOutput)
+	require.True(t, signals.HasStandaloneNamedFunctionCallOutput)
+	require.False(t, signals.HasFunctionCallOutputMissingCallID)
+	require.Equal(t, []string{"call_1"}, signals.FunctionCallOutputCallIDs)
+}
+
+func TestValidateFunctionCallOutputContextBytesRecognizesStandaloneNamedOutput(t *testing.T) {
+	validation := ValidateFunctionCallOutputContextBytes([]byte(`{
+		"input":[{
+			"type":"function_call_output",
+			"id":"fco_01a05c2d-d0ab-7093-ad09-712ab5c80c9b",
+			"name":"notifications",
+			"namespace":"desktop",
+			"output":"updated"
+		}]
+	}`))
+
+	require.True(t, validation.HasFunctionCallOutput)
+	require.False(t, validation.HasPairedFunctionCallOutput)
+	require.True(t, validation.HasStandaloneNamedFunctionCallOutput)
+	require.False(t, validation.HasFunctionCallOutputMissingCallID)
 }
 
 func TestHasItemReferenceForCallIDs(t *testing.T) {
@@ -133,6 +172,14 @@ func TestValidateFunctionCallOutputContextBytesMatchesMapValidation(t *testing.T
 		{
 			name: "missing_call_id",
 			body: map[string]any{"input": []any{map[string]any{"type": "function_call_output"}}},
+		},
+		{
+			name: "standalone_named_output",
+			body: map[string]any{"input": []any{map[string]any{
+				"type": "function_call_output",
+				"id":   "fco_standalone",
+				"name": "notifications",
+			}}},
 		},
 		{
 			name: "call_id_without_reference",
@@ -254,6 +301,14 @@ func TestAnalyzeToolCallOutputContextCoverageBytes(t *testing.T) {
 			}},
 			hasOutput:    true,
 			coversAllIDs: false,
+		},
+		{
+			name: "standalone_named_output_needs_no_call_context",
+			body: map[string]any{"input": []any{
+				map[string]any{"type": "function_call_output", "id": "fco_standalone", "name": "notifications"},
+			}},
+			hasOutput:    true,
+			coversAllIDs: true,
 		},
 		{
 			name: "mixed_context_and_reference_cover_all",

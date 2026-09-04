@@ -470,7 +470,7 @@ func shouldInferIngressFunctionCallOutputPreviousResponseID(
 	currentPreviousResponseID string,
 	expectedPreviousResponseID string,
 ) bool {
-	if !storeDisabled || turn <= 1 || !signals.HasFunctionCallOutput {
+	if !storeDisabled || turn <= 1 || !signals.HasPairedFunctionCallOutput {
 		return false
 	}
 	if strings.TrimSpace(currentPreviousResponseID) != "" {
@@ -663,6 +663,7 @@ func openAIWSRawItemsHaveToolCallContextForOutputs(items []json.RawMessage) bool
 	}
 	contextCallIDs := make(map[string]struct{})
 	outputCallIDs := make(map[string]struct{})
+	hasOutput := false
 	for _, item := range items {
 		itemType := gjson.GetBytes(item, "type").String()
 		callID := strings.TrimSpace(gjson.GetBytes(item, "call_id").String())
@@ -672,13 +673,23 @@ func openAIWSRawItemsHaveToolCallContextForOutputs(items []json.RawMessage) bool
 				contextCallIDs[callID] = struct{}{}
 			}
 		case isCodexToolCallOutputItemType(itemType):
+			hasOutput = true
 			if callID == "" {
+				if isStandaloneNamedFunctionCallOutput(itemType, callID, gjson.GetBytes(item, "name").String()) {
+					continue
+				}
 				return false
 			}
 			outputCallIDs[callID] = struct{}{}
 		}
 	}
-	if len(outputCallIDs) == 0 || len(contextCallIDs) == 0 {
+	if !hasOutput {
+		return false
+	}
+	if len(outputCallIDs) == 0 {
+		return true
+	}
+	if len(contextCallIDs) == 0 {
 		return false
 	}
 	for callID := range outputCallIDs {

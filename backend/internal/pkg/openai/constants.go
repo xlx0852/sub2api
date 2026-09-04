@@ -8,12 +8,29 @@ import (
 
 // Model represents an OpenAI model
 type Model struct {
-	ID          string `json:"id"`
-	Object      string `json:"object"`
-	Created     int64  `json:"created"`
-	OwnedBy     string `json:"owned_by"`
-	Type        string `json:"type"`
-	DisplayName string `json:"display_name"`
+	ID                          string   `json:"id"`
+	Object                      string   `json:"object"`
+	Created                     int64    `json:"created"`
+	OwnedBy                     string   `json:"owned_by"`
+	Type                        string   `json:"type"`
+	DisplayName                 string   `json:"display_name"`
+	ContextWindow               int      `json:"context_window,omitempty"`
+	MaxContextWindow            int      `json:"max_context_window,omitempty"`
+	MaxOutputTokens             int      `json:"max_output_tokens,omitempty"`
+	SupportedReasoningLevels    []string `json:"supported_reasoning_levels,omitempty"`
+	DefaultReasoningLevel       string   `json:"default_reasoning_level,omitempty"`
+	SupportsVerbosity           bool     `json:"supports_verbosity,omitempty"`
+	DefaultVerbosity            string   `json:"default_verbosity,omitempty"`
+	UseResponsesLite            bool     `json:"use_responses_lite,omitempty"`
+	ToolMode                    string   `json:"tool_mode,omitempty"`
+	MultiAgentVersion           string   `json:"multi_agent_version,omitempty"`
+	MultiAgentReasoningEffort   string   `json:"multi_agent_reasoning_effort,omitempty"`
+	SupportsParallelToolCalls   bool     `json:"supports_parallel_tool_calls,omitempty"`
+	SupportsImageDetailOriginal bool     `json:"supports_image_detail_original,omitempty"`
+	TruncationLimit             int      `json:"truncation_limit,omitempty"`
+	PreferWebsockets            bool     `json:"prefer_websockets,omitempty"`
+	MinimalClientVersion        string   `json:"minimal_client_version,omitempty"`
+	SupportedInAPI              bool     `json:"supported_in_api,omitempty"`
 }
 
 // DefaultModels is populated from modelcatalog on package init.
@@ -39,6 +56,9 @@ var instructionsGPT52 string
 //go:embed instructions_gpt5_5.txt
 var instructionsGPT55 string
 
+//go:embed instructions_gpt6_astra.txt
+var instructionsGPT6Astra string
+
 // latestCodexInstructions 返回当前已知最新版本的 Codex base instructions，
 // 当前为 GPT-5.5；若 5.5 prompt 意外为空则回退到 DefaultInstructions 保证非空。
 func latestCodexInstructions() string {
@@ -63,6 +83,10 @@ func CodexBaseInstructionsForModel(model string) string {
 		return DefaultInstructions
 	case strings.HasPrefix(m, "gpt-5.5"):
 		return latestCodexInstructions()
+	case strings.HasPrefix(m, "gpt-6-astra"):
+		if v := strings.TrimSpace(instructionsGPT6Astra); v != "" {
+			return instructionsGPT6Astra
+		}
 	case strings.HasPrefix(m, "gpt-5.2"):
 		if v := strings.TrimSpace(instructionsGPT52); v != "" {
 			return instructionsGPT52

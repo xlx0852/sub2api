@@ -291,6 +291,8 @@ gateway:
     store_disabled_force_new_conn: true
     # 是否启用 WSv2 generate=false 预热（默认 false）
     prewarm_generate_enabled: false
+    # Codex 下游 WebSocket 独占上游连接；首次可领取未使用的预连接，会话结束后销毁
+    codex_session_exclusive_enabled: true
     # 协议 feature 开关，v2 优先于 v1
     responses_websockets: false
     responses_websockets_v2: true

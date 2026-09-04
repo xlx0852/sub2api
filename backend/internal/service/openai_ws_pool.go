@@ -18,7 +18,10 @@ import (
 )
 
 const (
-	openAIWSConnMaxAge             = 60 * time.Minute
+	openAIWSConnMaxAge = 60 * time.Minute
+	// OpenAI closes a long-lived Responses WebSocket at 60 minutes. Rotate
+	// between turns before that boundary so an active Codex session can continue.
+	openAIWSConnRotationAge        = 55 * time.Minute
 	openAIWSConnHealthCheckIdle    = 15 * time.Second
 	openAIWSConnHealthCheckTO      = time.Second
 	openAIWSConnPrewarmExtraDelay  = 2 * time.Second
@@ -75,6 +78,8 @@ type openAIWSAcquireRequest struct {
 	ForceNewConn bool
 	// ForcePreferredConn: 强制本次只使用 PreferredConnID，禁止漂移到其它连接。
 	ForcePreferredConn bool
+	// RequirePristine: 只领取从未承载过 response.create 的连接。
+	RequirePristine bool
 }
 
 type openAIWSConnLease struct {
@@ -123,6 +128,24 @@ func (l *openAIWSConnLease) Reused() bool {
 		return false
 	}
 	return l.reused
+}
+
+func (l *openAIWSConnLease) RequestCount() uint64 {
+	if l == nil || l.conn == nil {
+		return 0
+	}
+	return l.conn.requestCount.Load()
+}
+
+func (l *openAIWSConnLease) IsPristine() bool {
+	return l != nil && l.conn != nil && l.conn.isPristine()
+}
+
+func (l *openAIWSConnLease) ConnAge(now time.Time) time.Duration {
+	if l == nil || l.conn == nil {
+		return 0
+	}
+	return l.conn.age(now)
 }
 
 func (l *openAIWSConnLease) HandshakeHeader(name string) string {
@@ -224,6 +247,20 @@ func (l *openAIWSConnLease) MarkBroken() {
 	l.pool.evictConn(l.accountID, l.conn.id)
 }
 
+// Retire permanently removes a session-owned connection instead of returning it
+// to the account-wide reuse pool.
+func (l *openAIWSConnLease) Retire() {
+	if l == nil || l.conn == nil || !l.released.CompareAndSwap(false, true) {
+		return
+	}
+	if l.pool != nil {
+		l.pool.evictConn(l.accountID, l.conn.id)
+		l.pool.notifyAccountPoolChanged(l.accountID)
+		return
+	}
+	l.conn.close()
+}
+
 func (l *openAIWSConnLease) Release() {
 	if l == nil || l.conn == nil {
 		return
@@ -258,6 +295,7 @@ type openAIWSConn struct {
 	waiters       atomic.Int32
 	createdAtNano atomic.Int64
 	lastUsedNano  atomic.Int64
+	requestCount  atomic.Uint64
 	prewarmed     atomic.Bool
 }
 
@@ -444,6 +482,7 @@ func (c *openAIWSConn) writeJSON(value any, writeCtx context.Context) error {
 	if err := c.ws.WriteJSON(writeCtx, value); err != nil {
 		return err
 	}
+	c.requestCount.Add(1)
 	c.touch()
 	return nil
 }
@@ -625,6 +664,10 @@ func (c *openAIWSConn) age(now time.Time) time.Duration {
 		return 0
 	}
 	return now.Sub(created)
+}
+
+func (c *openAIWSConn) isPristine() bool {
+	return c != nil && c.requestCount.Load() == 0
 }
 
 func (c *openAIWSConn) isLeased() bool {
@@ -969,9 +1012,32 @@ retryAcquire:
 		ap.lastCleanupAt = now
 	}
 	pickStartedAt := time.Now()
-	allowReuse := !req.ForceNewConn
+	allowReuse := !req.ForceNewConn && !req.RequirePristine
 	preferredConnID := stringsTrim(req.PreferredConnID)
 	forcePreferredConn := allowReuse && req.ForcePreferredConn
+
+	if req.RequirePristine {
+		if pristine := p.pickPristineConnLocked(ap, betaFeatures); pristine != nil && pristine.tryAcquire() {
+			connPick := time.Since(pickStartedAt)
+			p.recordConnPickDuration(connPick)
+			ap.mu.Unlock()
+			closeOpenAIWSConns(evicted)
+			if p.shouldHealthCheckConn(pristine) {
+				if err := pristine.pingWithTimeout(openAIWSConnHealthCheckTO); err != nil {
+					pristine.close()
+					p.evictConn(accountID, pristine.id)
+					if retry < 1 {
+						return p.acquire(ctx, req, retry+1)
+					}
+					return nil, err
+				}
+			}
+			lease := &openAIWSConnLease{pool: p, accountID: accountID, conn: pristine, connPick: connPick, reused: true}
+			p.metrics.acquireReuseTotal.Add(1)
+			p.ensureTargetIdleAsync(accountID)
+			return lease, nil
+		}
+	}
 
 	if allowReuse {
 		if forcePreferredConn {
@@ -1133,7 +1199,15 @@ retryAcquire:
 		}
 	}
 
-	if !req.ForceNewConn && len(ap.conns)+ap.creating >= effectiveMaxConns {
+	if req.RequirePristine && len(ap.conns)+ap.creating >= effectiveMaxConns {
+		if idle := p.pickOldestIdleConnLocked(ap); idle != nil {
+			delete(ap.conns, idle.id)
+			evicted = append(evicted, idle)
+			p.metrics.scaleDownTotal.Add(1)
+		}
+	}
+
+	if !req.ForceNewConn && !req.RequirePristine && len(ap.conns)+ap.creating >= effectiveMaxConns {
 		compatible := p.pickLeastBusyConnLocked(ap, "", betaFeatures)
 		if idle := p.pickOldestIdleConnWithDifferentBetaFeaturesLocked(ap, betaFeatures); idle != nil {
 			delete(ap.conns, idle.id)
@@ -1207,6 +1281,19 @@ retryAcquire:
 		lease := &openAIWSConnLease{pool: p, accountID: accountID, conn: conn, connPick: connPick}
 		p.ensureTargetIdleAsync(accountID)
 		return lease, nil
+	}
+
+	if req.RequirePristine {
+		changedCh := ap.changeChannelLocked()
+		p.recordConnPickDuration(time.Since(pickStartedAt))
+		ap.mu.Unlock()
+		closeOpenAIWSConns(evicted)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-changedCh:
+			goto retryAcquire
+		}
 	}
 
 	if req.ForceNewConn {
@@ -1474,6 +1561,22 @@ func (p *openAIWSConnPool) pickLeastBusyConnLocked(ap *openAIWSAccountPool, pref
 		}
 	}
 	return best
+}
+
+func (p *openAIWSConnPool) pickPristineConnLocked(ap *openAIWSAccountPool, betaFeatures string) *openAIWSConn {
+	if ap == nil {
+		return nil
+	}
+	var newest *openAIWSConn
+	for _, conn := range ap.conns {
+		if conn == nil || !conn.isPristine() || !conn.matchesBetaFeatures(betaFeatures) || conn.isLeased() || conn.waiters.Load() > 0 {
+			continue
+		}
+		if newest == nil || conn.createdAt().After(newest.createdAt()) {
+			newest = conn
+		}
+	}
+	return newest
 }
 
 func accountPoolLoadLocked(ap *openAIWSAccountPool) (inflight int, waiters int) {

@@ -110,11 +110,15 @@ func (sess *openAIWSIngressSession) refreshRouteState(payload openAIWSClientPayl
 	}
 
 	sess.storeDisabled = s.isOpenAIWSStoreDisabledInRequestRaw(payload.payloadRaw, sess.account)
-	if sess.stateStore != nil && sess.storeDisabled && payload.previousResponseID == "" && sess.sessionHash != "" {
+	if sess.stateStore != nil && sess.storeDisabled && payload.previousResponseID == "" && sess.sessionHash != "" && !sess.codexSessionExclusive() {
 		if connID, ok := sess.stateStore.GetSessionConn(sess.groupID, sess.sessionHash); ok {
 			sess.preferredConnID = connID
 		}
 	}
+}
+
+func (sess *openAIWSIngressSession) codexSessionExclusive() bool {
+	return sess != nil && sess.isCodexCLI && sess.svc != nil && sess.svc.openAIWSCodexSessionExclusiveEnabled()
 }
 
 func (sess *openAIWSIngressSession) isStrictAffinityTurn(payload []byte) bool {

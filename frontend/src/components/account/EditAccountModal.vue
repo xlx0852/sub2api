@@ -1269,30 +1269,6 @@
             />
             <p class="input-hint">{{ t('admin.accounts.expiresAtFollowsCostCycle') }}</p>
           </div>
-          <div class="flex items-start justify-between gap-3 rounded-md bg-gray-50 px-3 py-2 dark:bg-dark-700/60">
-            <div class="min-w-0">
-              <label class="input-label mb-0">{{ t('admin.accounts.autoPauseOnExpired') }}</label>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {{ t('admin.accounts.autoPauseOnExpiredDesc') }}
-              </p>
-            </div>
-            <button
-              type="button"
-              @click="autoPauseOnExpired = !autoPauseOnExpired"
-              :class="[
-                'relative mt-0.5 inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
-                autoPauseOnExpired ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-              ]"
-              data-testid="edit-account-auto-pause-on-expired"
-            >
-              <span
-                :class="[
-                  'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                  autoPauseOnExpired ? 'translate-x-5' : 'translate-x-0'
-                ]"
-              />
-            </button>
-          </div>
         </div>
       </div><!-- /edit-tab-basic-scheduling -->
 
@@ -2689,7 +2665,6 @@ const fillHeaderOverrideTemplate = () => {
   headerOverrideRows.value = rows
 }
 const interceptWarmupRequests = ref(false)
-const autoPauseOnExpired = ref(false)
 const autoPause5hThreshold = ref<number | null>(null)
 const autoPause7dThreshold = ref<number | null>(null)
 const autoPause5hDisabled = ref(false)
@@ -3172,7 +3147,6 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   // Load intercept warmup requests setting (applies to all account types)
   const credentials = newAccount.credentials as Record<string, unknown> | undefined
   interceptWarmupRequests.value = credentials?.intercept_warmup_requests === true
-  autoPauseOnExpired.value = newAccount.auto_pause_on_expired === true
   editVertexProjectId.value = ''
   editVertexClientEmail.value = ''
   editVertexLocation.value = 'us-central1'
@@ -3900,7 +3874,10 @@ const handleCostConfigSaved = async (payload?: { account_expires_at?: string | n
       }
     }
   }
-  emit('updated', props.account)
+  // Cost configuration is saved by its own child panel. Do not emit the
+  // account-level `updated` event here: the parent list would replace the
+  // account prop while this drawer is open, resetting the active tab and
+  // making the outer account form race with the inner save.
 }
 
 const handleSubmit = async () => {
@@ -3930,11 +3907,9 @@ const handleSubmit = async () => {
     if (isSubscriptionAccount.value) {
       // 订阅号过期时间由成本周期驱动，账号更新不覆盖
       delete updatePayload.expires_at
-      updatePayload.auto_pause_on_expired = autoPauseOnExpired.value
     } else {
       // API Key 等非订阅账号无调度过期概念
       updatePayload.expires_at = 0
-      updatePayload.auto_pause_on_expired = false
     }
     // load_factor: 空值/NaN/0/负数 时发送 0（后端约定 <= 0 = 清除）
     const lf = form.load_factor

@@ -216,19 +216,23 @@ func normalizeOpenAICodexCompactReasoningEffortForAccount(c *gin.Context, accoun
 }
 
 func normalizeOpenAICodexCompactReasoningEffort(body []byte, effectiveModel string) ([]byte, bool, error) {
-	if !isOpenAIGPT56Model(effectiveModel) ||
+	if !isOpenAIGPT56Model(effectiveModel) || isOpenAIAstraModel(effectiveModel) ||
 		!strings.EqualFold(strings.TrimSpace(gjson.GetBytes(body, "reasoning.effort").String()), "max") {
 		return body, false, nil
 	}
 
-	// Codex Ultra 在客户端编排层会下发 max；ChatGPT compact 端点目前只接受到
-	// xhigh。这里只降级 OpenAI OAuth 的 GPT-5.6 compact 子请求，普通 Responses、
-	// API Key 请求和其他平台的 OAuth 请求保留 max。
+	// Codex Ultra 在客户端编排层会下发 max；旧 ChatGPT compact 端点目前只接受到
+	// xhigh。这里只降级仍不支持 max 的 OpenAI OAuth compact 子请求，Astra 的
+	// compact 合约支持 max，因此保持原值。
 	normalized, err := sjson.SetBytes(body, "reasoning.effort", "xhigh")
 	if err != nil {
 		return body, false, fmt.Errorf("normalize codex compact reasoning effort: %w", err)
 	}
 	return normalized, true, nil
+}
+
+func isOpenAIAstraModel(model string) bool {
+	return strings.HasPrefix(canonicalizeOpenAIModelAliasSpelling(model), "gpt-6-astra")
 }
 
 func resolveOpenAICompactSessionID(c *gin.Context) string {
@@ -1359,12 +1363,15 @@ func normalizeOpenAIReasoningEffortForModel(raw, model string) string {
 	if strings.EqualFold(strings.TrimSpace(raw), "max") && isOpenAIGPT56Model(model) {
 		return "max"
 	}
+	if strings.EqualFold(strings.TrimSpace(raw), "ultra") && strings.HasPrefix(canonicalizeOpenAIModelAliasSpelling(model), "gpt-6-astra") {
+		return "ultra"
+	}
 	return normalizeOpenAIReasoningEffort(raw)
 }
 
 func isOpenAIGPT56Model(model string) bool {
 	normalized := canonicalizeOpenAIModelAliasSpelling(model)
-	for _, prefix := range []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"} {
+	for _, prefix := range []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra"} {
 		if normalized == prefix || strings.HasPrefix(normalized, prefix+"-") {
 			return true
 		}

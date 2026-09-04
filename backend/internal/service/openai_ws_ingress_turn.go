@@ -13,31 +13,48 @@ import (
 )
 
 func (sess *openAIWSIngressSession) runHTTPBridgeTurns(firstPayload openAIWSClientPayload) error {
+	return sess.runHTTPBridgeTurnsFromState(firstPayload, 1, nil, false, false, "")
+}
+
+func (sess *openAIWSIngressSession) runHTTPBridgeTurnsFromState(
+	firstPayload openAIWSClientPayload,
+	startTurn int,
+	seedReplayInput []json.RawMessage,
+	seedReplayInputExists bool,
+	skipFirstTurnHooks bool,
+	fallbackReason string,
+) error {
 	s := sess.svc
 	ctx := sess.ctx
 	c := sess.c
 	account := sess.account
 	token := sess.token
 	hooks := sess.hooks
+	if startTurn <= 0 {
+		startTurn = 1
+	}
 	logOpenAIWSModeInfo(
-		"ingress_ws_http_bridge_start account_id=%d account_type=%s payload_bytes=%d threshold_bytes=%d has_session_hash=%v store_disabled=%v",
+		"ingress_ws_http_bridge_start account_id=%d account_type=%s start_turn=%d payload_bytes=%d threshold_bytes=%d has_session_hash=%v store_disabled=%v fallback_reason=%s",
 		account.ID,
 		account.Type,
+		startTurn,
 		firstPayload.payloadBytes,
 		s.openAIWSHTTPBridgeThresholdBytes(),
 		sess.sessionHash != "",
 		sess.storeDisabled,
+		normalizeOpenAIWSLogValue(fallbackReason),
 	)
 	currentBridgePayload := firstPayload
-	var bridgeReplayInput []json.RawMessage
-	bridgeReplayInputExists := false
-	for turn := 1; ; turn++ {
-		if turn > 1 && hooks != nil && hooks.BeforeRequest != nil {
+	bridgeReplayInput := cloneOpenAIWSRawMessages(seedReplayInput)
+	bridgeReplayInputExists := seedReplayInputExists
+	for turn := startTurn; ; turn++ {
+		skipHooks := skipFirstTurnHooks && turn == startTurn
+		if !skipHooks && turn > 1 && hooks != nil && hooks.BeforeRequest != nil {
 			if err := hooks.BeforeRequest(turn, currentBridgePayload.payloadRaw, currentBridgePayload.originalModel); err != nil {
 				return err
 			}
 		}
-		if hooks != nil && hooks.BeforeTurn != nil {
+		if !skipHooks && hooks != nil && hooks.BeforeTurn != nil {
 			if err := hooks.BeforeTurn(turn); err != nil {
 				return err
 			}
@@ -148,6 +165,41 @@ func (sess *openAIWSIngressSession) runHTTPBridgeTurns(firstPayload openAIWSClie
 			return parseErr
 		}
 		currentBridgePayload = nextPayload
+	}
+}
+
+func (sess *openAIWSIngressSession) canFallbackStrictAffinityTurnToHTTPBridge(relayErr error) bool {
+	if sess == nil || sess.svc == nil || !sess.isCodexCLI || !sess.svc.openAIWSHTTPBridgeEnabled() || sess.ctx.Err() != nil {
+		return false
+	}
+	var turnErr *openAIWSIngressTurnError
+	if !errors.As(relayErr, &turnErr) || turnErr == nil || turnErr.wroteDownstream {
+		return false
+	}
+	if turnErr.stage != "write_upstream" && turnErr.stage != "read_upstream" {
+		return false
+	}
+	if !sess.isStrictAffinityTurn(sess.currentPayload) || !sess.lastTurnReplayInputExists {
+		return false
+	}
+	if sess.hasCurrentOrReplayFunctionCallOutput(sess.currentPayload) {
+		return sess.currentTurnReplayInputExists &&
+			openAIWSRawItemsHaveToolCallContextForOutputs(sess.currentTurnReplayInput)
+	}
+	return true
+}
+
+func (sess *openAIWSIngressSession) currentPayloadForHTTPBridge() openAIWSClientPayload {
+	payload := cloneOpenAIWSPayloadBytes(sess.currentPayload)
+	return openAIWSClientPayload{
+		payloadRaw:         payload,
+		promptCacheKey:     openAIWSPayloadStringFromRaw(payload, "prompt_cache_key"),
+		previousResponseID: openAIWSPayloadStringFromRaw(payload, "previous_response_id"),
+		originalModel:      sess.currentOriginalModel,
+		imageBillingModel:  sess.currentImageBillingModel,
+		imageSizeTier:      sess.currentImageSizeTier,
+		imageInputSize:     sess.currentImageInputSize,
+		payloadBytes:       len(payload),
 	}
 }
 
@@ -616,6 +668,10 @@ func (sess *openAIWSIngressSession) runWSTurns(firstPayload openAIWSClientPayloa
 				}
 			}
 		}
+		if sess.rotateAgedUpstreamConnBeforeTurn() {
+			// The current payload may have been converted to a replayable full create;
+			// acquire the replacement connection in this same turn.
+		}
 		forcePreferredConn := sess.isStrictAffinityTurn(sess.currentPayload)
 		if sess.sessionLease == nil {
 			acquiredLease, acquireErr := sess.acquireTurnLease(sess.turn, sess.preferredConnID, forcePreferredConn)
@@ -772,6 +828,30 @@ func (sess *openAIWSIngressSession) runWSTurns(firstPayload openAIWSClientPayloa
 			if sess.recoverIngressConnectionLimit(relayErr, sess.turn, connID) {
 				continue
 			}
+			if sess.canFallbackStrictAffinityTurnToHTTPBridge(relayErr) {
+				fallbackReason := openAIWSIngressTurnRetryReason(relayErr)
+				bridgePayload := sess.currentPayloadForHTTPBridge()
+				seedReplayInput := cloneOpenAIWSRawMessages(sess.lastTurnReplayInput)
+				seedReplayInputExists := sess.lastTurnReplayInputExists
+				logOpenAIWSModeInfo(
+					"ingress_ws_http_bridge_fallback account_id=%d turn=%d conn_id=%s reason=%s payload_bytes=%d replay_items=%d",
+					account.ID,
+					sess.turn,
+					truncateOpenAIWSLogValue(connID, openAIWSIDValueMaxLen),
+					truncateOpenAIWSLogValue(fallbackReason, openAIWSLogValueMaxLen),
+					bridgePayload.payloadBytes,
+					len(seedReplayInput),
+				)
+				sess.resetSessionLease(true)
+				return sess.runHTTPBridgeTurnsFromState(
+					bridgePayload,
+					sess.turn,
+					seedReplayInput,
+					seedReplayInputExists,
+					true,
+					fallbackReason,
+				)
+			}
 			if sess.retryIngressTurn(relayErr, sess.turn, connID) {
 				continue
 			}
@@ -826,7 +906,7 @@ func (sess *openAIWSIngressSession) runWSTurns(firstPayload openAIWSClientPayloa
 			logOpenAIWSBindResponseAccountWarn(sess.groupID, account.ID, responseID, sess.stateStore.BindResponseAccount(ctx, sess.groupID, responseID, account.ID, ttl))
 			sess.stateStore.BindResponseConn(responseID, connID, ttl)
 		}
-		if sess.stateStore != nil && sess.storeDisabled && sess.sessionHash != "" {
+		if sess.stateStore != nil && sess.storeDisabled && sess.sessionHash != "" && !sess.codexSessionExclusive() {
 			sess.stateStore.BindSessionConn(sess.groupID, sess.sessionHash, connID, s.openAIWSSessionStickyTTL())
 		}
 		if connID != "" {

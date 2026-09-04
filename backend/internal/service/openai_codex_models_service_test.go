@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -276,6 +277,23 @@ func TestFetchPreferredCodexModelsManifestFallsBackToStaleCache(t *testing.T) {
 	}
 	if !strings.Contains(string(manifest.Body), "gpt-5.6-sol") {
 		t.Fatalf("unexpected stale manifest body: %s", string(manifest.Body))
+	}
+}
+
+func TestFetchPreferredCodexModelsManifestFallsBackToEmbeddedAstra(t *testing.T) {
+	groupID := int64(4)
+	service := &OpenAIGatewayService{accountRepo: codexManifestFallbackRepo{}}
+
+	manifest, err := service.FetchPreferredCodexModelsManifest(context.Background(), &groupID, "0.153.0", "")
+	if err != nil {
+		t.Fatalf("embedded Astra fallback returned error: %v", err)
+	}
+	var envelope codexManifestEnvelope
+	if err := json.Unmarshal(manifest.Body, &envelope); err != nil {
+		t.Fatalf("embedded Astra fallback is invalid JSON: %v", err)
+	}
+	if len(envelope.Models) != 1 || envelope.Models[0].Slug != "gpt-6-astra" {
+		t.Fatalf("embedded Astra fallback models = %+v", envelope.Models)
 	}
 }
 

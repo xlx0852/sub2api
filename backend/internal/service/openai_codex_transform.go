@@ -604,7 +604,7 @@ func codexModelLookupKey(modelID string) string {
 
 func isKnownCodexModelSuffix(suffix string) bool {
 	switch suffix {
-	case "none", "minimal", "low", "medium", "high", "xhigh":
+	case "none", "minimal", "low", "medium", "high", "xhigh", "ultra":
 		return true
 	}
 	return isCodexDateSuffix(suffix)
@@ -1419,7 +1419,10 @@ func filterCodexInputWithOptions(input []any, opts codexInputFilterOptions) []an
 
 		if isCodexToolCallItemType(typ) {
 			callID, ok := m["call_id"].(string)
-			if !ok || strings.TrimSpace(callID) == "" {
+			// Only call-input items may derive call_id from id. Codex also emits
+			// standalone named function_call_output items whose fco_* id is an
+			// item identity, not a tool-call correlation key.
+			if (!ok || strings.TrimSpace(callID) == "") && isCodexToolCallInputType(typ) {
 				if id, ok := m["id"].(string); ok && strings.TrimSpace(id) != "" {
 					callID = id
 					ensureCopy()

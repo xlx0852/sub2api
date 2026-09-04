@@ -46,6 +46,18 @@ func TestParsePricingData_ParsesPriorityAndServiceTierFields(t *testing.T) {
 	require.True(t, pricing.SupportsServiceTier)
 }
 
+func TestPricingService_GPT6AstraStaticFallback(t *testing.T) {
+	svc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{}}
+	pricing := svc.GetModelPricing("gpt-6-astra")
+	require.NotNil(t, pricing)
+	require.Equal(t, 1e-5, pricing.InputCostPerToken)
+	require.Equal(t, 5e-5, pricing.OutputCostPerToken)
+	require.Equal(t, 1e-6, pricing.CacheReadInputTokenCost)
+	require.Equal(t, 272000, pricing.LongContextInputTokenThreshold)
+	require.Equal(t, 2.0, pricing.LongContextInputCostMultiplier)
+	require.Equal(t, 1.5, pricing.LongContextOutputCostMultiplier)
+}
+
 func TestBillingService_GPT56CacheWritePricingUsesOfficialMultiplier(t *testing.T) {
 	tests := []struct {
 		model             string

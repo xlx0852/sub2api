@@ -342,6 +342,116 @@ func TestOpenAIWSConnPool_ForceNewConnSkipsReuse(t *testing.T) {
 	require.Equal(t, 2, dialer.DialCount(), "ForceNewConn=true 时应跳过空闲连接复用并新建连接")
 }
 
+func TestOpenAIWSConnPool_RequirePristineSkipsUsedConnection(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Gateway.OpenAIWS.MaxConnsPerAccount = 2
+	cfg.Gateway.OpenAIWS.MinIdlePerAccount = 0
+	cfg.Gateway.OpenAIWS.MaxIdlePerAccount = 2
+
+	pool := newOpenAIWSConnPool(cfg)
+	dialer := &openAIWSCountingDialer{}
+	pool.setClientDialerForTest(dialer)
+	account := &Account{ID: 124, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+	baseReq := openAIWSAcquireRequest{Account: account, WSURL: "wss://example.com/v1/responses"}
+
+	usedLease, err := pool.Acquire(context.Background(), baseReq)
+	require.NoError(t, err)
+	usedConnID := usedLease.ConnID()
+	require.NoError(t, usedLease.WriteJSON(map[string]any{"type": "response.create"}, time.Second))
+	require.Equal(t, uint64(1), usedLease.RequestCount())
+	usedLease.Release()
+
+	pristineReq := baseReq
+	pristineReq.RequirePristine = true
+	pristineLease, err := pool.Acquire(context.Background(), pristineReq)
+	require.NoError(t, err)
+	require.NotEqual(t, usedConnID, pristineLease.ConnID())
+	require.True(t, pristineLease.IsPristine())
+	require.Equal(t, 2, dialer.DialCount())
+	pristineLease.Retire()
+}
+
+func TestOpenAIWSConnPool_RequirePristineClaimsPredialedConnection(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Gateway.OpenAIWS.MaxConnsPerAccount = 2
+	cfg.Gateway.OpenAIWS.MinIdlePerAccount = 0
+	cfg.Gateway.OpenAIWS.MaxIdlePerAccount = 2
+
+	pool := newOpenAIWSConnPool(cfg)
+	dialer := &openAIWSCountingDialer{}
+	pool.setClientDialerForTest(dialer)
+	account := &Account{ID: 125, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+	ap := pool.getOrCreateAccountPool(account.ID)
+	predialed := newOpenAIWSConn("predialed", account.ID, &openAIWSFakeConn{}, nil)
+	ap.mu.Lock()
+	ap.conns[predialed.id] = predialed
+	ap.mu.Unlock()
+
+	lease, err := pool.Acquire(context.Background(), openAIWSAcquireRequest{
+		Account:         account,
+		WSURL:           "wss://example.com/v1/responses",
+		RequirePristine: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, predialed.id, lease.ConnID())
+	require.True(t, lease.Reused(), "预拨号连接应计为连接复用")
+	require.True(t, lease.IsPristine())
+	require.Equal(t, 0, dialer.DialCount())
+	lease.Retire()
+
+	ap.mu.Lock()
+	_, exists := ap.conns[predialed.id]
+	ap.mu.Unlock()
+	require.False(t, exists, "Retire 后连接不能回到账号池")
+}
+
+func TestOpenAIWSConnPool_RequirePristineWaitsForBusySessionAtCapacity(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Gateway.OpenAIWS.MaxConnsPerAccount = 1
+	cfg.Gateway.OpenAIWS.MinIdlePerAccount = 0
+	cfg.Gateway.OpenAIWS.MaxIdlePerAccount = 1
+
+	pool := newOpenAIWSConnPool(cfg)
+	dialer := &openAIWSCountingDialer{}
+	pool.setClientDialerForTest(dialer)
+	account := &Account{ID: 126, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+	baseReq := openAIWSAcquireRequest{Account: account, WSURL: "wss://example.com/v1/responses"}
+
+	busyLease, err := pool.Acquire(context.Background(), baseReq)
+	require.NoError(t, err)
+	require.NoError(t, busyLease.WriteJSON(map[string]any{"type": "response.create"}, time.Second))
+
+	resultCh := make(chan *openAIWSConnLease, 1)
+	errCh := make(chan error, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	go func() {
+		req := baseReq
+		req.RequirePristine = true
+		lease, acquireErr := pool.Acquire(ctx, req)
+		if acquireErr != nil {
+			errCh <- acquireErr
+			return
+		}
+		resultCh <- lease
+	}()
+
+	time.Sleep(40 * time.Millisecond)
+	busyLease.Release()
+
+	select {
+	case acquireErr := <-errCh:
+		require.NoError(t, acquireErr)
+	case lease := <-resultCh:
+		require.NotNil(t, lease)
+		require.True(t, lease.IsPristine())
+		require.Equal(t, 2, dialer.DialCount())
+		lease.Retire()
+	case <-time.After(2 * time.Second):
+		t.Fatal("等待 pristine 连接超时")
+	}
+}
+
 func TestOpenAIWSConnPool_AcquireReusesOnlyMatchingBetaFeatures(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Gateway.OpenAIWS.MaxConnsPerAccount = 2

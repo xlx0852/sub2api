@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	coderws "github.com/coder/websocket"
@@ -75,6 +76,51 @@ func TestIsOpenAIWSIngressConnectionLimitReached(t *testing.T) {
 	))
 }
 
+func TestOpenAIWSIngressStrictAffinityHTTPBridgeFallbackEligibility(t *testing.T) {
+	t.Parallel()
+
+	newSession := func() *openAIWSIngressSession {
+		return &openAIWSIngressSession{
+			svc: &OpenAIGatewayService{cfg: &config.Config{
+				Gateway: config.GatewayConfig{OpenAIWS: config.GatewayOpenAIWSConfig{HTTPBridgeEnabled: true}},
+			}},
+			ctx:                          context.Background(),
+			isCodexCLI:                   true,
+			storeDisabled:                true,
+			currentPayload:               []byte(`{"type":"response.create","store":false,"previous_response_id":"resp_prev","input":[{"role":"user","content":"next"}]}`),
+			lastTurnReplayInput:          []json.RawMessage{json.RawMessage(`{"role":"user","content":"first"}`)},
+			lastTurnReplayInputExists:    true,
+			currentTurnReplayInput:       []json.RawMessage{json.RawMessage(`{"role":"user","content":"first"}`), json.RawMessage(`{"role":"user","content":"next"}`)},
+			currentTurnReplayInputExists: true,
+		}
+	}
+	retryable := wrapOpenAIWSIngressTurnError("read_upstream", io.EOF, false)
+	require.True(t, newSession().canFallbackStrictAffinityTurnToHTTPBridge(retryable))
+
+	tests := []struct {
+		name   string
+		mutate func(*openAIWSIngressSession)
+		err    error
+	}{
+		{name: "downstream already received output", err: wrapOpenAIWSIngressTurnError("read_upstream", io.EOF, true)},
+		{name: "non codex client", mutate: func(sess *openAIWSIngressSession) { sess.isCodexCLI = false }, err: retryable},
+		{name: "missing replay history", mutate: func(sess *openAIWSIngressSession) { sess.lastTurnReplayInputExists = false }, err: retryable},
+		{name: "non strict turn", mutate: func(sess *openAIWSIngressSession) {
+			sess.currentPayload = []byte(`{"type":"response.create","store":false,"input":"hello"}`)
+		}, err: retryable},
+		{name: "non transport error", err: wrapOpenAIWSIngressTurnError("upstream_event", errors.New("bad request"), false)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sess := newSession()
+			if tt.mutate != nil {
+				tt.mutate(sess)
+			}
+			require.False(t, sess.canFallbackStrictAffinityTurnToHTTPBridge(tt.err))
+		})
+	}
+}
+
 func TestOpenAIWSIngressConnectionLimitRecoveryOnlyOnce(t *testing.T) {
 	t.Parallel()
 
@@ -92,6 +138,29 @@ func TestOpenAIWSIngressConnectionLimitRecoveryOnlyOnce(t *testing.T) {
 	require.True(t, sess.recoverIngressConnectionLimit(err, 40, "old-conn"))
 	require.True(t, sess.forceNewConnOnRetry)
 	require.False(t, sess.recoverIngressConnectionLimit(err, 40, "old-conn"))
+}
+
+func TestOpenAIWSIngressProactiveRotationBeforeUpstreamLimit(t *testing.T) {
+	t.Parallel()
+
+	pool := newOpenAIWSConnPool(&config.Config{})
+	conn := newOpenAIWSConn("aged-conn", 110, &openAIWSCaptureConn{}, nil)
+	conn.createdAtNano.Store(time.Now().Add(-56 * time.Minute).UnixNano())
+	sess := &openAIWSIngressSession{
+		ctx:                          context.Background(),
+		account:                      &Account{ID: 110},
+		sessionLease:                 &openAIWSConnLease{pool: pool, accountID: 110, conn: conn},
+		sessionConnID:                conn.id,
+		turn:                         2,
+		currentPayload:               []byte(`{"type":"response.create","store":false,"previous_response_id":"resp_old","input":[{"role":"user","content":"next"}]}`),
+		currentTurnReplayInput:       []json.RawMessage{json.RawMessage(`{"role":"user","content":"first"}`), json.RawMessage(`{"role":"user","content":"next"}`)},
+		currentTurnReplayInputExists: true,
+		storeDisabled:                false,
+	}
+	require.True(t, sess.rotateAgedUpstreamConnBeforeTurn())
+	require.Nil(t, sess.sessionLease)
+	require.True(t, sess.forceNewConnOnRetry)
+	require.True(t, gjson.GetBytes(sess.currentPayload, "previous_response_id").Exists())
 }
 
 func TestOpenAIWSIngressConnectionLimitRecoveryReplaysStoreDisabledContext(t *testing.T) {
@@ -400,7 +469,7 @@ func TestShouldInferIngressFunctionCallOutputPreviousResponseID(t *testing.T) {
 			name:             "infer_when_all_conditions_match",
 			storeDisabled:    true,
 			turn:             2,
-			signals:          ToolContinuationSignals{HasFunctionCallOutput: true},
+			signals:          ToolContinuationSignals{HasFunctionCallOutput: true, HasPairedFunctionCallOutput: true},
 			expectedPrevious: "resp_1",
 			want:             true,
 		},
@@ -408,7 +477,7 @@ func TestShouldInferIngressFunctionCallOutputPreviousResponseID(t *testing.T) {
 			name:             "skip_when_store_enabled",
 			storeDisabled:    false,
 			turn:             2,
-			signals:          ToolContinuationSignals{HasFunctionCallOutput: true},
+			signals:          ToolContinuationSignals{HasFunctionCallOutput: true, HasPairedFunctionCallOutput: true},
 			expectedPrevious: "resp_1",
 			want:             false,
 		},
@@ -416,7 +485,7 @@ func TestShouldInferIngressFunctionCallOutputPreviousResponseID(t *testing.T) {
 			name:             "skip_on_first_turn",
 			storeDisabled:    true,
 			turn:             1,
-			signals:          ToolContinuationSignals{HasFunctionCallOutput: true},
+			signals:          ToolContinuationSignals{HasFunctionCallOutput: true, HasPairedFunctionCallOutput: true},
 			expectedPrevious: "resp_1",
 			want:             false,
 		},
@@ -432,7 +501,7 @@ func TestShouldInferIngressFunctionCallOutputPreviousResponseID(t *testing.T) {
 			name:                    "skip_when_request_already_has_previous_response_id",
 			storeDisabled:           true,
 			turn:                    2,
-			signals:                 ToolContinuationSignals{HasFunctionCallOutput: true},
+			signals:                 ToolContinuationSignals{HasFunctionCallOutput: true, HasPairedFunctionCallOutput: true},
 			currentPreviousResponse: "resp_client",
 			expectedPrevious:        "resp_1",
 			want:                    false,
@@ -441,7 +510,7 @@ func TestShouldInferIngressFunctionCallOutputPreviousResponseID(t *testing.T) {
 			name:             "skip_when_last_turn_response_id_missing",
 			storeDisabled:    true,
 			turn:             2,
-			signals:          ToolContinuationSignals{HasFunctionCallOutput: true},
+			signals:          ToolContinuationSignals{HasFunctionCallOutput: true, HasPairedFunctionCallOutput: true},
 			expectedPrevious: "",
 			want:             false,
 		},
@@ -449,7 +518,7 @@ func TestShouldInferIngressFunctionCallOutputPreviousResponseID(t *testing.T) {
 			name:             "trim_whitespace_before_judgement",
 			storeDisabled:    true,
 			turn:             2,
-			signals:          ToolContinuationSignals{HasFunctionCallOutput: true},
+			signals:          ToolContinuationSignals{HasFunctionCallOutput: true, HasPairedFunctionCallOutput: true},
 			expectedPrevious: "   resp_2   ",
 			want:             true,
 		},
@@ -457,7 +526,7 @@ func TestShouldInferIngressFunctionCallOutputPreviousResponseID(t *testing.T) {
 			name:             "skip_when_tool_call_context_already_present",
 			storeDisabled:    true,
 			turn:             2,
-			signals:          ToolContinuationSignals{HasFunctionCallOutput: true, HasToolCallContext: true},
+			signals:          ToolContinuationSignals{HasFunctionCallOutput: true, HasPairedFunctionCallOutput: true, HasToolCallContext: true},
 			expectedPrevious: "resp_2",
 			want:             false,
 		},
@@ -465,7 +534,7 @@ func TestShouldInferIngressFunctionCallOutputPreviousResponseID(t *testing.T) {
 			name:             "infer_when_only_item_reference_covers_call_ids",
 			storeDisabled:    true,
 			turn:             2,
-			signals:          ToolContinuationSignals{HasFunctionCallOutput: true, HasItemReferenceForAllCallIDs: true},
+			signals:          ToolContinuationSignals{HasFunctionCallOutput: true, HasPairedFunctionCallOutput: true, HasItemReferenceForAllCallIDs: true},
 			expectedPrevious: "resp_2",
 			want:             true,
 		},
@@ -473,7 +542,18 @@ func TestShouldInferIngressFunctionCallOutputPreviousResponseID(t *testing.T) {
 			name:             "skip_when_function_call_output_missing_call_id",
 			storeDisabled:    true,
 			turn:             2,
-			signals:          ToolContinuationSignals{HasFunctionCallOutput: true, HasFunctionCallOutputMissingCallID: true},
+			signals:          ToolContinuationSignals{HasFunctionCallOutput: true, HasPairedFunctionCallOutput: true, HasFunctionCallOutputMissingCallID: true},
+			expectedPrevious: "resp_2",
+			want:             false,
+		},
+		{
+			name:          "skip_for_standalone_named_output",
+			storeDisabled: true,
+			turn:          2,
+			signals: ToolContinuationSignals{
+				HasFunctionCallOutput:                true,
+				HasStandaloneNamedFunctionCallOutput: true,
+			},
 			expectedPrevious: "resp_2",
 			want:             false,
 		},
@@ -491,6 +571,55 @@ func TestShouldInferIngressFunctionCallOutputPreviousResponseID(t *testing.T) {
 				tt.expectedPrevious,
 			)
 			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestOpenAIWSRawItemsHaveToolCallContextForStandaloneNamedOutputs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		items []json.RawMessage
+		want  bool
+	}{
+		{
+			name: "standalone named output is self contained",
+			items: []json.RawMessage{
+				json.RawMessage(`{"type":"function_call_output","id":"fco_standalone","name":"notifications","output":"updated"}`),
+			},
+			want: true,
+		},
+		{
+			name: "unnamed output without call id is invalid",
+			items: []json.RawMessage{
+				json.RawMessage(`{"type":"function_call_output","id":"fco_invalid","output":"updated"}`),
+			},
+			want: false,
+		},
+		{
+			name: "standalone and paired output can replay together",
+			items: []json.RawMessage{
+				json.RawMessage(`{"type":"function_call","call_id":"call_1","name":"shell","arguments":"{}"}`),
+				json.RawMessage(`{"type":"function_call_output","call_id":"call_1","output":"ok"}`),
+				json.RawMessage(`{"type":"function_call_output","id":"fco_standalone","name":"notifications","output":"updated"}`),
+			},
+			want: true,
+		},
+		{
+			name: "paired output still requires matching call",
+			items: []json.RawMessage{
+				json.RawMessage(`{"type":"function_call_output","call_id":"call_1","output":"ok"}`),
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, openAIWSRawItemsHaveToolCallContextForOutputs(tt.items))
 		})
 	}
 }

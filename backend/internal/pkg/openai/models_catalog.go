@@ -21,12 +21,29 @@ func modelsFromCatalog() []Model {
 			owned = "openai"
 		}
 		out = append(out, Model{
-			ID:          e.ID,
-			Object:      obj,
-			Created:     e.Created,
-			OwnedBy:     owned,
-			Type:        typ,
-			DisplayName: e.DisplayName,
+			ID:                          e.ID,
+			Object:                      obj,
+			Created:                     e.Created,
+			OwnedBy:                     owned,
+			Type:                        typ,
+			DisplayName:                 e.DisplayName,
+			ContextWindow:               e.ContextWindow,
+			MaxContextWindow:            e.MaxContextWindow,
+			MaxOutputTokens:             e.MaxOutputTokens,
+			SupportedReasoningLevels:    append([]string(nil), e.SupportedReasoningLevels...),
+			DefaultReasoningLevel:       e.DefaultReasoningLevel,
+			SupportsVerbosity:           e.SupportsVerbosity,
+			DefaultVerbosity:            e.DefaultVerbosity,
+			UseResponsesLite:            e.UseResponsesLite,
+			ToolMode:                    e.ToolMode,
+			MultiAgentVersion:           e.MultiAgentVersion,
+			MultiAgentReasoningEffort:   e.MultiAgentReasoningEffort,
+			SupportsParallelToolCalls:   e.SupportsParallelToolCalls,
+			SupportsImageDetailOriginal: e.SupportsImageDetailOriginal,
+			TruncationLimit:             e.TruncationLimit,
+			PreferWebsockets:            e.PreferWebsockets,
+			MinimalClientVersion:        e.MinimalClientVersion,
+			SupportedInAPI:              e.SupportedInAPI,
 		})
 	}
 	return out

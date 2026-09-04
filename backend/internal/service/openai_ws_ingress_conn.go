@@ -13,6 +13,47 @@ import (
 	coderws "github.com/coder/websocket"
 )
 
+// rotateAgedUpstreamConnBeforeTurn proactively replaces a leased upstream
+// Responses WebSocket before OpenAI's 60-minute lifetime limit. Strict
+// continuations are converted to a replayable full create when their replay
+// context is complete; otherwise we keep the connection and let the existing
+// error-triggered recovery path decide safely.
+func (sess *openAIWSIngressSession) rotateAgedUpstreamConnBeforeTurn() bool {
+	if sess == nil || sess.sessionLease == nil || sess.turn <= 1 {
+		return false
+	}
+	if sess.sessionLease.ConnAge(time.Now()) < openAIWSConnRotationAge {
+		return false
+	}
+	if sess.isStrictAffinityTurn(sess.currentPayload) {
+		withoutPrevious, removed, dropErr := dropPreviousResponseIDFromRawPayload(sess.currentPayload)
+		if dropErr != nil || !removed {
+			return false
+		}
+		withReplay, setInputErr := setOpenAIWSPayloadInputSequence(
+			withoutPrevious,
+			sess.currentTurnReplayInput,
+			sess.currentTurnReplayInputExists,
+		)
+		if setInputErr != nil {
+			return false
+		}
+		sess.currentPayload = withReplay
+		sess.currentPayloadBytes = len(withReplay)
+	}
+	oldConnID := sess.sessionConnID
+	sess.resetSessionLease(true)
+	sess.forceNewConnOnRetry = true
+	logOpenAIWSModeInfo(
+		"ingress_ws_proactive_rotation account_id=%d turn=%d old_conn_id=%s age_minutes=%d",
+		sess.account.ID,
+		sess.turn,
+		truncateOpenAIWSLogValue(oldConnID, openAIWSIDValueMaxLen),
+		int(openAIWSConnRotationAge/time.Minute),
+	)
+	return true
+}
+
 func (sess *openAIWSIngressSession) acquireTurnLease(turn int, preferred string, forcePreferredConn bool) (*openAIWSConnLease, error) {
 	s := sess.svc
 	ctx := sess.ctx
@@ -23,6 +64,10 @@ func (sess *openAIWSIngressSession) acquireTurnLease(turn int, preferred string,
 	req.ForcePreferredConn = forcePreferredConn
 	// dedicated 模式下每次获取均新建连接，避免跨会话复用残留上下文。
 	req.ForceNewConn = sess.dedicatedMode || sess.forceNewConnOnRetry
+	// Codex 自己会在同一个下游 WS 内复用会话。首次只领取未承载请求的
+	// 预连接，防止把其他 Codex 会话的上游连接重新分配给当前会话。
+	req.RequirePristine = sess.codexSessionExclusive() && !req.ForceNewConn && req.PreferredConnID == "" &&
+		strings.TrimSpace(openAIWSPayloadStringFromRaw(sess.currentPayload, "previous_response_id")) == ""
 	sess.forceNewConnOnRetry = false
 	acquireCtx, acquireCancel := context.WithTimeout(ctx, sess.acquireTimeout)
 	lease, acquireErr := pool.Acquire(acquireCtx, req)
@@ -38,7 +83,7 @@ func (sess *openAIWSIngressSession) acquireTurnLease(turn int, preferred string,
 	if acquireErr != nil {
 		dialStatus, dialClass, dialCloseStatus, dialCloseReason, dialRespServer, dialRespVia, dialRespCFRay, dialRespReqID := summarizeOpenAIWSDialError(acquireErr)
 		logOpenAIWSModeInfo(
-			"ingress_ws_upstream_acquire_fail account_id=%d turn=%d reason=%s dial_status=%d dial_class=%s dial_close_status=%s dial_close_reason=%s dial_resp_server=%s dial_resp_via=%s dial_resp_cf_ray=%s dial_resp_x_request_id=%s cause=%s preferred_conn_id=%s force_preferred_conn=%v ws_host=%s ws_path=%s proxy_enabled=%v",
+			"ingress_ws_upstream_acquire_fail account_id=%d turn=%d reason=%s dial_status=%d dial_class=%s dial_close_status=%s dial_close_reason=%s dial_resp_server=%s dial_resp_via=%s dial_resp_cf_ray=%s dial_resp_x_request_id=%s cause=%s preferred_conn_id=%s force_preferred_conn=%v require_pristine=%v ws_host=%s ws_path=%s proxy_enabled=%v",
 			account.ID,
 			turn,
 			normalizeOpenAIWSLogValue(classifyOpenAIWSAcquireError(acquireErr)),
@@ -53,6 +98,7 @@ func (sess *openAIWSIngressSession) acquireTurnLease(turn int, preferred string,
 			truncateOpenAIWSLogValue(acquireErr.Error(), openAIWSLogValueMaxLen),
 			truncateOpenAIWSLogValue(preferred, openAIWSIDValueMaxLen),
 			forcePreferredConn,
+			req.RequirePristine,
 			sess.wsHost,
 			sess.wsPath,
 			account.ProxyID != nil && account.Proxy != nil,
@@ -95,11 +141,15 @@ func (sess *openAIWSIngressSession) acquireTurnLease(turn int, preferred string,
 		sess.baseAcquireReq.Headers = updatedHeaders
 	}
 	logOpenAIWSModeInfo(
-		"ingress_ws_upstream_connected account_id=%d turn=%d conn_id=%s conn_reused=%v conn_pick_ms=%d queue_wait_ms=%d preferred_conn_id=%s",
+		"ingress_ws_upstream_connected account_id=%d turn=%d conn_id=%s conn_reused=%v conn_age_ms=%d request_count=%d pristine=%v session_owned=%v conn_pick_ms=%d queue_wait_ms=%d preferred_conn_id=%s",
 		account.ID,
 		turn,
 		truncateOpenAIWSLogValue(connID, openAIWSIDValueMaxLen),
 		lease.Reused(),
+		lease.ConnAge(time.Now()).Milliseconds(),
+		lease.RequestCount(),
+		lease.IsPristine(),
+		sess.codexSessionExclusive(),
 		lease.ConnPickDuration().Milliseconds(),
 		lease.QueueWaitDuration().Milliseconds(),
 		truncateOpenAIWSLogValue(preferred, openAIWSIDValueMaxLen),
@@ -481,11 +531,29 @@ func (sess *openAIWSIngressSession) releaseSessionLease() {
 	if sess.sessionLease == nil {
 		return
 	}
+	retire := sess.codexSessionExclusive()
 	if !sess.lastTurnClean {
 		sess.sessionLease.MarkBroken()
 	}
 	sess.unpinSessionConn(sess.sessionConnID)
-	sess.sessionLease.Release()
+	if retire {
+		retireReason := "session_end"
+		if !sess.lastTurnClean {
+			retireReason = "broken"
+		}
+		logOpenAIWSModeInfo(
+			"ingress_ws_upstream_retired account_id=%d conn_id=%s reason=%s clean=%v conn_age_ms=%d request_count=%d",
+			account.ID,
+			truncateOpenAIWSLogValue(sess.sessionConnID, openAIWSIDValueMaxLen),
+			retireReason,
+			sess.lastTurnClean,
+			sess.sessionLease.ConnAge(time.Now()).Milliseconds(),
+			sess.sessionLease.RequestCount(),
+		)
+		sess.sessionLease.Retire()
+	} else {
+		sess.sessionLease.Release()
+	}
 	if sess.debugEnabled {
 		logOpenAIWSModeDebug(
 			"ingress_ws_upstream_released account_id=%d conn_id=%s",

@@ -1464,6 +1464,11 @@ func (h *OpenAIGatewayHandler) validateFunctionCallOutputRequest(c *gin.Context,
 	if !validation.HasFunctionCallOutput {
 		return true
 	}
+	if !validation.HasPairedFunctionCallOutput &&
+		validation.HasStandaloneNamedFunctionCallOutput &&
+		!validation.HasFunctionCallOutputMissingCallID {
+		return true
+	}
 
 	previousResponseID := gjson.GetBytes(body, "previous_response_id").String()
 	if strings.TrimSpace(previousResponseID) != "" || validation.HasToolCallContext {

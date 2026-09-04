@@ -24,19 +24,36 @@ type PlatformConfig struct {
 
 // ModelEntry is a single model in the catalog.
 type ModelEntry struct {
-	ID                         string          `json:"id"`
-	Name                       string          `json:"name,omitempty"` // Gemini native "models/..." form
-	DisplayName                string          `json:"display_name,omitempty"`
-	Object                     string          `json:"object,omitempty"`
-	OwnedBy                    string          `json:"owned_by,omitempty"`
-	Type                       string          `json:"type,omitempty"`
-	Created                    int64           `json:"created,omitempty"`
-	CreatedAt                  string          `json:"created_at,omitempty"`
-	Family                     string          `json:"family,omitempty"` // antigravity: claude|gemini
-	IsReasoning                bool            `json:"is_reasoning,omitempty"`
-	SupportedGenerationMethods []string        `json:"supported_generation_methods,omitempty"`
-	Media                      map[string]bool `json:"media,omitempty"`
-	Flags                      map[string]bool `json:"flags,omitempty"`
+	ID                          string          `json:"id"`
+	Name                        string          `json:"name,omitempty"` // Gemini native "models/..." form
+	DisplayName                 string          `json:"display_name,omitempty"`
+	Object                      string          `json:"object,omitempty"`
+	OwnedBy                     string          `json:"owned_by,omitempty"`
+	Type                        string          `json:"type,omitempty"`
+	Created                     int64           `json:"created,omitempty"`
+	CreatedAt                   string          `json:"created_at,omitempty"`
+	Family                      string          `json:"family,omitempty"` // antigravity: claude|gemini
+	IsReasoning                 bool            `json:"is_reasoning,omitempty"`
+	SupportedGenerationMethods  []string        `json:"supported_generation_methods,omitempty"`
+	Media                       map[string]bool `json:"media,omitempty"`
+	Flags                       map[string]bool `json:"flags,omitempty"`
+	ContextWindow               int             `json:"context_window,omitempty"`
+	MaxContextWindow            int             `json:"max_context_window,omitempty"`
+	MaxOutputTokens             int             `json:"max_output_tokens,omitempty"`
+	SupportedReasoningLevels    []string        `json:"supported_reasoning_levels,omitempty"`
+	DefaultReasoningLevel       string          `json:"default_reasoning_level,omitempty"`
+	SupportsVerbosity           bool            `json:"supports_verbosity,omitempty"`
+	DefaultVerbosity            string          `json:"default_verbosity,omitempty"`
+	UseResponsesLite            bool            `json:"use_responses_lite,omitempty"`
+	ToolMode                    string          `json:"tool_mode,omitempty"`
+	MultiAgentVersion           string          `json:"multi_agent_version,omitempty"`
+	MultiAgentReasoningEffort   string          `json:"multi_agent_reasoning_effort,omitempty"`
+	SupportsParallelToolCalls   bool            `json:"supports_parallel_tool_calls,omitempty"`
+	SupportsImageDetailOriginal bool            `json:"supports_image_detail_original,omitempty"`
+	TruncationLimit             int             `json:"truncation_limit,omitempty"`
+	PreferWebsockets            bool            `json:"prefer_websockets,omitempty"`
+	MinimalClientVersion        string          `json:"minimal_client_version,omitempty"`
+	SupportedInAPI              bool            `json:"supported_in_api,omitempty"`
 }
 
 // PriceEntry is LiteLLM-compatible fallback pricing. Currency defaults to USD.

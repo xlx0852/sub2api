@@ -131,6 +131,12 @@ const GroupSelectorStub = defineComponent({
   `
 })
 
+const AccountCostConfigPanelStub = defineComponent({
+  name: 'AccountCostConfigPanel',
+  emits: ['saved'],
+  template: '<button type="button" data-testid="inner-cost-save" @click="$emit(\'saved\', { account_expires_at: \'2026-10-01T00:00:00Z\' })">save cost</button>'
+})
+
 function buildAccount() {
   return {
     id: 1,
@@ -284,13 +290,25 @@ function mountModal(account = buildAccount()) {
         Icon: true,
         ProxySelector: true,
         GroupSelector: GroupSelectorStub,
-        ModelWhitelistSelector: ModelWhitelistSelectorStub
+        ModelWhitelistSelector: ModelWhitelistSelectorStub,
+        AccountCostConfigPanel: AccountCostConfigPanelStub
       }
     }
   })
 }
 
 describe('EditAccountModal', () => {
+  it('keeps the cost tab open and does not emit account updated after the inner save', async () => {
+    const wrapper = mountModal(buildGrokOAuthAccount())
+
+    await wrapper.get('[data-testid="edit-account-tab-cost"]').trigger('click')
+    await wrapper.get('[data-testid="inner-cost-save"]').trigger('click')
+
+    expect(wrapper.get('[data-testid="edit-account-cost-section"]').isVisible()).toBe(true)
+    expect(wrapper.emitted('updated')).toBeUndefined()
+    expect(wrapper.emitted('close')).toBeUndefined()
+  })
+
   it('keeps comprehensive cost multiplier operator-controlled and removes legacy auto-sync', async () => {
     const account = buildAccount()
     account.rate_multiplier = 7.1

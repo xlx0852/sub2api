@@ -18,6 +18,17 @@ func TestAccountIsSchedulable_QuotaExceeded(t *testing.T) {
 		want    bool
 	}{
 		{
+			name: "expired subscription remains schedulable",
+			account: &Account{
+				Status:             StatusActive,
+				Schedulable:        true,
+				Type:               AccountTypeOAuth,
+				ExpiresAt:          func() *time.Time { v := now.Add(-time.Hour); return &v }(),
+				AutoPauseOnExpired: true,
+			},
+			want: true,
+		},
+		{
 			name: "apikey daily quota exceeded",
 			account: &Account{
 				Status:      StatusActive,

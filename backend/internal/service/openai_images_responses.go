@@ -373,9 +373,11 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
 	tool := []byte(`{"type":"image_generation","action":"","model":""}`)
 	tool, _ = sjson.SetBytes(tool, "action", action)
 	tool, _ = sjson.SetBytes(tool, "model", strings.TrimSpace(toolModel))
-	if shouldPassOpenAIImagesN(toolModel, parsed.N) {
-		tool, _ = sjson.SetBytes(tool, "n", parsed.N)
-	}
+	// The Images API's `n` parameter is not part of the Responses API
+	// image_generation tool schema.  Passing it through causes a hard 400
+	// (`Unknown parameter: 'tools[0].n'`) from the upstream Responses endpoint.
+	// Keep the requested count at the gateway layer; the Responses tool request
+	// itself must always be a single-tool request without `n`.
 
 	for _, field := range []struct {
 		path  string
@@ -417,10 +419,9 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
 }
 
 func shouldPassOpenAIImagesN(model string, n int) bool {
-	if n <= 1 {
-		return false
-	}
-	return !strings.EqualFold(strings.TrimSpace(model), "dall-e-3")
+	// Kept as a compatibility helper for callers/tests; Responses image
+	// generation never accepts this field for any model.
+	return false
 }
 
 func extractOpenAIImagesFromResponsesCompleted(payload []byte) ([]openAIResponsesImageResult, int64, []byte, openAIResponsesImageResult, error) {
