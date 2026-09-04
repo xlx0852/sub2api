@@ -20,19 +20,19 @@ function parseOperations(yaml) {
   const paths = new Map()
   let currentPath = null
   for (const line of yaml.split(/\r?\n/)) {
-    const pathMatch = line.match(/^  (\/[A-Za-z0-9/_{}-]+):$/)
+    const pathMatch = line.match(/^( {2})(\/[A-Za-z0-9/_{}-]+):$/)
     if (pathMatch) {
-      currentPath = pathMatch[1]
+      currentPath = pathMatch[2]
       if (!paths.has(currentPath)) {
         paths.set(currentPath, [])
       }
       continue
     }
-    const methodMatch = line.match(/^    ([a-z]+):$/)
-    if (methodMatch && currentPath && HTTP_METHODS.has(methodMatch[1])) {
+    const methodMatch = line.match(/^( {4})([a-z]+):$/)
+    if (methodMatch && currentPath && HTTP_METHODS.has(methodMatch[2])) {
       const methods = paths.get(currentPath)
-      if (methods && !methods.includes(methodMatch[1])) {
-        methods.push(methodMatch[1])
+      if (methods && !methods.includes(methodMatch[2])) {
+        methods.push(methodMatch[2])
       }
     }
   }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/* global __APP_VERSION__, __MIN_BACKEND_VERSION__ */
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { onMounted, onBeforeUnmount, watch, ref } from 'vue'
 import { useI18n } from 'vue-i18n'

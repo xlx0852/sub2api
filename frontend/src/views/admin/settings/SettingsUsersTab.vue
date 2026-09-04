@@ -18,7 +18,6 @@ interface DefaultSubscriptionGroupOption {
 }
 
 defineProps<{
-  authSourceDefaults: Record<string, any>
   authSourceDefaultsMeta: { source: AuthSourceType; title: string; description: string }[]
   subscriptionGroups: AdminGroup[]
   defaultSubscriptionGroupOptions: DefaultSubscriptionGroupOption[]
@@ -27,6 +26,8 @@ defineProps<{
   addAuthSourceDefaultSubscription: (source: AuthSourceType) => void
   removeAuthSourceDefaultSubscription: (source: AuthSourceType, index: number) => void
 }>()
+
+const authSourceDefaults = defineModel<Record<string, any>>('authSourceDefaults', { required: true })
 
 const form = defineModel<Record<string, any>>('form', { required: true })
 

@@ -8,16 +8,12 @@ import type { WebSearchEmulationConfig, WebSearchProviderConfig } from '@/api/ad
 import type { Proxy } from '@/types'
 
 defineProps<{
-  overloadCooldownForm: Record<string, any>
   overloadCooldownLoading: boolean
   overloadCooldownSaving: boolean
-  rateLimit429CooldownForm: Record<string, any>
   rateLimit429CooldownLoading: boolean
   rateLimit429CooldownSaving: boolean
-  streamTimeoutForm: Record<string, any>
   streamTimeoutLoading: boolean
   streamTimeoutSaving: boolean
-  rectifierForm: Record<string, any>
   rectifierLoading: boolean
   rectifierSaving: boolean
   betaPolicyForm: Record<string, any>
@@ -36,10 +32,8 @@ defineProps<{
   claudeOAuthSystemPromptBlockTypeOptions: { value: string; label: string }[]
   claudeOAuthSystemPromptCacheTTLOptions: { value: string; label: string }[]
   openAIAdvancedSchedulerWeightFields: any[]
-  webSearchConfig: WebSearchEmulationConfig
   webSearchProxies: Proxy[]
   expandedProviders: Record<number, boolean>
-  apiKeyVisible: Record<number, boolean>
   wsTestLoading: boolean
   wsTestResult: Record<string, any> | null
   codexFingerprintRows: any[]
@@ -82,6 +76,13 @@ defineProps<{
   addCodexWhitelistRow: () => void
   removeCodexWhitelistRow: (i: number) => void
 }>()
+
+const overloadCooldownForm = defineModel<Record<string, any>>('overloadCooldownForm', { required: true })
+const rateLimit429CooldownForm = defineModel<Record<string, any>>('rateLimit429CooldownForm', { required: true })
+const streamTimeoutForm = defineModel<Record<string, any>>('streamTimeoutForm', { required: true })
+const rectifierForm = defineModel<Record<string, any>>('rectifierForm', { required: true })
+const webSearchConfig = defineModel<WebSearchEmulationConfig>('webSearchConfig', { required: true })
+const apiKeyVisible = defineModel<Record<number, boolean>>('apiKeyVisible', { required: true })
 
 const form = defineModel<Record<string, any>>('form', { required: true })
 

@@ -4,9 +4,6 @@ import Toggle from '@/ui/Toggle.vue'
 import type { AffiliateAdminEntry, SimpleUser } from '@/api/admin/affiliates'
 
 defineProps<{
-  affiliateState: Record<string, any>
-  affiliateModal: Record<string, any>
-  affiliateBatchModal: Record<string, any>
   affiliateModalCanSubmit: boolean
   openAffiliateModal: (entry: AffiliateAdminEntry | null) => void
   onAffiliateSearchInput: () => void
@@ -22,6 +19,10 @@ defineProps<{
   submitAffiliateModal: () => void
   submitAffiliateBatchModal: () => void
 }>()
+
+const affiliateState = defineModel<Record<string, any>>('affiliateState', { required: true })
+const affiliateModal = defineModel<Record<string, any>>('affiliateModal', { required: true })
+const affiliateBatchModal = defineModel<Record<string, any>>('affiliateBatchModal', { required: true })
 
 const form = defineModel<Record<string, any>>('form', { required: true })
 
