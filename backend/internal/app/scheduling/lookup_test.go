@@ -87,12 +87,3 @@ func TestNewResultReleaseIsIdempotent(t *testing.T) {
 
 	require.Equal(t, 1, calls)
 }
-
-func TestReleaseOnError(t *testing.T) {
-	calls := 0
-	ReleaseOnError(func() { calls++ }, errors.New("hydrate failed"))
-	require.Equal(t, 1, calls)
-	ReleaseOnError(func() { calls++ }, nil)
-	require.Equal(t, 1, calls)
-	ReleaseOnError(nil, errors.New("hydrate failed"))
-}

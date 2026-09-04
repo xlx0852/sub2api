@@ -74,10 +74,3 @@ func NewModelLimitedResult(account *domain.Account) *Result {
 		ModelLimited: true,
 	}
 }
-
-// ReleaseOnError 在 hydrate/构造失败时立即释放已抢到的并发槽，避免等到 Redis TTL。
-func ReleaseOnError(release func(), err error) {
-	if err != nil && release != nil {
-		release()
-	}
-}
