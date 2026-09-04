@@ -61,6 +61,9 @@ func lookupSchedulableAccount(ctx context.Context, snapshot *SchedulerSnapshotSe
 func newHydratedSelectionResult(ctx context.Context, snapshot *SchedulerSnapshotService, account *Account, kind string, acquired bool, release func(), waitPlan *AccountWaitPlan) (*AccountSelectionResult, error) {
 	hydrated, err := hydrateSelectedAccount(ctx, snapshot, account, kind)
 	if err != nil {
+		if acquired && release != nil {
+			release()
+		}
 		return nil, err
 	}
 	return AccountSelectionFromScheduling(scheduling.NewResult(hydrated, acquired, release, waitPlanToScheduling(waitPlan)), nil)
@@ -75,7 +78,5 @@ func newHydratedModelLimitedResult(ctx context.Context, snapshot *SchedulerSnaps
 }
 
 func newHydratedAcquiredResult(ctx context.Context, snapshot *SchedulerSnapshotService, account *Account, kind string, release func()) (*AccountSelectionResult, error) {
-	selection, err := newHydratedSelectionResult(ctx, snapshot, account, kind, true, release, nil)
-	scheduling.ReleaseOnError(release, err)
-	return selection, err
+	return newHydratedSelectionResult(ctx, snapshot, account, kind, true, release, nil)
 }

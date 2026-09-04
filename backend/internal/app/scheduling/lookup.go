@@ -3,6 +3,7 @@ package scheduling
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
@@ -49,6 +50,13 @@ func HydrateSelected(ctx context.Context, snapshot AccountLookup, account *domai
 
 // NewResult 构造普通选号结果。
 func NewResult(account *domain.Account, acquired bool, release func(), waitPlan *WaitPlan) *Result {
+	if release != nil {
+		var once sync.Once
+		releaseFn := release
+		release = func() {
+			once.Do(releaseFn)
+		}
+	}
 	return &Result{
 		Account:  account,
 		Acquired: acquired,

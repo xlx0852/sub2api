@@ -78,6 +78,16 @@ func TestNewResultAndModelLimited(t *testing.T) {
 	require.Nil(t, limited.WaitPlan)
 }
 
+func TestNewResultReleaseIsIdempotent(t *testing.T) {
+	calls := 0
+	result := NewResult(&domain.Account{ID: 7}, true, func() { calls++ }, nil)
+
+	result.Release()
+	result.Release()
+
+	require.Equal(t, 1, calls)
+}
+
 func TestReleaseOnError(t *testing.T) {
 	calls := 0
 	ReleaseOnError(func() { calls++ }, errors.New("hydrate failed"))
