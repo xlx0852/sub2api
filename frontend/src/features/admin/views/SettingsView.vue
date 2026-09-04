@@ -101,16 +101,16 @@
         <div v-show="activeTab === 'gateway'" class="space-y-6">
           <SettingsGatewayTab
             v-model:form="formModel"
-            v-model:overloadCooldownForm="overloadCooldownForm"
+            v-model:overloadCooldownForm="overloadCooldownFormModel"
             :overloadCooldownLoading="overloadCooldownLoading"
             :overloadCooldownSaving="overloadCooldownSaving"
-            v-model:rateLimit429CooldownForm="rateLimit429CooldownForm"
+            v-model:rateLimit429CooldownForm="rateLimit429CooldownFormModel"
             :rateLimit429CooldownLoading="rateLimit429CooldownLoading"
             :rateLimit429CooldownSaving="rateLimit429CooldownSaving"
-            v-model:streamTimeoutForm="streamTimeoutForm"
+            v-model:streamTimeoutForm="streamTimeoutFormModel"
             :streamTimeoutLoading="streamTimeoutLoading"
             :streamTimeoutSaving="streamTimeoutSaving"
-            v-model:rectifierForm="rectifierForm"
+            v-model:rectifierForm="rectifierFormModel"
             :rectifierLoading="rectifierLoading"
             :rectifierSaving="rectifierSaving"
             :betaPolicyForm="betaPolicyForm"
@@ -129,10 +129,10 @@
             :claudeOAuthSystemPromptBlockTypeOptions="claudeOAuthSystemPromptBlockTypeOptions"
             :claudeOAuthSystemPromptCacheTTLOptions="claudeOAuthSystemPromptCacheTTLOptions"
             :openAIAdvancedSchedulerWeightFields="openAIAdvancedSchedulerWeightFields"
-            v-model:webSearchConfig="webSearchConfig"
+            v-model:webSearchConfig="webSearchConfigModel"
             :webSearchProxies="webSearchProxies"
             :expandedProviders="expandedProviders"
-            v-model:apiKeyVisible="apiKeyVisible"
+            v-model:apiKeyVisible="apiKeyVisibleModel"
             :wsTestLoading="wsTestLoading"
             :wsTestResult="wsTestResult"
             :codexFingerprintRows="codexFingerprintRows"
@@ -576,6 +576,10 @@ const overloadCooldownForm = reactive({
   enabled: true,
   cooldown_minutes: 10,
 });
+const overloadCooldownFormModel = computed({
+  get: () => overloadCooldownForm,
+  set: (next) => Object.assign(overloadCooldownForm, next),
+});
 
 // Rate Limit Cooldown (429) 状态
 const rateLimit429CooldownLoading = ref(true);
@@ -583,6 +587,10 @@ const rateLimit429CooldownSaving = ref(false);
 const rateLimit429CooldownForm = reactive({
   enabled: true,
   cooldown_seconds: 5,
+});
+const rateLimit429CooldownFormModel = computed({
+  get: () => rateLimit429CooldownForm,
+  set: (next) => Object.assign(rateLimit429CooldownForm, next),
 });
 
 // Stream Timeout 状态
@@ -595,6 +603,10 @@ const streamTimeoutForm = reactive({
   threshold_count: 3,
   threshold_window_minutes: 10,
 });
+const streamTimeoutFormModel = computed({
+  get: () => streamTimeoutForm,
+  set: (next) => Object.assign(streamTimeoutForm, next),
+});
 
 // Rectifier 状态
 const rectifierLoading = ref(true);
@@ -605,6 +617,10 @@ const rectifierForm = reactive({
   thinking_budget_enabled: true,
   apikey_signature_enabled: false,
   apikey_signature_patterns: [] as string[],
+});
+const rectifierFormModel = computed({
+  get: () => rectifierForm,
+  set: (next) => Object.assign(rectifierForm, next),
 });
 
 // Beta Policy 状态
@@ -1508,6 +1524,14 @@ const webSearchConfig = reactive<WebSearchEmulationConfig>({
 
 const expandedProviders = reactive<Record<number, boolean>>({});
 const apiKeyVisible = reactive<Record<number, boolean>>({});
+const webSearchConfigModel = computed({
+  get: () => webSearchConfig,
+  set: (next: WebSearchEmulationConfig) => Object.assign(webSearchConfig, next),
+});
+const apiKeyVisibleModel = computed({
+  get: () => apiKeyVisible,
+  set: (next: Record<number, boolean>) => Object.assign(apiKeyVisible, next),
+});
 const wsTestQuery = ref("");
 const wsTestLoading = ref(false);
 const wsTestResult = ref<WebSearchTestResult | null>(null);
