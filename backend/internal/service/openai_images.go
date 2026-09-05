@@ -13,8 +13,8 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
-	"net/url"
 	"net/textproto"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -555,6 +555,9 @@ func (s *OpenAIGatewayService) ForwardImages(
 ) (*OpenAIForwardResult, error) {
 	if parsed == nil {
 		return nil, fmt.Errorf("parsed images request is required")
+	}
+	if account == nil {
+		return nil, fmt.Errorf("images account is required")
 	}
 	switch account.Type {
 	case AccountTypeAPIKey:
