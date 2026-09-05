@@ -787,19 +787,6 @@ func containsBetaToken(header, token string) bool {
 	return false
 }
 
-func filterBetaTokens(tokens []string, filterSet map[string]struct{}) []string {
-	if len(tokens) == 0 || len(filterSet) == 0 {
-		return tokens
-	}
-	kept := make([]string, 0, len(tokens))
-	for _, token := range tokens {
-		if _, filtered := filterSet[token]; !filtered {
-			kept = append(kept, token)
-		}
-	}
-	return kept
-}
-
 func buildBetaTokenSet(tokens []string) map[string]struct{} {
 	m := make(map[string]struct{}, len(tokens))
 	for _, t := range tokens {
