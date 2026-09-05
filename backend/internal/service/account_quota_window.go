@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"log/slog"
 	"math"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -631,11 +633,29 @@ func observationFromGrokBillingUpdate(accountID int64, updates map[string]any, n
 		return nil
 	}
 	kind, _ := classifyQuotaWindow("7d", mins)
-	used := grokBillingUsedPercent(m)
+	used := grokQuotaLedgerUsedPercent(m)
 	return &QuotaWindowObservation{
 		AccountID: accountID, Platform: PlatformGrok, Kind: kind,
 		EndAt: *endAt, WindowMinutes: mins, UsedPercent: used, ObservedAt: now,
 	}
+}
+
+func grokQuotaLedgerUsedPercent(billing map[string]any) *float64 {
+	if billing == nil {
+		return nil
+	}
+	if products, ok := billing["product_usage"].([]any); ok {
+		for _, raw := range products {
+			product := asStringAnyMap(raw)
+			if product == nil || !strings.Contains(strings.ToLower(strings.TrimSpace(fmt.Sprint(product["product"]))), "grokbuild") {
+				continue
+			}
+			if used := anyToFloat64(product["usage_percent"]); used != nil {
+				return used
+			}
+		}
+	}
+	return roundUsagePercent2Ptr(anyToFloat64(billing["usage_percent"]))
 }
 
 func anyToTimeValue(v any) (time.Time, bool) {
