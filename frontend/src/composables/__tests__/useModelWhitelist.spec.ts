@@ -18,10 +18,30 @@ import {
   getModelsByPlatform,
   replaceExactModelsWithUpstream,
   replaceIdentityModelMappingsWithUpstream,
-  splitModelMappingObject
+  splitModelMappingObject,
+  useModelRestrictionEditor
 } from '../useModelWhitelist'
 
 describe('useModelWhitelist', () => {
+  it('共享模型限制编辑器会拒绝重复来源并支持统一重置', () => {
+    const editor = useModelRestrictionEditor()
+
+    editor.addModelMapping()
+    editor.modelMappings.value[0] = { from: 'gpt-latest', to: 'gpt-5.4' }
+
+    expect(editor.addPresetMapping('gpt-latest', 'gpt-5.5')).toBe(false)
+    expect(editor.addPresetMapping('gpt-new', 'gpt-5.5')).toBe(true)
+    expect(editor.modelMappings.value).toHaveLength(2)
+
+    editor.modelRestrictionMode.value = 'mapping'
+    editor.allowedModels.value = ['gpt-5.4']
+    editor.resetModelRestriction()
+
+    expect(editor.modelRestrictionMode.value).toBe('whitelist')
+    expect(editor.allowedModels.value).toEqual([])
+    expect(editor.modelMappings.value).toEqual([])
+  })
+
   it('openai 模型列表包含 GPT-5.4 官方快照', () => {
     const models = getModelsByPlatform('openai')
 
