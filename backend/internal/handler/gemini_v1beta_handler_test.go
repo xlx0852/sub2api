@@ -4,11 +4,29 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/gemini"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
+
+func shouldFallbackGeminiModels(res *service.UpstreamHTTPResult) bool {
+	if res == nil || (res.StatusCode != http.StatusUnauthorized && res.StatusCode != http.StatusForbidden) {
+		return res == nil
+	}
+	body := strings.ToLower(string(res.Body))
+	return strings.Contains(strings.ToLower(res.Headers.Get("Www-Authenticate")), "insufficient_scope") ||
+		strings.Contains(body, "insufficient authentication scopes") || strings.Contains(body, "access_token_scope_insufficient")
+}
+
+func shouldFallbackGeminiModel(modelName string, res *service.UpstreamHTTPResult) bool {
+	if shouldFallbackGeminiModels(res) {
+		return true
+	}
+	return res != nil && res.StatusCode == http.StatusNotFound && gemini.HasFallbackModel(modelName)
+}
 
 // TestGeminiV1BetaHandler_PlatformRoutingInvariant 文档化并验证 Handler 层的平台路由逻辑不变量
 // 该测试确保 gemini 和 antigravity 平台的路由逻辑符合预期

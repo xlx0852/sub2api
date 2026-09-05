@@ -15,7 +15,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/gemini"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
@@ -594,35 +593,6 @@ func googleError(c *gin.Context, status int, message string) {
 			"status":  googleapi.HTTPStatusToGoogleStatus(status),
 		},
 	})
-}
-
-func shouldFallbackGeminiModels(res *service.UpstreamHTTPResult) bool {
-	if res == nil {
-		return true
-	}
-	if res.StatusCode != http.StatusUnauthorized && res.StatusCode != http.StatusForbidden {
-		return false
-	}
-	if strings.Contains(strings.ToLower(res.Headers.Get("Www-Authenticate")), "insufficient_scope") {
-		return true
-	}
-	if strings.Contains(strings.ToLower(string(res.Body)), "insufficient authentication scopes") {
-		return true
-	}
-	if strings.Contains(strings.ToLower(string(res.Body)), "access_token_scope_insufficient") {
-		return true
-	}
-	return false
-}
-
-func shouldFallbackGeminiModel(modelName string, res *service.UpstreamHTTPResult) bool {
-	if shouldFallbackGeminiModels(res) {
-		return true
-	}
-	if res == nil || res.StatusCode != http.StatusNotFound {
-		return false
-	}
-	return gemini.HasFallbackModel(modelName)
 }
 
 // extractGeminiCLISessionHash 从 Gemini CLI 请求中提取会话标识。
