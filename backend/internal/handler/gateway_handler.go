@@ -365,6 +365,9 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 
 			// 3. 获取账号并发槽位
 			accountReleaseFunc := selection.ReleaseFunc
+			if selection.Acquired {
+				accountReleaseFunc = selection.Release
+			}
 			if !selection.Acquired {
 				if selection.ModelLimited {
 					// 模型级并发预算已满：直接 429 让路，不进入账号等待队列。

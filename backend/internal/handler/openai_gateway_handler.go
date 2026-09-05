@@ -1871,6 +1871,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			accountMaxConcurrency = selection.WaitPlan.MaxConcurrency
 		}
 		accountReleaseFunc := selection.ReleaseFunc
+		if selection.Acquired {
+			accountReleaseFunc = selection.Release
+		}
 		if !selection.Acquired {
 			if selection.ModelLimited {
 				// 模型级并发预算已满：直接关闭让路，不进入账号等待队列。

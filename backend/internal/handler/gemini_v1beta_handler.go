@@ -346,6 +346,9 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 
 		// 4) account concurrency slot
 		accountReleaseFunc := selection.ReleaseFunc
+		if selection.Acquired {
+			accountReleaseFunc = selection.Release
+		}
 		if !selection.Acquired {
 			if selection.WaitPlan == nil {
 				markOpsRoutingCapacityLimited(c)
