@@ -490,6 +490,7 @@ export default {
         collapseExpirations: '收起重置次数到期时间',
         expirationDetails: '重置次数到期明细',
         noCreditsAvailable: '没有可用的重置次数',
+        noEligibleWindow: '当前没有可重置的额度窗口',
         resetSuccess: '已重置 {windows} 个窗口',
         confirmTitle: '确认重置周限',
         confirmMessage: '将消耗 1 次重置次数立即恢复当前窗口，剩余 {count} 次。此操作不可撤销，确定继续吗？',
@@ -827,12 +828,6 @@ export default {
       },
       autoPauseOnExpired: '过期自动暂停调度',
       autoPauseOnExpiredDesc: '启用后，账号过期将自动暂停调度',
-	  autoPause5hThreshold: '5h 用量阈值(%)',
-	  autoPause7dThreshold: '7d 用量阈值(%)',
-	  autoPauseThresholdHint: '留空或填 0 表示使用全局默认阈值（在运维设置中配置）；填具体值则覆盖全局默认。达到阈值后仅在调度时跳过账号，不修改 schedulable。',
-	  autoPause5hDisabled: '禁用 5h 自动暂停',
-	  autoPause7dDisabled: '禁用 7d 自动暂停',
-	  autoPauseDisabledHint: '开启后该账号永不进入自动暂停（即使全局默认阈值已配置）。',
       // Quota control (Anthropic OAuth/SetupToken only)
       quotaControl: {
         title: '配额控制',

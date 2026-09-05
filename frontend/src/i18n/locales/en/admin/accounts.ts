@@ -628,12 +628,6 @@ export default {
       },
       autoPauseOnExpired: 'Auto Pause On Expired',
       autoPauseOnExpiredDesc: 'When enabled, the account will auto pause scheduling after it expires',
-	  autoPause5hThreshold: '5h Usage Threshold (%)',
-	  autoPause7dThreshold: '7d Usage Threshold (%)',
-	  autoPauseThresholdHint: 'Leave empty or set 0 to use the global default threshold (configured in Ops settings); set a value to override the global default. Reaching the threshold only skips the account during scheduling and does not modify schedulable.',
-	  autoPause5hDisabled: 'Disable 5h auto-pause',
-	  autoPause7dDisabled: 'Disable 7d auto-pause',
-	  autoPauseDisabledHint: 'When enabled, this account is never auto-paused (even if a global default threshold is configured).',
       // Quota control (Anthropic OAuth/SetupToken only)
       quotaControl: {
         title: 'Quota Control',
@@ -1426,6 +1420,7 @@ export default {
         collapseExpirations: 'Collapse reset credit expirations',
         expirationDetails: 'Reset credit expiration details',
         noCreditsAvailable: 'No reset credits available',
+        noEligibleWindow: 'No eligible rate-limit window to reset',
         resetSuccess: 'Reset {windows} window(s)',
         confirmTitle: 'Confirm Weekly Limit Reset',
         confirmMessage: 'This will consume 1 reset credit to immediately restore the current window ({count} remaining). This action cannot be undone. Continue?',

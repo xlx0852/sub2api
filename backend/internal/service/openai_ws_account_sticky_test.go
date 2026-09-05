@@ -48,7 +48,7 @@ func TestOpenAIGatewayService_SelectAccountByPreviousResponseID_Hit(t *testing.T
 	}
 }
 
-func TestOpenAIGatewayService_SelectAccountByPreviousResponseID_QuotaAutoPausedMiss(t *testing.T) {
+func TestOpenAIGatewayService_SelectAccountByPreviousResponseID_IgnoresHistoricalQuotaThreshold(t *testing.T) {
 	ctx := context.Background()
 	groupID := int64(23)
 	account := Account{
@@ -79,7 +79,8 @@ func TestOpenAIGatewayService_SelectAccountByPreviousResponseID_QuotaAutoPausedM
 
 	selection, err := svc.SelectAccountByPreviousResponseID(ctx, &groupID, "resp_prev_quota", "gpt-5.1", nil, false)
 	require.NoError(t, err)
-	require.Nil(t, selection, "超过 5h 配额阈值的账号不应继续命中 previous_response_id 粘连")
+	require.NotNil(t, selection, "历史 5h 阈值不应阻止 previous_response_id 粘连")
+	require.Equal(t, account.ID, selection.Account.ID)
 
 	// Auto-pause is transient, so the binding is preserved: the chain can resume on the
 	// same account once the quota window resets.

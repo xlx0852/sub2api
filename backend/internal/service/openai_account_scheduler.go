@@ -1884,7 +1884,6 @@ func (s *defaultOpenAIAccountScheduler) accountRequestPolicyDecision(ctx context
 		account,
 		openAICandidatePolicyRequest(req),
 		openAIRuntimePolicy{service: s.service},
-		openAIAdvancedQuotaPolicy,
 		openAIShadowParentPolicy{scheduler: s},
 		openAIRequestedModelPolicy,
 		openAIUpstreamChannelPolicy{service: s.service},
@@ -2233,7 +2232,6 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerStrategy(
 	platform string,
 	previousResponseCanMove bool,
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
-	ctx = s.withOpenAIQuotaAutoPauseContext(ctx)
 	platform = normalizeOpenAICompatiblePlatform(platform)
 	decision := OpenAIAccountScheduleDecision{}
 	scheduler := s.getOpenAIAccountScheduler(ctx)

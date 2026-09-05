@@ -67,15 +67,6 @@ type SettingService struct {
 	cyberSessionBlockRuntimeCache atomic.Value // *cachedCyberSessionBlockRuntime
 	cyberSessionBlockRuntimeSF    singleflight.Group
 
-	// openAIQuotaAutoPauseSettingsCache holds the most recently observed quota auto-pause
-	// settings. GetOpenAIQuotaAutoPauseSettings reads this atomic.Value on the request hot
-	// path without ever blocking on the DB; when the cached entry expires, a background
-	// goroutine refreshes it via openAIQuotaAutoPauseSettingsSF (stale-while-revalidate).
-	// This per-service field also gives tests natural isolation — each SettingService
-	// instance owns its own cache, no shared package-level state.
-	openAIQuotaAutoPauseSettingsCache atomic.Value // *cachedOpenAIQuotaAutoPauseSettings
-	openAIQuotaAutoPauseSettingsSF    singleflight.Group
-
 	// modelConcurrencyLimitsCache 缓存模型级全局并发预算（canonical model → 并发上限）。
 	// GetModelConcurrencyLimits 在网关请求热路径上被调用，进程内缓存避免每次访问 DB；
 	// 配置更新时由 refreshCachedSettings 主动刷新。

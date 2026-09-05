@@ -68,10 +68,7 @@ const (
 	openAIUpstreamEndpointContextKey   = "openai_actual_upstream_endpoint"
 	// Codex 限额快照仅用于后台展示/诊断，不需要每个成功请求都立即落库。
 	openAICodexSnapshotPersistMinInterval = 30 * time.Second
-	// 配额自动暂停时，超过该时长仍未刷新的 used% 快照视为陈旧，不再据此暂停账号。
-	// 被暂停的账号收不到流量，其快照永远不会从上游响应头刷新；该兜底让账号在快照
-	// 陈旧时放行一次请求，从而通过正常响应头自愈，而无需等待整个窗口（5h/7d）重置。
-	openAICodexAutoPauseStaleAfter = 2 * time.Hour
+	grokQuotaPauseStaleAfter = 2 * time.Hour
 )
 
 // OpenAI allowed headers whitelist (for non-passthrough).

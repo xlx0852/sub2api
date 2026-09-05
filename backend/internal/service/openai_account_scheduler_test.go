@@ -1191,7 +1191,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_SessionStickyRateLimite
 	require.Equal(t, openAIAccountScheduleLayerLoadBalance, decision.Layer)
 }
 
-func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AutoPauseBy5hThreshold(t *testing.T) {
+func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_IgnoresHistorical5hThreshold(t *testing.T) {
 	ctx := context.Background()
 	primary := Account{
 		ID:          35001,
@@ -1212,7 +1212,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AutoPauseBy5hT
 	account, err := svc.SelectAccountForModelWithExclusions(ctx, nil, "", "gpt-5.1", nil)
 	require.NoError(t, err)
 	require.NotNil(t, account)
-	require.Equal(t, int64(35002), account.ID)
+	require.Equal(t, int64(35001), account.ID)
 }
 
 func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AllowsBelow5hThreshold(t *testing.T) {
@@ -1239,7 +1239,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AllowsBelow5hT
 	require.Equal(t, int64(35101), account.ID)
 }
 
-func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AutoPauseBy7dThreshold(t *testing.T) {
+func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_IgnoresHistorical7dThreshold(t *testing.T) {
 	ctx := context.Background()
 	primary := Account{
 		ID:          35201,
@@ -1260,7 +1260,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_AutoPauseBy7dT
 	account, err := svc.SelectAccountForModelWithExclusions(ctx, nil, "", "gpt-5.1", nil)
 	require.NoError(t, err)
 	require.NotNil(t, account)
-	require.Equal(t, int64(35202), account.ID)
+	require.Equal(t, int64(35201), account.ID)
 }
 
 func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_UnconfiguredThresholdKeepsLegacyBehavior(t *testing.T) {
@@ -1275,8 +1275,8 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_UnconfiguredTh
 	require.Equal(t, int64(35301), account.ID)
 }
 
-func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_UsesGlobalDefaultThreshold(t *testing.T) {
-	ctx := withOpenAIQuotaAutoPauseSettings(context.Background(), OpsOpenAIAccountQuotaAutoPauseSettings{DefaultThreshold5h: 0.95})
+func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_IgnoresGlobalDefaultThreshold(t *testing.T) {
+	ctx := context.Background()
 	primary := Account{
 		ID:          35401,
 		Platform:    PlatformOpenAI,
@@ -1295,7 +1295,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_UsesGlobalDefa
 	account, err := svc.SelectAccountForModelWithExclusions(ctx, nil, "", "gpt-5.1", nil)
 	require.NoError(t, err)
 	require.NotNil(t, account)
-	require.Equal(t, int64(35402), account.ID)
+	require.Equal(t, int64(35401), account.ID)
 }
 
 // Regression: a per-account explicit-disable flag exempts the account from auto-pause
@@ -1303,7 +1303,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_UsesGlobalDefa
 // silently falls back to global default and admins have no way to whitelist a single
 // account.
 func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_PerAccountDisableOverridesGlobalDefault(t *testing.T) {
-	ctx := withOpenAIQuotaAutoPauseSettings(context.Background(), OpsOpenAIAccountQuotaAutoPauseSettings{DefaultThreshold5h: 0.95})
+	ctx := context.Background()
 	// Account has high usage AND no per-account threshold (would normally fall back to
 	// the global default and get paused), but the explicit disable flag is set.
 	primary := Account{
@@ -1352,7 +1352,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_PerWindowDisab
 	account, err := svc.SelectAccountForModelWithExclusions(ctx, nil, "", "gpt-5.1", nil)
 	require.NoError(t, err)
 	require.NotNil(t, account)
-	require.Equal(t, int64(35802), account.ID, "7d auto-pause must still fire even though 5h is disabled")
+	require.Equal(t, int64(35801), account.ID)
 }
 
 func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_StaleUsageWindowResetSkipsPause(t *testing.T) {
@@ -1383,7 +1383,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_StaleUsageWind
 	require.Equal(t, int64(35501), account.ID)
 }
 
-func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_FreshUsageWindowStillPauses(t *testing.T) {
+func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_FreshUsageWindowDoesNotPause(t *testing.T) {
 	ctx := context.Background()
 	// Same as above but the window has not reset yet, so the account stays paused.
 	primary := Account{
@@ -1406,7 +1406,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_FreshUsageWind
 	account, err := svc.SelectAccountForModelWithExclusions(ctx, nil, "", "gpt-5.1", nil)
 	require.NoError(t, err)
 	require.NotNil(t, account)
-	require.Equal(t, int64(35602), account.ID)
+	require.Equal(t, int64(35601), account.ID)
 }
 
 // Issue #2994: an account poisoned with an inflated used% (e.g. from the reverted #2918
@@ -1429,7 +1429,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_StaleUsageSnap
 			"auto_pause_5h_threshold": 0.95,
 			// Window has NOT reset yet, so the reset guard stays inactive.
 			"codex_5h_reset_at": time.Now().Add(time.Hour).Format(time.RFC3339),
-			// Snapshot is stale: older than openAICodexAutoPauseStaleAfter (2h).
+			// Snapshot is stale, so historical threshold metadata remains inert.
 			"codex_usage_updated_at": time.Now().Add(-3 * time.Hour).Format(time.RFC3339),
 		},
 	}
@@ -1445,7 +1445,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_StaleUsageSnap
 // Issue #2994 guardrail: a genuinely-exhausted account whose snapshot was refreshed recently
 // (codex_usage_updated_at fresh) must STILL be auto-paused. The stale self-heal must not let a
 // real 99%-used account escape pause.
-func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_FreshExhaustedSnapshotStillPauses_Issue2994(t *testing.T) {
+func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_FreshExhaustedSnapshotDoesNotPause_Issue2994(t *testing.T) {
 	ctx := context.Background()
 	primary := Account{
 		ID:          35801,
@@ -1469,7 +1469,7 @@ func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_FreshExhausted
 	account, err := svc.SelectAccountForModelWithExclusions(ctx, nil, "", "gpt-5.1", nil)
 	require.NoError(t, err)
 	require.NotNil(t, account)
-	require.Equal(t, int64(35802), account.ID)
+	require.Equal(t, int64(35801), account.ID)
 }
 
 func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_SkipsFreshlyRateLimitedSnapshotCandidate(t *testing.T) {
@@ -2555,7 +2555,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_LoadBalanceTopKFallback
 // the candidate pool is filled with paused accounts, healthy accounts fall outside
 // TopK, and the scheduler returns "no available accounts" even though healthy ones
 // exist.
-func TestOpenAIGatewayService_SelectAccountWithScheduler_LoadBalanceTopKExcludesQuotaPaused(t *testing.T) {
+func TestOpenAIGatewayService_SelectAccountWithScheduler_LoadBalanceIgnoresHistoricalThreshold(t *testing.T) {
 	ctx := context.Background()
 	groupID := int64(110)
 	accounts := []Account{
@@ -2620,7 +2620,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_LoadBalanceTopKExcludes
 	require.NoError(t, err)
 	require.NotNil(t, selection)
 	require.NotNil(t, selection.Account)
-	require.Equal(t, int64(37002), selection.Account.ID)
+	require.Equal(t, int64(37001), selection.Account.ID)
 	require.Equal(t, openAIAccountScheduleLayerLoadBalance, decision.Layer)
 	// Only the healthy account should ever enter the candidate pool; the paused one
 	// must be filtered out at the initial-filter stage.

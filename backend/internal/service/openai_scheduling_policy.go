@@ -34,14 +34,6 @@ func (p openAIRuntimePolicy) Allows(_ context.Context, account *Account, _ sched
 	return p.service != nil && account != nil && !p.service.isOpenAIAccountRuntimeBlocked(account)
 }
 
-var openAIAdvancedQuotaPolicy = scheduling.NewCandidatePolicy("advanced_quota_auto_pause", func(ctx context.Context, account *Account, _ scheduling.Request) bool {
-	if account == nil {
-		return false
-	}
-	paused, _ := shouldAutoPauseOpenAIAccountByQuota(ctx, account)
-	return !paused
-})
-
 type openAIShadowParentPolicy struct {
 	scheduler *defaultOpenAIAccountScheduler
 }

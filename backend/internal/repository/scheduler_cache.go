@@ -599,10 +599,6 @@ func filterSchedulerExtra(extra map[string]any) map[string]any {
 		"codex_usage_updated_at",
 		"grok_billing_snapshot",
 		"grok_usage_snapshot",
-		"auto_pause_5h_threshold",
-		"auto_pause_7d_threshold",
-		"auto_pause_5h_disabled",
-		"auto_pause_7d_disabled",
 		"model_rate_limits",
 	}
 	filtered := make(map[string]any)

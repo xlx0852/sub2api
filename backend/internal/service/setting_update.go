@@ -577,17 +577,6 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		config:    scheduling.ParseRolloutConfig(settings.SchedulerScoringRollout),
 		expiresAt: time.Now().Add(schedulerScoringRolloutCacheTTL).UnixNano(),
 	})
-	// Invalidate the quota auto-pause cache and let the next read trigger a fresh load.
-	// We can't know from here whether ops_advanced_settings was also touched, so be
-	// defensive: store an expired entry — GetOpenAIQuotaAutoPauseSettings will serve
-	// stale and kick off an async refresh, never blocking the request that follows.
-	s.openAIQuotaAutoPauseSettingsSF.Forget(openAIQuotaAutoPauseSettingsRefreshKey)
-	if cached, _ := s.openAIQuotaAutoPauseSettingsCache.Load().(*cachedOpenAIQuotaAutoPauseSettings); cached != nil {
-		s.openAIQuotaAutoPauseSettingsCache.Store(&cachedOpenAIQuotaAutoPauseSettings{
-			settings:  cached.settings,
-			expiresAt: 0,
-		})
-	}
 	// 模型级并发预算：配置更新时直接刷新缓存，让变更即时生效（无需等一个 TTL）。
 	if settings.ModelConcurrencyLimits != nil {
 		s.SetModelConcurrencyLimitsCache(settings.ModelConcurrencyLimits)
