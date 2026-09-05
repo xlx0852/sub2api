@@ -1,9 +1,7 @@
 package admin
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -23,7 +21,6 @@ func NewGeminiOAuthHandler(geminiOAuthService *service.GeminiOAuthService) *Gemi
 // GET /api/v1/admin/gemini/oauth/capabilities
 func (h *GeminiOAuthHandler) GetCapabilities(c *gin.Context) {
 	response.Error(c, http.StatusGone, "Gemini platform/OAuth has been retired")
-	return
 }
 
 type GeminiGenerateAuthURLRequest struct {
@@ -40,7 +37,6 @@ type GeminiGenerateAuthURLRequest struct {
 // POST /api/v1/admin/gemini/oauth/auth-url
 func (h *GeminiOAuthHandler) GenerateAuthURL(c *gin.Context) {
 	response.Error(c, http.StatusGone, "Gemini platform/OAuth has been retired")
-	return
 }
 
 type GeminiExchangeCodeRequest struct {
@@ -59,27 +55,4 @@ type GeminiExchangeCodeRequest struct {
 // POST /api/v1/admin/gemini/oauth/exchange-code
 func (h *GeminiOAuthHandler) ExchangeCode(c *gin.Context) {
 	response.Error(c, http.StatusGone, "Gemini platform/OAuth has been retired")
-	return
-}
-
-func deriveGeminiRedirectURI(c *gin.Context) string {
-	origin := strings.TrimSpace(c.GetHeader("Origin"))
-	if origin != "" {
-		return strings.TrimRight(origin, "/") + "/auth/callback"
-	}
-
-	scheme := "http"
-	if c.Request.TLS != nil {
-		scheme = "https"
-	}
-	if xfProto := strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")); xfProto != "" {
-		scheme = strings.TrimSpace(strings.Split(xfProto, ",")[0])
-	}
-
-	host := strings.TrimSpace(c.Request.Host)
-	if xfHost := strings.TrimSpace(c.GetHeader("X-Forwarded-Host")); xfHost != "" {
-		host = strings.TrimSpace(strings.Split(xfHost, ",")[0])
-	}
-
-	return fmt.Sprintf("%s://%s/auth/callback", scheme, host)
 }

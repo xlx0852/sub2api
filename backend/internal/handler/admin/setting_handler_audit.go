@@ -596,31 +596,6 @@ func appendAuthSourceDefaultChanges(changed []string, before *service.AuthSource
 	return changed
 }
 
-func normalizeDefaultSubscriptions(input []dto.DefaultSubscriptionSetting) []dto.DefaultSubscriptionSetting {
-	if len(input) == 0 {
-		return nil
-	}
-	normalized := make([]dto.DefaultSubscriptionSetting, 0, len(input))
-	for _, item := range input {
-		if item.GroupID <= 0 || item.ValidityDays <= 0 {
-			continue
-		}
-		if item.ValidityDays > service.MaxValidityDays {
-			item.ValidityDays = service.MaxValidityDays
-		}
-		normalized = append(normalized, item)
-	}
-	return normalized
-}
-
-func normalizeOptionalDefaultSubscriptions(input *[]dto.DefaultSubscriptionSetting) *[]dto.DefaultSubscriptionSetting {
-	if input == nil {
-		return nil
-	}
-	normalized := normalizeDefaultSubscriptions(*input)
-	return &normalized
-}
-
 func float64ValueOrDefault(value *float64, fallback float64) float64 {
 	if value == nil {
 		return fallback
