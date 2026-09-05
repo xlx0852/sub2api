@@ -75,6 +75,24 @@ export function applyOpenAIPassthrough(
   }
 }
 
+export function applyOpenAIWebSocketExtra<T extends string>(
+  extra: Record<string, unknown>,
+  accountType: string,
+  oauthMode: T,
+  apiKeyMode: T,
+  isEnabled: (mode: T) => boolean
+): void {
+  if (accountType === 'oauth' || accountType === 'setup-token' || accountType === 'oauth-based') {
+    extra.openai_oauth_responses_websockets_v2_mode = oauthMode
+    extra.openai_oauth_responses_websockets_v2_enabled = isEnabled(oauthMode)
+  } else if (accountType === 'apikey') {
+    extra.openai_apikey_responses_websockets_v2_mode = apiKeyMode
+    extra.openai_apikey_responses_websockets_v2_enabled = isEnabled(apiKeyMode)
+  }
+  delete extra.responses_websockets_v2_enabled
+  delete extra.openai_ws_enabled
+}
+
 export function applyCustomBaseURL(
   extra: Record<string, unknown>,
   enabled: boolean,

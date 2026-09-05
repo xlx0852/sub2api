@@ -2791,6 +2791,7 @@ import {
   applyAntigravityProjectID,
   applyAntigravityExtra,
   applyOpenAIPassthrough,
+  applyOpenAIWebSocketExtra,
   applyCustomBaseURL,
   applyAnthropicExtra,
   applyGrokAPIKeyRouting,
@@ -3962,16 +3963,7 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
   }
 
   const extra: Record<string, unknown> = { ...(base || {}) }
-  if (accountCategory.value === 'oauth-based') {
-    extra.openai_oauth_responses_websockets_v2_mode = openaiOAuthResponsesWebSocketV2Mode.value
-    extra.openai_oauth_responses_websockets_v2_enabled = isOpenAIWSModeEnabled(openaiOAuthResponsesWebSocketV2Mode.value)
-  } else if (accountCategory.value === 'apikey') {
-    extra.openai_apikey_responses_websockets_v2_mode = openaiAPIKeyResponsesWebSocketV2Mode.value
-    extra.openai_apikey_responses_websockets_v2_enabled = isOpenAIWSModeEnabled(openaiAPIKeyResponsesWebSocketV2Mode.value)
-  }
-  // 清理兼容旧键，统一改用分类型开关。
-  delete extra.responses_websockets_v2_enabled
-  delete extra.openai_ws_enabled
+  applyOpenAIWebSocketExtra(extra, accountCategory.value, openaiOAuthResponsesWebSocketV2Mode.value, openaiAPIKeyResponsesWebSocketV2Mode.value, isOpenAIWSModeEnabled)
   applyOpenAIPassthrough(extra, openaiPassthroughEnabled.value, 'create')
 
   if (accountCategory.value === 'oauth-based' && codexCLIOnlyEnabled.value) {

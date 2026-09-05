@@ -2471,6 +2471,7 @@ import {
   applyAntigravityProjectID,
   applyAntigravityExtra,
   applyOpenAIPassthrough,
+  applyOpenAIWebSocketExtra,
   applyCustomBaseURL,
   applyAnthropicExtra,
   applyGrokAPIKeyRouting,
@@ -4235,15 +4236,7 @@ const handleSubmit = async () => {
       const currentExtra = (props.account.extra as Record<string, unknown>) || {}
       const newExtra: Record<string, unknown> = { ...currentExtra }
       const hadCodexCLIOnlyEnabled = currentExtra.codex_cli_only === true
-      if (props.account.type === 'oauth' || props.account.type === 'setup-token') {
-        newExtra.openai_oauth_responses_websockets_v2_mode = openaiOAuthResponsesWebSocketV2Mode.value
-        newExtra.openai_oauth_responses_websockets_v2_enabled = isOpenAIWSModeEnabled(openaiOAuthResponsesWebSocketV2Mode.value)
-      } else if (props.account.type === 'apikey') {
-        newExtra.openai_apikey_responses_websockets_v2_mode = openaiAPIKeyResponsesWebSocketV2Mode.value
-        newExtra.openai_apikey_responses_websockets_v2_enabled = isOpenAIWSModeEnabled(openaiAPIKeyResponsesWebSocketV2Mode.value)
-      }
-      delete newExtra.responses_websockets_v2_enabled
-      delete newExtra.openai_ws_enabled
+      applyOpenAIWebSocketExtra(newExtra, props.account.type, openaiOAuthResponsesWebSocketV2Mode.value, openaiAPIKeyResponsesWebSocketV2Mode.value, isOpenAIWSModeEnabled)
       applyOpenAIPassthrough(newExtra, openaiPassthroughEnabled.value, 'edit')
       if (openAICompactMode.value === 'auto') {
         delete newExtra.openai_compact_mode

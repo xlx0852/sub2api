@@ -7,6 +7,7 @@ import {
   applyAnthropicExtra,
   applyCustomBaseURL,
   applyOpenAIPassthrough,
+  applyOpenAIWebSocketExtra,
   applyAntigravityProjectID,
   applyGrokAPIKeyRouting,
   applyHeaderOverride,
@@ -58,6 +59,20 @@ describe('applyOpenAIPassthrough', () => {
     }
     applyOpenAIPassthrough(edit, false, 'edit')
     expect(edit).toEqual({})
+  })
+})
+
+describe('applyOpenAIWebSocketExtra', () => {
+  it('writes type-specific modes and removes legacy keys', () => {
+    const extra: Record<string, unknown> = {
+      responses_websockets_v2_enabled: true,
+      openai_ws_enabled: true
+    }
+    applyOpenAIWebSocketExtra(extra, 'oauth', 'ctx_pool', 'off', (mode) => mode !== 'off')
+    expect(extra).toEqual({
+      openai_oauth_responses_websockets_v2_mode: 'ctx_pool',
+      openai_oauth_responses_websockets_v2_enabled: true
+    })
   })
 })
 
