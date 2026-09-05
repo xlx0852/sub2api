@@ -141,7 +141,7 @@ func TestForwardGrokChatViaResponsesNonStreamingCachesAndReturnsChat(t *testing.
 	require.NotNil(t, result)
 	require.Equal(t, xai.DefaultCLIBaseURL+"/responses", upstream.lastReq.URL.String())
 	require.Equal(t, grokChatResponsesEndpoint, result.UpstreamEndpoint)
-	require.Equal(t, "grok-4.5", result.UpstreamModel)
+	require.Equal(t, "grok-4.6", result.UpstreamModel)
 	require.Equal(t, 9908, result.Usage.InputTokens)
 	require.Equal(t, 12, result.Usage.OutputTokens)
 	require.Equal(t, 9856, result.Usage.CacheReadInputTokens)
@@ -224,7 +224,7 @@ func TestForwardGrokChatRuntimeGateFallsBackToRaw(t *testing.T) {
 		mappedModel  string
 		wantUpstream string
 	}{
-		{name: "missing cache identity", wantUpstream: "grok-4.5"},
+		{name: "missing cache identity", wantUpstream: "grok-4.6"},
 		{name: "non cache capable mapped model", setAPIKey: true, mappedModel: "grok-4.3", wantUpstream: "grok-4.3"},
 	}
 
