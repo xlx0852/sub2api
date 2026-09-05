@@ -1502,7 +1502,7 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlot(
 	ctx := c.Request.Context()
 	account := selection.Account
 	if selection.Acquired {
-		return wrapReleaseOnDone(ctx, selection.ReleaseFunc), true
+		return wrapReleaseOnDone(ctx, selection.Release), true
 	}
 	if selection.ModelLimited {
 		// 模型级并发预算已满：直接 429 让路，不进入账号等待队列。

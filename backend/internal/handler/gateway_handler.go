@@ -352,7 +352,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				interceptType := detectInterceptType(body, reqModel, parsedReq.MaxTokens, isClaudeCodeClient)
 				if interceptType != InterceptTypeNone {
 					if selection.Acquired && selection.ReleaseFunc != nil {
-						selection.ReleaseFunc()
+						selection.Release()
 					}
 					if reqStream {
 						sendMockInterceptStream(c, reqModel, interceptType)
@@ -667,7 +667,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				interceptType := detectInterceptType(body, reqModel, parsedReq.MaxTokens, isClaudeCodeClient)
 				if interceptType != InterceptTypeNone {
 					if selection.Acquired && selection.ReleaseFunc != nil {
-						selection.ReleaseFunc()
+						selection.Release()
 					}
 					if reqStream {
 						sendMockInterceptStream(c, reqModel, interceptType)
