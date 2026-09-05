@@ -66,17 +66,6 @@ func NewSubscriptionService(groupRepo GroupRepository, userSubRepo UserSubscript
 	return svc
 }
 
-func (s *SubscriptionService) initMaintenanceQueue(cfg *config.Config) {
-	if cfg == nil {
-		return
-	}
-	mc := cfg.SubscriptionMaintenance
-	if mc.WorkerCount <= 0 || mc.QueueSize <= 0 {
-		return
-	}
-	s.maintenanceQueue = NewSubscriptionMaintenanceQueue(mc.WorkerCount, mc.QueueSize)
-}
-
 // Stop stops the maintenance worker pool.
 func (s *SubscriptionService) Stop() {
 	if s == nil {
@@ -85,29 +74,6 @@ func (s *SubscriptionService) Stop() {
 	if s.maintenanceQueue != nil {
 		s.maintenanceQueue.Stop()
 	}
-}
-
-// initSubCache 初始化订阅 L1 缓存
-func (s *SubscriptionService) initSubCache(cfg *config.Config) {
-	if cfg == nil {
-		return
-	}
-	sc := cfg.SubscriptionCache
-	if sc.L1Size <= 0 || sc.L1TTLSeconds <= 0 {
-		return
-	}
-	cache, err := ristretto.NewCache(&ristretto.Config{
-		NumCounters: int64(sc.L1Size) * 10,
-		MaxCost:     int64(sc.L1Size),
-		BufferItems: 64,
-	})
-	if err != nil {
-		log.Printf("Warning: failed to init subscription L1 cache: %v", err)
-		return
-	}
-	s.subCacheL1 = cache
-	s.subCacheTTL = time.Duration(sc.L1TTLSeconds) * time.Second
-	s.subCacheJitter = sc.JitterPercent
 }
 
 // subCacheKey 生成订阅缓存 key（热路径，避免 fmt.Sprintf 开销）
