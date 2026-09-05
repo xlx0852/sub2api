@@ -2578,8 +2578,20 @@ func grokBillingUsedPercent(billing map[string]any) *float64 {
 	if billing == nil {
 		return nil
 	}
-	// Keep the profit timeline aligned with the account usage view: both show
-	// the provider's top-level quota-window utilization, not a product slice.
+	// Prefer the provider's GrokBuild product utilization when present. The
+	// merged billing response may expose a 100% aggregate alongside a partial
+	// build quota, and the account usage view is based on that billable product.
+	if products, ok := billing["product_usage"].([]any); ok {
+		for _, raw := range products {
+			product := asStringAnyMap(raw)
+			if product == nil || !strings.Contains(strings.ToLower(strings.TrimSpace(fmt.Sprint(product["product"]))), "grokbuild") {
+				continue
+			}
+			if used := anyToFloat64(product["usage_percent"]); used != nil {
+				return used
+			}
+		}
+	}
 	return roundUsagePercent2Ptr(anyToFloat64(billing["usage_percent"]))
 }
 
