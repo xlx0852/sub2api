@@ -292,8 +292,8 @@ func (s *OpenAIGatewayService) openaiForwardPipeline() *pipeline.Pipeline {
 func (s *OpenAIGatewayService) openaiForwardStages() []pipeline.Stage {
 	return []pipeline.Stage{
 		pipeline.Func(pipeline.StageParse, s.forwardOpenAIParse),
-		pipeline.Func(pipeline.StageAdmission, admitOpenAIForward),
-		pipeline.Func(pipeline.StageSelect, selectOpenAIForward),
+		pipeline.Func(pipeline.StageAdmission, admitAccount),
+		pipeline.Func(pipeline.StageSelect, selectAccount),
 		pipeline.Func(pipeline.StageRewrite, s.forwardOpenAIRewrite),
 		pipeline.Func(pipeline.StageTransport, s.forwardOpenAITransport),
 		pipeline.Func(pipeline.StageRelay, s.forwardOpenAIRelay),
@@ -301,14 +301,14 @@ func (s *OpenAIGatewayService) openaiForwardStages() []pipeline.Stage {
 	}
 }
 
-func admitOpenAIForward(ex *pipeline.Exchange) error {
+func admitAccount(ex *pipeline.Exchange) error {
 	if ex == nil || ex.Account == nil {
 		return fmt.Errorf("admission: account is required")
 	}
 	return nil
 }
 
-func selectOpenAIForward(ex *pipeline.Exchange) error {
+func selectAccount(ex *pipeline.Exchange) error {
 	if ex == nil || ex.Account == nil {
 		return fmt.Errorf("select: account is required")
 	}
@@ -348,8 +348,8 @@ func (s *OpenAIGatewayService) openaiChatForwardPipeline() *pipeline.Pipeline {
 func (s *OpenAIGatewayService) openaiChatForwardStages() []pipeline.Stage {
 	return []pipeline.Stage{
 		pipeline.Func(pipeline.StageParse, s.forwardOpenAIChatParse),
-		pipeline.Func(pipeline.StageAdmission, admitOpenAIForward),
-		pipeline.Func(pipeline.StageSelect, selectOpenAIForward),
+		pipeline.Func(pipeline.StageAdmission, admitAccount),
+		pipeline.Func(pipeline.StageSelect, selectAccount),
 		pipeline.Func(pipeline.StageRewrite, s.forwardOpenAIChatRewrite),
 		pipeline.Func(pipeline.StageTransport, s.forwardOpenAIChatTransport),
 		pipeline.Func(pipeline.StageRelay, s.forwardOpenAIChatRelay),
@@ -399,8 +399,8 @@ func (s *OpenAIGatewayService) openaiMessagesForwardPipeline() *pipeline.Pipelin
 func (s *OpenAIGatewayService) openaiMessagesForwardStages() []pipeline.Stage {
 	return []pipeline.Stage{
 		pipeline.Func(pipeline.StageParse, s.forwardOpenAIMessagesParse),
-		pipeline.Func(pipeline.StageAdmission, admitOpenAIForward),
-		pipeline.Func(pipeline.StageSelect, selectOpenAIForward),
+		pipeline.Func(pipeline.StageAdmission, admitAccount),
+		pipeline.Func(pipeline.StageSelect, selectAccount),
 		pipeline.Func(pipeline.StageRewrite, s.forwardOpenAIMessagesRewrite),
 		pipeline.Func(pipeline.StageTransport, s.forwardOpenAIMessagesTransport),
 		pipeline.Func(pipeline.StageRelay, s.forwardOpenAIMessagesRelay),
