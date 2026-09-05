@@ -26,17 +26,6 @@ type blockingOpenAIResponseHeaderUpstream struct {
 	once     sync.Once
 }
 
-type firstOutputCloseTrackingBody struct {
-	io.ReadCloser
-	closed chan struct{}
-	once   sync.Once
-}
-
-func (b *firstOutputCloseTrackingBody) Close() error {
-	b.once.Do(func() { close(b.closed) })
-	return b.ReadCloser.Close()
-}
-
 func (u *blockingOpenAIResponseHeaderUpstream) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
 	select {
 	case <-req.Context().Done():
@@ -258,4 +247,3 @@ func TestOpenAIFirstOutputStageUnlinkFailurePermanentlyFallsBackToMemoryAndRetri
 	require.ErrorIs(t, err, os.ErrNotExist)
 	require.NoError(t, stage.Close())
 }
-
