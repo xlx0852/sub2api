@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rsa"
@@ -1152,7 +1153,21 @@ func (k oidcJWK) publicKey() (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("decode ec y: %w", err)
 		}
-		if !curve.IsOnCurve(x, y) {
+		coordinateSize := (curve.Params().BitSize + 7) / 8
+		point := make([]byte, 1+2*coordinateSize)
+		point[0] = 4
+		x.FillBytes(point[1 : 1+coordinateSize])
+		y.FillBytes(point[1+coordinateSize:])
+		var ecdhCurve ecdh.Curve
+		switch curve.Params().Name {
+		case elliptic.P256().Params().Name:
+			ecdhCurve = ecdh.P256()
+		case elliptic.P384().Params().Name:
+			ecdhCurve = ecdh.P384()
+		case elliptic.P521().Params().Name:
+			ecdhCurve = ecdh.P521()
+		}
+		if _, err := ecdhCurve.NewPublicKey(point); err != nil {
 			return nil, errors.New("ec point is not on curve")
 		}
 		return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
