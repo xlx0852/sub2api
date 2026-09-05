@@ -50,10 +50,10 @@ func (p *KimiTokenProvider) GetAccessToken(ctx context.Context, account *Account
 	}
 	accessToken := strings.TrimSpace(account.GetCredential("access_token"))
 	if accessToken == "" {
-		return "", errors.New("Kimi access token is missing")
+		return "", errors.New("kimi access token is missing")
 	}
 	if expiresAt != nil && !time.Now().Before(*expiresAt) {
-		return "", errors.New("Kimi access token is expired")
+		return "", errors.New("kimi access token is expired")
 	}
 	if latest, stale := CheckTokenVersion(ctx, account, p.accountRepo); stale && latest != nil {
 		account = latest
@@ -77,7 +77,7 @@ func (p *KimiTokenProvider) GetAccessToken(ctx context.Context, account *Account
 
 func (p *KimiTokenProvider) ForceRefresh(ctx context.Context, account *Account) (string, error) {
 	if p == nil || p.refreshAPI == nil || p.executor == nil {
-		return "", errors.New("Kimi OAuth refresh is not configured")
+		return "", errors.New("kimi OAuth refresh is not configured")
 	}
 	refreshCtx, cancel := context.WithTimeout(ctx, kimiRequestRefreshTimeout)
 	defer cancel()
@@ -86,7 +86,7 @@ func (p *KimiTokenProvider) ForceRefresh(ctx context.Context, account *Account) 
 		return "", err
 	}
 	if result != nil && result.LockHeld {
-		return "", errors.New("Kimi token refresh is already in progress")
+		return "", errors.New("kimi token refresh is already in progress")
 	}
 	if result != nil && result.Account != nil {
 		account = result.Account
@@ -98,7 +98,7 @@ func (p *KimiTokenProvider) ForceRefresh(ctx context.Context, account *Account) 
 		}
 	}
 	if token == "" {
-		return "", errors.New("Kimi access token is missing after refresh")
+		return "", errors.New("kimi access token is missing after refresh")
 	}
 	if p.tokenCache != nil {
 		_ = p.tokenCache.SetAccessToken(ctx, KimiTokenCacheKey(account), token, 30*time.Minute)
