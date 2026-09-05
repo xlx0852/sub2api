@@ -872,24 +872,6 @@ func (s *GatewayService) IsSingleAntigravityAccountGroup(ctx context.Context, gr
 	return len(accounts) == 1
 }
 
-func (s *GatewayService) isAccountSchedulableForSelection(account *Account) bool {
-	return scheduling.EvaluateCandidate(
-		context.Background(),
-		account,
-		scheduling.Request{},
-		scheduling.SchedulablePolicy,
-	).Allowed
-}
-
-func (s *GatewayService) isAccountSchedulableForModelSelection(ctx context.Context, account *Account, requestedModel string) bool {
-	return scheduling.EvaluateCandidate(
-		ctx,
-		account,
-		scheduling.Request{RequestedModel: requestedModel},
-		scheduling.SchedulableForModelPolicy,
-	).Allowed
-}
-
 // isAccountInGroup checks if the account belongs to the specified group.
 // When groupID is nil, returns true only for ungrouped accounts (no group assignments).
 func (s *GatewayService) isAccountInGroup(account *Account, groupID *int64) bool {
@@ -1210,14 +1192,6 @@ func (s *GatewayService) checkAndRegisterSession(ctx context.Context, account *A
 		return true
 	}
 	return allowed
-}
-
-func (s *GatewayService) getSchedulableAccount(ctx context.Context, accountID int64) (*Account, error) {
-	return lookupSchedulableAccount(ctx, s.schedulerSnapshot, s.accountRepo, accountID)
-}
-
-func (s *GatewayService) hydrateSelectedAccount(ctx context.Context, account *Account) (*Account, error) {
-	return hydrateSelectedAccount(ctx, s.schedulerSnapshot, account, "gateway")
 }
 
 func (s *GatewayService) newSelectionResult(ctx context.Context, account *Account, acquired bool, release func(), waitPlan *AccountWaitPlan) (*AccountSelectionResult, error) {
