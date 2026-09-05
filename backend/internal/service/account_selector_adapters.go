@@ -183,6 +183,7 @@ func accountSelectionFromSchedulingResult(sel *scheduling.Result) *AccountSelect
 	out := &AccountSelectionResult{
 		Account:      sel.Account,
 		Acquired:     sel.Acquired,
+		Lease:        sel.Lease,
 		ReleaseFunc:  sel.Release,
 		ModelLimited: sel.ModelLimited,
 	}
@@ -211,8 +212,12 @@ func mapAccountSelectionResult(sel *AccountSelectionResult) *scheduling.Result {
 	out := &scheduling.Result{
 		Account:      sel.Account,
 		Acquired:     sel.Acquired,
+		Lease:        sel.Lease,
 		Release:      sel.ReleaseFunc,
 		ModelLimited: sel.ModelLimited,
+	}
+	if sel.Lease != nil {
+		out.Release = sel.Lease.Release
 	}
 	if sel.WaitPlan != nil {
 		out.WaitPlan = &scheduling.WaitPlan{

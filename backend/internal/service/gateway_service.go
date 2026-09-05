@@ -501,6 +501,7 @@ type AccountWaitPlan struct {
 type AccountSelectionResult struct {
 	Account     *Account
 	Acquired    bool
+	Lease       *scheduling.AccountLease
 	ReleaseFunc func()
 	WaitPlan    *AccountWaitPlan // nil means no wait allowed
 
