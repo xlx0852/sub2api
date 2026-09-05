@@ -262,6 +262,16 @@ describe('applyHeaderOverride', () => {
     applyHeaderOverride(creds, true, [{ name: 'x-new', value: 'new' }], 'edit')
     expect(creds[HEADER_OVERRIDES_CREDENTIAL_KEY]).toEqual({ 'x-new': 'new' })
   })
+
+  it('bulk + disabled: writes explicit empty values for JSON merge updates', () => {
+    const creds: Record<string, unknown> = {
+      [HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY]: true,
+      [HEADER_OVERRIDES_CREDENTIAL_KEY]: { 'x-old': 'old' }
+    }
+    applyHeaderOverride(creds, false, [], 'bulk')
+    expect(creds[HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY]).toBe(false)
+    expect(creds[HEADER_OVERRIDES_CREDENTIAL_KEY]).toEqual({})
+  })
 })
 
 describe('validateHeaderOverrideRows value/entry limits', () => {

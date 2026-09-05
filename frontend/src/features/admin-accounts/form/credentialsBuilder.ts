@@ -207,7 +207,7 @@ export function applyHeaderOverride(
   credentials: Record<string, unknown>,
   enabled: boolean,
   rows: HeaderOverrideRow[],
-  mode: 'create' | 'edit'
+  mode: 'create' | 'edit' | 'bulk'
 ): void {
   if (enabled) {
     credentials[HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY] = true
@@ -215,5 +215,10 @@ export function applyHeaderOverride(
   } else if (mode === 'edit') {
     delete credentials[HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY]
     delete credentials[HEADER_OVERRIDES_CREDENTIAL_KEY]
+  } else if (mode === 'bulk') {
+    // Bulk updates merge JSONB keys, so explicitly write empty values to clear
+    // the selected accounts' existing override configuration.
+    credentials[HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY] = false
+    credentials[HEADER_OVERRIDES_CREDENTIAL_KEY] = {}
   }
 }

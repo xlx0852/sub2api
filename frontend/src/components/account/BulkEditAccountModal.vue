@@ -1292,12 +1292,10 @@ import {
   useModelRestrictionEditor
 } from '@/composables/useModelWhitelist'
 import {
-  buildHeaderOverridesObject,
   getHeaderOverrideTemplate,
   platformsShareField,
   validateHeaderOverrideRows,
-  HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
-  HEADER_OVERRIDES_CREDENTIAL_KEY,
+  applyHeaderOverride,
   type HeaderOverrideRow
 } from '@/features/admin-accounts/form/credentialsBuilder'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
@@ -1711,11 +1709,7 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
   }
 
   if (enableHeaderOverride.value) {
-    // 后端使用 JSONB || merge 语义：关闭时显式写入 false + 空对象以清除旧配置
-    credentials[HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY] = headerOverrideEnabled.value
-    credentials[HEADER_OVERRIDES_CREDENTIAL_KEY] = headerOverrideEnabled.value
-      ? buildHeaderOverridesObject(headerOverrideRows.value)
-      : {}
+    applyHeaderOverride(credentials, headerOverrideEnabled.value, headerOverrideRows.value, 'bulk')
     credentialsChanged = true
   }
 
