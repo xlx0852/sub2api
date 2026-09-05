@@ -1079,10 +1079,6 @@ func (s *OpenAIGatewayService) getSchedulableAccount(ctx context.Context, accoun
 	return lookupSchedulableAccount(ctx, s.schedulerSnapshot, s.accountRepo, accountID)
 }
 
-func (s *OpenAIGatewayService) hydrateSelectedAccount(ctx context.Context, account *Account) (*Account, error) {
-	return hydrateSelectedAccount(ctx, s.schedulerSnapshot, account, "openai")
-}
-
 func (s *OpenAIGatewayService) newSelectionResult(ctx context.Context, account *Account, acquired bool, release func(), waitPlan *AccountWaitPlan) (*AccountSelectionResult, error) {
 	return newHydratedSelectionResult(ctx, s.schedulerSnapshot, account, "openai", acquired, release, waitPlan)
 }

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 )
@@ -138,10 +137,6 @@ func (s *GatewayService) gatewayCandidatePoliciesFor(options gatewayCandidatePol
 	)
 }
 
-func (s *GatewayService) gatewayCandidatePoliciesWithGroup() []scheduling.CandidatePolicy {
-	return s.gatewayCandidatePoliciesFor(gatewayCandidatePolicyOptions{includeGroup: true})
-}
-
 func (s *GatewayService) evaluateGatewayCandidates(
 	ctx context.Context,
 	accounts []*Account,
@@ -184,66 +179,11 @@ func (s *GatewayService) evaluateGatewayRoutingShadowCandidates(
 	return result
 }
 
-func (s *GatewayService) filterGatewayCandidatesByPolicies(
-	ctx context.Context,
-	accounts []Account,
-	request scheduling.Request,
-	options gatewayCandidatePolicyOptions,
-	routingSet map[int64]struct{},
-) []*Account {
-	policies := s.gatewayCandidatePoliciesFor(options)
-	result := make([]*Account, 0, len(accounts))
-	for i := range accounts {
-		account := &accounts[i]
-		if routingSet != nil {
-			if _, ok := routingSet[account.ID]; !ok {
-				continue
-			}
-		}
-		decision := scheduling.EvaluateCandidate(ctx, account, request, policies...)
-		if decision.RejectedPolicy == "privacy" && options.group != nil && s.accountRepo != nil {
-			_ = s.accountRepo.SetError(ctx, account.ID,
-				fmt.Sprintf("Privacy not set, required by group [%s]", options.group.Name))
-		}
-		if decision.Allowed {
-			result = append(result, account)
-		}
-	}
-	return result
-}
-
 func (s *GatewayService) isAccountAllowedForPlatform(account *Account, platform string, useMixed bool) bool {
 	return scheduling.EvaluateCandidate(
 		context.Background(),
 		account,
 		scheduling.Request{Platform: platform, AllowMixedPlatform: useMixed},
 		gatewayPlatformPolicy,
-	).Allowed
-}
-
-func (s *GatewayService) isAccountSchedulableForQuota(account *Account) bool {
-	return scheduling.EvaluateCandidate(
-		context.Background(),
-		account,
-		scheduling.Request{},
-		gatewayQuotaPolicy{service: s},
-	).Allowed
-}
-
-func (s *GatewayService) isAccountSchedulableForWindowCost(ctx context.Context, account *Account, sticky bool) bool {
-	return scheduling.EvaluateCandidate(
-		ctx,
-		account,
-		scheduling.Request{Sticky: sticky},
-		gatewayWindowCostPolicy{service: s},
-	).Allowed
-}
-
-func (s *GatewayService) isAccountSchedulableForRPM(ctx context.Context, account *Account, sticky bool) bool {
-	return scheduling.EvaluateCandidate(
-		ctx,
-		account,
-		scheduling.Request{Sticky: sticky},
-		gatewayRPMPolicy{service: s},
 	).Allowed
 }
