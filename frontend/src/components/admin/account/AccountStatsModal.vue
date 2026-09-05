@@ -641,13 +641,13 @@ watch(
 const formatCost = (value: number): string => {
   const absolute = Math.abs(value)
   if (absolute >= 1000) {
-    return (value / 1000).toFixed(2) + 'K'
+    return '$' + (value / 1000).toFixed(2) + 'K'
   } else if (absolute >= 1) {
-    return value.toFixed(2)
+    return '$' + value.toFixed(2)
   } else if (absolute >= 0.01) {
-    return value.toFixed(3)
+    return '$' + value.toFixed(3)
   }
-  return value.toFixed(4)
+  return '$' + value.toFixed(4)
 }
 
 const formatNumber = (value: number): string => {

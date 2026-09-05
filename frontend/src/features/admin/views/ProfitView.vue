@@ -465,7 +465,7 @@ const chartOptions = computed<ChartOptions<'bar'>>(() => {
   }
 })
 
-const fmt = (value?: number) => (value ?? 0).toFixed(2)
+const fmt = (value?: number) => `$${(value ?? 0).toFixed(2)}`
 const snapshotTimeLabel = computed(() => {
   if (!snapshotGeneratedAt.value) return ''
   const generatedAt = new Date(snapshotGeneratedAt.value)
