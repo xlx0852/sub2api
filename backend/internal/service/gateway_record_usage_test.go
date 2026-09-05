@@ -54,6 +54,14 @@ func newGatewayRecordUsageServiceWithBillingRepoForTest(usageRepo UsageLogReposi
 	return svc
 }
 
+func TestGatewayRecordUsageRejectsNilInput(t *testing.T) {
+	svc := &GatewayService{}
+	require.EqualError(t, svc.RecordUsage(context.Background(), nil), "gateway usage input is nil")
+	require.EqualError(t, svc.RecordUsage(context.Background(), &RecordUsageInput{}), "gateway usage result is nil")
+	require.EqualError(t, svc.RecordUsageWithLongContext(context.Background(), nil), "gateway long-context usage input is nil")
+	require.EqualError(t, svc.RecordUsageWithLongContext(context.Background(), &RecordUsageLongContextInput{}), "gateway long-context usage result is nil")
+}
+
 type openAIRecordUsageBestEffortLogRepoStub struct {
 	UsageLogRepository
 
