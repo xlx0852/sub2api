@@ -245,66 +245,6 @@ func OpenAIAccountCredentialGeneration(account *Account) int64 {
 	return 0
 }
 
-// apiKeyPoolState is a small CAS helper for multi-key 429 rotation.
-type apiKeyPoolState struct {
-	liveKey     string
-	cooledUntil map[string]int64 // key -> unix ms
-}
-
-func newAPIKeyPoolState(liveKey string) *apiKeyPoolState {
-	return &apiKeyPoolState{
-		liveKey:     strings.TrimSpace(liveKey),
-		cooledUntil: make(map[string]int64),
-	}
-}
-
-// CoolAndRotate cools the attempted key and CAS-rotates live key only when it still matches attempted.
-// Returns the live key after the operation and whether a rotate happened.
-func (s *apiKeyPoolState) CoolAndRotate(attemptedKey string, candidates []string, cooldown time.Duration, now time.Time) (liveKey string, rotated bool) {
-	if s == nil {
-		return "", false
-	}
-	attemptedKey = strings.TrimSpace(attemptedKey)
-	if attemptedKey == "" {
-		return s.liveKey, false
-	}
-	if cooldown <= 0 {
-		cooldown = openAIDefaultQuotaCooldown
-	}
-	cooldown = clampDuration(cooldown, openAIMinQuotaCooldown, openAIMaxKeyPoolCooldown)
-	until := now.Add(cooldown).UnixMilli()
-	if s.cooledUntil == nil {
-		s.cooledUntil = make(map[string]int64)
-	}
-	s.cooledUntil[attemptedKey] = until
-
-	// Only rotate if live key is still the attempted key (CAS).
-	if strings.TrimSpace(s.liveKey) != attemptedKey {
-		return s.liveKey, false
-	}
-	nowMs := now.UnixMilli()
-	for _, candidate := range candidates {
-		candidate = strings.TrimSpace(candidate)
-		if candidate == "" || candidate == attemptedKey {
-			continue
-		}
-		if untilMs, cooled := s.cooledUntil[candidate]; cooled && untilMs > nowMs {
-			continue
-		}
-		s.liveKey = candidate
-		return s.liveKey, true
-	}
-	return s.liveKey, false
-}
-
-func (s *apiKeyPoolState) IsCooled(key string, now time.Time) bool {
-	if s == nil || s.cooledUntil == nil {
-		return false
-	}
-	untilMs, ok := s.cooledUntil[strings.TrimSpace(key)]
-	return ok && untilMs > now.UnixMilli()
-}
-
 // Process-local sticky invalidation epoch. Bumped on credential failures so
 // existing sticky bindings (which stored the prior epoch) miss and fall through.
 // Cross-instance cleanup still relies on unschedulable/rate-limit sticky clear.

@@ -15,6 +15,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func pickSuccessfulBillingStatus(creditsSnap *xai.BillingSnapshot, creditsStatus int, plainSnap *xai.BillingSnapshot, plainStatus int) int {
+	isOK := func(code int) bool { return code >= 200 && code < 300 }
+	switch {
+	case creditsSnap != nil && plainSnap != nil:
+		if isOK(creditsStatus) {
+			return creditsStatus
+		}
+		if isOK(plainStatus) {
+			return plainStatus
+		}
+		if creditsStatus != 0 {
+			return creditsStatus
+		}
+		return plainStatus
+	case creditsSnap != nil:
+		return creditsStatus
+	case plainSnap != nil:
+		return plainStatus
+	default:
+		if creditsStatus != 0 {
+			return creditsStatus
+		}
+		return plainStatus
+	}
+}
+
 type grokQuotaAccountRepo struct {
 	*mockAccountRepoForPlatform
 	updates               map[int64]map[string]any

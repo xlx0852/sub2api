@@ -5,11 +5,62 @@ package service
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+type apiKeyPoolState struct {
+	liveKey     string
+	cooledUntil map[string]int64
+}
+
+func newAPIKeyPoolState(liveKey string) *apiKeyPoolState {
+	return &apiKeyPoolState{liveKey: strings.TrimSpace(liveKey), cooledUntil: make(map[string]int64)}
+}
+
+func (s *apiKeyPoolState) CoolAndRotate(attemptedKey string, candidates []string, cooldown time.Duration, now time.Time) (string, bool) {
+	if s == nil {
+		return "", false
+	}
+	attemptedKey = strings.TrimSpace(attemptedKey)
+	if attemptedKey == "" {
+		return s.liveKey, false
+	}
+	if cooldown <= 0 {
+		cooldown = openAIDefaultQuotaCooldown
+	}
+	cooldown = clampDuration(cooldown, openAIMinQuotaCooldown, openAIMaxKeyPoolCooldown)
+	if s.cooledUntil == nil {
+		s.cooledUntil = make(map[string]int64)
+	}
+	s.cooledUntil[attemptedKey] = now.Add(cooldown).UnixMilli()
+	if strings.TrimSpace(s.liveKey) != attemptedKey {
+		return s.liveKey, false
+	}
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" || candidate == attemptedKey {
+			continue
+		}
+		if until, ok := s.cooledUntil[candidate]; ok && until > now.UnixMilli() {
+			continue
+		}
+		s.liveKey = candidate
+		return s.liveKey, true
+	}
+	return s.liveKey, false
+}
+
+func (s *apiKeyPoolState) IsCooled(key string, now time.Time) bool {
+	if s == nil || s.cooledUntil == nil {
+		return false
+	}
+	until, ok := s.cooledUntil[strings.TrimSpace(key)]
+	return ok && until > now.UnixMilli()
+}
 
 func TestClassifyUpstreamOutcome(t *testing.T) {
 	require.Equal(t, UpstreamOutcomeSuccess, ClassifyUpstreamOutcome(200, nil, false))
