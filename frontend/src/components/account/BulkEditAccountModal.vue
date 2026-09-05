@@ -1294,6 +1294,7 @@ import {
 } from '@/composables/useModelWhitelist'
 import {
   applyInterceptWarmup,
+  applyOpenAIPassthrough,
   getHeaderOverrideTemplate,
   platformsShareField,
   validateHeaderOverrideRows,
@@ -1682,10 +1683,7 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
 
   if (enableOpenAIPassthrough.value) {
     const extra = ensureExtra()
-    extra.openai_passthrough = openaiPassthroughEnabled.value
-    if (!openaiPassthroughEnabled.value) {
-      extra.openai_oauth_passthrough = false
-    }
+    applyOpenAIPassthrough(extra, openaiPassthroughEnabled.value, 'bulk')
   }
 
   if (enableModelRestriction.value && !isOpenAIModelRestrictionDisabled.value) {

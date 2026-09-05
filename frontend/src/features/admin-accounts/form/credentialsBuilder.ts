@@ -57,6 +57,24 @@ export function applyAntigravityExtra(
   }
 }
 
+export function applyOpenAIPassthrough(
+  extra: Record<string, unknown>,
+  enabled: boolean,
+  mode: 'create' | 'edit' | 'bulk'
+): void {
+  if (enabled) {
+    extra.openai_passthrough = true
+    return
+  }
+  if (mode === 'bulk') {
+    extra.openai_passthrough = false
+    extra.openai_oauth_passthrough = false
+  } else {
+    delete extra.openai_passthrough
+    delete extra.openai_oauth_passthrough
+  }
+}
+
 // ========== 请求头覆写（仅 anthropic/openai 平台的 api_key 账号） ==========
 
 export const HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY = 'header_override_enabled'

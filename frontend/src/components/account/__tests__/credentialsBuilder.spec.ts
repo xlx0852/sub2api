@@ -4,6 +4,7 @@ import {
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
   applyAntigravityExtra,
+  applyOpenAIPassthrough,
   applyAntigravityProjectID,
   applyGrokAPIKeyRouting,
   applyHeaderOverride,
@@ -28,6 +29,21 @@ describe('applyAntigravityExtra', () => {
 
     applyAntigravityExtra(extra, true, false)
     expect(extra).toEqual({ mixed_scheduling: true, keep: 'value' })
+  })
+})
+
+describe('applyOpenAIPassthrough', () => {
+  it('keeps bulk false values explicit and clears legacy keys for single updates', () => {
+    const bulk: Record<string, unknown> = {}
+    applyOpenAIPassthrough(bulk, false, 'bulk')
+    expect(bulk).toEqual({ openai_passthrough: false, openai_oauth_passthrough: false })
+
+    const edit: Record<string, unknown> = {
+      openai_passthrough: true,
+      openai_oauth_passthrough: true
+    }
+    applyOpenAIPassthrough(edit, false, 'edit')
+    expect(edit).toEqual({})
   })
 })
 

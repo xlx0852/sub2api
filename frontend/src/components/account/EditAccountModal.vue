@@ -2470,6 +2470,7 @@ import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
   applyAntigravityProjectID,
   applyAntigravityExtra,
+  applyOpenAIPassthrough,
   applyGrokAPIKeyRouting,
   applyHeaderOverride,
   applyInterceptWarmup,
@@ -4261,12 +4262,7 @@ const handleSubmit = async () => {
       }
       delete newExtra.responses_websockets_v2_enabled
       delete newExtra.openai_ws_enabled
-      if (openaiPassthroughEnabled.value) {
-        newExtra.openai_passthrough = true
-      } else {
-        delete newExtra.openai_passthrough
-        delete newExtra.openai_oauth_passthrough
-      }
+      applyOpenAIPassthrough(newExtra, openaiPassthroughEnabled.value, 'edit')
       if (openAICompactMode.value === 'auto') {
         delete newExtra.openai_compact_mode
       } else {
