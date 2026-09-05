@@ -12,13 +12,15 @@ import (
 func TestClaudeForwardPipelineStageOrder(t *testing.T) {
 	svc := &GatewayService{}
 	stages := svc.claudeForwardStages()
-	require.Len(t, stages, 5)
+	require.Len(t, stages, 7)
 	names := make([]pipeline.StageName, 0, len(stages))
 	for _, stage := range stages {
 		names = append(names, stage.Name())
 	}
 	require.Equal(t, []pipeline.StageName{
 		pipeline.StageParse,
+		pipeline.StageAdmission,
+		pipeline.StageSelect,
 		pipeline.StageRewrite,
 		pipeline.StageTransport,
 		pipeline.StageRelay,

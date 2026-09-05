@@ -60,6 +60,8 @@ func (s *GatewayService) claudeForwardPipeline() *pipeline.Pipeline {
 func (s *GatewayService) claudeForwardStages() []pipeline.Stage {
 	return []pipeline.Stage{
 		pipeline.Func(pipeline.StageParse, s.forwardClaudeParse),
+		pipeline.Func(pipeline.StageAdmission, admitAccount),
+		pipeline.Func(pipeline.StageSelect, selectAccount),
 		pipeline.Func(pipeline.StageRewrite, s.forwardClaudeRewrite),
 		pipeline.Func(pipeline.StageTransport, s.forwardClaudeTransport),
 		pipeline.Func(pipeline.StageRelay, s.forwardClaudeRelay),
