@@ -348,6 +348,8 @@ func (s *OpenAIGatewayService) openaiChatForwardPipeline() *pipeline.Pipeline {
 func (s *OpenAIGatewayService) openaiChatForwardStages() []pipeline.Stage {
 	return []pipeline.Stage{
 		pipeline.Func(pipeline.StageParse, s.forwardOpenAIChatParse),
+		pipeline.Func(pipeline.StageAdmission, admitOpenAIForward),
+		pipeline.Func(pipeline.StageSelect, selectOpenAIForward),
 		pipeline.Func(pipeline.StageRewrite, s.forwardOpenAIChatRewrite),
 		pipeline.Func(pipeline.StageTransport, s.forwardOpenAIChatTransport),
 		pipeline.Func(pipeline.StageRelay, s.forwardOpenAIChatRelay),
@@ -397,6 +399,8 @@ func (s *OpenAIGatewayService) openaiMessagesForwardPipeline() *pipeline.Pipelin
 func (s *OpenAIGatewayService) openaiMessagesForwardStages() []pipeline.Stage {
 	return []pipeline.Stage{
 		pipeline.Func(pipeline.StageParse, s.forwardOpenAIMessagesParse),
+		pipeline.Func(pipeline.StageAdmission, admitOpenAIForward),
+		pipeline.Func(pipeline.StageSelect, selectOpenAIForward),
 		pipeline.Func(pipeline.StageRewrite, s.forwardOpenAIMessagesRewrite),
 		pipeline.Func(pipeline.StageTransport, s.forwardOpenAIMessagesTransport),
 		pipeline.Func(pipeline.StageRelay, s.forwardOpenAIMessagesRelay),
