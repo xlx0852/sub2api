@@ -596,27 +596,6 @@ func googleError(c *gin.Context, status int, message string) {
 	})
 }
 
-func writeUpstreamResponse(c *gin.Context, res *service.UpstreamHTTPResult) {
-	if res == nil {
-		googleError(c, http.StatusBadGateway, "Empty upstream response")
-		return
-	}
-	for k, vv := range res.Headers {
-		// Avoid overriding content-length and hop-by-hop headers.
-		if strings.EqualFold(k, "Content-Length") || strings.EqualFold(k, "Transfer-Encoding") || strings.EqualFold(k, "Connection") {
-			continue
-		}
-		for _, v := range vv {
-			c.Writer.Header().Add(k, v)
-		}
-	}
-	contentType := res.Headers.Get("Content-Type")
-	if contentType == "" {
-		contentType = "application/json"
-	}
-	c.Data(res.StatusCode, contentType, res.Body)
-}
-
 func shouldFallbackGeminiModels(res *service.UpstreamHTTPResult) bool {
 	if res == nil {
 		return true
