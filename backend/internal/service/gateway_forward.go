@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/app/gateway/pipeline"
@@ -188,31 +187,5 @@ func resolveAccountUpstreamModel(account *Account, requestedModel string) string
 	return account.GetMappedModel(requestedModel)
 }
 
-// needsUpstreamChannelRestrictionCheck 判断是否需要在调度循环中逐账号检查上游模型的渠道限制。
-func (s *GatewayService) needsUpstreamChannelRestrictionCheck(ctx context.Context, groupID *int64) bool {
-	if groupID == nil || s.channelService == nil {
-		return false
-	}
-	ch, err := s.channelService.GetChannelForGroup(ctx, *groupID)
-	if err != nil {
-		slog.Warn("failed to check channel upstream restriction", "group_id", *groupID, "error", err)
-		return false
-	}
-	if ch == nil || !ch.RestrictModels {
-		return false
-	}
-	return ch.BillingModelSource == BillingModelSourceUpstream
-}
-
 // isStickyAccountUpstreamRestricted 检查粘性会话命中的账号是否受 upstream 渠道限制。
 // 合并 needsUpstreamChannelRestrictionCheck + isUpstreamModelRestrictedByChannel 两步调用，
-// 供 sticky session 条件链使用，避免内联多个函数调用导致行过长。
-func (s *GatewayService) isStickyAccountUpstreamRestricted(ctx context.Context, groupID *int64, account *Account, requestedModel string) bool {
-	if groupID == nil {
-		return false
-	}
-	if !s.needsUpstreamChannelRestrictionCheck(ctx, groupID) {
-		return false
-	}
-	return s.isUpstreamModelRestrictedByChannel(ctx, *groupID, account, requestedModel)
-}
