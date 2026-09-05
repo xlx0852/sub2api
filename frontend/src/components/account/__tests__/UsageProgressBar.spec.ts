@@ -117,8 +117,8 @@ describe('UsageProgressBar', () => {
     expect(wrapper.get('[data-testid="usage-window-row"]').text()).toContain('5h')
     expect(wrapper.get('[data-testid="usage-stat-volume"]').text()).toContain('100 req')
     expect(wrapper.get('[data-testid="usage-stat-volume"]').text()).toContain('21.8M')
-    expect(wrapper.get('[data-testid="usage-stat-billing"]').text()).toContain('A 20.66')
-    expect(wrapper.get('[data-testid="usage-stat-billing"]').text()).toContain('U 20.66')
+    expect(wrapper.get('[data-testid="usage-stat-billing"]').text()).toContain('A $20.66')
+    expect(wrapper.get('[data-testid="usage-stat-billing"]').text()).toContain('U $20.66')
     expect(wrapper.get('[data-testid="usage-progress-fill"]').classes()).toContain('bg-emerald-500')
     expect(wrapper.findAll('.usage-metric')).toHaveLength(8)
     expect(wrapper.html()).not.toContain('shadow')
@@ -156,8 +156,8 @@ describe('UsageProgressBar', () => {
     expect(estimate.text()).toContain('usage.fullUtilizationEstimate')
     expect(estimate.text()).toContain('30.0K req')
     expect(estimate.text()).toContain('3.8B')
-    expect(estimate.text()).toContain('A 3000.00')
-    expect(estimate.text()).toContain('U 360.00')
+    expect(estimate.text()).toContain('A $3000.00')
+    expect(estimate.text()).toContain('U $360.00')
   })
 
   it('满额预估请求数四舍五入为整数', () => {
@@ -261,21 +261,21 @@ describe('UsageProgressBar', () => {
       }
     })
 
-    // 50% → 满额 U 24.00
-    expect(wrapper.get('[data-testid="usage-full-estimate"]').text()).toContain('U 24.00')
+    // 50% → 满额 U $24.00
+    expect(wrapper.get('[data-testid="usage-full-estimate"]').text()).toContain('U $24.00')
 
     await wrapper.setProps({ utilization: 50.3 })
     // 防抖窗口内保持旧值
-    expect(wrapper.get('[data-testid="usage-full-estimate"]').text()).toContain('U 24.00')
+    expect(wrapper.get('[data-testid="usage-full-estimate"]').text()).toContain('U $24.00')
 
     await vi.advanceTimersByTimeAsync(1300)
     // 相对变化很小（~0.6%），阈值内仍不提交
-    expect(wrapper.get('[data-testid="usage-full-estimate"]').text()).toContain('U 24.00')
+    expect(wrapper.get('[data-testid="usage-full-estimate"]').text()).toContain('U $24.00')
 
     await wrapper.setProps({ utilization: 40 })
     await vi.advanceTimersByTimeAsync(1300)
-    // 40% → 满额 U 30.00，应更新
-    expect(wrapper.get('[data-testid="usage-full-estimate"]').text()).toContain('U 30.00')
+    // 40% → 满额 U $30.00，应更新
+    expect(wrapper.get('[data-testid="usage-full-estimate"]').text()).toContain('U $30.00')
   })
 
   it('利用率掉到 0 时立刻隐藏满额预估，不防抖拖尾', async () => {
