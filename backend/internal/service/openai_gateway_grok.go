@@ -672,20 +672,6 @@ func firstNonEmptyAny(values ...any) any {
 	return "call_unknown"
 }
 
-func stripGrokEncryptedAnywhere(value any) {
-	switch typed := value.(type) {
-	case map[string]any:
-		delete(typed, "encrypted_content")
-		for _, child := range typed {
-			stripGrokEncryptedAnywhere(child)
-		}
-	case []any:
-		for _, child := range typed {
-			stripGrokEncryptedAnywhere(child)
-		}
-	}
-}
-
 func extractGrokReasoningSummaryText(item map[string]any) string {
 	summary, ok := item["summary"].([]any)
 	if !ok || len(summary) == 0 {
@@ -1576,11 +1562,4 @@ func (s *OpenAIGatewayService) tempUnscheduleGrok(ctx context.Context, account *
 		defer cancel()
 		_ = s.accountRepo.SetTempUnschedulable(stateCtx, account.ID, until, reason)
 	}
-}
-
-func ptrStringOrNil(value string) *string {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	return &value
 }

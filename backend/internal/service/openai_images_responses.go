@@ -418,12 +418,6 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
 	return req, nil
 }
 
-func shouldPassOpenAIImagesN(model string, n int) bool {
-	// Kept as a compatibility helper for callers/tests; Responses image
-	// generation never accepts this field for any model.
-	return false
-}
-
 func extractOpenAIImagesFromResponsesCompleted(payload []byte) ([]openAIResponsesImageResult, int64, []byte, openAIResponsesImageResult, error) {
 	if gjson.GetBytes(payload, "type").String() != "response.completed" {
 		return nil, 0, nil, openAIResponsesImageResult{}, fmt.Errorf("unexpected event type")
