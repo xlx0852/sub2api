@@ -5,7 +5,7 @@
 
 ## 2. Migration
 
-- [ ] 2.1 提取 parse/admission/select/rewrite/transport/relay/settle 阶段
+- [x] 2.1 提取 parse/admission/select/rewrite/transport/relay/settle 阶段
 - [x] 2.2 将首个入口迁移到统一 pipeline Exchange
 - [ ] 2.3 迁移 WS、图片和兼容入口
 
