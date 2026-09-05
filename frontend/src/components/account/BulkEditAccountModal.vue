@@ -1289,7 +1289,8 @@ import Icon from '@/components/icons/Icon.vue'
 import {
   buildModelMappingObject as buildModelMappingPayload,
   getPresetMappingsByPlatform,
-  useModelRestrictionEditor
+  useModelRestrictionEditor,
+  type ModelMappingEntry
 } from '@/composables/useModelWhitelist'
 import {
   applyInterceptWarmup,
@@ -1404,10 +1405,6 @@ const filteredPresets = computed(() => {
 })
 
 // Model mapping type
-interface ModelMapping {
-  from: string
-  to: string
-}
 
 // State - field enable flags
 const enableBaseUrl = ref(false)
@@ -1504,7 +1501,7 @@ const codexFingerprintModeOptions = computed(() => [
   { value: 'full' as CodexFingerprintMode, label: t('admin.accounts.openai.codexFingerprintFull') },
 ])
 const openAICompactMode = ref<OpenAICompactMode>('auto')
-const openAICompactModelMappings = ref<ModelMapping[]>([])
+const openAICompactModelMappings = ref<ModelMappingEntry[]>([])
 const rpmLimitEnabled = ref(false)
 const bulkBaseRpm = ref<number | null>(null)
 const bulkRpmStrategy = ref<'tiered' | 'sticky_exempt'>('tiered')

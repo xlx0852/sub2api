@@ -2500,7 +2500,8 @@ import {
   buildModelMappingObject,
   splitModelMappingObject,
   isValidWildcardPattern,
-  useModelRestrictionEditor
+  useModelRestrictionEditor,
+  type ModelMappingEntry
 } from '@/composables/useModelWhitelist'
 
 interface Props {
@@ -2577,10 +2578,6 @@ const baseUrlHint = computed(() => {
 const antigravityPresetMappings = computed(() => getPresetMappingsByPlatform('antigravity'))
 
 // Model mapping type
-interface ModelMapping {
-  from: string
-  to: string
-}
 
 interface TempUnschedRuleForm {
   error_code: number | null
@@ -2605,7 +2602,7 @@ const {
   addPresetMapping: addModelPresetMapping,
   resetModelRestriction
 } = useModelRestrictionEditor()
-const openAICompactModelMappings = ref<ModelMapping[]>([])
+const openAICompactModelMappings = ref<ModelMappingEntry[]>([])
 const DEFAULT_POOL_MODE_RETRY_COUNT = 3
 const MAX_POOL_MODE_RETRY_COUNT = 10
 const DEFAULT_POOL_MODE_RETRY_STATUS_CODES = [401, 403, 429]
@@ -2681,14 +2678,14 @@ const allowOverages = ref(false) // For antigravity accounts: enable AI Credits 
 const antigravityProjectId = ref('')
 const antigravityModelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
 const antigravityWhitelistModels = ref<string[]>([])
-const antigravityModelMappings = ref<ModelMapping[]>([])
+const antigravityModelMappings = ref<ModelMappingEntry[]>([])
 const isSyncingAntigravityUpstream = ref(false)
 const tempUnschedEnabled = ref(false)
 const tempUnschedRules = ref<TempUnschedRuleForm[]>([])
-const getModelMappingKey = createStableObjectKeyResolver<ModelMapping>('edit-model-mapping')
+const getModelMappingKey = createStableObjectKeyResolver<ModelMappingEntry>('edit-model-mapping')
 const getHeaderOverrideRowKey = createStableObjectKeyResolver<HeaderOverrideRow>('edit-header-override-row')
-const getOpenAICompactModelMappingKey = createStableObjectKeyResolver<ModelMapping>('edit-openai-compact-model-mapping')
-const getAntigravityModelMappingKey = createStableObjectKeyResolver<ModelMapping>('edit-antigravity-model-mapping')
+const getOpenAICompactModelMappingKey = createStableObjectKeyResolver<ModelMappingEntry>('edit-openai-compact-model-mapping')
+const getAntigravityModelMappingKey = createStableObjectKeyResolver<ModelMappingEntry>('edit-antigravity-model-mapping')
 const getTempUnschedRuleKey = createStableObjectKeyResolver<TempUnschedRuleForm>('edit-temp-unsched-rule')
 
 const showMixedChannelWarning = ref(false)

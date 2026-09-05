@@ -2745,7 +2745,8 @@ import {
   buildModelMappingObject,
   fetchAntigravityDefaultMappings,
   isValidWildcardPattern,
-  useModelRestrictionEditor
+  useModelRestrictionEditor,
+  type ModelMappingEntry
 } from '@/composables/useModelWhitelist'
 import { adminAPI } from '@/api/admin'
 import { apiErrorMessage } from '@/api/client'
@@ -2921,10 +2922,6 @@ const currentOAuthError = computed(() => {
 const oauthFlowRef = ref<OAuthFlowExposed | null>(null)
 
 // Model mapping type
-interface ModelMapping {
-  from: string
-  to: string
-}
 
 interface TempUnschedRuleForm {
   error_code: number | null
@@ -2971,7 +2968,7 @@ const {
   addPresetMapping: addModelPresetMapping,
   resetModelRestriction
 } = useModelRestrictionEditor()
-const openAICompactModelMappings = ref<ModelMapping[]>([])
+const openAICompactModelMappings = ref<ModelMappingEntry[]>([])
 const DEFAULT_POOL_MODE_RETRY_COUNT = 3
 const MAX_POOL_MODE_RETRY_COUNT = 10
 const DEFAULT_POOL_MODE_RETRY_STATUS_CODES = [401, 403, 429]
@@ -3080,7 +3077,7 @@ const upstreamBaseUrl = ref('') // For upstream type: base URL
 const upstreamApiKey = ref('') // For upstream type: API key
 const antigravityModelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
 const antigravityWhitelistModels = ref<string[]>([])
-const antigravityModelMappings = ref<ModelMapping[]>([])
+const antigravityModelMappings = ref<ModelMappingEntry[]>([])
 const antigravityPresetMappings = computed(() => getPresetMappingsByPlatform('antigravity'))
 const vertexServiceAccountFileInput = ref<HTMLInputElement | null>(null)
 const vertexServiceAccountJson = ref('')
@@ -3090,10 +3087,10 @@ const vertexLocation = ref('global')
 const vertexServiceAccountDragActive = ref(false)
 const tempUnschedEnabled = ref(false)
 const tempUnschedRules = ref<TempUnschedRuleForm[]>([])
-const getModelMappingKey = createStableObjectKeyResolver<ModelMapping>('create-model-mapping')
+const getModelMappingKey = createStableObjectKeyResolver<ModelMappingEntry>('create-model-mapping')
 const getHeaderOverrideRowKey = createStableObjectKeyResolver<HeaderOverrideRow>('create-header-override-row')
-const getOpenAICompactModelMappingKey = createStableObjectKeyResolver<ModelMapping>('create-openai-compact-model-mapping')
-const getAntigravityModelMappingKey = createStableObjectKeyResolver<ModelMapping>('create-antigravity-model-mapping')
+const getOpenAICompactModelMappingKey = createStableObjectKeyResolver<ModelMappingEntry>('create-openai-compact-model-mapping')
+const getAntigravityModelMappingKey = createStableObjectKeyResolver<ModelMappingEntry>('create-antigravity-model-mapping')
 const getTempUnschedRuleKey = createStableObjectKeyResolver<TempUnschedRuleForm>('create-temp-unsched-rule')
 const geminiOAuthType = ref<'code_assist' | 'google_one' | 'ai_studio'>('google_one')
 const geminiAIStudioOAuthEnabled = ref(false)
