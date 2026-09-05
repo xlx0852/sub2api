@@ -45,6 +45,8 @@ func (s *GeminiMessagesCompatService) geminiMessagesForwardPipeline() *pipeline.
 func (s *GeminiMessagesCompatService) geminiMessagesForwardStages() []pipeline.Stage {
 	return []pipeline.Stage{
 		pipeline.Func(pipeline.StageParse, s.forwardGeminiMessagesParse),
+		pipeline.Func(pipeline.StageAdmission, admitOpenAIForward),
+		pipeline.Func(pipeline.StageSelect, selectOpenAIForward),
 		pipeline.Func(pipeline.StageRewrite, s.forwardGeminiMessagesRewrite),
 		pipeline.Func(pipeline.StageTransport, s.forwardGeminiMessagesTransport),
 		pipeline.Func(pipeline.StageRelay, s.forwardGeminiMessagesRelay),
@@ -85,6 +87,8 @@ func (s *GeminiMessagesCompatService) geminiNativeForwardPipeline() *pipeline.Pi
 func (s *GeminiMessagesCompatService) geminiNativeForwardStages() []pipeline.Stage {
 	return []pipeline.Stage{
 		pipeline.Func(pipeline.StageParse, s.forwardGeminiNativeParse),
+		pipeline.Func(pipeline.StageAdmission, admitOpenAIForward),
+		pipeline.Func(pipeline.StageSelect, selectOpenAIForward),
 		pipeline.Func(pipeline.StageRewrite, s.forwardGeminiNativeRewrite),
 		pipeline.Func(pipeline.StageTransport, s.forwardGeminiNativeTransport),
 		pipeline.Func(pipeline.StageRelay, s.forwardGeminiNativeRelay),
@@ -126,6 +130,8 @@ func (s *GeminiMessagesCompatService) geminiChatForwardPipeline() *pipeline.Pipe
 func (s *GeminiMessagesCompatService) geminiChatForwardStages() []pipeline.Stage {
 	return []pipeline.Stage{
 		pipeline.Func(pipeline.StageParse, s.forwardGeminiChatParse),
+		pipeline.Func(pipeline.StageAdmission, admitOpenAIForward),
+		pipeline.Func(pipeline.StageSelect, selectOpenAIForward),
 		pipeline.Func(pipeline.StageRewrite, s.forwardGeminiChatRewrite),
 		pipeline.Func(pipeline.StageTransport, s.forwardGeminiChatTransport),
 		pipeline.Func(pipeline.StageRelay, s.forwardGeminiChatRelay),
