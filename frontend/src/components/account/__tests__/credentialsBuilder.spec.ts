@@ -4,6 +4,7 @@ import {
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
   applyAntigravityExtra,
+  applyAnthropicExtra,
   applyCustomBaseURL,
   applyOpenAIPassthrough,
   applyAntigravityProjectID,
@@ -30,6 +31,18 @@ describe('applyAntigravityExtra', () => {
 
     applyAntigravityExtra(extra, true, false)
     expect(extra).toEqual({ mixed_scheduling: true, keep: 'value' })
+  })
+})
+
+describe('applyAnthropicExtra', () => {
+  it('sets selected values and removes stale optional values', () => {
+    const extra: Record<string, unknown> = {
+      anthropic_passthrough: true,
+      anthropic_apikey_auth_scheme: 'authorization_bearer',
+      web_search_emulation: 'default'
+    }
+    applyAnthropicExtra(extra, false, 'api_key', 'native')
+    expect(extra).toEqual({ web_search_emulation: 'native' })
   })
 })
 

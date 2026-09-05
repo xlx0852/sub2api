@@ -2472,6 +2472,7 @@ import {
   applyAntigravityExtra,
   applyOpenAIPassthrough,
   applyCustomBaseURL,
+  applyAnthropicExtra,
   applyGrokAPIKeyRouting,
   applyHeaderOverride,
   applyInterceptWarmup,
@@ -4225,21 +4226,7 @@ const handleSubmit = async () => {
     if (props.account.platform === 'anthropic' && props.account.type === 'apikey') {
       const currentExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
       const newExtra: Record<string, unknown> = { ...currentExtra }
-      if (anthropicPassthroughEnabled.value) {
-        newExtra.anthropic_passthrough = true
-      } else {
-        delete newExtra.anthropic_passthrough
-      }
-      if (anthropicAPIKeyAuthScheme.value === 'authorization_bearer') {
-        newExtra.anthropic_apikey_auth_scheme = 'authorization_bearer'
-      } else {
-        delete newExtra.anthropic_apikey_auth_scheme
-      }
-      if (webSearchEmulationMode.value === 'default') {
-        delete newExtra.web_search_emulation
-      } else {
-        newExtra.web_search_emulation = webSearchEmulationMode.value
-      }
+      applyAnthropicExtra(newExtra, anthropicPassthroughEnabled.value, anthropicAPIKeyAuthScheme.value, webSearchEmulationMode.value)
       updatePayload.extra = newExtra
     }
 

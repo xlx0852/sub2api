@@ -91,6 +91,25 @@ export function applyCustomBaseURL(
   }
 }
 
+export function applyAnthropicExtra(
+  extra: Record<string, unknown>,
+  passthroughEnabled: boolean,
+  authScheme: string,
+  webSearchMode: string
+): void {
+  if (passthroughEnabled) extra.anthropic_passthrough = true
+  else delete extra.anthropic_passthrough
+
+  if (authScheme === 'authorization_bearer') {
+    extra.anthropic_apikey_auth_scheme = authScheme
+  } else {
+    delete extra.anthropic_apikey_auth_scheme
+  }
+
+  if (webSearchMode === 'default') delete extra.web_search_emulation
+  else extra.web_search_emulation = webSearchMode
+}
+
 // ========== 请求头覆写（仅 anthropic/openai 平台的 api_key 账号） ==========
 
 export const HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY = 'header_override_enabled'

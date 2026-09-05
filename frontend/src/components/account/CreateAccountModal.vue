@@ -2792,6 +2792,7 @@ import {
   applyAntigravityExtra,
   applyOpenAIPassthrough,
   applyCustomBaseURL,
+  applyAnthropicExtra,
   applyGrokAPIKeyRouting,
   applyHeaderOverride,
   applyInterceptWarmup,
@@ -4018,21 +4019,7 @@ const buildAnthropicExtra = (base?: Record<string, unknown>): Record<string, unk
   }
 
   const extra: Record<string, unknown> = { ...(base || {}) }
-  if (anthropicPassthroughEnabled.value) {
-    extra.anthropic_passthrough = true
-  } else {
-    delete extra.anthropic_passthrough
-  }
-  if (anthropicAPIKeyAuthScheme.value === 'authorization_bearer') {
-    extra.anthropic_apikey_auth_scheme = 'authorization_bearer'
-  } else {
-    delete extra.anthropic_apikey_auth_scheme
-  }
-  if (webSearchEmulationMode.value === 'default') {
-    delete extra.web_search_emulation
-  } else {
-    extra.web_search_emulation = webSearchEmulationMode.value
-  }
+  applyAnthropicExtra(extra, anthropicPassthroughEnabled.value, anthropicAPIKeyAuthScheme.value, webSearchEmulationMode.value)
 
   return Object.keys(extra).length > 0 ? extra : undefined
 }
