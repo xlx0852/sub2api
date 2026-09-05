@@ -512,6 +512,21 @@ type AccountSelectionResult struct {
 	ModelLimited bool
 }
 
+// Release closes the acquired lease through the canonical lifecycle object,
+// while retaining compatibility with legacy results built without a Lease.
+func (r *AccountSelectionResult) Release() {
+	if r == nil || !r.Acquired {
+		return
+	}
+	if r.Lease != nil {
+		r.Lease.Release()
+		return
+	}
+	if r.ReleaseFunc != nil {
+		r.ReleaseFunc()
+	}
+}
+
 // ClaudeUsage 表示Claude API返回的usage信息
 type ClaudeUsage struct {
 	InputTokens              int `json:"input_tokens"`
