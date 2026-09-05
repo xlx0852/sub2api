@@ -88,7 +88,7 @@ var (
 		Mode:                                "chat",
 		SupportsPromptCaching:               true,
 	}
-	openAIGPT6AstraFallbackPricing = &LiteLLMModelPricing{
+	openAIGPT6AstraFallbackPricing = LiteLLMModelPricing{
 		InputCostPerToken:                   1e-05,
 		InputCostPerTokenPriority:           2e-05,
 		OutputCostPerToken:                  5e-05,
@@ -925,7 +925,8 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 	if strings.HasPrefix(model, "gpt-6-astra") {
 		logger.With(zap.String("component", "service.pricing")).
 			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s(static)", model, "gpt-6-astra"))
-		return openAIGPT6AstraFallbackPricing
+		pricing := openAIGPT6AstraFallbackPricing
+		return &pricing
 	}
 	if strings.HasPrefix(model, "gpt-5.3-codex-spark") {
 		if pricing, ok := s.pricingData["gpt-5.1-codex"]; ok {
