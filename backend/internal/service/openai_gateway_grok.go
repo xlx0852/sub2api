@@ -215,16 +215,6 @@ func normalizeGrokResponsesTopLevel(body []byte) ([]byte, error) {
 	return json.Marshal(payload)
 }
 
-// xAI ModelInput only reliably accepts easy messages plus function_call /
-// function_call_output on the Grok OAuth / CLI proxy surface. Search/MCP/shell
-// call items from Codex history fail untagged-enum decode even when the type
-// name looks OpenAI-compatible.
-var grokResponsesKeepInputTypes = map[string]struct{}{
-	"message":              {},
-	"function_call":        {},
-	"function_call_output": {},
-}
-
 var grokResponsesDropInputTypes = map[string]struct{}{
 	"computer_call":           {},
 	"computer_call_output":    {},
