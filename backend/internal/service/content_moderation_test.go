@@ -2114,15 +2114,12 @@ func TestContentModerationCheck_ElevatedUserForcesSample(t *testing.T) {
 	cfg.SampleRate = 0
 	cfg.APIKeys = []string{"sk-test"}
 	cfg.PreHashCheckEnabled = true
-	raw, err := json.Marshal(cfg)
-	require.NoError(t, err)
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"id":"modr","model":"omni-moderation-latest","results":[{"flagged":false,"categories":{},"category_scores":{"sexual":0.01}}]}`))
 	}))
 	defer server.Close()
 	cfg.BaseURL = server.URL
-	raw, err = json.Marshal(cfg)
+	raw, err := json.Marshal(cfg)
 	require.NoError(t, err)
 
 	hashCache := &contentModerationTestHashCache{elevated: map[int64]bool{42: true}}
@@ -2155,9 +2152,6 @@ func TestContentModerationCheck_NormalUserHonorsZeroSample(t *testing.T) {
 	cfg.Mode = ContentModerationModePreBlock
 	cfg.SampleRate = 0
 	cfg.APIKeys = []string{"sk-test"}
-	raw, err := json.Marshal(cfg)
-	require.NoError(t, err)
-
 	called := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called++
@@ -2165,7 +2159,7 @@ func TestContentModerationCheck_NormalUserHonorsZeroSample(t *testing.T) {
 	}))
 	defer server.Close()
 	cfg.BaseURL = server.URL
-	raw, err = json.Marshal(cfg)
+	raw, err := json.Marshal(cfg)
 	require.NoError(t, err)
 
 	hashCache := &contentModerationTestHashCache{elevated: map[int64]bool{7: false}}

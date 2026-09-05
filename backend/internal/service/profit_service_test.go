@@ -870,9 +870,6 @@ func TestDeriveAccountExpiresAtFromCycles(t *testing.T) {
 }
 
 func TestProfitService_CreateSubscriptionCycleSyncsExpiresAt(t *testing.T) {
-	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-	nowish := time.Date(2026, 7, 5, 0, 0, 0, 0, time.UTC)
-	_ = nowish
 	repo := &profitRepoStub{cycles: map[int64][]*AccountSubscriptionCycle{}}
 	accounts := &profitAccountRepoStub{
 		byID: map[int64]*Account{
@@ -881,7 +878,7 @@ func TestProfitService_CreateSubscriptionCycleSyncsExpiresAt(t *testing.T) {
 	}
 	svc := &ProfitService{profitRepo: repo, accountRepo: accounts}
 	// Freeze-ish: create cycle covering "now" — derive uses time.Now(), so use recent start
-	start = time.Now().UTC().AddDate(0, 0, -3)
+	start := time.Now().UTC().AddDate(0, 0, -3)
 	created, err := svc.CreateSubscriptionCycle(context.Background(), &AccountSubscriptionCycle{
 		AccountID: 9, StartsAt: start, PeriodDays: 30, PeriodFee: 200, Currency: "USD",
 	})
