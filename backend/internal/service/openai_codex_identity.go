@@ -8,7 +8,6 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
-	"github.com/google/uuid"
 )
 
 // codexUpstreamMinVersion 上游 /backend-api/codex 接受的最低 version 头：
@@ -155,15 +154,6 @@ func (c *CodexIdentity) ensureHeaders(h http.Header) {
 	}
 }
 
-// applyProbeHeaders 为合成探测请求补齐 Codex 身份和引擎指纹。
-func (c *CodexIdentity) applyProbeHeaders(h http.Header) {
-	if h == nil {
-		return
-	}
-	c.ensureHeaders(h)
-	h.Set("X-Codex-Window-ID", uuid.NewString())
-}
-
 // enforceHeaders 收口 OAuth（ChatGPT 内部接口）出站请求的客户端身份头。
 // 见 enforceHeadersWithUA；无账号级自定义 User-Agent 时使用本方法。
 func (c *CodexIdentity) enforceHeaders(h http.Header) {
@@ -218,10 +208,6 @@ func (c *CodexIdentity) pairIdentityHeaders(h http.Header) {
 // 生产路径必须走注入的 *CodexIdentity，否则会丢掉面板版本号与配置开关。
 func ensureCodexIdentityHeaders(h http.Header) {
 	(*CodexIdentity)(nil).ensureHeaders(h)
-}
-
-func applyOpenAICodexProbeHeaders(h http.Header) {
-	(*CodexIdentity)(nil).applyProbeHeaders(h)
 }
 
 func enforceCodexIdentityHeaders(h http.Header) {
