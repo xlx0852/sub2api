@@ -27,10 +27,8 @@ func (s gatewaySchedulingStrategy) Select(ctx context.Context, req scheduling.Re
 		ctx = context.WithValue(ctx, gatewayPlatformHintContextKey{}, req.Platform)
 	}
 	service := s.service
-	if req.SkipAcquire && service != nil {
-		copyService := *service
-		copyService.concurrencyService = nil
-		service = &copyService
+	if req.SkipAcquire {
+		ctx = withSkipAccountAcquire(ctx)
 	}
 	result, err := service.selectAccountWithLoadAwarenessStrategy(
 		ctx, resolveSelectorGroupID(req), req.StickyKey, req.RequestedModel,
@@ -61,10 +59,8 @@ func (s openAISchedulingStrategy) Select(ctx context.Context, req scheduling.Req
 		platform = PlatformOpenAI
 	}
 	service := s.service
-	if req.SkipAcquire && service != nil {
-		copyService := *service
-		copyService.concurrencyService = nil
-		service = &copyService
+	if req.SkipAcquire {
+		ctx = withSkipAccountAcquire(ctx)
 	}
 	result, decision, err := service.selectAccountWithSchedulerStrategy(
 		ctx,
