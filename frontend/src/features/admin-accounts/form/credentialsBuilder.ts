@@ -93,6 +93,26 @@ export function applyOpenAIWebSocketExtra<T extends string>(
   delete extra.openai_ws_enabled
 }
 
+export function normalizeOpenAIEndpointCapabilities(
+  values: OpenAIEndpointCapability[]
+): OpenAIEndpointCapability[] {
+  const allowed: OpenAIEndpointCapability[] = ['chat_completions', 'embeddings']
+  const selected = allowed.filter((value) => values.includes(value))
+  return selected.length > 0 ? selected : allowed
+}
+
+export function applyOpenAIEndpointCapabilities(
+  credentials: Record<string, unknown>,
+  values: OpenAIEndpointCapability[]
+): void {
+  const capabilities = normalizeOpenAIEndpointCapabilities(values)
+  if (capabilities.length === 2) {
+    delete credentials.openai_capabilities
+  } else {
+    credentials.openai_capabilities = capabilities
+  }
+}
+
 export function applyCustomBaseURL(
   extra: Record<string, unknown>,
   enabled: boolean,
@@ -310,3 +330,4 @@ export function applyHeaderOverride(
     credentials[HEADER_OVERRIDES_CREDENTIAL_KEY] = {}
   }
 }
+import type { OpenAIEndpointCapability } from '@/types'

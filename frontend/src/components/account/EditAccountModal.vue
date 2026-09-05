@@ -2472,6 +2472,8 @@ import {
   applyAntigravityExtra,
   applyOpenAIPassthrough,
   applyOpenAIWebSocketExtra,
+  applyOpenAIEndpointCapabilities,
+  normalizeOpenAIEndpointCapabilities,
   applyCustomBaseURL,
   applyAnthropicExtra,
   applyGrokAPIKeyRouting,
@@ -2893,11 +2895,6 @@ const openAITextGenerationCapabilityEnabled = computed(() =>
   openAIEndpointCapabilities.value.includes('chat_completions')
 )
 
-const normalizeOpenAIEndpointCapabilities = (values: OpenAIEndpointCapability[]) => {
-  const allowed: OpenAIEndpointCapability[] = ['chat_completions', 'embeddings']
-  const selected = allowed.filter((value) => values.includes(value))
-  return selected.length > 0 ? selected : allowed
-}
 
 const readOpenAIEndpointCapabilities = (credentials?: Record<string, unknown>): OpenAIEndpointCapability[] => {
   const raw = credentials?.openai_capabilities
@@ -2940,14 +2937,6 @@ const toggleOpenAIEndpointCapability = (capability: OpenAIEndpointCapability, ev
   ])
 }
 
-const applyOpenAIEndpointCapabilities = (credentials: Record<string, unknown>) => {
-  const capabilities = normalizeOpenAIEndpointCapabilities(openAIEndpointCapabilities.value)
-  if (capabilities.length === 2) {
-    delete credentials.openai_capabilities
-    return
-  }
-  credentials.openai_capabilities = capabilities
-}
 const normalizeOpenAIResponsesMode = (mode: unknown): OpenAIResponsesMode => {
   if (mode === 'force_responses' || mode === 'force_chat_completions') {
     return mode
@@ -3950,7 +3939,7 @@ const handleSubmit = async () => {
         newCredentials.model_mapping = currentCredentials.model_mapping
       }
       if (props.account.platform === 'openai') {
-        applyOpenAIEndpointCapabilities(newCredentials)
+        applyOpenAIEndpointCapabilities(newCredentials, openAIEndpointCapabilities.value)
         const compactModelMapping = buildModelMappingObject('mapping', [], openAICompactModelMappings.value)
         if (compactModelMapping) {
           newCredentials.compact_model_mapping = compactModelMapping

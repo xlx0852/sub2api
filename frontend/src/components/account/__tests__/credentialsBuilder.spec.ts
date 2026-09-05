@@ -8,6 +8,8 @@ import {
   applyCustomBaseURL,
   applyOpenAIPassthrough,
   applyOpenAIWebSocketExtra,
+  applyOpenAIEndpointCapabilities,
+  normalizeOpenAIEndpointCapabilities,
   applyAntigravityProjectID,
   applyGrokAPIKeyRouting,
   applyHeaderOverride,
@@ -73,6 +75,17 @@ describe('applyOpenAIWebSocketExtra', () => {
       openai_oauth_responses_websockets_v2_mode: 'ctx_pool',
       openai_oauth_responses_websockets_v2_enabled: true
     })
+  })
+})
+
+describe('OpenAI endpoint capabilities', () => {
+  it('normalizes unknown/empty values and omits the all-capabilities override', () => {
+    expect(normalizeOpenAIEndpointCapabilities([])).toEqual(['chat_completions', 'embeddings'])
+    expect(normalizeOpenAIEndpointCapabilities(['embeddings'])).toEqual(['embeddings'])
+
+    const credentials: Record<string, unknown> = { openai_capabilities: ['embeddings'] }
+    applyOpenAIEndpointCapabilities(credentials, ['chat_completions', 'embeddings'])
+    expect(credentials).toEqual({})
   })
 })
 

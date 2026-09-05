@@ -2792,6 +2792,8 @@ import {
   applyAntigravityExtra,
   applyOpenAIPassthrough,
   applyOpenAIWebSocketExtra,
+  applyOpenAIEndpointCapabilities,
+  normalizeOpenAIEndpointCapabilities,
   applyCustomBaseURL,
   applyAnthropicExtra,
   applyGrokAPIKeyRouting,
@@ -3126,11 +3128,6 @@ const openAITextGenerationCapabilityEnabled = computed(() =>
   openAIEndpointCapabilities.value.includes('chat_completions')
 )
 
-const normalizeOpenAIEndpointCapabilities = (values: OpenAIEndpointCapability[]) => {
-  const allowed: OpenAIEndpointCapability[] = ['chat_completions', 'embeddings']
-  const selected = allowed.filter((value) => values.includes(value))
-  return selected.length > 0 ? selected : allowed
-}
 
 const toggleOpenAIEndpointCapability = (capability: OpenAIEndpointCapability, event?: Event) => {
   if (openAIEndpointCapabilities.value.includes(capability)) {
@@ -3153,14 +3150,6 @@ const toggleOpenAIEndpointCapability = (capability: OpenAIEndpointCapability, ev
   ])
 }
 
-const applyOpenAIEndpointCapabilities = (credentials: Record<string, unknown>) => {
-  const capabilities = normalizeOpenAIEndpointCapabilities(openAIEndpointCapabilities.value)
-  if (capabilities.length === 2) {
-    delete credentials.openai_capabilities
-    return
-  }
-  credentials.openai_capabilities = capabilities
-}
 
 function buildAntigravityExtra(): Record<string, unknown> | undefined {
   const extra: Record<string, unknown> = {}
@@ -4215,7 +4204,7 @@ const handleSubmit = async () => {
     }
   }
   if (form.platform === 'openai') {
-    applyOpenAIEndpointCapabilities(credentials)
+    applyOpenAIEndpointCapabilities(credentials, openAIEndpointCapabilities.value)
     const compactModelMapping = buildOpenAICompactModelMapping()
     if (compactModelMapping) {
       credentials.compact_model_mapping = compactModelMapping
@@ -4467,7 +4456,7 @@ const createAccountAndFinish = async (
   }
   if (platform === 'openai') {
     if (type === 'apikey') {
-      applyOpenAIEndpointCapabilities(credentials)
+      applyOpenAIEndpointCapabilities(credentials, openAIEndpointCapabilities.value)
     }
     const compactModelMapping = buildOpenAICompactModelMapping()
     if (compactModelMapping) {
