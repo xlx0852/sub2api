@@ -1181,50 +1181,6 @@ func sortAccountsByPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
 	scheduling.SortPriorityLRU(accounts, prefer)
 }
 
-// shuffleWithinSortGroups 对排序后的 accountWithLoad 切片，按 (Priority, LoadRate, LastUsedAt) 分组后组内随机打乱。
-// 防止并发请求读取同一快照时，确定性排序导致所有请求命中相同账号。
-func shuffleWithinSortGroups(accounts []accountWithLoad) {
-	scheduling.ShuffleEqualRuns(accounts, sameAccountWithLoadGroup)
-}
-
-// sameAccountWithLoadGroup 判断两个 accountWithLoad 是否属于同一排序组
-func sameAccountWithLoadGroup(a, b accountWithLoad) bool {
-	if a.account.Priority != b.account.Priority {
-		return false
-	}
-	if a.loadInfo.LoadRate != b.loadInfo.LoadRate {
-		return false
-	}
-	return sameLastUsedAt(a.account.LastUsedAt, b.account.LastUsedAt)
-}
-
-// shuffleWithinPriorityAndLastUsed 对排序后的 []*Account 切片，按 (Priority, LastUsedAt) 分组后组内随机打乱。
-//
-// 注意：当 preferOAuth=true 时，需要保证 OAuth 账号在同组内仍然优先，否则会把排序时的偏好打散掉。
-// 因此这里采用"组内分区 + 分区内 shuffle"的方式：
-// - 先把同组账号按 (OAuth / 非 OAuth) 拆成两段，保持 OAuth 段在前；
-// - 再分别在各段内随机打散，避免热点。
-func shuffleWithinPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
-	var prefer func(*Account) bool
-	if preferOAuth {
-		prefer = func(account *Account) bool { return account.Type == AccountTypeOAuth }
-	}
-	scheduling.ShufflePriorityLRURuns(accounts, prefer)
-}
-
-// sameAccountGroup 判断两个 Account 是否属于同一排序组（Priority + LastUsedAt）
-func sameAccountGroup(a, b *Account) bool {
-	if a.Priority != b.Priority {
-		return false
-	}
-	return sameLastUsedAt(a.LastUsedAt, b.LastUsedAt)
-}
-
-// sameLastUsedAt 判断两个 LastUsedAt 是否相同（精度到秒）
-func sameLastUsedAt(a, b *time.Time) bool {
-	return scheduling.SameLastUsedSecond(a, b)
-}
-
 // sortCandidatesForFallback 根据配置选择排序策略
 // mode: "last_used"(按最后使用时间) 或 "random"(随机)
 func (s *GatewayService) sortCandidatesForFallback(accounts []*Account, preferOAuth bool, mode string) {

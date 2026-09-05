@@ -3,11 +3,36 @@
 package service
 
 import (
+	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+func shuffleWithinSortGroups(accounts []accountWithLoad) {
+	scheduling.ShuffleEqualRuns(accounts, sameAccountWithLoadGroup)
+}
+
+func sameAccountWithLoadGroup(a, b accountWithLoad) bool {
+	return a.account.Priority == b.account.Priority && a.loadInfo.LoadRate == b.loadInfo.LoadRate && sameLastUsedAt(a.account.LastUsedAt, b.account.LastUsedAt)
+}
+
+func shuffleWithinPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
+	var prefer func(*Account) bool
+	if preferOAuth {
+		prefer = func(account *Account) bool { return account.Type == AccountTypeOAuth }
+	}
+	scheduling.ShufflePriorityLRURuns(accounts, prefer)
+}
+
+func sameAccountGroup(a, b *Account) bool {
+	return a.Priority == b.Priority && sameLastUsedAt(a.LastUsedAt, b.LastUsedAt)
+}
+
+func sameLastUsedAt(a, b *time.Time) bool {
+	return scheduling.SameLastUsedSecond(a, b)
+}
 
 // ============ shuffleWithinSortGroups 测试 ============
 
