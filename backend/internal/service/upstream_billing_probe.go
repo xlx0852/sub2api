@@ -771,25 +771,6 @@ func parseUpstreamBillingProbeResponse(body []byte) (map[string]any, error) {
 	return data, nil
 }
 
-func upstreamBillingRateAt(data map[string]any, now time.Time) (float64, bool) {
-	if scope, _ := data["billing_scope"].(string); scope != "token" {
-		return 0, false
-	}
-	base, ok := resolveAccountExtraNumber(data, "resolved_rate_multiplier")
-	if !ok || base < 0 || math.IsNaN(base) || math.IsInf(base, 0) {
-		return 0, false
-	}
-	appliedPeak, ok := upstreamBillingPeakMultiplierAt(data, now)
-	if !ok {
-		return 0, false
-	}
-	base *= appliedPeak
-	if math.IsNaN(base) || math.IsInf(base, 0) {
-		return 0, false
-	}
-	return base, true
-}
-
 func upstreamBillingPeakMultiplierAt(data map[string]any, now time.Time) (float64, bool) {
 	peakEnabled, ok := data["peak_rate_enabled"].(bool)
 	if !ok {
