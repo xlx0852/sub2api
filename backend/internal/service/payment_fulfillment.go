@@ -468,19 +468,6 @@ func (s *PaymentService) ExecuteSubscriptionFulfillment(ctx context.Context, oid
 	return infraerrors.BadRequest("SUBSCRIPTION_MODE_RETIRED", "user subscription fulfillment is no longer supported")
 }
 
-func paymentSubscriptionOrderNote(orderID int64) string {
-	return fmt.Sprintf("payment order %d", orderID)
-}
-
-func hasPaymentSubscriptionOrderNote(notes string, orderNote string) bool {
-	for _, line := range strings.Split(strings.ReplaceAll(notes, "\r\n", "\n"), "\n") {
-		if strings.TrimSpace(line) == orderNote {
-			return true
-		}
-	}
-	return false
-}
-
 func (s *PaymentService) hasAuditLog(ctx context.Context, orderID int64, action string) bool {
 	oid := strconv.FormatInt(orderID, 10)
 	c, _ := s.entClient.PaymentAuditLog.Query().

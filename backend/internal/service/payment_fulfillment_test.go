@@ -5,8 +5,10 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +19,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func paymentSubscriptionOrderNote(orderID int64) string {
+	return fmt.Sprintf("payment order %d", orderID)
+}
+
+func hasPaymentSubscriptionOrderNote(notes, orderNote string) bool {
+	for _, line := range strings.Split(strings.ReplaceAll(notes, "\r\n", "\n"), "\n") {
+		if strings.TrimSpace(line) == orderNote {
+			return true
+		}
+	}
+	return false
+}
 
 type paymentFulfillmentTestProvider struct {
 	key            string
