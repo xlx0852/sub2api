@@ -49,7 +49,7 @@ func (s *kimiDeviceSessionStore) AcquirePollLease(ctx context.Context, sessionID
 
 func (s *kimiDeviceSessionStore) CommitPoll(ctx context.Context, lease *domain.KimiDevicePollLease, updated *domain.KimiDeviceSession) (bool, error) {
 	if lease == nil || lease.ProviderLease == nil {
-		return false, errors.New("Kimi device poll lease is invalid")
+		return false, errors.New("kimi device poll lease is invalid")
 	}
 	providerSession, err := kimiProviderOAuthSession(updated)
 	if err != nil {
@@ -76,7 +76,7 @@ func (s *kimiDeviceSessionStore) Delete(ctx context.Context, sessionID string) e
 
 func kimiProviderOAuthSession(session *domain.KimiDeviceSession) (*domain.ProviderOAuthSession, error) {
 	if session == nil {
-		return nil, errors.New("Kimi device session is nil")
+		return nil, errors.New("kimi device session is nil")
 	}
 	payload, err := json.Marshal(session)
 	if err != nil {
@@ -107,7 +107,7 @@ func decodeKimiProviderOAuthSession(provider *domain.ProviderOAuthSession) (*dom
 	}
 	var session domain.KimiDeviceSession
 	if len(provider.Payload) == 0 {
-		return nil, errors.New("Kimi device session payload is missing")
+		return nil, errors.New("kimi device session payload is missing")
 	}
 	if err := json.Unmarshal(provider.Payload, &session); err != nil {
 		return nil, err

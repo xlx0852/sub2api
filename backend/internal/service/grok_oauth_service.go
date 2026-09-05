@@ -556,7 +556,7 @@ func parseJWTEmailClaim(token string) string {
 
 func decodeGrokDeviceSessionPayload(session *ProviderOAuthSession) (*grokDeviceSessionPayload, error) {
 	if session == nil || len(session.Payload) == 0 {
-		return nil, errors.New("Grok device session payload is missing")
+		return nil, errors.New("grok device session payload is missing")
 	}
 	var payload grokDeviceSessionPayload
 	if err := json.Unmarshal(session.Payload, &payload); err != nil {

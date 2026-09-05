@@ -42,7 +42,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		return errors.New("account is nil")
 	}
 	if account.Platform == PlatformGrok {
-		return errors.New("Grok Responses WebSocket ingress is disabled; use HTTP Responses/SSE")
+		return errors.New("grok Responses WebSocket ingress is disabled; use HTTP Responses/SSE")
 	}
 	if strings.TrimSpace(token) == "" {
 		return errors.New("token is empty")

@@ -20,7 +20,7 @@ func (s *OpenAIGatewayService) buildOpenAIResponsesWSURL(account *Account) (stri
 		return "", errors.New("account is nil")
 	}
 	if account.Platform == PlatformGrok {
-		return "", errors.New("Grok Responses WebSocket is not supported")
+		return "", errors.New("grok Responses WebSocket is not supported")
 	}
 	var targetURL string
 	switch account.Type {

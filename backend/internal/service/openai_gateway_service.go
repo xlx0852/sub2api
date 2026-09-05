@@ -1235,7 +1235,7 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 			}
 			accessToken := strings.TrimSpace(account.GetCredential("access_token"))
 			if accessToken == "" {
-				return "", "", errors.New("Kimi access_token not found in credentials")
+				return "", "", errors.New("kimi access_token not found in credentials")
 			}
 			return accessToken, "oauth", nil
 		}
