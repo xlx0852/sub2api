@@ -88,23 +88,6 @@ var (
 		Mode:                                "chat",
 		SupportsPromptCaching:               true,
 	}
-	openAIGPT6AstraFallbackPricing = LiteLLMModelPricing{
-		InputCostPerToken:                   1e-05,
-		InputCostPerTokenPriority:           2e-05,
-		OutputCostPerToken:                  5e-05,
-		OutputCostPerTokenPriority:          1e-04,
-		CacheCreationInputTokenCost:         1.25e-05,
-		CacheCreationInputTokenCostPriority: 2.5e-05,
-		CacheReadInputTokenCost:             1e-06,
-		CacheReadInputTokenCostPriority:     2e-06,
-		LongContextInputTokenThreshold:      272000,
-		LongContextInputCostMultiplier:      2.0,
-		LongContextOutputCostMultiplier:     1.5,
-		SupportsServiceTier:                 true,
-		LiteLLMProvider:                     "openai",
-		Mode:                                "responses",
-		SupportsPromptCaching:               true,
-	}
 	openAIGPT54MiniFallbackPricing = &LiteLLMModelPricing{
 		InputCostPerToken:       7.5e-07,
 		OutputCostPerToken:      4.5e-06,
@@ -179,6 +162,28 @@ type LiteLLMRawEntry struct {
 }
 
 // PricingService 动态价格服务
+
+func newGPT6AstraFallbackPricing() *LiteLLMModelPricing {
+	return &LiteLLMModelPricing{
+
+		InputCostPerToken:                   1e-05,
+		InputCostPerTokenPriority:           2e-05,
+		OutputCostPerToken:                  5e-05,
+		OutputCostPerTokenPriority:          1e-04,
+		CacheCreationInputTokenCost:         1.25e-05,
+		CacheCreationInputTokenCostPriority: 2.5e-05,
+		CacheReadInputTokenCost:             1e-06,
+		CacheReadInputTokenCostPriority:     2e-06,
+		LongContextInputTokenThreshold:      272000,
+		LongContextInputCostMultiplier:      2.0,
+		LongContextOutputCostMultiplier:     1.5,
+		SupportsServiceTier:                 true,
+		LiteLLMProvider:                     "openai",
+		Mode:                                "responses",
+		SupportsPromptCaching:               true,
+	}
+}
+
 type PricingService struct {
 	cfg          *config.Config
 	remoteClient PricingRemoteClient
@@ -925,8 +930,7 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 	if strings.HasPrefix(model, "gpt-6-astra") {
 		logger.With(zap.String("component", "service.pricing")).
 			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s(static)", model, "gpt-6-astra"))
-		pricing := openAIGPT6AstraFallbackPricing
-		return &pricing
+		return newGPT6AstraFallbackPricing()
 	}
 	if strings.HasPrefix(model, "gpt-5.3-codex-spark") {
 		if pricing, ok := s.pricingData["gpt-5.1-codex"]; ok {
