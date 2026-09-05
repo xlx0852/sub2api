@@ -1,10 +1,6 @@
 package service
 
-import (
-	"reflect"
-
-	"github.com/Wei-Shaw/sub2api/internal/domain"
-)
+import "github.com/Wei-Shaw/sub2api/internal/domain"
 
 type Account = domain.Account
 type OpenAIEndpointCapability = domain.OpenAIEndpointCapability
@@ -66,41 +62,4 @@ func ValidatePeakRateConfig(subscriptionType string, enabled bool, start, end st
 
 func matchWildcard(pattern, str string) bool {
 	return domain.MatchWildcard(pattern, str)
-}
-
-func mapPtr(m map[string]any) uintptr {
-	if m == nil {
-		return 0
-	}
-	return reflect.ValueOf(m).Pointer()
-}
-
-func stringMappingFromRaw(raw any) map[string]string {
-	switch mapping := raw.(type) {
-	case map[string]any:
-		if len(mapping) == 0 {
-			return nil
-		}
-		result := make(map[string]string, len(mapping))
-		for key, value := range mapping {
-			if str, ok := value.(string); ok {
-				result[key] = str
-			}
-		}
-		if len(result) == 0 {
-			return nil
-		}
-		return result
-	case map[string]string:
-		if len(mapping) == 0 {
-			return nil
-		}
-		result := make(map[string]string, len(mapping))
-		for key, value := range mapping {
-			result[key] = value
-		}
-		return result
-	default:
-		return nil
-	}
 }
