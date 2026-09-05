@@ -4,12 +4,6 @@ import (
 	"strings"
 )
 
-const (
-	defaultOpenAIMessagesDispatchOpusMappedModel   = "gpt-5.4"
-	defaultOpenAIMessagesDispatchSonnetMappedModel = "gpt-5.3-codex"
-	defaultOpenAIMessagesDispatchHaikuMappedModel  = "gpt-5.4-mini"
-)
-
 func normalizeOpenAIMessagesDispatchMappedModel(model string) string {
 	model = NormalizeOpenAICompatRequestedModel(strings.TrimSpace(model))
 	return strings.TrimSpace(model)
@@ -38,23 +32,6 @@ func normalizeOpenAIMessagesDispatchModelConfig(cfg OpenAIMessagesDispatchModelC
 	}
 
 	return out
-}
-
-func claudeMessagesDispatchFamily(model string) string {
-	normalized := strings.ToLower(strings.TrimSpace(model))
-	if !strings.HasPrefix(normalized, "claude") {
-		return ""
-	}
-	switch {
-	case strings.Contains(normalized, "opus"):
-		return "opus"
-	case strings.Contains(normalized, "sonnet"):
-		return "sonnet"
-	case strings.Contains(normalized, "haiku"):
-		return "haiku"
-	default:
-		return ""
-	}
 }
 
 func sanitizeGroupMessagesDispatchFields(g *Group) {
