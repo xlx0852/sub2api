@@ -2829,24 +2829,6 @@ func (h *AccountHandler) BatchRefreshTier(c *gin.Context) {
 			failedCount++
 			mu.Unlock()
 			return nil
-			_, updateErr := h.adminService.UpdateAccount(gctx, acc.ID, &service.UpdateAccountInput{
-				Credentials: nil,
-				Extra:       nil,
-			})
-
-			mu.Lock()
-			if updateErr != nil {
-				failedCount++
-				errors = append(errors, gin.H{
-					"account_id": acc.ID,
-					"error":      updateErr.Error(),
-				})
-			} else {
-				successCount++
-			}
-			mu.Unlock()
-
-			return nil
 		})
 	}
 

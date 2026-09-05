@@ -1,8 +1,8 @@
 package admin
 
 import (
-	"net/http"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -24,9 +24,6 @@ func NewGeminiOAuthHandler(geminiOAuthService *service.GeminiOAuthService) *Gemi
 func (h *GeminiOAuthHandler) GetCapabilities(c *gin.Context) {
 	response.Error(c, http.StatusGone, "Gemini platform/OAuth has been retired")
 	return
-
-	cfg := h.geminiOAuthService.GetOAuthConfig()
-	response.Success(c, cfg)
 }
 
 type GeminiGenerateAuthURLRequest struct {
@@ -44,43 +41,6 @@ type GeminiGenerateAuthURLRequest struct {
 func (h *GeminiOAuthHandler) GenerateAuthURL(c *gin.Context) {
 	response.Error(c, http.StatusGone, "Gemini platform/OAuth has been retired")
 	return
-
-	var req GeminiGenerateAuthURLRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-
-	// 默认使用 code_assist 以保持向后兼容
-	oauthType := strings.TrimSpace(req.OAuthType)
-	if oauthType == "" {
-		oauthType = "code_assist"
-	}
-	if oauthType != "code_assist" && oauthType != "google_one" && oauthType != "ai_studio" {
-		response.BadRequest(c, "Invalid oauth_type: must be 'code_assist', 'google_one', or 'ai_studio'")
-		return
-	}
-
-	// Always pass the "hosted" callback URI; the OAuth service may override it depending on
-	// oauth_type and whether the built-in Gemini CLI OAuth client is used.
-	redirectURI := deriveGeminiRedirectURI(c)
-	result, err := h.geminiOAuthService.GenerateAuthURL(c.Request.Context(), req.ProxyID, redirectURI, req.ProjectID, oauthType, req.TierID)
-	if err != nil {
-		msg := err.Error()
-		// Treat missing/invalid OAuth client configuration as a user/config error.
-		if strings.Contains(msg, "OAuth client not configured") ||
-			strings.Contains(msg, "requires your own OAuth Client") ||
-			strings.Contains(msg, "requires a custom OAuth Client") ||
-			strings.Contains(msg, "GEMINI_CLI_OAUTH_CLIENT_SECRET_MISSING") ||
-			strings.Contains(msg, "built-in Gemini CLI OAuth client_secret is not configured") {
-			response.BadRequest(c, "Failed to generate auth URL: "+msg)
-			return
-		}
-		response.InternalError(c, "Failed to generate auth URL: "+msg)
-		return
-	}
-
-	response.Success(c, result)
 }
 
 type GeminiExchangeCodeRequest struct {
@@ -100,37 +60,6 @@ type GeminiExchangeCodeRequest struct {
 func (h *GeminiOAuthHandler) ExchangeCode(c *gin.Context) {
 	response.Error(c, http.StatusGone, "Gemini platform/OAuth has been retired")
 	return
-
-	var req GeminiExchangeCodeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-
-	// 默认使用 code_assist 以保持向后兼容
-	oauthType := strings.TrimSpace(req.OAuthType)
-	if oauthType == "" {
-		oauthType = "code_assist"
-	}
-	if oauthType != "code_assist" && oauthType != "google_one" && oauthType != "ai_studio" {
-		response.BadRequest(c, "Invalid oauth_type: must be 'code_assist', 'google_one', or 'ai_studio'")
-		return
-	}
-
-	tokenInfo, err := h.geminiOAuthService.ExchangeCode(c.Request.Context(), &service.GeminiExchangeCodeInput{
-		SessionID: req.SessionID,
-		State:     req.State,
-		Code:      req.Code,
-		ProxyID:   req.ProxyID,
-		OAuthType: oauthType,
-		TierID:    req.TierID,
-	})
-	if err != nil {
-		response.BadRequest(c, "Failed to exchange code: "+err.Error())
-		return
-	}
-
-	response.Success(c, tokenInfo)
 }
 
 func deriveGeminiRedirectURI(c *gin.Context) string {
