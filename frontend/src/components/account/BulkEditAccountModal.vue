@@ -1295,6 +1295,7 @@ import {
 import {
   applyInterceptWarmup,
   applyOpenAIPassthrough,
+  applyOpenAIWebSocketExtra,
   getHeaderOverrideTemplate,
   platformsShareField,
   validateHeaderOverrideRows,
@@ -1711,18 +1712,12 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
 
   if (enableOpenAIWSMode.value) {
     const extra = ensureExtra()
-    extra.openai_oauth_responses_websockets_v2_mode = openaiOAuthResponsesWebSocketV2Mode.value
-    extra.openai_oauth_responses_websockets_v2_enabled = isOpenAIWSModeEnabled(
-      openaiOAuthResponsesWebSocketV2Mode.value
-    )
+    applyOpenAIWebSocketExtra(extra, 'oauth', openaiOAuthResponsesWebSocketV2Mode.value, openaiAPIKeyResponsesWebSocketV2Mode.value, isOpenAIWSModeEnabled)
   }
 
   if (enableOpenAIAPIKeyWSMode.value) {
     const extra = ensureExtra()
-    extra.openai_apikey_responses_websockets_v2_mode = openaiAPIKeyResponsesWebSocketV2Mode.value
-    extra.openai_apikey_responses_websockets_v2_enabled = isOpenAIWSModeEnabled(
-      openaiAPIKeyResponsesWebSocketV2Mode.value
-    )
+    applyOpenAIWebSocketExtra(extra, 'apikey', openaiOAuthResponsesWebSocketV2Mode.value, openaiAPIKeyResponsesWebSocketV2Mode.value, isOpenAIWSModeEnabled)
   }
 
   if (enableCodexCLIOnly.value) {
