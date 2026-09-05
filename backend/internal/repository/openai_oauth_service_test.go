@@ -337,8 +337,7 @@ func TestNewOpenAIOAuthClient_DefaultTokenURL(t *testing.T) {
 
 func TestOpenAIOAuthServiceDeviceAuthorizationProtocol(t *testing.T) {
 	var pollCalls atomic.Int32
-	var server *httptest.Server
-	server = newLocalTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newLocalTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/device/usercode":
