@@ -31,10 +31,6 @@ func parseMinutes(hhmm string) (int, bool) {
 	return domain.ParseMinutes(hhmm)
 }
 
-func normalizeOpenAIWSIngressMode(mode string) string {
-	return domain.NormalizeOpenAIWSIngressMode(mode)
-}
-
 func normalizeOpenAIWSIngressDefaultMode(mode string) string {
 	return domain.NormalizeOpenAIWSIngressDefaultMode(mode)
 }

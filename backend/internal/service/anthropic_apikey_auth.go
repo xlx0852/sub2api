@@ -7,8 +7,6 @@ import (
 )
 
 const (
-	anthropicAPIKeyAuthSchemeExtraKey = domain.AnthropicAPIKeyAuthSchemeExtraKey
-
 	AnthropicAPIKeyAuthSchemeXAPIKey             = domain.AnthropicAPIKeyAuthSchemeXAPIKey
 	AnthropicAPIKeyAuthSchemeAuthorizationBearer = domain.AnthropicAPIKeyAuthSchemeAuthorizationBearer
 )
