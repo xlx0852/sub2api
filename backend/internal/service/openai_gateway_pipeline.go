@@ -196,10 +196,7 @@ type openaiForwardState struct {
 	imageInputSize                         string
 	token                                  string
 	resp                                   *http.Response
-	upstreamCtx                            context.Context
-	upstreamBody                           []byte
 	pendingCompactCancel                   context.CancelFunc
-	usage                                  *OpenAIUsage
 	firstTokenMs                           *int
 	responseID                             string
 	responseModel                          string
