@@ -1154,6 +1154,9 @@ func (k oidcJWK) publicKey() (any, error) {
 			return nil, fmt.Errorf("decode ec y: %w", err)
 		}
 		coordinateSize := (curve.Params().BitSize + 7) / 8
+		if len(x.Bytes()) > coordinateSize || len(y.Bytes()) > coordinateSize {
+			return nil, errors.New("ec coordinate exceeds curve size")
+		}
 		point := make([]byte, 1+2*coordinateSize)
 		point[0] = 4
 		x.FillBytes(point[1 : 1+coordinateSize])

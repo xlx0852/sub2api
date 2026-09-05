@@ -134,6 +134,20 @@ func buildRSAJWK(kid string, pub *rsa.PublicKey) oidcJWK {
 	}
 }
 
+func TestOIDCJWKRejectsOversizedECCoordinatesWithoutPanic(t *testing.T) {
+	oversized := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{1}, 33))
+	jwk := oidcJWK{Kty: "EC", Crv: "P-256", X: oversized, Y: oversized}
+
+	var key any
+	require.NotPanics(t, func() {
+		var err error
+		key, err = jwk.publicKey()
+		require.Error(t, err)
+		require.Nil(t, key)
+		require.Contains(t, err.Error(), "exceeds curve size")
+	})
+}
+
 func TestOIDCOAuthBindStartRedirectsAndSetsBindCookies(t *testing.T) {
 	handler := newOIDCOAuthTestHandler(t, false, config.OIDCConnectConfig{
 		Enabled:              true,
