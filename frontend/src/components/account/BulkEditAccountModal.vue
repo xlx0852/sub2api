@@ -1292,6 +1292,7 @@ import {
   useModelRestrictionEditor
 } from '@/composables/useModelWhitelist'
 import {
+  applyInterceptWarmup,
   getHeaderOverrideTemplate,
   platformsShareField,
   validateHeaderOverrideRows,
@@ -1704,7 +1705,7 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
   }
 
   if (enableInterceptWarmup.value) {
-    credentials.intercept_warmup_requests = interceptWarmupRequests.value
+    applyInterceptWarmup(credentials, interceptWarmupRequests.value, 'bulk')
     credentialsChanged = true
   }
 

@@ -1,7 +1,7 @@
 export function applyInterceptWarmup(
   credentials: Record<string, unknown>,
   enabled: boolean,
-  mode: 'create' | 'edit'
+  mode: 'create' | 'edit' | 'bulk'
 ): void {
   if (enabled) {
     credentials.intercept_warmup_requests = true
