@@ -7,9 +7,30 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
+
+func TestUsageRecordContextPreservesIdentityWithoutParentCancellation(t *testing.T) {
+	parent, cancel := context.WithCancel(context.Background())
+	parent = context.WithValue(parent, ctxkey.RequestID, " request-1 ")
+	parent = context.WithValue(parent, ctxkey.ClientRequestID, " client-1 ")
+	groupID := int64(42)
+	parent = service.WithUsageSettlementGroupID(parent, &groupID)
+	cancel()
+	base, stop := context.WithTimeout(context.Background(), time.Second)
+	defer stop()
+	ctx := usageRecordContext(parent, base)
+	require.NoError(t, ctx.Err())
+	require.Equal(t, "request-1", ctx.Value(ctxkey.RequestID))
+	require.Equal(t, "client-1", ctx.Value(ctxkey.ClientRequestID))
+	require.Equal(t, &groupID, service.UsageSettlementGroupIDFromContext(ctx))
+	deadline, ok := ctx.Deadline()
+	require.True(t, ok)
+	want, _ := base.Deadline()
+	require.Equal(t, want, deadline)
+}
 
 type handlerUsageSettlementCoordinator struct {
 	selectedGroup *int64

@@ -2275,40 +2275,8 @@ func (h *GatewayHandler) maybeLogCompatibilityFallbackMetrics(reqLog *zap.Logger
 }
 
 func (h *GatewayHandler) submitUsageRecordTask(parent context.Context, task service.UsageRecordTask) {
-	if task == nil {
-		return
-	}
-	task = wrapUsageRecordTaskContext(parent, task)
-	if h.gatewayService != nil && h.gatewayService.UsageSettlementEnabledFor(service.UsageSettlementGroupIDFromContext(parent)) {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		defer func() {
-			if recovered := recover(); recovered != nil {
-				logger.L().With(
-					zap.String("component", "handler.gateway.messages"),
-					zap.Any("panic", recovered),
-				).Error("gateway.durable_usage_handoff_panic_recovered")
-			}
-		}()
-		task(ctx)
-		return
-	}
-	if h.usageRecordWorkerPool != nil {
-		h.usageRecordWorkerPool.Submit(task)
-		return
-	}
-	// 回退路径：worker 池未注入时同步执行，避免退回到无界 goroutine 模式。
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			logger.L().With(
-				zap.String("component", "handler.gateway.messages"),
-				zap.Any("panic", recovered),
-			).Error("gateway.usage_record_task_panic_recovered")
-		}
-	}()
-	task(ctx)
+	durable := h.gatewayService != nil && h.gatewayService.UsageSettlementEnabledFor(service.UsageSettlementGroupIDFromContext(parent))
+	submitUsageRecordTask(parent, task, durable, h.usageRecordWorkerPool, "handler.gateway.messages", "gateway")
 }
 
 // getUserMsgQueueMode 获取当前请求的 UMQ 模式
