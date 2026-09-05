@@ -376,11 +376,6 @@ func IsOfficialAPIBaseURL(raw string) bool {
 	return IsOfficialAPIBaseURLHost(parsed.Hostname())
 }
 
-// isKnownBaseURLHost is kept as a thin alias for older call sites / tests.
-func isKnownBaseURLHost(host string) bool {
-	return IsOfficialBaseURLHost(host)
-}
-
 func AllowUnsafeURLOverrides() bool {
 	return envBool(EnvAllowUnsafeURLOverrides)
 }

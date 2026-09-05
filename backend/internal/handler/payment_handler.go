@@ -162,23 +162,6 @@ type checkoutPlan struct {
 	ProductName        string   `json:"product_name"`
 }
 
-// parseFeatures splits a newline-separated features string into a string slice.
-func parseFeatures(raw string) []string {
-	if raw == "" {
-		return []string{}
-	}
-	var out []string
-	for _, line := range strings.Split(raw, "\n") {
-		if s := strings.TrimSpace(line); s != "" {
-			out = append(out, s)
-		}
-	}
-	if out == nil {
-		return []string{}
-	}
-	return out
-}
-
 // GetLimits returns per-payment-type limits derived from enabled provider instances.
 // GET /api/v1/payment/limits
 func (h *PaymentHandler) GetLimits(c *gin.Context) {
