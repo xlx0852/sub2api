@@ -63,13 +63,15 @@ func TestAntigravityProviderPlatform(t *testing.T) {
 func TestAntigravityGeminiForwardPipelineStageOrder(t *testing.T) {
 	svc := &AntigravityGatewayService{}
 	stages := svc.geminiForwardStages()
-	require.Len(t, stages, 5)
+	require.Len(t, stages, 7)
 	names := make([]pipeline.StageName, 0, len(stages))
 	for _, stage := range stages {
 		names = append(names, stage.Name())
 	}
 	require.Equal(t, []pipeline.StageName{
 		pipeline.StageParse,
+		pipeline.StageAdmission,
+		pipeline.StageSelect,
 		pipeline.StageRewrite,
 		pipeline.StageTransport,
 		pipeline.StageRelay,

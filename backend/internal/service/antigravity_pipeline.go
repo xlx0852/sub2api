@@ -180,6 +180,8 @@ func (s *AntigravityGatewayService) geminiForwardPipeline() *pipeline.Pipeline {
 func (s *AntigravityGatewayService) geminiForwardStages() []pipeline.Stage {
 	return []pipeline.Stage{
 		pipeline.Func(pipeline.StageParse, s.forwardGeminiParse),
+		pipeline.Func(pipeline.StageAdmission, admitAccount),
+		pipeline.Func(pipeline.StageSelect, selectAccount),
 		pipeline.Func(pipeline.StageRewrite, s.forwardGeminiRewrite),
 		pipeline.Func(pipeline.StageTransport, s.forwardGeminiTransport),
 		pipeline.Func(pipeline.StageRelay, s.forwardGeminiRelay),
