@@ -499,7 +499,7 @@ func TestProfitService_GetOverviewUsesBoundedBatchQueries(t *testing.T) {
 
 func TestProfitService_GetOverviewComputesBreakEvenWithoutDrawerQueries(t *testing.T) {
 	start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-	cycleStart := time.Date(2026, 6, 7, 0, 0, 0, 0, time.UTC)
+	cycleStart := time.Now().UTC().AddDate(0, 0, -89)
 	winStart := start.Add(-3 * 24 * time.Hour)
 	winEnd := start.Add(4 * 24 * time.Hour)
 	repo := &profitRepoStub{
