@@ -1,3 +1,5 @@
+import type { OpenAICompactMode, OpenAIEndpointCapability } from '@/types'
+
 export function applyInterceptWarmup(
   credentials: Record<string, unknown>,
   enabled: boolean,
@@ -332,4 +334,16 @@ export function applyHeaderOverride(
     credentials[HEADER_OVERRIDES_CREDENTIAL_KEY] = {}
   }
 }
-import type { OpenAIEndpointCapability } from '@/types'
+
+// Bulk JSON merge requires an explicit auto value to clear an existing override.
+export function applyOpenAICompactMode(
+  extra: Record<string, unknown>,
+  value: OpenAICompactMode,
+  mode: 'create' | 'edit' | 'bulk'
+): void {
+  if (value === 'auto' && mode !== 'bulk') {
+    delete extra.openai_compact_mode
+  } else {
+    extra.openai_compact_mode = value
+  }
+}

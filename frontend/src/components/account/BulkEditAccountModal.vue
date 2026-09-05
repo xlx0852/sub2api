@@ -1295,6 +1295,7 @@ import {
 import {
   applyInterceptWarmup,
   applyOpenAIPassthrough,
+  applyOpenAICompactMode,
   applyOpenAIWebSocketExtra,
   getHeaderOverrideTemplate,
   platformsShareField,
@@ -1742,7 +1743,7 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
 
   if (enableOpenAICompactMode.value) {
     const extra = ensureExtra()
-    extra.openai_compact_mode = openAICompactMode.value
+    applyOpenAICompactMode(extra, openAICompactMode.value, 'bulk')
   }
 
   if (enableOpenAICompactModelMapping.value) {

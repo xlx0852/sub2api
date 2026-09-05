@@ -7,6 +7,7 @@ import {
   applyAnthropicExtra,
   applyCustomBaseURL,
   applyOpenAIPassthrough,
+  applyOpenAICompactMode,
   applyOpenAIWebSocketExtra,
   applyOpenAIEndpointCapabilities,
   normalizeOpenAIEndpointCapabilities,
@@ -20,6 +21,16 @@ import {
   splitHeaderOverridesObject,
   validateHeaderOverrideRows
 } from '@/features/admin-accounts/form/credentialsBuilder'
+
+describe('applyOpenAICompactMode', () => {
+  it.each(['create', 'edit', 'bulk'] as const)('%s preserves unrelated fields and resets overrides correctly', (mode) => {
+    const extra: Record<string, unknown> = { keep: 42, openai_compact_mode: 'force_on' }
+    applyOpenAICompactMode(extra, 'auto', mode)
+    expect(extra).toEqual(mode === 'bulk' ? { keep: 42, openai_compact_mode: 'auto' } : { keep: 42 })
+    applyOpenAICompactMode(extra, 'force_off', mode)
+    expect(extra).toEqual({ keep: 42, openai_compact_mode: 'force_off' })
+  })
+})
 
 describe('applyAntigravityExtra', () => {
   it('sets enabled flags and removes stale disabled flags', () => {

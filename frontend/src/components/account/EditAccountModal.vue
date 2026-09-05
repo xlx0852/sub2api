@@ -2471,6 +2471,7 @@ import {
   applyAntigravityProjectID,
   applyAntigravityExtra,
   applyOpenAIPassthrough,
+  applyOpenAICompactMode,
   applyOpenAIWebSocketExtra,
   applyOpenAIEndpointCapabilities,
   normalizeOpenAIEndpointCapabilities,
@@ -4227,11 +4228,7 @@ const handleSubmit = async () => {
       const hadCodexCLIOnlyEnabled = currentExtra.codex_cli_only === true
       applyOpenAIWebSocketExtra(newExtra, props.account.type, openaiOAuthResponsesWebSocketV2Mode.value, openaiAPIKeyResponsesWebSocketV2Mode.value, isOpenAIWSModeEnabled)
       applyOpenAIPassthrough(newExtra, openaiPassthroughEnabled.value, 'edit')
-      if (openAICompactMode.value === 'auto') {
-        delete newExtra.openai_compact_mode
-      } else {
-        newExtra.openai_compact_mode = openAICompactMode.value
-      }
+      applyOpenAICompactMode(newExtra, openAICompactMode.value, 'edit')
 		if (props.account.type === 'apikey') {
         if (!openAITextGenerationCapabilityEnabled.value || openAIResponsesMode.value === 'auto') {
           delete newExtra.openai_responses_mode

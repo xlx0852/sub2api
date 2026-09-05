@@ -2791,6 +2791,7 @@ import {
   applyAntigravityProjectID,
   applyAntigravityExtra,
   applyOpenAIPassthrough,
+  applyOpenAICompactMode,
   applyOpenAIWebSocketExtra,
   applyOpenAIEndpointCapabilities,
   normalizeOpenAIEndpointCapabilities,
@@ -3975,11 +3976,7 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
   } else {
     delete extra.codex_fingerprint_mode
   }
-  if (openAICompactMode.value !== 'auto') {
-    extra.openai_compact_mode = openAICompactMode.value
-  } else {
-    delete extra.openai_compact_mode
-  }
+  applyOpenAICompactMode(extra, openAICompactMode.value, 'create')
 
   if (
     accountCategory.value === 'apikey' &&
