@@ -137,8 +137,9 @@ const showResetCreditDetails = ref(false)
 const isShadow = computed(() => props.account.parent_account_id != null)
 
 const availableResetCount = computed(() => data.value?.rate_limit_reset_credits?.available_count ?? 0)
+const availableCredits = computed(() => data.value?.rate_limit_reset_credits?.credits ?? [])
 const resetCreditExpirations = computed(() =>
-  (data.value?.rate_limit_reset_credits?.credits ?? [])
+  availableCredits.value
     .map((credit) => credit.expires_at?.trim() ?? '')
     .filter((expiresAt) => expiresAt.length > 0)
     .sort(compareResetCreditExpiry)
@@ -303,14 +304,21 @@ const confirmReset = async () => {
   error.value = null
   resetMessage.value = null
   try {
-    const result: OpenAIQuotaResetResult = await resetOpenAIQuota(props.account.id)
+    const selectedCreditId = availableCredits.value.find((credit) => credit.status === 'available' && credit.id)?.id
+    const result: OpenAIQuotaResetResult = await resetOpenAIQuota(props.account.id, selectedCreditId)
     // Refresh the reset-credit count so the badge reflects the consumed credit.
     // handleQuery clears resetMessage on entry, so the success toast is set
     // AFTER it resolves.
     await handleQuery()
-    resetMessage.value = t('admin.accounts.openaiQuotaReset.resetSuccess', {
-      windows: result.windows_reset
-    })
+    if (result.code === 'reset' || result.code === 'alreadyRedeemed') {
+      resetMessage.value = t('admin.accounts.openaiQuotaReset.resetSuccess', { windows: result.windows_reset })
+    } else {
+      error.value = result.code === 'nothingToReset'
+        ? t('admin.accounts.openaiQuotaReset.noEligibleWindow')
+        : result.code === 'noCredit'
+          ? t('admin.accounts.openaiQuotaReset.noCreditsAvailable')
+          : result.code
+    }
   } catch (e) {
     error.value = extractErrorMessage(e)
   } finally {

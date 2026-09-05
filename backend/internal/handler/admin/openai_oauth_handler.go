@@ -22,6 +22,10 @@ type OpenAIOAuthHandler struct {
 	tokenInvalidator   service.TokenCacheInvalidator
 }
 
+type OpenAIQuotaResetRequest struct {
+	CreditID string `json:"credit_id"`
+}
+
 func (h *OpenAIOAuthHandler) StartDeviceAuthorization(c *gin.Context) {
 	var req struct {
 		ProxyID *int64 `json:"proxy_id"`
@@ -608,7 +612,14 @@ func (h *OpenAIOAuthHandler) ResetQuota(c *gin.Context) {
 		response.BadRequest(c, "openai quota service is not enabled")
 		return
 	}
-	result, err := h.quotaService.ResetCredit(c.Request.Context(), accountID)
+	var req OpenAIQuotaResetRequest
+	if c.Request.ContentLength != 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			response.BadRequest(c, "Invalid request: "+err.Error())
+			return
+		}
+	}
+	result, err := h.quotaService.ResetCreditByID(c.Request.Context(), accountID, req.CreditID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

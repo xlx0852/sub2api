@@ -221,58 +221,58 @@ func processOpenAIReplayItems(items []json.RawMessage, adaptToStandard bool) []j
 			originalCallIDs[callID] = struct{}{}
 		}
 
-outputItem := item
-			if isCall || isOut {
-				validated, keep := normalizeOpenAIReplayItem(item)
-				if !keep {
-					// Never drop a call that still has an association key: the
-					// paired client output may arrive on the next bridge turn.
-					// Prefer a minimal portable function_call over deleting the
-					// only evidence of the tool invocation.
-					if isCall && callID != "" {
-						name := strings.TrimSpace(stringValue(item["name"]))
-						if name == "" {
-							name = strings.TrimSpace(stringValue(item["tool_name"]))
-						}
-						if name == "" && originalType == "local_shell_call" {
-							name = "shell"
-						}
-						if name == "" {
-							name = "tool"
-						}
-						fallback := map[string]any{
-							"type":      "function_call",
-							"call_id":   callID,
-							"name":      name,
-							"arguments": "{}",
-						}
-						if !adaptToStandard {
-							// Native dialect: keep the original wire shape when
-							// possible so custom_tool_call stays custom.
-							outputItem = item
-							if _, hasArgs := item["arguments"]; !hasArgs {
-								if _, hasInput := item["input"]; !hasInput {
-									// Ensure something valid for strict upstreams.
-									copied := cloneOpenAIReplayItem(item)
-									copied["arguments"] = "{}"
-									outputItem = copied
-								}
-							}
-						} else {
-							outputItem = fallback
-						}
-						if isCall && callID != "" {
-							keptCallIDs[callID] = struct{}{}
-						}
-						candidates = append(candidates, replayCandidate{item: outputItem, callID: callID, isCall: isCall, isOut: isOut})
-						continue
+		outputItem := item
+		if isCall || isOut {
+			validated, keep := normalizeOpenAIReplayItem(item)
+			if !keep {
+				// Never drop a call that still has an association key: the
+				// paired client output may arrive on the next bridge turn.
+				// Prefer a minimal portable function_call over deleting the
+				// only evidence of the tool invocation.
+				if isCall && callID != "" {
+					name := strings.TrimSpace(stringValue(item["name"]))
+					if name == "" {
+						name = strings.TrimSpace(stringValue(item["tool_name"]))
 					}
+					if name == "" && originalType == "local_shell_call" {
+						name = "shell"
+					}
+					if name == "" {
+						name = "tool"
+					}
+					fallback := map[string]any{
+						"type":      "function_call",
+						"call_id":   callID,
+						"name":      name,
+						"arguments": "{}",
+					}
+					if !adaptToStandard {
+						// Native dialect: keep the original wire shape when
+						// possible so custom_tool_call stays custom.
+						outputItem = item
+						if _, hasArgs := item["arguments"]; !hasArgs {
+							if _, hasInput := item["input"]; !hasInput {
+								// Ensure something valid for strict upstreams.
+								copied := cloneOpenAIReplayItem(item)
+								copied["arguments"] = "{}"
+								outputItem = copied
+							}
+						}
+					} else {
+						outputItem = fallback
+					}
+					if isCall && callID != "" {
+						keptCallIDs[callID] = struct{}{}
+					}
+					candidates = append(candidates, replayCandidate{item: outputItem, callID: callID, isCall: isCall, isOut: isOut})
 					continue
 				}
-				if adaptToStandard {
-					outputItem = validated
-				}
+				continue
 			}
+			if adaptToStandard {
+				outputItem = validated
+			}
+		}
 		if id := strings.TrimSpace(stringValue(outputItem["id"])); id != "" {
 			if _, duplicate := seenIDs[id]; duplicate {
 				// Item id is not the call/output association key. Keep the semantic

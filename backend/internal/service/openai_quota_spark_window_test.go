@@ -385,7 +385,7 @@ func TestParseOpenAIRateLimitResetCreditDetails_CompatibleContainers(t *testing.
 	}{
 		{
 			name: "credits",
-			body: `{"credits":[{"id":"secret-id","expires_at":"2026-07-03T04:05:06Z"}]}`,
+			body: `{"credits":[{"id":"credit-1","expires_at":"2026-07-03T04:05:06Z"}]}`,
 			want: []string{"2026-07-03T04:05:06Z"},
 		},
 		{
@@ -418,11 +418,16 @@ func TestParseOpenAIRateLimitResetCreditDetails_CompatibleContainers(t *testing.
 			for i := range tt.want {
 				require.Equal(t, tt.want[i], got[i].ExpiresAt)
 			}
-			encoded, err := json.Marshal(got)
-			require.NoError(t, err)
-			require.NotContains(t, string(encoded), "secret-id")
 		})
 	}
+}
+
+func TestBuildOpenAIQuotaResetRequestIncludesOptionalCreditID(t *testing.T) {
+	require.Equal(t, map[string]string{"redeem_request_id": "redeem-1"}, buildOpenAIQuotaResetRequest("redeem-1", ""))
+	require.Equal(t, map[string]string{
+		"redeem_request_id": "redeem-2",
+		"credit_id":         "credit-2",
+	}, buildOpenAIQuotaResetRequest("redeem-2", " credit-2 "))
 }
 
 func TestQueryUsageIncludesResetCreditExpirations_EndToEnd(t *testing.T) {
@@ -471,13 +476,11 @@ func TestQueryUsageIncludesResetCreditExpirations_EndToEnd(t *testing.T) {
 	require.Equal(t, 1, detailCalls)
 	require.Equal(t, openaiQuotaCodexBeta, capturedBeta)
 	require.Equal(t, []OpenAIRateLimitResetCreditDetail{
-		{ExpiresAt: "2026-07-03T04:05:06Z"},
+		{ID: "secret-credit-id", ExpiresAt: "2026-07-03T04:05:06Z"},
 		{ExpiresAt: "2026-07-04T04:05:06Z"},
 	}, usage.RateLimitResetCredits.Credits)
 
-	encoded, err := json.Marshal(usage)
-	require.NoError(t, err)
-	require.NotContains(t, string(encoded), "secret-credit-id")
+	require.Equal(t, "secret-credit-id", usage.RateLimitResetCredits.Credits[0].ID)
 }
 
 func TestQueryUsageResetCreditDetails401NonFatal(t *testing.T) {

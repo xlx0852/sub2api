@@ -110,9 +110,9 @@ func (p *GeminiTokenProvider) GetAccessToken(ctx context.Context, account *Accou
 	projectID := strings.TrimSpace(account.GetCredential("project_id"))
 	autoDetectProjectID := account.GetCredential("auto_detect_project_id") == "true"
 
-// project_id auto-detect via Gemini CLI/Code Assist is retired.
-		_ = projectID
-		_ = autoDetectProjectID
+	// project_id auto-detect via Gemini CLI/Code Assist is retired.
+	_ = projectID
+	_ = autoDetectProjectID
 
 	// 3) Populate cache with TTL.
 	if p.tokenCache != nil {

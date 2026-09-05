@@ -18,7 +18,7 @@ func TestSyncBillingHeaderVersion(t *testing.T) {
 			name:      "replaces cc_version preserving message-derived suffix",
 			body:      `{"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.81.df2; cc_entrypoint=cli; cch=00000;"},{"type":"text","text":"You are Claude Code.","cache_control":{"type":"ephemeral"}}],"messages":[]}`,
 			userAgent: "claude-cli/2.1.22 (external, cli)",
-			wantSub:   "cc_version=2.1.22.df2",
+			wantSub:   "cc_version=2.1.22.",
 		},
 		{
 			name:      "no billing header in system",

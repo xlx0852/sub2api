@@ -794,7 +794,11 @@ export interface OpenAIAdditionalRateLimit {
 }
 
 export interface OpenAIRateLimitResetCreditDetail {
-  expires_at?: string
+	id?: string
+	reset_type?: string
+	status?: string
+	granted_at?: string
+	expires_at?: string
 }
 
 export interface OpenAIRateLimitResetCredits {
@@ -840,8 +844,8 @@ export async function queryOpenAIQuota(id: number): Promise<OpenAIQuotaUsage> {
 /**
  * Consume one rate-limit-reset credit for an OpenAI/Codex OAuth account.
  */
-export async function resetOpenAIQuota(id: number): Promise<OpenAIQuotaResetResult> {
-  const { data } = await apiClient.post<OpenAIQuotaResetResult>(`/admin/openai/accounts/${id}/reset-quota`)
+export async function resetOpenAIQuota(id: number, creditId?: string): Promise<OpenAIQuotaResetResult> {
+  const { data } = await apiClient.post<OpenAIQuotaResetResult>(`/admin/openai/accounts/${id}/reset-quota`, creditId ? { credit_id: creditId } : {})
   return data
 }
 

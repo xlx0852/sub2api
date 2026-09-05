@@ -66,8 +66,13 @@ type OpenAIAdditionalRateLimit struct {
 }
 
 // OpenAIRateLimitResetCreditDetail is the sanitized metadata surfaced for one
-// available reset credit. Do not add upstream ids or tokens here.
+// available reset credit. The opaque ID is safe to return to the admin UI so
+// the next consume call can target the selected credit.
 type OpenAIRateLimitResetCreditDetail struct {
+	ID        string `json:"id,omitempty"`
+	ResetType string `json:"reset_type,omitempty"`
+	Status    string `json:"status,omitempty"`
+	GrantedAt string `json:"granted_at,omitempty"`
 	ExpiresAt string `json:"expires_at,omitempty"`
 }
 
@@ -109,6 +114,7 @@ type OpenAIQuotaResetCredit struct {
 // NOT add a top-level redeemed_at to avoid ambiguity with the nested field.
 type OpenAIQuotaResetResult struct {
 	Code         string                  `json:"code"`
+	Outcome      string                  `json:"outcome,omitempty"`
 	Credit       *OpenAIQuotaResetCredit `json:"credit,omitempty"`
 	WindowsReset int                     `json:"windows_reset"`
 }
@@ -256,6 +262,12 @@ func (s *OpenAIQuotaService) queryResetCreditDetails(ctx context.Context, client
 // The redeem_request_id is auto-generated (uuid-like) — upstream uses it for
 // idempotency. Returns the consumed credit metadata so the UI can refresh.
 func (s *OpenAIQuotaService) ResetCredit(ctx context.Context, accountID int64) (*OpenAIQuotaResetResult, error) {
+	return s.ResetCreditByID(ctx, accountID, "")
+}
+
+// ResetCreditByID consumes one earned reset credit. When creditID is empty,
+// upstream selects the next available credit for backward compatibility.
+func (s *OpenAIQuotaService) ResetCreditByID(ctx context.Context, accountID int64, creditID string) (*OpenAIQuotaResetResult, error) {
 	// Shadow guard: resetting credits via a shadow account would silently
 	// operate on the parent's quota; that is surprising and unwanted. Callers
 	// must reset the parent account directly.
@@ -303,7 +315,7 @@ func (s *OpenAIQuotaService) ResetCredit(ctx context.Context, accountID int64) (
 	resp, err := client.R().
 		SetContext(callCtx).
 		SetHeaders(headers).
-		SetBody(map[string]string{"redeem_request_id": redeemRequestID}).
+		SetBody(buildOpenAIQuotaResetRequest(redeemRequestID, creditID)).
 		SetSuccessResult(&payload).
 		Post(chatGPTRateLimitResetURL)
 	if err != nil {
@@ -314,6 +326,15 @@ func (s *OpenAIQuotaService) ResetCredit(ctx context.Context, accountID int64) (
 		body := truncate(s.redactQuotaErrorBody(callCtx, accountID, resp.String()), 240)
 		slog.Warn("openai_quota_reset_failed", "account_id", accountID, "status", status, "body", body)
 		return nil, infraerrors.Newf(mapUpstreamStatus(status), "OPENAI_QUOTA_RESET_UPSTREAM_ERROR", "upstream returned %d: %s", status, body)
+	}
+	// The current Codex-facing contract calls this field `outcome`; the older
+	// private wham endpoint calls it `code`. Normalize both forms while exposing
+	// both names to keep existing admin clients compatible.
+	if payload.Code == "" {
+		payload.Code = payload.Outcome
+	}
+	if payload.Outcome == "" {
+		payload.Outcome = payload.Code
 	}
 
 	slog.Info("openai_quota_reset_success",
@@ -336,6 +357,14 @@ func (s *OpenAIQuotaService) ResetCredit(ctx context.Context, accountID int64) (
 	// Best-effort: re-query usage so open-window end aligns to upstream reset_at.
 	s.calibrateQuotaWindowsAfterReset(accountID)
 	return &payload, nil
+}
+
+func buildOpenAIQuotaResetRequest(redeemRequestID, creditID string) map[string]string {
+	body := map[string]string{"redeem_request_id": redeemRequestID}
+	if trimmed := strings.TrimSpace(creditID); trimmed != "" {
+		body["credit_id"] = trimmed
+	}
+	return body
 }
 
 // calibrateQuotaWindowsAfterReset re-fetches /wham/usage and feeds the ledger.
@@ -563,6 +592,12 @@ func generateRedeemRequestID() (string, error) {
 }
 
 type openAIRateLimitResetCreditDetailPayload struct {
+	ID             string `json:"id,omitempty"`
+	ResetType      string `json:"reset_type,omitempty"`
+	ResetTypeCamel string `json:"resetType,omitempty"`
+	Status         string `json:"status,omitempty"`
+	GrantedAt      string `json:"granted_at,omitempty"`
+	GrantedAtCamel string `json:"grantedAt,omitempty"`
 	ExpiresAt      string `json:"expires_at,omitempty"`
 	ExpiresAtCamel string `json:"expiresAt,omitempty"`
 }
@@ -604,10 +639,18 @@ func parseOpenAIRateLimitResetCreditDetails(body []byte) ([]OpenAIRateLimitReset
 		if expiresAt == "" {
 			expiresAt = strings.TrimSpace(raw.ExpiresAtCamel)
 		}
-		if expiresAt == "" {
-			continue
+		resetType := strings.TrimSpace(raw.ResetType)
+		if resetType == "" {
+			resetType = strings.TrimSpace(raw.ResetTypeCamel)
 		}
-		credits = append(credits, OpenAIRateLimitResetCreditDetail{ExpiresAt: expiresAt})
+		grantedAt := strings.TrimSpace(raw.GrantedAt)
+		if grantedAt == "" {
+			grantedAt = strings.TrimSpace(raw.GrantedAtCamel)
+		}
+		credits = append(credits, OpenAIRateLimitResetCreditDetail{
+			ID: raw.ID, ResetType: resetType, Status: raw.Status,
+			GrantedAt: grantedAt, ExpiresAt: expiresAt,
+		})
 	}
 	return credits, nil
 }

@@ -41,7 +41,6 @@ func TestDefaultScheduledDiagnosticsModel_PrefersCheap(t *testing.T) {
 	require.True(t, strings.Contains(strings.ToLower(model), "mini") || model != "")
 }
 
-
 func TestResolveScheduledDiagnosticsModels_ModelMappingUsesValuesAndDropsWildcards(t *testing.T) {
 	account := &Account{
 		Platform: PlatformOpenAI,

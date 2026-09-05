@@ -348,7 +348,6 @@ func TestRateLimitService_RecoverAccountState_InvalidatesOAuthTokenOnErrorRecove
 	require.Equal(t, int64(21), invalidator.accounts[0].ID)
 }
 
-
 func TestRateLimitService_RecoverAccountAfterScheduledDiagnostics_DoesNotRestoreSchedulable(t *testing.T) {
 	repo := &rateLimitClearRepoStub{
 		getByIDAccount: &Account{

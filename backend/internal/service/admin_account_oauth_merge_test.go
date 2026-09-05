@@ -18,7 +18,7 @@ type oauthMergeAccountRepoStub struct {
 	oauthByEmail    map[string][]Account
 	created         []*Account
 	deletedIDs      []int64
-	hardDeletedIDs []int64
+	hardDeletedIDs  []int64
 	reassigned      [][2]int64
 	restoredIDs     []int64
 	updatedIDs      []int64
@@ -351,7 +351,6 @@ func TestCleanupOAuthEmailDuplicates_IncludesTrash(t *testing.T) {
 	require.False(t, ok6)
 }
 
-
 func TestCreateAccount_MergesKimiByAccessTokenSubject(t *testing.T) {
 	// Legacy Kimi rows have no credentials.email; only the access JWT carries user_id.
 	accessOld := "eyJhbGciOiJub25lIn0." + mustB64(`{"user_id":"ctnrlinftaee7h5moq80","sub":"ctnrlinftaee7h5moq80"}`) + ".sig"
@@ -375,7 +374,7 @@ func TestCreateAccount_MergesKimiByAccessTokenSubject(t *testing.T) {
 		Credentials: map[string]any{
 			"access_token":  accessNew,
 			"refresh_token": "fresh-rt",
-			"device_id":      "device-new",
+			"device_id":     "device-new",
 		},
 	})
 	require.NoError(t, err)

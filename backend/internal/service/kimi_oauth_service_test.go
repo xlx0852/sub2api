@@ -240,7 +240,6 @@ func TestKimiRefreshRejectsEmptyTokenResponse(t *testing.T) {
 	require.Equal(t, "KIMI_OAUTH_INVALID_TOKEN_RESPONSE", infraerrors.Reason(err))
 }
 
-
 func TestKimiUserIDFromAccessTokenPrefersUserIDClaim(t *testing.T) {
 	token := "eyJhbGciOiJub25lIn0." + base64.RawURLEncoding.EncodeToString([]byte(`{"user_id":"ctnrlinftaee7h5moq80","sub":"ctnrlinftaee7h5moq80","type":"access"}`)) + ".sig"
 	require.Equal(t, "ctnrlinftaee7h5moq80", kimiUserIDFromAccessToken(token))

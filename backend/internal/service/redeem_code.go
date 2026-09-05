@@ -5,4 +5,5 @@ import (
 )
 
 type RedeemCode = domain.RedeemCode
+
 func GenerateRedeemCode() (string, error) { return domain.GenerateRedeemCode() }

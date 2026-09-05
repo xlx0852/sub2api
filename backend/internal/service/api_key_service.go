@@ -1,11 +1,11 @@
 package service
 
 import (
-	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"html"
 	"strconv"
 	"strings"

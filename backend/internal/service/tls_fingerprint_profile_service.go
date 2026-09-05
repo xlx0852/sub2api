@@ -1,8 +1,8 @@
 package service
 
 import (
-	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"math/rand/v2"
 	"sync"
 	"time"

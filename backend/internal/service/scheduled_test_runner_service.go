@@ -39,6 +39,7 @@ type ScheduledTestRunnerService struct {
 	stopOnce  sync.Once
 	running   atomic.Bool
 }
+
 // NewScheduledTestRunnerService creates a new runner.
 func NewScheduledTestRunnerService(
 	planRepo ScheduledTestPlanRepository,

@@ -86,9 +86,9 @@ func (m *sessionWindowMockRepo) ListOAuthIncludingDeleted(context.Context) ([]Ac
 func (m *sessionWindowMockRepo) ListCRSAccountIDs(context.Context) (map[string]int64, error) {
 	panic("unexpected")
 }
-func (m *sessionWindowMockRepo) Update(context.Context, *Account) error { panic("unexpected") }
-func (m *sessionWindowMockRepo) Restore(context.Context, int64) error   { panic("unexpected") }
-func (m *sessionWindowMockRepo) Delete(context.Context, int64) error    { panic("unexpected") }
+func (m *sessionWindowMockRepo) Update(context.Context, *Account) error  { panic("unexpected") }
+func (m *sessionWindowMockRepo) Restore(context.Context, int64) error    { panic("unexpected") }
+func (m *sessionWindowMockRepo) Delete(context.Context, int64) error     { panic("unexpected") }
 func (m *sessionWindowMockRepo) HardDelete(context.Context, int64) error { panic("unexpected") }
 func (m *sessionWindowMockRepo) ReassignAccountReferences(context.Context, int64, int64) error {
 	panic("unexpected")

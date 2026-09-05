@@ -24,9 +24,9 @@ func TestFillDrawerWindowFromQuota_UsesQuotaWindowNotPageFilter(t *testing.T) {
 		QuotaWindows: []ProfitQuotaWindow{*win},
 	}
 	cycles := []*AccountSubscriptionCycle{{
-		AccountID: 69,
-		StartsAt:  time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC),
-		PeriodFee: 200,
+		AccountID:  69,
+		StartsAt:   time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC),
+		PeriodFee:  200,
 		PeriodDays: 30,
 	}}
 	// Window stats: revenue inside the 7d quota window only

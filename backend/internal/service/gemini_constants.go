@@ -65,4 +65,3 @@ func canonicalGeminiTierID(raw string) string {
 func canonicalGeminiTierIDForOAuthType(oauthType, tierID string) string {
 	return canonicalGeminiTierID(tierID)
 }
-

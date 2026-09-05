@@ -14,11 +14,11 @@ const (
 )
 
 const (
-	openAICompactModeContextKey             = "openai_compact_mode"
-	openAICompactForceUpstreamSuffixKey     = "openai_compact_force_upstream_suffix"
-	openAICompactBridgeUsedContextKey       = "openai_compact_bridge_used"
+	openAICompactModeContextKey              = "openai_compact_mode"
+	openAICompactForceUpstreamSuffixKey      = "openai_compact_force_upstream_suffix"
+	openAICompactBridgeUsedContextKey        = "openai_compact_bridge_used"
 	openAICompactTerminalCommittedContextKey = "openai_compact_terminal_committed"
-	openAICompactV2SSEStartedContextKey     = "openai_compact_v2_sse_started"
+	openAICompactV2SSEStartedContextKey      = "openai_compact_v2_sse_started"
 )
 
 // SetOpenAICompactMode stores the compact protocol mode for the current request.

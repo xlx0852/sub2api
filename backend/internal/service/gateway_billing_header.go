@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
@@ -12,6 +13,17 @@ import (
 // ccVersionInBillingRe matches the semver part of cc_version (X.Y.Z), preserving
 // the trailing message-derived suffix (e.g. ".c02") if present.
 var ccVersionInBillingRe = regexp.MustCompile(`cc_version=\d+\.\d+\.\d+`)
+var ccVersionWithFingerprintInBillingRe = regexp.MustCompile(`cc_version=\d+\.\d+\.\d+\.[0-9a-fA-F]{3}\b`)
+
+func effectiveBillingUserAgent(tokenType string, mimicClaudeCode bool, fingerprint *Fingerprint) string {
+	if tokenType == "oauth" && mimicClaudeCode {
+		return claude.DefaultHeaders["User-Agent"]
+	}
+	if fingerprint == nil {
+		return ""
+	}
+	return fingerprint.UserAgent
+}
 
 // syncBillingHeaderVersion rewrites cc_version in x-anthropic-billing-header
 // system text blocks to match the version extracted from userAgent.
@@ -33,7 +45,9 @@ func syncBillingHeaderVersion(body []byte, userAgent string) []byte {
 		text := item.Get("text")
 		if text.Exists() && text.Type == gjson.String &&
 			strings.HasPrefix(text.String(), "x-anthropic-billing-header") {
-			newText := ccVersionInBillingRe.ReplaceAllString(text.String(), replacement)
+			fingerprintedReplacement := replacement + "." + computeClaudeCodeFingerprint(body, version)
+			newText := ccVersionWithFingerprintInBillingRe.ReplaceAllString(text.String(), fingerprintedReplacement)
+			newText = ccVersionInBillingRe.ReplaceAllString(newText, replacement)
 			if newText != text.String() {
 				if updated, err := sjson.SetBytes(body, fmt.Sprintf("system.%d.text", idx), newText); err == nil {
 					body = updated

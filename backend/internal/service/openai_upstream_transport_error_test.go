@@ -91,11 +91,9 @@ func errString(err error) string {
 	return err.Error()
 }
 
-
-
 func TestIsOpenAIUpstreamConnectionResetMessage(t *testing.T) {
-	cases := []struct{
-		msg string
+	cases := []struct {
+		msg  string
 		want bool
 	}{
 		{"upstream connect error or disconnect/reset before headers. reset reason: connection termination", true},
