@@ -29,10 +29,6 @@ func resolveFinalAntigravityModelKey(ctx context.Context, account *Account, requ
 	return domain.ResolveFinalAntigravityModelKey(ctx, account, requestedModel)
 }
 
-func isAntigravityGeminiModel(model string) bool {
-	return domain.IsAntigravityGeminiModel(model)
-}
-
 func antigravityModelRateLimitKeys(model string) []string {
 	return domain.AntigravityModelRateLimitKeys(model)
 }

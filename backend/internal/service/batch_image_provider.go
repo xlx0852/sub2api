@@ -179,13 +179,6 @@ func batchImageProviderOutputRef(job *BatchImageJob) string {
 	return strings.TrimSpace(*job.ProviderOutputRef)
 }
 
-func batchImageProviderAPIKey(account *Account) string {
-	if account == nil {
-		return ""
-	}
-	return strings.TrimSpace(account.GetCredential("api_key"))
-}
-
 func batchImageProviderInputError(format string, args ...any) error {
 	return ErrBatchImageProviderInvalidInput.WithCause(fmt.Errorf(format, args...))
 }

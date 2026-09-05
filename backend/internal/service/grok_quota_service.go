@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	grokQuotaUpstreamTimeout     = 20 * time.Second
-	grokBillingSnapshotKey       = "grok_billing_snapshot"
+	grokQuotaUpstreamTimeout = 20 * time.Second
+	grokBillingSnapshotKey   = "grok_billing_snapshot"
 	// Legacy temp-unsched reason prefix (pre rate-limit alignment). Still cleared on recovery.
 	grokBillingPauseReasonPrefix = "grok billing quota exhausted:"
 	// Marker written when weekly billing exhaustion is mirrored into rate_limit_reset_at,
@@ -121,18 +121,18 @@ func (s *GrokQuotaService) ProbeUsage(ctx context.Context, accountID int64) (*Gr
 	updates := map[string]any{
 		grokBillingSnapshotKey: billing,
 	}
-if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
-			slog.Warn("grok_billing_persist_failed",
-				"account_id", account.ID,
-				"error", err,
-			)
-			return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_BILLING_PERSIST_FAILED", "billing fetched but failed to persist: %v", err)
-		}
-		now := time.Now()
-		syncGrokBillingSchedulingState(ctx, s.accountRepo, account, billing, now)
-		if s.quotaWindowLedger != nil {
-			observePlatformQuotaWindowUpdates(ctx, s.quotaWindowLedger, account.ID, PlatformGrok, updates, now)
-		}
+	if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
+		slog.Warn("grok_billing_persist_failed",
+			"account_id", account.ID,
+			"error", err,
+		)
+		return nil, infraerrors.Newf(http.StatusInternalServerError, "GROK_BILLING_PERSIST_FAILED", "billing fetched but failed to persist: %v", err)
+	}
+	now := time.Now()
+	syncGrokBillingSchedulingState(ctx, s.accountRepo, account, billing, now)
+	if s.quotaWindowLedger != nil {
+		observePlatformQuotaWindowUpdates(ctx, s.quotaWindowLedger, account.ID, PlatformGrok, updates, now)
+	}
 
 	// Keep legacy rate-limit header snapshot if present (still useful for 429 UI).
 	legacy, _ := grokQuotaSnapshotFromExtra(account.Extra)
@@ -267,32 +267,6 @@ func hasGrokBillingRateLimitMarker(extra map[string]any) bool {
 
 // pickSuccessfulBillingStatus returns the HTTP status from a successful snapshot.
 // When both succeed, prefers a 2xx status; when only one succeeds, uses that side.
-func pickSuccessfulBillingStatus(creditsSnap *xai.BillingSnapshot, creditsStatus int, plainSnap *xai.BillingSnapshot, plainStatus int) int {
-	isOK := func(code int) bool { return code >= 200 && code < 300 }
-
-	switch {
-	case creditsSnap != nil && plainSnap != nil:
-		if isOK(creditsStatus) {
-			return creditsStatus
-		}
-		if isOK(plainStatus) {
-			return plainStatus
-		}
-		if creditsStatus != 0 {
-			return creditsStatus
-		}
-		return plainStatus
-	case creditsSnap != nil:
-		return creditsStatus
-	case plainSnap != nil:
-		return plainStatus
-	default:
-		if creditsStatus != 0 {
-			return creditsStatus
-		}
-		return plainStatus
-	}
-}
 
 func (s *GrokQuotaService) fetchBilling(
 	ctx context.Context,
