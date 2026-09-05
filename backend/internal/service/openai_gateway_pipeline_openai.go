@@ -595,7 +595,7 @@ func (s *OpenAIGatewayService) forwardOpenAITransport(ex *pipeline.Exchange) err
 		// Other paths still detach so client disconnect can finish upstream for billing.
 		var upstreamReq *http.Request
 		var err error
-		upstreamCtx := ex.Ctx
+		var upstreamCtx context.Context
 		var headerGuard *openAIFirstOutputHeaderGuard
 		if st.bodySignalCompactV2 {
 			// 释放上一轮重试残留的 detached context，最后一轮由函数返回时的 defer 兜底。

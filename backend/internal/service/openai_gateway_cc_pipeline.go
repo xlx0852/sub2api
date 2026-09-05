@@ -140,10 +140,13 @@ func (s *OpenAIGatewayService) openAIChatCompletionsTargetURL(account *Account) 
 }
 
 // resolveCCFallbackTarget 解析两条 CC 回退路径共用的账号凭证与上游端点
-// （回退路径仅面向 APIKey 账号，凭证恒为 openai api_key）。
+// Kimi OAuth 使用 token provider，其余账号使用 API key。
 func (s *OpenAIGatewayService) resolveCCFallbackTarget(ctx context.Context, account *Account) (apiKey string, targetURL string, err error) {
 	if account != nil && account.Platform == PlatformKimi {
 		apiKey, _, err = s.GetAccessToken(ctx, account)
+		if err != nil {
+			return "", "", err
+		}
 	} else {
 		apiKey = account.GetOpenAIApiKey()
 	}
