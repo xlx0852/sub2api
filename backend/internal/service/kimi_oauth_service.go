@@ -289,17 +289,6 @@ func (s *KimiOAuthService) BuildAccountCredentials(token *KimiOAuthTokenInfo) ma
 	return credentials
 }
 
-func (s *KimiOAuthService) getDeviceSession(ctx context.Context, sessionID string) (*KimiDeviceSession, error) {
-	if strings.TrimSpace(sessionID) == "" {
-		return nil, infraerrors.New(http.StatusBadRequest, "KIMI_OAUTH_SESSION_REQUIRED", "session_id is required")
-	}
-	session, err := s.sessionStore.Get(ctx, sessionID)
-	if err != nil || session == nil {
-		return nil, infraerrors.New(http.StatusNotFound, "KIMI_OAUTH_SESSION_NOT_FOUND", "Kimi authorization session not found or expired")
-	}
-	return session, nil
-}
-
 func (s *KimiOAuthService) tokenInfo(token *kimi.TokenResponse, headers kimi.DeviceHeaders) *KimiOAuthTokenInfo {
 	expiresIn := int64(token.ExpiresIn)
 	if expiresIn <= 0 {
