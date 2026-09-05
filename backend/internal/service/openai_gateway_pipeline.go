@@ -292,11 +292,27 @@ func (s *OpenAIGatewayService) openaiForwardPipeline() *pipeline.Pipeline {
 func (s *OpenAIGatewayService) openaiForwardStages() []pipeline.Stage {
 	return []pipeline.Stage{
 		pipeline.Func(pipeline.StageParse, s.forwardOpenAIParse),
+		pipeline.Func(pipeline.StageAdmission, admitOpenAIForward),
+		pipeline.Func(pipeline.StageSelect, selectOpenAIForward),
 		pipeline.Func(pipeline.StageRewrite, s.forwardOpenAIRewrite),
 		pipeline.Func(pipeline.StageTransport, s.forwardOpenAITransport),
 		pipeline.Func(pipeline.StageRelay, s.forwardOpenAIRelay),
 		pipeline.Func(pipeline.StageSettle, s.forwardOpenAISettle),
 	}
+}
+
+func admitOpenAIForward(ex *pipeline.Exchange) error {
+	if ex == nil || ex.Account == nil {
+		return fmt.Errorf("admission: account is required")
+	}
+	return nil
+}
+
+func selectOpenAIForward(ex *pipeline.Exchange) error {
+	if ex == nil || ex.Account == nil {
+		return fmt.Errorf("select: account is required")
+	}
+	return nil
 }
 
 type openaiChatForwardState struct {
