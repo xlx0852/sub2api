@@ -846,17 +846,6 @@ func (s *GatewayService) IsSingleAntigravityAccountGroup(ctx context.Context, gr
 	return len(accounts) == 1
 }
 
-// isAccountInGroup checks if the account belongs to the specified group.
-// When groupID is nil, returns true only for ungrouped accounts (no group assignments).
-func (s *GatewayService) isAccountInGroup(account *Account, groupID *int64) bool {
-	return scheduling.EvaluateCandidate(
-		context.Background(),
-		account,
-		scheduling.Request{GroupID: groupID},
-		scheduling.GroupMembershipPolicy,
-	).Allowed
-}
-
 func (s *GatewayService) tryAcquireAccountSlot(ctx context.Context, requestedModel string, accountID int64, maxConcurrency int) (*AcquireResult, error) {
 	if shouldSkipAccountAcquire(ctx) {
 		return tryAcquireAccountSlot(ctx, nil, requestedModel, accountID, maxConcurrency)

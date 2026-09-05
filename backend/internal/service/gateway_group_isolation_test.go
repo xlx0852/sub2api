@@ -6,8 +6,13 @@ import (
 	"context"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/stretchr/testify/require"
 )
+
+func (s *GatewayService) isAccountInGroup(account *Account, groupID *int64) bool {
+	return scheduling.EvaluateCandidate(context.Background(), account, scheduling.Request{GroupID: groupID}, scheduling.GroupMembershipPolicy).Allowed
+}
 
 // ============================================================================
 // Part 1: isAccountInGroup 单元测试
