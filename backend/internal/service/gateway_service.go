@@ -527,6 +527,18 @@ func (r *AccountSelectionResult) Release() {
 	}
 }
 
+// ReleaseCallback returns the owned release callback only when a slot was
+// acquired, preserving nil for wait-plan results.
+func (r *AccountSelectionResult) ReleaseCallback() func() {
+	if r == nil || !r.Acquired {
+		return nil
+	}
+	if r.Lease != nil {
+		return r.Lease.Release
+	}
+	return r.ReleaseFunc
+}
+
 // ClaudeUsage 表示Claude API返回的usage信息
 type ClaudeUsage struct {
 	InputTokens              int `json:"input_tokens"`

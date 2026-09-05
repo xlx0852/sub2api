@@ -196,10 +196,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
 		// 4. Acquire account concurrency slot
-		accountReleaseFunc := selection.ReleaseFunc
-		if selection.Acquired {
-			accountReleaseFunc = selection.Release
-		}
+		accountReleaseFunc := selection.ReleaseCallback()
 		if !selection.Acquired {
 			if selection.ModelLimited {
 				// 模型级并发预算已满：直接 429 让路，不进入账号等待队列。
