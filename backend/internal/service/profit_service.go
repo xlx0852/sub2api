@@ -2327,18 +2327,6 @@ func mergeProfitWindowSpans(spans []profitWindowSpan) []profitWindowSpan {
 	return merged
 }
 
-func (a profitWindowAnchor) coversStart(start time.Time) bool {
-	if len(a.spans) == 0 {
-		return true
-	}
-	for _, s := range a.spans {
-		if !start.Before(s.start) && start.Before(s.end) {
-			return true
-		}
-	}
-	return false
-}
-
 // quotaWindowCutoffForCycles returns the last instant at which future quota
 // windows may be projected for a subscription account.
 //
@@ -2937,27 +2925,6 @@ func anyToInt64(v any) *int64 {
 		if i, err := n.Int64(); err == nil {
 			return &i
 		}
-	}
-	return nil
-}
-
-func anyToTime(v any) *time.Time {
-	if v == nil {
-		return nil
-	}
-	switch n := v.(type) {
-	case string:
-		s := strings.TrimSpace(n)
-		if s == "" {
-			return nil
-		}
-		if ts, err := time.Parse(time.RFC3339, s); err == nil {
-			t := ts.UTC()
-			return &t
-		}
-	case time.Time:
-		t := n.UTC()
-		return &t
 	}
 	return nil
 }

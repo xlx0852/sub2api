@@ -79,7 +79,3 @@ func (t *openAIWSAccountHealthTracker) recentFailuresLocked(accountID int64, now
 	}
 	return failures
 }
-
-func openAIWSInt64Ptr(v int64) *int64 {
-	return &v
-}
