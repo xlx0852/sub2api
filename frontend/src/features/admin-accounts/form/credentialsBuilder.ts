@@ -7,6 +7,8 @@ export function applyInterceptWarmup(
     credentials.intercept_warmup_requests = true
   } else if (mode === 'edit') {
     delete credentials.intercept_warmup_requests
+  } else if (mode === 'bulk') {
+    credentials.intercept_warmup_requests = false
   }
 }
 
