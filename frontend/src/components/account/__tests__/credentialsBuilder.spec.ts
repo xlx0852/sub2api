@@ -4,6 +4,7 @@ import {
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
   applyAntigravityExtra,
+  applyCustomBaseURL,
   applyOpenAIPassthrough,
   applyAntigravityProjectID,
   applyGrokAPIKeyRouting,
@@ -44,6 +45,20 @@ describe('applyOpenAIPassthrough', () => {
     }
     applyOpenAIPassthrough(edit, false, 'edit')
     expect(edit).toEqual({})
+  })
+})
+
+describe('applyCustomBaseURL', () => {
+  it('trims and writes create values, while edit clears disabled values', () => {
+    const created: Record<string, unknown> = {}
+    applyCustomBaseURL(created, true, ' https://upstream.example/v1 ', 'create')
+    expect(created).toEqual({
+      custom_base_url_enabled: true,
+      custom_base_url: 'https://upstream.example/v1'
+    })
+
+    applyCustomBaseURL(created, false, '', 'edit')
+    expect(created).toEqual({})
   })
 })
 

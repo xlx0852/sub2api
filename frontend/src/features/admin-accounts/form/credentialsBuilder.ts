@@ -75,6 +75,22 @@ export function applyOpenAIPassthrough(
   }
 }
 
+export function applyCustomBaseURL(
+  extra: Record<string, unknown>,
+  enabled: boolean,
+  value: string,
+  mode: 'create' | 'edit'
+): void {
+  const trimmed = value.trim()
+  if (enabled && trimmed) {
+    extra.custom_base_url_enabled = true
+    extra.custom_base_url = trimmed
+  } else if (mode === 'edit') {
+    delete extra.custom_base_url_enabled
+    delete extra.custom_base_url
+  }
+}
+
 // ========== 请求头覆写（仅 anthropic/openai 平台的 api_key 账号） ==========
 
 export const HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY = 'header_override_enabled'

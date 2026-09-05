@@ -2471,6 +2471,7 @@ import {
   applyAntigravityProjectID,
   applyAntigravityExtra,
   applyOpenAIPassthrough,
+  applyCustomBaseURL,
   applyGrokAPIKeyRouting,
   applyHeaderOverride,
   applyInterceptWarmup,
@@ -4215,13 +4216,7 @@ const handleSubmit = async () => {
       }
 
       // Custom base URL relay setting
-      if (customBaseUrlEnabled.value && customBaseUrl.value.trim()) {
-        newExtra.custom_base_url_enabled = true
-        newExtra.custom_base_url = customBaseUrl.value.trim()
-      } else {
-        delete newExtra.custom_base_url_enabled
-        delete newExtra.custom_base_url
-      }
+      applyCustomBaseURL(newExtra, customBaseUrlEnabled.value, customBaseUrl.value, 'edit')
 
       updatePayload.extra = newExtra
     }

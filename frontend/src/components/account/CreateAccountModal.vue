@@ -2791,6 +2791,7 @@ import {
   applyAntigravityProjectID,
   applyAntigravityExtra,
   applyOpenAIPassthrough,
+  applyCustomBaseURL,
   applyGrokAPIKeyRouting,
   applyHeaderOverride,
   applyInterceptWarmup,
@@ -5264,10 +5265,7 @@ const handleAnthropicExchange = async (authCode: string) => {
     }
 
     // Add custom base URL settings
-    if (customBaseUrlEnabled.value && customBaseUrl.value.trim()) {
-      extra.custom_base_url_enabled = true
-      extra.custom_base_url = customBaseUrl.value.trim()
-    }
+    applyCustomBaseURL(extra, customBaseUrlEnabled.value, customBaseUrl.value, 'create')
 
     const credentials: Record<string, unknown> = { ...tokenInfo }
     applyInterceptWarmup(credentials, interceptWarmupRequests.value, 'create')
@@ -5389,10 +5387,7 @@ const handleCookieAuth = async (sessionKey: string) => {
         }
 
         // Add custom base URL settings
-        if (customBaseUrlEnabled.value && customBaseUrl.value.trim()) {
-          extra.custom_base_url_enabled = true
-          extra.custom_base_url = customBaseUrl.value.trim()
-        }
+        applyCustomBaseURL(extra, customBaseUrlEnabled.value, customBaseUrl.value, 'create')
 
         const accountName = keys.length > 1 ? `${form.name} #${i + 1}` : form.name
 
