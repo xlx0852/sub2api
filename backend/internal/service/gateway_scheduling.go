@@ -1304,38 +1304,6 @@ type selectionFailureDiagnosis struct {
 	Detail   string
 }
 
-func (s *GatewayService) logDetailedSelectionFailure(
-	ctx context.Context,
-	groupID *int64,
-	sessionHash string,
-	requestedModel string,
-	platform string,
-	accounts []Account,
-	excludedIDs map[int64]struct{},
-	allowMixedScheduling bool,
-) selectionFailureStats {
-	stats := s.collectSelectionFailureStats(ctx, accounts, requestedModel, platform, excludedIDs, allowMixedScheduling)
-	logger.LegacyPrintf(
-		"service.gateway",
-		"[SelectAccountDetailed] group_id=%v model=%s platform=%s session=%s total=%d eligible=%d excluded=%d unschedulable=%d platform_filtered=%d model_unsupported=%d model_rate_limited=%d sample_platform_filtered=%v sample_model_unsupported=%v sample_model_rate_limited=%v",
-		derefGroupID(groupID),
-		requestedModel,
-		platform,
-		shortSessionHash(sessionHash),
-		stats.Total,
-		stats.Eligible,
-		stats.Excluded,
-		stats.Unschedulable,
-		stats.PlatformFiltered,
-		stats.ModelUnsupported,
-		stats.ModelRateLimited,
-		stats.SamplePlatformIDs,
-		stats.SampleMappingIDs,
-		stats.SampleRateLimitIDs,
-	)
-	return stats
-}
-
 func (s *GatewayService) collectSelectionFailureStats(
 	ctx context.Context,
 	accounts []Account,
