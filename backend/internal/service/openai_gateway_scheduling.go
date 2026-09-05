@@ -171,7 +171,7 @@ func (s *OpenAIGatewayService) SelectAccountForModelWithExclusions(ctx context.C
 		return nil, ErrNoAvailableAccounts
 	}
 	if selection.ReleaseFunc != nil {
-		selection.ReleaseFunc()
+		selection.Release()
 	}
 	return selection.Account, nil
 }

@@ -53,7 +53,7 @@ func (s *GatewayService) SelectAccountForModelWithExclusions(ctx context.Context
 		return nil, ErrNoAvailableAccounts
 	}
 	if selection.ReleaseFunc != nil {
-		selection.ReleaseFunc()
+		selection.Release()
 	}
 	return selection.Account, nil
 }
