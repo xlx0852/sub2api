@@ -40,6 +40,23 @@ export function applyGrokAPIKeyRouting(
   credentials.using_api = true
 }
 
+export function applyAntigravityExtra(
+  extra: Record<string, unknown>,
+  mixedScheduling: boolean,
+  allowOverages: boolean
+): void {
+  if (mixedScheduling) {
+    extra.mixed_scheduling = true
+  } else {
+    delete extra.mixed_scheduling
+  }
+  if (allowOverages) {
+    extra.allow_overages = true
+  } else {
+    delete extra.allow_overages
+  }
+}
+
 // ========== 请求头覆写（仅 anthropic/openai 平台的 api_key 账号） ==========
 
 export const HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY = 'header_override_enabled'

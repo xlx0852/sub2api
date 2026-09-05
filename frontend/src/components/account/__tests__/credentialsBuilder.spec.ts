@@ -3,6 +3,7 @@ import {
   ANTIGRAVITY_PROJECT_ID_CREDENTIAL_KEY,
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
+  applyAntigravityExtra,
   applyAntigravityProjectID,
   applyGrokAPIKeyRouting,
   applyHeaderOverride,
@@ -13,6 +14,22 @@ import {
   splitHeaderOverridesObject,
   validateHeaderOverrideRows
 } from '@/features/admin-accounts/form/credentialsBuilder'
+
+describe('applyAntigravityExtra', () => {
+  it('sets enabled flags and removes stale disabled flags', () => {
+    const extra: Record<string, unknown> = {
+      mixed_scheduling: true,
+      allow_overages: true,
+      keep: 'value'
+    }
+
+    applyAntigravityExtra(extra, false, true)
+    expect(extra).toEqual({ allow_overages: true, keep: 'value' })
+
+    applyAntigravityExtra(extra, true, false)
+    expect(extra).toEqual({ mixed_scheduling: true, keep: 'value' })
+  })
+})
 
 describe('applyGrokAPIKeyRouting', () => {
   it('selects the official xAI API for Grok API Key accounts', () => {

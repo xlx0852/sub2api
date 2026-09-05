@@ -2789,6 +2789,7 @@ import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
   applyAntigravityProjectID,
+  applyAntigravityExtra,
   applyGrokAPIKeyRouting,
   applyHeaderOverride,
   applyInterceptWarmup,
@@ -3159,8 +3160,7 @@ const applyOpenAIEndpointCapabilities = (credentials: Record<string, unknown>) =
 
 function buildAntigravityExtra(): Record<string, unknown> | undefined {
   const extra: Record<string, unknown> = {}
-  if (mixedScheduling.value) extra.mixed_scheduling = true
-  if (allowOverages.value) extra.allow_overages = true
+  applyAntigravityExtra(extra, mixedScheduling.value, allowOverages.value)
   return Object.keys(extra).length > 0 ? extra : undefined
 }
 

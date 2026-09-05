@@ -2469,6 +2469,7 @@ import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
   applyAntigravityProjectID,
+  applyAntigravityExtra,
   applyGrokAPIKeyRouting,
   applyHeaderOverride,
   applyInterceptWarmup,
@@ -4130,16 +4131,7 @@ const handleSubmit = async () => {
     if (props.account.platform === 'antigravity') {
       const currentExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
       const newExtra: Record<string, unknown> = { ...currentExtra }
-      if (mixedScheduling.value) {
-        newExtra.mixed_scheduling = true
-      } else {
-        delete newExtra.mixed_scheduling
-      }
-      if (allowOverages.value) {
-        newExtra.allow_overages = true
-      } else {
-        delete newExtra.allow_overages
-      }
+      applyAntigravityExtra(newExtra, mixedScheduling.value, allowOverages.value)
       updatePayload.extra = newExtra
     }
 
