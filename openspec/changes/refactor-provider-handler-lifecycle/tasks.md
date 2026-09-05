@@ -11,8 +11,7 @@
 
 ## 3. Gates
 
-- [ ] 3.1 `go test ./internal/...`
-- [ ] 3.2 `go vet ./internal/...`
-- [ ] 3.3 前端 ESLint、typecheck、Vitest
+- [x] 3.1 `go test ./internal/...`
+- [x] 3.2 `go vet ./internal/...`
+- [x] 3.3 前端 ESLint、typecheck、Vitest
 - [ ] 3.4 旧/新差分无未归因差异后删除旧编排代码
-
