@@ -3,6 +3,7 @@ package scheduling
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
@@ -47,9 +48,30 @@ type WaitPlan struct {
 type Result struct {
 	Account      *domain.Account
 	Acquired     bool
+	Lease        *AccountLease
 	Release      func()
 	WaitPlan     *WaitPlan
 	ModelLimited bool
+}
+
+// AccountLease owns one acquired distributed slot. Release is idempotent so
+// error, defer, and disconnect paths can safely converge on the same lease.
+type AccountLease struct {
+	once      sync.Once
+	releaseFn func()
+}
+
+func NewAccountLease(release func()) *AccountLease {
+	if release == nil {
+		return nil
+	}
+	return &AccountLease{releaseFn: release}
+}
+
+func (l *AccountLease) Release() {
+	if l != nil {
+		l.once.Do(l.releaseFn)
+	}
 }
 
 // Outcome 是统一调度编排器的完整输出。Decision 由平台策略填充，

@@ -89,8 +89,10 @@ func TestNewResultReleaseIsIdempotent(t *testing.T) {
 	calls := 0
 	result := NewResult(&domain.Account{ID: 7}, true, func() { calls++ }, nil)
 
+	require.NotNil(t, result.Lease)
 	result.Release()
 	result.Release()
+	result.Lease.Release()
 
 	require.Equal(t, 1, calls)
 }
