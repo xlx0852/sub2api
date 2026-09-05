@@ -45,6 +45,9 @@ func acquireResultFromSlot(res *scheduling.SlotResult) *AcquireResult {
 }
 
 func tryAcquireAccountSlot(ctx context.Context, concurrency *ConcurrencyService, requestedModel string, accountID int64, maxConcurrency int) (*AcquireResult, error) {
+	if shouldSkipAccountAcquire(ctx) {
+		concurrency = nil
+	}
 	res, err := scheduling.TryAcquireAccountSlot(ctx, optionalSlotAcquirer(concurrency), requestedModel, accountID, maxConcurrency)
 	return acquireResultFromSlot(res), err
 }

@@ -847,9 +847,6 @@ func (s *GatewayService) IsSingleAntigravityAccountGroup(ctx context.Context, gr
 }
 
 func (s *GatewayService) tryAcquireAccountSlot(ctx context.Context, requestedModel string, accountID int64, maxConcurrency int) (*AcquireResult, error) {
-	if shouldSkipAccountAcquire(ctx) {
-		return tryAcquireAccountSlot(ctx, nil, requestedModel, accountID, maxConcurrency)
-	}
 	return tryAcquireAccountSlot(ctx, s.concurrencyService, requestedModel, accountID, maxConcurrency)
 }
 
