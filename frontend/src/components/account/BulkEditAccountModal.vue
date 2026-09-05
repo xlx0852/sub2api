@@ -1288,7 +1288,8 @@ import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.
 import Icon from '@/components/icons/Icon.vue'
 import {
   buildModelMappingObject as buildModelMappingPayload,
-  getPresetMappingsByPlatform
+  getPresetMappingsByPlatform,
+  useModelRestrictionEditor
 } from '@/composables/useModelWhitelist'
 import {
   buildHeaderOverridesObject,
@@ -1437,9 +1438,15 @@ const showMixedChannelWarning = ref(false)
 const mixedChannelWarningMessage = ref('')
 const pendingUpdatesForConfirm = ref<Record<string, unknown> | null>(null)
 const baseUrl = ref('')
-const modelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
-const allowedModels = ref<string[]>([])
-const modelMappings = ref<ModelMapping[]>([])
+const {
+  modelRestrictionMode,
+  allowedModels,
+  modelMappings,
+  addModelMapping,
+  removeModelMapping,
+  addPresetMapping: addModelPresetMapping,
+  resetModelRestriction
+} = useModelRestrictionEditor()
 const selectedErrorCodes = ref<number[]>([])
 const customErrorCodeInput = ref<number | null>(null)
 const interceptWarmupRequests = ref(false)
@@ -1550,15 +1557,6 @@ const openAIAPIKeyWSModeConcurrencyHintKey = computed(() =>
   resolveOpenAIWSModeConcurrencyHintKey(openaiAPIKeyResponsesWebSocketV2Mode.value)
 )
 
-// Model mapping helpers
-const addModelMapping = () => {
-  modelMappings.value.push({ from: '', to: '' })
-}
-
-const removeModelMapping = (index: number) => {
-  modelMappings.value.splice(index, 1)
-}
-
 const addOpenAICompactModelMapping = () => {
   openAICompactModelMappings.value.push({ from: '', to: '' })
 }
@@ -1568,12 +1566,9 @@ const removeOpenAICompactModelMapping = (index: number) => {
 }
 
 const addPresetMapping = (from: string, to: string) => {
-  const exists = modelMappings.value.some((m) => m.from === from)
-  if (exists) {
+  if (!addModelPresetMapping(from, to)) {
     appStore.showInfo(t('admin.accounts.mappingExists', { model: from }))
-    return
   }
-  modelMappings.value.push({ from, to })
 }
 
 // Error code helpers
@@ -2008,9 +2003,7 @@ watch(
       // Reset all values
       baseUrl.value = ''
       openaiPassthroughEnabled.value = false
-      modelRestrictionMode.value = 'whitelist'
-      allowedModels.value = []
-      modelMappings.value = []
+      resetModelRestriction()
       selectedErrorCodes.value = []
       customErrorCodeInput.value = null
       interceptWarmupRequests.value = false

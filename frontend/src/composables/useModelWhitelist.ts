@@ -427,6 +427,45 @@ export interface ModelMappingEntry {
   to: string
 }
 
+/** Shared editor state for account model restrictions. */
+export function useModelRestrictionEditor() {
+  const modelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
+  const allowedModels = ref<string[]>([])
+  const modelMappings = ref<ModelMappingEntry[]>([])
+
+  const addModelMapping = () => {
+    modelMappings.value.push({ from: '', to: '' })
+  }
+
+  const removeModelMapping = (index: number) => {
+    modelMappings.value.splice(index, 1)
+  }
+
+  const addPresetMapping = (from: string, to: string): boolean => {
+    if (modelMappings.value.some((mapping) => mapping.from === from)) {
+      return false
+    }
+    modelMappings.value.push({ from, to })
+    return true
+  }
+
+  const resetModelRestriction = () => {
+    modelRestrictionMode.value = 'whitelist'
+    allowedModels.value = []
+    modelMappings.value = []
+  }
+
+  return {
+    modelRestrictionMode,
+    allowedModels,
+    modelMappings,
+    addModelMapping,
+    removeModelMapping,
+    addPresetMapping,
+    resetModelRestriction
+  }
+}
+
 export function replaceExactModelsWithUpstream(existing: string[], upstream: string[]) {
   const exactExisting = new Set<string>()
   const wildcards: string[] = []
@@ -672,3 +711,4 @@ export async function ensureModelCatalogLoaded(options?: { force?: boolean }): P
 		}
 	}
 }
+import { ref } from 'vue'

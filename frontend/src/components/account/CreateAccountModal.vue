@@ -2744,7 +2744,8 @@ import {
   commonErrorCodes,
   buildModelMappingObject,
   fetchAntigravityDefaultMappings,
-  isValidWildcardPattern
+  isValidWildcardPattern,
+  useModelRestrictionEditor
 } from '@/composables/useModelWhitelist'
 import { adminAPI } from '@/api/admin'
 import { apiErrorMessage } from '@/api/client'
@@ -2961,10 +2962,16 @@ const editWeeklyResetMode = ref<'rolling' | 'fixed' | null>(null)
 const editWeeklyResetDay = ref<number | null>(null)
 const editWeeklyResetHour = ref<number | null>(null)
 const editResetTimezone = ref<string | null>(null)
-const modelMappings = ref<ModelMapping[]>([])
+const {
+  modelMappings,
+  modelRestrictionMode,
+  allowedModels,
+  addModelMapping,
+  removeModelMapping,
+  addPresetMapping: addModelPresetMapping,
+  resetModelRestriction
+} = useModelRestrictionEditor()
 const openAICompactModelMappings = ref<ModelMapping[]>([])
-const modelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
-const allowedModels = ref<string[]>([])
 const DEFAULT_POOL_MODE_RETRY_COUNT = 3
 const MAX_POOL_MODE_RETRY_COUNT = 10
 const DEFAULT_POOL_MODE_RETRY_STATUS_CODES = [401, 403, 429]
@@ -3555,11 +3562,6 @@ watch(
   }
 )
 
-// Model mapping helpers
-const addModelMapping = () => {
-  modelMappings.value.push({ from: '', to: '' })
-}
-
 const addOpenAICompactModelMapping = () => {
   openAICompactModelMappings.value.push({ from: '', to: '' })
 }
@@ -3568,16 +3570,10 @@ const removeOpenAICompactModelMapping = (index: number) => {
   openAICompactModelMappings.value.splice(index, 1)
 }
 
-const removeModelMapping = (index: number) => {
-  modelMappings.value.splice(index, 1)
-}
-
 const addPresetMapping = (from: string, to: string) => {
-  if (modelMappings.value.some((m) => m.from === from)) {
+  if (!addModelPresetMapping(from, to)) {
     appStore.showInfo(t('admin.accounts.mappingExists', { model: from }))
-    return
   }
-  modelMappings.value.push({ from, to })
 }
 
 const addAntigravityModelMapping = () => {
@@ -3873,9 +3869,8 @@ const resetForm = () => {
   editWeeklyResetDay.value = null
   editWeeklyResetHour.value = null
   editResetTimezone.value = null
-  modelMappings.value = []
+  resetModelRestriction()
   openAICompactModelMappings.value = []
-  modelRestrictionMode.value = 'whitelist'
   allowedModels.value = [...claudeModels] // Default fill related models
 
   antigravityModelRestrictionMode.value = 'mapping'

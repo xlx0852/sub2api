@@ -2499,7 +2499,8 @@ import {
   commonErrorCodes,
   buildModelMappingObject,
   splitModelMappingObject,
-  isValidWildcardPattern
+  isValidWildcardPattern,
+  useModelRestrictionEditor
 } from '@/composables/useModelWhitelist'
 
 interface Props {
@@ -2595,10 +2596,16 @@ const editApiKey = ref('')
 const editVertexProjectId = ref('')
 const editVertexClientEmail = ref('')
 const editVertexLocation = ref('us-central1')
-const modelMappings = ref<ModelMapping[]>([])
+const {
+  modelMappings,
+  modelRestrictionMode,
+  allowedModels,
+  addModelMapping,
+  removeModelMapping,
+  addPresetMapping: addModelPresetMapping,
+  resetModelRestriction
+} = useModelRestrictionEditor()
 const openAICompactModelMappings = ref<ModelMapping[]>([])
-const modelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
-const allowedModels = ref<string[]>([])
 const DEFAULT_POOL_MODE_RETRY_COUNT = 3
 const MAX_POOL_MODE_RETRY_COUNT = 10
 const DEFAULT_POOL_MODE_RETRY_STATUS_CODES = [401, 403, 429]
@@ -3377,9 +3384,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
       const oauthCredentials = newAccount.credentials as Record<string, unknown>
       loadModelRestrictionFromMapping(oauthCredentials.model_mapping as Record<string, unknown> | undefined)
     } else {
-      modelRestrictionMode.value = 'whitelist'
-      modelMappings.value = []
-      allowedModels.value = []
+      resetModelRestriction()
     }
     poolModeEnabled.value = false
     poolModeRetryCount.value = DEFAULT_POOL_MODE_RETRY_COUNT
@@ -3414,22 +3419,10 @@ watch(
   { immediate: true }
 )
 
-// Model mapping helpers
-const addModelMapping = () => {
-  modelMappings.value.push({ from: '', to: '' })
-}
-
-const removeModelMapping = (index: number) => {
-  modelMappings.value.splice(index, 1)
-}
-
 const addPresetMapping = (from: string, to: string) => {
-  const exists = modelMappings.value.some((m) => m.from === from)
-  if (exists) {
+  if (!addModelPresetMapping(from, to)) {
     appStore.showInfo(t('admin.accounts.mappingExists', { model: from }))
-    return
   }
-  modelMappings.value.push({ from, to })
 }
 
 const addAntigravityModelMapping = () => {
