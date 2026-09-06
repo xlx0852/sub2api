@@ -1343,7 +1343,8 @@ func appendSelectionFailureRateSample(samples []string, accountID int64, remaini
 }
 
 // isModelSupportedByAccountWithContext 根据账户平台检查模型支持（带 context）
-// 对于 Antigravity 平台，会先获取映射后的最终模型名（包括 thinking 后缀）再检查支持
+// Antigravity is Gemini-only; thinking is carried in generationConfig and does
+// not select a separate suffixed model.
 func (s *GatewayService) isModelSupportedByAccountWithContext(ctx context.Context, account *Account, requestedModel string) bool {
 	if account.Platform == PlatformAntigravity {
 		if strings.TrimSpace(requestedModel) == "" {
@@ -1353,14 +1354,6 @@ func (s *GatewayService) isModelSupportedByAccountWithContext(ctx context.Contex
 		mapped := mapAntigravityModel(account, requestedModel)
 		if mapped == "" {
 			return false
-		}
-		// 应用 thinking 后缀后检查最终模型是否在账号映射中
-		if enabled, ok := ThinkingEnabledFromContext(ctx); ok {
-			finalModel := applyThinkingModelSuffix(mapped, enabled)
-			if finalModel == mapped {
-				return true // thinking 后缀未改变模型名，映射已通过
-			}
-			return account.IsModelSupported(finalModel)
 		}
 		return true
 	}

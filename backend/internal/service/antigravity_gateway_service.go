@@ -284,17 +284,12 @@ func resolveAntigravityProjectID(account *Account) (string, error) {
 	return "", errAntigravityProjectIDRequired
 }
 
-// applyThinkingModelSuffix 根据 thinking 配置调整模型名
-// 当映射结果是 claude-sonnet-4-5 且请求开启了 thinking 时，改为 claude-sonnet-4-5-thinking
-func applyThinkingModelSuffix(mappedModel string, thinkingEnabled bool) string {
-	return domain.ApplyThinkingModelSuffix(mappedModel, thinkingEnabled)
-}
-
-// IsModelSupported 检查模型是否被支持
-// 所有 claude- 和 gemini- 前缀的模型都能通过映射或透传支持
+// IsModelSupported reports whether this Gemini-only deployment accepts a model.
 func (s *AntigravityGatewayService) IsModelSupported(requestedModel string) bool {
-	return strings.HasPrefix(requestedModel, "claude-") ||
-		strings.HasPrefix(requestedModel, "gemini-")
+	model := strings.ToLower(strings.TrimSpace(requestedModel))
+	return strings.HasPrefix(model, "gemini-") &&
+		!strings.Contains(model, "image") &&
+		!strings.Contains(model, "imagen")
 }
 
 // TestConnectionResult 测试连接结果
@@ -329,12 +324,11 @@ func (s *AntigravityGatewayService) TestConnection(ctx context.Context, account 
 	}
 
 	// 构建请求体
-	var requestBody []byte
-	if strings.HasPrefix(modelID, "gemini-") {
-		requestBody, err = s.buildGeminiTestRequest(projectID, mappedModel)
-	} else {
-		requestBody, err = s.buildClaudeTestRequest(projectID, mappedModel)
+	if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(modelID)), "gemini-") || strings.Contains(strings.ToLower(modelID), "image") || strings.Contains(strings.ToLower(modelID), "imagen") {
+		return nil, fmt.Errorf("unsupported Antigravity model: text Gemini models only")
 	}
+	var requestBody []byte
+	requestBody, err = s.buildGeminiTestRequest(projectID, mappedModel)
 	if err != nil {
 		return nil, fmt.Errorf("构建请求失败: %w", err)
 	}
@@ -428,33 +422,6 @@ func (s *AntigravityGatewayService) buildGeminiTestRequest(projectID, model stri
 	}
 	payloadBytes, _ := json.Marshal(payload)
 	return s.wrapV1InternalRequest(projectID, model, payloadBytes)
-}
-
-// buildClaudeTestRequest 构建 Claude 格式测试请求并转换为 Gemini 格式
-// 使用最小 token 消耗：输入 "." + MaxTokens: 1
-func (s *AntigravityGatewayService) buildClaudeTestRequest(projectID, mappedModel string) ([]byte, error) {
-	claudeReq := &antigravity.ClaudeRequest{
-		Model: mappedModel,
-		Messages: []antigravity.ClaudeMessage{
-			{
-				Role:    "user",
-				Content: json.RawMessage(`"."`),
-			},
-		},
-		MaxTokens: 1,
-		Stream:    false,
-	}
-	return antigravity.TransformClaudeToGemini(claudeReq, projectID, mappedModel)
-}
-
-func (s *AntigravityGatewayService) getClaudeTransformOptions(ctx context.Context) antigravity.TransformOptions {
-	opts := antigravity.DefaultTransformOptions()
-	if s.settingService == nil {
-		return opts
-	}
-	opts.EnableIdentityPatch = s.settingService.IsIdentityPatchEnabled(ctx)
-	opts.IdentityPatch = s.settingService.GetIdentityPatchPrompt(ctx)
-	return opts
 }
 
 // extractTextFromSSEResponse 从 SSE 流式响应中提取文本

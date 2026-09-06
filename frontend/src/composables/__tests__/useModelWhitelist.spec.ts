@@ -69,18 +69,18 @@ describe('useModelWhitelist', () => {
   it('antigravity 模型列表包含当前代 Gemini', () => {
     const models = getModelsByPlatform('antigravity')
 
-    expect(models).toContain('gemini-3.1-flash-image')
     expect(models).toContain('gemini-3-flash')
     expect(models).toContain('gemini-3.1-pro-high')
+    expect(models).not.toContain('gemini-3.1-flash-image')
     expect(models).not.toContain('gemini-2.5-flash')
     expect(models).not.toContain('gemini-2.5-flash-image')
   })
 
   it('Claude 模型列表包含新发布的 Claude 模型', () => {
     expect(getModelsByPlatform('claude')).toContain('claude-fable-5')
-    expect(getModelsByPlatform('antigravity')).toContain('claude-fable-5')
     expect(getModelsByPlatform('claude')).toContain('claude-opus-4-8')
-    expect(getModelsByPlatform('antigravity')).toContain('claude-opus-4-8')
+    expect(getModelsByPlatform('antigravity')).not.toContain('claude-fable-5')
+    expect(getModelsByPlatform('antigravity')).not.toContain('claude-opus-4-8')
   })
 
   it('gemini 模型列表仅保留当前代', () => {
@@ -123,10 +123,10 @@ describe('useModelWhitelist', () => {
 		expect(getModelsByPlatform('grok')).toEqual(['grok-4.6', 'grok-4.5'])
 	})
 
-  it('antigravity 模型列表会把图片模型排在前面', () => {
+  it('antigravity 模型列表不包含图片模型', () => {
     const models = getModelsByPlatform('antigravity')
 
-    expect(models.indexOf('gemini-3.1-flash-image')).toBeLessThan(models.indexOf('gemini-3-flash'))
+    expect(models.every(model => !model.includes('image') && !model.includes('imagen'))).toBe(true)
   })
 
   it('antigravity 模型列表包含 Gemini 3.1 Pro 通用别名', () => {

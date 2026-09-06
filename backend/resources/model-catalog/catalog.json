@@ -234,63 +234,6 @@
     "antigravity": {
       "models": [
         {
-          "id": "claude-fable-5",
-          "display_name": "Claude Fable 5",
-          "created_at": "2026-06-09T00:00:00Z",
-          "family": "claude"
-        },
-        {
-          "id": "claude-opus-4-5-thinking",
-          "display_name": "Claude Opus 4.5 Thinking",
-          "created_at": "2025-11-01T00:00:00Z",
-          "family": "claude",
-          "is_reasoning": true
-        },
-        {
-          "id": "claude-sonnet-4-5",
-          "display_name": "Claude Sonnet 4.5",
-          "created_at": "2025-09-29T00:00:00Z",
-          "family": "claude"
-        },
-        {
-          "id": "claude-sonnet-4-5-thinking",
-          "display_name": "Claude Sonnet 4.5 Thinking",
-          "created_at": "2025-09-29T00:00:00Z",
-          "family": "claude",
-          "is_reasoning": true
-        },
-        {
-          "id": "claude-opus-4-6",
-          "display_name": "Claude Opus 4.6",
-          "created_at": "2026-02-05T00:00:00Z",
-          "family": "claude"
-        },
-        {
-          "id": "claude-opus-4-6-thinking",
-          "display_name": "Claude Opus 4.6 Thinking",
-          "created_at": "2026-02-05T00:00:00Z",
-          "family": "claude",
-          "is_reasoning": true
-        },
-        {
-          "id": "claude-opus-4-7",
-          "display_name": "Claude Opus 4.7",
-          "created_at": "2026-04-17T00:00:00Z",
-          "family": "claude"
-        },
-        {
-          "id": "claude-opus-4-8",
-          "display_name": "Claude Opus 4.8",
-          "created_at": "2026-05-29T00:00:00Z",
-          "family": "claude"
-        },
-        {
-          "id": "claude-sonnet-4-6",
-          "display_name": "Claude Sonnet 4.6",
-          "created_at": "2026-02-17T00:00:00Z",
-          "family": "claude"
-        },
-        {
           "id": "gemini-3-flash",
           "display_name": "Gemini 3 Flash",
           "created_at": "2025-06-01T00:00:00Z",
@@ -308,34 +251,10 @@
           "created_at": "2026-02-19T00:00:00Z",
           "family": "gemini",
           "is_reasoning": true
-        },
-        {
-          "id": "gemini-3.1-flash-image",
-          "display_name": "Gemini 3.1 Flash Image",
-          "created_at": "2026-02-19T00:00:00Z",
-          "family": "gemini",
-          "media": {
-            "image_generation": true
-          }
         }
       ],
       "default_mapping": {
-        "claude-fable-5": "claude-fable-5",
-        "claude-opus-4-8": "claude-opus-4-8",
-        "claude-opus-4-7": "claude-opus-4-7",
-        "claude-opus-4-6-thinking": "claude-opus-4-6-thinking",
-        "claude-opus-4-6": "claude-opus-4-6-thinking",
-        "claude-opus-4-5-thinking": "claude-opus-4-6-thinking",
-        "claude-sonnet-4-6": "claude-sonnet-4-6",
-        "claude-sonnet-4-5": "claude-sonnet-4-5",
-        "claude-sonnet-4-5-thinking": "claude-sonnet-4-5-thinking",
-        "claude-opus-4-5-20251101": "claude-opus-4-6-thinking",
-        "claude-sonnet-4-5-20250929": "claude-sonnet-4-5",
-        "claude-haiku-4-5": "claude-sonnet-4-6",
-        "claude-haiku-4-5-20251001": "claude-sonnet-4-6",
         "gemini-2.5-flash": "gemini-3-flash",
-        "gemini-2.5-flash-image": "gemini-3.1-flash-image",
-        "gemini-2.5-flash-image-preview": "gemini-3.1-flash-image",
         "gemini-2.5-flash-lite": "gemini-3-flash",
         "gemini-2.5-flash-thinking": "gemini-3-flash",
         "gemini-2.5-pro": "gemini-pro-agent",
@@ -348,13 +267,7 @@
         "gemini-3.1-pro": "gemini-pro-agent",
         "gemini-3.1-pro-high": "gemini-pro-agent",
         "gemini-3.1-pro-low": "gemini-3.1-pro-low",
-        "gemini-3.1-pro-preview": "gemini-pro-agent",
-        "gemini-3.1-flash-image": "gemini-3.1-flash-image",
-        "gemini-3.1-flash-image-preview": "gemini-3.1-flash-image",
-        "gemini-3-pro-image": "gemini-3.1-flash-image",
-        "gemini-3-pro-image-preview": "gemini-3.1-flash-image",
-        "gpt-oss-120b-medium": "gpt-oss-120b-medium",
-        "tab_flash_lite_preview": "tab_flash_lite_preview"
+        "gemini-3.1-pro-preview": "gemini-pro-agent"
       }
     },
     "deepseek": {
@@ -1082,19 +995,9 @@
     ],
     "antigravity": [
       {
-        "label": "Claude→Sonnet",
-        "from": "claude-*",
-        "to": "claude-sonnet-4-5"
-      },
-      {
         "label": "Gemini 2.5→3 Flash",
         "from": "gemini-2.5*",
         "to": "gemini-3-flash"
-      },
-      {
-        "label": "3.1-Flash-Image透传",
-        "from": "gemini-3.1-flash-image",
-        "to": "gemini-3.1-flash-image"
       }
     ]
   }

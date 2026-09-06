@@ -197,7 +197,7 @@ func TestGatewayModels_OpenAIMergesCatalogWhenAccountMappingLags(t *testing.T) {
 						Credentials: map[string]any{
 							// Stale mapping: only gpt-5.5, no 5.6 family.
 							"model_mapping": map[string]any{
-								"gpt-5.5":          "gpt-5.5",
+								"gpt-5.5":         "gpt-5.5",
 								"account-only-id": "account-only-id",
 							},
 						},
@@ -430,7 +430,7 @@ func TestGatewayModels_AnthropicCustomModelsListDisabledKeepsMappedModelList(t *
 	require.Equal(t, []string{"deepseek-v4-pro"}, modelIDsForTest(got.Data))
 }
 
-func TestGatewayModels_AnthropicCustomModelsListIncludesOAuthClaudeWithoutMappings(t *testing.T) {
+func TestGatewayModels_AnthropicCustomModelsListExcludesRemovedAntigravityClaudeModels(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	groupID := int64(30)
@@ -468,7 +468,7 @@ func TestGatewayModels_AnthropicCustomModelsListIncludesOAuthClaudeWithoutMappin
 
 	var got gatewayModelsResponseForTest
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
-	require.Equal(t, []string{"claude-opus-4-6-thinking", "claude-sonnet-4-5"}, modelIDsForTest(got.Data))
+	require.Empty(t, modelIDsForTest(got.Data))
 }
 
 func TestGatewayModels_CustomModelsListCanReturnEmptyWhenSelectionsUnavailable(t *testing.T) {

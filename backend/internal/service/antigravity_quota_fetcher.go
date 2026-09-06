@@ -138,12 +138,24 @@ func (f *AntigravityQuotaFetcher) buildUsageInfo(modelsResp *antigravity.FetchAv
 
 	// 遍历所有模型，填充 AntigravityQuota 和 AntigravityQuotaDetails
 	for modelName, modelInfo := range modelsResp.Models {
+		modelLower := strings.ToLower(strings.TrimSpace(modelName))
+		if !strings.HasPrefix(modelLower, "gemini-") || strings.Contains(modelLower, "image") || strings.Contains(modelLower, "imagen") {
+			continue
+		}
 		if modelInfo.QuotaInfo == nil {
 			continue
 		}
 
-		// remainingFraction 是剩余比例 (0.0-1.0)，转换为使用率百分比
-		utilization := int((1.0 - modelInfo.QuotaInfo.RemainingFraction) * 100)
+		// CPA displays quota as used percentage derived from remainingFraction.
+		// Clamp malformed/temporarily overshooting upstream values to the same
+		// 0..100 range used by the UI and scheduler.
+		remaining := modelInfo.QuotaInfo.RemainingFraction
+		if remaining < 0 {
+			remaining = 0
+		} else if remaining > 1 {
+			remaining = 1
+		}
+		utilization := int(roundUsagePercent2((1.0 - remaining) * 100))
 
 		info.AntigravityQuota[modelName] = &AntigravityModelQuota{
 			Utilization: utilization,
@@ -168,12 +180,22 @@ func (f *AntigravityQuotaFetcher) buildUsageInfo(modelsResp *antigravity.FetchAv
 	if len(modelsResp.DeprecatedModelIDs) > 0 {
 		info.ModelForwardingRules = make(map[string]string, len(modelsResp.DeprecatedModelIDs))
 		for oldID, deprecated := range modelsResp.DeprecatedModelIDs {
+			oldLower := strings.ToLower(strings.TrimSpace(oldID))
+			newLower := strings.ToLower(strings.TrimSpace(deprecated.NewModelID))
+			if !strings.HasPrefix(oldLower, "gemini-") || !strings.HasPrefix(newLower, "gemini-") ||
+				strings.Contains(oldLower, "image") || strings.Contains(newLower, "image") ||
+				strings.Contains(oldLower, "imagen") || strings.Contains(newLower, "imagen") {
+				continue
+			}
 			info.ModelForwardingRules[oldID] = deprecated.NewModelID
+		}
+		if len(info.ModelForwardingRules) == 0 {
+			info.ModelForwardingRules = nil
 		}
 	}
 
 	// 同时设置 FiveHour 用于兼容展示（取主要模型）
-	priorityModels := []string{"claude-sonnet-4-20250514", "claude-sonnet-4", "gemini-2.5-pro"}
+	priorityModels := []string{"gemini-3.1-pro-high", "gemini-3.1-pro-low", "gemini-3-flash", "gemini-2.5-pro"}
 	for _, modelName := range priorityModels {
 		if modelInfo, ok := modelsResp.Models[modelName]; ok && modelInfo.QuotaInfo != nil {
 			utilization := roundUsagePercent2((1.0 - modelInfo.QuotaInfo.RemainingFraction) * 100)

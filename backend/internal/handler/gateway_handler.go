@@ -834,7 +834,6 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					return
 				}
 			}
-			attemptBody := attemptParsedReq.Body.Bytes()
 			upstreamBillingModel := account.GetMappedModel(attemptParsedReq.Model)
 			if err := h.gatewayService.ValidatePricingAdmission(c.Request.Context(), currentAPIKey.GroupID, channelMapping.BillingModelSource, reqModel, attemptParsedReq.Model, upstreamBillingModel); err != nil {
 				status, code, message, _ := billingErrorDetails(err)
@@ -872,7 +871,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				})
 			}
 			if account.Platform == service.PlatformAntigravity && account.Type != service.AccountTypeAPIKey {
-				result, err = h.antigravityGatewayService.Forward(requestCtx, c, account, attemptBody, hasBoundSession)
+				h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Antigravity supports text Gemini models only")
+				return
 			} else {
 				result, err = h.gatewayService.Forward(requestCtx, c, account, attemptParsedReq)
 			}

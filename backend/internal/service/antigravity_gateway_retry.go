@@ -840,7 +840,7 @@ func isSingleAccountRetry(ctx context.Context) bool {
 }
 
 // setModelRateLimitByModelName 使用官方模型 ID 设置模型级限流
-// 直接使用上游返回的模型 ID（如 claude-sonnet-4-5）作为限流 key
+// 直接使用上游返回的模型 ID（如 gemini-3-flash）作为限流 key
 // 返回是否已成功设置（若模型名为空或 repo 为 nil 将返回 false）
 func setModelRateLimitByModelName(ctx context.Context, repo AccountRepository, accountID int64, modelName, prefix string, statusCode int, resetAt time.Time, afterSmartRetry bool) bool {
 	if repo == nil || modelName == "" {
@@ -902,7 +902,7 @@ func antigravityFallbackCooldownSeconds() (time.Duration, bool) {
 // antigravitySmartRetryInfo 智能重试所需的信息
 type antigravitySmartRetryInfo struct {
 	RetryDelay               time.Duration // 重试延迟时间
-	ModelName                string        // 限流的模型名称（如 "claude-sonnet-4-5"）
+	ModelName                string        // 限流的模型名称（如 "gemini-3-flash"）
 	IsModelCapacityExhausted bool          // 是否为模型容量不足（MODEL_CAPACITY_EXHAUSTED）
 }
 
@@ -1218,7 +1218,7 @@ func (s *AntigravityGatewayService) handleUpstreamError(
 
 		// 尝试解析模型 key 并设置模型级限流
 		//
-		// 注意：requestedModel 可能是"映射前"的请求模型名（例如 claude-opus-4-6），
+		// 注意：requestedModel 可能是映射前的请求模型名（例如 gemini-2.5-flash），
 		// 调度与限流判定使用的是 Antigravity 最终模型名（包含映射与 thinking 后缀）。
 		// 因此这里必须写入最终模型 key，确保后续调度能正确避开已限流模型。
 		modelKey := resolveFinalAntigravityModelKey(ctx, account, requestedModel)

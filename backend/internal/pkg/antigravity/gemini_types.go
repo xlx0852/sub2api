@@ -67,13 +67,6 @@ type GeminiGenerationConfig struct {
 	TopK            *int                  `json:"topK,omitempty"`
 	ThinkingConfig  *GeminiThinkingConfig `json:"thinkingConfig,omitempty"`
 	StopSequences   []string              `json:"stopSequences,omitempty"`
-	ImageConfig     *GeminiImageConfig    `json:"imageConfig,omitempty"`
-}
-
-// GeminiImageConfig Gemini 图片生成配置（gemini-3-pro-image / gemini-3.1-flash-image 等图片模型支持）
-type GeminiImageConfig struct {
-	AspectRatio string `json:"aspectRatio,omitempty"` // "1:1", "16:9", "9:16", "4:3", "3:4"
-	ImageSize   string `json:"imageSize,omitempty"`   // "1K", "2K", "4K"
 }
 
 // GeminiThinkingConfig Gemini thinking 配置
@@ -96,19 +89,7 @@ type GeminiFunctionDecl struct {
 }
 
 // GeminiGoogleSearch Gemini Google 搜索工具
-type GeminiGoogleSearch struct {
-	EnhancedContent *GeminiEnhancedContent `json:"enhancedContent,omitempty"`
-}
-
-// GeminiEnhancedContent 增强内容配置
-type GeminiEnhancedContent struct {
-	ImageSearch *GeminiImageSearch `json:"imageSearch,omitempty"`
-}
-
-// GeminiImageSearch 图片搜索配置
-type GeminiImageSearch struct {
-	MaxResultCount int `json:"maxResultCount,omitempty"`
-}
+type GeminiGoogleSearch struct{}
 
 // GeminiToolConfig Gemini 工具配置
 type GeminiToolConfig struct {

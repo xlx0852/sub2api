@@ -23,6 +23,13 @@ func (s *AntigravityGatewayService) forwardGeminiParse(ex *pipeline.Exchange) er
 	if strings.TrimSpace(st.originalModel) == "" {
 		return googleClientError(http.StatusBadRequest, "Missing model in URL")
 	}
+	// This deployment intentionally supports text Gemini models only.  Keep the
+	// boundary check here so image models cannot reach mapping, billing, or the
+	// upstream retry path.
+	modelLower := strings.ToLower(strings.TrimSpace(st.originalModel))
+	if !strings.HasPrefix(modelLower, "gemini-") || strings.Contains(modelLower, "image") || strings.Contains(modelLower, "imagen") {
+		return googleClientError(http.StatusBadRequest, "Unsupported Antigravity model: text Gemini models only")
+	}
 	if strings.TrimSpace(st.action) == "" {
 		return googleClientError(http.StatusBadRequest, "Missing action in URL")
 	}
@@ -30,8 +37,6 @@ func (s *AntigravityGatewayService) forwardGeminiParse(ex *pipeline.Exchange) er
 		return googleClientError(http.StatusBadRequest, "Request body is empty")
 	}
 
-	st.imageInputSize = s.extractImageInputSize(ex.Inbound)
-	st.imageSize = normalizeOpenAIImageSizeTier(st.imageInputSize)
 	ex.RequestedModel = st.originalModel
 
 	switch st.action {
@@ -434,9 +439,6 @@ func (s *AntigravityGatewayService) forwardGeminiSettle(ex *pipeline.Exchange) e
 	if st.usage == nil {
 		st.usage = &ClaudeUsage{}
 	}
-	if isImageGenerationModel(st.mappedModel) {
-		st.imageCount = 1
-	}
 	st.result = &ForwardResult{
 		RequestID:        st.requestID,
 		Usage:            *st.usage,
@@ -446,9 +448,6 @@ func (s *AntigravityGatewayService) forwardGeminiSettle(ex *pipeline.Exchange) e
 		Duration:         time.Since(st.startTime),
 		FirstTokenMs:     st.firstTokenMs,
 		ClientDisconnect: st.clientDisconnect,
-		ImageCount:       st.imageCount,
-		ImageSize:        st.imageSize,
-		ImageInputSize:   st.imageInputSize,
 	}
 	return nil
 }

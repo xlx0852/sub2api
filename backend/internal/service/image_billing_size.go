@@ -17,6 +17,19 @@ const (
 	ImageSizeSourceLegacy  = "legacy"
 )
 
+func isImageGenerationModel(model string) bool {
+	modelLower := strings.TrimPrefix(strings.ToLower(model), "models/")
+	return modelLower == "gemini-3.1-flash-image" ||
+		modelLower == "gemini-3.1-flash-image-preview" ||
+		strings.HasPrefix(modelLower, "gemini-3.1-flash-image-") ||
+		modelLower == "gemini-3-pro-image" ||
+		modelLower == "gemini-3-pro-image-preview" ||
+		strings.HasPrefix(modelLower, "gemini-3-pro-image-") ||
+		modelLower == "gemini-2.5-flash-image" ||
+		modelLower == "gemini-2.5-flash-image-preview" ||
+		strings.HasPrefix(modelLower, "gemini-2.5-flash-image-")
+}
+
 type ImageBillingSizeResolution struct {
 	BillingSize string
 	InputSize   string
