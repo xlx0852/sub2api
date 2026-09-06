@@ -132,6 +132,71 @@ describe('buildAccountUsagePresentation', () => {
     expect(presentation.plan).toBe('SuperGrok')
   })
 
+  it('Antigravity 使用 quota summary bucket 并将剩余额度换算为已用进度', () => {
+    const presentation = buildAccountUsagePresentation({
+      account: makeAccount({ platform: 'antigravity' }),
+      usageInfo: baseUsage({
+        antigravity_quota_groups: [{
+          id: 'gemini-models',
+          label: 'Gemini Models',
+          buckets: [{
+            id: 'five-hour',
+            label: '5 Hour Limit',
+            window: '5h',
+            remaining_fraction: 0.72,
+            reset_time: '2026-07-12T05:00:00Z'
+          }]
+        }]
+      }),
+      todayStats: today,
+      t
+    })
+
+    expect(presentation.windows).toHaveLength(1)
+    expect(presentation.windows[0]).toMatchObject({
+      label: '5h',
+      utilization: 28,
+      resetsAt: '2026-07-12T05:00:00Z',
+      displayPercent: null
+    })
+  })
+
+  it('Antigravity 多个配额窗口必须保持 5h 在上、7d 在下', () => {
+    const presentation = buildAccountUsagePresentation({
+      account: makeAccount({ platform: 'antigravity' }),
+      usageInfo: baseUsage({
+        antigravity_quota_groups: [{
+          id: 'gemini-models',
+          label: 'Gemini Models',
+          buckets: [
+            {
+              id: 'weekly',
+              label: 'Weekly Limit',
+              window: 'weekly',
+              remaining_fraction: 0.9038,
+              reset_time: '2026-07-19T05:00:00Z'
+            },
+            {
+              id: 'five-hour',
+              label: '5 Hour Limit',
+              window: '5h',
+              remaining_fraction: 0.4933,
+              reset_time: '2026-07-12T05:00:00Z'
+            }
+          ]
+        }]
+      }),
+      todayStats: today,
+      t
+    })
+
+    expect(presentation.windows).toHaveLength(2)
+    expect(presentation.windows[0].label).toBe('5h')
+    expect(presentation.windows[1].label).toBe('7d')
+    expect(presentation.windows[0].color).toBe('indigo')
+    expect(presentation.windows[1].color).toBe('emerald')
+  })
+
   it('没有官方额度时只保留本地消耗，不伪造百分比窗口', () => {
     const presentation = buildAccountUsagePresentation({
       account: makeAccount({ type: 'apikey' }),

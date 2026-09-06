@@ -35,8 +35,8 @@
           <span class="h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
             <span :class="['block h-full rounded-full', windowBarClass(window.utilization)]" :style="{ width: `${Math.min(window.utilization, 100)}%` }" />
           </span>
-          <span :class="windowValueClass(window.utilization)">{{ formatUsagePercent(window.utilization) }}</span>
-          <span class="truncate text-gray-400 dark:text-gray-500" :title="formatResetTime(window.resetsAt)">{{ formatResetTime(window.resetsAt) }}</span>
+          <span :class="windowValueClass(window.utilization)">{{ window.displayPercent || formatUsagePercent(window.utilization) }}</span>
+          <span class="truncate text-gray-400 dark:text-gray-500" :title="formatResetTime(window.resetsAt, window.clockOffsetMs)">{{ formatResetTime(window.resetsAt, window.clockOffsetMs) }}</span>
         </div>
       </div>
 
@@ -115,11 +115,11 @@ const windowValueClass = (utilization: number) => {
   return 'text-gray-600 dark:text-gray-300'
 }
 
-const formatResetTime = (value: string | null): string => {
+const formatResetTime = (value: string | null, clockOffsetMs = 0): string => {
   if (!value) return '-'
   const resetAt = new Date(value).getTime()
   if (!Number.isFinite(resetAt)) return '-'
-  const diffMinutes = Math.max(0, Math.floor((resetAt - now.value) / 60_000))
+  const diffMinutes = Math.max(0, Math.floor((resetAt - (now.value + clockOffsetMs)) / 60_000))
   if (diffMinutes <= 0) return t('usage.resetNow')
   const hours = Math.floor(diffMinutes / 60)
   if (hours >= 24) return `${Math.floor(hours / 24)}d ${hours % 24}h`

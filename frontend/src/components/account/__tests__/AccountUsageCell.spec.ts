@@ -90,22 +90,19 @@ describe('AccountUsageCell', () => {
     expect(wrapper.classes()).not.toContain('w-[304px]')
   })
 
-  it('Antigravity 图片用量会聚合新旧 image 模型', async () => {
+  it('Antigravity 会按 quota summary bucket 展示剩余比例和重置时间', async () => {
     getUsage.mockResolvedValue({
-      antigravity_quota: {
-        'gemini-2.5-flash-image': {
-          utilization: 45,
-          reset_time: '2026-03-01T11:00:00Z'
-        },
-        'gemini-3.1-flash-image': {
-          utilization: 20,
-          reset_time: '2026-03-01T10:00:00Z'
-        },
-        'gemini-3-pro-image': {
-          utilization: 70,
+      antigravity_quota_groups: [{
+        id: 'gemini-models',
+        label: 'Gemini Models',
+        buckets: [{
+          id: 'five-hour',
+          label: '5 Hour Limit',
+          window: '5h',
+          remaining_fraction: 0.7,
           reset_time: '2026-03-01T09:00:00Z'
-        }
-      }
+        }]
+      }]
     })
 
     const wrapper = mount(AccountUsageCell, {
@@ -120,8 +117,8 @@ describe('AccountUsageCell', () => {
       global: {
         stubs: {
           UsageProgressBar: {
-            props: ['label', 'utilization', 'resetsAt', 'color'],
-            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|{{ resetsAt }}</div>'
+            props: ['label', 'utilization', 'displayPercent', 'resetsAt', 'color'],
+            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|{{ displayPercent }}|{{ resetsAt }}</div>'
           },
           AccountQuotaInfo: true
         }
@@ -130,7 +127,59 @@ describe('AccountUsageCell', () => {
 
     await flushPromises()
 
-    expect(wrapper.text()).toContain('admin.accounts.usageWindow.gemini3Image|70|2026-03-01T09:00:00Z')
+    expect(wrapper.text()).toContain('5h|30||2026-03-01T09:00:00Z')
+  })
+
+  it('Antigravity 会将 5h 排在 7d 上方', async () => {
+    getUsage.mockResolvedValue({
+      antigravity_quota_groups: [{
+        id: 'gemini-models',
+        label: 'Gemini Models',
+        buckets: [
+          {
+            id: 'weekly',
+            label: 'Weekly Limit',
+            window: 'weekly',
+            remaining_fraction: 0.9,
+            reset_time: '2026-03-08T09:00:00Z'
+          },
+          {
+            id: 'five-hour',
+            label: '5 Hour Limit',
+            window: '5h',
+            remaining_fraction: 0.5,
+            reset_time: '2026-03-01T09:00:00Z'
+          }
+        ]
+      }]
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({
+          id: 1002,
+          platform: 'antigravity',
+          type: 'oauth',
+          extra: {}
+        })
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization', 'displayPercent', 'resetsAt', 'color'],
+            template: '<div class="usage-bar">{{ label }}|{{ color }}</div>'
+          },
+          AccountQuotaInfo: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    const bars = wrapper.findAll('.usage-bar')
+    expect(bars).toHaveLength(2)
+    expect(bars[0].text()).toBe('5h|indigo')
+    expect(bars[1].text()).toBe('7d|emerald')
   })
 
   it('Antigravity 会显示 AI Credits 余额信息', async () => {

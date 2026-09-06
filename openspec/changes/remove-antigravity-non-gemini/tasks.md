@@ -5,4 +5,7 @@
 - [x] 1.3 Add explicit Gemini-only model validation at the gateway boundary.
 - [x] 1.4 Restrict the backend catalog and frontend Antigravity model choices to text Gemini models.
 - [x] 1.5 Run targeted Antigravity Go tests and verify unsupported models are rejected before upstream execution.
-- [x] 1.6 Align quota utilization with CPA `remainingFraction` semantics and omit unsupported Claude/image quota entries.
+- [x] 1.6 Replace quota discovery through `fetchAvailableModels` with CPA-compatible `retrieveUserQuotaSummary`, preserving group/bucket windows, remaining percentages, reset times, subscription tier, AI Credits, caching, and structured errors.
+- [x] 1.7 Render quota-summary buckets in the frontend and remove the legacy Claude/image quota rows.
+- [x] 1.8 Make manual Antigravity quota refresh bypass the successful-response cache while retaining singleflight protection.
+- [x] 1.9 Derive the legacy per-model quota shape from Gemini quota groups during rolling frontend upgrades.

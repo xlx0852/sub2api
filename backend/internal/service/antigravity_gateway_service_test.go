@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -435,14 +437,14 @@ func TestAntigravityGatewayService_ForwardGemini_ClearsStickySessionOnGeminiRate
 	})
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-3-flash-preview:generateContent", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-3.8-flash:generateContent", bytes.NewReader(body))
 	c.Request = req
 
 	respBody := []byte(`{
 		"error": {
 			"status": "RESOURCE_EXHAUSTED",
 			"details": [
-				{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "metadata": {"model": "gemini-3-flash"}, "reason": "RATE_LIMIT_EXCEEDED"},
+				{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "metadata": {"model": "gemini-3.8-flash"}, "reason": "RATE_LIMIT_EXCEEDED"},
 				{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "15s"}
 			]
 		}
@@ -483,7 +485,7 @@ func TestAntigravityGatewayService_ForwardGemini_ClearsStickySessionOnGeminiRate
 		context.Background(),
 		c,
 		account,
-		"gemini-3-flash-preview",
+		"gemini-3.8-flash",
 		"generateContent",
 		false,
 		body,
@@ -496,7 +498,7 @@ func TestAntigravityGatewayService_ForwardGemini_ClearsStickySessionOnGeminiRate
 	require.ErrorAs(t, err, &failoverErr)
 	require.Equal(t, http.StatusServiceUnavailable, failoverErr.StatusCode)
 	require.Len(t, repo.modelRateLimitCalls, 2)
-	require.Equal(t, "gemini-3-flash", repo.modelRateLimitCalls[0].modelKey)
+	require.Equal(t, "gemini-3.8-flash", repo.modelRateLimitCalls[0].modelKey)
 	require.Equal(t, antigravityGeminiModelRateLimitKey, repo.modelRateLimitCalls[1].modelKey)
 	require.Len(t, cache.deleteCalls, 1)
 	require.Equal(t, int64(77), cache.deleteCalls[0].groupID)
@@ -605,7 +607,7 @@ func TestAntigravityGatewayService_ForwardGemini_RetriesCorruptedThoughtSignatur
 	}
 
 	const originalModel = "gemini-3.1-pro-preview"
-	const mappedModel = "gemini-3.1-pro-high"
+	const mappedModel = domain.AntigravityGemini31ProAgentModel
 	account := &Account{
 		ID:          7,
 		Name:        "acc-gemini-signature",
@@ -664,7 +666,7 @@ func TestAntigravityGatewayService_ForwardGemini_SignatureRetryPropagatesFailove
 	firstRespBody := []byte(`{"response":{"error":{"code":400,"message":"Corrupted thought signature.","status":"INVALID_ARGUMENT"}}}`)
 
 	const originalModel = "gemini-3.1-pro-preview"
-	const mappedModel = "gemini-3.1-pro-high"
+	const mappedModel = domain.AntigravityGemini31ProAgentModel
 	account := &Account{
 		ID:          8,
 		Name:        "acc-gemini-signature-failover",
@@ -1052,4 +1054,71 @@ func generateLargeUnwrapJSON(minSize int) []byte {
 	outer := map[string]any{"response": inner}
 	b, _ := json.Marshal(outer)
 	return b
+}
+
+func TestResolveAntigravityForwardBaseURL_Modes(t *testing.T) {
+	orig := append([]string(nil), antigravity.BaseURLs...)
+	defer func() {
+		antigravity.BaseURLs = orig
+	}()
+
+	daily := "https://daily-cloudcode-pa.googleapis.com"
+	prod := "https://cloudcode-pa.googleapis.com"
+	sandbox := "https://daily-cloudcode-pa.sandbox.googleapis.com"
+	antigravity.BaseURLs = []string{daily, prod, sandbox}
+
+	t.Run("default is daily", func(t *testing.T) {
+		t.Setenv(antigravityForwardBaseURLEnv, "")
+		require.Equal(t, daily, resolveAntigravityForwardBaseURL())
+	})
+
+	t.Run("daily mode", func(t *testing.T) {
+		t.Setenv(antigravityForwardBaseURLEnv, "daily")
+		require.Equal(t, daily, resolveAntigravityForwardBaseURL())
+	})
+
+	t.Run("prod mode", func(t *testing.T) {
+		t.Setenv(antigravityForwardBaseURLEnv, "prod")
+		require.Equal(t, prod, resolveAntigravityForwardBaseURL())
+	})
+
+	t.Run("sandbox mode", func(t *testing.T) {
+		t.Setenv(antigravityForwardBaseURLEnv, "sandbox")
+		require.Equal(t, sandbox, resolveAntigravityForwardBaseURL())
+	})
+}
+
+func TestWrapV1InternalRequest_InjectsSessionIDAndStripsMaxOutputTokens(t *testing.T) {
+	svc := &AntigravityGatewayService{}
+
+	original := []byte(`{
+		"contents": [{"role": "user", "parts": [{"text": "hi"}]}],
+		"generationConfig": {"maxOutputTokens": 1, "temperature": 0.5}
+	}`)
+
+	wrappedBytes, err := svc.wrapV1InternalRequest("test-project", "gemini-3.8-flash-high", original)
+	require.NoError(t, err)
+
+	var wrapped map[string]any
+	require.NoError(t, json.Unmarshal(wrappedBytes, &wrapped))
+
+	require.Equal(t, "test-project", wrapped["project"])
+	require.Equal(t, "gemini-3.8-flash-high", wrapped["model"])
+	require.Equal(t, "agent", wrapped["requestType"])
+	require.Equal(t, "antigravity", wrapped["userAgent"])
+
+	innerReq, ok := wrapped["request"].(map[string]any)
+	require.True(t, ok)
+
+	// sessionId should be injected as negative number string
+	sessionID, ok := innerReq["sessionId"].(string)
+	require.True(t, ok)
+	require.True(t, strings.HasPrefix(sessionID, "-"))
+
+	// maxOutputTokens should be deleted for Gemini models, but temperature preserved
+	genConfig, ok := innerReq["generationConfig"].(map[string]any)
+	require.True(t, ok)
+	_, hasMax := genConfig["maxOutputTokens"]
+	require.False(t, hasMax, "maxOutputTokens must be stripped for Gemini models")
+	require.Equal(t, 0.5, genConfig["temperature"])
 }

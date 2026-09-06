@@ -48,24 +48,41 @@ type antigravityRetryLoopResult struct {
 
 // resolveAntigravityForwardBaseURL 解析转发用 base URL。
 //
-// 默认使用生产端点 cloudcode-pa.googleapis.com（antigravity.BaseURLs 的首个地址，
-// 与账号 OAuth 登录/测试连接所用的 antigravity.BaseURL 一致）。
-//
-// 历史上这里改用 ForwardBaseURLs()（把 daily/sandbox 排到首位）并默认取首个地址，
-// 导致网关把带生产 OAuth token 的请求发到 daily-cloudcode-pa.sandbox.googleapis.com，
-// 上游拒绝 → 账号被 401「Invalid bearer token」/502 打入临时不可调度且无法恢复
-// （见 #3611 / #2962）。后台「测试连接」用的是生产端点，所以「测试成功但网关 401」。
-//
-// daily/sandbox 端点仅供内部联调，需显式设置
-// GATEWAY_ANTIGRAVITY_FORWARD_BASE_URL=daily（或 sandbox）才启用。
+// 默认使用 daily 端点 daily-cloudcode-pa.googleapis.com（antigravity.BaseURLs 首位，
+// 与 CPA 行为一致，保证 Gemini 3.8/3.7/3.6 等新模型可用）。
+// 可通过环境变量 GATEWAY_ANTIGRAVITY_FORWARD_BASE_URL 显式切换为 prod 或 sandbox。
 func resolveAntigravityForwardBaseURL() string {
 	baseURLs := antigravity.BaseURLs
 	if len(baseURLs) == 0 {
 		return ""
 	}
 	mode := strings.ToLower(strings.TrimSpace(os.Getenv(antigravityForwardBaseURLEnv)))
-	if (mode == "daily" || mode == "sandbox") && len(baseURLs) > 1 {
-		return baseURLs[1]
+	switch mode {
+	case "prod", "production":
+		for _, u := range baseURLs {
+			if strings.Contains(u, "cloudcode-pa.googleapis.com") && !strings.Contains(u, "daily") && !strings.Contains(u, "sandbox") {
+				return u
+			}
+		}
+		if len(baseURLs) > 1 {
+			return baseURLs[1]
+		}
+	case "sandbox":
+		for _, u := range baseURLs {
+			if strings.Contains(u, "sandbox") {
+				return u
+			}
+		}
+		if len(baseURLs) > 2 {
+			return baseURLs[2]
+		}
+	case "daily":
+		for _, u := range baseURLs {
+			if strings.Contains(u, "daily") && !strings.Contains(u, "sandbox") {
+				return u
+			}
+		}
+		return baseURLs[0]
 	}
 	return baseURLs[0]
 }
@@ -488,11 +505,19 @@ func (s *AntigravityGatewayService) antigravityRetryLoop(p antigravityRetryLoopP
 		}
 	}
 
-	baseURL := resolveAntigravityForwardBaseURL()
-	if baseURL == "" {
-		return nil, errors.New("no antigravity forward base url configured")
+	var availableURLs []string
+	if p.account != nil {
+		if customBaseURL := strings.TrimSpace(p.account.GetCredential("base_url")); customBaseURL != "" {
+			availableURLs = []string{strings.TrimSuffix(customBaseURL, "/")}
+		}
 	}
-	availableURLs := []string{baseURL}
+	if len(availableURLs) == 0 {
+		baseURL := resolveAntigravityForwardBaseURL()
+		if baseURL == "" {
+			return nil, errors.New("no antigravity forward base url configured")
+		}
+		availableURLs = []string{baseURL}
+	}
 
 	var resp *http.Response
 	var usedBaseURL string

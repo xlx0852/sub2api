@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -24,6 +25,8 @@ const (
 	errorCodeRateLimited     = "rate_limited"
 	errorCodeNetworkError    = "network_error"
 )
+
+var antigravityQuotaIDPattern = regexp.MustCompile(`[^a-z0-9]+`)
 
 // AntigravityQuotaFetcher 从 Antigravity API 获取额度
 type AntigravityQuotaFetcher struct {
@@ -47,15 +50,19 @@ func (f *AntigravityQuotaFetcher) CanFetch(account *Account) bool {
 // FetchQuota 获取 Antigravity 账户额度信息
 func (f *AntigravityQuotaFetcher) FetchQuota(ctx context.Context, account *Account, proxyURL string) (*QuotaResult, error) {
 	accessToken := account.GetCredential("access_token")
-	projectID := account.GetCredential("project_id")
+	projectID, err := resolveAntigravityProjectID(account)
+	if err != nil {
+		return nil, err
+	}
 
 	client, err := antigravity.NewClient(proxyURL)
 	if err != nil {
 		return nil, fmt.Errorf("create antigravity client failed: %w", err)
 	}
 
-	// 调用 API 获取配额
-	modelsResp, modelsRaw, err := client.FetchAvailableModels(ctx, accessToken, projectID)
+	// retrieveUserQuotaSummary is the quota-window source used by CPA Management
+	// Center. FetchAvailableModels remains available for model discovery only.
+	quotaResp, quotaRaw, err := client.RetrieveUserQuotaSummary(ctx, accessToken, projectID)
 	if err != nil {
 		// 403 Forbidden: 不报错，返回 is_forbidden 标记
 		var forbiddenErr *antigravity.ForbiddenError
@@ -82,11 +89,11 @@ func (f *AntigravityQuotaFetcher) FetchQuota(ctx context.Context, account *Accou
 	tierRaw, tierNormalized, loadResp := f.fetchSubscriptionTier(ctx, client, accessToken)
 
 	// 转换为 UsageInfo
-	usageInfo := f.buildUsageInfo(modelsResp, tierRaw, tierNormalized, loadResp)
+	usageInfo := f.buildQuotaSummaryUsageInfo(quotaResp, tierRaw, tierNormalized, loadResp)
 
 	return &QuotaResult{
 		UsageInfo: usageInfo,
-		Raw:       modelsRaw,
+		Raw:       quotaRaw,
 	}, nil
 }
 
@@ -107,13 +114,15 @@ func (f *AntigravityQuotaFetcher) fetchSubscriptionTier(ctx context.Context, cli
 	return raw, normalized, loadResp
 }
 
-// normalizeTier 将原始 tier 字符串归一化为 FREE/PRO/ULTRA/UNKNOWN
+// normalizeTier 将原始 tier 字符串归一化为 FREE/PRO/ULTRA/ULTRA_LITE/UNKNOWN
 func normalizeTier(raw string) string {
 	if raw == "" {
 		return ""
 	}
 	lower := strings.ToLower(raw)
 	switch {
+	case strings.Contains(lower, "ultra-lite") || strings.Contains(lower, "ultra_lite"):
+		return "ULTRA_LITE"
 	case strings.Contains(lower, "ultra"):
 		return "ULTRA"
 	case strings.Contains(lower, "pro"):
@@ -125,92 +134,72 @@ func normalizeTier(raw string) string {
 	}
 }
 
-// buildUsageInfo 将 API 响应转换为 UsageInfo。
-func (f *AntigravityQuotaFetcher) buildUsageInfo(modelsResp *antigravity.FetchAvailableModelsResponse, tierRaw, tierNormalized string, loadResp *antigravity.LoadCodeAssistResponse) *UsageInfo {
+// buildQuotaSummaryUsageInfo preserves the upstream group/bucket/window shape.
+func (f *AntigravityQuotaFetcher) buildQuotaSummaryUsageInfo(quotaResp *antigravity.RetrieveUserQuotaSummaryResponse, tierRaw, tierNormalized string, loadResp *antigravity.LoadCodeAssistResponse) *UsageInfo {
 	now := time.Now()
 	info := &UsageInfo{
-		UpdatedAt:               &now,
-		AntigravityQuota:        make(map[string]*AntigravityModelQuota),
-		AntigravityQuotaDetails: make(map[string]*AntigravityModelDetail),
-		SubscriptionTier:        tierNormalized,
-		SubscriptionTierRaw:     tierRaw,
+		Source:              "active",
+		UpdatedAt:           &now,
+		AntigravityQuota:    make(map[string]*AntigravityModelQuota),
+		SubscriptionTier:    tierNormalized,
+		SubscriptionTierRaw: tierRaw,
 	}
-
-	// 遍历所有模型，填充 AntigravityQuota 和 AntigravityQuotaDetails
-	for modelName, modelInfo := range modelsResp.Models {
-		modelLower := strings.ToLower(strings.TrimSpace(modelName))
-		if !strings.HasPrefix(modelLower, "gemini-") || strings.Contains(modelLower, "image") || strings.Contains(modelLower, "imagen") {
-			continue
+	if quotaResp != nil {
+		if quotaResp.ServerTime != nil {
+			info.AntigravityServerTime = quotaResp.ServerTime.UTC().Format(time.RFC3339)
 		}
-		if modelInfo.QuotaInfo == nil {
-			continue
-		}
-
-		// CPA displays quota as used percentage derived from remainingFraction.
-		// Clamp malformed/temporarily overshooting upstream values to the same
-		// 0..100 range used by the UI and scheduler.
-		remaining := modelInfo.QuotaInfo.RemainingFraction
-		if remaining < 0 {
-			remaining = 0
-		} else if remaining > 1 {
-			remaining = 1
-		}
-		utilization := int(roundUsagePercent2((1.0 - remaining) * 100))
-
-		info.AntigravityQuota[modelName] = &AntigravityModelQuota{
-			Utilization: utilization,
-			ResetTime:   modelInfo.QuotaInfo.ResetTime,
-		}
-
-		// 填充模型详细能力信息
-		detail := &AntigravityModelDetail{
-			DisplayName:        modelInfo.DisplayName,
-			SupportsImages:     modelInfo.SupportsImages,
-			SupportsThinking:   modelInfo.SupportsThinking,
-			ThinkingBudget:     modelInfo.ThinkingBudget,
-			Recommended:        modelInfo.Recommended,
-			MaxTokens:          modelInfo.MaxTokens,
-			MaxOutputTokens:    modelInfo.MaxOutputTokens,
-			SupportedMimeTypes: modelInfo.SupportedMimeTypes,
-		}
-		info.AntigravityQuotaDetails[modelName] = detail
-	}
-
-	// 废弃模型转发规则
-	if len(modelsResp.DeprecatedModelIDs) > 0 {
-		info.ModelForwardingRules = make(map[string]string, len(modelsResp.DeprecatedModelIDs))
-		for oldID, deprecated := range modelsResp.DeprecatedModelIDs {
-			oldLower := strings.ToLower(strings.TrimSpace(oldID))
-			newLower := strings.ToLower(strings.TrimSpace(deprecated.NewModelID))
-			if !strings.HasPrefix(oldLower, "gemini-") || !strings.HasPrefix(newLower, "gemini-") ||
-				strings.Contains(oldLower, "image") || strings.Contains(newLower, "image") ||
-				strings.Contains(oldLower, "imagen") || strings.Contains(newLower, "imagen") {
+		for groupIndex, group := range quotaResp.Groups {
+			if !isTextGeminiQuotaGroup(group.DisplayName, group.Description) {
 				continue
 			}
-			info.ModelForwardingRules[oldID] = deprecated.NewModelID
-		}
-		if len(info.ModelForwardingRules) == 0 {
-			info.ModelForwardingRules = nil
-		}
-	}
-
-	// 同时设置 FiveHour 用于兼容展示（取主要模型）
-	priorityModels := []string{"gemini-3.1-pro-high", "gemini-3.1-pro-low", "gemini-3-flash", "gemini-2.5-pro"}
-	for _, modelName := range priorityModels {
-		if modelInfo, ok := modelsResp.Models[modelName]; ok && modelInfo.QuotaInfo != nil {
-			utilization := roundUsagePercent2((1.0 - modelInfo.QuotaInfo.RemainingFraction) * 100)
-			progress := &UsageProgress{
-				Utilization: utilization,
-			}
-			if modelInfo.QuotaInfo.ResetTime != "" {
-				if resetTime, err := time.Parse(time.RFC3339, modelInfo.QuotaInfo.ResetTime); err == nil {
-					progress.ResetsAt = &resetTime
-					progress.RemainingSeconds = int(time.Until(resetTime).Seconds())
+			groupID := stableQuotaID(group.DisplayName, fmt.Sprintf("quota-group-%d", groupIndex+1))
+			converted := AntigravityQuotaGroup{ID: groupID, Label: group.DisplayName, Description: group.Description}
+			for bucketIndex, bucket := range group.Buckets {
+				if bucket.RemainingFraction == nil {
+					continue
+				}
+				remaining := clampQuotaFraction(*bucket.RemainingFraction)
+				bucketID := strings.TrimSpace(bucket.BucketID)
+				if bucketID == "" {
+					bucketID = fmt.Sprintf("%s-bucket-%d", groupID, bucketIndex+1)
+				}
+				converted.Buckets = append(converted.Buckets, AntigravityQuotaBucket{
+					ID: bucketID, Label: bucket.DisplayName, Window: bucket.Window,
+					RemainingFraction: remaining, ResetTime: bucket.ResetTime, Description: bucket.Description,
+				})
+				// Populate the legacy per-model shape during rolling frontend
+				// upgrades. Antigravity's Gemini quota is a shared group, so both
+				// supported model labels intentionally point at the same strictest
+				// bucket until the browser reloads the group-aware bundle.
+				legacyUtilization := int(roundUsagePercent2((1 - remaining) * 100))
+				for _, model := range []string{"gemini-3.1-pro-high", "gemini-3.8-flash"} {
+					existing := info.AntigravityQuota[model]
+					if existing == nil || legacyUtilization > existing.Utilization {
+						info.AntigravityQuota[model] = &AntigravityModelQuota{Utilization: legacyUtilization, ResetTime: bucket.ResetTime}
+					} else if existing.ResetTime == "" || (bucket.ResetTime != "" && bucket.ResetTime < existing.ResetTime) {
+						existing.ResetTime = bucket.ResetTime
+					}
+				}
+				if info.FiveHour == nil && isFiveHourQuotaWindow(bucket.Window, bucket.DisplayName) {
+					progress := &UsageProgress{Utilization: roundUsagePercent2((1 - remaining) * 100), WindowLabel: "5h"}
+					if resetTime, errReset := time.Parse(time.RFC3339, bucket.ResetTime); errReset == nil {
+						progress.ResetsAt = &resetTime
+						progress.RemainingSeconds = max(0, int(time.Until(resetTime).Seconds()))
+					}
+					info.FiveHour = progress
 				}
 			}
-			info.FiveHour = progress
-			break
+			if len(converted.Buckets) > 0 {
+				sort.SliceStable(converted.Buckets, func(i, j int) bool {
+					return quotaBucketSortWeight(converted.Buckets[i].Window, converted.Buckets[i].Label) <
+						quotaBucketSortWeight(converted.Buckets[j].Window, converted.Buckets[j].Label)
+				})
+				info.AntigravityQuotaGroups = append(info.AntigravityQuotaGroups, converted)
+			}
 		}
+	}
+	if len(info.AntigravityQuota) == 0 {
+		info.AntigravityQuota = nil
 	}
 
 	if loadResp != nil {
@@ -224,6 +213,54 @@ func (f *AntigravityQuotaFetcher) buildUsageInfo(modelsResp *antigravity.FetchAv
 	}
 
 	return info
+}
+
+func clampQuotaFraction(value float64) float64 {
+	if value < 0 {
+		return 0
+	}
+	if value > 1 {
+		return 1
+	}
+	return value
+}
+
+func stableQuotaID(value, fallback string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = antigravityQuotaIDPattern.ReplaceAllString(value, "-")
+	value = strings.Trim(value, "-")
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func isTextGeminiQuotaGroup(label, description string) bool {
+	labelText := strings.ToLower(label)
+	if strings.Contains(labelText, "image") || strings.Contains(labelText, "imagen") {
+		return false
+	}
+	text := strings.ToLower(label + " " + description)
+	return strings.Contains(text, "gemini")
+}
+
+func isFiveHourQuotaWindow(window, label string) bool {
+	value := strings.ToLower(strings.TrimSpace(window + " " + label))
+	return strings.Contains(value, "5h") || strings.Contains(value, "5 hour") || strings.Contains(value, "5-hour") || strings.Contains(value, "five hour")
+}
+
+func quotaBucketSortWeight(window, label string) int {
+	value := strings.ToLower(strings.TrimSpace(window + " " + label))
+	if strings.Contains(value, "5h") || strings.Contains(value, "5 hour") || strings.Contains(value, "5-hour") || strings.Contains(value, "five hour") {
+		return 1
+	}
+	if strings.Contains(value, "1d") || strings.Contains(value, "daily") || strings.Contains(value, "day") {
+		return 2
+	}
+	if strings.Contains(value, "7d") || strings.Contains(value, "weekly") || strings.Contains(value, "week") {
+		return 3
+	}
+	return 4
 }
 
 // GetProxyURL 获取账户的代理 URL

@@ -83,11 +83,19 @@ func FallbackGeminiModel(model string) GeminiModel {
 }
 
 func IsGeminiReasoningModel(modelID string) bool {
-	lowerID := strings.ToLower(modelID)
+	lowerID := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(modelID)), "models/")
 	for _, model := range geminiModels {
-		if strings.Contains(lowerID, model.ID) && model.IsReasoning {
-			return true
+		if strings.EqualFold(lowerID, model.ID) {
+			return model.IsReasoning
 		}
 	}
-	return false
+	matched := false
+	matchedLen := 0
+	for _, model := range geminiModels {
+		if strings.Contains(lowerID, strings.ToLower(model.ID)) && len(model.ID) > matchedLen {
+			matched = model.IsReasoning
+			matchedLen = len(model.ID)
+		}
+	}
+	return matched
 }

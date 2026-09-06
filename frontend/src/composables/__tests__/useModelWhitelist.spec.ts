@@ -69,8 +69,17 @@ describe('useModelWhitelist', () => {
   it('antigravity 模型列表包含当前代 Gemini', () => {
     const models = getModelsByPlatform('antigravity')
 
-    expect(models).toContain('gemini-3-flash')
+    expect(models).toContain('gemini-3.8-flash')
+    expect(models).toContain('gemini-3.8-flash-high')
+    expect(models).toContain('gemini-3.7-flash')
+    expect(models).toContain('gemini-3.7-flash-high')
+    expect(models).toContain('gemini-3.6-flash')
+    expect(models).toContain('gemini-3.6-flash-high')
+    expect(models).toContain('gemini-3.1-pro')
     expect(models).toContain('gemini-3.1-pro-high')
+    expect(models).toContain('gemini-3.1-pro-low')
+    expect(models).not.toContain('gemini-3.1-flash-lite')
+    expect(models).not.toContain('gemini-3-flash')
     expect(models).not.toContain('gemini-3.1-flash-image')
     expect(models).not.toContain('gemini-2.5-flash')
     expect(models).not.toContain('gemini-2.5-flash-image')

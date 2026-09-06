@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	mathrand "math/rand"
 	"net/http"
 	"strings"
 	"sync"
@@ -122,14 +123,16 @@ func (e *PromptTooLongError) Error() string {
 
 // AntigravityGatewayService 处理 Antigravity 平台的 API 转发
 type AntigravityGatewayService struct {
-	accountRepo       AccountRepository
-	tokenProvider     *AntigravityTokenProvider
-	rateLimitService  *RateLimitService
-	httpUpstream      HTTPUpstream
-	settingService    *SettingService
-	cache             GatewayCache // 用于模型级限流时清除粘性会话绑定
-	schedulerSnapshot *SchedulerSnapshotService
-	internal500Cache  Internal500CounterCache // INTERNAL 500 渐进惩罚计数器
+	accountRepo          AccountRepository
+	tokenProvider        *AntigravityTokenProvider
+	rateLimitService     *RateLimitService
+	httpUpstream         HTTPUpstream
+	settingService       *SettingService
+	cache                GatewayCache // 用于模型级限流时清除粘性会话绑定
+	schedulerSnapshot    *SchedulerSnapshotService
+	internal500Cache     Internal500CounterCache // INTERNAL 500 渐进惩罚计数器
+	reasoningReplayCache *AntigravityReasoningReplayCache
+	reasoningReplayMu    sync.Mutex
 }
 
 func (s *AntigravityGatewayService) upstreamErrorBodyReadLimit() int64 {
@@ -159,15 +162,52 @@ func NewAntigravityGatewayService(
 	internal500Cache Internal500CounterCache,
 ) *AntigravityGatewayService {
 	return &AntigravityGatewayService{
-		accountRepo:       accountRepo,
-		tokenProvider:     tokenProvider,
-		rateLimitService:  rateLimitService,
-		httpUpstream:      withUsageSettlementHTTPUpstream(httpUpstream),
-		settingService:    settingService,
-		cache:             cache,
-		schedulerSnapshot: schedulerSnapshot,
-		internal500Cache:  internal500Cache,
+		accountRepo:          accountRepo,
+		tokenProvider:        tokenProvider,
+		rateLimitService:     rateLimitService,
+		httpUpstream:         withUsageSettlementHTTPUpstream(httpUpstream),
+		settingService:       settingService,
+		cache:                cache,
+		schedulerSnapshot:    schedulerSnapshot,
+		internal500Cache:     internal500Cache,
+		reasoningReplayCache: NewAntigravityReasoningReplayCache(),
 	}
+}
+
+func (s *AntigravityGatewayService) getReasoningReplayCache() *AntigravityReasoningReplayCache {
+	if s == nil || s.reasoningReplayCache == nil {
+		if s == nil {
+			return NewAntigravityReasoningReplayCache()
+		}
+		s.reasoningReplayMu.Lock()
+		if s.reasoningReplayCache == nil {
+			s.reasoningReplayCache = NewAntigravityReasoningReplayCache()
+		}
+		cache := s.reasoningReplayCache
+		s.reasoningReplayMu.Unlock()
+		return cache
+	}
+	return s.reasoningReplayCache
+}
+
+func (s *AntigravityGatewayService) resolveReplaySessionKey(st *antigravityForwardState, body []byte) string {
+	if st != nil && strings.TrimSpace(st.sessionHash) != "" {
+		return strings.TrimSpace(st.sessionHash)
+	}
+	if st != nil && st.c != nil {
+		for _, hdr := range []string{"Session-Id", "X-Session-Id", "session-id", "x-session-id"} {
+			if sid := strings.TrimSpace(st.c.GetHeader(hdr)); sid != "" {
+				return "header:" + sid
+			}
+		}
+		if sid := strings.TrimSpace(getSessionID(st.c)); sid != "" {
+			return "session:" + sid
+		}
+	}
+	if derived := deriveGeminiReplayKeyFromBody(body); derived != "" {
+		return derived
+	}
+	return ""
 }
 
 // GetTokenProvider 返回 token provider
@@ -302,6 +342,7 @@ type TestConnectionResult struct {
 // 复用 antigravityRetryLoop 的完整重试 / credits overages / 智能重试逻辑，
 // 与真实调度行为一致。差异：不做账号切换（测试指定账号）、不记录 ops 错误。
 func (s *AntigravityGatewayService) TestConnection(ctx context.Context, account *Account, modelID string) (*TestConnectionResult, error) {
+	ctx = domain.WithHTTPUpstreamProfile(ctx, domain.HTTPUpstreamProfileAntigravity)
 
 	// 获取 token
 	if s.tokenProvider == nil {
@@ -399,7 +440,7 @@ func testConnectionHandleError(
 }
 
 // buildGeminiTestRequest 构建 Gemini 格式测试请求
-// 使用最小 token 消耗：输入 "." + maxOutputTokens: 1
+// 使用最小 token 消耗：输入 "."
 func (s *AntigravityGatewayService) buildGeminiTestRequest(projectID, model string) ([]byte, error) {
 	payload := map[string]any{
 		"contents": []map[string]any{
@@ -415,9 +456,6 @@ func (s *AntigravityGatewayService) buildGeminiTestRequest(projectID, model stri
 			"parts": []map[string]any{
 				{"text": antigravity.GetDefaultIdentityPatch()},
 			},
-		},
-		"generationConfig": map[string]any{
-			"maxOutputTokens": 1,
 		},
 	}
 	payloadBytes, _ := json.Marshal(payload)
@@ -547,6 +585,21 @@ func (s *AntigravityGatewayService) wrapV1InternalRequest(projectID, model strin
 	projectID = strings.TrimSpace(projectID)
 	if projectID == "" {
 		return nil, errAntigravityProjectIDRequired
+	}
+
+	if reqMap, ok := request.(map[string]any); ok {
+		// 确保 request 包含 sessionId（与 CPA 行为一致）
+		if _, ok := reqMap["sessionId"]; !ok {
+			n := mathrand.Int63n(9_000_000_000_000_000_000)
+			reqMap["sessionId"] = fmt.Sprintf("-%d", n)
+		}
+		// 非 Claude 模型剥离 maxOutputTokens（与 CPA 保持一致，避免 thinking 模型报错或被截断）
+		if !strings.Contains(strings.ToLower(model), "claude") {
+			if genConfig, ok := reqMap["generationConfig"].(map[string]any); ok {
+				delete(genConfig, "maxOutputTokens")
+			}
+		}
+		request = reqMap
 	}
 
 	wrapped := map[string]any{

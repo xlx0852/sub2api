@@ -4,6 +4,7 @@ package antigravity
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,6 +32,10 @@ func (e *ForbiddenError) Error() string {
 
 // NewAPIRequestWithURL 使用指定的 base URL 创建 Antigravity API 请求（v1internal 端点）
 func NewAPIRequestWithURL(ctx context.Context, baseURL, action, accessToken string, body []byte) (*http.Request, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	// 构建 URL，流式请求添加 ?alt=sse 参数
 	apiURL := fmt.Sprintf("%s/v1internal:%s", baseURL, action)
 	isStream := action == "streamGenerateContent"
@@ -234,6 +239,8 @@ func TierIDToPlanType(tierID string) string {
 		return "Pro"
 	case "g1-ultra-tier":
 		return "Ultra"
+	case "g1-ultra-lite-tier":
+		return "Ultra Lite"
 	default:
 		if tierID == "" {
 			return "Free"
@@ -267,18 +274,26 @@ func NewClient(proxyURL string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	transport := &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout: proxyDialTimeout,
+		}).DialContext,
+		TLSHandshakeTimeout: proxyTLSHandshakeTimeout,
+		ForceAttemptHTTP2:   false,
+		TLSNextProto:        make(map[string]func(string, *tls.Conn) http.RoundTripper),
+		TLSClientConfig: &tls.Config{
+			NextProtos: nil,
+		},
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
+		IdleConnTimeout:     10 * time.Minute,
+	}
 	if parsed != nil {
-		transport := &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout: proxyDialTimeout,
-			}).DialContext,
-			TLSHandshakeTimeout: proxyTLSHandshakeTimeout,
-		}
 		if err := proxyutil.ConfigureTransportProxy(transport, parsed); err != nil {
 			return nil, fmt.Errorf("configure proxy: %w", err)
 		}
-		client.Transport = transport
 	}
+	client.Transport = transport
 
 	return &Client{
 		httpClient: client,
@@ -542,7 +557,8 @@ func (c *Client) OnboardUser(ctx context.Context, accessToken, tierID string) (s
 			}
 			req.Header.Set("Authorization", "Bearer "+accessToken)
 			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("User-Agent", GetUserAgentForContext(ctx))
+			req.Header.Set("User-Agent", GetOnboardUserAgentForContext(ctx))
+			req.Header.Set("X-Goog-Api-Client", AntigravityGoogAPIClientUA)
 
 			resp, err := c.httpClient.Do(req)
 			if err != nil {

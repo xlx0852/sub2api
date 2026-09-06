@@ -350,6 +350,23 @@
       </div>
 
       <!-- Usage data from API -->
+      <div v-else-if="hasAntigravityQuotaGroups" class="space-y-0.5">
+        <UsageProgressBar
+          v-for="(row, index) in antigravityQuotaRows"
+          :key="row.id"
+          :label="row.label"
+          :utilization="row.utilization"
+          :resets-at="row.resetTime"
+          :clock-offset-ms="antigravityClockOffsetMs"
+          :color="index % 2 === 0 ? 'indigo' : 'emerald'"
+        />
+
+        <div v-if="aiCreditsDisplay" class="mt-0.5 border-l-2 border-gray-300 pl-1 text-[10px] text-gray-500 dark:border-gray-600 dark:text-gray-400">
+          {{ t('admin.accounts.aiCreditsBalance') }}: {{ aiCreditsDisplay }}
+        </div>
+      </div>
+
+      <!-- Compatibility fallback for API versions before quota-summary groups. -->
       <div v-else-if="hasAntigravityQuotaFromAPI" class="space-y-0.5">
         <!-- Gemini 3 Pro -->
         <UsageProgressBar
@@ -367,24 +384,6 @@
           :utilization="antigravity3FlashUsageFromAPI.utilization"
           :resets-at="antigravity3FlashUsageFromAPI.resetTime"
           color="emerald"
-        />
-
-        <!-- Gemini 3 Image -->
-        <UsageProgressBar
-          v-if="antigravity3ImageUsageFromAPI !== null"
-          :label="t('admin.accounts.usageWindow.gemini3Image')"
-          :utilization="antigravity3ImageUsageFromAPI.utilization"
-          :resets-at="antigravity3ImageUsageFromAPI.resetTime"
-          color="purple"
-        />
-
-        <!-- Claude -->
-        <UsageProgressBar
-          v-if="antigravityClaudeUsageFromAPI !== null"
-          :label="t('admin.accounts.usageWindow.claude')"
-          :utilization="antigravityClaudeUsageFromAPI.utilization"
-          :resets-at="antigravityClaudeUsageFromAPI.resetTime"
-          color="amber"
         />
 
         <div v-if="aiCreditsDisplay" class="mt-0.5 border-l-2 border-gray-300 pl-1 text-[10px] text-gray-500 dark:border-gray-600 dark:text-gray-400">
@@ -771,6 +770,63 @@ interface AntigravityUsageResult {
   resetTime: string | null
 }
 
+const hasAntigravityQuotaGroups = computed(() =>
+  Array.isArray(usageInfo.value?.antigravity_quota_groups) &&
+  usageInfo.value.antigravity_quota_groups.some(group => group.buckets?.length > 0)
+)
+
+const getAntigravityWindowOrder = (label: string): number => {
+  const norm = label.toLowerCase()
+  if (norm.startsWith('5h') || norm.includes('5 hour') || norm.includes('5-hour')) return 1
+  if (norm.startsWith('1d') || norm.includes('day') || norm.includes('daily')) return 2
+  if (norm.startsWith('7d') || norm.includes('week') || norm.includes('weekly')) return 3
+  return 4
+}
+
+const antigravityQuotaRows = computed(() => {
+  const groups = usageInfo.value?.antigravity_quota_groups || []
+  const byWindow = new Map<string, { utilization: number; resetTime: string | null }>()
+  for (const group of groups) {
+    for (const bucket of group.buckets || []) {
+      const remaining = Math.max(0, Math.min(1, Number(bucket.remaining_fraction) || 0))
+      const utilization = Math.round((1 - remaining) * 10000) / 100
+      const window = antigravityWindowLabel(bucket.window, bucket.label)
+      const current = byWindow.get(window)
+      if (!current || utilization > current.utilization) {
+        byWindow.set(window, { utilization, resetTime: bucket.reset_time || null })
+      } else if (!current.resetTime || (bucket.reset_time && bucket.reset_time < current.resetTime)) {
+        current.resetTime = bucket.reset_time || null
+      }
+    }
+  }
+  const rows = Array.from(byWindow, ([label, value]) => ({ id: label, label, ...value }))
+  rows.sort((a, b) => getAntigravityWindowOrder(a.label) - getAntigravityWindowOrder(b.label))
+  return rows
+})
+
+const antigravityWindowLabel = (window: string | undefined, label: string) => {
+  const normalized = `${window || ''} ${label || ''}`.trim().toLowerCase()
+  if (normalized.includes('weekly') || normalized.includes('week')) {
+    return '7d'
+  }
+  if (normalized.includes('5h') || normalized.includes('5 hour') || normalized.includes('5-hour')) {
+    return '5h'
+  }
+  if (normalized.includes('daily') || normalized.includes('day')) {
+    return '1d'
+  }
+  return window || label || 'quota'
+}
+
+const antigravityClockOffsetMs = computed(() => {
+  const raw = usageInfo.value?.antigravity_server_time
+  const observedAt = usageInfo.value?.updated_at
+  if (!raw || !observedAt) return 0
+  const serverTime = new Date(raw).getTime()
+  const localTime = new Date(observedAt).getTime()
+  return Number.isFinite(serverTime) && Number.isFinite(localTime) ? serverTime - localTime : 0
+})
+
 // ===== Antigravity quota from API (usageInfo.antigravity_quota) =====
 
 // 检查是否有从 API 获取的配额数据
@@ -816,28 +872,18 @@ const getAntigravityUsageFromAPI = (
 
 // Gemini 3 Pro from API
 const antigravity3ProUsageFromAPI = computed(() =>
-  getAntigravityUsageFromAPI(['gemini-3-pro-low', 'gemini-3-pro-high', 'gemini-3.1-pro-high'])
+  getAntigravityUsageFromAPI(['gemini-3.1-pro', 'gemini-3.1-pro-high', 'gemini-3.1-pro-low'])
 )
 
-// Gemini 3 Flash from API
-const antigravity3FlashUsageFromAPI = computed(() => getAntigravityUsageFromAPI(['gemini-3-flash']))
-
-// Gemini Image from API
-const antigravity3ImageUsageFromAPI = computed(() =>
+// Gemini Flash from API
+const antigravity3FlashUsageFromAPI = computed(() =>
   getAntigravityUsageFromAPI([
-    'gemini-2.5-flash-image',
-    'gemini-3.1-flash-image',
-    'gemini-3-pro-image'
-  ])
-)
-
-// Claude from API (all Claude model variants)
-const antigravityClaudeUsageFromAPI = computed(() =>
-  getAntigravityUsageFromAPI([
-    'claude-fable-5',
-    'claude-sonnet-4-5', 'claude-opus-4-5-thinking',
-    'claude-sonnet-4-6', 'claude-opus-4-6', 'claude-opus-4-6-thinking',
-    'claude-opus-4-7', 'claude-opus-4-8',
+    'gemini-3.8-flash',
+    'gemini-3.8-flash-high',
+    'gemini-3.7-flash',
+    'gemini-3.7-flash-high',
+    'gemini-3.6-flash',
+    'gemini-3.6-flash-high'
   ])
 )
 

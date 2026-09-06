@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/app/gateway/pipeline"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
@@ -89,6 +90,10 @@ func (s *AntigravityGatewayService) forwardGeminiRewrite(ex *pipeline.Exchange) 
 	} else {
 		logger.LegacyPrintf("service.antigravity_gateway", "[Antigravity] Failed to clean schema: %v", cleanErr)
 	}
+
+	sessionKey := s.resolveReplaySessionKey(st, injectedBody)
+	st.sessionHash = sessionKey
+	injectedBody = s.getReasoningReplayCache().RestoreSignatures(sessionKey, injectedBody)
 	st.injectedBody = injectedBody
 	return nil
 }
@@ -102,7 +107,7 @@ func (s *AntigravityGatewayService) forwardGeminiTransport(ex *pipeline.Exchange
 		return nil
 	}
 
-	ctx := ex.Ctx
+	ctx := domain.WithHTTPUpstreamProfile(ex.Ctx, domain.HTTPUpstreamProfileAntigravity)
 	account := ex.Account
 	c := st.c
 
@@ -407,7 +412,7 @@ func (s *AntigravityGatewayService) forwardGeminiRelay(ex *pipeline.Exchange) er
 	st.requestID = requestID
 
 	if st.stream {
-		streamRes, err := s.handleGeminiStreamingResponse(st.c, resp, st.startTime)
+		streamRes, err := s.handleGeminiStreamingResponse(st.c, resp, st.startTime, st.sessionHash)
 		if err != nil {
 			logger.LegacyPrintf("service.antigravity_gateway", "%s status=stream_error error=%v", st.prefix, err)
 			return err
@@ -418,7 +423,7 @@ func (s *AntigravityGatewayService) forwardGeminiRelay(ex *pipeline.Exchange) er
 		return nil
 	}
 
-	streamRes, err := s.handleGeminiStreamToNonStreaming(st.c, resp, st.startTime)
+	streamRes, err := s.handleGeminiStreamToNonStreaming(st.c, resp, st.startTime, st.sessionHash)
 	if err != nil {
 		logger.LegacyPrintf("service.antigravity_gateway", "%s status=stream_collect_error error=%v", st.prefix, err)
 		return err

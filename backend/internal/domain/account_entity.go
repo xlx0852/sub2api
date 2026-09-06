@@ -597,10 +597,13 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 	if len(result) > 0 {
 		if a.Platform == PlatformAntigravity {
 			ensureAntigravityDefaultPassthroughs(result, []string{
-				"gemini-3-flash",
-				"gemini-3.1-pro-high",
+				"gemini-3.8-flash-high",
+				"gemini-3.7-flash-high",
+				"gemini-3.6-flash-high",
+				"gemini-pro-agent",
 				"gemini-3.1-pro-low",
 			})
+			applyAntigravityFlashAliases(result)
 			applyAntigravityGemini31ProAliases(result)
 		}
 		return result
@@ -665,6 +668,54 @@ func ensureAntigravityDefaultPassthrough(mapping map[string]string, model string
 func ensureAntigravityDefaultPassthroughs(mapping map[string]string, models []string) {
 	for _, model := range models {
 		ensureAntigravityDefaultPassthrough(mapping, model)
+	}
+}
+
+func applyAntigravityFlashAliases(mapping map[string]string) {
+	flashAliases := []struct {
+		model         string
+		defaultTarget string
+		legacyTargets map[string]struct{}
+	}{
+		{
+			model:         "gemini-3.8-flash",
+			defaultTarget: "gemini-3.8-flash-high",
+			legacyTargets: map[string]struct{}{
+				"gemini-3.8-flash": {},
+			},
+		},
+		{
+			model:         "gemini-3.7-flash",
+			defaultTarget: "gemini-3.7-flash-high",
+			legacyTargets: map[string]struct{}{
+				"gemini-3.7-flash": {},
+			},
+		},
+		{
+			model:         "gemini-3.6-flash",
+			defaultTarget: "gemini-3.6-flash-high",
+			legacyTargets: map[string]struct{}{
+				"gemini-3.6-flash": {},
+			},
+		},
+	}
+
+	for _, alias := range flashAliases {
+		target := strings.TrimSpace(mapping[alias.defaultTarget])
+		if target == "" {
+			target = alias.defaultTarget
+		}
+		current, exists := mapping[alias.model]
+		if exists {
+			if _, legacy := alias.legacyTargets[current]; legacy {
+				mapping[alias.model] = target
+			}
+			continue
+		}
+		if mappingHasWildcardForModel(mapping, alias.model) {
+			continue
+		}
+		mapping[alias.model] = target
 	}
 }
 

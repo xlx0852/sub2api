@@ -34,7 +34,7 @@ const (
 	AntigravityUserAgentVersionEnv = "ANTIGRAVITY_USER_AGENT_VERSION"
 
 	// DefaultUserAgentVersion 是未通过环境变量或后台设置覆盖时使用的默认版本号。
-	DefaultUserAgentVersion = "1.23.2"
+	DefaultUserAgentVersion = "2.9.1"
 
 	// 固定的 redirect_uri（用户需手动复制 code）
 	RedirectURI = "http://localhost:8085/callback"
@@ -53,8 +53,13 @@ const (
 	URLAvailabilityTTL = 5 * time.Minute
 
 	// Antigravity API 端点
-	antigravityProdBaseURL  = "https://cloudcode-pa.googleapis.com"
-	antigravityDailyBaseURL = "https://daily-cloudcode-pa.sandbox.googleapis.com"
+	antigravityDailyBaseURL   = "https://daily-cloudcode-pa.googleapis.com"
+	antigravityProdBaseURL    = "https://cloudcode-pa.googleapis.com"
+	antigravitySandboxBaseURL = "https://daily-cloudcode-pa.sandbox.googleapis.com"
+
+	// 控制面辅助 User-Agent
+	AntigravityNodeAPIClientUA = "google-api-nodejs-client/10.3.0"
+	AntigravityGoogAPIClientUA = "gl-node/22.21.1"
 )
 
 var userAgentVersionPattern = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
@@ -122,15 +127,26 @@ func GetUserAgentVersionForContext(ctx context.Context) string {
 
 // BuildUserAgent 使用指定版本号构造 User-Agent；版本为空或非法时回退默认值。
 func BuildUserAgent(version string) string {
+	v := defaultUserAgentVersion
 	if normalized := NormalizeUserAgentVersion(version); normalized != "" {
-		return fmt.Sprintf("antigravity/%s windows/amd64", normalized)
+		v = normalized
 	}
-	return fmt.Sprintf("antigravity/%s windows/amd64", defaultUserAgentVersion)
+	return fmt.Sprintf("antigravity/hub/%s darwin/arm64", v)
+}
+
+// BuildOnboardUserAgent 构造控制面 / onboardUser 专用的 User-Agent。
+func BuildOnboardUserAgent(version string) string {
+	return BuildUserAgent(version) + " " + AntigravityNodeAPIClientUA
 }
 
 // GetUserAgentForContext 返回当前请求应使用的 User-Agent。
 func GetUserAgentForContext(ctx context.Context) string {
 	return BuildUserAgent(GetUserAgentVersionForContext(ctx))
+}
+
+// GetOnboardUserAgentForContext 返回当前请求应使用的 onboard User-Agent。
+func GetOnboardUserAgentForContext(ctx context.Context) string {
+	return BuildOnboardUserAgent(GetUserAgentVersionForContext(ctx))
 }
 
 // GetUserAgent 返回当前配置的 User-Agent。
@@ -145,10 +161,11 @@ func getClientSecret() (string, error) {
 	return "", infraerrors.Newf(http.StatusBadRequest, "ANTIGRAVITY_OAUTH_CLIENT_SECRET_MISSING", "missing antigravity oauth client_secret; set %s", AntigravityOAuthClientSecretEnv)
 }
 
-// BaseURLs 定义 Antigravity API 端点（与 Antigravity-Manager 保持一致）
+// BaseURLs 定义 Antigravity API 端点（daily 优先，prod 与 sandbox 备用）
 var BaseURLs = []string{
-	antigravityProdBaseURL,  // prod (优先)
-	antigravityDailyBaseURL, // daily sandbox (备用)
+	antigravityDailyBaseURL,   // daily prod (优先)
+	antigravityProdBaseURL,    // prod (备用)
+	antigravitySandboxBaseURL, // daily sandbox (备用)
 }
 
 // BaseURL 默认 URL（保持向后兼容）

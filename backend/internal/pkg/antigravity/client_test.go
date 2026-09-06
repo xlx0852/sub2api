@@ -298,9 +298,19 @@ func TestNewClient_无代理(t *testing.T) {
 	if client.httpClient.Timeout != clientTimeout {
 		t.Errorf("Timeout 不匹配: got %v, want %v", client.httpClient.Timeout, clientTimeout)
 	}
-	// 无代理时 Transport 应为 nil（使用默认）
-	if client.httpClient.Transport != nil {
-		t.Error("无代理时 Transport 应为 nil")
+	// 验证已配置专属 HTTP/1.1 Transport 并禁用 HTTP/2
+	if client.httpClient.Transport == nil {
+		t.Fatal("Transport 不应为 nil")
+	}
+	tr, ok := client.httpClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("Transport 类型应为 *http.Transport")
+	}
+	if tr.ForceAttemptHTTP2 {
+		t.Error("Transport 应禁用 ForceAttemptHTTP2")
+	}
+	if tr.TLSClientConfig != nil && len(tr.TLSClientConfig.NextProtos) > 0 {
+		t.Error("Transport NextProtos 应为 nil，不声明 ALPN h2")
 	}
 }
 
@@ -325,9 +335,16 @@ func TestNewClient_空格代理(t *testing.T) {
 	if client == nil {
 		t.Fatal("NewClient 返回 nil")
 	}
-	// 空格代理应等同于无代理
-	if client.httpClient.Transport != nil {
-		t.Error("空格代理 Transport 应为 nil")
+	// 空格代理应配置默认 HTTP/1.1 Transport
+	if client.httpClient.Transport == nil {
+		t.Fatal("空格代理 Transport 不应为 nil")
+	}
+	tr, ok := client.httpClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("Transport 类型应为 *http.Transport")
+	}
+	if tr.ForceAttemptHTTP2 {
+		t.Error("Transport 应禁用 ForceAttemptHTTP2")
 	}
 }
 

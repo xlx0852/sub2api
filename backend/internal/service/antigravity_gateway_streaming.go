@@ -81,7 +81,15 @@ func handleStreamReadError(err error, clientDisconnected bool, prefix string) (d
 	return false, false
 }
 
-func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context, resp *http.Response, startTime time.Time) (*antigravityStreamResult, error) {
+func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context, resp *http.Response, startTime time.Time, sessionKeys ...string) (*antigravityStreamResult, error) {
+	sessionKey := ""
+	if len(sessionKeys) > 0 {
+		sessionKey = strings.TrimSpace(sessionKeys[0])
+	}
+	if sessionKey == "" && c != nil {
+		sessionKey = strings.TrimSpace(getSessionID(c))
+	}
+
 	c.Status(resp.StatusCode)
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
@@ -221,6 +229,13 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
 					payload = string(inner)
 				}
 
+				// 记录思考签名至推理回放缓存
+				chunkToRecord := inner
+				if len(chunkToRecord) == 0 {
+					chunkToRecord = []byte(payload)
+				}
+				s.recordSignaturesFromGeminiChunk(sessionKey, chunkToRecord)
+
 				// 解析 usage
 				if u := extractGeminiUsage(inner); u != nil {
 					usage = u
@@ -284,7 +299,15 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
 
 // handleGeminiStreamToNonStreaming 读取上游流式响应，合并为非流式响应返回给客户端
 // Gemini 流式响应是增量的，需要累积所有 chunk 的内容
-func (s *AntigravityGatewayService) handleGeminiStreamToNonStreaming(c *gin.Context, resp *http.Response, startTime time.Time) (*antigravityStreamResult, error) {
+func (s *AntigravityGatewayService) handleGeminiStreamToNonStreaming(c *gin.Context, resp *http.Response, startTime time.Time, sessionKeys ...string) (*antigravityStreamResult, error) {
+	sessionKey := ""
+	if len(sessionKeys) > 0 {
+		sessionKey = strings.TrimSpace(sessionKeys[0])
+	}
+	if sessionKey == "" && c != nil {
+		sessionKey = strings.TrimSpace(getSessionID(c))
+	}
+
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
 	if s.settingService.cfg != nil && s.settingService.cfg.Gateway.MaxLineSize > 0 {
@@ -379,6 +402,13 @@ func (s *AntigravityGatewayService) handleGeminiStreamToNonStreaming(c *gin.Cont
 			if parseErr != nil {
 				continue
 			}
+
+			// 记录思考签名至推理回放缓存
+			chunkToRecord := inner
+			if len(chunkToRecord) == 0 {
+				chunkToRecord = []byte(payload)
+			}
+			s.recordSignaturesFromGeminiChunk(sessionKey, chunkToRecord)
 
 			var parsed map[string]any
 			if err := json.Unmarshal(inner, &parsed); err != nil {
@@ -713,4 +743,11 @@ func (s *AntigravityGatewayService) writeGoogleError(c *gin.Context, status int,
 		},
 	})
 	return fmt.Errorf("%s", message)
+}
+
+func (s *AntigravityGatewayService) recordSignaturesFromGeminiChunk(sessionKey string, chunk []byte) {
+	if len(chunk) == 0 || sessionKey == "" {
+		return
+	}
+	s.getReasoningReplayCache().RecordSignaturesFromChunk(sessionKey, chunk)
 }

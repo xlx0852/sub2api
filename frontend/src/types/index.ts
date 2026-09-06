@@ -1051,6 +1051,22 @@ export interface AntigravityModelQuota {
   reset_time: string  // 重置时间 ISO8601
 }
 
+export interface AntigravityQuotaBucket {
+  id: string
+  label: string
+  window?: string
+  remaining_fraction: number
+  reset_time?: string
+  description?: string
+}
+
+export interface AntigravityQuotaGroup {
+  id: string
+  label: string
+  description?: string
+  buckets: AntigravityQuotaBucket[]
+}
+
 export interface GrokQuotaWindow {
   limit?: number
   remaining?: number
@@ -1072,6 +1088,8 @@ export interface AccountUsageInfo {
   gemini_pro_minute?: UsageProgress | null
   gemini_flash_minute?: UsageProgress | null
   antigravity_quota?: Record<string, AntigravityModelQuota> | null
+  antigravity_quota_groups?: AntigravityQuotaGroup[] | null
+  antigravity_server_time?: string | null
   grok_request_quota?: GrokQuotaWindow | null
   grok_token_quota?: GrokQuotaWindow | null
   grok_retry_after_seconds?: number | null

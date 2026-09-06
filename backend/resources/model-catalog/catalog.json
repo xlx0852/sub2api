@@ -15,7 +15,14 @@
           "context_window": 272000,
           "max_context_window": 872000,
           "max_output_tokens": 128000,
-          "supported_reasoning_levels": ["low", "medium", "high", "xhigh", "max", "ultra"],
+          "supported_reasoning_levels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
           "default_reasoning_level": "low",
           "supports_verbosity": true,
           "default_verbosity": "low",
@@ -29,8 +36,12 @@
           "prefer_websockets": true,
           "minimal_client_version": "0.153.0",
           "supported_in_api": true,
-          "media": {"image_input": true},
-          "flags": {"node_repl_auto_review_required": true}
+          "media": {
+            "image_input": true
+          },
+          "flags": {
+            "node_repl_auto_review_required": true
+          }
         },
         {
           "id": "gpt-5.6-sol",
@@ -234,10 +245,50 @@
     "antigravity": {
       "models": [
         {
-          "id": "gemini-3-flash",
-          "display_name": "Gemini 3 Flash",
-          "created_at": "2025-06-01T00:00:00Z",
+          "id": "gemini-3.8-flash",
+          "display_name": "Gemini 3.8 Flash",
+          "created_at": "2026-03-01T00:00:00Z",
           "family": "gemini"
+        },
+        {
+          "id": "gemini-3.8-flash-high",
+          "display_name": "Gemini 3.8 Flash (High)",
+          "created_at": "2026-03-01T00:00:00Z",
+          "family": "gemini",
+          "is_reasoning": true
+        },
+        {
+          "id": "gemini-3.7-flash",
+          "display_name": "Gemini 3.7 Flash",
+          "created_at": "2026-02-20T00:00:00Z",
+          "family": "gemini"
+        },
+        {
+          "id": "gemini-3.7-flash-high",
+          "display_name": "Gemini 3.7 Flash (High)",
+          "created_at": "2026-02-20T00:00:00Z",
+          "family": "gemini",
+          "is_reasoning": true
+        },
+        {
+          "id": "gemini-3.6-flash",
+          "display_name": "Gemini 3.6 Flash",
+          "created_at": "2026-01-15T00:00:00Z",
+          "family": "gemini"
+        },
+        {
+          "id": "gemini-3.6-flash-high",
+          "display_name": "Gemini 3.6 Flash (High)",
+          "created_at": "2026-01-15T00:00:00Z",
+          "family": "gemini",
+          "is_reasoning": true
+        },
+        {
+          "id": "gemini-3.1-pro",
+          "display_name": "Gemini 3.1 Pro",
+          "created_at": "2026-02-19T00:00:00Z",
+          "family": "gemini",
+          "is_reasoning": true
         },
         {
           "id": "gemini-3.1-pro-low",
@@ -254,20 +305,17 @@
         }
       ],
       "default_mapping": {
-        "gemini-2.5-flash": "gemini-3-flash",
-        "gemini-2.5-flash-lite": "gemini-3-flash",
-        "gemini-2.5-flash-thinking": "gemini-3-flash",
-        "gemini-2.5-pro": "gemini-pro-agent",
-        "gemini-3-flash": "gemini-3-flash",
-        "gemini-3-pro-high": "gemini-pro-agent",
-        "gemini-3-pro-low": "gemini-3.1-pro-low",
-        "gemini-3-flash-preview": "gemini-3-flash",
-        "gemini-3-pro-preview": "gemini-pro-agent",
-        "gemini-pro-agent": "gemini-pro-agent",
+        "gemini-3.8-flash": "gemini-3.8-flash-high",
+        "gemini-3.8-flash-high": "gemini-3.8-flash-high",
+        "gemini-3.7-flash": "gemini-3.7-flash-high",
+        "gemini-3.7-flash-high": "gemini-3.7-flash-high",
+        "gemini-3.6-flash": "gemini-3.6-flash-high",
+        "gemini-3.6-flash-high": "gemini-3.6-flash-high",
         "gemini-3.1-pro": "gemini-pro-agent",
         "gemini-3.1-pro-high": "gemini-pro-agent",
         "gemini-3.1-pro-low": "gemini-3.1-pro-low",
-        "gemini-3.1-pro-preview": "gemini-pro-agent"
+        "gemini-3.1-pro-preview": "gemini-pro-agent",
+        "gemini-pro-agent": "gemini-pro-agent"
       }
     },
     "deepseek": {
@@ -597,7 +645,7 @@
       "input_cost_per_token_batches": 5e-06,
       "input_cost_per_token_flex": 5e-06,
       "output_cost_per_token": 5e-05,
-      "output_cost_per_token_priority": 1e-04,
+      "output_cost_per_token_priority": 0.0001,
       "output_cost_per_token_batches": 2.5e-05,
       "output_cost_per_token_flex": 2.5e-05,
       "cache_creation_input_token_cost": 1.25e-05,
@@ -660,25 +708,25 @@
       "cache_read_input_token_cost_priority": 3e-07
     },
     "deepseek-v4-pro": {
-		"currency": "CNY",
-		"input_cost_per_token": 9e-06,
-		"output_cost_per_token": 2.7e-05,
-		"cache_creation_input_token_cost": 9e-06,
-		"cache_read_input_token_cost": 3e-07
+      "currency": "CNY",
+      "input_cost_per_token": 9e-06,
+      "output_cost_per_token": 2.7e-05,
+      "cache_creation_input_token_cost": 9e-06,
+      "cache_read_input_token_cost": 3e-07
     },
     "deepseek-v4-flash": {
-		"currency": "CNY",
-		"input_cost_per_token": 3e-06,
-		"output_cost_per_token": 9e-06,
-		"cache_creation_input_token_cost": 3e-06,
-		"cache_read_input_token_cost": 1e-07
+      "currency": "CNY",
+      "input_cost_per_token": 3e-06,
+      "output_cost_per_token": 9e-06,
+      "cache_creation_input_token_cost": 3e-06,
+      "cache_read_input_token_cost": 1e-07
     },
     "deepseek-v4-flash-vision-exp": {
-		"currency": "CNY",
-		"input_cost_per_token": 3e-06,
-		"output_cost_per_token": 9e-06,
-		"cache_creation_input_token_cost": 3e-06,
-		"cache_read_input_token_cost": 1e-07
+      "currency": "CNY",
+      "input_cost_per_token": 3e-06,
+      "output_cost_per_token": 9e-06,
+      "cache_creation_input_token_cost": 3e-06,
+      "cache_read_input_token_cost": 1e-07
     },
     "glm-5.1": {
       "input_cost_per_token": 1.4e-06,
@@ -845,6 +893,36 @@
     },
     "kimi-for-coding-highspeed": {
       "alias_of": "kimi-for-coding"
+    },
+    "gemini-3.8-flash": {
+      "input_cost_per_token": 3e-07,
+      "output_cost_per_token": 2.5e-06,
+      "cache_creation_input_token_cost": 3e-07,
+      "cache_read_input_token_cost": 3e-08
+    },
+    "gemini-3.8-flash-high": {
+      "alias_of": "gemini-3.8-flash"
+    },
+    "gemini-3.7-flash": {
+      "alias_of": "gemini-3.8-flash"
+    },
+    "gemini-3.7-flash-high": {
+      "alias_of": "gemini-3.8-flash"
+    },
+    "gemini-3.6-flash": {
+      "alias_of": "gemini-3.8-flash"
+    },
+    "gemini-3.6-flash-high": {
+      "alias_of": "gemini-3.8-flash"
+    },
+    "gemini-3.1-pro-high": {
+      "alias_of": "gemini-3.1-pro"
+    },
+    "gemini-3.1-pro-low": {
+      "alias_of": "gemini-3.1-pro"
+    },
+    "gemini-pro-agent": {
+      "alias_of": "gemini-3.1-pro"
     }
   },
   "image_defaults": {
@@ -995,9 +1073,49 @@
     ],
     "antigravity": [
       {
-        "label": "Gemini 2.5→3 Flash",
-        "from": "gemini-2.5*",
-        "to": "gemini-3-flash"
+        "label": "Gemini 3.8 Flash→Flash High",
+        "from": "gemini-3.8-flash",
+        "to": "gemini-3.8-flash-high"
+      },
+      {
+        "label": "Gemini 3.8 Flash High透传",
+        "from": "gemini-3.8-flash-high",
+        "to": "gemini-3.8-flash-high"
+      },
+      {
+        "label": "Gemini 3.7 Flash→Flash High",
+        "from": "gemini-3.7-flash",
+        "to": "gemini-3.7-flash-high"
+      },
+      {
+        "label": "Gemini 3.7 Flash High透传",
+        "from": "gemini-3.7-flash-high",
+        "to": "gemini-3.7-flash-high"
+      },
+      {
+        "label": "Gemini 3.6 Flash→Flash High",
+        "from": "gemini-3.6-flash",
+        "to": "gemini-3.6-flash-high"
+      },
+      {
+        "label": "Gemini 3.6 Flash High透传",
+        "from": "gemini-3.6-flash-high",
+        "to": "gemini-3.6-flash-high"
+      },
+      {
+        "label": "Gemini 3.1 Pro→Pro-Agent",
+        "from": "gemini-3.1-pro",
+        "to": "gemini-pro-agent"
+      },
+      {
+        "label": "Gemini 3.1 Pro High透传",
+        "from": "gemini-3.1-pro-high",
+        "to": "gemini-pro-agent"
+      },
+      {
+        "label": "Gemini 3.1 Pro Low透传",
+        "from": "gemini-3.1-pro-low",
+        "to": "gemini-3.1-pro-low"
       }
     ]
   }

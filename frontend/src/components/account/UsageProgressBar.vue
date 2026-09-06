@@ -107,6 +107,7 @@ const props = defineProps<{
   windowStats?: WindowStats | null
   showNowWhenIdle?: boolean
   displayPercent?: string | null
+  clockOffsetMs?: number
   extraStats?: ExtraStat[]
 }>()
 
@@ -329,7 +330,7 @@ const formatResetTime = computed(() => {
   if (!props.resetsAt) return '-'
 
   const date = new Date(props.resetsAt)
-  const diffMs = date.getTime() - now.value.getTime()
+  const diffMs = date.getTime() - (now.value.getTime() + (props.clockOffsetMs || 0))
 
   // resetsAt 已过期：utilization>0 说明后端窗口数据还没刷新（active poll 没回写），
   // 显示「待刷新」以区别于真正可用的「现在」。

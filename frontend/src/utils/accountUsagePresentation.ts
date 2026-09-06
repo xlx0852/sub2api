@@ -8,6 +8,8 @@ export interface AccountUsageWindowPresentation {
   utilization: number
   resetsAt: string | null
   detail?: string | null
+  displayPercent?: string | null
+  clockOffsetMs?: number
   stats?: WindowStats | null
   color: 'indigo' | 'emerald' | 'purple' | 'amber'
 }
@@ -49,7 +51,9 @@ const makeQuotaWindow = (
   resetsAt: string | null | undefined,
   color: AccountUsageWindowPresentation['color'],
   stats?: WindowStats | null,
-  detail?: string | null
+  detail?: string | null,
+  displayPercent?: string | null,
+  clockOffsetMs = 0
 ): AccountUsageWindowPresentation => ({
   key,
   label,
@@ -57,7 +61,9 @@ const makeQuotaWindow = (
   resetsAt: resetsAt || null,
   color,
   stats: stats || null,
-  detail: detail || null
+  detail: detail || null,
+  displayPercent: displayPercent || null,
+  clockOffsetMs
 })
 
 const quotaResetAt = (account: Account, kind: 'daily' | 'weekly'): string | null => {
@@ -89,6 +95,28 @@ const maxAntigravityQuota = (
       .filter(Boolean)
       .sort()[0] || null
   }
+}
+
+const antigravityWindowLabel = (label: string, window: string | undefined): string => {
+  const normalized = `${window || ''} ${label || ''}`.trim().toLowerCase()
+  if (normalized.includes('weekly') || normalized.includes('week')) {
+    return '7d'
+  }
+  if (normalized.includes('5h') || normalized.includes('5 hour') || normalized.includes('5-hour')) {
+    return '5h'
+  }
+  if (normalized.includes('daily') || normalized.includes('day')) {
+    return '1d'
+  }
+  return window || label || 'quota'
+}
+
+const getAntigravityWindowOrder = (label: string): number => {
+  const norm = label.toLowerCase()
+  if (norm.startsWith('5h') || norm.includes('5 hour') || norm.includes('5-hour')) return 1
+  if (norm.startsWith('1d') || norm.includes('day') || norm.includes('daily')) return 2
+  if (norm.startsWith('7d') || norm.includes('week') || norm.includes('weekly')) return 3
+  return 4
 }
 
 const addUsageProgress = (
@@ -164,36 +192,73 @@ export const buildAccountUsagePresentation = ({
     addUsageProgress(windows, 'gemini-pro', t('admin.accounts.usageWindow.geminiProDaily'), usageInfo?.gemini_pro_daily || null, 'indigo')
     addUsageProgress(windows, 'gemini-flash', t('admin.accounts.usageWindow.geminiFlashDaily'), usageInfo?.gemini_flash_daily || null, 'emerald')
   } else if (account.platform === 'antigravity') {
-    const antigravityGroups = [
+    const quotaGroups = usageInfo?.antigravity_quota_groups || []
+    const serverTime = usageInfo?.antigravity_server_time
+      ? new Date(usageInfo.antigravity_server_time).getTime()
+      : Number.NaN
+    const observedAt = usageInfo?.updated_at ? new Date(usageInfo.updated_at).getTime() : Number.NaN
+    const clockOffsetMs = Number.isFinite(serverTime) && Number.isFinite(observedAt)
+      ? serverTime - observedAt
+      : 0
+    const byWindow = new Map<string, { utilization: number; resetsAt: string | null }>()
+    for (const group of quotaGroups) {
+      for (const bucket of group.buckets || []) {
+        const remaining = Math.max(0, Math.min(1, Number(bucket.remaining_fraction) || 0))
+        const label = antigravityWindowLabel(bucket.label, bucket.window)
+        const utilization = (1 - remaining) * 100
+        const current = byWindow.get(label)
+        if (!current || utilization > current.utilization) {
+          byWindow.set(label, { utilization, resetsAt: bucket.reset_time || null })
+        } else if (!current.resetsAt || (bucket.reset_time && bucket.reset_time < current.resetsAt)) {
+          current.resetsAt = bucket.reset_time || null
+        }
+      }
+    }
+    const sortedWindows = Array.from(byWindow.entries()).sort(
+      ([labelA], [labelB]) => getAntigravityWindowOrder(labelA) - getAntigravityWindowOrder(labelB)
+    )
+    for (const [label, value] of sortedWindows) {
+      windows.push(makeQuotaWindow(
+        `antigravity-${label}`,
+        label,
+        value.utilization,
+        value.resetsAt,
+        label === '7d' ? 'emerald' : 'indigo',
+        null,
+        null,
+        null,
+        clockOffsetMs
+      ))
+    }
+
+    // Compatibility fallback for API versions before quota-summary groups.
+    const legacyGroups = [
       {
         key: 'antigravity-pro',
         label: t('admin.accounts.usageWindow.gemini3Pro'),
-        models: ['gemini-3-pro-low', 'gemini-3-pro-high', 'gemini-3.1-pro-high'],
+        models: ['gemini-3.1-pro', 'gemini-3.1-pro-high', 'gemini-3.1-pro-low'],
         color: 'indigo' as const
       },
       {
         key: 'antigravity-flash',
         label: t('admin.accounts.usageWindow.gemini3Flash'),
-        models: ['gemini-3-flash'],
+        models: [
+          'gemini-3.8-flash',
+          'gemini-3.8-flash-high',
+          'gemini-3.7-flash',
+          'gemini-3.7-flash-high',
+          'gemini-3.6-flash',
+          'gemini-3.6-flash-high'
+        ],
         color: 'emerald' as const
-      },
-      {
-        key: 'antigravity-image',
-        label: t('admin.accounts.usageWindow.gemini3Image'),
-        models: ['gemini-2.5-flash-image', 'gemini-3.1-flash-image', 'gemini-3-pro-image'],
-        color: 'purple' as const
-      },
-      {
-        key: 'antigravity-claude',
-        label: t('admin.accounts.usageWindow.claude'),
-        models: ['claude-fable-5', 'claude-sonnet-4-5', 'claude-opus-4-5-thinking', 'claude-sonnet-4-6', 'claude-opus-4-6', 'claude-opus-4-6-thinking', 'claude-opus-4-7', 'claude-opus-4-8'],
-        color: 'amber' as const
       }
     ]
-    for (const group of antigravityGroups) {
-      const quota = maxAntigravityQuota(usageInfo, group.models)
-      if (!quota) continue
-      windows.push(makeQuotaWindow(group.key, group.label, quota.utilization, quota.resetsAt, group.color))
+    if (windows.length === 0) {
+      for (const group of legacyGroups) {
+        const quota = maxAntigravityQuota(usageInfo, group.models)
+        if (!quota) continue
+        windows.push(makeQuotaWindow(group.key, group.label, quota.utilization, quota.resetsAt, group.color))
+      }
     }
   }
 

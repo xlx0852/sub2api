@@ -84,6 +84,7 @@ const (
 	upstreamProtocolModeOpenAIH2         = "openai_h2"
 	upstreamProtocolModeOpenAIH1Fallback = "openai_h1_fallback"
 	upstreamProtocolModeGrokH2           = "grok_h2"
+	upstreamProtocolModeAntigravityH1    = "antigravity_h1"
 )
 
 var errUpstreamClientLimitReached = errors.New("upstream client cache limit reached")
@@ -334,7 +335,7 @@ func (s *httpUpstreamService) acquireClientWithTLS(proxyURL string, accountID in
 // getClientEntryWithTLS 获取或创建带 TLS 指纹的客户端条目
 // TLS 指纹客户端使用独立的缓存键，与普通客户端隔离
 func (s *httpUpstreamService) getClientEntryWithTLS(proxyURL string, accountID int64, accountConcurrency int, profile *tlsfingerprint.Profile, upstreamProfile domain.HTTPUpstreamProfile, markInFlight bool, enforceLimit bool) (*upstreamClientEntry, error) {
-	isolation := s.getIsolationMode()
+	isolation := s.resolveIsolationForProfile(s.getIsolationMode(), upstreamProfile)
 	proxyKey, parsedProxy, err := normalizeProxyURL(proxyURL)
 	if err != nil {
 		return nil, err
@@ -344,7 +345,7 @@ func (s *httpUpstreamService) getClientEntryWithTLS(proxyURL string, accountID i
 	// OpenAI 指纹客户端与普通 openai_h2 池对齐：启用 H2 + PING keepalive。
 	// Claude 等其它指纹路径保持 default（通常 ALPN=http/1.1），避免改写指纹语义。
 	protocolMode := upstreamProtocolModeDefault
-	if upstreamProfile == domain.HTTPUpstreamProfileOpenAI {
+	if upstreamProfile == domain.HTTPUpstreamProfileOpenAI || upstreamProfile == domain.HTTPUpstreamProfileAntigravity {
 		protocolMode = s.resolveProtocolMode(upstreamProfile, proxyKey, parsedProxy)
 	}
 	// TLS 指纹客户端使用独立的缓存键，加 "tls:" 前缀
@@ -511,14 +512,14 @@ func (s *httpUpstreamService) getOrCreateClient(proxyURL string, accountID int64
 // markInFlight=true 时会标记进行中请求，用于请求路径防止被淘汰
 // enforceLimit=true 时会限制客户端数量，超限且无法淘汰时返回错误
 func (s *httpUpstreamService) getClientEntry(proxyURL string, accountID int64, accountConcurrency int, profile domain.HTTPUpstreamProfile, markInFlight bool, enforceLimit bool) (*upstreamClientEntry, error) {
-	// 获取隔离模式
-	isolation := s.getIsolationMode()
+	// 获取隔离模式（Antigravity 强制按账号隔离）
+	isolation := s.resolveIsolationForProfile(s.getIsolationMode(), profile)
 	// 标准化代理 URL 并解析
 	proxyKey, parsedProxy, err := normalizeProxyURL(proxyURL)
 	if err != nil {
 		return nil, err
 	}
-	// 根据请求 profile（例如 OpenAI）选择协议模式
+	// 根据请求 profile（例如 OpenAI / Antigravity）选择协议模式
 	protocolMode := s.resolveProtocolMode(profile, proxyKey, parsedProxy)
 	settings := s.resolvePoolSettings(isolation, accountConcurrency)
 	settings = s.applyProfilePoolSettings(settings, profile)
@@ -717,6 +718,17 @@ func (s *httpUpstreamService) getIsolationMode() string {
 	}
 }
 
+// resolveIsolationForProfile 为特定 profile 确保合规的隔离模式。
+// Antigravity 强依赖凭据级别的连接池隔离，避免不同 OAuth 身份共用底层 TCP/TLS 连接。
+func (s *httpUpstreamService) resolveIsolationForProfile(isolation string, profile domain.HTTPUpstreamProfile) string {
+	if profile == domain.HTTPUpstreamProfileAntigravity {
+		if isolation == config.ConnectionPoolIsolationProxy || isolation == "" {
+			return config.ConnectionPoolIsolationAccountProxy
+		}
+	}
+	return isolation
+}
+
 // maxUpstreamClients 获取最大客户端缓存数量
 // 从配置中读取，无效值使用默认值
 func (s *httpUpstreamService) maxUpstreamClients() int {
@@ -766,6 +778,18 @@ func (s *httpUpstreamService) resolvePoolSettings(isolation string, accountConcu
 }
 
 func (s *httpUpstreamService) applyProfilePoolSettings(settings poolSettings, profile domain.HTTPUpstreamProfile) poolSettings {
+	if profile == domain.HTTPUpstreamProfileAntigravity {
+		if settings.maxIdleConnsPerHost < 100 {
+			settings.maxIdleConnsPerHost = 100
+		}
+		if settings.maxIdleConns < settings.maxIdleConnsPerHost {
+			settings.maxIdleConns = settings.maxIdleConnsPerHost
+		}
+		if settings.idleConnTimeout < 10*time.Minute {
+			settings.idleConnTimeout = 10 * time.Minute
+		}
+		return settings
+	}
 	if profile != domain.HTTPUpstreamProfileOpenAI {
 		return settings
 	}
@@ -850,6 +874,9 @@ func (s *httpUpstreamService) resolveOpenAIHTTP2Settings() openAIHTTP2Settings {
 }
 
 func (s *httpUpstreamService) resolveProtocolMode(profile domain.HTTPUpstreamProfile, proxyKey string, parsedProxy *url.URL) string {
+	if profile == domain.HTTPUpstreamProfileAntigravity {
+		return upstreamProtocolModeAntigravityH1
+	}
 	if profile == domain.HTTPUpstreamProfileGrok {
 		return upstreamProtocolModeGrokH2
 	}
@@ -1179,6 +1206,16 @@ func buildUpstreamTransport(settings poolSettings, proxyURL *url.URL, protocolMo
 		// 显式禁用 HTTP/2，确保代理不兼容场景回退到 HTTP/1.1。
 		transport.ForceAttemptHTTP2 = false
 		transport.TLSNextProto = make(map[string]func(string, *tls.Conn) http.RoundTripper)
+	case upstreamProtocolModeAntigravityH1:
+		// Antigravity 官方客户端底层使用 httptransport，不声明 ALPN 也不升级 HTTP/2。
+		transport.ForceAttemptHTTP2 = false
+		transport.TLSNextProto = make(map[string]func(string, *tls.Conn) http.RoundTripper)
+		if transport.TLSClientConfig == nil {
+			transport.TLSClientConfig = &tls.Config{}
+		} else {
+			transport.TLSClientConfig = transport.TLSClientConfig.Clone()
+		}
+		transport.TLSClientConfig.NextProtos = nil
 	}
 	if err := proxyutil.ConfigureTransportProxy(transport, proxyURL); err != nil {
 		return nil, err

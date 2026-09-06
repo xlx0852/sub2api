@@ -42,7 +42,12 @@ let geminiModels = [
 // Antigravity 官方支持的模型（精确匹配）
 let antigravityModels = [
   // Gemini text models
-  'gemini-3-flash',
+  'gemini-3.8-flash',
+  'gemini-3.8-flash-high',
+  'gemini-3.7-flash',
+  'gemini-3.7-flash-high',
+  'gemini-3.6-flash',
+  'gemini-3.6-flash-high',
   'gemini-3.1-pro',
   'gemini-3.1-pro-high',
   'gemini-3.1-pro-low'
@@ -188,26 +193,29 @@ const perplexityModels = [
 ]
 
 // 所有模型（去重）
-const allModelsList: string[] = [
-  ...openaiModels,
-  ...claudeModels,
-  ...geminiModels,
-  ...zhipuModels,
-  ...qwenModels,
-  ...deepseekModels,
-  ...mistralModels,
-  ...metaModels,
-  ...xaiModels,
-  ...cohereModels,
-  ...yiModels,
-  ...moonshotModels,
-  ...doubaoModels,
-  ...minimaxModels,
-  ...baiduModels,
-  ...sparkModels,
-  ...hunyuanModels,
-  ...perplexityModels
-]
+const allModelsList: string[] = Array.from(
+  new Set([
+    ...openaiModels,
+    ...claudeModels,
+    ...geminiModels,
+    ...antigravityModels,
+    ...zhipuModels,
+    ...qwenModels,
+    ...deepseekModels,
+    ...mistralModels,
+    ...metaModels,
+    ...xaiModels,
+    ...cohereModels,
+    ...yiModels,
+    ...moonshotModels,
+    ...doubaoModels,
+    ...minimaxModels,
+    ...baiduModels,
+    ...sparkModels,
+    ...hunyuanModels,
+    ...perplexityModels
+  ])
+)
 
 // 转换为下拉选项格式
 export const allModels = allModelsList.map(m => ({ value: m, label: m }))
@@ -282,17 +290,19 @@ let kimiPresetMappings = [
 
 // Antigravity 预设映射（支持通配符）
 let antigravityPresetMappings = [
-  // Gemini current-generation mappings
-  { label: '3-Pro-High→Pro-Agent', from: 'gemini-3-pro-high', to: 'gemini-pro-agent', color: 'bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400' },
-  { label: '3-Pro-Low→3.1-Pro-Low', from: 'gemini-3-pro-low', to: 'gemini-3.1-pro-low', color: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400' },
+  // Gemini 3.8 / 3.7 / 3.6 mappings
+  { label: '3.8-Flash透传', from: 'gemini-3.8-flash', to: 'gemini-3.8-flash-high', color: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  { label: '3.8-Flash-High透传', from: 'gemini-3.8-flash-high', to: 'gemini-3.8-flash-high', color: 'bg-teal-100 text-teal-700 hover:bg-teal-200 dark:bg-teal-900/30 dark:text-teal-400' },
+  { label: '3.7-Flash透传', from: 'gemini-3.7-flash', to: 'gemini-3.7-flash-high', color: 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400' },
+  { label: '3.7-Flash-High透传', from: 'gemini-3.7-flash-high', to: 'gemini-3.7-flash-high', color: 'bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-900/30 dark:text-sky-400' },
+  { label: '3.6-Flash透传', from: 'gemini-3.6-flash', to: 'gemini-3.6-flash-high', color: 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400' },
+  { label: '3.6-Flash-High透传', from: 'gemini-3.6-flash-high', to: 'gemini-3.6-flash-high', color: 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400' },
+  // Gemini 3.1 Pro mappings
   { label: '3.1-Pro→Pro-Agent', from: 'gemini-3.1-pro', to: 'gemini-pro-agent', color: 'bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400' },
   { label: '3.1-Pro-High→Pro-Agent', from: 'gemini-3.1-pro-high', to: 'gemini-pro-agent', color: 'bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400' },
-  { label: '3.1-Pro-High透传', from: 'gemini-3.1-pro-high', to: 'gemini-3.1-pro-high', color: 'bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400' },
+  { label: '3.1-Pro-High透传', from: 'gemini-3.1-pro-high', to: 'gemini-pro-agent', color: 'bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400' },
   { label: '3.1-Pro-Low透传', from: 'gemini-3.1-pro-low', to: 'gemini-3.1-pro-low', color: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400' },
   { label: '3.1-Pro-Preview→Pro-Agent', from: 'gemini-3.1-pro-preview', to: 'gemini-pro-agent', color: 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400' },
-  { label: 'Gemini 3→Flash', from: 'gemini-3*', to: 'gemini-3-flash', color: 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400' },
-  { label: 'Gemini 2.5→3 Flash', from: 'gemini-2.5*', to: 'gemini-3-flash', color: 'bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400' },
-  { label: '3-Flash透传', from: 'gemini-3-flash', to: 'gemini-3-flash', color: 'bg-lime-100 text-lime-700 hover:bg-lime-200 dark:bg-lime-900/30 dark:text-lime-400' },
 ]
 
 // Antigravity 默认映射（从后端 API 获取，与 constants.go 保持一致）

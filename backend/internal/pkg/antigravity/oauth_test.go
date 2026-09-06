@@ -690,14 +690,38 @@ func TestConstants_值正确(t *testing.T) {
 	if RedirectURI != "http://localhost:8085/callback" {
 		t.Errorf("RedirectURI 不匹配: got %s", RedirectURI)
 	}
-	if GetUserAgent() != "antigravity/1.23.2 windows/amd64" {
-		t.Errorf("UserAgent 不匹配: got %s", GetUserAgent())
+	expectedUA := "antigravity/hub/2.9.1 darwin/arm64"
+	if GetUserAgent() != expectedUA {
+		t.Errorf("UserAgent 不匹配: got %s, want %s", GetUserAgent(), expectedUA)
 	}
 	if SessionTTL != 30*time.Minute {
 		t.Errorf("SessionTTL 不匹配: got %v", SessionTTL)
 	}
 	if URLAvailabilityTTL != 5*time.Minute {
 		t.Errorf("URLAvailabilityTTL 不匹配: got %v", URLAvailabilityTTL)
+	}
+}
+
+func TestBuildUserAgent(t *testing.T) {
+	ua := BuildUserAgent("2.9.1")
+	expected := "antigravity/hub/2.9.1 darwin/arm64"
+	if ua != expected {
+		t.Errorf("BuildUserAgent(2.9.1) = %s, want %s", ua, expected)
+	}
+
+	uaDefault := BuildUserAgent("")
+	if uaDefault != expected {
+		t.Errorf("BuildUserAgent(\"\") = %s, want %s", uaDefault, expected)
+	}
+}
+
+func TestBuildOnboardUserAgent(t *testing.T) {
+	ua := BuildOnboardUserAgent("2.9.1")
+	if !strings.HasPrefix(ua, "antigravity/hub/2.9.1 darwin/arm64") {
+		t.Errorf("BuildOnboardUserAgent prefix mismatch: got %s", ua)
+	}
+	if !strings.Contains(ua, AntigravityNodeAPIClientUA) {
+		t.Errorf("BuildOnboardUserAgent should contain node client UA: got %s", ua)
 	}
 }
 

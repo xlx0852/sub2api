@@ -186,6 +186,22 @@ type AntigravityModelQuota struct {
 	ResetTime   string `json:"reset_time"`  // 重置时间 ISO8601
 }
 
+type AntigravityQuotaBucket struct {
+	ID                string  `json:"id"`
+	Label             string  `json:"label"`
+	Window            string  `json:"window,omitempty"`
+	RemainingFraction float64 `json:"remaining_fraction"`
+	ResetTime         string  `json:"reset_time,omitempty"`
+	Description       string  `json:"description,omitempty"`
+}
+
+type AntigravityQuotaGroup struct {
+	ID          string                   `json:"id"`
+	Label       string                   `json:"label"`
+	Description string                   `json:"description,omitempty"`
+	Buckets     []AntigravityQuotaBucket `json:"buckets"`
+}
+
 // AntigravityModelDetail Antigravity 单个模型的详细能力信息
 type AntigravityModelDetail struct {
 	DisplayName        string          `json:"display_name,omitempty"`
@@ -221,7 +237,9 @@ type UsageInfo struct {
 	GeminiFlashMinute  *UsageProgress `json:"gemini_flash_minute,omitempty"`  // Gemini Flash RPM
 
 	// Antigravity 多模型配额
-	AntigravityQuota map[string]*AntigravityModelQuota `json:"antigravity_quota,omitempty"`
+	AntigravityQuota       map[string]*AntigravityModelQuota `json:"antigravity_quota,omitempty"`
+	AntigravityQuotaGroups []AntigravityQuotaGroup           `json:"antigravity_quota_groups,omitempty"`
+	AntigravityServerTime  string                            `json:"antigravity_server_time,omitempty"`
 
 	// Grok / xAI 被动额度快照（rate-limit 响应头）
 	GrokRequestQuota       *xai.QuotaWindow `json:"grok_request_quota,omitempty"`
@@ -382,7 +400,7 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 
 	// Antigravity 平台：使用 AntigravityQuotaFetcher 获取额度
 	if account.Platform == PlatformAntigravity {
-		usage, err := s.getAntigravityUsage(ctx, account)
+		usage, err := s.getAntigravityUsage(ctx, account, forceProbe)
 		if err == nil {
 			s.tryClearRecoverableAccountError(ctx, account)
 		}
@@ -963,22 +981,25 @@ func (s *AccountUsageService) getGeminiUsage(ctx context.Context, account *Accou
 }
 
 // getAntigravityUsage 获取 Antigravity 账户额度
-func (s *AccountUsageService) getAntigravityUsage(ctx context.Context, account *Account) (*UsageInfo, error) {
+func (s *AccountUsageService) getAntigravityUsage(ctx context.Context, account *Account, force bool) (*UsageInfo, error) {
 	if s.antigravityQuotaFetcher == nil || !s.antigravityQuotaFetcher.CanFetch(account) {
 		now := time.Now()
 		return &UsageInfo{UpdatedAt: &now}, nil
 	}
 
 	// 1. 检查缓存
-	if cached, ok := s.cache.antigravityCache.Load(account.ID); ok {
-		if cache, ok := cached.(*antigravityUsageCache); ok {
-			ttl := antigravityCacheTTL(cache.usageInfo)
-			if time.Since(cache.timestamp) < ttl {
-				usage := cache.usageInfo
-				if usage.FiveHour != nil && usage.FiveHour.ResetsAt != nil {
-					usage.FiveHour.RemainingSeconds = int(time.Until(*usage.FiveHour.ResetsAt).Seconds())
+	if !force {
+		cached, ok := s.cache.antigravityCache.Load(account.ID)
+		if ok {
+			if cache, ok := cached.(*antigravityUsageCache); ok {
+				ttl := antigravityCacheTTL(cache.usageInfo)
+				if time.Since(cache.timestamp) < ttl {
+					usage := cache.usageInfo
+					if usage.FiveHour != nil && usage.FiveHour.ResetsAt != nil {
+						usage.FiveHour.RemainingSeconds = int(time.Until(*usage.FiveHour.ResetsAt).Seconds())
+					}
+					return usage, nil
 				}
-				return usage, nil
 			}
 		}
 	}
@@ -987,14 +1008,17 @@ func (s *AccountUsageService) getAntigravityUsage(ctx context.Context, account *
 	flightKey := fmt.Sprintf("ag-usage:%d", account.ID)
 	result, flightErr, _ := s.cache.antigravityFlight.Do(flightKey, func() (any, error) {
 		// 再次检查缓存（等待期间可能已被填充）
-		if cached, ok := s.cache.antigravityCache.Load(account.ID); ok {
-			if cache, ok := cached.(*antigravityUsageCache); ok {
-				ttl := antigravityCacheTTL(cache.usageInfo)
-				if time.Since(cache.timestamp) < ttl {
-					usage := cache.usageInfo
-					// 重新计算 RemainingSeconds，避免返回过时的剩余秒数
-					recalcAntigravityRemainingSeconds(usage)
-					return usage, nil
+		if !force {
+			cached, ok := s.cache.antigravityCache.Load(account.ID)
+			if ok {
+				if cache, ok := cached.(*antigravityUsageCache); ok {
+					ttl := antigravityCacheTTL(cache.usageInfo)
+					if time.Since(cache.timestamp) < ttl {
+						usage := cache.usageInfo
+						// 重新计算 RemainingSeconds，避免返回过时的剩余秒数
+						recalcAntigravityRemainingSeconds(usage)
+						return usage, nil
+					}
 				}
 			}
 		}
