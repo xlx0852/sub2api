@@ -247,6 +247,7 @@ func TestGetModelPricing_OpenAIGPT54MiniFallback(t *testing.T) {
 	require.Zero(t, pricing.LongContextInputThreshold)
 }
 
+
 func TestCalculateCost_OpenAIGPT54LongContextAppliesWholeSessionMultipliers(t *testing.T) {
 	svc := newTestBillingService()
 
@@ -705,8 +706,48 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 			expectedInput: 0.098e-6,
 		},
 
+		// ---- 阿里通义千问 Qwen（官方最新调价基准）----
+		{
+			name:              "qwen 3.7 max",
+			model:             "qwen3.7-max",
+			expectedInput:     12.0e-6,
+			expectedOutput:    floatPtr(36.0e-6),
+			expectedCacheRead: floatPtr(2.4e-6),
+		},
+		{
+			name:              "qwen 3.8 flash",
+			model:             "qwen3.8-flash",
+			expectedInput:     0.8e-6,
+			expectedOutput:    floatPtr(2.7e-6),
+			expectedCacheRead: floatPtr(0.08e-6),
+		},
+		{
+			name:              "qwen 3.8 max",
+			model:             "qwen3.8-max",
+			expectedInput:     12.0e-6,
+			expectedOutput:    floatPtr(36.0e-6),
+			expectedCacheRead: floatPtr(2.4e-6),
+		},
+
+		// ---- 小米 MiMo（官方最新定价基准）----
+		{
+			name:              "mimo v2.5",
+			model:             "mimo-v2.5",
+			expectedInput:     1.0e-6,
+			expectedOutput:    floatPtr(2.0e-6),
+			expectedCacheRead: floatPtr(0.02e-6),
+		},
+		{
+			name:              "mimo v2.5 pro",
+			model:             "mimo-v2.5-pro",
+			expectedInput:     3.0e-6,
+			expectedOutput:    floatPtr(6.0e-6),
+			expectedCacheRead: floatPtr(0.025e-6),
+		},
+
 		// ---- 负向用例 ----
 		{name: "qwen unknown no fallback", model: "qwen-max", expectNilPricing: true},
+		{name: "mimo unknown no fallback", model: "mimo", expectNilPricing: true},
 		// doubao-pro / doubao-embedding（纯文本）不在白名单，不回退；仅 doubao-embedding-vision 显式命中。
 		{name: "doubao unknown no fallback", model: "doubao-pro", expectNilPricing: true},
 		{name: "doubao text embedding no fallback", model: "doubao-embedding-text-240515", expectNilPricing: true},
@@ -1658,7 +1699,7 @@ func TestGetModelPricingWithChannel_UnknownModelReturnsError(t *testing.T) {
 	require.Contains(t, err.Error(), "pricing not found")
 }
 
-func TestGetModelPricingWithChannel_NilImageOutputPriceZerosAndMarksExplicit(t *testing.T) {
+func TestGetModelPricingWithChannel_NilImageOutputPricePreservesDefault(t *testing.T) {
 	svc := newTestBillingService()
 
 	chPricing := &ChannelModelPricing{
@@ -1669,8 +1710,8 @@ func TestGetModelPricingWithChannel_NilImageOutputPriceZerosAndMarksExplicit(t *
 	pricing, err := svc.GetModelPricingWithChannel("claude-sonnet-4", chPricing)
 	require.NoError(t, err)
 
-	require.Equal(t, 0.0, pricing.ImageOutputPricePerToken)
-	require.True(t, pricing.ImageOutputPriceExplicit)
+	require.Positive(t, pricing.ImageOutputPricePerToken)
+	require.False(t, pricing.ImageOutputPriceExplicit)
 }
 
 func TestComputeTokenBreakdown_ExplicitZeroImagePrice_NoFallback(t *testing.T) {

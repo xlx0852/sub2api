@@ -757,15 +757,15 @@
     "supports_xhigh_reasoning_effort": true
   },
   "deepseek-chat": {
-		"currency": "CNY",
-		"cache_read_input_token_cost": 1e-07,
-		"input_cost_per_token": 3e-06,
+    "currency": "CNY",
+    "cache_read_input_token_cost": 1e-07,
+    "input_cost_per_token": 3e-06,
     "litellm_provider": "deepseek",
     "max_input_tokens": 131072,
     "max_output_tokens": 8192,
     "max_tokens": 8192,
     "mode": "chat",
-		"output_cost_per_token": 9e-06,
+    "output_cost_per_token": 9e-06,
     "source": "https://api-docs.deepseek.com/quick_start/pricing",
     "supported_endpoints": [
       "/v1/chat/completions"
@@ -779,15 +779,15 @@
     "supports_tool_choice": true
   },
   "deepseek-reasoner": {
-		"currency": "CNY",
-		"cache_read_input_token_cost": 1e-07,
-		"input_cost_per_token": 3e-06,
+    "currency": "CNY",
+    "cache_read_input_token_cost": 1e-07,
+    "input_cost_per_token": 3e-06,
     "litellm_provider": "deepseek",
     "max_input_tokens": 131072,
     "max_output_tokens": 65536,
     "max_tokens": 65536,
     "mode": "chat",
-		"output_cost_per_token": 9e-06,
+    "output_cost_per_token": 9e-06,
     "source": "https://api-docs.deepseek.com/quick_start/pricing",
     "supported_endpoints": [
       "/v1/chat/completions"
@@ -802,17 +802,17 @@
     "supports_tool_choice": false
   },
   "deepseek-v4-flash": {
-		"currency": "CNY",
-		"cache_creation_input_token_cost": 3e-06,
-		"cache_read_input_token_cost": 1e-07,
-		"input_cost_per_token": 3e-06,
-		"input_cost_per_token_cache_hit": 1e-07,
+    "currency": "CNY",
+    "cache_creation_input_token_cost": 3e-06,
+    "cache_read_input_token_cost": 1e-07,
+    "input_cost_per_token": 3e-06,
+    "input_cost_per_token_cache_hit": 1e-07,
     "litellm_provider": "deepseek",
     "max_input_tokens": 1000000,
     "max_output_tokens": 384000,
     "max_tokens": 384000,
     "mode": "chat",
-		"output_cost_per_token": 9e-06,
+    "output_cost_per_token": 9e-06,
     "source": "https://api-docs.deepseek.com/quick_start/pricing",
     "supported_endpoints": [
       "/v1/chat/completions"
@@ -829,17 +829,17 @@
     "supports_vision": false
   },
   "deepseek-v4-flash-vision-exp": {
-		"currency": "CNY",
-		"cache_creation_input_token_cost": 3e-06,
-		"cache_read_input_token_cost": 1e-07,
-		"input_cost_per_token": 3e-06,
-		"input_cost_per_token_cache_hit": 1e-07,
+    "currency": "CNY",
+    "cache_creation_input_token_cost": 3e-06,
+    "cache_read_input_token_cost": 1e-07,
+    "input_cost_per_token": 3e-06,
+    "input_cost_per_token_cache_hit": 1e-07,
     "litellm_provider": "deepseek",
     "max_input_tokens": 1000000,
     "max_output_tokens": 384000,
     "max_tokens": 384000,
     "mode": "chat",
-		"output_cost_per_token": 9e-06,
+    "output_cost_per_token": 9e-06,
     "source": "https://api-docs.deepseek.com/quick_start/pricing",
     "supported_endpoints": [
       "/v1/chat/completions"
@@ -856,17 +856,17 @@
     "supports_vision": true
   },
   "deepseek-v4-pro": {
-		"currency": "CNY",
-		"cache_creation_input_token_cost": 9e-06,
-		"cache_read_input_token_cost": 3e-07,
-		"input_cost_per_token": 9e-06,
-		"input_cost_per_token_cache_hit": 3e-07,
+    "currency": "CNY",
+    "cache_creation_input_token_cost": 9e-06,
+    "cache_read_input_token_cost": 3e-07,
+    "input_cost_per_token": 9e-06,
+    "input_cost_per_token_cache_hit": 3e-07,
     "litellm_provider": "deepseek",
     "max_input_tokens": 1000000,
     "max_output_tokens": 384000,
     "max_tokens": 384000,
     "mode": "chat",
-		"output_cost_per_token": 2.7e-05,
+    "output_cost_per_token": 2.7e-05,
     "source": "https://api-docs.deepseek.com/quick_start/pricing",
     "supported_endpoints": [
       "/v1/chat/completions"
@@ -5104,10 +5104,19 @@
     "output_cost_per_token_above_272k_tokens": 7.5e-05,
     "output_cost_per_token_batches": 2.5e-05,
     "output_cost_per_token_flex": 2.5e-05,
-    "output_cost_per_token_priority": 1e-04,
-    "supported_endpoints": ["/v1/chat/completions", "/v1/batch", "/v1/responses"],
-    "supported_modalities": ["text", "image"],
-    "supported_output_modalities": ["text"],
+    "output_cost_per_token_priority": 0.0001,
+    "supported_endpoints": [
+      "/v1/chat/completions",
+      "/v1/batch",
+      "/v1/responses"
+    ],
+    "supported_modalities": [
+      "text",
+      "image"
+    ],
+    "supported_output_modalities": [
+      "text"
+    ],
     "supports_function_calling": true,
     "supports_service_tier": true,
     "supports_native_streaming": true,
@@ -6546,5 +6555,73 @@
     "supports_prompt_caching": true,
     "supports_vision": true,
     "supports_function_calling": true
+  },
+  "qwen3.7-max": {
+    "currency": "CNY",
+    "cache_creation_input_token_cost": 1.75e-05,
+    "cache_read_input_token_cost": 2.4e-06,
+    "input_cost_per_token": 1.2e-05,
+    "input_cost_per_token_cache_hit": 2.4e-06,
+    "litellm_provider": "openai",
+    "max_input_tokens": 1000000,
+    "max_output_tokens": 32000,
+    "max_tokens": 32000,
+    "mode": "chat",
+    "output_cost_per_token": 3.6e-05,
+    "supports_prompt_caching": true
+  },
+  "qwen3.8-flash": {
+    "currency": "CNY",
+    "cache_creation_input_token_cost": 1e-08,
+    "cache_read_input_token_cost": 8e-08,
+    "input_cost_per_token": 8e-07,
+    "input_cost_per_token_cache_hit": 8e-08,
+    "litellm_provider": "openai",
+    "max_input_tokens": 1000000,
+    "max_output_tokens": 32000,
+    "max_tokens": 32000,
+    "mode": "chat",
+    "output_cost_per_token": 2.7e-06,
+    "supports_prompt_caching": true
+  },
+  "qwen3.8-max": {
+    "currency": "CNY",
+    "cache_creation_input_token_cost": 1.75e-05,
+    "cache_read_input_token_cost": 2.4e-06,
+    "input_cost_per_token": 1.2e-05,
+    "input_cost_per_token_cache_hit": 2.4e-06,
+    "litellm_provider": "openai",
+    "max_input_tokens": 1000000,
+    "max_output_tokens": 32000,
+    "max_tokens": 32000,
+    "mode": "chat",
+    "output_cost_per_token": 3.6e-05,
+    "supports_prompt_caching": true
+  },
+  "mimo-v2.5": {
+    "currency": "CNY",
+    "cache_read_input_token_cost": 2e-08,
+    "input_cost_per_token": 1e-06,
+    "input_cost_per_token_cache_hit": 2e-08,
+    "litellm_provider": "openai",
+    "max_input_tokens": 1000000,
+    "max_output_tokens": 32000,
+    "max_tokens": 32000,
+    "mode": "chat",
+    "output_cost_per_token": 2e-06,
+    "supports_prompt_caching": true
+  },
+  "mimo-v2.5-pro": {
+    "currency": "CNY",
+    "cache_read_input_token_cost": 2.5e-08,
+    "input_cost_per_token": 3e-06,
+    "input_cost_per_token_cache_hit": 2.5e-08,
+    "litellm_provider": "openai",
+    "max_input_tokens": 1000000,
+    "max_output_tokens": 32000,
+    "max_tokens": 32000,
+    "mode": "chat",
+    "output_cost_per_token": 6e-06,
+    "supports_prompt_caching": true
   }
 }

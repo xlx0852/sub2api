@@ -49,7 +49,8 @@
           "object": "model",
           "owned_by": "openai",
           "type": "model",
-          "created": 1780876800
+          "created": 1780876800,
+          "use_responses_lite": true
         },
         {
           "id": "gpt-5.6-terra",
@@ -57,7 +58,8 @@
           "object": "model",
           "owned_by": "openai",
           "type": "model",
-          "created": 1780876800
+          "created": 1780876800,
+          "use_responses_lite": true
         },
         {
           "id": "gpt-5.6-luna",
@@ -65,7 +67,8 @@
           "object": "model",
           "owned_by": "openai",
           "type": "model",
-          "created": 1780876800
+          "created": 1780876800,
+          "use_responses_lite": true
         },
         {
           "id": "gpt-5.5",
@@ -923,6 +926,39 @@
     },
     "gemini-pro-agent": {
       "alias_of": "gemini-3.1-pro"
+    },
+    "qwen3.7-max": {
+      "currency": "CNY",
+      "input_cost_per_token": 1.2e-05,
+      "output_cost_per_token": 3.6e-05,
+      "cache_creation_input_token_cost": 1.75e-05,
+      "cache_read_input_token_cost": 2.4e-06
+    },
+    "qwen3.8-flash": {
+      "currency": "CNY",
+      "input_cost_per_token": 8e-07,
+      "output_cost_per_token": 2.7e-06,
+      "cache_creation_input_token_cost": 1e-08,
+      "cache_read_input_token_cost": 8e-08
+    },
+    "qwen3.8-max": {
+      "currency": "CNY",
+      "input_cost_per_token": 1.2e-05,
+      "output_cost_per_token": 3.6e-05,
+      "cache_creation_input_token_cost": 1.75e-05,
+      "cache_read_input_token_cost": 2.4e-06
+    },
+    "mimo-v2.5": {
+      "currency": "CNY",
+      "input_cost_per_token": 1e-06,
+      "output_cost_per_token": 2e-06,
+      "cache_read_input_token_cost": 2e-08
+    },
+    "mimo-v2.5-pro": {
+      "currency": "CNY",
+      "input_cost_per_token": 3e-06,
+      "output_cost_per_token": 6e-06,
+      "cache_read_input_token_cost": 2.5e-08
     }
   },
   "image_defaults": {

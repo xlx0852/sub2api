@@ -207,12 +207,21 @@ func (s *BillingService) fallbackPrice(key string) *ModelPricing {
 	if entry, ok := modelcatalog.ResolvePriceEntry(key); ok {
 		return priceEntryToModelPricing(entry)
 	}
-	return s.fallbackPrice(key)
+	return nil
 }
 
 // getFallbackPricing 根据模型系列获取回退价格
 func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	modelLower := strings.ToLower(model)
+
+	if p := s.fallbackPrice(modelLower); p != nil {
+		return p
+	}
+	if strings.HasPrefix(modelLower, "models/") {
+		if p := s.fallbackPrice(strings.TrimPrefix(modelLower, "models/")); p != nil {
+			return p
+		}
+	}
 
 	// 按模型系列匹配
 	if strings.Contains(modelLower, "opus") {
@@ -250,8 +259,13 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	if strings.Contains(modelLower, "claude") {
 		return s.fallbackPrice("claude-sonnet-4")
 	}
-	if strings.Contains(modelLower, "gemini-3.1-pro") || strings.Contains(modelLower, "gemini-3-1-pro") {
-		return s.fallbackPrice("gemini-3.1-pro")
+	if strings.Contains(modelLower, "gemini") {
+		if strings.Contains(modelLower, "pro") {
+			return s.fallbackPrice("gemini-3.1-pro")
+		}
+		if strings.Contains(modelLower, "flash") {
+			return s.fallbackPrice("gemini-3.8-flash")
+		}
 	}
 
 	// DeepSeek V4 系列：仅匹配已知 V4 Pro/Flash 与官方兼容别名
@@ -373,6 +387,18 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 		return s.fallbackPrice("doubao-embedding-vision")
 	}
 
+	// 通义千问 Qwen（严格限定具体官方 SKU，未知型号不回退以避免误计价）
+	switch modelLower {
+	case "qwen3.7-max", "qwen3.8-flash", "qwen3.8-max":
+		return s.fallbackPrice(modelLower)
+	}
+
+	// 小米 MiMo（严格限定具体官方 SKU）
+	switch modelLower {
+	case "mimo-v2.5", "mimo-v2.5-pro":
+		return s.fallbackPrice(modelLower)
+	}
+
 	// OpenAI（GPT-5 / Codex 族）：仅匹配已知型号，避免未知 OpenAI 型号误计价。
 	if normalized := normalizeKnownOpenAICodexModel(modelLower); normalized != "" {
 		switch normalized {
@@ -474,7 +500,7 @@ func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
 }
 
 // GetModelPricingWithChannel 获取模型定价，渠道配置的价格覆盖默认值
-// 渠道存在时，未配置的图片输出价格归零（不回退到 LiteLLM）
+// 渠道存在时，仅覆盖渠道明确配置的图片输出价格；未配置时沿用模型默认价格。
 func (s *BillingService) GetModelPricingWithChannel(model string, channelPricing *ChannelModelPricing) (*ModelPricing, error) {
 	pricing, err := s.GetModelPricing(model)
 	if err != nil {
@@ -508,10 +534,8 @@ func (s *BillingService) GetModelPricingWithChannel(model string, channelPricing
 	}
 	if channelPricing.ImageOutputPrice != nil {
 		pricing.ImageOutputPricePerToken = *channelPricing.ImageOutputPrice
-	} else {
-		pricing.ImageOutputPricePerToken = 0
+		pricing.ImageOutputPriceExplicit = true
 	}
-	pricing.ImageOutputPriceExplicit = true
 	return pricing, nil
 }
 
