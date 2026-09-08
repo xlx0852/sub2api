@@ -457,8 +457,44 @@ func (s *HTTPUpstreamSuite) TestIdleTTLDoesNotEvictActive() {
 	atomic.StoreInt64(&entry1.inFlight, 1) // 模拟有活跃请求
 	// 创建新客户端，触发淘汰检查
 	_, _ = svc.getOrCreateClient("", 2, 1)
-
 	require.True(s.T(), hasEntry(svc, entry1), "有活跃请求时不应回收")
+}
+
+// TestAntigravityProfileEnforcesHTTP1AndClearsALPN 测试 Antigravity profile 强制 HTTP/1.1 与 ALPN 剥除
+func (s *HTTPUpstreamSuite) TestAntigravityProfileEnforcesHTTP1AndClearsALPN() {
+	svc := s.newService()
+	entry, err := svc.getClientEntry("", 1001, 1, domain.HTTPUpstreamProfileAntigravity, false, false)
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), entry)
+
+	transport, ok := entry.client.Transport.(*http.Transport)
+	require.True(s.T(), ok, "expected *http.Transport")
+	require.False(s.T(), transport.ForceAttemptHTTP2, "ForceAttemptHTTP2 must be disabled")
+	require.NotNil(s.T(), transport.TLSNextProto, "TLSNextProto must be non-nil map to prevent H2 upgrade")
+	require.Empty(s.T(), transport.TLSNextProto, "TLSNextProto must be empty")
+	require.NotNil(s.T(), transport.TLSClientConfig, "TLSClientConfig must be configured")
+	require.Empty(s.T(), transport.TLSClientConfig.NextProtos, "NextProtos must be nil/empty to prevent ALPN h2 advertisement")
+	require.GreaterOrEqual(s.T(), transport.MaxIdleConnsPerHost, 100, "MaxIdleConnsPerHost >= 100")
+	require.GreaterOrEqual(s.T(), transport.IdleConnTimeout, 10*time.Minute, "IdleConnTimeout >= 10m")
+}
+
+// TestAntigravityProfileForcesAccountIsolation 测试 Antigravity profile 强制账号级连接池隔离
+func (s *HTTPUpstreamSuite) TestAntigravityProfileForcesAccountIsolation() {
+	// 配置全局为 proxy 级别隔离
+	s.cfg.Gateway = config.GatewayConfig{
+		ConnectionPoolIsolation: config.ConnectionPoolIsolationProxy,
+	}
+	svc := s.newService()
+
+	entryA, errA := svc.getClientEntry("", 2001, 1, domain.HTTPUpstreamProfileAntigravity, false, false)
+	require.NoError(s.T(), errA)
+
+	entryB, errB := svc.getClientEntry("", 2002, 1, domain.HTTPUpstreamProfileAntigravity, false, false)
+	require.NoError(s.T(), errB)
+
+	// 尽管全局为 proxy 隔离，Antigravity 账号必须拥有独立连接池
+	require.NotSame(s.T(), entryA, entryB, "Antigravity accounts must have isolated client pools")
+	require.NotSame(s.T(), entryA.client.Transport, entryB.client.Transport, "Antigravity accounts must have isolated transports")
 }
 
 // TestHTTPUpstreamSuite 运行测试套件

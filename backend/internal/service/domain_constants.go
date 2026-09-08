@@ -56,6 +56,7 @@ const (
 	PlatformAntigravity = domain.PlatformAntigravity
 	PlatformGrok        = domain.PlatformGrok
 	PlatformKimi        = domain.PlatformKimi
+	PlatformCursor      = domain.PlatformCursor
 
 	PrivacyModeTrainingOff   = domain.PrivacyModeTrainingOff
 	PrivacyModeFailed        = domain.PrivacyModeFailed
@@ -74,6 +75,7 @@ var AllowedQuotaPlatforms = []string{
 	PlatformAntigravity,
 	PlatformGrok,
 	PlatformKimi,
+	PlatformCursor,
 }
 
 // IsAllowedQuotaPlatform 报告 s 是否为合法的 quota platform 标识。

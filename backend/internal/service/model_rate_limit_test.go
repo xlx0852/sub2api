@@ -261,6 +261,11 @@ func TestIsModelRateLimited_Antigravity_ThinkingAffectsModelKey(t *testing.T) {
 
 	account := &Account{
 		Platform: PlatformAntigravity,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{
+				"claude-sonnet-4-5": "claude-sonnet-4-5",
+			},
+		},
 		Extra: map[string]any{
 			modelRateLimitsKey: map[string]any{
 				"claude-sonnet-4-5-thinking": map[string]any{

@@ -26,6 +26,7 @@ func (e *antigravityClientError) Error() string {
 }
 
 type antigravityForwardState struct {
+	responses        *antigravityResponsesState
 	c                *gin.Context
 	isStickySession  bool
 	startTime        time.Time

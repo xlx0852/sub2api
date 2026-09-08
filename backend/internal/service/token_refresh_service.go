@@ -114,6 +114,15 @@ func (s *TokenRefreshService) RegisterKimiOAuthService(oauthService *KimiOAuthSe
 	s.executors = append(s.executors, refresher)
 }
 
+func (s *TokenRefreshService) RegisterCursorOAuthService(oauthService *CursorOAuthService) {
+	if s == nil || oauthService == nil {
+		return
+	}
+	refresher := NewCursorTokenRefresher(oauthService)
+	s.refreshers = append(s.refreshers, refresher)
+	s.executors = append(s.executors, refresher)
+}
+
 // SetRefreshPolicy 注入后台刷新调用侧策略（用于显式化平台/场景差异行为）。
 func (s *TokenRefreshService) SetRefreshPolicy(policy BackgroundRefreshPolicy) {
 	s.refreshPolicy = policy

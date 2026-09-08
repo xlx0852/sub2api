@@ -161,10 +161,9 @@ func getClientSecret() (string, error) {
 	return "", infraerrors.Newf(http.StatusBadRequest, "ANTIGRAVITY_OAUTH_CLIENT_SECRET_MISSING", "missing antigravity oauth client_secret; set %s", AntigravityOAuthClientSecretEnv)
 }
 
-// BaseURLs 定义 Antigravity API 端点（daily 优先，prod 与 sandbox 备用）
+// BaseURLs 定义 Antigravity API 端点（daily 优先，与官方 CLI 行为一致；prod 已弃用，避免 fallback 踩 429 限流）
 var BaseURLs = []string{
-	antigravityDailyBaseURL,   // daily prod (优先)
-	antigravityProdBaseURL,    // prod (备用)
+	antigravityDailyBaseURL,   // daily (优先，与官方 CLI 行为一致)
 	antigravitySandboxBaseURL, // daily sandbox (备用)
 }
 

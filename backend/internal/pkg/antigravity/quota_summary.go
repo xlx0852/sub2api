@@ -19,7 +19,7 @@ const (
 var antigravityQuotaSummaryBaseURLs = []string{
 	antigravityDailyPublicBaseURL,
 	antigravityDailyBaseURL,
-	antigravityProdBaseURL,
+	antigravitySandboxBaseURL,
 }
 
 const antigravityQuotaUserAgent = "antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)"

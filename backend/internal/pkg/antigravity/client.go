@@ -121,10 +121,26 @@ func (t *TierInfo) UnmarshalJSON(data []byte) error {
 
 // IneligibleTier 不符合条件的层级信息
 type IneligibleTier struct {
-	Tier *TierInfo `json:"tier,omitempty"`
+	TierID        string    `json:"tierId,omitempty"`
+	TierName      string    `json:"tierName,omitempty"`
+	Tier          *TierInfo `json:"tier,omitempty"`
 	// ReasonCode 不符合条件的原因代码，如 INELIGIBLE_ACCOUNT
-	ReasonCode    string `json:"reasonCode,omitempty"`
-	ReasonMessage string `json:"reasonMessage,omitempty"`
+	ReasonCode    string    `json:"reasonCode,omitempty"`
+	ReasonMessage string    `json:"reasonMessage,omitempty"`
+}
+
+// GetTierID 返回不合格层级的 ID
+func (it *IneligibleTier) GetTierID() string {
+	if it == nil {
+		return ""
+	}
+	if it.TierID != "" {
+		return it.TierID
+	}
+	if it.Tier != nil {
+		return it.Tier.ID
+	}
+	return ""
 }
 
 // LoadCodeAssistResponse loadCodeAssist 响应

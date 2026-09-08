@@ -320,7 +320,7 @@ func (s *AntigravityGatewayService) handleGeminiStreamToNonStreaming(c *gin.Cont
 	var firstTokenMs *int
 	var last map[string]any
 	var lastWithParts map[string]any
-	var collectedTextParts []string // 收集所有文本片段
+	var collectedParts []map[string]any // 收集所有 parts (text, thinking, functionCall 等)
 
 	type scanEvent struct {
 		line string
@@ -445,11 +445,12 @@ func (s *AntigravityGatewayService) handleGeminiStreamToNonStreaming(c *gin.Cont
 			// 保留最后一个有 parts 的响应
 			if parts := extractGeminiParts(parsed); len(parts) > 0 {
 				lastWithParts = parsed
-				// 收集文本 parts
 				for _, part := range parts {
-					if text, ok := part["text"].(string); ok && text != "" {
-						collectedTextParts = append(collectedTextParts, text)
+					// 过滤纯空占位文本块 {"text": ""}
+					if text, ok := part["text"].(string); ok && text == "" && len(part) == 1 {
+						continue
 					}
+					collectedParts = append(collectedParts, part)
 				}
 			}
 
@@ -477,9 +478,9 @@ returnResponse:
 		}
 	}
 
-	// 如果收集到了文本，需要合并到最终响应中
-	if len(collectedTextParts) > 0 {
-		finalResponse = mergeTextPartsToResponse(finalResponse, collectedTextParts)
+	// 将收集的所有 parts 合并到最终响应中（保持 functionCall、连续 text 合并等）
+	if len(collectedParts) > 0 {
+		finalResponse = mergeCollectedPartsToResponse(finalResponse, collectedParts)
 	}
 
 	respBody, err := json.Marshal(finalResponse)
@@ -536,7 +537,7 @@ func getOrCreateGeminiParts(response map[string]any) (result map[string]any, exi
 
 // mergeCollectedPartsToResponse 将收集的所有 parts 合并到 Gemini 响应中
 // 这个函数会合并所有类型的 parts：text、thinking、functionCall、inlineData 等
-// 保持原始顺序，只合并连续的普通 text parts
+// 保持原始顺序，合并连续的普通 text parts 以及连续的 thought parts
 func mergeCollectedPartsToResponse(response map[string]any, collectedParts []map[string]any) map[string]any {
 	if len(collectedParts) == 0 {
 		return response
@@ -547,9 +548,12 @@ func mergeCollectedPartsToResponse(response map[string]any, collectedParts []map
 	// 合并策略：
 	// 1. 保持原始顺序
 	// 2. 连续的普通 text parts 合并为一个
-	// 3. thinking、functionCall、inlineData 等保持原样
+	// 3. 连续的 thought parts 合并为一个（拼接 text，保留 thoughtSignature 等属性）
+	// 4. functionCall、inlineData 等非 text parts 保持原样
 	var mergedParts []any
 	var textBuffer strings.Builder
+	var thoughtBuffer strings.Builder
+	var currentThoughtMeta map[string]any
 
 	flushTextBuffer := func() {
 		if textBuffer.Len() > 0 {
@@ -560,27 +564,57 @@ func mergeCollectedPartsToResponse(response map[string]any, collectedParts []map
 		}
 	}
 
-	for _, part := range collectedParts {
-		// 检查是否是普通 text part
-		if text, ok := part["text"].(string); ok {
-			// 检查是否有 thought 标记
-			if thought, _ := part["thought"].(bool); thought {
-				// thinking part，先刷新 text buffer，然后保留原样
-				flushTextBuffer()
-				mergedParts = append(mergedParts, part)
-			} else {
-				// 普通 text，累积到 buffer
-				_, _ = textBuffer.WriteString(text)
+	flushThoughtBuffer := func() {
+		if thoughtBuffer.Len() > 0 || currentThoughtMeta != nil {
+			merged := make(map[string]any)
+			if currentThoughtMeta != nil {
+				for k, v := range currentThoughtMeta {
+					merged[k] = v
+				}
 			}
-		} else {
-			// 非 text part（functionCall、inlineData 等），先刷新 text buffer，然后保留原样
+			merged["text"] = thoughtBuffer.String()
+			merged["thought"] = true
+			mergedParts = append(mergedParts, merged)
+			thoughtBuffer.Reset()
+			currentThoughtMeta = nil
+		}
+	}
+
+	for _, part := range collectedParts {
+		// 检查是否是 thought part
+		if thought, _ := part["thought"].(bool); thought {
 			flushTextBuffer()
+			if text, ok := part["text"].(string); ok {
+				_, _ = thoughtBuffer.WriteString(text)
+			}
+			if currentThoughtMeta == nil {
+				currentThoughtMeta = make(map[string]any)
+			}
+			for k, v := range part {
+				if k != "text" {
+					currentThoughtMeta[k] = v
+				}
+			}
+		} else if text, ok := part["text"].(string); ok {
+			// 普通 text，累积到 buffer
+			flushThoughtBuffer()
+			_, _ = textBuffer.WriteString(text)
+		} else {
+			// 非 text part（functionCall、inlineData 等），先刷新 buffer，然后保留原样
+			flushTextBuffer()
+			flushThoughtBuffer()
 			mergedParts = append(mergedParts, part)
 		}
 	}
 
-	// 刷新剩余的 text
+	// 刷新剩余的 buffer
 	flushTextBuffer()
+	flushThoughtBuffer()
+
+	// 兜底：若收集到的 parts 全为空文本，确保至少有一个空 text part
+	if len(mergedParts) == 0 {
+		mergedParts = append(mergedParts, map[string]any{"text": ""})
+	}
 
 	setParts(mergedParts)
 	return result
@@ -720,6 +754,14 @@ func (s *AntigravityGatewayService) writeMappedClaudeError(c *gin.Context, accou
 }
 
 func (s *AntigravityGatewayService) writeGoogleError(c *gin.Context, status int, message string) error {
+	if c.GetBool(antigravityResponsesContextKey) {
+		code := "upstream_error"
+		if status < 500 {
+			code = "invalid_request_error"
+		}
+		c.JSON(status, gin.H{"error": gin.H{"type": code, "code": code, "message": message}})
+		return fmt.Errorf("%s", message)
+	}
 	MarkResponseCommitted(c)
 	statusStr := "UNKNOWN"
 	switch status {

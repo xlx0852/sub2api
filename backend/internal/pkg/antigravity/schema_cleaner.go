@@ -119,6 +119,26 @@ func cleanJSONSchemaRecursive(value any) any {
 	// 0. [NEW] 合并 allOf
 	mergeAllOf(schemaMap)
 
+	// [FIX] 处理 const 字段: 转为 enum 并推导 type (Gemini Schema 不支持 const)
+	if constVal, hasConst := schemaMap["const"]; hasConst {
+		delete(schemaMap, "const")
+		if _, hasEnum := schemaMap["enum"]; !hasEnum {
+			schemaMap["enum"] = []any{fmt.Sprintf("%v", constVal)}
+		}
+		if _, hasType := schemaMap["type"]; !hasType {
+			switch constVal.(type) {
+			case bool:
+				schemaMap["type"] = "boolean"
+			case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+				schemaMap["type"] = "integer"
+			case float32, float64:
+				schemaMap["type"] = "number"
+			default:
+				schemaMap["type"] = "string"
+			}
+		}
+	}
+
 	// 1. [CRITICAL] 深度递归处理子项
 	if props, ok := schemaMap["properties"].(map[string]any); ok {
 		for _, v := range props {
@@ -179,7 +199,7 @@ func cleanJSONSchemaRecursive(value any) any {
 						if sourceProps, ok := v.(map[string]any); ok {
 							for pk, pv := range sourceProps {
 								if _, exists := targetProps[pk]; !exists {
-									targetProps[pk] = deepCopy(pv)
+									targetProps[pk] = cleanJSONSchemaRecursive(deepCopy(pv))
 								}
 							}
 						}
@@ -216,7 +236,10 @@ func cleanJSONSchemaRecursive(value any) any {
 		hasKey(schemaMap, "enum") ||
 		hasKey(schemaMap, "anyOf") ||
 		hasKey(schemaMap, "oneOf") ||
-		hasKey(schemaMap, "allOf")
+		hasKey(schemaMap, "allOf") ||
+		hasKey(schemaMap, "const") ||
+		hasKey(schemaMap, "description") ||
+		hasKey(schemaMap, "default")
 
 	if looksLikeSchema {
 		// 4. [ROBUST] 约束迁移
@@ -238,43 +261,7 @@ func cleanJSONSchemaRecursive(value any) any {
 			}
 		}
 
-		// 6. [SAFETY] 处理空 Object
-		if t, _ := schemaMap["type"].(string); t == "object" {
-			hasProps := false
-			if props, ok := schemaMap["properties"].(map[string]any); ok && len(props) > 0 {
-				hasProps = true
-			}
-			if !hasProps {
-				schemaMap["properties"] = map[string]any{
-					"reason": map[string]any{
-						"type":        "string",
-						"description": "Reason for calling this tool",
-					},
-				}
-				schemaMap["required"] = []any{"reason"}
-			}
-		}
-
-		// 7. [SAFETY] Required 字段对齐
-		if props, ok := schemaMap["properties"].(map[string]any); ok {
-			if req, ok := schemaMap["required"].([]any); ok {
-				var validReq []any
-				for _, r := range req {
-					if rStr, ok := r.(string); ok {
-						if _, exists := props[rStr]; exists {
-							validReq = append(validReq, r)
-						}
-					}
-				}
-				if len(validReq) > 0 {
-					schemaMap["required"] = validReq
-				} else {
-					delete(schemaMap, "required")
-				}
-			}
-		}
-
-		// 8. 处理 type 字段 (Lowercase + Nullable 提取)
+		// 6. 处理 type 字段 (Lowercase + Nullable 提取)
 		isEffectivelyNullable := false
 		if typeVal, exists := schemaMap["type"]; exists {
 			var selectedType string
@@ -305,13 +292,56 @@ func cleanJSONSchemaRecursive(value any) any {
 			}
 			schemaMap["type"] = selectedType
 		} else {
-			// 默认 object 如果有 properties (虽然上面白名单过滤可能删了 type 如果它不在... 但 type 必在 allowlist)
-			// 如果没有 type，但有 properties，补一个
+			// 如果没有 type，但有 properties，补 object
 			if hasKey(schemaMap, "properties") {
 				schemaMap["type"] = "object"
+			} else if hasKey(schemaMap, "items") {
+				schemaMap["type"] = "array"
 			} else {
-				// 默认为 string ? or object? Gemini 通常需要明确 type
 				schemaMap["type"] = "object"
+			}
+		}
+
+		// 7. [SAFETY] 处理空 Object
+		if t, _ := schemaMap["type"].(string); t == "object" {
+			hasProps := false
+			if props, ok := schemaMap["properties"].(map[string]any); ok && len(props) > 0 {
+				hasProps = true
+			}
+			if !hasProps {
+				schemaMap["properties"] = map[string]any{
+					"reason": map[string]any{
+						"type":        "string",
+						"description": "Reason for calling this tool",
+					},
+				}
+				schemaMap["required"] = []any{"reason"}
+			}
+		}
+
+		// 8. [SAFETY] 处理 Array 必须包含 items
+		if t, _ := schemaMap["type"].(string); t == "array" {
+			if _, hasItems := schemaMap["items"]; !hasItems {
+				schemaMap["items"] = map[string]any{"type": "string"}
+			}
+		}
+
+		// 9. [SAFETY] Required 字段对齐
+		if props, ok := schemaMap["properties"].(map[string]any); ok {
+			if req, ok := schemaMap["required"].([]any); ok {
+				var validReq []any
+				for _, r := range req {
+					if rStr, ok := r.(string); ok {
+						if _, exists := props[rStr]; exists {
+							validReq = append(validReq, r)
+						}
+					}
+				}
+				if len(validReq) > 0 {
+					schemaMap["required"] = validReq
+				} else {
+					delete(schemaMap, "required")
+				}
 			}
 		}
 
@@ -326,7 +356,7 @@ func cleanJSONSchemaRecursive(value any) any {
 			}
 		}
 
-		// 9. Enum 值强制转字符串
+		// 10. Enum 值强制转字符串
 		if enumVals, ok := schemaMap["enum"].([]any); ok {
 			hasNonString := false
 			for i, val := range enumVals {
@@ -371,6 +401,7 @@ func migrateConstraints(m map[string]any) {
 		{"maxItems", "maxItems"},
 		{"propertyNames", "propertyNames"},
 		{"format", "format"},
+		{"default", "default"},
 	}
 
 	var hints []string

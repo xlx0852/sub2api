@@ -123,6 +123,7 @@ func (e *PromptTooLongError) Error() string {
 
 // AntigravityGatewayService 处理 Antigravity 平台的 API 转发
 type AntigravityGatewayService struct {
+	responsesStore       antigravityResponseStore
 	accountRepo          AccountRepository
 	tokenProvider        *AntigravityTokenProvider
 	rateLimitService     *RateLimitService
@@ -577,7 +578,7 @@ func injectIdentityPatchToGeminiRequest(body []byte) ([]byte, error) {
 }
 
 // wrapV1InternalRequest 包装请求为 v1internal 格式
-func (s *AntigravityGatewayService) wrapV1InternalRequest(projectID, model string, originalBody []byte) ([]byte, error) {
+func (s *AntigravityGatewayService) wrapV1InternalRequest(projectID, model string, originalBody []byte, preserveOutputLimit ...bool) ([]byte, error) {
 	var request any
 	if err := json.Unmarshal(originalBody, &request); err != nil {
 		return nil, fmt.Errorf("解析请求体失败: %w", err)
@@ -593,9 +594,15 @@ func (s *AntigravityGatewayService) wrapV1InternalRequest(projectID, model strin
 			n := mathrand.Int63n(9_000_000_000_000_000_000)
 			reqMap["sessionId"] = fmt.Sprintf("-%d", n)
 		}
-		// 非 Claude 模型剥离 maxOutputTokens（与 CPA 保持一致，避免 thinking 模型报错或被截断）
-		if !strings.Contains(strings.ToLower(model), "claude") {
-			if genConfig, ok := reqMap["generationConfig"].(map[string]any); ok {
+		// Gemini 模型限制 maxOutputTokens 不能超过 65536（Google API 会直接 400 报错）
+		if genConfig, ok := reqMap["generationConfig"].(map[string]any); ok {
+			if mot, ok := genConfig["maxOutputTokens"].(float64); ok && mot > 65536 {
+				genConfig["maxOutputTokens"] = 65536
+			} else if motInt, ok := genConfig["maxOutputTokens"].(int); ok && motInt > 65536 {
+				genConfig["maxOutputTokens"] = 65536
+			}
+			// 非 Claude 模型剥离 maxOutputTokens（与 CPA 保持一致，避免 thinking 模型报错或被截断）
+			if !strings.Contains(strings.ToLower(model), "claude") && !(len(preserveOutputLimit) > 0 && preserveOutputLimit[0]) {
 				delete(genConfig, "maxOutputTokens")
 			}
 		}

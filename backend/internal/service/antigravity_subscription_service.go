@@ -21,18 +21,34 @@ func NormalizeAntigravitySubscription(resp *antigravity.LoadCodeAssistResponse) 
 	if resp == nil {
 		return AntigravitySubscriptionResult{PlanType: "Free"}
 	}
-	if len(resp.IneligibleTiers) > 0 {
-		result := AntigravitySubscriptionResult{
-			PlanType:           "Abnormal",
-			SubscriptionStatus: antigravitySubscriptionAbnormal,
-		}
-		if resp.IneligibleTiers[0] != nil {
-			result.SubscriptionError = strings.TrimSpace(resp.IneligibleTiers[0].ReasonMessage)
-		}
-		return result
-	}
+
 	tierID := resp.GetTier()
+	planType := antigravity.TierIDToPlanType(tierID)
+
+	// 检查是否存在阻断性的不合格层级。
+	// 注意：如果账号拥有有效付费订阅（PaidTier，如 g1-pro-tier / g1-ultra-tier）或处于有效 standard-tier，
+	// 谷歌即便在 ineligibleTiers 中返回 free-tier（例如因直连 IP 判定免费层受限，或已开通 Pro 不再适用免费层），
+	// 账号本身作为 Pro/Ultra 也是完全正常可调用的，不能粗暴误判为 Abnormal。
+	for _, it := range resp.IneligibleTiers {
+		if it == nil {
+			continue
+		}
+		ineligibleID := it.GetTierID()
+		// 1. 若不合格层明确匹配当前生效的 tier（无论付费还是免费），属于异常
+		isTierIneligible := (ineligibleID != "" && strings.EqualFold(ineligibleID, tierID))
+		// 2. 若用户并无付费层（纯 free 账号），且 free-tier 自身在 ineligibleTiers 中或全局受限
+		isFreeBlocked := (resp.PaidTier == nil && (ineligibleID == "" || strings.EqualFold(ineligibleID, "free-tier")))
+
+		if isTierIneligible || isFreeBlocked {
+			return AntigravitySubscriptionResult{
+				PlanType:           "Abnormal",
+				SubscriptionStatus: antigravitySubscriptionAbnormal,
+				SubscriptionError:  strings.TrimSpace(it.ReasonMessage),
+			}
+		}
+	}
+
 	return AntigravitySubscriptionResult{
-		PlanType: antigravity.TierIDToPlanType(tierID),
+		PlanType: planType,
 	}
 }

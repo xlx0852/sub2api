@@ -137,6 +137,13 @@ func (s *GatewayService) selectAccountWithLoadAwarenessStrategy(ctx context.Cont
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("sticky.accounts_listed",
+		"group_id", derefGroupID(groupID),
+		"platform", platform,
+		"has_force", hasForcePlatform,
+		"accounts_count", len(accounts),
+		"use_mixed", useMixed,
+	)
 	if len(accounts) == 0 {
 		return nil, ErrNoAvailableAccounts
 	}
@@ -550,6 +557,12 @@ func (s *GatewayService) selectAccountWithLoadAwarenessStrategy(ctx context.Cont
 		AllowMixedPlatform: useMixed,
 	})
 	candidates = policyDecision.AllowedAccounts
+	slog.Info("sticky.candidates_evaluated",
+		"group_id", derefGroupID(groupID),
+		"candidates_count", len(candidates),
+		"allowed_count", len(policyDecision.AllowedAccounts),
+		"traces", policyDecision.Trace,
+	)
 
 	if len(candidates) == 0 {
 		return nil, ErrNoAvailableAccounts
@@ -613,6 +626,10 @@ func (s *GatewayService) selectAccountWithLoadAwarenessStrategy(ctx context.Cont
 		}
 		return s.newSelectionResult(ctx, acc, false, nil, newFallbackWaitPlan(acc.ID, acc.Concurrency, cfg))
 	}
+	slog.Info("sticky.fallback_loop_completed_no_accounts",
+		"group_id", derefGroupID(groupID),
+		"candidates_count", len(candidates),
+	)
 	return nil, ErrNoAvailableAccounts
 }
 

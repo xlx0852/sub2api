@@ -94,6 +94,7 @@ func (s *AntigravityGatewayService) forwardGeminiRewrite(ex *pipeline.Exchange) 
 	sessionKey := s.resolveReplaySessionKey(st, injectedBody)
 	st.sessionHash = sessionKey
 	injectedBody = s.getReasoningReplayCache().RestoreSignatures(sessionKey, injectedBody)
+	injectedBody = ensureGeminiFunctionCallThoughtSignatures(injectedBody)
 	st.injectedBody = injectedBody
 	return nil
 }
@@ -134,7 +135,7 @@ func (s *AntigravityGatewayService) forwardGeminiTransport(ex *pipeline.Exchange
 		st.proxyURL = account.Proxy.URL()
 	}
 
-	wrappedBody, err := s.wrapV1InternalRequest(projectID, st.mappedModel, st.injectedBody)
+	wrappedBody, err := s.wrapV1InternalRequest(projectID, st.mappedModel, st.injectedBody, st.responses != nil)
 	if err != nil {
 		return s.writeGoogleError(c, http.StatusInternalServerError, "Failed to build upstream request")
 	}
@@ -192,7 +193,7 @@ func (s *AntigravityGatewayService) forwardGeminiTransport(ex *pipeline.Exchange
 			if fallbackModel != "" && fallbackModel != st.mappedModel {
 				logger.LegacyPrintf("service.antigravity_gateway", "[Antigravity] Model not found (%s), retrying with fallback model %s (account: %s)", st.mappedModel, fallbackModel, account.Name)
 
-				fallbackWrapped, wrapErr := s.wrapV1InternalRequest(projectID, fallbackModel, st.injectedBody)
+				fallbackWrapped, wrapErr := s.wrapV1InternalRequest(projectID, fallbackModel, st.injectedBody, st.responses != nil)
 				if wrapErr == nil {
 					fallbackReq, reqErr := antigravity.NewAPIRequest(ctx, st.upstreamAction, accessToken, fallbackWrapped)
 					if reqErr == nil {
@@ -233,7 +234,7 @@ func (s *AntigravityGatewayService) forwardGeminiTransport(ex *pipeline.Exchange
 			logger.LegacyPrintf("service.antigravity_gateway", "Antigravity Gemini account %d: detected signature-related 400, retrying with cleaned thought signatures", account.ID)
 
 			cleanedInjectedBody := CleanGeminiNativeThoughtSignatures(st.injectedBody)
-			retryWrappedBody, wrapErr := s.wrapV1InternalRequest(projectID, st.mappedModel, cleanedInjectedBody)
+			retryWrappedBody, wrapErr := s.wrapV1InternalRequest(projectID, st.mappedModel, cleanedInjectedBody, st.responses != nil)
 			if wrapErr == nil {
 				retryResult, retryErr := s.antigravityRetryLoop(antigravityRetryLoopParams{
 					ctx:             ctx,
@@ -376,7 +377,7 @@ func (s *AntigravityGatewayService) forwardGeminiTransport(ex *pipeline.Exchange
 			Message:            upstreamMsg,
 			Detail:             upstreamDetail,
 		})
-		logger.LegacyPrintf("service.antigravity_gateway", "[antigravity-Forward] upstream error status=%d body=%s", resp.StatusCode, truncateForLog(unwrappedForOps, 500))
+		logger.LegacyPrintf("service.antigravity_gateway", "[antigravity-Forward] upstream error status=%d body=%s req=%s", resp.StatusCode, truncateForLog(unwrappedForOps, 500), truncateForLog(st.wrappedBody, 1000))
 		MarkResponseCommitted(c)
 		c.Data(resp.StatusCode, contentType, unwrappedForOps)
 		return fmt.Errorf("antigravity upstream error: %d", resp.StatusCode)
@@ -410,6 +411,9 @@ func (s *AntigravityGatewayService) forwardGeminiRelay(ex *pipeline.Exchange) er
 		st.c.Header("x-request-id", requestID)
 	}
 	st.requestID = requestID
+	if st.responses != nil {
+		return s.relayResponses(st)
+	}
 
 	if st.stream {
 		streamRes, err := s.handleGeminiStreamingResponse(st.c, resp, st.startTime, st.sessionHash)

@@ -398,6 +398,64 @@ func TestAccountGetModelMapping_AntigravityGemini31ProAliasesRespectWildcard(t *
 	}
 }
 
+func TestAccountGetModelMapping_AntigravityNormalizesFlashAliases(t *testing.T) {
+	t.Parallel()
+
+	account := &Account{
+		Platform: PlatformAntigravity,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{
+				"gemini-3.8-flash": "gemini-3.8-flash",
+				"gemini-3.7-flash": "gemini-3.7-flash",
+				"gemini-3.6-flash": "gemini-3.6-flash",
+			},
+		},
+	}
+
+	mapping := account.GetModelMapping()
+
+	if got := mapping["gemini-3.8-flash"]; got != "gemini-3.8-flash-high" {
+		t.Fatalf("expected gemini-3.8-flash to map to gemini-3.8-flash-high, got %q", got)
+	}
+	if got := mapping["gemini-3.7-flash"]; got != "gemini-3.7-flash-high" {
+		t.Fatalf("expected gemini-3.7-flash to map to gemini-3.7-flash-high, got %q", got)
+	}
+	if got := mapping["gemini-3.6-flash"]; got != "gemini-3.6-flash-high" {
+		t.Fatalf("expected gemini-3.6-flash to map to gemini-3.6-flash-high, got %q", got)
+	}
+	// Default passthroughs should also be present
+	if got := mapping["gemini-3.8-flash-high"]; got != "gemini-3.8-flash-high" {
+		t.Fatalf("expected gemini-3.8-flash-high passthrough, got %q", got)
+	}
+}
+
+func TestAccountGetModelMapping_AntigravityPreservesFlashOverrides(t *testing.T) {
+	t.Parallel()
+
+	account := &Account{
+		Platform: PlatformAntigravity,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{
+				"gemini-3.8-flash": "custom-38-flash",
+				"gemini-3.7-flash": "custom-37-flash",
+			},
+		},
+	}
+
+	mapping := account.GetModelMapping()
+
+	if got := mapping["gemini-3.8-flash"]; got != "custom-38-flash" {
+		t.Fatalf("expected custom override to be preserved, got %q", got)
+	}
+	if got := mapping["gemini-3.7-flash"]; got != "custom-37-flash" {
+		t.Fatalf("expected custom override to be preserved, got %q", got)
+	}
+	// gemini-3.6-flash was not configured, should be defaulted to high
+	if got := mapping["gemini-3.6-flash"]; got != "gemini-3.6-flash-high" {
+		t.Fatalf("expected gemini-3.6-flash default to gemini-3.6-flash-high, got %q", got)
+	}
+}
+
 func TestAccountResolveMappedModel(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -493,17 +551,23 @@ func TestAccountGetModelMapping_AntigravityEnsuresGeminiDefaultPassthroughs(t *t
 		Platform: PlatformAntigravity,
 		Credentials: map[string]any{
 			"model_mapping": map[string]any{
-				"gemini-3-pro-high": "gemini-3.1-pro-high",
+				"custom-model": "gemini-pro-agent",
 			},
 		},
 	}
 
 	mapping := account.GetModelMapping()
-	if mapping["gemini-3-flash"] != "gemini-3-flash" {
-		t.Fatalf("expected gemini-3-flash passthrough to be auto-filled, got: %q", mapping["gemini-3-flash"])
+	if mapping["gemini-3.8-flash-high"] != "gemini-3.8-flash-high" {
+		t.Fatalf("expected gemini-3.8-flash-high passthrough to be auto-filled, got: %q", mapping["gemini-3.8-flash-high"])
 	}
-	if mapping["gemini-3.1-pro-high"] != "gemini-3.1-pro-high" {
-		t.Fatalf("expected gemini-3.1-pro-high passthrough to be auto-filled, got: %q", mapping["gemini-3.1-pro-high"])
+	if mapping["gemini-3.7-flash-high"] != "gemini-3.7-flash-high" {
+		t.Fatalf("expected gemini-3.7-flash-high passthrough to be auto-filled, got: %q", mapping["gemini-3.7-flash-high"])
+	}
+	if mapping["gemini-3.6-flash-high"] != "gemini-3.6-flash-high" {
+		t.Fatalf("expected gemini-3.6-flash-high passthrough to be auto-filled, got: %q", mapping["gemini-3.6-flash-high"])
+	}
+	if mapping["gemini-pro-agent"] != "gemini-pro-agent" {
+		t.Fatalf("expected gemini-pro-agent passthrough to be auto-filled, got: %q", mapping["gemini-pro-agent"])
 	}
 	if mapping["gemini-3.1-pro-low"] != "gemini-3.1-pro-low" {
 		t.Fatalf("expected gemini-3.1-pro-low passthrough to be auto-filled, got: %q", mapping["gemini-3.1-pro-low"])

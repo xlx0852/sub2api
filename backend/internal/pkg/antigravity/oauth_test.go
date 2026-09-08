@@ -105,16 +105,16 @@ func TestForwardBaseURLs_Daily优先(t *testing.T) {
 		t.Errorf("URL 数量不匹配: got %d, want %d", len(urls), len(BaseURLs))
 	}
 
-	// 验证 prod URL 也在列表中
+	// 验证 sandbox URL 也在列表中
 	found := false
 	for _, u := range urls {
-		if u == antigravityProdBaseURL {
+		if u == antigravitySandboxBaseURL {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("ForwardBaseURLs 中缺少 prod URL")
+		t.Error("ForwardBaseURLs 中缺少 sandbox URL")
 	}
 }
 
