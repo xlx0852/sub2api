@@ -17,20 +17,16 @@ import (
 
 const (
 	opsAggHourlyJobName = "ops_preaggregation_hourly"
-	opsAggDailyJobName  = "ops_preaggregation_daily"
 
 	opsAggHourlyInterval = 10 * time.Minute
-	opsAggDailyInterval  = 1 * time.Hour
 
 	// Keep in sync with ops retention target (vNext default 30d).
 	opsAggBackfillWindow = 1 * time.Hour
 
 	// Recompute overlap to absorb late-arriving rows near boundaries.
 	opsAggHourlyOverlap = 2 * time.Hour
-	opsAggDailyOverlap  = 48 * time.Hour
 
 	opsAggHourlyChunk = 24 * time.Hour
-	opsAggDailyChunk  = 7 * 24 * time.Hour
 
 	// Delay around boundaries (e.g. 10:00..10:05) to avoid aggregating buckets
 	// that may still receive late inserts.
@@ -38,16 +34,13 @@ const (
 
 	opsAggMaxQueryTimeout = 5 * time.Second
 	opsAggHourlyTimeout   = 5 * time.Minute
-	opsAggDailyTimeout    = 2 * time.Minute
 
 	opsAggHourlyLeaderLockKey = "ops:aggregation:hourly:leader"
-	opsAggDailyLeaderLockKey  = "ops:aggregation:daily:leader"
 
 	opsAggHourlyLeaderLockTTL = 15 * time.Minute
-	opsAggDailyLeaderLockTTL  = 10 * time.Minute
 )
 
-// OpsAggregationService periodically backfills ops_metrics_hourly / ops_metrics_daily
+// OpsAggregationService periodically backfills ops_metrics_hourly
 // for stable long-window dashboard queries.
 //
 // It is safe to run in multi-replica deployments when Redis is available (leader lock).
@@ -65,7 +58,6 @@ type OpsAggregationService struct {
 	stopOnce  sync.Once
 
 	hourlyMu sync.Mutex
-	dailyMu  sync.Mutex
 
 	skipLogMu sync.Mutex
 	skipLogAt time.Time
@@ -97,7 +89,6 @@ func (s *OpsAggregationService) Start() {
 			s.stopCh = make(chan struct{})
 		}
 		go s.hourlyLoop()
-		go s.dailyLoop()
 	})
 }
 
@@ -123,23 +114,6 @@ func (s *OpsAggregationService) hourlyLoop() {
 		select {
 		case <-ticker.C:
 			s.aggregateHourly()
-		case <-s.stopCh:
-			return
-		}
-	}
-}
-
-func (s *OpsAggregationService) dailyLoop() {
-	// First run immediately.
-	s.aggregateDaily()
-
-	ticker := time.NewTicker(opsAggDailyInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			s.aggregateDaily()
 		case <-s.stopCh:
 			return
 		}
@@ -246,104 +220,6 @@ func (s *OpsAggregationService) aggregateHourly() {
 	})
 }
 
-func (s *OpsAggregationService) aggregateDaily() {
-	if s == nil || s.opsRepo == nil {
-		return
-	}
-	if s.cfg != nil {
-		if !s.cfg.Ops.Enabled {
-			return
-		}
-		if !s.cfg.Ops.Aggregation.Enabled {
-			return
-		}
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), opsAggDailyTimeout)
-	defer cancel()
-
-	if !s.isMonitoringEnabled(ctx) {
-		return
-	}
-
-	release, ok := s.tryAcquireLeaderLock(ctx, opsAggDailyLeaderLockKey, opsAggDailyLeaderLockTTL, "[OpsAggregation][daily]")
-	if !ok {
-		return
-	}
-	if release != nil {
-		defer release()
-	}
-
-	s.dailyMu.Lock()
-	defer s.dailyMu.Unlock()
-
-	startedAt := time.Now().UTC()
-	runAt := startedAt
-
-	end := utcFloorToDay(time.Now().UTC())
-	start := end.Add(-opsAggBackfillWindow)
-
-	{
-		ctxMax, cancelMax := context.WithTimeout(context.Background(), opsAggMaxQueryTimeout)
-		latest, ok, err := s.opsRepo.GetLatestDailyBucketDate(ctxMax)
-		cancelMax()
-		if err != nil {
-			logger.LegacyPrintf("service.ops_aggregation", "[OpsAggregation][daily] failed to read latest bucket: %v", err)
-		} else if ok {
-			candidate := latest.Add(-opsAggDailyOverlap)
-			if candidate.After(start) {
-				start = candidate
-			}
-		}
-	}
-
-	start = utcFloorToDay(start)
-	if !start.Before(end) {
-		return
-	}
-
-	var aggErr error
-	for cursor := start; cursor.Before(end); cursor = cursor.Add(opsAggDailyChunk) {
-		chunkEnd := minTime(cursor.Add(opsAggDailyChunk), end)
-		if err := s.opsRepo.UpsertDailyMetrics(ctx, cursor, chunkEnd); err != nil {
-			aggErr = err
-			logger.LegacyPrintf("service.ops_aggregation", "[OpsAggregation][daily] upsert failed (%s..%s): %v", cursor.Format("2006-01-02"), chunkEnd.Format("2006-01-02"), err)
-			break
-		}
-	}
-
-	finishedAt := time.Now().UTC()
-	durationMs := finishedAt.Sub(startedAt).Milliseconds()
-	dur := durationMs
-
-	if aggErr != nil {
-		msg := truncateString(aggErr.Error(), 2048)
-		errAt := finishedAt
-		hbCtx, hbCancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer hbCancel()
-		_ = s.opsRepo.UpsertJobHeartbeat(hbCtx, &OpsUpsertJobHeartbeatInput{
-			JobName:        opsAggDailyJobName,
-			LastRunAt:      &runAt,
-			LastErrorAt:    &errAt,
-			LastError:      &msg,
-			LastDurationMs: &dur,
-		})
-		return
-	}
-
-	successAt := finishedAt
-	hbCtx, hbCancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer hbCancel()
-	result := truncateString(fmt.Sprintf("window=%s..%s", start.Format(time.RFC3339), end.Format(time.RFC3339)), 2048)
-	_ = s.opsRepo.UpsertJobHeartbeat(hbCtx, &OpsUpsertJobHeartbeatInput{
-		JobName:        opsAggDailyJobName,
-		LastRunAt:      &runAt,
-		LastSuccessAt:  &successAt,
-		LastDurationMs: &dur,
-		LastResult:     &result,
-	})
-}
-
 func (s *OpsAggregationService) isMonitoringEnabled(ctx context.Context) bool {
 	if s == nil {
 		return false
@@ -432,12 +308,6 @@ func (s *OpsAggregationService) maybeLogSkip(prefix string) {
 
 func utcFloorToHour(t time.Time) time.Time {
 	return t.UTC().Truncate(time.Hour)
-}
-
-func utcFloorToDay(t time.Time) time.Time {
-	u := t.UTC()
-	y, m, d := u.Date()
-	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
 func minTime(a, b time.Time) time.Time {

@@ -16,7 +16,7 @@ import (
 var ErrOpsDisabled = infraerrors.NotFound("OPS_DISABLED", "Ops monitoring is disabled")
 
 const (
-	opsMaxStoredErrorBodyBytes = 20 * 1024
+	opsMaxStoredErrorBodyBytes = 2 * 1024
 )
 
 // OpsService provides ingestion and query APIs for the Ops monitoring module.
@@ -253,7 +253,7 @@ func sanitizeOpsUpstreamErrors(entry *OpsInsertErrorLogInput) error {
 		return nil
 	}
 
-	const maxEvents = 32
+	const maxEvents = 8
 	events := entry.UpstreamErrors
 	if len(events) > maxEvents {
 		events = events[len(events)-maxEvents:]
