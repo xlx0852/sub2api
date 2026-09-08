@@ -22,7 +22,9 @@
                     ? 'from-purple-500 to-purple-600'
                     : isGrok
                       ? 'from-zinc-700 to-zinc-900'
-                      : 'from-orange-500 to-orange-600'
+                      : isCursor
+                        ? 'from-cyan-600 to-cyan-700'
+                        : 'from-orange-500 to-orange-600'
             ]"
           >
             <Icon name="sparkles" size="md" class="text-white" />
@@ -43,7 +45,9 @@
                       ? t('admin.accounts.antigravityAccount')
                       : isGrok
                         ? t('admin.accounts.grokAccount')
-                        : t('admin.accounts.claudeCodeAccount')
+                        : isCursor
+                          ? 'Cursor'
+                          : t('admin.accounts.claudeCodeAccount')
               }}
             </span>
           </div>
@@ -154,21 +158,21 @@
       </div>
 
       <DeviceAuthorizationFlow
-        v-if="isKimi || (isOpenAI && deviceAuthMode === 'device') || (isGrok && deviceAuthMode === 'device')"
-        :provider="isOpenAI ? 'openai' : isGrok ? 'grok' : 'kimi'"
-        :session="isOpenAI ? openaiDeviceOAuth.session.value : isGrok ? grokDeviceOAuth.session.value : kimiOAuth.session.value"
-        :loading="isOpenAI ? openaiDeviceOAuth.loading.value : isGrok ? grokDeviceOAuth.loading.value : kimiOAuth.loading.value"
-        :error="isOpenAI ? openaiDeviceOAuth.error.value : isGrok ? grokDeviceOAuth.error.value : kimiOAuth.error.value"
-        :remaining-seconds="isOpenAI ? openaiDeviceOAuth.remainingSeconds.value : isGrok ? grokDeviceOAuth.remainingSeconds.value : kimiOAuth.remainingSeconds.value"
+        v-if="isKimi || isCursor || (isOpenAI && deviceAuthMode === 'device') || (isGrok && deviceAuthMode === 'device')"
+        :provider="isOpenAI ? 'openai' : isGrok ? 'grok' : isCursor ? 'cursor' : 'kimi'"
+        :session="isOpenAI ? openaiDeviceOAuth.session.value : isGrok ? grokDeviceOAuth.session.value : isCursor ? cursorDeviceOAuth.session.value : kimiOAuth.session.value"
+        :loading="isOpenAI ? openaiDeviceOAuth.loading.value : isGrok ? grokDeviceOAuth.loading.value : isCursor ? cursorDeviceOAuth.loading.value : kimiOAuth.loading.value"
+        :error="isOpenAI ? openaiDeviceOAuth.error.value : isGrok ? grokDeviceOAuth.error.value : isCursor ? cursorDeviceOAuth.error.value : kimiOAuth.error.value"
+        :remaining-seconds="isOpenAI ? openaiDeviceOAuth.remainingSeconds.value : isGrok ? grokDeviceOAuth.remainingSeconds.value : isCursor ? cursorDeviceOAuth.remainingSeconds.value : kimiOAuth.remainingSeconds.value"
         :complete-label="t('admin.accounts.reAuthorize')"
         :loading-label="t('admin.accounts.oauth.verifying')"
-        @start="isOpenAI ? handleStartOpenAIDeviceAuthorization : isGrok ? handleStartGrokDeviceAuthorization : handleStartKimiAuthorization"
-        @cancel="isOpenAI ? handleCancelOpenAIDeviceAuthorization : isGrok ? handleCancelGrokDeviceAuthorization : handleCancelKimiAuthorization"
-        @complete="isOpenAI ? handleCompleteOpenAIDeviceAuthorization : isGrok ? handleCompleteGrokDeviceAuthorization : handleCompleteKimiAuthorization"
+        @start="isOpenAI ? handleStartOpenAIDeviceAuthorization : isGrok ? handleStartGrokDeviceAuthorization : isCursor ? handleStartCursorDeviceAuthorization : handleStartKimiAuthorization"
+        @cancel="isOpenAI ? handleCancelOpenAIDeviceAuthorization : isGrok ? handleCancelGrokDeviceAuthorization : isCursor ? handleCancelCursorDeviceAuthorization : handleCancelKimiAuthorization"
+        @complete="isOpenAI ? handleCompleteOpenAIDeviceAuthorization : isGrok ? handleCompleteGrokDeviceAuthorization : isCursor ? handleCompleteCursorDeviceAuthorization : handleCompleteKimiAuthorization"
       />
 
       <OAuthAuthorizationFlow
-        v-else-if="!isKimi"
+        v-else-if="!isKimi && !isCursor"
         ref="oauthFlowRef"
         :add-method="addMethod"
         :auth-url="currentAuthUrl"
@@ -189,7 +193,7 @@
     </div>
 
     <template #footer>
-      <div v-if="account && !isKimi && !isDeviceAuthMode" class="flex justify-between gap-3">
+      <div v-if="account && !isKimi && !isCursor && !isDeviceAuthMode" class="flex justify-between gap-3">
         <button type="button" class="btn btn-secondary" @click="handleClose">
           {{ t('common.cancel') }}
         </button>
@@ -249,6 +253,7 @@ import { useGrokOAuth } from '@/composables/useGrokOAuth'
 import { useKimiOAuth } from '@/composables/useKimiOAuth'
 import { useOpenAIDeviceOAuth } from '@/composables/useOpenAIDeviceOAuth'
 import { useGrokDeviceOAuth } from '@/composables/useGrokDeviceOAuth'
+import { useCursorDeviceOAuth } from '@/composables/useCursorDeviceOAuth'
 import type { Account } from '@/types'
 import BaseDialog from '@/ui/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -289,6 +294,7 @@ const grokOAuth = useGrokOAuth()
 const kimiOAuth = useKimiOAuth()
 const openaiDeviceOAuth = useOpenAIDeviceOAuth()
 const grokDeviceOAuth = useGrokDeviceOAuth()
+const cursorDeviceOAuth = useCursorDeviceOAuth()
 
 // Refs
 const oauthFlowRef = ref<OAuthFlowExposed | null>(null)
@@ -306,6 +312,7 @@ const isAnthropic = computed(() => props.account?.platform === 'anthropic')
 const isAntigravity = computed(() => props.account?.platform === 'antigravity')
 const isGrok = computed(() => props.account?.platform === 'grok')
 const isKimi = computed(() => props.account?.platform === 'kimi')
+const isCursor = computed(() => props.account?.platform === 'cursor')
 const isDeviceAuthMode = computed(
   () => (isOpenAI.value || isGrok.value) && deviceAuthMode.value === 'device'
 )
@@ -399,12 +406,14 @@ const resetState = () => {
   kimiOAuth.resetState()
   openaiDeviceOAuth.resetState()
   grokDeviceOAuth.resetState()
+  cursorDeviceOAuth.resetState()
   deviceAuthMode.value = 'browser'
   oauthFlowRef.value?.reset()
 }
 
 const handleClose = () => {
   if (isKimi.value) void kimiOAuth.cancel()
+  if (isCursor.value && cursorDeviceOAuth.session.value) void cursorDeviceOAuth.cancel()
   if (isOpenAI.value && openaiDeviceOAuth.session.value) void openaiDeviceOAuth.cancel()
   if (isGrok.value && grokDeviceOAuth.session.value) void grokDeviceOAuth.cancel()
   emit('close')
@@ -475,6 +484,35 @@ const handleCompleteGrokDeviceAuthorization = async () => {
     appStore.showError(message)
   } finally {
     grokDeviceOAuth.loading.value = false
+  }
+}
+
+const handleStartCursorDeviceAuthorization = async () => {
+  if (!props.account) return
+  await cursorDeviceOAuth.cancel()
+  await cursorDeviceOAuth.start(props.account.proxy_id)
+}
+
+const handleCancelCursorDeviceAuthorization = async () => {
+  await cursorDeviceOAuth.cancel()
+}
+
+const handleCompleteCursorDeviceAuthorization = async () => {
+  if (!props.account) return
+  cursorDeviceOAuth.loading.value = true
+  cursorDeviceOAuth.error.value = ''
+  try {
+    const updatedAccount = await cursorDeviceOAuth.reauthorizeAccount(props.account.id)
+    appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
+    emit('reauthorized', updatedAccount as Account)
+    cursorDeviceOAuth.resetState()
+    emit('close')
+  } catch (error: any) {
+    const message = error?.response?.data?.detail || error?.response?.data?.message || t('admin.accounts.oauth.authFailed')
+    cursorDeviceOAuth.error.value = message
+    appStore.showError(message)
+  } finally {
+    cursorDeviceOAuth.loading.value = false
   }
 }
 

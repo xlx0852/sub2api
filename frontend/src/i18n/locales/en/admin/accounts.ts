@@ -136,6 +136,7 @@ export default {
         gemini: 'Gemini',
         antigravity: 'Antigravity',
         grok: 'Grok',
+        cursor: 'Cursor',
       },
       types: {
         oauth: 'OAuth',
@@ -145,6 +146,8 @@ export default {
         codeAssist: 'Code Assist',
         antigravityOauth: 'Antigravity OAuth',
         grokOauth: 'Grok OAuth',
+        cursorOauth: 'Cursor OAuth',
+        cursorApikey: 'Cursor API Key',
         antigravityApikey: 'Connect via Base URL + API Key',
         upstream: 'Upstream',
         upstreamDesc: 'Connect via Base URL + API Key'
@@ -536,6 +539,11 @@ export default {
         baseUrlHint: 'Leave default for the official xAI API (https://api.x.ai/v1).',
         apiKeyHint: 'Your xAI API Key',
         accountTypeHint: 'OAuth uses a Grok subscription; API Key uses xAI API credits and the official API.'
+      },
+      cursor: {
+        baseUrlHint: 'Leave default for official Cursor API (https://api2.cursor.sh).',
+        apiKeyHint: 'Your Cursor User API Key (key-...)',
+        accountTypeHint: 'OAuth uses Cursor browser login / session token; API Key uses Cursor User API Key.'
       },
       anthropic: {
         apiKeyPassthrough: 'Auto passthrough (auth only)',
@@ -982,6 +990,22 @@ export default {
           retry: 'Retry Authorization',
           createAccount: 'Create Kimi Account'
         },
+        cursor: {
+          device: {
+            title: 'Cursor Authorization',
+            description: 'Open the Cursor authorization page and complete browser login. Completion is detected automatically.',
+            start: 'Start Authorization',
+            starting: 'Generating authorization link...',
+            userCode: 'Session',
+            openAuthorization: 'Open Cursor Login',
+            waiting: 'Waiting for Cursor login',
+            authorized: 'Authorized and ready to create',
+            denied: 'Authorization denied',
+            expiresIn: 'Expires in {seconds}s',
+            retry: 'Retry Authorization',
+            createAccount: 'Create Cursor Account'
+          }
+        },
         // Gemini specific
 	        gemini: {
 	          title: 'Gemini Account Authorization',
@@ -1305,6 +1329,12 @@ export default {
         grokLastStatus: 'Status {status}',
         grokLastProbe: 'Probe {time}',
         grokLastHeadersSeen: 'Headers {time}',
+        cursorFastRequests: 'Fast Req',
+        cursorSlowRequests: 'Slow Req',
+        cursorUsage: 'Usage',
+        cursorUnknown: 'Cursor quota unknown — click Refresh quota to load account usage.',
+        cursorProbe: 'Refresh quota',
+        cursorProbeTooltip: 'Query Cursor usage API for Fast Requests and billing period limits',
         passiveSampled: 'Passive',
         activeQuery: 'Refresh quota'
       },

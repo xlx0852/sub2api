@@ -488,7 +488,7 @@ export interface PaginationConfig {
 
 // ==================== API Key & Group Types ====================
 
-export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kimi'
+export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kimi' | 'cursor'
 
 export type SubscriptionType = 'standard' | 'subscription'
 
@@ -747,7 +747,7 @@ export interface UpdateGroupRequest {
 
 // ==================== Account & Proxy Types ====================
 
-export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kimi'
+export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kimi' | 'cursor'
 export type AccountType = 'oauth' | 'setup-token' | 'apikey' | 'upstream' | 'service_account'
 export type OAuthAddMethod = 'oauth' | 'setup-token'
 export type ProxyProtocol = 'http' | 'https' | 'socks5' | 'socks5h'
@@ -1128,6 +1128,15 @@ export interface AccountUsageInfo {
     amount?: number
     minimum_balance?: number
   }> | null
+  cursor_sand_usage?: {
+    sand_usage_percent?: number | null
+    plan?: string
+    email?: string
+    user_id?: string
+    membership_type?: string
+    limit?: number | null
+    num_requests?: number | null
+  } | null
   // Antigravity 403 forbidden 状态
   is_forbidden?: boolean
   forbidden_reason?: string

@@ -175,6 +175,8 @@ func ProvideAccountUsageService(
 	grokQuotaService *GrokQuotaService,
 	openAIQuotaService *OpenAIQuotaService,
 	kimiQuotaService *KimiQuotaService,
+	cursorQuotaFetcher *CursorQuotaFetcher,
+	cursorTokenProvider *CursorTokenProvider,
 	cache *UsageCache,
 	identityCache IdentityCache,
 	tlsFPProfileService *TLSFingerprintProfileService,
@@ -193,6 +195,7 @@ func ProvideAccountUsageService(
 		identityCache,
 		tlsFPProfileService,
 	)
+	service.SetCursorQuotaFetcher(cursorQuotaFetcher)
 	service.SetKimiQuotaService(kimiQuotaService)
 	service.SetGrokQuotaService(grokQuotaService)
 	service.SetQuotaWindowLedger(quotaWindowLedger)
@@ -209,6 +212,7 @@ func ProvideAccountUsageService(
 	}
 	openAIGatewayService.SetKimiQuotaService(kimiQuotaService)
 	openAIGatewayService.SetGrokQuotaService(grokQuotaService)
+	openAIGatewayService.SetCursorTokenProvider(cursorTokenProvider)
 	service.agentIdentityWS = openAIGatewayService
 	service.codexIdentity = openAIGatewayService.codexIdentity
 	return service
@@ -309,6 +313,23 @@ func ProvideKimiTokenProvider(
 	provider := NewKimiTokenProvider(accountRepo, tokenCache)
 	provider.SetRefreshAPI(refreshAPI, NewKimiTokenRefresher(kimiOAuthService))
 	return provider
+}
+
+func ProvideCursorTokenProvider(
+	accountRepo AccountRepository,
+	tokenCache GeminiTokenCache,
+	cursorOAuthService *CursorOAuthService,
+	refreshAPI *OAuthRefreshAPI,
+) *CursorTokenProvider {
+	provider := NewCursorTokenProvider(accountRepo, tokenCache)
+	provider.SetRefreshAPI(refreshAPI, NewCursorTokenRefresher(cursorOAuthService))
+	return provider
+}
+
+func ProvideCursorQuotaFetcher(
+	proxyRepo ProxyRepository,
+) *CursorQuotaFetcher {
+	return NewCursorQuotaFetcher(proxyRepo)
 }
 
 // ProvideDashboardAggregationService 创建并启动仪表盘聚合服务
@@ -746,6 +767,7 @@ var ProviderSet = wire.NewSet(
 	ProvideOpenAIOAuthService,
 	ProvideGrokOAuthService,
 	NewKimiOAuthService,
+	NewCursorOAuthService,
 	NewGeminiOAuthService,
 	NewGeminiQuotaService,
 	NewCompositeTokenCacheInvalidator,
@@ -757,6 +779,8 @@ var ProviderSet = wire.NewSet(
 	ProvideAntigravityTokenProvider,
 	ProvideGrokTokenProvider,
 	ProvideKimiTokenProvider,
+	ProvideCursorTokenProvider,
+	ProvideCursorQuotaFetcher,
 	ProvideOpenAITokenProvider,
 	ProvideOpenAIQuotaService,
 	ProvideKimiQuotaService,
@@ -793,6 +817,7 @@ var ProviderSet = wire.NewSet(
 	NewIdentityService,
 	NewCRSSyncService,
 	ProvideTokenRefreshService,
+	ProvideAccountExpiryService,
 	ProvideOpenAICodexVersionSyncService,
 	ProvideProxyExpiryService,
 	ProvideSubscriptionExpiryService,

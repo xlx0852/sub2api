@@ -2383,6 +2383,17 @@
         @cancel="handleCancelGrokDeviceAuthorization"
         @complete="handleCreateGrokDeviceAccount"
       />
+      <DeviceAuthorizationFlow
+        v-else-if="isFieldVisible('cursorAdvanced', { platform: form.platform })"
+        provider="cursor"
+        :session="cursorDeviceOAuth.session.value"
+        :loading="cursorDeviceOAuth.loading.value || submitting"
+        :error="cursorDeviceOAuth.error.value"
+        :remaining-seconds="cursorDeviceOAuth.remainingSeconds.value"
+        @start="handleStartCursorDeviceAuthorization"
+        @cancel="handleCancelCursorDeviceAuthorization"
+        @complete="handleCreateCursorDeviceAccount"
+      />
       <OAuthAuthorizationFlow
         v-else
         ref="oauthFlowRef"
@@ -2467,7 +2478,7 @@
           {{ t('common.back') }}
         </button>
         <button
-          v-if="isManualInputMethod && form.platform !== 'kimi' && !isDeviceAuthMode"
+          v-if="isManualInputMethod && form.platform !== 'kimi' && form.platform !== 'cursor' && !isDeviceAuthMode"
           type="button"
           :disabled="!canExchangeCode"
           class="btn btn-primary"
@@ -2763,6 +2774,7 @@ import { useGrokOAuth } from '@/composables/useGrokOAuth'
 import { useKimiOAuth } from '@/composables/useKimiOAuth'
 import { useOpenAIDeviceOAuth } from '@/composables/useOpenAIDeviceOAuth'
 import { useGrokDeviceOAuth } from '@/composables/useGrokDeviceOAuth'
+import { useCursorDeviceOAuth } from '@/composables/useCursorDeviceOAuth'
 import type {
   Proxy,
   Account,
@@ -2849,6 +2861,7 @@ const oauthStepTitle = computed(() => {
   if (form.platform === 'antigravity') return t('admin.accounts.oauth.antigravity.title')
   if (form.platform === 'grok') return t('admin.accounts.oauth.grok.title')
   if (form.platform === 'kimi') return t('admin.accounts.oauth.kimi.title')
+  if (form.platform === 'cursor') return t('admin.accounts.oauth.cursor.device.title')
   return t('admin.accounts.oauth.title')
 })
 
@@ -2880,6 +2893,7 @@ const grokOAuth = useGrokOAuth() // For Grok OAuth
 const kimiOAuth = useKimiOAuth()
 const openaiDeviceOAuth = useOpenAIDeviceOAuth()
 const grokDeviceOAuth = useGrokDeviceOAuth()
+const cursorDeviceOAuth = useCursorDeviceOAuth()
 
 type DeviceAuthMode = 'browser' | 'device'
 const deviceAuthMode = ref<DeviceAuthMode>('browser')
@@ -3325,7 +3339,7 @@ const isOAuthFlow = computed(() => {
 })
 
 const isManualInputMethod = computed(() => {
-  if (form.platform === 'kimi') return false
+  if (form.platform === 'kimi' || form.platform === 'cursor') return false
   return oauthFlowRef.value?.inputMethod === 'manual'
 })
 
@@ -3490,6 +3504,7 @@ watch(
     kimiOAuth.resetState()
     openaiDeviceOAuth.resetState()
     grokDeviceOAuth.resetState()
+    cursorDeviceOAuth.resetState()
     deviceAuthMode.value = newPlatform === 'openai' || newPlatform === 'grok' ? 'device' : 'browser'
   }
 )
@@ -3932,6 +3947,7 @@ const resetForm = () => {
   kimiOAuth.resetState()
   openaiDeviceOAuth.resetState()
   grokDeviceOAuth.resetState()
+  cursorDeviceOAuth.resetState()
   oauthFlowRef.value?.reset()
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
@@ -3942,6 +3958,7 @@ const handleClose = () => {
   if (openaiDeviceOAuth.session.value) void openaiDeviceOAuth.cancel()
   if (grokDeviceOAuth.session.value) void grokDeviceOAuth.cancel()
   if (kimiOAuth.session.value) void kimiOAuth.cancel()
+  if (cursorDeviceOAuth.session.value) void cursorDeviceOAuth.cancel()
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
   emit('close')
@@ -4109,6 +4126,8 @@ const handleSubmit = async () => {
     step.value = 2
     if (form.platform === 'kimi') {
       await kimiOAuth.start(form.proxy_id)
+    } else if (form.platform === 'cursor') {
+      await cursorDeviceOAuth.start(form.proxy_id)
     }
     return
   }
@@ -4262,6 +4281,7 @@ const goBackToBasicInfo = () => {
   kimiOAuth.resetState()
   openaiDeviceOAuth.resetState()
   grokDeviceOAuth.resetState()
+  cursorDeviceOAuth.resetState()
   deviceAuthMode.value = 'browser'
   oauthFlowRef.value?.reset()
 }
@@ -4358,6 +4378,41 @@ const handleCreateGrokDeviceAccount = async () => {
       error?.message ||
       t('admin.accounts.failedToCreate')
     grokDeviceOAuth.error.value = message
+    appStore.showError(message)
+  } finally {
+    submitting.value = false
+  }
+}
+
+const handleStartCursorDeviceAuthorization = async () => {
+  await cursorDeviceOAuth.cancel()
+  await cursorDeviceOAuth.start(form.proxy_id)
+}
+
+const handleCancelCursorDeviceAuthorization = async () => {
+  await cursorDeviceOAuth.cancel()
+}
+
+const handleCreateCursorDeviceAccount = async () => {
+  submitting.value = true
+  try {
+    await cursorDeviceOAuth.createAccount({
+      name: form.name,
+      notes: form.notes || undefined,
+      proxy_id: form.proxy_id,
+      concurrency: form.concurrency,
+      priority: form.priority,
+      group_ids: form.group_ids
+    })
+    appStore.showSuccess(t('admin.accounts.accountCreated'))
+    finishCreateSuccess(null, { skipCost: true })
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.message ||
+      error?.response?.data?.detail ||
+      error?.message ||
+      t('admin.accounts.failedToCreate')
+    cursorDeviceOAuth.error.value = message
     appStore.showError(message)
   } finally {
     submitting.value = false

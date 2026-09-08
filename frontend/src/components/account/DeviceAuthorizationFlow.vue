@@ -16,8 +16,10 @@
 
     <div v-else class="space-y-4">
       <div class="rounded-lg border border-amber-200 bg-white p-4 text-center dark:border-amber-800 dark:bg-dark-700">
-        <p class="text-xs uppercase tracking-wide text-gray-500">{{ text('userCode') }}</p>
-        <p class="my-2 select-all font-mono text-3xl font-bold tracking-[0.25em] text-amber-700 dark:text-amber-300">{{ session.user_code }}</p>
+        <template v-if="session.user_code">
+          <p class="text-xs uppercase tracking-wide text-gray-500">{{ text('userCode') }}</p>
+          <p class="my-2 select-all font-mono text-3xl font-bold tracking-[0.25em] text-amber-700 dark:text-amber-300">{{ session.user_code }}</p>
+        </template>
         <a :href="authorizationUrl" target="_blank" rel="noopener noreferrer" class="btn btn-primary mt-2 inline-flex">
           {{ text('openAuthorization') }}
         </a>
@@ -44,7 +46,7 @@ import { useI18n } from 'vue-i18n'
 import type { DeviceAuthorization } from '@/api/admin/deviceOAuth'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 
-type DeviceProvider = 'openai' | 'grok' | 'kimi'
+type DeviceProvider = 'openai' | 'grok' | 'kimi' | 'cursor'
 
 const props = withDefaults(defineProps<{
   session: DeviceAuthorization | null
@@ -62,7 +64,7 @@ const props = withDefaults(defineProps<{
 })
 const emit = defineEmits<{ start: []; cancel: []; complete: [] }>()
 const { t } = useI18n()
-const authorizationUrl = computed(() => props.session?.verification_uri_complete || props.session?.verification_uri || '#')
+const authorizationUrl = computed(() => props.session?.login_url || props.session?.verification_uri_complete || props.session?.verification_uri || '#')
 const text = (key: string, params?: Record<string, unknown>) => {
   const base = props.provider === 'kimi'
     ? 'admin.accounts.oauth.kimi'
@@ -89,15 +91,15 @@ function clearAutoTimer() {
 }
 
 watch(
-  () => [props.session?.status, props.session?.user_code] as const,
-  ([status, userCode]) => {
+  () => [props.session?.status, props.session?.user_code || props.session?.session_id] as const,
+  ([status, code]) => {
     clearAutoTimer()
     if (status !== 'authorized' || !props.autoComplete) return
-    if (!userCode) return
-    // 同一授权码只自动触发一次，失败也不要立刻循环重试
-    if (autoFiredFor === userCode && autoCompleteFailed.value) return
-    if (autoFiredFor === userCode) return
-    autoFiredFor = userCode
+    if (!code) return
+    // 同一授权码或会话只自动触发一次，失败也不要立刻循环重试
+    if (autoFiredFor === code && autoCompleteFailed.value) return
+    if (autoFiredFor === code) return
+    autoFiredFor = code
     autoCompleteFailed.value = false
     autoTimer = setTimeout(() => {
       autoTimer = null

@@ -7,9 +7,10 @@ export type DeviceAuthorizationStatus = 'pending' | 'authorized' | 'denied'
 export interface DeviceAuthorization {
   session_id: string
   status: DeviceAuthorizationStatus
-  verification_uri: string
+  verification_uri?: string
   verification_uri_complete?: string
-  user_code: string
+  login_url?: string
+  user_code?: string
   expires_in: number
   interval: number
   retry_after?: number
@@ -26,7 +27,7 @@ export interface DeviceCreateAccountRequest {
   group_ids: number[]
 }
 
-export type DeviceOAuthProvider = 'openai' | 'grok' | 'kimi'
+export type DeviceOAuthProvider = 'openai' | 'grok' | 'kimi' | 'cursor'
 
 const providerPath = (provider: DeviceOAuthProvider) => `/admin/${provider}/oauth/device`
 
@@ -77,10 +78,12 @@ export function createDeviceOAuthAPI(provider: DeviceOAuthProvider) {
 
 export const openAIDeviceOAuthAPI = createDeviceOAuthAPI('openai')
 export const grokDeviceOAuthAPI = createDeviceOAuthAPI('grok')
+export const cursorDeviceOAuthAPI = createDeviceOAuthAPI('cursor')
 
 const deviceOAuthAPI = {
   openai: openAIDeviceOAuthAPI,
-  grok: grokDeviceOAuthAPI
+  grok: grokDeviceOAuthAPI,
+  cursor: cursorDeviceOAuthAPI
 }
 
 export default deviceOAuthAPI

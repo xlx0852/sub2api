@@ -175,6 +175,10 @@ export const buildAccountUsagePresentation = ({
     addUsageProgress(windows, 'seven-day', '7d', usageInfo?.seven_day || null, 'emerald')
     addUsageProgress(windows, 'seven-day-sonnet', '7d S', usageInfo?.seven_day_sonnet || null, 'purple')
     addUsageProgress(windows, 'seven-day-fable', '7d F', usageInfo?.seven_day_fable || null, 'amber')
+  } else if (account.platform === 'cursor') {
+    if (usageInfo?.seven_day) {
+      addUsageProgress(windows, 'cursor-sand', 'Sand', usageInfo.seven_day, 'emerald')
+    }
   } else if (account.platform === 'grok') {
     const billing = usageInfo?.grok_billing
     if (billing?.period_type?.toLowerCase() === 'weekly' && billing.usage_percent != null) {

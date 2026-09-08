@@ -26,6 +26,7 @@ const (
 	PlatformAntigravity = "antigravity"
 	PlatformGrok        = "grok"
 	PlatformKimi        = "kimi"
+	PlatformCursor      = "cursor"
 )
 
 // Privacy mode markers stored on account extra.

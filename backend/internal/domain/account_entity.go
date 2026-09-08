@@ -250,8 +250,12 @@ func (a *Account) IsKimi() bool { return a != nil && a.Platform == PlatformKimi 
 
 func (a *Account) IsKimiOAuth() bool { return a.IsKimi() && a.Type == AccountTypeOAuth }
 
+func (a *Account) IsCursor() bool { return a != nil && a.Platform == PlatformCursor }
+
+func (a *Account) IsCursorOAuth() bool { return a.IsCursor() && a.Type == AccountTypeOAuth }
+
 func (a *Account) IsOpenAICompatible() bool {
-	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok || a.Platform == PlatformKimi)
+	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok || a.Platform == PlatformKimi || a.Platform == PlatformCursor)
 }
 
 func (a *Account) GeminiOAuthType() string {

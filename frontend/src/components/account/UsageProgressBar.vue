@@ -103,7 +103,7 @@ const props = defineProps<{
   label: string
   utilization: number // Percentage (0-100+)
   resetsAt?: string | null
-  color: 'indigo' | 'emerald' | 'purple' | 'amber'
+  color: 'indigo' | 'emerald' | 'purple' | 'amber' | 'cyan'
   windowStats?: WindowStats | null
   showNowWhenIdle?: boolean
   displayPercent?: string | null
@@ -312,6 +312,9 @@ const colorClasses = computed(() => ({
   },
   amber: {
     badge: 'bg-amber-100 text-amber-700 dark:bg-amber-950/70 dark:text-amber-300'
+  },
+  cyan: {
+    badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/70 dark:text-cyan-300'
   }
 }[props.color]))
 

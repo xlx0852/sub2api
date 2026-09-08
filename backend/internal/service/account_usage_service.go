@@ -257,6 +257,9 @@ type UsageInfo struct {
 	// GrokBilling 来自 cli-chat-proxy /v1/billing（与 CPAMC 同源）
 	GrokBilling *xai.BillingSnapshot `json:"grok_billing,omitempty"`
 
+	// Cursor / Sand 额度信息
+	CursorSandUsage *CursorSandUsageStatus `json:"cursor_sand_usage,omitempty"`
+
 	// Antigravity 账号级信息
 	SubscriptionTier    string `json:"subscription_tier,omitempty"`     // 归一化订阅等级: FREE/PRO/ULTRA/UNKNOWN
 	SubscriptionTierRaw string `json:"subscription_tier_raw,omitempty"` // 上游原始订阅等级名称
@@ -300,6 +303,7 @@ type AccountUsageService struct {
 	geminiQuotaService      *GeminiQuotaService
 	antigravityQuotaFetcher *AntigravityQuotaFetcher
 	grokQuotaFetcher        *GrokQuotaFetcher
+	cursorQuotaFetcher      *CursorQuotaFetcher
 	openAIQuotaService      *OpenAIQuotaService
 	grokQuotaService        *GrokQuotaService
 	kimiQuotaService        KimiQuotaQuerier
@@ -316,6 +320,12 @@ type AccountUsageService struct {
 func (s *AccountUsageService) SetQuotaWindowLedger(ledger *QuotaWindowLedger) {
 	if s != nil {
 		s.quotaWindowLedger = ledger
+	}
+}
+
+func (s *AccountUsageService) SetCursorQuotaFetcher(fetcher *CursorQuotaFetcher) {
+	if s != nil {
+		s.cursorQuotaFetcher = fetcher
 	}
 }
 
@@ -409,6 +419,14 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 
 	if account.Platform == PlatformGrok {
 		usage, err := s.getGrokUsage(ctx, account, forceProbe)
+		if err == nil {
+			s.tryClearRecoverableAccountError(ctx, account)
+		}
+		return usage, err
+	}
+
+	if account.Platform == PlatformCursor {
+		usage, err := s.getCursorUsage(ctx, account, forceProbe)
 		if err == nil {
 			s.tryClearRecoverableAccountError(ctx, account)
 		}
@@ -1097,6 +1115,32 @@ func (s *AccountUsageService) getGrokUsage(ctx context.Context, account *Account
 
 	enrichUsageWithAccountError(usage, account)
 	return usage, nil
+}
+
+func (s *AccountUsageService) getCursorUsage(ctx context.Context, account *Account, force ...bool) (*UsageInfo, error) {
+	if s.cursorQuotaFetcher == nil || !s.cursorQuotaFetcher.CanFetch(account) {
+		now := time.Now()
+		return &UsageInfo{UpdatedAt: &now}, nil
+	}
+
+	fetchCtx, fetchCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer fetchCancel()
+
+	proxyURL := s.cursorQuotaFetcher.GetProxyURL(fetchCtx, account)
+	fetchResult, err := s.cursorQuotaFetcher.FetchQuota(fetchCtx, account, proxyURL)
+	if err != nil {
+		now := time.Now()
+		degraded := &UsageInfo{
+			Source:    "active",
+			UpdatedAt: &now,
+			Error:     err.Error(),
+		}
+		enrichUsageWithAccountError(degraded, account)
+		return degraded, nil
+	}
+
+	enrichUsageWithAccountError(fetchResult.UsageInfo, account)
+	return fetchResult.UsageInfo, nil
 }
 
 // grokBillingWindowStart returns the start of the official weekly billing

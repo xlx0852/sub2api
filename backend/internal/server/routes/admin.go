@@ -54,6 +54,9 @@ func RegisterAdminRoutes(
 		// Kimi OAuth device authorization
 		registerKimiOAuthRoutes(admin, h)
 
+		// Cursor OAuth authorization
+		registerCursorOAuthRoutes(admin, h)
+
 		// 代理管理
 		registerProxyRoutes(admin, h)
 
@@ -469,6 +472,19 @@ func registerKimiOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		kimi.POST("/oauth/create-from-device", h.Admin.KimiOAuth.CreateAccountFromDevice)
 		kimi.POST("/accounts/:id/reauth-from-device", h.Admin.KimiOAuth.ReauthorizeAccountFromDevice)
 		kimi.POST("/accounts/:id/refresh", h.Admin.KimiOAuth.RefreshAccountToken)
+	}
+}
+
+func registerCursorOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	cursor := admin.Group("/cursor")
+	{
+		cursor.POST("/oauth/device/start", h.Admin.CursorOAuth.StartDeviceAuthorization)
+		cursor.GET("/oauth/device/status", h.Admin.CursorOAuth.DeviceAuthorizationStatus)
+		cursor.DELETE("/oauth/device/session", h.Admin.CursorOAuth.CancelDeviceAuthorization)
+		cursor.POST("/oauth/create-from-device", h.Admin.CursorOAuth.CreateAccountFromDevice)
+		cursor.POST("/accounts/:id/reauth-from-device", h.Admin.CursorOAuth.ReauthorizeAccountFromDevice)
+		cursor.POST("/accounts/:id/refresh", h.Admin.CursorOAuth.RefreshAccountToken)
+		cursor.POST("/accounts/:id/exchange-key", h.Admin.CursorOAuth.ExchangeUserAPIKey)
 	}
 }
 

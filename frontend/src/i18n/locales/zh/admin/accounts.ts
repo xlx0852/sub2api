@@ -256,6 +256,7 @@ export default {
         gemini: 'Gemini',
         antigravity: 'Antigravity',
         grok: 'Grok',
+        cursor: 'Cursor',
       },
       types: {
         oauth: 'OAuth',
@@ -265,6 +266,8 @@ export default {
         codeAssist: 'Code Assist',
         antigravityOauth: 'Antigravity OAuth',
         grokOauth: 'Grok OAuth',
+        cursorOauth: 'Cursor OAuth',
+        cursorApikey: 'Cursor API Key',
         antigravityApikey: '通过 Base URL + API Key 连接',
         upstream: '对接上游',
         upstreamDesc: '通过 Base URL + API Key 连接上游',
@@ -375,6 +378,12 @@ export default {
         grokLastStatus: '状态 {status}',
         grokLastProbe: '探测 {time}',
         grokLastHeadersSeen: '响应头 {time}',
+        cursorFastRequests: '快速请求',
+        cursorSlowRequests: '慢速请求',
+        cursorUsage: '用量',
+        cursorUnknown: 'Cursor 额度未知：请点击「刷新额度」读取账号用量。',
+        cursorProbe: '刷新额度',
+        cursorProbeTooltip: '调用 Cursor 接口查询 Fast Requests 与账期用量',
         passiveSampled: '被动采样',
         activeQuery: '刷新额度'
       },
@@ -741,6 +750,11 @@ export default {
         baseUrlHint: '留空使用官方 xAI API（https://api.x.ai/v1）',
         apiKeyHint: '您的 xAI API Key',
         accountTypeHint: 'OAuth 使用 Grok 订阅；API Key 使用 xAI API 余额并直连官方接口。'
+      },
+      cursor: {
+        baseUrlHint: '留空使用官方 Cursor API（https://api2.cursor.sh）',
+        apiKeyHint: '您的 Cursor User API Key（key-...）',
+        accountTypeHint: 'OAuth 使用 Cursor 浏览器授权 / 会话 Token；API Key 使用 Cursor User API Key。'
       },
       anthropic: {
         apiKeyPassthrough: '自动透传（仅替换认证）',
@@ -1174,6 +1188,22 @@ export default {
           expiresIn: '{seconds} 秒后过期',
           retry: '重新授权',
           createAccount: '创建 Kimi 账号'
+        },
+        cursor: {
+          device: {
+            title: 'Cursor 账户授权',
+            description: '打开 Cursor 授权页面并在浏览器中完成登录，完成后系统会自动检测。',
+            start: '开始授权',
+            starting: '正在生成授权链接...',
+            userCode: '会话',
+            openAuthorization: '打开 Cursor 登录页',
+            waiting: '等待 Cursor 授权',
+            authorized: '授权成功，可以创建账号',
+            denied: '授权已被拒绝',
+            expiresIn: '{seconds} 秒后过期',
+            retry: '重新授权',
+            createAccount: '创建 Cursor 账号'
+          }
         },
         // Gemini specific
         gemini: {

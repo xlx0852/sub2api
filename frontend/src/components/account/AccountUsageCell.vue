@@ -259,6 +259,88 @@
       </div>
     </template>
 
+    <!-- Cursor OAuth accounts: official Sand usage / 7d window -->
+    <template v-else-if="account.platform === 'cursor' && account.type === 'oauth'">
+      <div v-if="loading" class="space-y-1.5">
+        <div class="flex items-center gap-1">
+          <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-1.5 w-8 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+        </div>
+      </div>
+      <div v-else-if="error" class="text-xs text-red-500">
+        {{ error }}
+      </div>
+      <div v-else-if="needsReauth" class="space-y-1">
+        <span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
+          {{ t('admin.accounts.needsReauth') }}
+        </span>
+        <QuotaActionButton
+          :loading="activeQueryLoading"
+          :title="t('admin.accounts.usageWindow.activeQuery')"
+          @click="loadActiveUsage"
+        >
+          {{ t('admin.accounts.usageWindow.activeQuery') }}
+        </QuotaActionButton>
+      </div>
+      <div v-else-if="isForbidden" class="space-y-1">
+        <span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+          {{ t('admin.accounts.forbidden') }}
+        </span>
+      </div>
+      <div v-else-if="usageInfo?.error" class="space-y-1">
+        <span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+          {{ usageErrorLabel }}
+        </span>
+        <QuotaActionButton
+          :loading="activeQueryLoading"
+          :title="t('admin.accounts.usageWindow.activeQuery')"
+          @click="loadActiveUsage"
+        >
+          {{ t('admin.accounts.usageWindow.activeQuery') }}
+        </QuotaActionButton>
+      </div>
+      <div v-else-if="usageInfo" class="space-y-0.5">
+        <div v-if="usageInfo.subscription_tier" class="mb-0.5">
+          <span class="inline-block rounded px-1.5 py-0.2 text-[9px] font-semibold bg-cyan-100 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300">
+            {{ usageInfo.subscription_tier }}
+          </span>
+        </div>
+        <UsageProgressBar
+          v-if="usageInfo.seven_day"
+          label="Sand"
+          :utilization="usageInfo.seven_day.utilization"
+          :resets-at="usageInfo.seven_day.resets_at"
+          color="cyan"
+        />
+        <div class="flex items-center gap-1.5 mt-0.5">
+          <span
+            v-if="usageInfo.source === 'passive'"
+            class="text-[9px] text-gray-400 dark:text-gray-500"
+          >
+            {{ t('admin.accounts.usageWindow.passiveSampled') }}
+          </span>
+          <QuotaActionButton
+            :loading="activeQueryLoading"
+            :title="t('admin.accounts.usageWindow.activeQuery')"
+            @click="loadActiveUsage"
+          >
+            {{ t('admin.accounts.usageWindow.activeQuery') }}
+          </QuotaActionButton>
+        </div>
+      </div>
+      <div v-else class="space-y-1">
+        <div class="text-xs text-gray-400">-</div>
+        <QuotaActionButton
+          :loading="activeQueryLoading"
+          :title="t('admin.accounts.usageWindow.activeQuery')"
+          @click="loadActiveUsage"
+        >
+          {{ t('admin.accounts.usageWindow.activeQuery') }}
+        </QuotaActionButton>
+      </div>
+    </template>
+
     <!-- Antigravity OAuth accounts: fetch usage from API -->
     <template v-else-if="account.platform === 'antigravity' && account.type === 'oauth'">
       <!-- 账户类型徽章 -->
@@ -729,6 +811,9 @@ const shouldFetchUsage = computed(() => {
     return props.account.type === 'oauth'
   }
   if (props.account.platform === 'kimi') {
+    return props.account.type === 'oauth'
+  }
+  if (props.account.platform === 'cursor') {
     return props.account.type === 'oauth'
   }
   return false

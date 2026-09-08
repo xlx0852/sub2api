@@ -29,6 +29,10 @@
   <svg v-else-if="platform === 'kimi'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor">
     <path d="M20.1 15.1A8.5 8.5 0 0 1 8.9 3.9 9 9 0 1 0 20.1 15.1Z" />
   </svg>
+  <!-- Cursor logo (isometric cursor/cube) -->
+  <svg v-else-if="platform === 'cursor'" :class="sizeClass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+  </svg>
   <!-- Fallback: generic platform icon -->
   <svg v-else :class="sizeClass" fill="currentColor" viewBox="0 0 24 24">
     <path

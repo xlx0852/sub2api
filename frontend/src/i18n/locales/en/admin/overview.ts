@@ -893,6 +893,7 @@ export default {
         antigravity: 'Antigravity',
         grok: 'Grok',
         kimi: 'Kimi',
+        cursor: 'Cursor',
       },
       deleteConfirm:
         "Are you sure you want to delete '{name}'? All associated API keys will no longer belong to any group.",
@@ -1039,6 +1040,7 @@ export default {
         tooltip: 'Select the model families this group supports. Unchecked families will not be routed to this group.',
         claude: 'Claude',
         geminiText: 'Gemini Text',
+        geminiTextOnly: 'Gemini text only (including thinking and tool calls)',
         geminiImage: 'Gemini Image',
         hint: 'Select at least one model family'
       }
