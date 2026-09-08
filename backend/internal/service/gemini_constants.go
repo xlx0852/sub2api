@@ -10,7 +10,7 @@ import (
 // Standalone Gemini supplier and Gemini CLI OAuth are retired.
 const (
 	GeminiAIStudioBaseURL = "https://generativelanguage.googleapis.com"
-	GeminiCliBaseURL      = "https://cloudcode-pa.googleapis.com"
+	GeminiCliBaseURL      = "https://daily-cloudcode-pa.googleapis.com"
 	GeminiCLIUserAgent    = "GeminiCLI/0.1.5 (Windows; AMD64)"
 
 	GeminiTierGoogleOneFree    = "google_one_free"

@@ -153,7 +153,7 @@ func TestAdminService_CreateGroup_WithImagePricing(t *testing.T) {
 	input := &CreateGroupInput{
 		Name:           "test-group",
 		Description:    "Test group",
-		Platform:       PlatformAntigravity,
+		Platform:       PlatformOpenAI,
 		RateMultiplier: 1.0,
 		ImagePrice1K:   &price1K,
 		ImagePrice2K:   &price2K,
@@ -277,7 +277,7 @@ func TestAdminService_UpdateGroup_WithImagePricing(t *testing.T) {
 	existingGroup := &Group{
 		ID:       1,
 		Name:     "existing-group",
-		Platform: PlatformAntigravity,
+		Platform: PlatformOpenAI,
 		Status:   StatusActive,
 	}
 	repo := &groupRepoStubForAdmin{getByID: existingGroup}
@@ -313,7 +313,7 @@ func TestAdminService_UpdateGroup_PartialImagePricing(t *testing.T) {
 	existingGroup := &Group{
 		ID:           1,
 		Name:         "existing-group",
-		Platform:     PlatformAntigravity,
+		Platform:     PlatformOpenAI,
 		Status:       StatusActive,
 		ImagePrice2K: &oldPrice2K, // 已有 2K 价格
 	}
@@ -1250,4 +1250,28 @@ func TestAdminService_UpdateGroup_InvalidRequestFallbackAllowsAntigravity(t *tes
 	require.NotNil(t, group)
 	require.NotNil(t, repo.updated)
 	require.Equal(t, fallbackID, *repo.updated.FallbackGroupIDOnInvalidRequest)
+}
+
+func TestAdminService_AntigravityGroupTextOnly(t *testing.T) {
+	repo := &groupRepoStubForAdmin{}
+	svc := &adminServiceImpl{groupRepo: repo}
+	enabled := true
+	price := 0.5
+	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+		Name: "ag", Platform: PlatformAntigravity, RateMultiplier: 1,
+		SupportedModelScopes: []string{"claude", "gemini_image"},
+		MCPXMLInject:         &enabled, AllowImageGeneration: true, ImagePrice1K: &price,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"gemini_text"}, group.SupportedModelScopes)
+	require.False(t, group.MCPXMLInject)
+	require.False(t, group.AllowImageGeneration)
+	require.Nil(t, group.ImagePrice1K)
+	repo.getByID = &Group{ID: 1, Platform: PlatformAntigravity, SupportedModelScopes: []string{"claude"}, MCPXMLInject: true, AllowImageGeneration: true, ImagePrice1K: &price}
+	group, err = svc.UpdateGroup(context.Background(), 1, &UpdateGroupInput{})
+	require.NoError(t, err)
+	require.Equal(t, []string{"gemini_text"}, group.SupportedModelScopes)
+	require.False(t, group.MCPXMLInject)
+	require.False(t, group.AllowImageGeneration)
+	require.Nil(t, group.ImagePrice1K)
 }

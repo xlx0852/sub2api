@@ -1,5 +1,4 @@
 export const imagePricingPlatforms = new Set([
-  "antigravity",
   "gemini",
   "grok",
   "openai",

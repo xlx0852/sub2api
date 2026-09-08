@@ -1,7 +1,7 @@
 export const normalizeSupportedModelScopesForPlatform = (
   platform: string,
-  scopes: string[] | undefined,
+  _scopes: string[] | undefined,
 ): string[] => {
   if (platform !== "antigravity") return [];
-  return scopes ?? [];
+  return ["gemini_text"];
 };

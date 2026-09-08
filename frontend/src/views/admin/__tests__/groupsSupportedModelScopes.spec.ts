@@ -2,17 +2,17 @@ import { describe, expect, it } from "vitest";
 import { normalizeSupportedModelScopesForPlatform } from "../groupsSupportedModelScopes";
 
 describe("normalizeSupportedModelScopesForPlatform", () => {
-  it("preserves model scopes for Antigravity groups", () => {
+  it("normalizes legacy scopes to Gemini text for Antigravity", () => {
     expect(
       normalizeSupportedModelScopesForPlatform("antigravity", [
         "claude",
         "gemini_text",
       ]),
-    ).toEqual(["claude", "gemini_text"]);
+    ).toEqual(["gemini_text"]);
   });
 
-  it("returns an empty array for Antigravity groups without scopes", () => {
-    expect(normalizeSupportedModelScopesForPlatform("antigravity", undefined)).toEqual([]);
+  it("defaults Antigravity to Gemini text without scopes", () => {
+    expect(normalizeSupportedModelScopesForPlatform("antigravity", undefined)).toEqual(["gemini_text"]);
   });
 
   it("drops hidden model scopes for OpenAI groups", () => {

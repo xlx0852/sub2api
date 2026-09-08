@@ -264,10 +264,15 @@ const formatScopeName = (scope: string): string => {
     // Gemini 3.5 系列
     'gemini-3.5-flash': 'G35F',
     // Gemini 3 系列
-    'gemini-3-flash': 'G3F',
+    'gemini-3.8-flash': 'G38F',
+    'gemini-3.8-flash-high': 'G38FH',
+    'gemini-3.7-flash': 'G37F',
+    'gemini-3.7-flash-high': 'G37FH',
+    'gemini-3.6-flash': 'G36F',
+    'gemini-3.6-flash-high': 'G36FH',
+    'gemini-3.1-pro': 'G31P',
     'gemini-3.1-pro-high': 'G3PH',
     'gemini-3.1-pro-low': 'G3PL',
-    'gemini-3-pro-image': 'G3PI',
     'gemini-3.1-flash-image': 'G31FI',
     // 其他
     'gpt-oss-120b-medium': 'GPT120',

@@ -303,6 +303,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		ModelsListConfig:                normalizeGroupModelsListConfig(input.ModelsListConfig),
 		RPMLimit:                        input.RPMLimit,
 	}
+	sanitizeGroupAntigravityFields(group)
 	sanitizeGroupMessagesDispatchFields(group)
 	if err := s.groupRepo.Create(ctx, group); err != nil {
 		return nil, err
@@ -605,6 +606,7 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.RPMLimit != nil {
 		group.RPMLimit = *input.RPMLimit
 	}
+	sanitizeGroupAntigravityFields(group)
 	sanitizeGroupMessagesDispatchFields(group)
 
 	if err := s.groupRepo.Update(ctx, group); err != nil {
@@ -986,4 +988,20 @@ func (s *adminServiceImpl) ReplaceUserGroup(ctx context.Context, userID, oldGrou
 	}
 
 	return &ReplaceUserGroupResult{MigratedKeys: migrated}, nil
+}
+
+// Legacy Antigravity options remain in storage for compatibility, but cannot
+// re-enable model families or prompt injection removed from the text gateway.
+func sanitizeGroupAntigravityFields(group *Group) {
+	if group.Platform != PlatformAntigravity {
+		return
+	}
+	group.SupportedModelScopes = []string{"gemini_text"}
+	group.MCPXMLInject = false
+	group.AllowImageGeneration = false
+	group.AllowBatchImageGeneration = false
+	group.ImageRateIndependent = false
+	group.ImagePrice1K = nil
+	group.ImagePrice2K = nil
+	group.ImagePrice4K = nil
 }

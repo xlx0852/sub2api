@@ -19,6 +19,7 @@ describe("groups image pricing platform support", () => {
 
   it("keeps non-media group platforms out of the image pricing controls", () => {
     expect(supportsImagePricingPlatform("anthropic")).toBe(false);
+    expect(supportsImagePricingPlatform("antigravity")).toBe(false);
   });
 
   it("keeps image and video pricing copy separate", () => {
