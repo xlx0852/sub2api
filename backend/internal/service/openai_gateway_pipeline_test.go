@@ -19,13 +19,15 @@ import (
 func TestOpenAIForwardPipelineStageOrder(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	stages := svc.openaiForwardStages()
-	require.Len(t, stages, 5)
+	require.Len(t, stages, 7)
 	names := make([]pipeline.StageName, 0, len(stages))
 	for _, stage := range stages {
 		names = append(names, stage.Name())
 	}
 	require.Equal(t, []pipeline.StageName{
 		pipeline.StageParse,
+		pipeline.StageAdmission,
+		pipeline.StageSelect,
 		pipeline.StageRewrite,
 		pipeline.StageTransport,
 		pipeline.StageRelay,
@@ -87,13 +89,15 @@ func TestResponsesChatFallbackPipelineStageOrder(t *testing.T) {
 func TestOpenAIChatForwardPipelineStageOrder(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	stages := svc.openaiChatForwardStages()
-	require.Len(t, stages, 5)
+	require.Len(t, stages, 7)
 	names := make([]pipeline.StageName, 0, len(stages))
 	for _, stage := range stages {
 		names = append(names, stage.Name())
 	}
 	require.Equal(t, []pipeline.StageName{
 		pipeline.StageParse,
+		pipeline.StageAdmission,
+		pipeline.StageSelect,
 		pipeline.StageRewrite,
 		pipeline.StageTransport,
 		pipeline.StageRelay,
@@ -104,13 +108,15 @@ func TestOpenAIChatForwardPipelineStageOrder(t *testing.T) {
 func TestOpenAIMessagesForwardPipelineStageOrder(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	stages := svc.openaiMessagesForwardStages()
-	require.Len(t, stages, 5)
+	require.Len(t, stages, 7)
 	names := make([]pipeline.StageName, 0, len(stages))
 	for _, stage := range stages {
 		names = append(names, stage.Name())
 	}
 	require.Equal(t, []pipeline.StageName{
 		pipeline.StageParse,
+		pipeline.StageAdmission,
+		pipeline.StageSelect,
 		pipeline.StageRewrite,
 		pipeline.StageTransport,
 		pipeline.StageRelay,
