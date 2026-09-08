@@ -16,6 +16,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 const (
@@ -556,6 +557,33 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	if err != nil {
 		return nil, fmt.Errorf("prepare http bridge body: %w", err)
 	}
+	// Resolve upstream model first so Lite demotion can pair body rewrite with
+	// the non-lite target (account mapping + OAuth normalize).
+	bridgeUpstreamModel := ""
+	if originalModel != "" {
+		bridgeUpstreamModel = normalizeOpenAIModelForUpstream(account, account.GetMappedModel(originalModel))
+		if bridgeUpstreamModel != "" && bridgeUpstreamModel != originalModel {
+			nextBody, setErr := sjson.SetBytes(body, "model", bridgeUpstreamModel)
+			if setErr != nil {
+				return nil, fmt.Errorf("set http bridge mapped model: %w", setErr)
+			}
+			body = nextBody
+		}
+	} else {
+		bridgeUpstreamModel = strings.TrimSpace(gjson.GetBytes(body, "model").String())
+	}
+	if demotedBody, demoted, demoteErr := applyOpenAIResponsesLiteForUpstream(c, body, bridgeUpstreamModel); demoteErr != nil {
+		return nil, fmt.Errorf("demote http bridge responses lite body: %w", demoteErr)
+	} else if demoted {
+		body = demotedBody
+		logOpenAIWSModeInfo(
+			"ingress_ws_http_bridge_responses_lite_demoted account_id=%d turn=%d original_model=%s upstream_model=%s",
+			account.ID,
+			turn,
+			truncateOpenAIWSLogValue(originalModel, openAIWSLogValueMaxLen),
+			truncateOpenAIWSLogValue(bridgeUpstreamModel, openAIWSLogValueMaxLen),
+		)
+	}
 	// 构建 codex call_id ↔ 上游 call_id 映射（本 turn 内）。客户端 payload 保持
 	// 原样（prepare 不做归一化），但 codex 的 custom_tool_call 等私有类型在
 	// 重放路径会被归一化为 function_call；无论哪种形态，上游执行工具后都会
@@ -594,8 +622,13 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		if buildErr != nil {
 			return nil, buildErr
 		}
-		if account.Platform != PlatformGrok && isOpenAIResponsesLiteWebSocketPayload(payload) {
+		// Keep the Lite header only when the prepared body still carries Lite
+		// metadata after optional demotion. Lite→non-lite demotion strips the
+		// metadata key and must not re-inject the header from the raw payload.
+		if account.Platform != PlatformGrok && isOpenAIResponsesLiteWebSocketPayload(body) {
 			upstreamReq.Header.Set(responsesLiteHeader, "true")
+		} else {
+			stripOpenAIResponsesLiteHeader(upstreamReq.Header)
 		}
 		firstOutputTracker.transition(firstOutputStageConnect, time.Now(), false)
 		trace := &httptrace.ClientTrace{WroteRequest: func(httptrace.WroteRequestInfo) {

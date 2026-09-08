@@ -1585,6 +1585,10 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlot(
 // ResponsesWebSocket handles OpenAI Responses API WebSocket ingress endpoint
 // GET /openai/v1/responses (Upgrade: websocket)
 func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
+	if key, ok := middleware2.GetAPIKeyFromContext(c); ok && key.Group != nil && key.Group.Platform == service.PlatformAntigravity {
+		h.errorResponse(c, http.StatusUpgradeRequired, "websocket_not_supported", "Antigravity supports HTTP Responses/SSE; retry with POST /v1/responses")
+		return
+	}
 	if !isOpenAIWSUpgradeRequest(c.Request) {
 		h.errorResponse(c, http.StatusUpgradeRequired, "invalid_request_error", "WebSocket upgrade required (Upgrade: websocket)")
 		return

@@ -355,7 +355,8 @@ type ResponsesIncompleteDetails struct {
 
 // ResponsesOutput is one output item in a Responses API response.
 type ResponsesOutput struct {
-	Type string `json:"type"` // "message" | "reasoning" | "function_call" | "web_search_call"
+	Namespace string `json:"namespace,omitempty"`
+	Type      string `json:"type"` // "message" | "reasoning" | "function_call" | "web_search_call"
 
 	// type=message
 	ID      string                 `json:"id,omitempty"`

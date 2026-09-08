@@ -108,6 +108,25 @@ func (s *OpenAIGatewayService) forwardOpenAIRewrite(ex *pipeline.Exchange) error
 			st.markPatchSet("model", st.upstreamModel)
 		}
 	}
+	// Responses-Lite is a (slug, header, body) pair. Mapping a Lite model onto a
+	// non-Lite upstream (e.g. sol → gpt-5.5) requires demoting body shape and
+	// stripping the Lite header before the upstream call. Mutate via ensureReqBody
+	// so earlier model/instructions patches stay on the same decoded map.
+	if shouldDemoteOpenAIResponsesLite(isOpenAIResponsesLiteInbound(c, st.body), st.upstreamModel) {
+		decoded, decodeErr := st.ensureReqBody()
+		if decodeErr != nil {
+			return decodeErr
+		}
+		if st.upstreamModel != "" {
+			decoded["model"] = st.upstreamModel
+			st.markDecodedModified()
+		}
+		if demoteOpenAIResponsesLiteRequestMap(decoded) {
+			st.markDecodedModified()
+		}
+		markOpenAIResponsesLiteDemoted(c)
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Demoted Responses-Lite request for non-lite upstream model=%s (account: %s)", st.upstreamModel, account.Name)
+	}
 	if strings.TrimSpace(gjson.GetBytes(st.body, "reasoning.effort").String()) == "minimal" {
 		st.markPatchSet("reasoning.effort", "none")
 		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Normalized reasoning.effort: minimal -> none (account: %s)", account.Name)

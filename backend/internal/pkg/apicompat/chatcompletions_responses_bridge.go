@@ -119,7 +119,32 @@ func CustomToolNames(tools []ResponsesTool) map[string]bool {
 // The build + normalize split keeps every protocol rule in one place rather than
 // scattered across per-item cases, and makes unknown future codex item types
 // fail safe instead of leaking into the upstream request.
-func responsesInputToChatMessages(instructions string, inputRaw json.RawMessage) ([]ChatMessage, error) {
+// ResponsesInputMessages preserves tool items for adapters that resolve tool
+// results against server-side continuation history. It does not drop or reorder
+// unmatched tool results as the Chat Completions normalization must do.
+func ResponsesInputMessages(instructions string, inputRaw json.RawMessage) ([]ChatMessage, error) {
+	if raw := bytesTrimSpace(inputRaw); len(raw) > 0 && raw[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, err
+		}
+		for i, item := range items {
+			var fields map[string]json.RawMessage
+			if json.Unmarshal(item, &fields) != nil || rawString(fields["type"]) != "function_call" {
+				continue
+			}
+			args := bytesTrimSpace(fields["arguments"])
+			if len(args) > 0 && args[0] == '{' {
+				fields["arguments"], _ = json.Marshal(string(args))
+				items[i], _ = json.Marshal(fields)
+			}
+		}
+		inputRaw, _ = json.Marshal(items)
+	}
+	return responsesInputToChatMessages(instructions, inputRaw, true)
+}
+
+func responsesInputToChatMessages(instructions string, inputRaw json.RawMessage, preserveTools ...bool) ([]ChatMessage, error) {
 	var messages []ChatMessage
 	if strings.TrimSpace(instructions) != "" {
 		content, _ := json.Marshal(instructions)
@@ -147,6 +172,9 @@ func responsesInputToChatMessages(instructions string, inputRaw json.RawMessage)
 	built, err := buildChatMessagesFromItems(messages, rawItems)
 	if err != nil {
 		return nil, err
+	}
+	if len(preserveTools) > 0 && preserveTools[0] {
+		return built, nil
 	}
 	return normalizeChatMessages(built), nil
 }
@@ -633,6 +661,12 @@ const chatToolNameMaxLen = 64
 
 // flattenNamespaceToolName 生成 namespace 子工具的摊平名；超长时截断并追加
 // sha256 短哈希保证唯一性。
+// FlattenNamespaceToolName exposes the shared reversible naming convention to
+// provider adapters which restore namespace metadata on the response path.
+func FlattenNamespaceToolName(namespace, name string) string {
+	return flattenNamespaceToolName(namespace, name)
+}
+
 func flattenNamespaceToolName(namespace, name string) string {
 	full := namespace + "__" + name
 	if len(full) <= chatToolNameMaxLen {

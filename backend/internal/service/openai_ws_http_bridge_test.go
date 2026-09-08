@@ -338,7 +338,7 @@ func TestOpenAIWSHTTPBridgeRelaysSSEFramesAsWebSocketMessages(t *testing.T) {
 		Concurrency: 1,
 		Status:      StatusActive,
 	}
-	payload := []byte(`{"type":"response.create","generate":true,"model":"gpt-5","stream":true,"client_metadata":{"ws_request_header_x_openai_internal_codex_responses_lite":"true"},"input":"hi"}`)
+	payload := []byte(`{"type":"response.create","generate":true,"model":"gpt-5.6-sol","stream":true,"client_metadata":{"ws_request_header_x_openai_internal_codex_responses_lite":"true"},"input":"hi"}`)
 
 	type bridgeResult struct {
 		result *OpenAIForwardResult
@@ -371,7 +371,7 @@ func TestOpenAIWSHTTPBridgeRelaysSSEFramesAsWebSocketMessages(t *testing.T) {
 			"sk-test",
 			payload,
 			len(payload),
-			"gpt-5",
+			"gpt-5.6-sol",
 			"",
 			"",
 			"",
@@ -427,6 +427,135 @@ func TestOpenAIWSHTTPBridgeRelaysSSEFramesAsWebSocketMessages(t *testing.T) {
 	require.False(t, gjson.GetBytes(upstream.lastBody, "type").Exists())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "generate").Exists())
 	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
+}
+
+func TestOpenAIWSHTTPBridgeDemotesResponsesLiteWhenMappedToNonLite(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	sseBody := strings.Join([]string{
+		`data: {"type":"response.completed","response":{"id":"resp_bridge_demote","model":"gpt-5.5","usage":{"input_tokens":1,"output_tokens":1}}}`,
+		"",
+	}, "\n")
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type": []string{"text/event-stream"},
+			"x-request-id": []string{"rid_bridge_demote"},
+		},
+		Body: io.NopCloser(strings.NewReader(sseBody)),
+	}}
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{
+			Gateway: config.GatewayConfig{
+				MaxLineSize: defaultMaxLineSize,
+				OpenAIWS: config.GatewayOpenAIWSConfig{
+					HTTPBridgeEnabled:        true,
+					HTTPBridgeThresholdBytes: 1,
+				},
+			},
+		},
+		httpUpstream:  upstream,
+		toolCorrector: NewCodexToolCorrector(),
+	}
+	account := &Account{
+		ID:       8,
+		Name:     "api-key-mapped",
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{
+				"gpt-5.6-sol": "gpt-5.5",
+			},
+		},
+		Concurrency: 1,
+		Status:      StatusActive,
+	}
+	payload := []byte(`{
+		"type":"response.create",
+		"generate":true,
+		"model":"gpt-5.6-sol",
+		"stream":true,
+		"client_metadata":{"ws_request_header_x_openai_internal_codex_responses_lite":"true"},
+		"input":[
+			{"type":"additional_tools","tools":[{"type":"function","name":"exec"}]},
+			{
+				"type":"message",
+				"role":"developer",
+				"content":[{"type":"input_text","text":"base instructions"}],
+				"internal_chat_message_metadata_passthrough":{"content_item_kinds":["model.base_instructions"]}
+			},
+			{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}
+		]
+	}`)
+
+	type bridgeResult struct {
+		result *OpenAIForwardResult
+		err    error
+	}
+	resultCh := make(chan bridgeResult, 1)
+	wsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := coderws.Accept(w, r, &coderws.AcceptOptions{CompressionMode: coderws.CompressionContextTakeover})
+		if err != nil {
+			resultCh <- bridgeResult{err: err}
+			return
+		}
+		defer func() { _ = conn.CloseNow() }()
+
+		rec := httptest.NewRecorder()
+		ginCtx, _ := gin.CreateTestContext(rec)
+		req := r.Clone(r.Context())
+		req.Header = req.Header.Clone()
+		ginCtx.Request = req
+
+		writeClient := func(message []byte) error {
+			writeCtx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+			defer cancel()
+			return conn.Write(writeCtx, coderws.MessageText, message)
+		}
+		result, bridgeErr := svc.proxyOpenAIWSHTTPBridgeTurn(
+			r.Context(),
+			ginCtx,
+			account,
+			"sk-test",
+			payload,
+			len(payload),
+			"gpt-5.6-sol",
+			"",
+			"",
+			"",
+			1,
+			writeClient,
+		)
+		resultCh <- bridgeResult{result: result, err: bridgeErr}
+	}))
+	defer wsServer.Close()
+
+	dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
+	clientConn, _, err := coderws.Dial(dialCtx, "ws"+strings.TrimPrefix(wsServer.URL, "http"), nil)
+	cancelDial()
+	require.NoError(t, err)
+	defer func() { _ = clientConn.CloseNow() }()
+
+	readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
+	_, _, readErr := clientConn.Read(readCtx)
+	cancelRead()
+	require.NoError(t, readErr)
+
+	select {
+	case bridge := <-resultCh:
+		require.NoError(t, bridge.err)
+		require.NotNil(t, bridge.result)
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for bridge result")
+	}
+
+	require.NotNil(t, upstream.lastReq)
+	require.Empty(t, upstream.lastReq.Header.Get(responsesLiteHeader))
+	require.Equal(t, "gpt-5.5", gjson.GetBytes(upstream.lastBody, "model").String())
+	require.Equal(t, "base instructions", gjson.GetBytes(upstream.lastBody, "instructions").String())
+	require.Equal(t, "exec", gjson.GetBytes(upstream.lastBody, "tools.0.name").String())
+	require.False(t, gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools")`).Exists())
+	require.False(t, gjson.GetBytes(upstream.lastBody, "client_metadata."+responsesLiteWSMetadataKey).Exists())
 }
 
 func TestOpenAIWSHTTPBridgeRetriesOnlyRejectedClientCallPair(t *testing.T) {

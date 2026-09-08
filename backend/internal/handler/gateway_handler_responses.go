@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
@@ -16,10 +17,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// Responses handles OpenAI Responses API endpoint for Anthropic platform groups.
+// Responses handles the Responses API for Anthropic and Antigravity groups.
 // POST /v1/responses
-// This converts Responses API requests to Anthropic format, forwards to Anthropic
-// upstream, and converts responses back to Responses format.
+// The selected platform owns protocol conversion while admission, scheduling,
+// failover and settlement remain shared.
 func (h *GatewayHandler) Responses(c *gin.Context) {
 	streamStarted := false
 
@@ -45,6 +46,10 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 	)
 
 	// Read request body
+	if apiKey.Group != nil && apiKey.Group.Platform == service.PlatformAntigravity && strings.TrimRight(c.Request.URL.Path, "/") != "/v1/responses" && strings.TrimRight(c.Request.URL.Path, "/") != "/responses" {
+		h.responsesErrorResponse(c, 400, "unsupported_operation", "Antigravity supports POST /v1/responses only; compact and stored-response operations are unavailable")
+		return
+	}
 	body, err := readLenientJSONRequestBodyWithPrealloc(c.Request, h.cfg)
 	if err != nil {
 		if maxErr, ok := extractMaxBytesError(err); ok {
@@ -153,6 +158,24 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		APIKeyID:  apiKey.ID,
 	}
 	sessionHash := h.gatewayService.GenerateSessionHash(parsedReq)
+	if apiKey.Group != nil && apiKey.Group.Platform == service.PlatformAntigravity {
+		previous := gjson.GetBytes(body, "previous_response_id").String()
+		if previous != "" {
+			if h.antigravityGatewayService == nil {
+				h.responsesErrorResponse(c, 503, "server_error", "Antigravity service unavailable")
+				return
+			}
+			accountID, ok := h.antigravityGatewayService.ResponsesContinuationAccount(previous, apiKey.ID, derefGroupID(apiKey.GroupID))
+			if !ok {
+				h.responsesErrorResponse(c, 400, "previous_response_not_found", "previous_response_id not found or expired; resend full input")
+				return
+			}
+			if err := h.gatewayService.BindStickySession(requestCtx, apiKey.GroupID, sessionHash, accountID); err != nil {
+				h.responsesErrorResponse(c, 503, "server_error", "Unable to restore continuation affinity")
+				return
+			}
+		}
+	}
 
 	// 3. Account selection + failover loop
 	fs := NewFailoverState(h.maxAccountSwitches, false)
@@ -166,7 +189,11 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		}))
 		if err != nil {
 			if len(fs.FailedAccountIDs) == 0 {
-				cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, reqModel, reqModel, service.PlatformAnthropic)
+				platform := service.PlatformAnthropic
+				if apiKey.Group != nil && apiKey.Group.Platform == service.PlatformAntigravity {
+					platform = service.PlatformAntigravity
+				}
+				cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, reqModel, reqModel, platform)
 				if !cls.ModelNotFound {
 					markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
 				}
@@ -245,7 +272,16 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 			InboundEndpoint:    GetInboundEndpoint(c),
 			UpstreamEndpoint:   GetUpstreamEndpoint(c, account.Platform),
 		})
-		result, err := h.gatewayService.ForwardAsResponses(attemptCtx, c, account, forwardBody, parsedReq)
+		var result *service.ForwardResult
+		if account.Platform == service.PlatformAntigravity {
+			if h.antigravityGatewayService == nil {
+				err = errors.New("Antigravity service unavailable")
+			} else {
+				result, err = h.antigravityGatewayService.ForwardResponses(attemptCtx, c, account, forwardBody, apiKey.ID, derefGroupID(apiKey.GroupID), sessionHash)
+			}
+		} else {
+			result, err = h.gatewayService.ForwardAsResponses(attemptCtx, c, account, forwardBody, parsedReq)
+		}
 
 		if accountReleaseFunc != nil {
 			accountReleaseFunc()

@@ -264,6 +264,11 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			}
 		}
 	}
+	// Lite demotion rewrites body shape for non-lite upstream models; the matching
+	// internal header must not ride along or ChatGPT rejects the model.
+	if isOpenAIResponsesLiteDemoted(c) {
+		stripOpenAIResponsesLiteHeader(req.Header)
+	}
 	if account.Type == AccountTypeOAuth {
 		compatMessagesBridge := isOpenAICompatMessagesBridgeContext(c) || isOpenAICompatMessagesBridgeBody(body)
 		// 清除客户端透传的 session 头，后续用隔离后的值重新设置，防止跨用户会话碰撞。

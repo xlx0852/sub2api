@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"sort"
 	"strings"
 	"time"
@@ -36,10 +37,39 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	reqStream bool,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
+	originalReqModel := strings.TrimSpace(reqModel)
 	upstreamPassthroughModel := ""
+	billingModel := originalReqModel
+
+	// Account-level model mapping (same contract as the rewrite pipeline).
+	if account != nil {
+		mappedModel := strings.TrimSpace(account.GetMappedModel(originalReqModel))
+		if mappedModel == "" {
+			mappedModel = originalReqModel
+		}
+		billingModel = mappedModel
+		upstreamModel := normalizeOpenAIModelForUpstream(account, mappedModel)
+		if upstreamModel != "" && upstreamModel != originalReqModel {
+			nextBody, setErr := sjson.SetBytes(body, "model", upstreamModel)
+			if setErr != nil {
+				return nil, fmt.Errorf("set passthrough mapped model: %w", setErr)
+			}
+			body = nextBody
+			upstreamPassthroughModel = upstreamModel
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Passthrough model mapping applied: %s -> %s (account: %s)", originalReqModel, upstreamModel, account.Name)
+		}
+	}
+
 	if isOpenAIResponsesCompactPath(c) {
-		compactMappedModel := resolveOpenAICompactForwardModel(account, reqModel)
-		if compactMappedModel != "" && compactMappedModel != reqModel {
+		compactBase := upstreamPassthroughModel
+		if compactBase == "" {
+			compactBase = billingModel
+		}
+		if compactBase == "" {
+			compactBase = originalReqModel
+		}
+		compactMappedModel := resolveOpenAICompactForwardModel(account, compactBase)
+		if compactMappedModel != "" && compactMappedModel != compactBase {
 			nextBody, setErr := sjson.SetBytes(body, "model", compactMappedModel)
 			if setErr != nil {
 				return nil, fmt.Errorf("set compact passthrough model: %w", setErr)
@@ -47,6 +77,20 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			body = nextBody
 			upstreamPassthroughModel = compactMappedModel
 		}
+	}
+
+	liteUpstreamModel := upstreamPassthroughModel
+	if liteUpstreamModel == "" {
+		liteUpstreamModel = strings.TrimSpace(gjson.GetBytes(body, "model").String())
+	}
+	if liteUpstreamModel == "" {
+		liteUpstreamModel = billingModel
+	}
+	if demotedBody, demoted, demoteErr := applyOpenAIResponsesLiteForUpstream(c, body, liteUpstreamModel); demoteErr != nil {
+		return nil, fmt.Errorf("demote passthrough responses lite body: %w", demoteErr)
+	} else if demoted {
+		body = demotedBody
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Passthrough demoted Responses-Lite request for non-lite upstream model=%s (account: %s)", liteUpstreamModel, account.Name)
 	}
 
 	if account != nil && account.Type == AccountTypeOAuth {
@@ -183,9 +227,18 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		}
 
 		upstreamStart := time.Now()
+		markFirstOutputConnectionStart(ctx)
+		upstreamReq = upstreamReq.WithContext(httptrace.WithClientTrace(upstreamReq.Context(), &httptrace.ClientTrace{
+			WroteRequest: func(info httptrace.WroteRequestInfo) {
+				if info.Err == nil {
+					markFirstOutputRequestWritten(ctx)
+				}
+			},
+		}))
 		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
 		SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 		if err != nil {
+			markFirstOutputAttemptFailed(ctx)
 			// Transport-level failure (proxy/DNS/TCP/TLS — no HTTP response). Convert to
 			// a failover so the handler switches to a healthy account.
 			return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, true)
@@ -200,6 +253,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		_ = resp.Body.Close()
 		resp.Body = io.NopCloser(bytes.NewReader(probeBody))
 		if !agentTaskRecoveryTried && s.isAgentIdentityAccount(ctx, account) && isAgentIdentityTaskInvalidHTTPResponse(resp.StatusCode, probeBody) {
+			markFirstOutputAttemptFailed(ctx)
 			agentTaskRecoveryTried = true
 			expectedTaskID := account.GetCredential("task_id")
 			if recoveryErr := s.recoverAgentIdentityTask(ctx, account, expectedTaskID); recoveryErr != nil {
@@ -214,6 +268,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		errBody := probeBody
 		if shouldFailoverOpenAIPassthroughResponse(account, resp.StatusCode, errBody) ||
 			shouldFailoverOpenAIPassthroughHTMLGatewayError(resp.StatusCode, errBody) {
+			markFirstOutputAttemptFailed(ctx)
 			return nil, s.handleFailoverErrorResponsePassthrough(ctx, resp, c, account, body, errBody)
 		}
 		return nil, s.handleErrorResponsePassthrough(ctx, resp, c, account, body, errBody)
@@ -264,7 +319,8 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		RequestID:       resp.Header.Get("x-request-id"),
 		ResponseID:      responseID,
 		Usage:           *usage,
-		Model:           reqModel,
+		Model:           originalReqModel,
+		BillingModel:    billingModel,
 		UpstreamModel:   upstreamPassthroughModel,
 		ServiceTier:     serviceTier,
 		ReasoningEffort: reasoningEffort,
@@ -365,6 +421,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 				req.Header.Add(key, v)
 			}
 		}
+	}
+	if isOpenAIResponsesLiteDemoted(c) {
+		stripOpenAIResponsesLiteHeader(req.Header)
 	}
 
 	// 覆盖入站鉴权残留，并注入上游认证
