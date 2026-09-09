@@ -974,8 +974,9 @@ func parseAntigravitySmartRetryInfo(body []byte) *antigravitySmartRetryInfo {
 	}
 
 	var retryDelay time.Duration
+	var quotaResetAt time.Time
 	var modelName string
-	var hasRateLimitExceeded bool      // 429 需要此 reason
+	var hasRateLimitExceeded bool      // 429 需要限流或配额耗尽 reason
 	var hasModelCapacityExhausted bool // 503 需要此 reason
 
 	for _, d := range details {
@@ -992,13 +993,18 @@ func parseAntigravitySmartRetryInfo(body []byte) *antigravitySmartRetryInfo {
 				if model, ok := meta["model"].(string); ok {
 					modelName = normalizeAntigravityModelName(model)
 				}
+				if rawResetAt, ok := meta["quotaResetTimeStamp"].(string); ok {
+					if parsedResetAt, err := time.Parse(time.RFC3339Nano, rawResetAt); err == nil && parsedResetAt.After(time.Now()) {
+						quotaResetAt = parsedResetAt
+					}
+				}
 			}
 			// 检查 reason
 			if reason, ok := dm["reason"].(string); ok {
 				if reason == googleRPCReasonModelCapacityExhausted {
 					hasModelCapacityExhausted = true
 				}
-				if reason == googleRPCReasonRateLimitExceeded {
+				if reason == googleRPCReasonRateLimitExceeded || reason == googleRPCReasonQuotaExhausted {
 					hasRateLimitExceeded = true
 				}
 			}
@@ -1037,8 +1043,10 @@ func parseAntigravitySmartRetryInfo(body []byte) *antigravitySmartRetryInfo {
 		return nil
 	}
 
-	// 如果上游未提供 retryDelay，使用默认限流时间
-	if retryDelay <= 0 {
+	// 绝对重置时间比传输中的相对延迟更稳定，优先用它生成调度倒计时。
+	if !quotaResetAt.IsZero() {
+		retryDelay = time.Until(quotaResetAt)
+	} else if retryDelay <= 0 {
 		retryDelay = antigravityDefaultRateLimitDuration
 	}
 

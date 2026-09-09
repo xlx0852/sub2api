@@ -49,6 +49,7 @@ const (
 	googleRPCTypeErrorInfo                = "type.googleapis.com/google.rpc.ErrorInfo"
 	googleRPCReasonModelCapacityExhausted = "MODEL_CAPACITY_EXHAUSTED"
 	googleRPCReasonRateLimitExceeded      = "RATE_LIMIT_EXCEEDED"
+	googleRPCReasonQuotaExhausted         = "QUOTA_EXHAUSTED"
 
 	// 单账号 503 退避重试：Service 层原地重试的最大次数
 	// 在 handleSmartRetry 中，对于 shouldRateLimitModel（长延迟 ≥ 7s）的情况，
