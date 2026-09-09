@@ -517,15 +517,7 @@ func geminiReasoningEffortFromBody(body []byte) string {
 	if json.Unmarshal(body, &root) != nil {
 		return ""
 	}
-	var thinking map[string]any
-	if generation, ok := root["generationConfig"].(map[string]any); ok {
-		thinking, _ = generation["thinkingConfig"].(map[string]any)
-	}
-	if thinking == nil {
-		if generation, ok := root["generation_config"].(map[string]any); ok {
-			thinking, _ = generation["thinking_config"].(map[string]any)
-		}
-	}
+	thinking := findGeminiThinkingConfig(root)
 	if thinking == nil {
 		return ""
 	}
@@ -549,6 +541,31 @@ func geminiReasoningEffortFromBody(body []byte) string {
 		return "high"
 	}
 	return ""
+}
+
+func findGeminiThinkingConfig(value any) map[string]any {
+	if object, ok := value.(map[string]any); ok {
+		for key, child := range object {
+			if strings.EqualFold(strings.ReplaceAll(key, "_", ""), "thinkingconfig") {
+				if config, ok := child.(map[string]any); ok {
+					return config
+				}
+			}
+		}
+		for _, child := range object {
+			if config := findGeminiThinkingConfig(child); config != nil {
+				return config
+			}
+		}
+	}
+	if list, ok := value.([]any); ok {
+		for _, child := range list {
+			if config := findGeminiThinkingConfig(child); config != nil {
+				return config
+			}
+		}
+	}
+	return nil
 }
 func stringValue(values map[string]any, keys ...string) string {
 	for _, key := range keys {
