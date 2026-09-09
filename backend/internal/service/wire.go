@@ -40,15 +40,6 @@ func ProvideOAuthRefreshAPI(accountRepo AccountRepository, tokenCache GeminiToke
 	return NewOAuthRefreshAPI(accountRepo, tokenCache)
 }
 
-func ProvideBatchImageModelPricingResolver(resolver *ModelPricingResolver) *BatchImageModelPricingResolver {
-	return &BatchImageModelPricingResolver{Resolver: resolver}
-}
-
-func ProvideBatchImageCleanupService(repo BatchImageRepository, accountRepo AccountRepository, cfg *config.Config) *BatchImageCleanupService {
-	svc := NewBatchImageCleanupService(repo, accountRepo, cfg)
-	svc.Start()
-	return svc
-}
 
 // ProvideOpenAIOAuthService creates OpenAIOAuthService with privacy/account enrichment support.
 func ProvideOpenAIOAuthService(
@@ -646,7 +637,6 @@ func ProvideOpsService(
 	concurrencyService *ConcurrencyService,
 	gatewayService *GatewayService,
 	openAIGatewayService *OpenAIGatewayService,
-	geminiCompatService *GeminiMessagesCompatService,
 	antigravityGatewayService *AntigravityGatewayService,
 	systemLogSink *OpsSystemLogSink,
 	settingService *SettingService,
@@ -660,7 +650,7 @@ func ProvideOpsService(
 		concurrencyService,
 		gatewayService,
 		openAIGatewayService,
-		geminiCompatService,
+		nil,
 		antigravityGatewayService,
 		systemLogSink,
 	)
@@ -757,11 +747,6 @@ var ProviderSet = wire.NewSet(
 	NewOpenAIGatewayService,
 	NewUsageSettlementPostCommit,
 	NewUsageSettlementRecovery,
-	ProvideBatchImageModelPricingResolver,
-	NewBatchImagePublicService,
-	NewBatchImageDownloadService,
-	ProvideBatchImageCleanupService,
-	ProvideBatchImageWorkerRuntime,
 	wire.Bind(new(AccountRuntimeBlocker), new(*OpenAIGatewayService)),
 	NewOAuthService,
 	ProvideOpenAIOAuthService,
@@ -775,7 +760,6 @@ var ProviderSet = wire.NewSet(
 	NewAntigravityOAuthService,
 	ProvideOAuthRefreshAPI,
 	ProvideGeminiTokenProvider,
-	NewGeminiMessagesCompatService,
 	ProvideAntigravityTokenProvider,
 	ProvideGrokTokenProvider,
 	ProvideKimiTokenProvider,
