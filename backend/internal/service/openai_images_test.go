@@ -669,7 +669,7 @@ func TestOpenAIGatewayServiceForwardImages_OAuthOmitsUnsupportedNAndReturnsImage
 	// Codex 官方 HTTP 已移除 responses=experimental；网关不再强制注入。
 	require.Empty(t, upstream.lastReq.Header.Get("OpenAI-Beta"))
 
-	require.Equal(t, openAIImagesResponsesMainModel, gjson.GetBytes(upstream.lastBody, "model").String())
+	require.Equal(t, "gpt-5.6-luna", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
 	require.Equal(t, "image_generation", gjson.GetBytes(upstream.lastBody, "tools.0.type").String())
 	require.Equal(t, "generate", gjson.GetBytes(upstream.lastBody, "tools.0.action").String())
