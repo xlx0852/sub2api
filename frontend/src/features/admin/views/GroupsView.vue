@@ -3366,18 +3366,20 @@ const exclusiveOptions = computed(() => [
 const platformOptions = computed(() => [
   { value: "anthropic", label: "Anthropic" },
   { value: "openai", label: "OpenAI" },
-    { value: "antigravity", label: "Antigravity" },
+  { value: "antigravity", label: "Antigravity" },
   { value: "grok", label: "Grok" },
   { value: "kimi", label: "Kimi" },
+  { value: "cursor", label: "Cursor" },
 ]);
 
 const platformFilterOptions = computed(() => [
   { value: "", label: t("admin.groups.allPlatforms") },
   { value: "anthropic", label: "Anthropic" },
   { value: "openai", label: "OpenAI" },
-    { value: "antigravity", label: "Antigravity" },
+  { value: "antigravity", label: "Antigravity" },
   { value: "grok", label: "Grok" },
   { value: "kimi", label: "Kimi" },
+  { value: "cursor", label: "Cursor" },
 ]);
 
 const editStatusOptions = computed(() => [
