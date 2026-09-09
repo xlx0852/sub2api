@@ -257,17 +257,13 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 			UpstreamEndpoint:   GetUpstreamEndpoint(c, account.Platform),
 		})
 		if account.Platform == service.PlatformGemini {
-			if h.geminiCompatService == nil {
-				h.chatCompletionsErrorResponse(c, http.StatusBadGateway, "upstream_error", "Gemini compatibility service is not configured")
-				if accountReleaseFunc != nil {
-					accountReleaseFunc()
-				}
-				return
+			h.chatCompletionsErrorResponse(c, http.StatusGone, "platform_retired", "Gemini platform has been retired; use /antigravity routes")
+			if accountReleaseFunc != nil {
+				accountReleaseFunc()
 			}
-			result, err = h.geminiCompatService.ForwardAsChatCompletions(attemptCtx, c, account, forwardBody)
-		} else {
-			result, err = h.gatewayService.ForwardAsChatCompletions(attemptCtx, c, account, forwardBody, parsedReq)
+			return
 		}
+		result, err = h.gatewayService.ForwardAsChatCompletions(attemptCtx, c, account, forwardBody, parsedReq)
 
 		if accountReleaseFunc != nil {
 			accountReleaseFunc()

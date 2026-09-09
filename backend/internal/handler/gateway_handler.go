@@ -40,7 +40,6 @@ var gatewayCompatibilityMetricsLogCounter atomic.Uint64
 type GatewayHandler struct {
 	gatewayService            *service.GatewayService
 	accountSelector           scheduling.AccountSelector
-	geminiCompatService       *service.GeminiMessagesCompatService
 	antigravityGatewayService *service.AntigravityGatewayService
 	userService               *service.UserService
 	billingCacheService       *service.BillingCacheService
@@ -60,7 +59,6 @@ type GatewayHandler struct {
 // NewGatewayHandler creates a new GatewayHandler
 func NewGatewayHandler(
 	gatewayService *service.GatewayService,
-	geminiCompatService *service.GeminiMessagesCompatService,
 	antigravityGatewayService *service.AntigravityGatewayService,
 	userService *service.UserService,
 	concurrencyService *service.ConcurrencyService,
@@ -96,7 +94,6 @@ func NewGatewayHandler(
 	return &GatewayHandler{
 		gatewayService:            gatewayService,
 		accountSelector:           service.NewGatewayAccountSelector(gatewayService),
-		geminiCompatService:       geminiCompatService,
 		antigravityGatewayService: antigravityGatewayService,
 		userService:               userService,
 		billingCacheService:       billingCacheService,
@@ -454,7 +451,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					service.WithForwardGeminiSession(derefGroupID(apiKey.GroupID), sessionKey),
 				)
 			} else {
-				result, err = h.geminiCompatService.Forward(requestCtx, c, account, body)
+				h.handleFailoverExhaustedSimple(c, http.StatusGone, streamStarted)
+				return
 			}
 			if accountReleaseFunc != nil {
 				accountReleaseFunc()
