@@ -152,7 +152,7 @@ func newOpenAIModelMappedBodyCache(body []byte, replace openAIModelBodyReplaceFu
 func openAICompatibleRequestPlatform(apiKey *service.APIKey) string {
 	if apiKey != nil && apiKey.Group != nil {
 		switch apiKey.Group.Platform {
-		case service.PlatformGrok, service.PlatformKimi:
+		case service.PlatformGrok, service.PlatformKimi, service.PlatformCursor:
 			return apiKey.Group.Platform
 		}
 	}
@@ -163,7 +163,7 @@ func allowOpenAICompatibleMessagesDispatch(apiKey *service.APIKey) bool {
 	if apiKey == nil || apiKey.Group == nil {
 		return true
 	}
-	if apiKey.Group.Platform == service.PlatformGrok || apiKey.Group.Platform == service.PlatformKimi {
+	if apiKey.Group.Platform == service.PlatformGrok || apiKey.Group.Platform == service.PlatformKimi || apiKey.Group.Platform == service.PlatformCursor {
 		return true
 	}
 	return apiKey.Group.AllowMessagesDispatch

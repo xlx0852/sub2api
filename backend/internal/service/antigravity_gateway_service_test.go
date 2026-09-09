@@ -776,6 +776,8 @@ func TestHandleGeminiStreamingResponse_NormalComplete(t *testing.T) {
 	body := rec.Body.String()
 	require.Contains(t, body, "Hello")
 	require.Contains(t, body, "world")
+	require.NotContains(t, body, "\n\n\n", "SSE separators must not include an extra upstream blank line")
+	require.Equal(t, 2, strings.Count(body, "\n\n"))
 	// 不应包含错误事件
 	require.NotContains(t, body, "event: error")
 }

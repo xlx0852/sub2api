@@ -216,10 +216,16 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
 
 			line := ev.line
 			trimmed := strings.TrimRight(line, "\r\n")
+			// Data chunks below already include their SSE event separator.
+			// Forwarding upstream blank lines adds a third newline, which breaks
+			// Antigravity CLI's stream decoder.
+			if trimmed == "" {
+				continue
+			}
 			if strings.HasPrefix(trimmed, "data:") {
 				payload := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
 				if payload == "" || payload == "[DONE]" {
-					cw.Fprintf("%s\n", line)
+					cw.Fprintf("%s\n\n", line)
 					continue
 				}
 
