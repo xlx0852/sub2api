@@ -165,6 +165,7 @@ func (c *Client) StreamInference(ctx context.Context, req *cursorpb.InferenceStr
 	}
 
 	httpReq.Header.Set("Content-Type", "application/connect+proto")
+	httpReq.Header.Set("Connect-Protocol-Version", "1")
 	c.applyHeaders(httpReq)
 
 	httpResp, err := c.httpClient.Do(httpReq)
@@ -188,4 +189,36 @@ func (c *Client) StreamInference(ctx context.Context, req *cursorpb.InferenceStr
 		body:   httpResp.Body,
 		cancel: cancel,
 	}, nil
+}
+
+// AvailableModels fetches account-specific IDs using Cursor's unary Connect RPC.
+func (c *Client) AvailableModels(ctx context.Context) (*cursorpb.AvailableModelsResponse, error) {
+	body, err := proto.Marshal(&cursorpb.AvailableModelsRequest{Scope: 1, IncludeLongContextModels: true})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/aiserver.v1.AiService/AvailableModels", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	c.applyHeaders(req)
+	req.Header.Set("Content-Type", "application/proto")
+	req.Header.Set("Connect-Protocol-Version", "1")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, &UpstreamError{StatusCode: resp.StatusCode, Body: string(data), Headers: resp.Header.Clone()}
+	}
+	result := &cursorpb.AvailableModelsResponse{}
+	if err := proto.Unmarshal(data, result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }

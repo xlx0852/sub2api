@@ -296,7 +296,7 @@
                 <div class="grid grid-cols-2 gap-2">
                   <div
                     v-if="isColumnVisible('status')"
-                    class="rounded-md bg-black/[0.025] px-3 py-2.5 dark:bg-white/[0.04]"
+                    class="min-w-0 rounded-md bg-black/[0.025] px-3 py-2.5 dark:bg-white/[0.04]"
                   >
                     <p class="mb-1 text-[11px] font-medium text-gray-400 dark:text-dark-500">
                       {{ t('admin.accounts.columns.status') }}
@@ -317,7 +317,7 @@
                   </div>
                   <div
                     v-if="isColumnVisible('capacity')"
-                    class="rounded-md bg-black/[0.025] px-3 py-2.5 dark:bg-white/[0.04]"
+                    class="min-w-0 rounded-md bg-black/[0.025] px-3 py-2.5 dark:bg-white/[0.04]"
                   >
                     <p class="mb-1 text-[11px] font-medium text-gray-400 dark:text-dark-500">
                       {{ t('admin.accounts.columns.capacity') }}
@@ -1482,9 +1482,12 @@ function getAntigravityTierFromRow(row: any): string | null {
 function getAntigravityTierLabel(row: any): string | null {
   const tier = getAntigravityTierFromRow(row)
   switch (tier) {
-    case 'free-tier': return t('admin.accounts.tier.free')
-    case 'g1-pro-tier': return t('admin.accounts.tier.pro')
-    case 'g1-ultra-tier': return t('admin.accounts.tier.ultra')
+    case 'free-tier':
+    case 'FREE': return t('admin.accounts.tier.free')
+    case 'g1-pro-tier':
+    case 'PRO': return t('admin.accounts.tier.pro')
+    case 'g1-ultra-tier':
+    case 'ULTRA': return t('admin.accounts.tier.ultra')
     default: return null
   }
 }
@@ -1494,9 +1497,9 @@ function normalizeGrokPlanLabel(plan: string): string {
   const normalized = value.toLowerCase().replace(/[\s_-]+/g, '')
   switch (normalized) {
     case 'supergrok':
-      return 'SuperGrok'
+      return 'SUPERGROK'
     case 'supergrokheavy':
-      return 'SuperGrok Heavy'
+      return 'SUPERGROK HEAVY'
     default:
       return value
   }

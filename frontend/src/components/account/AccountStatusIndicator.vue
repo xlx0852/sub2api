@@ -1,5 +1,5 @@
 <template>
-  <div class="flex items-center gap-2">
+  <div class="flex min-w-0 flex-col items-start gap-2 md:flex-row md:items-center">
     <!-- Rate Limit Display (429) - Two-line layout -->
     <div v-if="isRateLimited" class="flex flex-col items-center gap-1">
       <span class="badge text-xs badge-warning">{{ t('admin.accounts.status.rateLimited') }}</span>
@@ -65,7 +65,7 @@
     <!-- Rate Limit Indicator (429) -->
     <div v-if="isRateLimited" class="group relative">
       <span
-        class="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+        class="inline-flex max-w-full flex-wrap items-center gap-1 whitespace-normal [overflow-wrap:anywhere] rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
       >
         <Icon name="exclamationTriangle" size="xs" :stroke-width="2" />
         429
@@ -86,17 +86,17 @@
       v-if="activeModelStatuses.length > 0"
       :class="[
         activeModelStatuses.length <= 4
-          ? 'flex flex-col gap-1'
+          ? 'flex min-w-0 max-w-full flex-col gap-1'
           : activeModelStatuses.length <= 8
-            ? 'columns-2 gap-x-2'
-            : 'columns-3 gap-x-2'
+            ? 'min-w-0 max-w-full columns-1 gap-x-2 md:columns-2'
+            : 'min-w-0 max-w-full columns-1 gap-x-2 md:columns-3'
       ]"
     >
       <div v-for="item in activeModelStatuses" :key="`${item.kind}-${item.model}`" class="group relative mb-1 break-inside-avoid">
         <!-- 积分已用尽 -->
         <span
           v-if="item.kind === 'credits_exhausted'"
-          class="inline-flex items-center gap-1 rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400"
+          class="inline-flex max-w-full flex-wrap items-center gap-1 whitespace-normal [overflow-wrap:anywhere] rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400"
         >
           <Icon name="exclamationTriangle" size="xs" :stroke-width="2" />
           {{ t('admin.accounts.status.creditsExhausted') }}
@@ -105,7 +105,7 @@
         <!-- 正在走积分（模型限流但积分可用）-->
         <span
           v-else-if="item.kind === 'credits_active'"
-          class="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+          class="inline-flex max-w-full flex-wrap items-center gap-1 whitespace-normal [overflow-wrap:anywhere] rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
         >
           <span>⚡</span>
           {{ formatScopeName(item.model) }}
@@ -114,7 +114,7 @@
         <!-- 普通模型限流 -->
         <span
           v-else
-          class="inline-flex items-center gap-1 rounded bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+          class="inline-flex max-w-full flex-wrap items-center gap-1 whitespace-normal [overflow-wrap:anywhere] rounded bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
         >
           <Icon name="exclamationTriangle" size="xs" :stroke-width="2" />
           {{ formatScopeName(item.model) }}
@@ -141,7 +141,7 @@
     <!-- Overload Indicator (529) -->
     <div v-if="isOverloaded" class="group relative">
       <span
-        class="inline-flex items-center gap-1 rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400"
+        class="inline-flex max-w-full flex-wrap items-center gap-1 whitespace-normal [overflow-wrap:anywhere] rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400"
       >
         <Icon name="exclamationTriangle" size="xs" :stroke-width="2" />
         529

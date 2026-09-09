@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.35.0
-// source: internal/pkg/cursor/proto/cursor.proto
+// source: backend/internal/pkg/cursor/proto/cursor.proto
 
 package cursorpb
 
@@ -61,11 +61,11 @@ func (x InferenceMessageRole) String() string {
 }
 
 func (InferenceMessageRole) Descriptor() protoreflect.EnumDescriptor {
-	return file_internal_pkg_cursor_proto_cursor_proto_enumTypes[0].Descriptor()
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_enumTypes[0].Descriptor()
 }
 
 func (InferenceMessageRole) Type() protoreflect.EnumType {
-	return &file_internal_pkg_cursor_proto_cursor_proto_enumTypes[0]
+	return &file_backend_internal_pkg_cursor_proto_cursor_proto_enumTypes[0]
 }
 
 func (x InferenceMessageRole) Number() protoreflect.EnumNumber {
@@ -74,7 +74,7 @@ func (x InferenceMessageRole) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use InferenceMessageRole.Descriptor instead.
 func (InferenceMessageRole) EnumDescriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{0}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{0}
 }
 
 type InferenceModelParameterValue struct {
@@ -87,7 +87,7 @@ type InferenceModelParameterValue struct {
 
 func (x *InferenceModelParameterValue) Reset() {
 	*x = InferenceModelParameterValue{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[0]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -99,7 +99,7 @@ func (x *InferenceModelParameterValue) String() string {
 func (*InferenceModelParameterValue) ProtoMessage() {}
 
 func (x *InferenceModelParameterValue) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[0]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -112,7 +112,7 @@ func (x *InferenceModelParameterValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceModelParameterValue.ProtoReflect.Descriptor instead.
 func (*InferenceModelParameterValue) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{0}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *InferenceModelParameterValue) GetId() string {
@@ -142,7 +142,7 @@ type InferenceRequestedModel struct {
 
 func (x *InferenceRequestedModel) Reset() {
 	*x = InferenceRequestedModel{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[1]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -154,7 +154,7 @@ func (x *InferenceRequestedModel) String() string {
 func (*InferenceRequestedModel) ProtoMessage() {}
 
 func (x *InferenceRequestedModel) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[1]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -167,7 +167,7 @@ func (x *InferenceRequestedModel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceRequestedModel.ProtoReflect.Descriptor instead.
 func (*InferenceRequestedModel) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{1}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *InferenceRequestedModel) GetModelId() string {
@@ -217,7 +217,7 @@ type InferenceModelConfig struct {
 
 func (x *InferenceModelConfig) Reset() {
 	*x = InferenceModelConfig{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[2]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -229,7 +229,7 @@ func (x *InferenceModelConfig) String() string {
 func (*InferenceModelConfig) ProtoMessage() {}
 
 func (x *InferenceModelConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[2]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -242,7 +242,7 @@ func (x *InferenceModelConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceModelConfig.ProtoReflect.Descriptor instead.
 func (*InferenceModelConfig) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{2}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *InferenceModelConfig) GetMaxTokens() int32 {
@@ -282,7 +282,7 @@ type InferenceTextPart struct {
 
 func (x *InferenceTextPart) Reset() {
 	*x = InferenceTextPart{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[3]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -294,7 +294,7 @@ func (x *InferenceTextPart) String() string {
 func (*InferenceTextPart) ProtoMessage() {}
 
 func (x *InferenceTextPart) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[3]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -307,7 +307,7 @@ func (x *InferenceTextPart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceTextPart.ProtoReflect.Descriptor instead.
 func (*InferenceTextPart) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{3}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *InferenceTextPart) GetText() string {
@@ -327,7 +327,7 @@ type InferenceImagePart struct {
 
 func (x *InferenceImagePart) Reset() {
 	*x = InferenceImagePart{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[4]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -339,7 +339,7 @@ func (x *InferenceImagePart) String() string {
 func (*InferenceImagePart) ProtoMessage() {}
 
 func (x *InferenceImagePart) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[4]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -352,7 +352,7 @@ func (x *InferenceImagePart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceImagePart.ProtoReflect.Descriptor instead.
 func (*InferenceImagePart) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{4}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *InferenceImagePart) GetData() string {
@@ -382,7 +382,7 @@ type InferenceContentPart struct {
 
 func (x *InferenceContentPart) Reset() {
 	*x = InferenceContentPart{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[5]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -394,7 +394,7 @@ func (x *InferenceContentPart) String() string {
 func (*InferenceContentPart) ProtoMessage() {}
 
 func (x *InferenceContentPart) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[5]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -407,7 +407,7 @@ func (x *InferenceContentPart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceContentPart.ProtoReflect.Descriptor instead.
 func (*InferenceContentPart) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{5}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *InferenceContentPart) GetPart() isInferenceContentPart_Part {
@@ -460,7 +460,7 @@ type InferenceContentParts struct {
 
 func (x *InferenceContentParts) Reset() {
 	*x = InferenceContentParts{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[6]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -472,7 +472,7 @@ func (x *InferenceContentParts) String() string {
 func (*InferenceContentParts) ProtoMessage() {}
 
 func (x *InferenceContentParts) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[6]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -485,7 +485,7 @@ func (x *InferenceContentParts) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceContentParts.ProtoReflect.Descriptor instead.
 func (*InferenceContentParts) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{6}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *InferenceContentParts) GetParts() []*InferenceContentPart {
@@ -506,7 +506,7 @@ type InferenceToolCall struct {
 
 func (x *InferenceToolCall) Reset() {
 	*x = InferenceToolCall{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[7]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -518,7 +518,7 @@ func (x *InferenceToolCall) String() string {
 func (*InferenceToolCall) ProtoMessage() {}
 
 func (x *InferenceToolCall) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[7]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -531,7 +531,7 @@ func (x *InferenceToolCall) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceToolCall.ProtoReflect.Descriptor instead.
 func (*InferenceToolCall) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{7}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *InferenceToolCall) GetToolCallId() string {
@@ -566,7 +566,7 @@ type InferenceToolResultPart struct {
 
 func (x *InferenceToolResultPart) Reset() {
 	*x = InferenceToolResultPart{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[8]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -578,7 +578,7 @@ func (x *InferenceToolResultPart) String() string {
 func (*InferenceToolResultPart) ProtoMessage() {}
 
 func (x *InferenceToolResultPart) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[8]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -591,7 +591,7 @@ func (x *InferenceToolResultPart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceToolResultPart.ProtoReflect.Descriptor instead.
 func (*InferenceToolResultPart) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{8}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *InferenceToolResultPart) GetToolCallId() string {
@@ -624,7 +624,7 @@ type InferenceToolResultContent struct {
 
 func (x *InferenceToolResultContent) Reset() {
 	*x = InferenceToolResultContent{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[9]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -636,7 +636,7 @@ func (x *InferenceToolResultContent) String() string {
 func (*InferenceToolResultContent) ProtoMessage() {}
 
 func (x *InferenceToolResultContent) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[9]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -649,7 +649,7 @@ func (x *InferenceToolResultContent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceToolResultContent.ProtoReflect.Descriptor instead.
 func (*InferenceToolResultContent) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{9}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *InferenceToolResultContent) GetParts() []*InferenceToolResultPart {
@@ -672,7 +672,7 @@ type InferenceReasoningPart struct {
 
 func (x *InferenceReasoningPart) Reset() {
 	*x = InferenceReasoningPart{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[10]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -684,7 +684,7 @@ func (x *InferenceReasoningPart) String() string {
 func (*InferenceReasoningPart) ProtoMessage() {}
 
 func (x *InferenceReasoningPart) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[10]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -697,7 +697,7 @@ func (x *InferenceReasoningPart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceReasoningPart.ProtoReflect.Descriptor instead.
 func (*InferenceReasoningPart) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{10}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *InferenceReasoningPart) GetIsRedacted() bool {
@@ -753,7 +753,7 @@ type InferenceCoreMessage struct {
 
 func (x *InferenceCoreMessage) Reset() {
 	*x = InferenceCoreMessage{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[11]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -765,7 +765,7 @@ func (x *InferenceCoreMessage) String() string {
 func (*InferenceCoreMessage) ProtoMessage() {}
 
 func (x *InferenceCoreMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[11]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -778,7 +778,7 @@ func (x *InferenceCoreMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceCoreMessage.ProtoReflect.Descriptor instead.
 func (*InferenceCoreMessage) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{11}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *InferenceCoreMessage) GetRole() InferenceMessageRole {
@@ -876,7 +876,7 @@ type InferenceAgentTool struct {
 
 func (x *InferenceAgentTool) Reset() {
 	*x = InferenceAgentTool{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[12]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -888,7 +888,7 @@ func (x *InferenceAgentTool) String() string {
 func (*InferenceAgentTool) ProtoMessage() {}
 
 func (x *InferenceAgentTool) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[12]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -901,7 +901,7 @@ func (x *InferenceAgentTool) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceAgentTool.ProtoReflect.Descriptor instead.
 func (*InferenceAgentTool) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{12}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *InferenceAgentTool) GetName() string {
@@ -941,7 +941,7 @@ type InferenceStreamRequest struct {
 
 func (x *InferenceStreamRequest) Reset() {
 	*x = InferenceStreamRequest{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[13]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -953,7 +953,7 @@ func (x *InferenceStreamRequest) String() string {
 func (*InferenceStreamRequest) ProtoMessage() {}
 
 func (x *InferenceStreamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[13]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -966,7 +966,7 @@ func (x *InferenceStreamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceStreamRequest.ProtoReflect.Descriptor instead.
 func (*InferenceStreamRequest) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{13}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *InferenceStreamRequest) GetMessages() []*InferenceCoreMessage {
@@ -1035,7 +1035,7 @@ type InferenceTextStreamPart struct {
 
 func (x *InferenceTextStreamPart) Reset() {
 	*x = InferenceTextStreamPart{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[14]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1047,7 +1047,7 @@ func (x *InferenceTextStreamPart) String() string {
 func (*InferenceTextStreamPart) ProtoMessage() {}
 
 func (x *InferenceTextStreamPart) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[14]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1060,7 +1060,7 @@ func (x *InferenceTextStreamPart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceTextStreamPart.ProtoReflect.Descriptor instead.
 func (*InferenceTextStreamPart) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{14}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *InferenceTextStreamPart) GetText() string {
@@ -1088,7 +1088,7 @@ type InferenceThinkingStreamPart struct {
 
 func (x *InferenceThinkingStreamPart) Reset() {
 	*x = InferenceThinkingStreamPart{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[15]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1100,7 +1100,7 @@ func (x *InferenceThinkingStreamPart) String() string {
 func (*InferenceThinkingStreamPart) ProtoMessage() {}
 
 func (x *InferenceThinkingStreamPart) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[15]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1113,7 +1113,7 @@ func (x *InferenceThinkingStreamPart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceThinkingStreamPart.ProtoReflect.Descriptor instead.
 func (*InferenceThinkingStreamPart) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{15}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *InferenceThinkingStreamPart) GetText() string {
@@ -1150,7 +1150,7 @@ type InferenceToolCallStreamPart struct {
 
 func (x *InferenceToolCallStreamPart) Reset() {
 	*x = InferenceToolCallStreamPart{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[16]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1162,7 +1162,7 @@ func (x *InferenceToolCallStreamPart) String() string {
 func (*InferenceToolCallStreamPart) ProtoMessage() {}
 
 func (x *InferenceToolCallStreamPart) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[16]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1175,7 +1175,7 @@ func (x *InferenceToolCallStreamPart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceToolCallStreamPart.ProtoReflect.Descriptor instead.
 func (*InferenceToolCallStreamPart) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{16}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *InferenceToolCallStreamPart) GetToolCallId() string {
@@ -1224,7 +1224,7 @@ type InferenceUsageInfo struct {
 
 func (x *InferenceUsageInfo) Reset() {
 	*x = InferenceUsageInfo{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[17]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1236,7 +1236,7 @@ func (x *InferenceUsageInfo) String() string {
 func (*InferenceUsageInfo) ProtoMessage() {}
 
 func (x *InferenceUsageInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[17]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1249,7 +1249,7 @@ func (x *InferenceUsageInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceUsageInfo.ProtoReflect.Descriptor instead.
 func (*InferenceUsageInfo) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{17}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *InferenceUsageInfo) GetPromptTokens() int32 {
@@ -1287,7 +1287,7 @@ type InferenceResponseMessage struct {
 
 func (x *InferenceResponseMessage) Reset() {
 	*x = InferenceResponseMessage{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[18]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1299,7 +1299,7 @@ func (x *InferenceResponseMessage) String() string {
 func (*InferenceResponseMessage) ProtoMessage() {}
 
 func (x *InferenceResponseMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[18]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1312,7 +1312,7 @@ func (x *InferenceResponseMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceResponseMessage.ProtoReflect.Descriptor instead.
 func (*InferenceResponseMessage) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{18}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *InferenceResponseMessage) GetId() string {
@@ -1370,7 +1370,7 @@ type InferenceResponseInfo struct {
 
 func (x *InferenceResponseInfo) Reset() {
 	*x = InferenceResponseInfo{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[19]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1382,7 +1382,7 @@ func (x *InferenceResponseInfo) String() string {
 func (*InferenceResponseInfo) ProtoMessage() {}
 
 func (x *InferenceResponseInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[19]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1395,7 +1395,7 @@ func (x *InferenceResponseInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceResponseInfo.ProtoReflect.Descriptor instead.
 func (*InferenceResponseInfo) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{19}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *InferenceResponseInfo) GetId() string {
@@ -1446,7 +1446,7 @@ type InferenceExtendedUsageInfo struct {
 
 func (x *InferenceExtendedUsageInfo) Reset() {
 	*x = InferenceExtendedUsageInfo{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[20]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1458,7 +1458,7 @@ func (x *InferenceExtendedUsageInfo) String() string {
 func (*InferenceExtendedUsageInfo) ProtoMessage() {}
 
 func (x *InferenceExtendedUsageInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[20]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1471,7 +1471,7 @@ func (x *InferenceExtendedUsageInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceExtendedUsageInfo.ProtoReflect.Descriptor instead.
 func (*InferenceExtendedUsageInfo) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{20}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *InferenceExtendedUsageInfo) GetInputTokens() int32 {
@@ -1518,7 +1518,7 @@ type InferenceProviderMetadataInfo struct {
 
 func (x *InferenceProviderMetadataInfo) Reset() {
 	*x = InferenceProviderMetadataInfo{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[21]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1530,7 +1530,7 @@ func (x *InferenceProviderMetadataInfo) String() string {
 func (*InferenceProviderMetadataInfo) ProtoMessage() {}
 
 func (x *InferenceProviderMetadataInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[21]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1543,7 +1543,7 @@ func (x *InferenceProviderMetadataInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceProviderMetadataInfo.ProtoReflect.Descriptor instead.
 func (*InferenceProviderMetadataInfo) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{21}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *InferenceProviderMetadataInfo) GetMetadata() *structpb.Struct {
@@ -1562,7 +1562,7 @@ type InferenceInvocationIdInfo struct {
 
 func (x *InferenceInvocationIdInfo) Reset() {
 	*x = InferenceInvocationIdInfo{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[22]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1574,7 +1574,7 @@ func (x *InferenceInvocationIdInfo) String() string {
 func (*InferenceInvocationIdInfo) ProtoMessage() {}
 
 func (x *InferenceInvocationIdInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[22]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1587,7 +1587,7 @@ func (x *InferenceInvocationIdInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceInvocationIdInfo.ProtoReflect.Descriptor instead.
 func (*InferenceInvocationIdInfo) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{22}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *InferenceInvocationIdInfo) GetInvocationId() string {
@@ -1609,7 +1609,7 @@ type InferenceImageDescription struct {
 
 func (x *InferenceImageDescription) Reset() {
 	*x = InferenceImageDescription{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[23]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1621,7 +1621,7 @@ func (x *InferenceImageDescription) String() string {
 func (*InferenceImageDescription) ProtoMessage() {}
 
 func (x *InferenceImageDescription) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[23]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1634,7 +1634,7 @@ func (x *InferenceImageDescription) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceImageDescription.ProtoReflect.Descriptor instead.
 func (*InferenceImageDescription) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{23}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *InferenceImageDescription) GetMessageIndex() int32 {
@@ -1674,7 +1674,7 @@ type InferenceImageDescriptionsInfo struct {
 
 func (x *InferenceImageDescriptionsInfo) Reset() {
 	*x = InferenceImageDescriptionsInfo{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[24]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1686,7 +1686,7 @@ func (x *InferenceImageDescriptionsInfo) String() string {
 func (*InferenceImageDescriptionsInfo) ProtoMessage() {}
 
 func (x *InferenceImageDescriptionsInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[24]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1699,7 +1699,7 @@ func (x *InferenceImageDescriptionsInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceImageDescriptionsInfo.ProtoReflect.Descriptor instead.
 func (*InferenceImageDescriptionsInfo) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{24}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *InferenceImageDescriptionsInfo) GetDescriptions() []*InferenceImageDescription {
@@ -1719,7 +1719,7 @@ type InferenceStreamError struct {
 
 func (x *InferenceStreamError) Reset() {
 	*x = InferenceStreamError{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[25]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1731,7 +1731,7 @@ func (x *InferenceStreamError) String() string {
 func (*InferenceStreamError) ProtoMessage() {}
 
 func (x *InferenceStreamError) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[25]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1744,7 +1744,7 @@ func (x *InferenceStreamError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceStreamError.ProtoReflect.Descriptor instead.
 func (*InferenceStreamError) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{25}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *InferenceStreamError) GetMessage() string {
@@ -1782,7 +1782,7 @@ type InferenceStreamResponse struct {
 
 func (x *InferenceStreamResponse) Reset() {
 	*x = InferenceStreamResponse{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[26]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1794,7 +1794,7 @@ func (x *InferenceStreamResponse) String() string {
 func (*InferenceStreamResponse) ProtoMessage() {}
 
 func (x *InferenceStreamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[26]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1807,7 +1807,7 @@ func (x *InferenceStreamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InferenceStreamResponse.ProtoReflect.Descriptor instead.
 func (*InferenceStreamResponse) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{26}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *InferenceStreamResponse) GetResponse() isInferenceStreamResponse_Response {
@@ -1973,7 +1973,7 @@ func (*InferenceStreamResponse_ImageDescriptions) isInferenceStreamResponse_Resp
 
 type AvailableModelsRequest struct {
 	state                    protoimpl.MessageState `protogen:"open.v1"`
-	Scope                    int32                  `protobuf:"varint,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	Scope                    int32                  `protobuf:"varint,10,opt,name=scope,proto3" json:"scope,omitempty"`
 	IncludeLongContextModels bool                   `protobuf:"varint,2,opt,name=include_long_context_models,json=includeLongContextModels,proto3" json:"include_long_context_models,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
@@ -1981,7 +1981,7 @@ type AvailableModelsRequest struct {
 
 func (x *AvailableModelsRequest) Reset() {
 	*x = AvailableModelsRequest{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[27]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1993,7 +1993,7 @@ func (x *AvailableModelsRequest) String() string {
 func (*AvailableModelsRequest) ProtoMessage() {}
 
 func (x *AvailableModelsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[27]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2006,7 +2006,7 @@ func (x *AvailableModelsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AvailableModelsRequest.ProtoReflect.Descriptor instead.
 func (*AvailableModelsRequest) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{27}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *AvailableModelsRequest) GetScope() int32 {
@@ -2026,17 +2026,16 @@ func (x *AvailableModelsRequest) GetIncludeLongContextModels() bool {
 type AvailableModel struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Name              string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Vendor            int32                  `protobuf:"varint,2,opt,name=vendor,proto3" json:"vendor,omitempty"`
-	VendorName        string                 `protobuf:"bytes,3,opt,name=vendor_name,json=vendorName,proto3" json:"vendor_name,omitempty"`
-	ClientDisplayName string                 `protobuf:"bytes,4,opt,name=client_display_name,json=clientDisplayName,proto3" json:"client_display_name,omitempty"`
-	IdAliases         []string               `protobuf:"bytes,5,rep,name=id_aliases,json=idAliases,proto3" json:"id_aliases,omitempty"`
+	VendorName        string                 `protobuf:"bytes,41,opt,name=vendor_name,json=vendorName,proto3" json:"vendor_name,omitempty"`
+	ClientDisplayName string                 `protobuf:"bytes,17,opt,name=client_display_name,json=clientDisplayName,proto3" json:"client_display_name,omitempty"`
+	IdAliases         []string               `protobuf:"bytes,37,rep,name=id_aliases,json=idAliases,proto3" json:"id_aliases,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
 
 func (x *AvailableModel) Reset() {
 	*x = AvailableModel{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[28]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2048,7 +2047,7 @@ func (x *AvailableModel) String() string {
 func (*AvailableModel) ProtoMessage() {}
 
 func (x *AvailableModel) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[28]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2061,7 +2060,7 @@ func (x *AvailableModel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AvailableModel.ProtoReflect.Descriptor instead.
 func (*AvailableModel) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{28}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *AvailableModel) GetName() string {
@@ -2069,13 +2068,6 @@ func (x *AvailableModel) GetName() string {
 		return x.Name
 	}
 	return ""
-}
-
-func (x *AvailableModel) GetVendor() int32 {
-	if x != nil {
-		return x.Vendor
-	}
-	return 0
 }
 
 func (x *AvailableModel) GetVendorName() string {
@@ -2101,14 +2093,14 @@ func (x *AvailableModel) GetIdAliases() []string {
 
 type AvailableModelsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Models        []*AvailableModel      `protobuf:"bytes,1,rep,name=models,proto3" json:"models,omitempty"`
+	Models        []*AvailableModel      `protobuf:"bytes,2,rep,name=models,proto3" json:"models,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AvailableModelsResponse) Reset() {
 	*x = AvailableModelsResponse{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[29]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2120,7 +2112,7 @@ func (x *AvailableModelsResponse) String() string {
 func (*AvailableModelsResponse) ProtoMessage() {}
 
 func (x *AvailableModelsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[29]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2133,7 +2125,7 @@ func (x *AvailableModelsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AvailableModelsResponse.ProtoReflect.Descriptor instead.
 func (*AvailableModelsResponse) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{29}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *AvailableModelsResponse) GetModels() []*AvailableModel {
@@ -2151,7 +2143,7 @@ type GetMeRequest struct {
 
 func (x *GetMeRequest) Reset() {
 	*x = GetMeRequest{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[30]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2163,7 +2155,7 @@ func (x *GetMeRequest) String() string {
 func (*GetMeRequest) ProtoMessage() {}
 
 func (x *GetMeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[30]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2176,7 +2168,7 @@ func (x *GetMeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMeRequest.ProtoReflect.Descriptor instead.
 func (*GetMeRequest) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{30}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{30}
 }
 
 type GetMeResponse struct {
@@ -2193,7 +2185,7 @@ type GetMeResponse struct {
 
 func (x *GetMeResponse) Reset() {
 	*x = GetMeResponse{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[31]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2205,7 +2197,7 @@ func (x *GetMeResponse) String() string {
 func (*GetMeResponse) ProtoMessage() {}
 
 func (x *GetMeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[31]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2218,7 +2210,7 @@ func (x *GetMeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMeResponse.ProtoReflect.Descriptor instead.
 func (*GetMeResponse) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{31}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetMeResponse) GetAuthId() string {
@@ -2271,7 +2263,7 @@ type GetSandUsageStatusRequest struct {
 
 func (x *GetSandUsageStatusRequest) Reset() {
 	*x = GetSandUsageStatusRequest{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[32]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2283,7 +2275,7 @@ func (x *GetSandUsageStatusRequest) String() string {
 func (*GetSandUsageStatusRequest) ProtoMessage() {}
 
 func (x *GetSandUsageStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[32]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2296,7 +2288,7 @@ func (x *GetSandUsageStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSandUsageStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetSandUsageStatusRequest) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{32}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{32}
 }
 
 type GetSandUsageStatusResponse struct {
@@ -2312,7 +2304,7 @@ type GetSandUsageStatusResponse struct {
 
 func (x *GetSandUsageStatusResponse) Reset() {
 	*x = GetSandUsageStatusResponse{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[33]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2324,7 +2316,7 @@ func (x *GetSandUsageStatusResponse) String() string {
 func (*GetSandUsageStatusResponse) ProtoMessage() {}
 
 func (x *GetSandUsageStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[33]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2337,7 +2329,7 @@ func (x *GetSandUsageStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSandUsageStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetSandUsageStatusResponse) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{33}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *GetSandUsageStatusResponse) GetCurrentPeriodStart() string {
@@ -2383,7 +2375,7 @@ type GetFastRequestsRequest struct {
 
 func (x *GetFastRequestsRequest) Reset() {
 	*x = GetFastRequestsRequest{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[34]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2395,7 +2387,7 @@ func (x *GetFastRequestsRequest) String() string {
 func (*GetFastRequestsRequest) ProtoMessage() {}
 
 func (x *GetFastRequestsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[34]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2408,7 +2400,7 @@ func (x *GetFastRequestsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFastRequestsRequest.ProtoReflect.Descriptor instead.
 func (*GetFastRequestsRequest) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{34}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{34}
 }
 
 type GetFastRequestsResponse struct {
@@ -2421,7 +2413,7 @@ type GetFastRequestsResponse struct {
 
 func (x *GetFastRequestsResponse) Reset() {
 	*x = GetFastRequestsResponse{}
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[35]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2433,7 +2425,7 @@ func (x *GetFastRequestsResponse) String() string {
 func (*GetFastRequestsResponse) ProtoMessage() {}
 
 func (x *GetFastRequestsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_pkg_cursor_proto_cursor_proto_msgTypes[35]
+	mi := &file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2446,7 +2438,7 @@ func (x *GetFastRequestsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFastRequestsResponse.ProtoReflect.Descriptor instead.
 func (*GetFastRequestsResponse) Descriptor() ([]byte, []int) {
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{35}
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *GetFastRequestsResponse) GetFastRequestsRemaining() int32 {
@@ -2463,11 +2455,11 @@ func (x *GetFastRequestsResponse) GetFastRequestsLimit() int32 {
 	return 0
 }
 
-var File_internal_pkg_cursor_proto_cursor_proto protoreflect.FileDescriptor
+var File_backend_internal_pkg_cursor_proto_cursor_proto protoreflect.FileDescriptor
 
-const file_internal_pkg_cursor_proto_cursor_proto_rawDesc = "" +
+const file_backend_internal_pkg_cursor_proto_cursor_proto_rawDesc = "" +
 	"\n" +
-	"&internal/pkg/cursor/proto/cursor.proto\x12\vaiserver.v1\x1a\x1cgoogle/protobuf/struct.proto\"D\n" +
+	".backend/internal/pkg/cursor/proto/cursor.proto\x12\vaiserver.v1\x1a\x1cgoogle/protobuf/struct.proto\"D\n" +
 	"\x1cInferenceModelParameterValue\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\"\x89\x02\n" +
@@ -2635,18 +2627,18 @@ const file_internal_pkg_cursor_proto_cursor_proto_rawDesc = "" +
 	"\n" +
 	"\bresponse\"m\n" +
 	"\x16AvailableModelsRequest\x12\x14\n" +
-	"\x05scope\x18\x01 \x01(\x05R\x05scope\x12=\n" +
-	"\x1binclude_long_context_models\x18\x02 \x01(\bR\x18includeLongContextModels\"\xac\x01\n" +
+	"\x05scope\x18\n" +
+	" \x01(\x05R\x05scope\x12=\n" +
+	"\x1binclude_long_context_models\x18\x02 \x01(\bR\x18includeLongContextModels\"\x94\x01\n" +
 	"\x0eAvailableModel\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
-	"\x06vendor\x18\x02 \x01(\x05R\x06vendor\x12\x1f\n" +
-	"\vvendor_name\x18\x03 \x01(\tR\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
+	"\vvendor_name\x18) \x01(\tR\n" +
 	"vendorName\x12.\n" +
-	"\x13client_display_name\x18\x04 \x01(\tR\x11clientDisplayName\x12\x1d\n" +
+	"\x13client_display_name\x18\x11 \x01(\tR\x11clientDisplayName\x12\x1d\n" +
 	"\n" +
-	"id_aliases\x18\x05 \x03(\tR\tidAliases\"N\n" +
+	"id_aliases\x18% \x03(\tR\tidAliases\"N\n" +
 	"\x17AvailableModelsResponse\x123\n" +
-	"\x06models\x18\x01 \x03(\v2\x1b.aiserver.v1.AvailableModelR\x06models\"\x0e\n" +
+	"\x06models\x18\x02 \x03(\v2\x1b.aiserver.v1.AvailableModelR\x06models\"\x0e\n" +
 	"\fGetMeRequest\"\xad\x01\n" +
 	"\rGetMeResponse\x12\x17\n" +
 	"\aauth_id\x18\x01 \x01(\tR\x06authId\x12\x17\n" +
@@ -2675,20 +2667,20 @@ const file_internal_pkg_cursor_proto_cursor_proto_rawDesc = "" +
 	"\x1dINFERENCE_MESSAGE_ROLE_SYSTEM\x10\x04B@Z>github.com/Wei-Shaw/sub2api/internal/pkg/cursor/proto;cursorpbb\x06proto3"
 
 var (
-	file_internal_pkg_cursor_proto_cursor_proto_rawDescOnce sync.Once
-	file_internal_pkg_cursor_proto_cursor_proto_rawDescData []byte
+	file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescOnce sync.Once
+	file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescData []byte
 )
 
-func file_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP() []byte {
-	file_internal_pkg_cursor_proto_cursor_proto_rawDescOnce.Do(func() {
-		file_internal_pkg_cursor_proto_cursor_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_internal_pkg_cursor_proto_cursor_proto_rawDesc), len(file_internal_pkg_cursor_proto_cursor_proto_rawDesc)))
+func file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescGZIP() []byte {
+	file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescOnce.Do(func() {
+		file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_backend_internal_pkg_cursor_proto_cursor_proto_rawDesc), len(file_backend_internal_pkg_cursor_proto_cursor_proto_rawDesc)))
 	})
-	return file_internal_pkg_cursor_proto_cursor_proto_rawDescData
+	return file_backend_internal_pkg_cursor_proto_cursor_proto_rawDescData
 }
 
-var file_internal_pkg_cursor_proto_cursor_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_internal_pkg_cursor_proto_cursor_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
-var file_internal_pkg_cursor_proto_cursor_proto_goTypes = []any{
+var file_backend_internal_pkg_cursor_proto_cursor_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
+var file_backend_internal_pkg_cursor_proto_cursor_proto_goTypes = []any{
 	(InferenceMessageRole)(0),              // 0: aiserver.v1.InferenceMessageRole
 	(*InferenceModelParameterValue)(nil),   // 1: aiserver.v1.InferenceModelParameterValue
 	(*InferenceRequestedModel)(nil),        // 2: aiserver.v1.InferenceRequestedModel
@@ -2729,7 +2721,7 @@ var file_internal_pkg_cursor_proto_cursor_proto_goTypes = []any{
 	(*structpb.Struct)(nil),                // 37: google.protobuf.Struct
 	(*structpb.Value)(nil),                 // 38: google.protobuf.Value
 }
-var file_internal_pkg_cursor_proto_cursor_proto_depIdxs = []int32{
+var file_backend_internal_pkg_cursor_proto_cursor_proto_depIdxs = []int32{
 	1,  // 0: aiserver.v1.InferenceRequestedModel.parameters:type_name -> aiserver.v1.InferenceModelParameterValue
 	4,  // 1: aiserver.v1.InferenceContentPart.text:type_name -> aiserver.v1.InferenceTextPart
 	5,  // 2: aiserver.v1.InferenceContentPart.image:type_name -> aiserver.v1.InferenceImagePart
@@ -2772,30 +2764,30 @@ var file_internal_pkg_cursor_proto_cursor_proto_depIdxs = []int32{
 	0,  // [0:35] is the sub-list for field type_name
 }
 
-func init() { file_internal_pkg_cursor_proto_cursor_proto_init() }
-func file_internal_pkg_cursor_proto_cursor_proto_init() {
-	if File_internal_pkg_cursor_proto_cursor_proto != nil {
+func init() { file_backend_internal_pkg_cursor_proto_cursor_proto_init() }
+func file_backend_internal_pkg_cursor_proto_cursor_proto_init() {
+	if File_backend_internal_pkg_cursor_proto_cursor_proto != nil {
 		return
 	}
-	file_internal_pkg_cursor_proto_cursor_proto_msgTypes[2].OneofWrappers = []any{}
-	file_internal_pkg_cursor_proto_cursor_proto_msgTypes[5].OneofWrappers = []any{
+	file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[2].OneofWrappers = []any{}
+	file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[5].OneofWrappers = []any{
 		(*InferenceContentPart_Text)(nil),
 		(*InferenceContentPart_Image)(nil),
 	}
-	file_internal_pkg_cursor_proto_cursor_proto_msgTypes[10].OneofWrappers = []any{}
-	file_internal_pkg_cursor_proto_cursor_proto_msgTypes[11].OneofWrappers = []any{
+	file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[10].OneofWrappers = []any{}
+	file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[11].OneofWrappers = []any{
 		(*InferenceCoreMessage_Text)(nil),
 		(*InferenceCoreMessage_Parts)(nil),
 		(*InferenceCoreMessage_ToolContent)(nil),
 	}
-	file_internal_pkg_cursor_proto_cursor_proto_msgTypes[13].OneofWrappers = []any{}
-	file_internal_pkg_cursor_proto_cursor_proto_msgTypes[15].OneofWrappers = []any{}
-	file_internal_pkg_cursor_proto_cursor_proto_msgTypes[16].OneofWrappers = []any{}
-	file_internal_pkg_cursor_proto_cursor_proto_msgTypes[17].OneofWrappers = []any{}
-	file_internal_pkg_cursor_proto_cursor_proto_msgTypes[18].OneofWrappers = []any{}
-	file_internal_pkg_cursor_proto_cursor_proto_msgTypes[19].OneofWrappers = []any{}
-	file_internal_pkg_cursor_proto_cursor_proto_msgTypes[23].OneofWrappers = []any{}
-	file_internal_pkg_cursor_proto_cursor_proto_msgTypes[26].OneofWrappers = []any{
+	file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[13].OneofWrappers = []any{}
+	file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[15].OneofWrappers = []any{}
+	file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[16].OneofWrappers = []any{}
+	file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[17].OneofWrappers = []any{}
+	file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[18].OneofWrappers = []any{}
+	file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[19].OneofWrappers = []any{}
+	file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[23].OneofWrappers = []any{}
+	file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes[26].OneofWrappers = []any{
 		(*InferenceStreamResponse_TextPart)(nil),
 		(*InferenceStreamResponse_ToolCallPart)(nil),
 		(*InferenceStreamResponse_Usage)(nil),
@@ -2811,18 +2803,18 @@ func file_internal_pkg_cursor_proto_cursor_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_pkg_cursor_proto_cursor_proto_rawDesc), len(file_internal_pkg_cursor_proto_cursor_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_backend_internal_pkg_cursor_proto_cursor_proto_rawDesc), len(file_backend_internal_pkg_cursor_proto_cursor_proto_rawDesc)),
 			NumEnums:      1,
 			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_internal_pkg_cursor_proto_cursor_proto_goTypes,
-		DependencyIndexes: file_internal_pkg_cursor_proto_cursor_proto_depIdxs,
-		EnumInfos:         file_internal_pkg_cursor_proto_cursor_proto_enumTypes,
-		MessageInfos:      file_internal_pkg_cursor_proto_cursor_proto_msgTypes,
+		GoTypes:           file_backend_internal_pkg_cursor_proto_cursor_proto_goTypes,
+		DependencyIndexes: file_backend_internal_pkg_cursor_proto_cursor_proto_depIdxs,
+		EnumInfos:         file_backend_internal_pkg_cursor_proto_cursor_proto_enumTypes,
+		MessageInfos:      file_backend_internal_pkg_cursor_proto_cursor_proto_msgTypes,
 	}.Build()
-	File_internal_pkg_cursor_proto_cursor_proto = out.File
-	file_internal_pkg_cursor_proto_cursor_proto_goTypes = nil
-	file_internal_pkg_cursor_proto_cursor_proto_depIdxs = nil
+	File_backend_internal_pkg_cursor_proto_cursor_proto = out.File
+	file_backend_internal_pkg_cursor_proto_cursor_proto_goTypes = nil
+	file_backend_internal_pkg_cursor_proto_cursor_proto_depIdxs = nil
 }

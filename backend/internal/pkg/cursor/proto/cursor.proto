@@ -197,20 +197,19 @@ message InferenceStreamResponse {
 }
 
 message AvailableModelsRequest {
-  int32 scope = 1;
+  int32 scope = 10;
   bool include_long_context_models = 2;
 }
 
 message AvailableModel {
   string name = 1;
-  int32 vendor = 2;
-  string vendor_name = 3;
-  string client_display_name = 4;
-  repeated string id_aliases = 5;
+  string vendor_name = 41;
+  string client_display_name = 17;
+  repeated string id_aliases = 37;
 }
 
 message AvailableModelsResponse {
-  repeated AvailableModel models = 1;
+  repeated AvailableModel models = 2;
 }
 
 message GetMeRequest {}

@@ -166,9 +166,9 @@
         :remaining-seconds="isOpenAI ? openaiDeviceOAuth.remainingSeconds.value : isGrok ? grokDeviceOAuth.remainingSeconds.value : isCursor ? cursorDeviceOAuth.remainingSeconds.value : kimiOAuth.remainingSeconds.value"
         :complete-label="t('admin.accounts.reAuthorize')"
         :loading-label="t('admin.accounts.oauth.verifying')"
-        @start="isOpenAI ? handleStartOpenAIDeviceAuthorization : isGrok ? handleStartGrokDeviceAuthorization : isCursor ? handleStartCursorDeviceAuthorization : handleStartKimiAuthorization"
-        @cancel="isOpenAI ? handleCancelOpenAIDeviceAuthorization : isGrok ? handleCancelGrokDeviceAuthorization : isCursor ? handleCancelCursorDeviceAuthorization : handleCancelKimiAuthorization"
-        @complete="isOpenAI ? handleCompleteOpenAIDeviceAuthorization : isGrok ? handleCompleteGrokDeviceAuthorization : isCursor ? handleCompleteCursorDeviceAuthorization : handleCompleteKimiAuthorization"
+        @start="isOpenAI ? handleStartOpenAIDeviceAuthorization() : isGrok ? handleStartGrokDeviceAuthorization() : isCursor ? handleStartCursorDeviceAuthorization() : handleStartKimiAuthorization()"
+        @cancel="isOpenAI ? handleCancelOpenAIDeviceAuthorization() : isGrok ? handleCancelGrokDeviceAuthorization() : isCursor ? handleCancelCursorDeviceAuthorization() : handleCancelKimiAuthorization()"
+        @complete="isOpenAI ? handleCompleteOpenAIDeviceAuthorization() : isGrok ? handleCompleteGrokDeviceAuthorization() : isCursor ? handleCompleteCursorDeviceAuthorization() : handleCompleteKimiAuthorization()"
       />
 
       <OAuthAuthorizationFlow

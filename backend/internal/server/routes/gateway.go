@@ -33,7 +33,7 @@ func RegisterGatewayRoutes(
 
 	isOpenAIResponsesCompatibleGatewayPlatform := func(c *gin.Context) bool {
 		switch getGroupPlatform(c) {
-		case service.PlatformOpenAI, service.PlatformGrok, service.PlatformKimi:
+		case service.PlatformOpenAI, service.PlatformGrok, service.PlatformKimi, service.PlatformCursor:
 			return true
 		default:
 			return false
@@ -142,6 +142,10 @@ func RegisterGatewayRoutes(
 				h.OpenAIGateway.CodexModels(c)
 				return
 			}
+			if getGroupPlatform(c) == service.PlatformCursor {
+				h.OpenAIGateway.CursorModels(c)
+				return
+			}
 			h.Gateway.Models(c)
 		})
 		gateway.GET("/usage", h.Gateway.Usage)
@@ -193,10 +197,10 @@ func RegisterGatewayRoutes(
 		gateway.GET("/videos/:request_id", videoStatusHandler)
 	}
 
-		// Gemini 原生 /v1beta 供给端点已下线（gemini 平台不再提供账号/分组）。
-		// Gemini 协议仍由 antigravity 转换层承载：/antigravity/v1beta/* 见下。
+	// Gemini 原生 /v1beta 供给端点已下线（gemini 平台不再提供账号/分组）。
+	// Gemini 协议仍由 antigravity 转换层承载：/antigravity/v1beta/* 见下。
 
-		// OpenAI Responses API（不带v1前缀的别名）— auto-route based on group platform
+	// OpenAI Responses API（不带v1前缀的别名）— auto-route based on group platform
 	responsesHandler := func(c *gin.Context) {
 		if isOpenAIResponsesCompatibleGatewayPlatform(c) {
 			h.OpenAIGateway.Responses(c)
@@ -227,6 +231,10 @@ func RegisterGatewayRoutes(
 	r.GET("/models", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
 		if isOpenAIGatewayPlatform(c) && c.Query("client_version") != "" {
 			h.OpenAIGateway.CodexModels(c)
+			return
+		}
+		if getGroupPlatform(c) == service.PlatformCursor {
+			h.OpenAIGateway.CursorModels(c)
 			return
 		}
 		h.Gateway.Models(c)

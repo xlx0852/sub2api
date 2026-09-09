@@ -1102,9 +1102,9 @@ export default {
           aiStudioHint:
             'AI Studio quotas are per-model (Pro/Flash are limited independently). If billing is enabled, choose Pay-as-you-go.',
           googleOne: {
-            free: 'Google One Free',
-            pro: 'Google One Pro',
-            ultra: 'Google One Ultra'
+            free: 'Google One FREE',
+            pro: 'Google One PRO',
+            ultra: 'Google One ULTRA'
           },
           gcp: {
             standard: 'GCP Standard',

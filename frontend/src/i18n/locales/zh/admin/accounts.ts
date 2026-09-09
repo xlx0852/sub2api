@@ -508,9 +508,9 @@ export default {
         planLimitedSeconds: '额度已满，约 {seconds} 秒后恢复'
       },
       tier: {
-        free: 'Free',
-        pro: 'Pro',
-        ultra: 'Ultra',
+        free: 'FREE',
+        pro: 'PRO',
+        ultra: 'ULTRA',
         aiPremium: 'AI Premium',
         standard: '标准版',
         basic: '基础版',

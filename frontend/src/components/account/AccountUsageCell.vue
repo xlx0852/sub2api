@@ -303,7 +303,7 @@
       <div v-else-if="usageInfo" class="space-y-0.5">
         <div v-if="usageInfo.subscription_tier" class="mb-0.5">
           <span class="inline-block rounded px-1.5 py-0.2 text-[9px] font-semibold bg-cyan-100 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300">
-            {{ usageInfo.subscription_tier }}
+            {{ String(usageInfo.subscription_tier).toUpperCase() }}
           </span>
         </div>
         <UsageProgressBar
@@ -1253,7 +1253,7 @@ const grokWeeklyBar = computed((): GrokQuotaBarInfo | null => {
 
 const grokLocalUsage = computed(() => usageInfo.value?.grok_local_usage || props.todayStats || null)
 const grokPlanOrEntitlementLabel = computed(() => {
-  const plan = (effectiveGrokBilling.value?.plan || usageInfo.value?.subscription_tier || '').trim()
+  const plan = (effectiveGrokBilling.value?.plan || usageInfo.value?.subscription_tier || '').trim().toUpperCase()
   if (plan) return plan
   const status = (usageInfo.value?.grok_entitlement_status || '').trim()
   return status || null
@@ -1275,10 +1275,13 @@ const formatWindowUserCost = (stats: WindowStats) => (stats.user_cost ?? 0).toFi
 const antigravityTierLabel = computed(() => {
   switch (antigravityTier.value) {
     case 'free-tier':
+    case 'FREE':
       return t('admin.accounts.tier.free')
     case 'g1-pro-tier':
+    case 'PRO':
       return t('admin.accounts.tier.pro')
     case 'g1-ultra-tier':
+    case 'ULTRA':
       return t('admin.accounts.tier.ultra')
     default:
       return null
