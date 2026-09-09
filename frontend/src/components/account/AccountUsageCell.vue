@@ -300,17 +300,32 @@
           {{ t('admin.accounts.usageWindow.activeQuery') }}
         </QuotaActionButton>
       </div>
-      <div v-else-if="usageInfo" class="space-y-0.5">
-        <div v-if="usageInfo.subscription_tier" class="mb-0.5">
-          <span class="inline-block rounded px-1.5 py-0.2 text-[9px] font-semibold bg-cyan-100 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300">
-            {{ String(usageInfo.subscription_tier).toUpperCase() }}
+      <div v-else-if="usageInfo" class="space-y-1">
+        <div v-if="cursorPlanLabel || usageInfo.cursor_sand_usage" class="flex items-center gap-1.5">
+          <span v-if="cursorPlanLabel" class="inline-block rounded bg-cyan-100 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300">
+            {{ cursorPlanLabel }}
+          </span>
+          <span
+            v-if="usageInfo.cursor_sand_usage"
+            :class="[
+              'inline-block rounded px-1.5 py-0.5 text-[9px] font-semibold',
+              usageInfo.cursor_sand_usage.has_available_usage
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+            ]"
+          >
+            {{ usageInfo.cursor_sand_usage.has_available_usage
+              ? t('admin.accounts.usageWindow.cursorAvailable')
+              : t('admin.accounts.usageWindow.cursorExhausted') }}
           </span>
         </div>
         <UsageProgressBar
           v-if="usageInfo.seven_day"
-          label="Sand"
+          label="7d Sand"
           :utilization="usageInfo.seven_day.utilization"
           :resets-at="usageInfo.seven_day.resets_at"
+          :window-stats="usageInfo.seven_day.window_stats"
+          :show-now-when-idle="true"
           color="cyan"
         />
         <div class="flex items-center gap-1.5 mt-0.5">
@@ -439,6 +454,7 @@
           :label="row.label"
           :utilization="row.utilization"
           :resets-at="row.resetTime"
+          :window-stats="row.windowStats"
           :clock-offset-ms="antigravityClockOffsetMs"
           :color="index % 2 === 0 ? 'indigo' : 'emerald'"
         />
@@ -870,7 +886,7 @@ const getAntigravityWindowOrder = (label: string): number => {
 
 const antigravityQuotaRows = computed(() => {
   const groups = usageInfo.value?.antigravity_quota_groups || []
-  const byWindow = new Map<string, { utilization: number; resetTime: string | null }>()
+  const byWindow = new Map<string, { utilization: number; resetTime: string | null; windowStats: WindowStats | null }>()
   for (const group of groups) {
     for (const bucket of group.buckets || []) {
       const remaining = Math.max(0, Math.min(1, Number(bucket.remaining_fraction) || 0))
@@ -878,7 +894,7 @@ const antigravityQuotaRows = computed(() => {
       const window = antigravityWindowLabel(bucket.window, bucket.label)
       const current = byWindow.get(window)
       if (!current || utilization > current.utilization) {
-        byWindow.set(window, { utilization, resetTime: bucket.reset_time || null })
+        byWindow.set(window, { utilization, resetTime: bucket.reset_time || null, windowStats: bucket.window_stats || null })
       } else if (!current.resetTime || (bucket.reset_time && bucket.reset_time < current.resetTime)) {
         current.resetTime = bucket.reset_time || null
       }
@@ -1307,6 +1323,14 @@ const validationURL = computed(() => usageInfo.value?.validation_url || '')
 
 // 需要重新授权（401）
 const needsReauth = computed(() => !!usageInfo.value?.needs_reauth)
+
+const cursorPlanLabel = computed(() => {
+  if (props.account.platform !== 'cursor') return ''
+  const sand = usageInfo.value?.cursor_sand_usage
+  return String(
+    sand?.grok_plan_label || sand?.included_usage_plan || usageInfo.value?.subscription_tier || ''
+  ).trim().toUpperCase()
+})
 
 // 降级错误标签（rate_limited / network_error）
 const usageErrorLabel = computed(() => {

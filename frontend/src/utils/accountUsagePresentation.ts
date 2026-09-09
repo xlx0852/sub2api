@@ -11,7 +11,7 @@ export interface AccountUsageWindowPresentation {
   displayPercent?: string | null
   clockOffsetMs?: number
   stats?: WindowStats | null
-  color: 'indigo' | 'emerald' | 'purple' | 'amber'
+  color: 'indigo' | 'emerald' | 'purple' | 'amber' | 'cyan'
 }
 
 export interface AccountUsageDiagnostic {
@@ -158,6 +158,9 @@ const readPlan = (account: Account, usageInfo: AccountUsageInfo | null): string 
       .toLowerCase()
       .replace(/(^|_)([a-z])/g, (_, prefix: string, letter: string) => `${prefix ? ' ' : ''}${letter.toUpperCase()}`)
   }
+  if (account.platform === 'openai') {
+    return normalized.toUpperCase()
+  }
   return normalized
 }
 
@@ -177,7 +180,7 @@ export const buildAccountUsagePresentation = ({
     addUsageProgress(windows, 'seven-day-fable', '7d F', usageInfo?.seven_day_fable || null, 'amber')
   } else if (account.platform === 'cursor') {
     if (usageInfo?.seven_day) {
-      addUsageProgress(windows, 'cursor-sand', 'Sand', usageInfo.seven_day, 'emerald')
+      addUsageProgress(windows, 'cursor-sand', '7d Sand', usageInfo.seven_day, 'cyan')
     }
   } else if (account.platform === 'grok') {
     const billing = usageInfo?.grok_billing
@@ -204,7 +207,7 @@ export const buildAccountUsagePresentation = ({
     const clockOffsetMs = Number.isFinite(serverTime) && Number.isFinite(observedAt)
       ? serverTime - observedAt
       : 0
-    const byWindow = new Map<string, { utilization: number; resetsAt: string | null }>()
+    const byWindow = new Map<string, { utilization: number; resetsAt: string | null; stats: WindowStats | null }>()
     for (const group of quotaGroups) {
       for (const bucket of group.buckets || []) {
         const remaining = Math.max(0, Math.min(1, Number(bucket.remaining_fraction) || 0))
@@ -212,7 +215,7 @@ export const buildAccountUsagePresentation = ({
         const utilization = (1 - remaining) * 100
         const current = byWindow.get(label)
         if (!current || utilization > current.utilization) {
-          byWindow.set(label, { utilization, resetsAt: bucket.reset_time || null })
+          byWindow.set(label, { utilization, resetsAt: bucket.reset_time || null, stats: bucket.window_stats || null })
         } else if (!current.resetsAt || (bucket.reset_time && bucket.reset_time < current.resetsAt)) {
           current.resetsAt = bucket.reset_time || null
         }
@@ -228,7 +231,7 @@ export const buildAccountUsagePresentation = ({
         value.utilization,
         value.resetsAt,
         label === '7d' ? 'emerald' : 'indigo',
-        null,
+        value.stats,
         null,
         null,
         clockOffsetMs

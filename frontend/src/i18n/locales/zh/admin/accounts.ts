@@ -384,6 +384,8 @@ export default {
         cursorUnknown: 'Cursor 额度未知：请点击「刷新额度」读取账号用量。',
         cursorProbe: '刷新额度',
         cursorProbeTooltip: '调用 Cursor 接口查询 Fast Requests 与账期用量',
+        cursorAvailable: '可用',
+        cursorExhausted: '已耗尽',
         passiveSampled: '被动采样',
         activeQuery: '刷新额度'
       },

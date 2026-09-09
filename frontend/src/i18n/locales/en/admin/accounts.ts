@@ -1335,6 +1335,8 @@ export default {
         cursorUnknown: 'Cursor quota unknown — click Refresh quota to load account usage.',
         cursorProbe: 'Refresh quota',
         cursorProbeTooltip: 'Query Cursor usage API for Fast Requests and billing period limits',
+        cursorAvailable: 'Available',
+        cursorExhausted: 'Exhausted',
         passiveSampled: 'Passive',
         activeQuery: 'Refresh quota'
       },

@@ -81,6 +81,17 @@ describe('buildAccountUsagePresentation', () => {
     expect(presentation.windows.map(window => window.label)).toEqual(['7d'])
   })
 
+  it('OpenAI 订阅等级使用大写展示', () => {
+    const presentation = buildAccountUsagePresentation({
+      account: makeAccount(),
+      usageInfo: baseUsage({ subscription_tier: 'pro' }),
+      todayStats: today,
+      t
+    })
+
+    expect(presentation.plan).toBe('PRO')
+  })
+
   it('Kimi 使用 membership.level 展示可读套餐等级而不是购买类型', () => {
     const presentation = buildAccountUsagePresentation({
       account: makeAccount({ platform: 'kimi' }),
@@ -96,6 +107,28 @@ describe('buildAccountUsagePresentation', () => {
 
     expect(presentation.plan).toBe('Intermediate')
     expect(presentation.plan).not.toBe('TYPE_PURCHASE')
+  })
+
+  it('Cursor 使用 7d Sand 窗口并保留本地统计', () => {
+    const stats: WindowStats = { requests: 8, tokens: 1200, cost: 0.8, user_cost: 0.1 }
+    const presentation = buildAccountUsagePresentation({
+      account: makeAccount({ platform: 'cursor' }),
+      usageInfo: baseUsage({
+        subscription_tier: 'supergrok',
+        seven_day: {
+          utilization: 35,
+          resets_at: '2026-09-17T00:00:00Z',
+          remaining_seconds: 0,
+          window_stats: stats
+        }
+      }),
+      todayStats: today,
+      t
+    })
+
+    expect(presentation.windows).toHaveLength(1)
+    expect(presentation.windows[0]).toMatchObject({ label: '7d Sand', utilization: 35, stats })
+    expect(presentation.plan).toBe('supergrok')
   })
 
   it('Grok 只映射官方周额度到窗口模型', () => {
@@ -133,6 +166,15 @@ describe('buildAccountUsagePresentation', () => {
   })
 
   it('Antigravity 使用 quota summary bucket 并将剩余额度换算为已用进度', () => {
+    const stats: WindowStats = {
+      requests: 20,
+      tokens: 5000,
+      cost: 2,
+      full_requests: 72,
+      full_tokens: 18000,
+      full_cost: 7.2,
+      full_estimate: { method: 'cumulative', confidence: 'low', sample_count: 1, used_percent_span: 28 }
+    }
     const presentation = buildAccountUsagePresentation({
       account: makeAccount({ platform: 'antigravity' }),
       usageInfo: baseUsage({
@@ -144,7 +186,8 @@ describe('buildAccountUsagePresentation', () => {
             label: '5 Hour Limit',
             window: '5h',
             remaining_fraction: 0.72,
-            reset_time: '2026-07-12T05:00:00Z'
+            reset_time: '2026-07-12T05:00:00Z',
+            window_stats: stats
           }]
         }]
       }),
@@ -159,6 +202,7 @@ describe('buildAccountUsagePresentation', () => {
       resetsAt: '2026-07-12T05:00:00Z',
       displayPercent: null
     })
+    expect(presentation.windows[0]?.stats).toEqual(stats)
   })
 
   it('Antigravity 多个配额窗口必须保持 5h 在上、7d 在下', () => {

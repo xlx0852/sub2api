@@ -1058,6 +1058,7 @@ export interface AntigravityQuotaBucket {
   remaining_fraction: number
   reset_time?: string
   description?: string
+  window_stats?: WindowStats | null
 }
 
 export interface AntigravityQuotaGroup {
@@ -1129,13 +1130,12 @@ export interface AccountUsageInfo {
     minimum_balance?: number
   }> | null
   cursor_sand_usage?: {
-    sand_usage_percent?: number | null
-    plan?: string
-    email?: string
-    user_id?: string
-    membership_type?: string
-    limit?: number | null
-    num_requests?: number | null
+    usage_percent: number
+    has_available_usage: boolean
+    current_period_start?: string
+    next_reset_timestamp_utc?: string
+    included_usage_plan?: string
+    grok_plan_label?: string
   } | null
   // Antigravity 403 forbidden 状态
   is_forbidden?: boolean
