@@ -205,7 +205,14 @@ func (r *accountQuotaWindowRepository) InsertObservation(ctx context.Context, ob
 			quota_window_id, account_id, platform, kind, observed_at, used_percent,
 			requests, tokens, account_cost, standard_cost, user_cost
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-		ON CONFLICT (quota_window_id, used_percent) DO NOTHING`,
+		ON CONFLICT (quota_window_id, used_percent) DO UPDATE SET
+			observed_at = EXCLUDED.observed_at,
+			requests = EXCLUDED.requests,
+			tokens = EXCLUDED.tokens,
+			account_cost = EXCLUDED.account_cost,
+			standard_cost = EXCLUDED.standard_cost,
+			user_cost = EXCLUDED.user_cost
+		WHERE EXCLUDED.observed_at > account_quota_usage_observations.observed_at`,
 		observation.QuotaWindowID, observation.AccountID, observation.Platform, observation.Kind,
 		observation.ObservedAt, observation.UsedPercent, observation.Requests, observation.Tokens,
 		observation.AccountCost, observation.StandardCost, observation.UserCost,

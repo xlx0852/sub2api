@@ -51,7 +51,7 @@ type apiUsageCache struct {
 
 // windowStatsCache 缓存从本地数据库查询的窗口统计（requests, tokens, cost）
 type windowStatsCache struct {
-	stats     *WindowStats
+	stats     map[string]*WindowStats
 	timestamp time.Time
 }
 
@@ -187,12 +187,13 @@ type AntigravityModelQuota struct {
 }
 
 type AntigravityQuotaBucket struct {
-	ID                string  `json:"id"`
-	Label             string  `json:"label"`
-	Window            string  `json:"window,omitempty"`
-	RemainingFraction float64 `json:"remaining_fraction"`
-	ResetTime         string  `json:"reset_time,omitempty"`
-	Description       string  `json:"description,omitempty"`
+	ID                string       `json:"id"`
+	Label             string       `json:"label"`
+	Window            string       `json:"window,omitempty"`
+	RemainingFraction float64      `json:"remaining_fraction"`
+	ResetTime         string       `json:"reset_time,omitempty"`
+	Description       string       `json:"description,omitempty"`
+	WindowStats       *WindowStats `json:"window_stats,omitempty"`
 }
 
 type AntigravityQuotaGroup struct {
@@ -994,6 +995,7 @@ func (s *AccountUsageService) getGeminiUsage(ctx context.Context, account *Accou
 		usage.GeminiProMinute = buildGeminiUsageProgress(minuteTotals.ProRequests, quota.ProRPM, minuteResetAt, minuteTotals.ProTokens, minuteTotals.ProCost, now)
 		usage.GeminiFlashMinute = buildGeminiUsageProgress(minuteTotals.FlashRequests, quota.FlashRPM, minuteResetAt, minuteTotals.FlashTokens, minuteTotals.FlashCost, now)
 	}
+	attachFullWindowEstimates(usage)
 
 	return usage, nil
 }
@@ -1016,6 +1018,7 @@ func (s *AccountUsageService) getAntigravityUsage(ctx context.Context, account *
 					if usage.FiveHour != nil && usage.FiveHour.ResetsAt != nil {
 						usage.FiveHour.RemainingSeconds = int(time.Until(*usage.FiveHour.ResetsAt).Seconds())
 					}
+					s.attachAntigravityBucketEstimates(ctx, account.ID, usage)
 					return usage, nil
 				}
 			}
@@ -1073,7 +1076,64 @@ func (s *AccountUsageService) getAntigravityUsage(ctx context.Context, account *
 		now := time.Now()
 		return &UsageInfo{UpdatedAt: &now}, nil
 	}
+	s.attachAntigravityBucketEstimates(ctx, account.ID, usage)
 	return usage, nil
+}
+
+func (s *AccountUsageService) attachAntigravityBucketEstimates(ctx context.Context, accountID int64, usage *UsageInfo) {
+	if s == nil || s.usageLogRepo == nil || usage == nil || accountID <= 0 {
+		return
+	}
+	now := time.Now()
+	statsByWindow := make(map[string]*WindowStats)
+	for groupIndex := range usage.AntigravityQuotaGroups {
+		for bucketIndex := range usage.AntigravityQuotaGroups[groupIndex].Buckets {
+			bucket := &usage.AntigravityQuotaGroups[groupIndex].Buckets[bucketIndex]
+			duration, key := antigravityQuotaWindowDuration(bucket.Window, bucket.Label)
+			if duration <= 0 {
+				continue
+			}
+			stats := statsByWindow[key]
+			if stats == nil {
+				start := now.Add(-duration)
+				if resetAt, err := time.Parse(time.RFC3339Nano, bucket.ResetTime); err == nil {
+					candidate := resetAt.Add(-duration)
+					if !candidate.After(now) {
+						start = candidate
+					}
+				}
+				var raw *usagestats.AccountStats
+				var err error
+				if rangeReader, ok := s.usageLogRepo.(accountWindowStatsRangeReader); ok {
+					raw, err = rangeReader.GetAccountWindowStatsRange(ctx, accountID, start, now)
+				} else {
+					raw, err = s.usageLogRepo.GetAccountWindowStats(ctx, accountID, start)
+				}
+				if err != nil {
+					continue
+				}
+				stats = windowStatsFromAccountStats(raw)
+				statsByWindow[key] = stats
+			}
+			copied := *stats
+			attachFullWindowEstimate(&copied, roundUsagePercent2((1-bucket.RemainingFraction)*100))
+			bucket.WindowStats = &copied
+		}
+	}
+}
+
+func antigravityQuotaWindowDuration(window, label string) (time.Duration, string) {
+	value := strings.ToLower(strings.TrimSpace(window + " " + label))
+	switch {
+	case strings.Contains(value, "5h"), strings.Contains(value, "5 hour"), strings.Contains(value, "five hour"):
+		return 5 * time.Hour, "5h"
+	case strings.Contains(value, "7d"), strings.Contains(value, "week"):
+		return 7 * 24 * time.Hour, "7d"
+	case strings.Contains(value, "1d"), strings.Contains(value, "daily"), strings.Contains(value, "day"):
+		return 24 * time.Hour, "1d"
+	default:
+		return 0, ""
+	}
 }
 
 func (s *AccountUsageService) getGrokUsage(ctx context.Context, account *Account, force ...bool) (*UsageInfo, error) {
@@ -1139,8 +1199,35 @@ func (s *AccountUsageService) getCursorUsage(ctx context.Context, account *Accou
 		return degraded, nil
 	}
 
+	s.attachCursorWindowStats(fetchCtx, account.ID, fetchResult.UsageInfo)
 	enrichUsageWithAccountError(fetchResult.UsageInfo, account)
 	return fetchResult.UsageInfo, nil
+}
+
+func (s *AccountUsageService) attachCursorWindowStats(ctx context.Context, accountID int64, usage *UsageInfo) {
+	if s == nil || s.usageLogRepo == nil || usage == nil || usage.SevenDay == nil {
+		return
+	}
+	now := time.Now()
+	start := codexWindowStatsStart(usage.SevenDay, 7*24*time.Hour, now)
+	if sand := usage.CursorSandUsage; sand != nil && sand.CurrentPeriodStart != "" {
+		if parsed, err := time.Parse(time.RFC3339Nano, sand.CurrentPeriodStart); err == nil && !parsed.After(now) {
+			start = parsed
+		}
+	}
+	var (
+		stats *usagestats.AccountStats
+		err   error
+	)
+	if rangeReader, ok := s.usageLogRepo.(accountWindowStatsRangeReader); ok {
+		stats, err = rangeReader.GetAccountWindowStatsRange(ctx, accountID, start, now)
+	} else {
+		stats, err = s.usageLogRepo.GetAccountWindowStats(ctx, accountID, start)
+	}
+	if err == nil {
+		usage.SevenDay.WindowStats = windowStatsFromAccountStats(stats)
+		attachFullWindowEstimate(usage.SevenDay.WindowStats, usage.SevenDay.Utilization)
+	}
 }
 
 // grokBillingWindowStart returns the start of the official weekly billing
@@ -1512,44 +1599,53 @@ func (s *AccountUsageService) addWindowStats(ctx context.Context, account *Accou
 	}
 
 	// 检查窗口统计缓存（1 分钟）
-	var windowStats *WindowStats
+	var statsByWindow map[string]*WindowStats
 	if cached, ok := s.cache.windowStatsCache.Load(account.ID); ok {
 		if cache, ok := cached.(*windowStatsCache); ok && time.Since(cache.timestamp) < windowStatsCacheTTL {
-			windowStats = cache.stats
+			statsByWindow = cache.stats
 		}
 	}
 
-	// 如果没有缓存，从数据库查询
-	if windowStats == nil {
-		// 使用统一的窗口开始时间计算逻辑（考虑窗口过期情况）
-		startTime := account.GetCurrentWindowStartTime()
-
-		stats, err := s.usageLogRepo.GetAccountWindowStats(ctx, account.ID, startTime)
-		if err != nil {
-			log.Printf("Failed to get window stats for account %d: %v", account.ID, err)
-			return
+	if statsByWindow == nil {
+		statsByWindow = make(map[string]*WindowStats)
+		now := time.Now()
+		windows := []struct {
+			key      string
+			progress *UsageProgress
+			fallback time.Duration
+		}{
+			{"5h", usage.FiveHour, 5 * time.Hour},
+			{"7d", usage.SevenDay, 7 * 24 * time.Hour},
+			{"7d-sonnet", usage.SevenDaySonnet, 7 * 24 * time.Hour},
+			{"7d-fable", usage.SevenDayFable, 7 * 24 * time.Hour},
 		}
-
-		windowStats = &WindowStats{
-			Requests:     stats.Requests,
-			Tokens:       stats.Tokens,
-			Cost:         stats.Cost,
-			StandardCost: stats.StandardCost,
-			UserCost:     stats.UserCost,
+		for _, window := range windows {
+			if window.progress == nil {
+				continue
+			}
+			start := codexWindowStatsStart(window.progress, window.fallback, now)
+			stats, err := s.usageLogRepo.GetAccountWindowStats(ctx, account.ID, start)
+			if err != nil {
+				log.Printf("Failed to get %s window stats for account %d: %v", window.key, account.ID, err)
+				continue
+			}
+			statsByWindow[window.key] = windowStatsFromAccountStats(stats)
 		}
-
-		// 缓存窗口统计（1 分钟）
 		s.cache.windowStatsCache.Store(account.ID, &windowStatsCache{
-			stats:     windowStats,
+			stats:     statsByWindow,
 			timestamp: time.Now(),
 		})
 	}
 
-	// 为 FiveHour 添加 WindowStats（5h 窗口统计）
-	if usage.FiveHour != nil {
-		// 拷贝一份，避免多个窗口共享同一指针被 full_* 互相覆盖
-		copied := *windowStats
-		usage.FiveHour.WindowStats = &copied
+	assignments := []struct {
+		key      string
+		progress *UsageProgress
+	}{{"5h", usage.FiveHour}, {"7d", usage.SevenDay}, {"7d-sonnet", usage.SevenDaySonnet}, {"7d-fable", usage.SevenDayFable}}
+	for _, assignment := range assignments {
+		if assignment.progress != nil && statsByWindow[assignment.key] != nil {
+			copied := *statsByWindow[assignment.key]
+			assignment.progress.WindowStats = &copied
+		}
 	}
 	attachFullWindowEstimates(usage)
 }
@@ -1922,6 +2018,27 @@ func attachFullWindowEstimateFromObservations(stats *WindowStats, utilization fl
 	if latest == nil {
 		return
 	}
+	// Rolling windows may decrease while their reset timestamp remains stable as
+	// old usage ages out. Samples before the latest decrease describe a different
+	// consumption segment and must not be projected together with the new one.
+	segmentStart := 0
+	for i := 1; i < len(observations); i++ {
+		previous, current := observations[i-1], observations[i]
+		if previous != nil && current != nil && current.UsedPercent < previous.UsedPercent {
+			segmentStart = i
+		}
+	}
+	observations = observations[segmentStart:]
+	latest = observations[len(observations)-1]
+	if len(observations) < 2 {
+		stats.FullRequests = nil
+		stats.FullTokens = nil
+		stats.FullCost = nil
+		stats.FullStandardCost = nil
+		stats.FullUserCost = nil
+		stats.FullEstimate = &FullWindowEstimateMeta{Method: "insufficient", Confidence: "insufficient", SampleCount: len(observations)}
+		return
+	}
 	var baseline *AccountQuotaUsageObservation
 	for _, candidate := range observations[:len(observations)-1] {
 		if candidate == nil || !candidate.ObservedAt.Before(latest.ObservedAt) {
@@ -1988,17 +2105,15 @@ func attachFullWindowEstimates(usage *UsageInfo) {
 	if usage == nil {
 		return
 	}
-	if usage.FiveHour != nil && usage.FiveHour.WindowStats != nil {
-		attachFullWindowEstimate(usage.FiveHour.WindowStats, usage.FiveHour.Utilization)
+	progresses := []*UsageProgress{
+		usage.FiveHour, usage.SevenDay, usage.SevenDaySonnet, usage.SevenDayFable,
+		usage.GeminiSharedDaily, usage.GeminiProDaily, usage.GeminiFlashDaily,
+		usage.GeminiSharedMinute, usage.GeminiProMinute, usage.GeminiFlashMinute,
 	}
-	if usage.SevenDay != nil && usage.SevenDay.WindowStats != nil {
-		attachFullWindowEstimate(usage.SevenDay.WindowStats, usage.SevenDay.Utilization)
-	}
-	if usage.SevenDaySonnet != nil && usage.SevenDaySonnet.WindowStats != nil {
-		attachFullWindowEstimate(usage.SevenDaySonnet.WindowStats, usage.SevenDaySonnet.Utilization)
-	}
-	if usage.SevenDayFable != nil && usage.SevenDayFable.WindowStats != nil {
-		attachFullWindowEstimate(usage.SevenDayFable.WindowStats, usage.SevenDayFable.Utilization)
+	for _, progress := range progresses {
+		if progress != nil && progress.WindowStats != nil {
+			attachFullWindowEstimate(progress.WindowStats, progress.Utilization)
+		}
 	}
 }
 

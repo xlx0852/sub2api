@@ -2,10 +2,30 @@ package service
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/stretchr/testify/require"
 )
+
+func TestAntigravityQuotaWindowDuration(t *testing.T) {
+	tests := []struct {
+		window string
+		label  string
+		want   time.Duration
+		key    string
+	}{
+		{"5h", "", 5 * time.Hour, "5h"},
+		{"", "Daily limit", 24 * time.Hour, "1d"},
+		{"weekly", "", 7 * 24 * time.Hour, "7d"},
+		{"unknown", "", 0, ""},
+	}
+	for _, test := range tests {
+		got, key := antigravityQuotaWindowDuration(test.window, test.label)
+		require.Equal(t, test.want, got)
+		require.Equal(t, test.key, key)
+	}
+}
 
 func TestAntigravityModelScope(t *testing.T) {
 	svc := &AntigravityGatewayService{}

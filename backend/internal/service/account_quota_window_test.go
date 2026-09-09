@@ -35,6 +35,10 @@ func (m *memQuotaWindowRepo) InsertObservation(_ context.Context, observation *A
 	defer m.mu.Unlock()
 	for _, existing := range m.observations {
 		if existing.QuotaWindowID == observation.QuotaWindowID && existing.UsedPercent == observation.UsedPercent {
+			if observation.ObservedAt.After(existing.ObservedAt) {
+				*existing = *observation
+				return true, nil
+			}
 			return false, nil
 		}
 	}

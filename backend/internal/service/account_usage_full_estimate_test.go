@@ -68,6 +68,23 @@ func TestAttachFullWindowEstimate_IgnoresDecreasingSamples(t *testing.T) {
 	require.Equal(t, "low", stats.FullEstimate.Confidence)
 }
 
+func TestAttachFullWindowEstimate_RestartsAfterRollingWindowDecrease(t *testing.T) {
+	now := time.Now()
+	stats := &WindowStats{Requests: 700, Tokens: 7000, Cost: 140, StandardCost: 140, UserCost: 14}
+	observations := []*AccountQuotaUsageObservation{
+		{ObservedAt: now.Add(-3 * time.Hour), UsedPercent: 60, Requests: 500, Tokens: 5000, AccountCost: 100, StandardCost: 100, UserCost: 10},
+		{ObservedAt: now.Add(-2 * time.Hour), UsedPercent: 67, Requests: 600, Tokens: 6000, AccountCost: 120, StandardCost: 120, UserCost: 12},
+		{ObservedAt: now.Add(-time.Hour), UsedPercent: 39, Requests: 700, Tokens: 7000, AccountCost: 140, StandardCost: 140, UserCost: 14},
+	}
+
+	attachFullWindowEstimateFromObservations(stats, 39, observations)
+
+	require.Nil(t, stats.FullCost)
+	require.NotNil(t, stats.FullEstimate)
+	require.Equal(t, "insufficient", stats.FullEstimate.Method)
+	require.Equal(t, 1, stats.FullEstimate.SampleCount)
+}
+
 func TestAttachFullWindowEstimates_PerWindow(t *testing.T) {
 	usage := &UsageInfo{
 		FiveHour: &UsageProgress{Utilization: 0, WindowStats: &WindowStats{Requests: 10, Tokens: 100, Cost: 1, UserCost: 0.1}},

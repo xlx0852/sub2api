@@ -39,7 +39,7 @@ func TestUpsertOpenRefresh_KeepsRealStartAt(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestInsertObservation_IsIdempotentByWindowAndPercent(t *testing.T) {
+func TestInsertObservation_RefreshesWindowPercentWithNewerSample(t *testing.T) {
 	db, mock := newSQLMock(t)
 	repo := &accountQuotaWindowRepository{db: db}
 	observedAt := time.Date(2026, 8, 9, 10, 0, 0, 0, time.UTC)
