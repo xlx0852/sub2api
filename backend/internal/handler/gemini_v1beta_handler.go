@@ -422,6 +422,11 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 			}
 			return
 		}
+		if result != nil && result.ReasoningEffort == nil {
+			if effort := geminiReasoningEffortFromBody(body); effort != "" {
+				result.ReasoningEffort = &effort
+			}
+		}
 		if accountReleaseFunc != nil {
 			accountReleaseFunc()
 		}
@@ -505,6 +510,69 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		)
 		return
 	}
+}
+
+func geminiReasoningEffortFromBody(body []byte) string {
+	var root map[string]any
+	if json.Unmarshal(body, &root) != nil {
+		return ""
+	}
+	var thinking map[string]any
+	if generation, ok := root["generationConfig"].(map[string]any); ok {
+		thinking, _ = generation["thinkingConfig"].(map[string]any)
+	}
+	if thinking == nil {
+		if generation, ok := root["generation_config"].(map[string]any); ok {
+			thinking, _ = generation["thinking_config"].(map[string]any)
+		}
+	}
+	if thinking == nil {
+		return ""
+	}
+	level := strings.ToLower(strings.TrimSpace(stringValue(thinking, "thinkingLevel", "thinking_level")))
+	if level != "" {
+		return level
+	}
+	if budget, ok := numberValue(thinking, "thinkingBudget", "thinking_budget"); ok {
+		switch {
+		case budget <= 0:
+			return "none"
+		case budget <= 4096:
+			return "low"
+		case budget <= 16384:
+			return "medium"
+		default:
+			return "high"
+		}
+	}
+	if boolValue(thinking, "includeThoughts", "include_thoughts") {
+		return "high"
+	}
+	return ""
+}
+func stringValue(values map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := values[key].(string); ok {
+			return value
+		}
+	}
+	return ""
+}
+func numberValue(values map[string]any, keys ...string) (int, bool) {
+	for _, key := range keys {
+		if value, ok := values[key].(float64); ok {
+			return int(value), true
+		}
+	}
+	return 0, false
+}
+func boolValue(values map[string]any, keys ...string) bool {
+	for _, key := range keys {
+		if value, ok := values[key].(bool); ok {
+			return value
+		}
+	}
+	return false
 }
 
 func parseGeminiModelAction(rest string) (model string, action string, err error) {
