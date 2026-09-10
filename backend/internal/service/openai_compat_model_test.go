@@ -23,8 +23,8 @@ func TestNormalizeOpenAICompatRequestedModel(t *testing.T) {
 		input string
 		want  string
 	}{
-		{name: "gpt reasoning alias strips xhigh", input: "gpt-5.4-xhigh", want: "gpt-5.4"},
-		{name: "gpt reasoning alias strips none", input: "gpt-5.4-none", want: "gpt-5.4"},
+		{name: "gpt reasoning alias strips xhigh", input: "gpt-5.5-xhigh", want: "gpt-5.5"},
+		{name: "gpt reasoning alias strips none", input: "gpt-5.5-none", want: "gpt-5.5"},
 		{name: "codex max model stays intact", input: "gpt-5.1-codex-max", want: "gpt-5.1-codex-max"},
 		{name: "non openai model unchanged", input: "claude-opus-4-6", want: "claude-opus-4-6"},
 	}
@@ -40,24 +40,24 @@ func TestApplyOpenAICompatModelNormalization(t *testing.T) {
 	t.Parallel()
 
 	t.Run("derives xhigh from model suffix when output config missing", func(t *testing.T) {
-		req := &apicompat.AnthropicRequest{Model: "gpt-5.4-xhigh"}
+		req := &apicompat.AnthropicRequest{Model: "gpt-5.5-xhigh"}
 
 		applyOpenAICompatModelNormalization(req)
 
-		require.Equal(t, "gpt-5.4", req.Model)
+		require.Equal(t, "gpt-5.5", req.Model)
 		require.NotNil(t, req.OutputConfig)
 		require.Equal(t, "max", req.OutputConfig.Effort)
 	})
 
 	t.Run("explicit output config wins over model suffix", func(t *testing.T) {
 		req := &apicompat.AnthropicRequest{
-			Model:        "gpt-5.4-xhigh",
+			Model:        "gpt-5.5-xhigh",
 			OutputConfig: &apicompat.AnthropicOutputConfig{Effort: "low"},
 		}
 
 		applyOpenAICompatModelNormalization(req)
 
-		require.Equal(t, "gpt-5.4", req.Model)
+		require.Equal(t, "gpt-5.5", req.Model)
 		require.NotNil(t, req.OutputConfig)
 		require.Equal(t, "low", req.OutputConfig.Effort)
 	})
@@ -72,18 +72,18 @@ func TestApplyOpenAICompatModelNormalization(t *testing.T) {
 	})
 }
 
-func TestForwardAsAnthropic_NormalizesRoutingAndEffortForGpt54XHigh(t *testing.T) {
+func TestForwardAsAnthropic_NormalizesRoutingAndEffortForGpt55XHigh(t *testing.T) {
 	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
-	body := []byte(`{"model":"gpt-5.4-xhigh","max_tokens":16,"messages":[{"role":"user","content":"hello"}],"stream":false}`)
+	body := []byte(`{"model":"gpt-5.5-xhigh","max_tokens":16,"messages":[{"role":"user","content":"hello"}],"stream":false}`)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 
 	upstreamBody := strings.Join([]string{
-		`data: {"type":"response.completed","response":{"id":"resp_1","object":"response","model":"gpt-5.4","status":"completed","output":[{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}`,
+		`data: {"type":"response.completed","response":{"id":"resp_1","object":"response","model":"gpt-5.5","status":"completed","output":[{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}`,
 		"",
 		"data: [DONE]",
 		"",
@@ -105,7 +105,7 @@ func TestForwardAsAnthropic_NormalizesRoutingAndEffortForGpt54XHigh(t *testing.T
 			"access_token":       "oauth-token",
 			"chatgpt_account_id": "chatgpt-acc",
 			"model_mapping": map[string]any{
-				"gpt-5.4": "gpt-5.4",
+				"gpt-5.5": "gpt-5.5",
 			},
 		},
 	}
@@ -113,16 +113,16 @@ func TestForwardAsAnthropic_NormalizesRoutingAndEffortForGpt54XHigh(t *testing.T
 	result, err := svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "gpt-5.1")
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Equal(t, "gpt-5.4-xhigh", result.Model)
-	require.Equal(t, "gpt-5.4", result.UpstreamModel)
-	require.Equal(t, "gpt-5.4", result.BillingModel)
+	require.Equal(t, "gpt-5.5-xhigh", result.Model)
+	require.Equal(t, "gpt-5.5", result.UpstreamModel)
+	require.Equal(t, "gpt-5.5", result.BillingModel)
 	require.NotNil(t, result.ReasoningEffort)
 	require.Equal(t, "xhigh", *result.ReasoningEffort)
 
-	require.Equal(t, "gpt-5.4", gjson.GetBytes(upstream.lastBody, "model").String())
+	require.Equal(t, "gpt-5.5", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.Equal(t, "xhigh", gjson.GetBytes(upstream.lastBody, "reasoning.effort").String())
 	require.Equal(t, http.StatusOK, rec.Code)
-	require.Equal(t, "gpt-5.4-xhigh", gjson.GetBytes(rec.Body.Bytes(), "model").String())
+	require.Equal(t, "gpt-5.5-xhigh", gjson.GetBytes(rec.Body.Bytes(), "model").String())
 	require.Equal(t, "ok", gjson.GetBytes(rec.Body.Bytes(), "content.0.text").String())
 	t.Logf("upstream body: %s", string(upstream.lastBody))
 	t.Logf("response body: %s", rec.Body.String())

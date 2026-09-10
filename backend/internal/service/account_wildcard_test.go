@@ -332,30 +332,30 @@ func TestAccountResolveMappedModel(t *testing.T) {
 		{
 			name:           "no mapping reports unmatched",
 			credentials:    nil,
-			requestedModel: "gpt-5.4",
-			expectedModel:  "gpt-5.4",
+			requestedModel: "gpt-5.5",
+			expectedModel:  "gpt-5.5",
 			expectedMatch:  false,
 		},
 		{
 			name: "exact passthrough mapping still counts as matched",
 			credentials: map[string]any{
 				"model_mapping": map[string]any{
-					"gpt-5.4": "gpt-5.4",
+					"gpt-5.5": "gpt-5.5",
 				},
 			},
-			requestedModel: "gpt-5.4",
-			expectedModel:  "gpt-5.4",
+			requestedModel: "gpt-5.5",
+			expectedModel:  "gpt-5.5",
 			expectedMatch:  true,
 		},
 		{
 			name: "wildcard passthrough mapping still counts as matched",
 			credentials: map[string]any{
 				"model_mapping": map[string]any{
-					"gpt-*": "gpt-5.4",
+					"gpt-*": "gpt-5.5",
 				},
 			},
-			requestedModel: "gpt-5.4",
-			expectedModel:  "gpt-5.4",
+			requestedModel: "gpt-5.5",
+			expectedModel:  "gpt-5.5",
 			expectedMatch:  true,
 		},
 		{
@@ -390,8 +390,8 @@ func TestAccountResolveMappedModel(t *testing.T) {
 					"gpt-5.2": "gpt-5.2",
 				},
 			},
-			requestedModel: "gpt-5.4",
-			expectedModel:  "gpt-5.4",
+			requestedModel: "gpt-5.5",
+			expectedModel:  "gpt-5.5",
 			expectedMatch:  false,
 		},
 	}

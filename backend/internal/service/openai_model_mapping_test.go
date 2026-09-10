@@ -15,7 +15,7 @@ func TestResolveOpenAIForwardModel(t *testing.T) {
 			account: &Account{
 				Credentials: map[string]any{},
 			},
-			requestedModel:     "gpt-5.4",
+			requestedModel:     "gpt-5.5",
 			defaultMappedModel: "gpt-4o-mini",
 			expectedModel:      "gpt-4o-mini",
 		},
@@ -24,39 +24,39 @@ func TestResolveOpenAIForwardModel(t *testing.T) {
 			account: &Account{
 				Credentials: map[string]any{
 					"model_mapping": map[string]any{
-						"gpt-5.4": "gpt-5.4",
+						"gpt-5.5": "gpt-5.5",
 					},
 				},
 			},
-			requestedModel:     "gpt-5.4",
+			requestedModel:     "gpt-5.5",
 			defaultMappedModel: "gpt-4o-mini",
-			expectedModel:      "gpt-5.4",
+			expectedModel:      "gpt-5.5",
 		},
 		{
 			name: "preserves wildcard passthrough mapping instead of group default",
 			account: &Account{
 				Credentials: map[string]any{
 					"model_mapping": map[string]any{
-						"gpt-*": "gpt-5.4",
+						"gpt-*": "gpt-5.5",
 					},
 				},
 			},
-			requestedModel:     "gpt-5.4",
+			requestedModel:     "gpt-5.5",
 			defaultMappedModel: "gpt-4o-mini",
-			expectedModel:      "gpt-5.4",
+			expectedModel:      "gpt-5.5",
 		},
 		{
 			name: "uses account remap when explicit target differs",
 			account: &Account{
 				Credentials: map[string]any{
 					"model_mapping": map[string]any{
-						"gpt-5": "gpt-5.4",
+						"gpt-5": "gpt-5.5",
 					},
 				},
 			},
 			requestedModel:     "gpt-5",
 			defaultMappedModel: "gpt-4o-mini",
-			expectedModel:      "gpt-5.4",
+			expectedModel:      "gpt-5.5",
 		},
 	}
 
@@ -79,9 +79,9 @@ func TestResolveOpenAIForwardModel_PreventsClaudeModelFromFallingBackToGpt51(t *
 		t.Fatalf("normalizeCodexModel(...) = %q, want %q", withoutDefault, "gpt-5.1")
 	}
 
-	withDefault := normalizeCodexModel(resolveOpenAIForwardModel(account, "claude-opus-4-6", "gpt-5.4"))
-	if withDefault != "gpt-5.4" {
-		t.Fatalf("normalizeCodexModel(...) = %q, want %q", withDefault, "gpt-5.4")
+	withDefault := normalizeCodexModel(resolveOpenAIForwardModel(account, "claude-opus-4-6", "gpt-5.5"))
+	if withDefault != "gpt-5.5" {
+		t.Fatalf("normalizeCodexModel(...) = %q, want %q", withDefault, "gpt-5.5")
 	}
 }
 

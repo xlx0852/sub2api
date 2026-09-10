@@ -847,7 +847,7 @@ func TestResolveChannelMapping_WildcardMapping(t *testing.T) {
 		GroupIDs: []int64{10},
 		ModelMapping: map[string]map[string]string{
 			"anthropic": {
-				"*": "gpt-5.4",
+				"*": "gpt-5.5",
 			},
 		},
 	}
@@ -856,7 +856,7 @@ func TestResolveChannelMapping_WildcardMapping(t *testing.T) {
 
 	result := svc.ResolveChannelMapping(context.Background(), 10, "any-model-name")
 	require.True(t, result.Mapped)
-	require.Equal(t, "gpt-5.4", result.MappedModel)
+	require.Equal(t, "gpt-5.5", result.MappedModel)
 }
 
 func TestResolveChannelMapping_WildcardFirstMatch(t *testing.T) {

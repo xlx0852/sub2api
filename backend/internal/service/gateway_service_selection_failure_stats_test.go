@@ -9,7 +9,7 @@ import (
 
 func TestCollectSelectionFailureStats(t *testing.T) {
 	svc := &GatewayService{}
-	model := "gpt-5.4"
+	model := "gpt-5.5"
 	resetAt := time.Now().Add(2 * time.Minute).Format(time.RFC3339)
 
 	accounts := []Account{
@@ -104,7 +104,7 @@ func TestDiagnoseSelectionFailure_UnschedulableDetail(t *testing.T) {
 		Schedulable: false,
 	}
 
-	diagnosis := svc.diagnoseSelectionFailure(context.Background(), acc, "gpt-5.4", PlatformOpenAI, map[int64]struct{}{}, false)
+	diagnosis := svc.diagnoseSelectionFailure(context.Background(), acc, "gpt-5.5", PlatformOpenAI, map[int64]struct{}{}, false)
 	if diagnosis.Category != "unschedulable" {
 		t.Fatalf("category=%s want=unschedulable", diagnosis.Category)
 	}
@@ -115,7 +115,7 @@ func TestDiagnoseSelectionFailure_UnschedulableDetail(t *testing.T) {
 
 func TestDiagnoseSelectionFailure_ModelRateLimitedDetail(t *testing.T) {
 	svc := &GatewayService{}
-	model := "gpt-5.4"
+	model := "gpt-5.5"
 	resetAt := time.Now().Add(2 * time.Minute).UTC().Format(time.RFC3339)
 	acc := &Account{
 		ID:          8,

@@ -206,7 +206,7 @@ describe('user UsageView tooltip', () => {
         first_token_ms: 12,
         duration_ms: 345,
         created_at: '2026-03-08T00:00:00Z',
-        model: 'gpt-5.4',
+        model: 'gpt-5.5',
         reasoning_effort: null,
         api_key: { name: 'demo-key' },
       },

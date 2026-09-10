@@ -14,7 +14,7 @@ func mustRawJSON(t *testing.T, s string) json.RawMessage {
 }
 
 func TestShouldAutoInjectPromptCacheKeyForCompat(t *testing.T) {
-	require.True(t, shouldAutoInjectPromptCacheKeyForCompat("gpt-5.4"))
+	require.True(t, shouldAutoInjectPromptCacheKeyForCompat("gpt-5.5"))
 	require.True(t, shouldAutoInjectPromptCacheKeyForCompat("gpt-5.3"))
 	require.True(t, shouldAutoInjectPromptCacheKeyForCompat("gpt-5.3-codex"))
 	require.True(t, shouldAutoInjectPromptCacheKeyForCompat("gpt-5.3-codex-spark"))
@@ -23,14 +23,14 @@ func TestShouldAutoInjectPromptCacheKeyForCompat(t *testing.T) {
 
 func TestDeriveCompatPromptCacheKey_StableAcrossLaterTurns(t *testing.T) {
 	base := &apicompat.ChatCompletionsRequest{
-		Model: "gpt-5.4",
+		Model: "gpt-5.5",
 		Messages: []apicompat.ChatMessage{
 			{Role: "system", Content: mustRawJSON(t, `"You are helpful."`)},
 			{Role: "user", Content: mustRawJSON(t, `"Hello"`)},
 		},
 	}
 	extended := &apicompat.ChatCompletionsRequest{
-		Model: "gpt-5.4",
+		Model: "gpt-5.5",
 		Messages: []apicompat.ChatMessage{
 			{Role: "system", Content: mustRawJSON(t, `"You are helpful."`)},
 			{Role: "user", Content: mustRawJSON(t, `"Hello"`)},
@@ -39,28 +39,28 @@ func TestDeriveCompatPromptCacheKey_StableAcrossLaterTurns(t *testing.T) {
 		},
 	}
 
-	k1 := deriveCompatPromptCacheKey(base, "gpt-5.4")
-	k2 := deriveCompatPromptCacheKey(extended, "gpt-5.4")
+	k1 := deriveCompatPromptCacheKey(base, "gpt-5.5")
+	k2 := deriveCompatPromptCacheKey(extended, "gpt-5.5")
 	require.Equal(t, k1, k2, "cache key should be stable across later turns")
 	require.NotEmpty(t, k1)
 }
 
 func TestDeriveCompatPromptCacheKey_DiffersAcrossSessions(t *testing.T) {
 	req1 := &apicompat.ChatCompletionsRequest{
-		Model: "gpt-5.4",
+		Model: "gpt-5.5",
 		Messages: []apicompat.ChatMessage{
 			{Role: "user", Content: mustRawJSON(t, `"Question A"`)},
 		},
 	}
 	req2 := &apicompat.ChatCompletionsRequest{
-		Model: "gpt-5.4",
+		Model: "gpt-5.5",
 		Messages: []apicompat.ChatMessage{
 			{Role: "user", Content: mustRawJSON(t, `"Question B"`)},
 		},
 	}
 
-	k1 := deriveCompatPromptCacheKey(req1, "gpt-5.4")
-	k2 := deriveCompatPromptCacheKey(req2, "gpt-5.4")
+	k1 := deriveCompatPromptCacheKey(req1, "gpt-5.5")
+	k2 := deriveCompatPromptCacheKey(req2, "gpt-5.5")
 	require.NotEqual(t, k1, k2, "different first user messages should yield different keys")
 }
 

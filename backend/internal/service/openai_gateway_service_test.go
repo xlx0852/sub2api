@@ -245,7 +245,7 @@ func TestOpenAIGatewayService_GenerateSessionHash_ContentFallback(t *testing.T) 
 
 	svc := &OpenAIGatewayService{}
 
-	body := []byte(`{"model":"gpt-5.4","messages":[{"role":"system","content":"You are helpful."},{"role":"user","content":"Hello"}]}`)
+	body := []byte(`{"model":"gpt-5.5","messages":[{"role":"system","content":"You are helpful."},{"role":"user","content":"Hello"}]}`)
 
 	hash := svc.GenerateSessionHash(c, body)
 	require.NotEmpty(t, hash, "content-based fallback should produce a hash")
@@ -253,11 +253,11 @@ func TestOpenAIGatewayService_GenerateSessionHash_ContentFallback(t *testing.T) 
 	hash2 := svc.GenerateSessionHash(c, body)
 	require.Equal(t, hash, hash2, "same content should produce same hash")
 
-	bodyExtended := []byte(`{"model":"gpt-5.4","messages":[{"role":"system","content":"You are helpful."},{"role":"user","content":"Hello"},{"role":"assistant","content":"Hi!"},{"role":"user","content":"How are you?"}]}`)
+	bodyExtended := []byte(`{"model":"gpt-5.5","messages":[{"role":"system","content":"You are helpful."},{"role":"user","content":"Hello"},{"role":"assistant","content":"Hi!"},{"role":"user","content":"How are you?"}]}`)
 	hashExtended := svc.GenerateSessionHash(c, bodyExtended)
 	require.Equal(t, hash, hashExtended, "hash should be stable across later turns")
 
-	bodyDifferent := []byte(`{"model":"gpt-5.4","messages":[{"role":"user","content":"Different question"}]}`)
+	bodyDifferent := []byte(`{"model":"gpt-5.5","messages":[{"role":"user","content":"Different question"}]}`)
 	hashDifferent := svc.GenerateSessionHash(c, bodyDifferent)
 	require.NotEqual(t, hash, hashDifferent, "different content should produce different hash")
 }
@@ -269,7 +269,7 @@ func TestOpenAIGatewayService_GenerateSessionHash_ExplicitSignalWinsOverContent(
 	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/chat/completions", nil)
 
 	svc := &OpenAIGatewayService{}
-	body := []byte(`{"model":"gpt-5.4","messages":[{"role":"user","content":"Hello"}]}`)
+	body := []byte(`{"model":"gpt-5.5","messages":[{"role":"user","content":"Hello"}]}`)
 
 	contentHash := svc.GenerateSessionHash(c, body)
 	require.NotEmpty(t, contentHash)

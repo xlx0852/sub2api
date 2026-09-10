@@ -81,7 +81,7 @@ func TestUsageLogFromService_IncludesServiceTierForUserAndAdmin(t *testing.T) {
 	upstreamEndpoint := "/v1/responses"
 	log := &service.UsageLog{
 		RequestID:             "req_3",
-		Model:                 "gpt-5.4",
+		Model:                 "gpt-5.5",
 		ServiceTier:           &serviceTier,
 		InboundEndpoint:       &inboundEndpoint,
 		UpstreamEndpoint:      &upstreamEndpoint,

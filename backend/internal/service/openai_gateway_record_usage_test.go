@@ -725,7 +725,7 @@ func TestOpenAIGatewayServiceRecordUsage_ClampsActualInputTokensToZero(t *testin
 	require.Equal(t, 0, usageRepo.lastLog.InputTokens)
 }
 
-func TestOpenAIGatewayServiceRecordUsage_Gpt54LongContextBillsWholeSession(t *testing.T) {
+func TestOpenAIGatewayServiceRecordUsage_Gpt55LongContextBillsWholeSession(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 	userRepo := &openAIRecordUsageUserRepoStub{}
 	subRepo := &openAIRecordUsageSubRepoStub{}
@@ -738,7 +738,7 @@ func TestOpenAIGatewayServiceRecordUsage_Gpt54LongContextBillsWholeSession(t *te
 				InputTokens:  300000,
 				OutputTokens: 2000,
 			},
-			Model:    "gpt-5.4-2026-03-05",
+			Model:    "gpt-5.5",
 			Duration: time.Second,
 		},
 		APIKey:  &APIKey{ID: 1014},
@@ -771,7 +771,7 @@ func TestOpenAIGatewayServiceRecordUsage_ServiceTierPriorityUsesFastPricing(t *t
 			RequestID:   "resp_service_tier_priority",
 			ServiceTier: &serviceTier,
 			Usage:       usage,
-			Model:       "gpt-5.4",
+			Model:       "gpt-5.5",
 			Duration:    time.Second,
 		},
 		APIKey:  &APIKey{ID: 1015},
@@ -784,7 +784,7 @@ func TestOpenAIGatewayServiceRecordUsage_ServiceTierPriorityUsesFastPricing(t *t
 	require.NotNil(t, usageRepo.lastLog.ServiceTier)
 	require.Equal(t, serviceTier, *usageRepo.lastLog.ServiceTier)
 
-	baseCost, calcErr := svc.billingService.CalculateCost("gpt-5.4", UsageTokens{InputTokens: 100, OutputTokens: 50}, 1.0)
+	baseCost, calcErr := svc.billingService.CalculateCost("gpt-5.5", UsageTokens{InputTokens: 100, OutputTokens: 50}, 1.0)
 	require.NoError(t, calcErr)
 	require.InDelta(t, baseCost.TotalCost*2, usageRepo.lastLog.TotalCost, 1e-10)
 }
@@ -802,7 +802,7 @@ func TestOpenAIGatewayServiceRecordUsage_ServiceTierFlexHalvesCost(t *testing.T)
 			RequestID:   "resp_service_tier_flex",
 			ServiceTier: &serviceTier,
 			Usage:       usage,
-			Model:       "gpt-5.4",
+			Model:       "gpt-5.5",
 			Duration:    time.Second,
 		},
 		APIKey:  &APIKey{ID: 1016},
@@ -813,7 +813,7 @@ func TestOpenAIGatewayServiceRecordUsage_ServiceTierFlexHalvesCost(t *testing.T)
 	require.NoError(t, err)
 	require.NotNil(t, usageRepo.lastLog)
 
-	baseCost, calcErr := svc.billingService.CalculateCost("gpt-5.4", UsageTokens{InputTokens: 80, OutputTokens: 50, CacheReadTokens: 20}, 1.0)
+	baseCost, calcErr := svc.billingService.CalculateCost("gpt-5.5", UsageTokens{InputTokens: 80, OutputTokens: 50, CacheReadTokens: 20}, 1.0)
 	require.NoError(t, calcErr)
 	require.InDelta(t, baseCost.TotalCost*0.5, usageRepo.lastLog.TotalCost, 1e-10)
 }

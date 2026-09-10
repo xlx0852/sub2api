@@ -39,7 +39,7 @@ func TestMarshalModelMapping(t *testing.T) {
 		{
 			name: "nested values",
 			input: map[string]map[string]string{
-				"openai":    {"*": "gpt-5.4"},
+				"openai":    {"*": "gpt-5.5"},
 				"anthropic": {"claude-old": "claude-new"},
 			},
 		},

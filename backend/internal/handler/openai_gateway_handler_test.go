@@ -355,16 +355,16 @@ func TestOpenAIEnsureResponsesDependencies(t *testing.T) {
 func TestResolveOpenAIForwardDefaultMappedModel(t *testing.T) {
 	t.Run("prefers_explicit_fallback_model", func(t *testing.T) {
 		apiKey := &service.APIKey{
-			Group: &service.Group{DefaultMappedModel: "gpt-5.4"},
+			Group: &service.Group{DefaultMappedModel: "gpt-5.5"},
 		}
 		require.Equal(t, "gpt-5.2", resolveOpenAIForwardDefaultMappedModel(apiKey, " gpt-5.2 "))
 	})
 
 	t.Run("uses_group_default_on_normal_path", func(t *testing.T) {
 		apiKey := &service.APIKey{
-			Group: &service.Group{DefaultMappedModel: "gpt-5.4"},
+			Group: &service.Group{DefaultMappedModel: "gpt-5.5"},
 		}
-		require.Equal(t, "gpt-5.4", resolveOpenAIForwardDefaultMappedModel(apiKey, ""))
+		require.Equal(t, "gpt-5.5", resolveOpenAIForwardDefaultMappedModel(apiKey, ""))
 	})
 
 	t.Run("returns_empty_without_group_default", func(t *testing.T) {
