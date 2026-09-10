@@ -2018,7 +2018,7 @@ const createForm = reactive({
   fallback_group_id_on_invalid_request: null as number | null,
   // OpenAI Messages 调度配置（仅 openai 平台使用）
   allow_messages_dispatch: false,
-  default_mapped_model: 'gpt-5.4',
+  default_mapped_model: 'gpt-5.5',
   // 账号过滤控制（OpenAI/Antigravity 平台）
   require_oauth_only: false,
   require_privacy_set: false,
@@ -2405,7 +2405,7 @@ const closeCreateModal = () => {
   createForm.allow_messages_dispatch = false
   createForm.require_oauth_only = false
   createForm.require_privacy_set = false
-  createForm.default_mapped_model = 'gpt-5.4'
+  createForm.default_mapped_model = 'gpt-5.5'
   createForm.supported_model_scopes = ['claude', 'gemini_text', 'gemini_image']
   createForm.mcp_xml_inject = true
   createForm.copy_accounts_from_group_ids = []
