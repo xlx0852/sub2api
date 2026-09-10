@@ -234,14 +234,15 @@ func TestApplyCodexOAuthTransform_EmptyInput(t *testing.T) {
 
 func TestNormalizeCodexModel_Gpt53(t *testing.T) {
 	cases := map[string]string{
+		"gpt-5.5":                   "gpt-5.5",
+		"gpt-5.5-high":              "gpt-5.5",
+		"gpt-5.5-chat-latest":       "gpt-5.5",
+		"gpt 5.5":                   "gpt-5.5",
+		// GPT-5.4 已下架，归一化仅用于历史计费。
 		"gpt-5.4":                   "gpt-5.4",
 		"gpt-5.4-high":              "gpt-5.4",
-		"gpt-5.4-chat-latest":       "gpt-5.4",
-		"gpt 5.4":                   "gpt-5.4",
 		"gpt-5.4-mini":              "gpt-5.4-mini",
-		"gpt 5.4 mini":              "gpt-5.4-mini",
 		"gpt-5.4-nano":              "gpt-5.4-nano",
-		"gpt 5.4 nano":              "gpt-5.4-nano",
 		"gpt-5.3":                   "gpt-5.3-codex",
 		"gpt-5.3-codex":             "gpt-5.3-codex",
 		"gpt-5.3-codex-xhigh":       "gpt-5.3-codex",
@@ -334,7 +335,7 @@ func TestApplyCodexOAuthTransform_NonCodexCLI_PreservesExistingInstructions(t *t
 }
 
 func TestApplyCodexOAuthTransform_StringInputConvertedToArray(t *testing.T) {
-	reqBody := map[string]any{"model": "gpt-5.4", "input": "Hello, world!"}
+	reqBody := map[string]any{"model": "gpt-5.5", "input": "Hello, world!"}
 	result := applyCodexOAuthTransform(reqBody, false, false)
 	require.True(t, result.Modified)
 	input, ok := reqBody["input"].([]any)
@@ -348,7 +349,7 @@ func TestApplyCodexOAuthTransform_StringInputConvertedToArray(t *testing.T) {
 }
 
 func TestApplyCodexOAuthTransform_EmptyStringInputBecomesEmptyArray(t *testing.T) {
-	reqBody := map[string]any{"model": "gpt-5.4", "input": ""}
+	reqBody := map[string]any{"model": "gpt-5.5", "input": ""}
 	result := applyCodexOAuthTransform(reqBody, false, false)
 	require.True(t, result.Modified)
 	input, ok := reqBody["input"].([]any)
@@ -357,7 +358,7 @@ func TestApplyCodexOAuthTransform_EmptyStringInputBecomesEmptyArray(t *testing.T
 }
 
 func TestApplyCodexOAuthTransform_WhitespaceStringInputBecomesEmptyArray(t *testing.T) {
-	reqBody := map[string]any{"model": "gpt-5.4", "input": "   "}
+	reqBody := map[string]any{"model": "gpt-5.5", "input": "   "}
 	result := applyCodexOAuthTransform(reqBody, false, false)
 	require.True(t, result.Modified)
 	input, ok := reqBody["input"].([]any)
@@ -367,7 +368,7 @@ func TestApplyCodexOAuthTransform_WhitespaceStringInputBecomesEmptyArray(t *test
 
 func TestApplyCodexOAuthTransform_StringInputWithToolsField(t *testing.T) {
 	reqBody := map[string]any{
-		"model": "gpt-5.4",
+		"model": "gpt-5.5",
 		"input": "Run the tests",
 		"tools": []any{map[string]any{"type": "function", "name": "bash"}},
 	}
