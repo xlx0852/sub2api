@@ -94,6 +94,16 @@ func patchGrokResponsesBodyWithTranslation(body []byte, upstreamModel string) ([
 			}
 		}
 	}
+	// Grok 上游拒绝 reasoning effort 值 "none"/"minimal"（400）。Codex 系客户端
+	// 用它表达"关闭推理"，映射为 grok 最低的 low，保留低推理意图。
+	for _, field := range []string{"reasoning_effort", "reasoningEffort", "reasoning.effort"} {
+		if v := strings.ToLower(strings.TrimSpace(gjson.GetBytes(out, field).String())); v == "none" || v == "minimal" {
+			out, err = sjson.SetBytes(out, field, "low")
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+	}
 	out, err = sanitizeGrokResponsesUnsupportedFields(out)
 	if err != nil {
 		return nil, nil, err

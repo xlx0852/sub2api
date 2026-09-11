@@ -104,6 +104,25 @@ func TestPatchGrokResponsesBodySanitizesComposerReasoningParameters(t *testing.T
 	}
 }
 
+func TestPatchGrokResponsesBodyMapsRejectedReasoningEffortNone(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{
+		"model": "grok",
+		"input": "hello",
+		"reasoning": {"effort": "none"},
+		"reasoning_effort": "minimal",
+		"reasoningEffort": "none"
+	}`)
+
+	patched, err := patchGrokResponsesBody(body, "grok-4.5")
+	require.NoError(t, err)
+	require.True(t, json.Valid(patched))
+	require.Equal(t, "low", gjson.GetBytes(patched, "reasoning.effort").String())
+	require.Equal(t, "low", gjson.GetBytes(patched, "reasoning_effort").String())
+	require.Equal(t, "low", gjson.GetBytes(patched, "reasoningEffort").String())
+}
+
 func TestSanitizeGrokReasoningNullContent_StripsNullContent(t *testing.T) {
 	t.Parallel()
 
