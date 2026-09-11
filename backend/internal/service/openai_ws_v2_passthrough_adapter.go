@@ -591,6 +591,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				if billingRequestID == "" {
 					billingRequestID = "ws-turn:" + generateRequestID()
 				}
+				// RunEntry owns one dialed upstream connection for all of its turns.
+				// A later completed turn reuses that connection even without a pool lease.
+				connReused := turnNo > 1
 				turnResult := &OpenAIForwardResult{
 					RequestID:        turn.RequestID,
 					ResponseID:       turn.RequestID,
@@ -607,6 +610,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					ReasoningEffort: usageMeta.reasoningEffort.Load(),
 					Stream:          true,
 					OpenAIWSMode:    true,
+					WSConnReused:    &connReused,
 					ResponseHeaders: cloneHeader(handshakeHeaders),
 					Duration:        turn.Duration,
 					FirstTokenMs:    turn.FirstTokenMs,

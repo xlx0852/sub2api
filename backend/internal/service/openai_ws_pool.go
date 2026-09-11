@@ -280,6 +280,8 @@ type openAIWSConn struct {
 
 	handshakeHeaders http.Header
 	betaFeatures     string
+	wsURL            string
+	proxyURL         string
 
 	leaseCh   chan struct{}
 	closedCh  chan struct{}
@@ -684,8 +686,14 @@ func (c *openAIWSConn) handshakeHeader(name string) string {
 	return strings.TrimSpace(c.handshakeHeaders.Get(strings.TrimSpace(name)))
 }
 
-func (c *openAIWSConn) matchesBetaFeatures(betaFeatures string) bool {
-	return c != nil && c.betaFeatures == betaFeatures
+func (c *openAIWSConn) matchesBetaFeatures(betaFeatures string, requests ...openAIWSAcquireRequest) bool {
+	if c == nil || c.betaFeatures != betaFeatures {
+		return false
+	}
+	if len(requests) > 0 && c.wsURL != "" {
+		return c.wsURL == requests[0].WSURL && c.proxyURL == requests[0].ProxyURL
+	}
+	return true
 }
 
 func (c *openAIWSConn) isPrewarmed() bool {
@@ -1017,7 +1025,7 @@ retryAcquire:
 	forcePreferredConn := allowReuse && req.ForcePreferredConn
 
 	if req.RequirePristine {
-		if pristine := p.pickPristineConnLocked(ap, betaFeatures); pristine != nil && pristine.tryAcquire() {
+		if pristine := p.pickPristineConnLocked(ap, betaFeatures, req); pristine != nil && pristine.tryAcquire() {
 			connPick := time.Since(pickStartedAt)
 			p.recordConnPickDuration(connPick)
 			ap.mu.Unlock()
@@ -1048,7 +1056,7 @@ retryAcquire:
 				return nil, errOpenAIWSPreferredConnUnavailable
 			}
 			preferredConn, ok := ap.conns[preferredConnID]
-			if !ok || !preferredConn.matchesBetaFeatures(betaFeatures) {
+			if !ok || !preferredConn.matchesBetaFeatures(betaFeatures, req) {
 				p.recordConnPickDuration(time.Since(pickStartedAt))
 				ap.mu.Unlock()
 				closeOpenAIWSConns(evicted)
@@ -1129,7 +1137,7 @@ retryAcquire:
 		}
 
 		if preferredConnID != "" {
-			if conn, ok := ap.conns[preferredConnID]; ok && conn.matchesBetaFeatures(betaFeatures) && conn.tryAcquire() {
+			if conn, ok := ap.conns[preferredConnID]; ok && conn.matchesBetaFeatures(betaFeatures, req) && conn.tryAcquire() {
 				connPick := time.Since(pickStartedAt)
 				p.recordConnPickDuration(connPick)
 				ap.mu.Unlock()
@@ -1151,7 +1159,7 @@ retryAcquire:
 			}
 		}
 
-		best := p.pickLeastBusyConnLocked(ap, "", betaFeatures)
+		best := p.pickLeastBusyConnLocked(ap, "", betaFeatures, req)
 		if best != nil && best.tryAcquire() {
 			connPick := time.Since(pickStartedAt)
 			p.recordConnPickDuration(connPick)
@@ -1173,7 +1181,7 @@ retryAcquire:
 			return lease, nil
 		}
 		for _, conn := range ap.conns {
-			if conn == nil || conn == best || !conn.matchesBetaFeatures(betaFeatures) {
+			if conn == nil || conn == best || !conn.matchesBetaFeatures(betaFeatures, req) {
 				continue
 			}
 			if conn.tryAcquire() {
@@ -1208,8 +1216,8 @@ retryAcquire:
 	}
 
 	if !req.ForceNewConn && !req.RequirePristine && len(ap.conns)+ap.creating >= effectiveMaxConns {
-		compatible := p.pickLeastBusyConnLocked(ap, "", betaFeatures)
-		if idle := p.pickOldestIdleConnWithDifferentBetaFeaturesLocked(ap, betaFeatures); idle != nil {
+		compatible := p.pickLeastBusyConnLocked(ap, "", betaFeatures, req)
+		if idle := p.pickOldestIdleConnWithDifferentBetaFeaturesLocked(ap, betaFeatures, req); idle != nil {
 			delete(ap.conns, idle.id)
 			evicted = append(evicted, idle)
 			p.metrics.scaleDownTotal.Add(1)
@@ -1303,7 +1311,7 @@ retryAcquire:
 		return nil, errOpenAIWSConnQueueFull
 	}
 
-	target := p.pickLeastBusyConnLocked(ap, req.PreferredConnID, betaFeatures)
+	target := p.pickLeastBusyConnLocked(ap, req.PreferredConnID, betaFeatures, req)
 	connPick := time.Since(pickStartedAt)
 	p.recordConnPickDuration(connPick)
 	if target == nil {
@@ -1376,13 +1384,13 @@ func (p *openAIWSConnPool) pickOldestIdleConnLocked(ap *openAIWSAccountPool) *op
 	return oldest
 }
 
-func (p *openAIWSConnPool) pickOldestIdleConnWithDifferentBetaFeaturesLocked(ap *openAIWSAccountPool, betaFeatures string) *openAIWSConn {
+func (p *openAIWSConnPool) pickOldestIdleConnWithDifferentBetaFeaturesLocked(ap *openAIWSAccountPool, betaFeatures string, requests ...openAIWSAcquireRequest) *openAIWSConn {
 	if ap == nil || len(ap.conns) == 0 {
 		return nil
 	}
 	var oldest *openAIWSConn
 	for _, conn := range ap.conns {
-		if conn == nil || conn.matchesBetaFeatures(betaFeatures) || conn.isLeased() || conn.waiters.Load() > 0 || p.isConnPinnedLocked(ap, conn.id) {
+		if conn == nil || conn.matchesBetaFeatures(betaFeatures, requests...) || conn.isLeased() || conn.waiters.Load() > 0 || p.isConnPinnedLocked(ap, conn.id) {
 			continue
 		}
 		if oldest == nil || conn.lastUsedAt().Before(oldest.lastUsedAt()) {
@@ -1533,13 +1541,13 @@ func (p *openAIWSConnPool) cleanupAccountLocked(ap *openAIWSAccountPool, now tim
 	return evicted
 }
 
-func (p *openAIWSConnPool) pickLeastBusyConnLocked(ap *openAIWSAccountPool, preferredConnID, betaFeatures string) *openAIWSConn {
+func (p *openAIWSConnPool) pickLeastBusyConnLocked(ap *openAIWSAccountPool, preferredConnID, betaFeatures string, requests ...openAIWSAcquireRequest) *openAIWSConn {
 	if ap == nil || len(ap.conns) == 0 {
 		return nil
 	}
 	preferredConnID = stringsTrim(preferredConnID)
 	if preferredConnID != "" {
-		if conn, ok := ap.conns[preferredConnID]; ok && conn.matchesBetaFeatures(betaFeatures) {
+		if conn, ok := ap.conns[preferredConnID]; ok && conn.matchesBetaFeatures(betaFeatures, requests...) {
 			return conn
 		}
 	}
@@ -1547,7 +1555,7 @@ func (p *openAIWSConnPool) pickLeastBusyConnLocked(ap *openAIWSAccountPool, pref
 	var bestWaiters int32
 	var bestLastUsed time.Time
 	for _, conn := range ap.conns {
-		if conn == nil || !conn.matchesBetaFeatures(betaFeatures) {
+		if conn == nil || !conn.matchesBetaFeatures(betaFeatures, requests...) {
 			continue
 		}
 		waiters := conn.waiters.Load()
@@ -1563,13 +1571,13 @@ func (p *openAIWSConnPool) pickLeastBusyConnLocked(ap *openAIWSAccountPool, pref
 	return best
 }
 
-func (p *openAIWSConnPool) pickPristineConnLocked(ap *openAIWSAccountPool, betaFeatures string) *openAIWSConn {
+func (p *openAIWSConnPool) pickPristineConnLocked(ap *openAIWSAccountPool, betaFeatures string, requests ...openAIWSAcquireRequest) *openAIWSConn {
 	if ap == nil {
 		return nil
 	}
 	var newest *openAIWSConn
 	for _, conn := range ap.conns {
-		if conn == nil || !conn.isPristine() || !conn.matchesBetaFeatures(betaFeatures) || conn.isLeased() || conn.waiters.Load() > 0 {
+		if conn == nil || !conn.isPristine() || !conn.matchesBetaFeatures(betaFeatures, requests...) || conn.isLeased() || conn.waiters.Load() > 0 {
 			continue
 		}
 		if newest == nil || conn.createdAt().After(newest.createdAt()) {
@@ -1917,6 +1925,8 @@ func (p *openAIWSConnPool) dialConn(ctx context.Context, req openAIWSAcquireRequ
 	id := p.nextConnID(req.Account.ID)
 	pooledConn := newOpenAIWSConn(id, req.Account.ID, conn, handshakeHeaders)
 	pooledConn.betaFeatures = normalizeOpenAIWSBetaFeatures(req.Headers)
+	pooledConn.wsURL = req.WSURL
+	pooledConn.proxyURL = req.ProxyURL
 	return pooledConn, nil
 }
 
