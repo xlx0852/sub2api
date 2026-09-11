@@ -1103,28 +1103,6 @@ export interface paths {
       }
     }
   }
-  '/api/v1/auth/validate-promo-code': {
-    post: {
-      parameters: {
-        query?: Record<string, unknown>
-        header?: never
-        path?: Record<string, string | number>
-        cookie?: never
-      }
-      requestBody?: {
-        content: {
-          'application/json': Record<string, unknown>
-        }
-      }
-      responses: {
-        200: {
-          content: {
-            'application/json': Record<string, unknown>
-          }
-        }
-      }
-    }
-  }
   '/api/v1/channels/available': {
     get: {
       parameters: {

@@ -299,6 +299,28 @@ const showPassword = ref<boolean>(false)
 // Public settings
 const registrationEnabled = ref<boolean>(true)
 const emailVerifyEnabled = ref<boolean>(false)
+const invitationCodeEnabled = ref<boolean>(false)
+const turnstileEnabled = ref<boolean>(false)
+const turnstileSiteKey = ref<string>('')
+const siteName = ref<string>('Gateway')
+const linuxdoOAuthEnabled = ref<boolean>(false)
+const wechatOAuthEnabled = ref<boolean>(false)
+const oidcOAuthEnabled = ref<boolean>(false)
+const oidcOAuthProviderName = ref<string>('OIDC')
+const githubOAuthEnabled = ref<boolean>(false)
+const googleOAuthEnabled = ref<boolean>(false)
+const registrationEmailSuffixWhitelist = ref<string[]>([])
+const loginAgreementEnabled = ref<boolean>(false)
+const loginAgreementMode = ref<'modal' | 'checkbox' | string>('modal')
+const loginAgreementUpdatedAt = ref<string>('')
+const loginAgreementRevision = ref<string>('')
+const loginAgreementDocuments = ref<LoginAgreementDocument[]>([])
+const agreementAccepted = ref<boolean>(false)
+const showAgreementModal = ref<boolean>(false)
+
+// Turnstile
+const turnstileRef = ref<InstanceType<typeof TurnstileWidget> | null>(null)
+const turnstileToken = ref<string>('')
 
 // Invitation code validation
 const invitationValidating = ref<boolean>(false)
@@ -390,13 +412,6 @@ onMounted(async () => {
       settings.registration_email_suffix_whitelist || []
     )
     applyLoginAgreementSettings(settings)
-
-    // Read promo code from URL parameter only if promo code is enabled
-      const promoParam = route.query.promo as string
-      if (promoParam) {
-        // Validate the promo code from URL
-      }
-    }
     syncAffiliateReferralCode()
   } catch (error) {
     console.error('Failed to load public settings:', error)
@@ -415,7 +430,6 @@ watch(
 )
 
 onUnmounted(() => {
-  }
   if (invitationValidateTimeout) {
     clearTimeout(invitationValidateTimeout)
   }
@@ -653,15 +667,6 @@ async function handleRegister(): Promise<void> {
   // Validate form
   if (!validateForm()) {
     return
-  }
-
-  // Check promo code validation status
-    // If promo code is being validated, wait
-      return
-    }
-    // If promo code is invalid, block submission
-      return
-    }
   }
 
   const affCode = getEffectiveAffiliateCode()

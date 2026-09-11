@@ -505,16 +505,6 @@ export async function sendPendingOAuthVerifyCode(
 }
 
 /**
- * Validate promo code response
- */
-
-/**
- * Validate promo code (public endpoint, no auth required)
- * @param code - Promo code to validate
- * @returns Validation result with bonus amount if valid
- */
-
-/**
  * Validate invitation code response
  */
 export interface ValidateInvitationCodeResponse {

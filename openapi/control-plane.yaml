@@ -1109,30 +1109,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/auth/validate-promo-code:
-    post:
-      operationId: postAuthValidatePromoCode
-      tags: [auth]
-      summary: POST /api/v1/auth/validate-promo-code
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LooseObject'
-      responses:
-        '200':
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/APIEnvelope'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
   /api/v1/channels/available:
     get:
       operationId: getChannelsAvailable

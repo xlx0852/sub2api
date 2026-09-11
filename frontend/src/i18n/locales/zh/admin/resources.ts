@@ -443,47 +443,6 @@ export default {
       deleteConfirm: '确定要删除该公告吗？此操作无法撤销。'
     },
 
-    // Promo Codes
-
-      // 表单标签（扁平结构便于模板使用）
-      code: '优惠码',
-      autoGenerate: '留空自动生成',
-      codePlaceholder: '输入优惠码或留空',
-      bonusAmount: '赠送金额 ($)',
-      maxUses: '最大使用次数',
-      zeroUnlimited: '0 = 无限制',
-      expiresAt: '过期时间',
-      notes: '备注',
-      notesPlaceholder: '可选备注信息',
-      status: '状态',
-      neverExpires: '永不过期',
-      // 状态标签
-      statusActive: '启用',
-      statusDisabled: '禁用',
-      statusExpired: '已过期',
-      statusMaxUsed: '已用完',
-      // 使用记录
-      usageRecords: '使用记录',
-      viewUsages: '查看使用记录',
-      noUsages: '暂无使用记录',
-      userPrefix: '用户 #{id}',
-      copied: '已复制！',
-      // 消息
-      noCodesYet: '暂无优惠码',
-      createFirstCode: '创建您的第一个优惠码，为新用户提供注册奖励。',
-      codeCreated: '优惠码创建成功',
-      codeUpdated: '优惠码更新成功',
-      codeDeleted: '优惠码删除成功',
-      deleteCodeConfirm: '确定要删除此优惠码吗？此操作无法撤销。',
-      copyRegisterLink: '复制注册链接',
-      registerLinkCopied: '注册链接已复制到剪贴板',
-      failedToLoad: '加载优惠码失败',
-      failedToCreate: '创建优惠码失败',
-      failedToUpdate: '更新优惠码失败',
-      failedToDelete: '删除优惠码失败',
-      failedToLoadUsages: '加载使用记录失败'
-    },
-
     // Usage Records
     usage: {
       title: '使用记录',

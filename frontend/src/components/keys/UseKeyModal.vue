@@ -987,7 +987,6 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
         xhigh: {}
       }
     },
-
     'gpt-5.3-codex-spark': {
       name: 'GPT-5.3 Codex Spark',
       limit: {

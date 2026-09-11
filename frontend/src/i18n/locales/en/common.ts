@@ -263,8 +263,6 @@ export default {
     verifyFailed: 'Verification failed. Please try again.',
     codeRequired: 'Verification code is required',
     invalidCode: 'Please enter a valid 6-digit code',
-    promoCodeInvalid: 'Invalid promo code',
-    promoCodeMaxUsed: 'This promo code has reached its usage limit',
     invitationCodeLabel: 'Invitation Code',
     invitationCodePlaceholder: 'Enter invitation code',
     invitationCodeRequired: 'Invitation code is required',
