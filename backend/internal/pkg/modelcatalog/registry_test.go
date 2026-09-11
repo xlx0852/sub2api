@@ -42,15 +42,15 @@ func TestEmbeddedCatalogLoads(t *testing.T) {
 		t.Fatalf("expected grok-4.6 long-context pricing, got %+v", entry)
 	}
 	deepseek := Get().Platforms["deepseek"]
-	if deepseek.DefaultChatModel != "deepseek-v4-pro" || len(deepseek.Models) != 3 || deepseek.Models[0].ID != "deepseek-v4-pro" {
+	if deepseek.DefaultChatModel != "deepseek-v4-pro" || len(deepseek.Models) != 5 || deepseek.Models[0].ID != "deepseek-flash" {
 		t.Fatalf("expected current DeepSeek V4 catalog, got %+v", deepseek)
 	}
 	vision, ok := deepseek.DefaultMapping["deepseek-v4-flash-vision-exp"]
-	if !ok || vision != "deepseek-v4-flash-vision-exp" || !deepseek.Models[2].Media["image_input"] {
+	if !ok || vision != "deepseek-v4-flash-vision-exp" || !deepseek.Models[4].Media["image_input"] {
 		t.Fatalf("expected DeepSeek V4 Flash Vision Exp catalog mapping/media, got %+v", deepseek)
 	}
 	entry, ok = ResolvePriceEntry("deepseek-v4-flash-vision-exp")
-	if !ok || entry.InputCostPerToken != 3e-6 || entry.OutputCostPerToken != 9e-6 {
+	if !ok || entry.InputCostPerToken != 2e-6 || entry.OutputCostPerToken != 8e-6 {
 		t.Fatalf("expected DeepSeek V4 Flash Vision Exp pricing, got %+v ok=%v", entry, ok)
 	}
 	entry, ok = ResolvePriceEntry("deepseek-v4-pro")

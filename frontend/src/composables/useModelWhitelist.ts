@@ -75,7 +75,7 @@ const qwenModels = [
 ]
 
 // DeepSeek
-let deepseekModels = ['deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp']
+let deepseekModels = ['deepseek-flash', 'deepseek-v4.1-flash', 'deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp']
 
 // Mistral
 const mistralModels = [
@@ -277,6 +277,7 @@ let grokPresetMappings = [
 ]
 
 let deepseekPresetMappings = [
+  { label: 'DeepSeek V4.1 Flash', from: 'deepseek-v4.1-flash', to: 'deepseek-flash', color: 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400' },
   { label: 'DeepSeek V4 Pro', from: 'deepseek-v4-pro', to: 'deepseek-v4-pro', color: 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400' },
   { label: 'DeepSeek V4 Flash', from: 'deepseek-v4-flash', to: 'deepseek-v4-flash', color: 'bg-cyan-100 text-cyan-700 hover:bg-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400' },
   { label: 'DeepSeek V4 Flash Vision Exp', from: 'deepseek-v4-flash-vision-exp', to: 'deepseek-v4-flash-vision-exp', color: 'bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-200 dark:bg-fuchsia-900/30 dark:text-fuchsia-400' }

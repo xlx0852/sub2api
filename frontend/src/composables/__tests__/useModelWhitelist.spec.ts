@@ -114,7 +114,7 @@ describe('useModelWhitelist', () => {
 
   it('DeepSeek 默认列表包含当前官方 V4 模型及视觉实验模型', () => {
     const models = getModelsByPlatform('deepseek')
-    expect(models).toEqual(['deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'])
+    expect(models).toEqual(['deepseek-flash', 'deepseek-v4.1-flash', 'deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'])
     expect(models).not.toContain('deepseek-chat')
     expect(models).not.toContain('deepseek-reasoner')
   })

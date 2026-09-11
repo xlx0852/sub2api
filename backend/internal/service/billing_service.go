@@ -76,12 +76,14 @@ func isDeepSeekV4OfficialModel(model string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(model))
 	return strings.Contains(normalized, "deepseek-v4-pro") ||
 		strings.Contains(normalized, "deepseek-v4-flash") ||
+		normalized == "deepseek-flash" || normalized == "deepseek-v4.1-flash" ||
 		normalized == "deepseek-chat" || normalized == "deepseek-reasoner"
 }
 
 func isDeepSeekPeakTime(now time.Time) bool {
 	// Official Chinese pricing defines peak hours on Monday-Friday only.
-	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
+	beijing := now.In(time.FixedZone("Asia/Shanghai", 8*60*60))
+	if beijing.Weekday() == time.Saturday || beijing.Weekday() == time.Sunday {
 		return false
 	}
 	hour := now.UTC().Hour()
@@ -107,12 +109,11 @@ func applyDeepSeekOfficialPeakPricing(model string, pricing *ModelPricing) *Mode
 		cloned.CacheCreationPricePerToken = 9.0e-6
 		cloned.CacheReadPricePerToken = 0.30e-6
 	} else {
-		// deepseek-chat / deepseek-reasoner and Vision Exp use the official
-		// Chinese V4 Flash price band.
-		cloned.InputPricePerToken = 3.0e-6
-		cloned.OutputPricePerToken = 9.0e-6
-		cloned.CacheCreationPricePerToken = 3.0e-6
-		cloned.CacheReadPricePerToken = 0.10e-6
+		// V4 Flash compatibility IDs now use V4.1 Flash's CNY peak rates.
+		cloned.InputPricePerToken = 2.0e-6
+		cloned.OutputPricePerToken = 8.0e-6
+		cloned.CacheCreationPricePerToken = 2.0e-6
+		cloned.CacheReadPricePerToken = 0.04e-6
 	}
 	return &cloned
 }
@@ -269,6 +270,9 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	}
 
 	// DeepSeek V4 系列：仅匹配已知 V4 Pro/Flash 与官方兼容别名
+	if modelLower == "deepseek-flash" || modelLower == "deepseek-v4.1-flash" {
+		return s.fallbackPrice("deepseek-flash")
+	}
 	// （deepseek-chat / deepseek-reasoner → V4 Flash），未知 deepseek-* 型号不回退，避免误计价。
 	if strings.Contains(modelLower, "deepseek-v4-flash") {
 		return s.fallbackPrice("deepseek-v4-flash")

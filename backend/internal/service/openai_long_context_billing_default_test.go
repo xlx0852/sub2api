@@ -18,17 +18,17 @@ func TestBillingService_GPT56LongContextExactThresholdAndOneTokenAbove(t *testin
 	}
 	base, err := svc.CalculateCost("gpt-5.6-sol", atThreshold, 1)
 	require.NoError(t, err)
-	require.InDelta(t, 100_000*5e-6, base.InputCost, 1e-12)
-	require.InDelta(t, 100_000*6.25e-6, base.CacheCreationCost, 1e-12)
-	require.InDelta(t, 72_000*0.5e-6, base.CacheReadCost, 1e-12)
-	require.InDelta(t, 10*30e-6, base.OutputCost, 1e-12)
+	require.InDelta(t, 100_000*4e-6, base.InputCost, 1e-12)
+	require.InDelta(t, 100_000*5e-6, base.CacheCreationCost, 1e-12)
+	require.InDelta(t, 72_000*0.4e-6, base.CacheReadCost, 1e-12)
+	require.InDelta(t, 10*20e-6, base.OutputCost, 1e-12)
 
 	aboveThreshold := atThreshold
 	aboveThreshold.CacheReadTokens++
 	longContext, err := svc.CalculateCost("gpt-5.6-sol", aboveThreshold, 1)
 	require.NoError(t, err)
-	require.InDelta(t, 100_000*5e-6*2, longContext.InputCost, 1e-12)
-	require.InDelta(t, 100_000*6.25e-6*2, longContext.CacheCreationCost, 1e-12)
-	require.InDelta(t, 72_001*0.5e-6*2, longContext.CacheReadCost, 1e-12)
-	require.InDelta(t, 10*30e-6*1.5, longContext.OutputCost, 1e-12)
+	require.InDelta(t, 100_000*4e-6*2, longContext.InputCost, 1e-12)
+	require.InDelta(t, 100_000*5e-6*2, longContext.CacheCreationCost, 1e-12)
+	require.InDelta(t, 72_001*0.4e-6*2, longContext.CacheReadCost, 1e-12)
+	require.InDelta(t, 10*20e-6*1.5, longContext.OutputCost, 1e-12)
 }

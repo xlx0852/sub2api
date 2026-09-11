@@ -848,8 +848,8 @@ func TestCalculateCost_DeepSeekFlashAndProExactCNYComponents(t *testing.T) {
 		model                                   string
 		input, output, cacheCreation, cacheRead float64
 	}{
-		{model: "deepseek-v4-flash", input: 3, output: 9, cacheCreation: 3, cacheRead: 0.10},
-		{model: "deepseek-v4-flash-vision-exp", input: 3, output: 9, cacheCreation: 3, cacheRead: 0.10},
+		{model: "deepseek-v4-flash", input: 2, output: 8, cacheCreation: 2, cacheRead: 0.04},
+		{model: "deepseek-v4-flash-vision-exp", input: 2, output: 8, cacheCreation: 2, cacheRead: 0.04},
 		{model: "deepseek-v4-pro", input: 9, output: 27, cacheCreation: 9, cacheRead: 0.30},
 	} {
 		t.Run(tt.model, func(t *testing.T) {
