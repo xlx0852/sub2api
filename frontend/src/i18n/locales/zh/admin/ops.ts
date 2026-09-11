@@ -411,6 +411,8 @@ export default {
         blockedBeforeUpstream: '调用前拦截（未请求上游）',
         flowPassed: '通过',
         flowNotReached: '未到达',
+        flowSelectedAccount: '选中 {account}',
+        flowAttemptsSummary: '共尝试 {n} 次 · {m} 个账号',
         compareA: '对比 A',
         compareB: '对比 B',
         suggestion: '处理建议',

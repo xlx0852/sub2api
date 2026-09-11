@@ -440,7 +440,39 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 		return s.fallbackPrice("grok-build-0.1")
 	}
 
+	// Cursor sandbox 网关模型：cursor-<base>-<effort>[-fast]。effort/fast 档位
+	// 只影响行为档不改变成本，剥离后按底层模型解析（cursor-grok-4.6-low →
+	// grok-4.6；cursor-claude-opus-5-high → claude-opus-5 → alias 链）。
+	if strings.HasPrefix(modelLower, "cursor-") {
+		if base := normalizeCursorBillingModel(modelLower); base != "" && base != modelLower {
+			if p := s.getFallbackPricing(base); p != nil {
+				return p
+			}
+		}
+	}
+	// Cursor 自研 Composer 无公开价目；锚定 grok-4.6 兜底价，渠道价可覆盖。
+	if modelLower == "composer-2.5" || modelLower == "composer-2.5-fast" {
+		return s.fallbackPrice("grok-4.6")
+	}
+
 	return nil
+}
+
+// normalizeCursorBillingModel strips the "cursor-" prefix and trailing
+// effort/fast tier markers ("-low"/"-medium"/"-high"/"-xhigh"/"-fast") from a
+// Cursor gateway model name, returning the underlying billable base model.
+// "-xhigh" is stripped before "-high" so "xhigh" doesn't leave a dangling "-x".
+func normalizeCursorBillingModel(model string) string {
+	s := strings.TrimPrefix(strings.TrimSpace(model), "cursor-")
+	for {
+		prev := s
+		for _, suffix := range []string{"-fast", "-xhigh", "-low", "-medium", "-high"} {
+			s = strings.TrimSuffix(s, suffix)
+		}
+		if s == prev {
+			return s
+		}
+	}
 }
 
 // GetModelPricing 获取模型价格配置

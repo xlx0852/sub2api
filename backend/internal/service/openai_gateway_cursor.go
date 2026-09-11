@@ -64,32 +64,12 @@ func (s *OpenAIGatewayService) forwardCursorChatCompletions(
 	}
 	chatReq.Model = upstreamModel
 
-	token, _, err := s.GetAccessToken(ctx, account)
+	cursorClient, token, err := s.cursorClientForAccount(ctx, account, func(status int, errType, msg string) {
+		writeChatCompletionsError(c, status, errType, msg)
+	})
 	if err != nil {
-		writeChatCompletionsError(c, http.StatusUnauthorized, "invalid_request_error", "failed to get cursor credentials: "+err.Error())
 		return nil, err
 	}
-	if strings.TrimSpace(token) == "" {
-		writeChatCompletionsError(c, http.StatusUnauthorized, "invalid_request_error", "cursor access token or api key is missing")
-		return nil, fmt.Errorf("account %d missing cursor token", account.ID)
-	}
-
-	machineID := strings.TrimSpace(account.GetCredential("machine_id"))
-	if machineID == "" {
-		machineID = uuid.NewString()
-	}
-
-	baseURL := strings.TrimSpace(account.GetCredential("base_url"))
-	if baseURL == "" {
-		baseURL = cursor.DefaultBackendURL
-	}
-
-	proxyURL := ""
-	if account.ProxyID != nil && account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	}
-
-	cursorClient := cursor.NewClient(token, machineID, createCursorHTTPClient(proxyURL), baseURL)
 
 	// Explicit inference transport keeps the legacy Connect-RPC path (tests / advanced).
 	transport := strings.ToLower(strings.TrimSpace(account.GetCredential("cursor_transport")))
@@ -115,6 +95,75 @@ func (s *OpenAIGatewayService) forwardCursorChatCompletions(
 		Stream:         clientStream,
 	}
 
+	deltas, result, err := s.runCursorGatewayTurn(ctx, c, account, cursorClient, token, gwReq, func(status int, errType, msg string) {
+		writeChatCompletionsError(c, status, errType, msg)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if clientStream {
+		return s.streamCursorGatewayChat(
+			ctx, c, deltas, result,
+			account, originalModel, billingModel, upstreamModel,
+			reasoningEffort, serviceTier, startTime,
+		)
+	}
+	return s.bufferCursorGatewayChat(
+		ctx, c, deltas, result,
+		account, originalModel, billingModel, upstreamModel,
+		reasoningEffort, serviceTier, startTime,
+	)
+}
+
+// cursorClientForAccount resolves the account's credentials and builds the
+// Cursor API client (token, machine_id, base_url, account proxy).
+// writeErr renders failures in the caller's wire format.
+func (s *OpenAIGatewayService) cursorClientForAccount(
+	ctx context.Context,
+	account *Account,
+	writeErr func(status int, errType, msg string),
+) (*cursor.Client, string, error) {
+	token, _, err := s.GetAccessToken(ctx, account)
+	if err != nil {
+		writeErr(http.StatusUnauthorized, "invalid_request_error", "failed to get cursor credentials: "+err.Error())
+		return nil, "", err
+	}
+	if strings.TrimSpace(token) == "" {
+		writeErr(http.StatusUnauthorized, "invalid_request_error", "cursor access token or api key is missing")
+		return nil, "", fmt.Errorf("account %d missing cursor token", account.ID)
+	}
+
+	machineID := strings.TrimSpace(account.GetCredential("machine_id"))
+	if machineID == "" {
+		machineID = uuid.NewString()
+	}
+
+	baseURL := strings.TrimSpace(account.GetCredential("base_url"))
+	if baseURL == "" {
+		baseURL = cursor.DefaultBackendURL
+	}
+
+	proxyURL := ""
+	if account.ProxyID != nil && account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+
+	return cursor.NewClient(token, machineID, createCursorHTTPClient(proxyURL), baseURL), token, nil
+}
+
+// runCursorGatewayTurn starts a sandbox-gateway chat turn via ChatViaGateway.
+// On 401 it force-refreshes the token once, invalidates the cached sandbox
+// session, and retries. Non-failover errors are written via writeErr.
+func (s *OpenAIGatewayService) runCursorGatewayTurn(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	cursorClient *cursor.Client,
+	token string,
+	gwReq *cursor.GatewayChatRequest,
+	writeErr func(status int, errType, msg string),
+) (<-chan cursor.ChatDelta, *cursor.GatewayChatResult, error) {
 	deltas, result, err := cursorClient.ChatViaGateway(ctx, gwReq)
 	if err != nil {
 		// One force-refresh + retry on auth failure.
@@ -136,7 +185,7 @@ func (s *OpenAIGatewayService) forwardCursorChatCompletions(
 		var upErr *cursor.UpstreamError
 		if errors.As(err, &upErr) {
 			if s.shouldFailoverUpstreamError(upErr.StatusCode) {
-				return nil, newOpenAIUpstreamFailoverError(
+				return nil, nil, newOpenAIUpstreamFailoverError(
 					upErr.StatusCode,
 					upErr.Headers,
 					[]byte(upErr.Body),
@@ -144,74 +193,32 @@ func (s *OpenAIGatewayService) forwardCursorChatCompletions(
 					false,
 				)
 			}
-			writeChatCompletionsError(c, upErr.StatusCode, "upstream_error", upErr.Body)
-			return nil, err
+			writeErr(upErr.StatusCode, "upstream_error", upErr.Body)
+			return nil, nil, err
 		}
-		writeChatCompletionsError(c, http.StatusBadGateway, "upstream_error", err.Error())
-		return nil, err
+		writeErr(http.StatusBadGateway, "upstream_error", err.Error())
+		return nil, nil, err
 	}
-
-	if clientStream {
-		return s.streamCursorGatewayChat(
-			ctx, c, deltas, result,
-			account, originalModel, billingModel, upstreamModel,
-			reasoningEffort, serviceTier, startTime,
-		)
-	}
-	return s.bufferCursorGatewayChat(
-		ctx, c, deltas, result,
-		account, originalModel, billingModel, upstreamModel,
-		reasoningEffort, serviceTier, startTime,
-	)
+	return deltas, result, nil
 }
 
-func (s *OpenAIGatewayService) streamCursorGatewayChat(
-	ctx context.Context,
-	c *gin.Context,
+// drainCursorGatewayDeltas consumes a gateway turn's delta channel and emits
+// canonical chat chunks to emit in order: reasoning/content/tool_call deltas,
+// then the finish_reason chunk, then a usage-only chunk. It merges the terminal
+// GatewayChatResult (usage, finish reason, first-token timestamp) and returns
+// the aggregated usage plus first-token latency.
+func drainCursorGatewayDeltas(
 	deltas <-chan cursor.ChatDelta,
 	result *cursor.GatewayChatResult,
-	account *Account,
+	responseID string,
+	createdTimestamp int64,
 	originalModel string,
-	billingModel string,
-	upstreamModel string,
-	reasoningEffort *string,
-	serviceTier *string,
 	startTime time.Time,
-) (*OpenAIForwardResult, error) {
-	c.Writer.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-	c.Writer.Header().Set("Cache-Control", "no-cache")
-	c.Writer.Header().Set("Connection", "keep-alive")
-	c.Writer.Header().Set("X-Accel-Buffering", "no")
-	c.Writer.WriteHeader(http.StatusOK)
-	c.Writer.Flush()
-
-	var usage OpenAIUsage
-	var firstTokenMs *int
-	clientDisconnected := false
+	emit func(*apicompat.ChatCompletionsChunk),
+) (usage OpenAIUsage, firstTokenMs *int) {
 	hasToolCalls := false
-	createdTimestamp := time.Now().Unix()
-	responseID := "chatcmpl-" + uuid.NewString()
 	finishReason := "stop"
 	emittedFinish := false
-
-	writeChunk := func(chunk *apicompat.ChatCompletionsChunk) {
-		if clientDisconnected {
-			return
-		}
-		b, err := json.Marshal(chunk)
-		if err != nil {
-			return
-		}
-		if _, werr := fmt.Fprintf(c.Writer, "data: %s\n\n", b); werr != nil {
-			clientDisconnected = true
-			logger.L().Debug("cursor gateway stream: client disconnected",
-				zap.Error(werr),
-				zap.String("response_id", responseID),
-			)
-		} else {
-			c.Writer.Flush()
-		}
-	}
 
 	for d := range deltas {
 		if firstTokenMs == nil && (d.Text != "" || d.Reasoning != "" || d.ToolName != "") {
@@ -220,7 +227,7 @@ func (s *OpenAIGatewayService) streamCursorGatewayChat(
 		}
 		if d.Reasoning != "" {
 			text := d.Reasoning
-			writeChunk(&apicompat.ChatCompletionsChunk{
+			emit(&apicompat.ChatCompletionsChunk{
 				ID:      responseID,
 				Object:  "chat.completion.chunk",
 				Created: createdTimestamp,
@@ -233,7 +240,7 @@ func (s *OpenAIGatewayService) streamCursorGatewayChat(
 		}
 		if d.Text != "" {
 			text := d.Text
-			writeChunk(&apicompat.ChatCompletionsChunk{
+			emit(&apicompat.ChatCompletionsChunk{
 				ID:      responseID,
 				Object:  "chat.completion.chunk",
 				Created: createdTimestamp,
@@ -247,7 +254,7 @@ func (s *OpenAIGatewayService) streamCursorGatewayChat(
 		if d.ToolName != "" || d.ToolCallID != "" || d.ToolArgs != "" {
 			hasToolCalls = true
 			idx := d.ToolIndex
-			writeChunk(&apicompat.ChatCompletionsChunk{
+			emit(&apicompat.ChatCompletionsChunk{
 				ID:      responseID,
 				Object:  "chat.completion.chunk",
 				Created: createdTimestamp,
@@ -280,7 +287,7 @@ func (s *OpenAIGatewayService) streamCursorGatewayChat(
 			if hasToolCalls && finishReason == "stop" {
 				finishReason = "tool_calls"
 			}
-			writeChunk(&apicompat.ChatCompletionsChunk{
+			emit(&apicompat.ChatCompletionsChunk{
 				ID:      responseID,
 				Object:  "chat.completion.chunk",
 				Created: createdTimestamp,
@@ -319,7 +326,7 @@ func (s *OpenAIGatewayService) streamCursorGatewayChat(
 		if hasToolCalls {
 			finishReason = "tool_calls"
 		}
-		writeChunk(&apicompat.ChatCompletionsChunk{
+		emit(&apicompat.ChatCompletionsChunk{
 			ID:      responseID,
 			Object:  "chat.completion.chunk",
 			Created: createdTimestamp,
@@ -332,7 +339,7 @@ func (s *OpenAIGatewayService) streamCursorGatewayChat(
 		})
 	}
 
-	writeChunk(&apicompat.ChatCompletionsChunk{
+	emit(&apicompat.ChatCompletionsChunk{
 		ID:      responseID,
 		Object:  "chat.completion.chunk",
 		Created: createdTimestamp,
@@ -344,6 +351,53 @@ func (s *OpenAIGatewayService) streamCursorGatewayChat(
 			TotalTokens:      usage.InputTokens + usage.OutputTokens,
 		},
 	})
+	return usage, firstTokenMs
+}
+
+func (s *OpenAIGatewayService) streamCursorGatewayChat(
+	ctx context.Context,
+	c *gin.Context,
+	deltas <-chan cursor.ChatDelta,
+	result *cursor.GatewayChatResult,
+	account *Account,
+	originalModel string,
+	billingModel string,
+	upstreamModel string,
+	reasoningEffort *string,
+	serviceTier *string,
+	startTime time.Time,
+) (*OpenAIForwardResult, error) {
+	c.Writer.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	c.Writer.WriteHeader(http.StatusOK)
+	c.Writer.Flush()
+
+	clientDisconnected := false
+	createdTimestamp := time.Now().Unix()
+	responseID := "chatcmpl-" + uuid.NewString()
+
+	writeChunk := func(chunk *apicompat.ChatCompletionsChunk) {
+		if clientDisconnected {
+			return
+		}
+		b, err := json.Marshal(chunk)
+		if err != nil {
+			return
+		}
+		if _, werr := fmt.Fprintf(c.Writer, "data: %s\n\n", b); werr != nil {
+			clientDisconnected = true
+			logger.L().Debug("cursor gateway stream: client disconnected",
+				zap.Error(werr),
+				zap.String("response_id", responseID),
+			)
+		} else {
+			c.Writer.Flush()
+		}
+	}
+
+	usage, firstTokenMs := drainCursorGatewayDeltas(deltas, result, responseID, createdTimestamp, originalModel, startTime, writeChunk)
 
 	if !clientDisconnected {
 		_, _ = fmt.Fprint(c.Writer, "data: [DONE]\n\n")
@@ -495,43 +549,10 @@ func (s *OpenAIGatewayService) forwardCursorViaInference(
 	clientStream bool,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
-	protoReq, err := cursor.MapOpenAIRequestToProto(chatReq)
+	stream, err := s.startCursorInferenceStream(ctx, c, account, cursorClient, chatReq, func(status int, errType, msg string) {
+		writeChatCompletionsError(c, status, errType, msg)
+	})
 	if err != nil {
-		writeChatCompletionsError(c, http.StatusBadRequest, "invalid_request_error", "failed to map request: "+err.Error())
-		return nil, fmt.Errorf("map request to cursor proto: %w", err)
-	}
-
-	stream, err := cursorClient.StreamInference(ctx, protoReq)
-	if err != nil {
-		var upErr *cursor.UpstreamError
-		if errors.As(err, &upErr) {
-			if upErr.StatusCode == http.StatusUnauthorized && account.Type == AccountTypeOAuth && s.cursorTokenProvider != nil {
-				logger.L().Info("cursor inference returned 401, attempting token refresh",
-					zap.Int64("account_id", account.ID),
-				)
-				if refreshedToken, refErr := s.cursorTokenProvider.ForceRefresh(ctx, account); refErr == nil && refreshedToken != "" {
-					cursorClient.SetToken(refreshedToken)
-					stream, err = cursorClient.StreamInference(ctx, protoReq)
-				}
-			}
-		}
-	}
-	if err != nil {
-		var upErr *cursor.UpstreamError
-		if errors.As(err, &upErr) {
-			if s.shouldFailoverUpstreamError(upErr.StatusCode) {
-				return nil, newOpenAIUpstreamFailoverError(
-					upErr.StatusCode,
-					upErr.Headers,
-					[]byte(upErr.Body),
-					upErr.Error(),
-					false,
-				)
-			}
-			writeChatCompletionsError(c, upErr.StatusCode, "upstream_error", upErr.Body)
-			return nil, err
-		}
-		writeChatCompletionsError(c, http.StatusBadGateway, "upstream_error", err.Error())
 		return nil, err
 	}
 
@@ -568,74 +589,25 @@ func createCursorHTTPClient(proxyURL string) *http.Client {
 	}
 }
 
-func (s *OpenAIGatewayService) streamCursorChatCompletions(
-	ctx context.Context,
-	c *gin.Context,
+// drainCursorInferenceStream reads a Connect InferenceService stream and emits
+// canonical chat chunks (thinking/content/tool_call deltas) in order.
+// responseID is updated in place when upstream supplies a ResponseInfo id.
+// Returns usage, first-token latency, and the terminal read error (nil on EOF).
+func drainCursorInferenceStream(
 	stream *cursor.StreamReader,
-	account *Account,
+	responseID *string,
+	createdTimestamp int64,
 	originalModel string,
-	billingModel string,
-	upstreamModel string,
-	reasoningEffort *string,
-	serviceTier *string,
 	startTime time.Time,
-) (*OpenAIForwardResult, error) {
-	defer func() { _ = stream.Close() }()
-
-	c.Writer.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-	c.Writer.Header().Set("Cache-Control", "no-cache")
-	c.Writer.Header().Set("Connection", "keep-alive")
-	c.Writer.Header().Set("X-Accel-Buffering", "no")
-	c.Writer.WriteHeader(http.StatusOK)
-	c.Writer.Flush()
-
-	var usage OpenAIUsage
-	var firstTokenMs *int
-	clientDisconnected := false
-	hasToolCalls := false
-	createdTimestamp := time.Now().Unix()
-	responseID := "chatcmpl-" + uuid.NewString()
-
-	writeChunk := func(chunk *apicompat.ChatCompletionsChunk) {
-		if clientDisconnected {
-			return
-		}
-		b, err := json.Marshal(chunk)
-		if err != nil {
-			return
-		}
-		if _, werr := fmt.Fprintf(c.Writer, "data: %s\n\n", b); werr != nil {
-			clientDisconnected = true
-			logger.L().Debug("cursor chat_completions stream: client disconnected, draining upstream",
-				zap.Error(werr),
-				zap.String("response_id", responseID),
-			)
-		} else {
-			c.Writer.Flush()
-		}
-	}
-
+	emit func(*apicompat.ChatCompletionsChunk),
+) (usage OpenAIUsage, firstTokenMs *int, err error) {
 	for {
-		msg, err := stream.Recv()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
+		msg, recvErr := stream.Recv()
+		if recvErr != nil {
+			if errors.Is(recvErr, io.EOF) {
+				return usage, firstTokenMs, nil
 			}
-			if clientDisconnected {
-				break
-			}
-			var upErr *cursor.UpstreamError
-			if errors.As(err, &upErr) && s.shouldFailoverUpstreamError(upErr.StatusCode) && firstTokenMs == nil {
-				return nil, newOpenAIUpstreamFailoverError(
-					upErr.StatusCode,
-					upErr.Headers,
-					[]byte(upErr.Body),
-					upErr.Error(),
-					false,
-				)
-			}
-			logger.L().Warn("cursor stream read error", zap.Error(err))
-			break
+			return usage, firstTokenMs, recvErr
 		}
 
 		if firstTokenMs == nil {
@@ -645,7 +617,7 @@ func (s *OpenAIGatewayService) streamCursorChatCompletions(
 
 		if respInfo := msg.GetResponseInfo(); respInfo != nil {
 			if respInfo.Id != "" {
-				responseID = respInfo.Id
+				*responseID = respInfo.Id
 			}
 		}
 
@@ -661,8 +633,8 @@ func (s *OpenAIGatewayService) streamCursorChatCompletions(
 
 		if thinking := msg.GetThinkingPart(); thinking != nil && thinking.Text != "" {
 			text := thinking.Text
-			writeChunk(&apicompat.ChatCompletionsChunk{
-				ID:      responseID,
+			emit(&apicompat.ChatCompletionsChunk{
+				ID:      *responseID,
 				Object:  "chat.completion.chunk",
 				Created: createdTimestamp,
 				Model:   originalModel,
@@ -679,8 +651,8 @@ func (s *OpenAIGatewayService) streamCursorChatCompletions(
 
 		if textPart := msg.GetTextPart(); textPart != nil && textPart.Text != "" {
 			text := textPart.Text
-			writeChunk(&apicompat.ChatCompletionsChunk{
-				ID:      responseID,
+			emit(&apicompat.ChatCompletionsChunk{
+				ID:      *responseID,
 				Object:  "chat.completion.chunk",
 				Created: createdTimestamp,
 				Model:   originalModel,
@@ -696,13 +668,12 @@ func (s *OpenAIGatewayService) streamCursorChatCompletions(
 		}
 
 		if toolPart := msg.GetToolCallPart(); toolPart != nil {
-			hasToolCalls = true
 			toolIdx := 0
 			if toolPart.ToolIndex != nil {
 				toolIdx = int(*toolPart.ToolIndex)
 			}
-			writeChunk(&apicompat.ChatCompletionsChunk{
-				ID:      responseID,
+			emit(&apicompat.ChatCompletionsChunk{
+				ID:      *responseID,
 				Object:  "chat.completion.chunk",
 				Created: createdTimestamp,
 				Model:   originalModel,
@@ -726,6 +697,72 @@ func (s *OpenAIGatewayService) streamCursorChatCompletions(
 				},
 			})
 		}
+	}
+}
+
+func (s *OpenAIGatewayService) streamCursorChatCompletions(
+	ctx context.Context,
+	c *gin.Context,
+	stream *cursor.StreamReader,
+	account *Account,
+	originalModel string,
+	billingModel string,
+	upstreamModel string,
+	reasoningEffort *string,
+	serviceTier *string,
+	startTime time.Time,
+) (*OpenAIForwardResult, error) {
+	defer func() { _ = stream.Close() }()
+
+	c.Writer.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	c.Writer.WriteHeader(http.StatusOK)
+	c.Writer.Flush()
+
+	clientDisconnected := false
+	hasToolCalls := false
+	createdTimestamp := time.Now().Unix()
+	responseID := "chatcmpl-" + uuid.NewString()
+
+	writeChunk := func(chunk *apicompat.ChatCompletionsChunk) {
+		if clientDisconnected {
+			return
+		}
+		for _, choice := range chunk.Choices {
+			if len(choice.Delta.ToolCalls) > 0 {
+				hasToolCalls = true
+			}
+		}
+		b, err := json.Marshal(chunk)
+		if err != nil {
+			return
+		}
+		if _, werr := fmt.Fprintf(c.Writer, "data: %s\n\n", b); werr != nil {
+			clientDisconnected = true
+			logger.L().Debug("cursor chat_completions stream: client disconnected, draining upstream",
+				zap.Error(werr),
+				zap.String("response_id", responseID),
+			)
+		} else {
+			c.Writer.Flush()
+		}
+	}
+
+	usage, firstTokenMs, drainErr := drainCursorInferenceStream(stream, &responseID, createdTimestamp, originalModel, startTime, writeChunk)
+	if drainErr != nil && !clientDisconnected {
+		var upErr *cursor.UpstreamError
+		if errors.As(drainErr, &upErr) && s.shouldFailoverUpstreamError(upErr.StatusCode) && firstTokenMs == nil {
+			return nil, newOpenAIUpstreamFailoverError(
+				upErr.StatusCode,
+				upErr.Headers,
+				[]byte(upErr.Body),
+				upErr.Error(),
+				false,
+			)
+		}
+		logger.L().Warn("cursor stream read error", zap.Error(drainErr))
 	}
 
 	finishReason := "stop"

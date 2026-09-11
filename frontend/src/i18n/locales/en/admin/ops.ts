@@ -411,6 +411,8 @@ export default {
         blockedBeforeUpstream: 'Blocked before call (upstream not requested)',
         flowPassed: 'Passed',
         flowNotReached: 'Not reached',
+        flowSelectedAccount: 'Selected {account}',
+        flowAttemptsSummary: '{n} attempts · {m} accounts',
         compareA: 'Compare A',
         compareB: 'Compare B',
         suggestion: 'Suggestion',

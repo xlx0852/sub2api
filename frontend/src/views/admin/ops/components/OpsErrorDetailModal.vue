@@ -12,131 +12,83 @@
     </div>
 
     <div v-else class="space-y-6 p-6">
-      <!-- Summary -->
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.requestId') }}</div>
-          <div class="mt-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">
-            {{ requestId || '—' }}
-          </div>
+      <!-- Summary (compact definition grid) -->
+      <dl class="grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl bg-gray-50 px-5 py-4 sm:grid-cols-3 lg:grid-cols-4 dark:bg-dark-900">
+        <div class="min-w-0">
+          <dt class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.requestId') }}</dt>
+          <dd class="truncate font-mono text-xs font-medium text-gray-900 dark:text-white" :title="requestId">{{ requestId || '—' }}</dd>
         </div>
-
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.time') }}</div>
-          <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-            {{ formatDateTime(detail.created_at) }}
-          </div>
+        <div class="min-w-0">
+          <dt class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.time') }}</dt>
+          <dd class="truncate text-xs font-medium text-gray-900 dark:text-white">{{ formatDateTime(detail.created_at) }}</dd>
         </div>
-
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.user') }}</div>
-          <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-            {{ detail.user_email || (detail.user_id != null ? String(detail.user_id) : '—') }}
-          </div>
+        <div class="min-w-0">
+          <dt class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.user') }}</dt>
+          <dd class="truncate text-xs font-medium text-gray-900 dark:text-white">{{ detail.user_email || (detail.user_id != null ? String(detail.user_id) : '—') }}</dd>
         </div>
-
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">
-            {{ t('admin.ops.errorDetail.attemptedAccount') }}
-          </div>
-          <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+        <div class="min-w-0">
+          <dt class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.attemptedAccount') }}</dt>
+          <dd class="truncate text-xs font-medium text-gray-900 dark:text-white">
             {{ detail.account_name || (detail.account_id != null ? `#${detail.account_id}` : t('admin.ops.errorDetail.accountNotSelected')) }}
-          </div>
-          <div v-if="detail.account_id != null && detail.account_name" class="mt-1 font-mono text-xs text-gray-500 dark:text-gray-400">
-            {{ t('admin.ops.errorDetail.accountId') }}: #{{ detail.account_id }}
-          </div>
+            <span v-if="detail.account_id != null && detail.account_name" class="font-mono text-gray-400">#{{ detail.account_id }}</span>
+          </dd>
         </div>
-
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.platform') }}</div>
-          <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-            {{ detail.platform || '—' }}
-          </div>
+        <div class="min-w-0">
+          <dt class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.platform') }}</dt>
+          <dd class="truncate text-xs font-medium text-gray-900 dark:text-white">{{ detail.platform || '—' }}</dd>
         </div>
-
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.group') }}</div>
-          <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-            {{ detail.group_name || (detail.group_id != null ? String(detail.group_id) : '—') }}
-          </div>
+        <div class="min-w-0">
+          <dt class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.group') }}</dt>
+          <dd class="truncate text-xs font-medium text-gray-900 dark:text-white">{{ detail.group_name || (detail.group_id != null ? String(detail.group_id) : '—') }}</dd>
         </div>
-
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.model') }}</div>
-          <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+        <div class="min-w-0">
+          <dt class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.model') }}</dt>
+          <dd class="truncate font-mono text-xs font-medium text-gray-900 dark:text-white">
             <template v-if="hasModelMapping(detail)">
-              <span class="font-mono">{{ detail.requested_model }}</span>
-              <span class="mx-1 text-gray-400">→</span>
-              <span class="font-mono text-primary-600 dark:text-primary-400">{{ detail.upstream_model }}</span>
+              {{ detail.requested_model }}<span class="mx-1 text-gray-400">→</span><span class="text-primary-600 dark:text-primary-400">{{ detail.upstream_model }}</span>
             </template>
-            <template v-else>
-              {{ displayModel(detail) || '—' }}
-            </template>
-          </div>
+            <template v-else>{{ displayModel(detail) || '—' }}</template>
+          </dd>
         </div>
-
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.inboundEndpoint') }}</div>
-          <div class="mt-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">
-            {{ detail.inbound_endpoint || '—' }}
-          </div>
+        <div class="min-w-0">
+          <dt class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.inboundEndpoint') }}</dt>
+          <dd class="truncate font-mono text-xs font-medium text-gray-900 dark:text-white" :title="detail.inbound_endpoint">{{ detail.inbound_endpoint || '—' }}</dd>
         </div>
-
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.upstreamEndpoint') }}</div>
-          <div class="mt-1 break-all font-mono text-sm font-medium text-gray-900 dark:text-white">
-            {{ detail.upstream_endpoint || '—' }}
-          </div>
+        <div class="min-w-0">
+          <dt class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.upstreamEndpoint') }}</dt>
+          <dd class="truncate font-mono text-xs font-medium text-gray-900 dark:text-white" :title="detail.upstream_endpoint">{{ detail.upstream_endpoint || '—' }}</dd>
         </div>
-
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.status') }}</div>
-          <div class="mt-1">
-            <span :class="['inline-flex items-center rounded-lg px-2 py-1 text-xs font-black ring-1 ring-inset ', statusClass]">
+        <div class="min-w-0">
+          <dt class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.status') }}</dt>
+          <dd>
+            <span :class="['inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-black ring-1 ring-inset', statusClass]">
               {{ detail.status_code }}
             </span>
-          </div>
+          </dd>
         </div>
-
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.requestType') }}</div>
-          <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-            {{ formatRequestTypeLabel(detail.request_type) }}
-          </div>
+        <div class="min-w-0">
+          <dt class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.requestType') }}</dt>
+          <dd class="truncate text-xs font-medium text-gray-900 dark:text-white">{{ formatRequestTypeLabel(detail.request_type) }}</dd>
         </div>
-
-        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.message') }}</div>
-          <div class="mt-1 truncate text-sm font-medium text-gray-900 dark:text-white" :title="detail.message">
-            {{ detail.message || '—' }}
-          </div>
+        <div class="min-w-0">
+          <dt class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.apiKeyPrefix') }}</dt>
+          <dd class="truncate font-mono text-xs font-medium text-gray-900 dark:text-white">{{ detail.api_key_prefix || detail.attempted_key_prefix || '—' }}</dd>
         </div>
-
-        <div v-if="detail.api_key_prefix" class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.apiKeyPrefix') }}</div>
-          <div class="mt-1 font-mono text-sm font-medium text-gray-900 dark:text-white">
-            {{ detail.api_key_prefix }}
-          </div>
+        <div class="min-w-0">
+          <dt class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.message') }}</dt>
+          <dd class="truncate text-xs font-medium text-gray-900 dark:text-white" :title="detail.message">{{ detail.message || '—' }}</dd>
         </div>
-
-        <div v-if="detail.attempted_key_prefix" class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.attemptedKeyPrefix') }}</div>
-          <div class="mt-1 font-mono text-sm font-medium text-gray-900 dark:text-white">
-            {{ detail.attempted_key_prefix }}
-          </div>
-        </div>
-
-        <div v-if="detail.deleted_key_owner_email" class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.deletedKeyOwner') }}</div>
-          <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+        <div v-if="detail.deleted_key_owner_email" class="min-w-0">
+          <dt class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.deletedKeyOwner') }}</dt>
+          <dd class="truncate text-xs font-medium text-gray-900 dark:text-white">
             {{ detail.deleted_key_owner_email }}
-            <span v-if="detail.deleted_key_name" class="ml-1 text-xs text-gray-500 dark:text-gray-400">({{ detail.deleted_key_name }})</span>
-            <span class="ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold ring-1 ring-inset bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-500/30">
+            <span v-if="detail.deleted_key_name" class="text-gray-500 dark:text-gray-400">({{ detail.deleted_key_name }})</span>
+            <span class="ml-1 inline-flex items-center rounded px-1 py-0.5 text-[10px] font-bold ring-1 ring-inset bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-500/30">
               {{ t('admin.ops.errorDetail.keyDeletedBadge') }}
             </span>
-          </div>
+          </dd>
         </div>
-      </div>
+      </dl>
 
       <!-- Request flow: which stage the request died at -->
       <div class="rounded-xl bg-gray-50 p-6 dark:bg-dark-900">
@@ -205,6 +157,35 @@
               >
                 {{ step.detail }}
               </div>
+
+              <!-- 环节内部细节 -->
+              <div v-if="step.subline" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ step.subline }}
+              </div>
+
+              <!-- 上游尝试链：每次选号/调用的账号、结果与耗时 -->
+              <ul
+                v-if="step.key === 'upstream' && upstreamAttempts.length"
+                class="mt-2 space-y-1 rounded-lg border border-gray-200 bg-white p-2 dark:border-dark-700 dark:bg-dark-800"
+              >
+                <li
+                  v-for="(a, i) in upstreamAttempts"
+                  :key="i"
+                  class="flex flex-wrap items-baseline gap-x-2 font-mono text-[11px] leading-5 text-gray-600 dark:text-gray-300"
+                >
+                  <span class="text-gray-400">#{{ i + 1 }}</span>
+                  <span v-if="a.atLabel" class="text-gray-400">{{ a.atLabel }}</span>
+                  <span class="font-semibold text-gray-800 dark:text-gray-100">{{ a.accountLabel }}</span>
+                  <span
+                    :class="a.statusCode && a.statusCode < 400
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-red-600 dark:text-red-400'"
+                  >{{ a.statusCode ?? '—' }}</span>
+                  <span v-if="a.kind" class="rounded bg-gray-100 px-1 text-[10px] text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ a.kind }}</span>
+                  <span v-if="a.deltaMs != null" class="text-gray-400">+{{ a.deltaMs }}ms</span>
+                  <span v-if="a.message" class="w-full truncate text-gray-500 dark:text-gray-400" :title="a.message">{{ a.message }}</span>
+                </li>
+              </ul>
             </div>
           </li>
         </ol>
@@ -380,7 +361,79 @@ interface FlowStep {
   status: FlowStepStatus
   latency?: number | null
   detail?: string
+  subline?: string
 }
+
+interface UpstreamAttempt {
+  atUnixMs?: number
+  atLabel?: string
+  accountLabel: string
+  statusCode?: number | null
+  kind?: string
+  message?: string
+  deltaMs?: number | null
+}
+
+function pad3(n: number): string {
+  return String(n).padStart(3, '0')
+}
+
+function formatAttemptTime(ms?: number): string {
+  if (ms == null) return ''
+  const d = new Date(ms)
+  const p2 = (v: number) => String(v).padStart(2, '0')
+  return `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}.${pad3(d.getMilliseconds())}`
+}
+
+const upstreamAttempts = computed<UpstreamAttempt[]>(() => {
+  const raw = String(detail.value?.upstream_errors || '').trim()
+  if (!raw || raw === '[]' || raw === '{}') return []
+  let events: any[] = []
+  try {
+    const parsed = JSON.parse(raw)
+    events = Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+  const attempts: UpstreamAttempt[] = []
+  let prevMs: number | null = null
+  for (const ev of events) {
+    const at = typeof ev?.at_unix_ms === 'number' ? ev.at_unix_ms : undefined
+    const accountLabel = ev?.account_name
+      ? `${ev.account_name} #${ev.account_id ?? ''}`.trim()
+      : ev?.account_id != null
+        ? `#${ev.account_id}`
+        : '—'
+    attempts.push({
+      atUnixMs: at,
+      atLabel: formatAttemptTime(at),
+      accountLabel,
+      statusCode: ev?.upstream_status_code ?? null,
+      kind: typeof ev?.kind === 'string' ? ev.kind : undefined,
+      message: typeof ev?.message === 'string' ? ev.message : undefined,
+      deltaMs: at != null && prevMs != null ? Math.max(0, at - prevMs) : null
+    })
+    if (at != null) prevMs = at
+  }
+  return attempts
+})
+
+// 选号摘要：最终账号 + 尝试次数/去重账号数，挂到 routing 步骤
+const selectionSummary = computed(() => {
+  const d = detail.value
+  if (!d) return ''
+  const parts: string[] = []
+  if (d.account_id != null || d.account_name) {
+    const label = d.account_name || `#${d.account_id}`
+    parts.push(t('admin.ops.errorDetail.flowSelectedAccount', { account: d.account_name ? `${label} #${d.account_id}` : label }))
+  }
+  const n = upstreamAttempts.value.length
+  if (n > 0) {
+    const distinct = new Set(upstreamAttempts.value.map((a) => a.accountLabel)).size
+    parts.push(t('admin.ops.errorDetail.flowAttemptsSummary', { n, m: distinct }))
+  }
+  return parts.join(' · ')
+})
 
 const flowSteps = computed<FlowStep[]>(() => {
   const d = detail.value
@@ -423,6 +476,7 @@ const flowSteps = computed<FlowStep[]>(() => {
       status: routingStatus,
       latency: routingLatency,
       detail: routingStatus === 'failed' ? failureDetail : undefined,
+      subline: selectionSummary.value || undefined,
     },
     {
       key: 'upstream',
@@ -430,6 +484,9 @@ const flowSteps = computed<FlowStep[]>(() => {
       status: upstreamStatus,
       latency: upstreamLatency,
       detail: upstreamStatus === 'failed' || upstreamStatus === 'blocked' ? failureDetail : undefined,
+      subline: upstreamAttempts.value.length
+        ? t('admin.ops.errorDetail.flowAttemptsSummary', { n: upstreamAttempts.value.length, m: new Set(upstreamAttempts.value.map((a) => a.accountLabel)).size })
+        : undefined,
     },
     {
       key: 'response',
