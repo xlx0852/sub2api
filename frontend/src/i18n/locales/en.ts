@@ -341,7 +341,6 @@ export default {
     proxies: 'Proxies',
     redeemCodes: 'Redeem Codes',
     ops: 'Ops',
-    promoCodes: 'Promo Codes',
     settings: 'Settings',
     myAccount: 'My Account',
     lightMode: 'Light Mode',
@@ -410,17 +409,6 @@ export default {
     verifyFailed: 'Verification failed. Please try again.',
     codeRequired: 'Verification code is required',
     invalidCode: 'Please enter a valid 6-digit code',
-    promoCodeLabel: 'Promo Code',
-    promoCodePlaceholder: 'Enter promo code (optional)',
-    promoCodeValid: 'Valid! You will receive ${amount} bonus balance',
-    promoCodeInvalid: 'Invalid promo code',
-    promoCodeNotFound: 'Promo code not found',
-    promoCodeExpired: 'This promo code has expired',
-    promoCodeDisabled: 'This promo code is disabled',
-    promoCodeMaxUsed: 'This promo code has reached its usage limit',
-    promoCodeAlreadyUsed: 'You have already used this promo code',
-    promoCodeValidating: 'Promo code is being validated, please wait',
-    promoCodeInvalidCannotRegister: 'Invalid promo code. Please check and try again or clear the promo code field',
     invitationCodeLabel: 'Invitation Code',
     invitationCodePlaceholder: 'Enter invitation code',
     invitationCodeRequired: 'Invitation code is required',
@@ -3239,65 +3227,6 @@ export default {
       deleteConfirm: 'Are you sure you want to delete this announcement? This action cannot be undone.'
     },
 
-    // Promo Codes
-    promo: {
-      title: 'Promo Code Management',
-      description: 'Create and manage registration promo codes',
-      createCode: 'Create Promo Code',
-      editCode: 'Edit Promo Code',
-      deleteCode: 'Delete Promo Code',
-      searchCodes: 'Search codes...',
-      allStatus: 'All Status',
-      columns: {
-        code: 'Code',
-        bonusAmount: 'Bonus Amount',
-        maxUses: 'Max Uses',
-        usedCount: 'Used',
-        usage: 'Usage',
-        status: 'Status',
-        expiresAt: 'Expires At',
-        createdAt: 'Created At',
-        actions: 'Actions'
-      },
-      // Form labels (flat structure for template usage)
-      code: 'Promo Code',
-      autoGenerate: 'auto-generate if empty',
-      codePlaceholder: 'Enter promo code or leave empty',
-      bonusAmount: 'Bonus Amount ($)',
-      maxUses: 'Max Uses',
-      zeroUnlimited: '0 = unlimited',
-      expiresAt: 'Expires At',
-      notes: 'Notes',
-      notesPlaceholder: 'Optional notes for this code',
-      status: 'Status',
-      neverExpires: 'Never expires',
-      // Status labels
-      statusActive: 'Active',
-      statusDisabled: 'Disabled',
-      statusExpired: 'Expired',
-      statusMaxUsed: 'Used Up',
-      // Usage records
-      usageRecords: 'Usage Records',
-      viewUsages: 'View Usages',
-      noUsages: 'No usage records yet',
-      userPrefix: 'User #{id}',
-      copied: 'Copied!',
-      // Messages
-      noCodesYet: 'No promo codes yet',
-      createFirstCode: 'Create your first promo code to offer registration bonuses.',
-      codeCreated: 'Promo code created successfully',
-      codeUpdated: 'Promo code updated successfully',
-      codeDeleted: 'Promo code deleted successfully',
-      deleteCodeConfirm: 'Are you sure you want to delete this promo code? This action cannot be undone.',
-      copyRegisterLink: 'Copy register link',
-      registerLinkCopied: 'Register link copied to clipboard',
-      failedToLoad: 'Failed to load promo codes',
-      failedToCreate: 'Failed to create promo code',
-      failedToUpdate: 'Failed to update promo code',
-      failedToDelete: 'Failed to delete promo code',
-      failedToLoadUsages: 'Failed to load usage records'
-    },
-
     // Usage Records
     usage: {
       title: 'Usage Records',
@@ -3424,6 +3353,7 @@ export default {
       errorRate: 'error_rate:',
       upstreamRate: 'upstream_rate:',
       latencyDuration: 'Request Duration',
+      durationLabel: 'Duration (duration_ms)',
       ttftLabel: 'TTFT (first_token_ms)',
       p50: 'p50:',
       p90: 'p90:',
@@ -4117,6 +4047,12 @@ export default {
         raw: 'Raw',
         preagg: 'Preagg'
       },
+      requestType: {
+        all: 'All request types',
+        sync: 'Sync',
+        stream: 'Stream',
+        ws_v2: 'WS v2'
+      },
       accountAvailability: {
         available: 'Available',
         unavailable: 'Unavailable',
@@ -4141,8 +4077,8 @@ export default {
         sla: 'Service Level Agreement success rate, excluding business limits (e.g., insufficient balance, quota exceeded).',
         errors: 'Error statistics, including total errors, error rate, and upstream error rate.',
         upstreamErrors: 'Upstream error statistics, excluding rate limit errors (429/529).',
-        latency: 'Request duration statistics, including p50, p90, p95, p99 percentiles.',
-        ttft: 'Time To First Token, measuring the speed of first token return in streaming responses.',
+        latency: 'Request duration statistics based on duration_ms, including p50, p90, p95, and p99 percentiles.',
+        ttft: 'Time To First Token based on first_token_ms, measuring how long it takes to receive the first token.',
         health: 'System health score (0-100), considering SLA, error rate, and resource usage.'
       },
       charts: {
@@ -4182,8 +4118,6 @@ export default {
           "Only email addresses from the specified domains can register (for example, {'@'}qq.com, {'@'}gmail.com)",
         emailSuffixWhitelistPlaceholder: 'example.com',
         emailSuffixWhitelistInputHint: 'Leave empty for no restriction',
-        promoCode: 'Promo Code',
-        promoCodeHint: 'Allow users to use promo codes during registration',
         invitationCode: 'Invitation Code Registration',
         invitationCodeHint: 'When enabled, users must enter a valid invitation code to register',
         passwordReset: 'Password Reset',

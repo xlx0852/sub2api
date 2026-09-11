@@ -341,7 +341,6 @@ export default {
     proxies: 'IP管理',
     redeemCodes: '兑换码',
     ops: '运维监控',
-    promoCodes: '优惠码',
     settings: '系统设置',
     myAccount: '我的账户',
     lightMode: '浅色模式',
@@ -409,17 +408,6 @@ export default {
     verifyFailed: '验证失败，请重试。',
     codeRequired: '请输入验证码',
     invalidCode: '请输入有效的6位验证码',
-    promoCodeLabel: '优惠码',
-    promoCodePlaceholder: '输入优惠码（可选）',
-    promoCodeValid: '有效！注册后将获得 ${amount} 赠送余额',
-    promoCodeInvalid: '无效的优惠码',
-    promoCodeNotFound: '优惠码不存在',
-    promoCodeExpired: '此优惠码已过期',
-    promoCodeDisabled: '此优惠码已被禁用',
-    promoCodeMaxUsed: '此优惠码已达到使用上限',
-    promoCodeAlreadyUsed: '您已使用过此优惠码',
-    promoCodeValidating: '优惠码正在验证中，请稍候',
-    promoCodeInvalidCannotRegister: '优惠码无效，请检查后重试或清空优惠码',
     invitationCodeLabel: '邀请码',
     invitationCodePlaceholder: '请输入邀请码',
     invitationCodeRequired: '请输入邀请码',
@@ -3398,65 +3386,6 @@ export default {
       deleteConfirm: '确定要删除该公告吗？此操作无法撤销。'
     },
 
-    // Promo Codes
-    promo: {
-      title: '优惠码管理',
-      description: '创建和管理注册优惠码',
-      createCode: '创建优惠码',
-      editCode: '编辑优惠码',
-      deleteCode: '删除优惠码',
-      searchCodes: '搜索优惠码...',
-      allStatus: '全部状态',
-      columns: {
-        code: '优惠码',
-        bonusAmount: '赠送金额',
-        maxUses: '最大使用次数',
-        usedCount: '已使用',
-        usage: '使用量',
-        status: '状态',
-        expiresAt: '过期时间',
-        createdAt: '创建时间',
-        actions: '操作'
-      },
-      // 表单标签（扁平结构便于模板使用）
-      code: '优惠码',
-      autoGenerate: '留空自动生成',
-      codePlaceholder: '输入优惠码或留空',
-      bonusAmount: '赠送金额 ($)',
-      maxUses: '最大使用次数',
-      zeroUnlimited: '0 = 无限制',
-      expiresAt: '过期时间',
-      notes: '备注',
-      notesPlaceholder: '可选备注信息',
-      status: '状态',
-      neverExpires: '永不过期',
-      // 状态标签
-      statusActive: '启用',
-      statusDisabled: '禁用',
-      statusExpired: '已过期',
-      statusMaxUsed: '已用完',
-      // 使用记录
-      usageRecords: '使用记录',
-      viewUsages: '查看使用记录',
-      noUsages: '暂无使用记录',
-      userPrefix: '用户 #{id}',
-      copied: '已复制！',
-      // 消息
-      noCodesYet: '暂无优惠码',
-      createFirstCode: '创建您的第一个优惠码，为新用户提供注册奖励。',
-      codeCreated: '优惠码创建成功',
-      codeUpdated: '优惠码更新成功',
-      codeDeleted: '优惠码删除成功',
-      deleteCodeConfirm: '确定要删除此优惠码吗？此操作无法撤销。',
-      copyRegisterLink: '复制注册链接',
-      registerLinkCopied: '注册链接已复制到剪贴板',
-      failedToLoad: '加载优惠码失败',
-      failedToCreate: '创建优惠码失败',
-      failedToUpdate: '更新优惠码失败',
-      failedToDelete: '删除优惠码失败',
-      failedToLoadUsages: '加载使用记录失败'
-    },
-
     // Usage Records
     usage: {
       title: '使用记录',
@@ -3584,7 +3513,8 @@ export default {
       errorRate: '错误率：',
       upstreamRate: '上游错误率：',
       latencyDuration: '请求时长',
-      ttftLabel: '首 Token 延迟（毫秒）',
+      durationLabel: '总耗时（duration_ms）',
+      ttftLabel: 'TTFT（first_token_ms）',
       p50: 'p50',
       p90: 'p90',
       p95: 'p95',
@@ -4283,6 +4213,12 @@ export default {
         raw: 'Raw（不聚合）',
         preagg: 'Preagg（聚合）'
       },
+      requestType: {
+        all: '全部请求类型',
+        sync: '同步',
+        stream: '流式',
+        ws_v2: 'WS v2'
+      },
       accountAvailability: {
         available: '可用',
         unavailable: '不可用',
@@ -4307,8 +4243,8 @@ export default {
         tokens: '当前时间窗口内处理的总Token数量。',
         sla: '服务等级协议达成率，排除业务限制（如余额不足、配额超限）的成功请求占比。',
         errors: '错误统计，包括总错误数、错误率和上游错误率。',
-        latency: '请求时长统计，包括 p50、p90、p95、p99 等百分位数。',
-        ttft: '首 Token 延迟（Time To First Token），衡量流式响应的首 Token 返回速度。',
+        latency: '基于 duration_ms 的请求总耗时统计，包括 p50、p90、p95、p99 等百分位数。',
+        ttft: '基于 first_token_ms 的首 Token 延迟，衡量收到第一个 Token 之前的等待时间。',
         health: '系统健康评分（0-100），综合考虑 SLA、错误率和资源使用情况。'
       },
       charts: {
@@ -4348,8 +4284,6 @@ export default {
           "仅允许使用指定域名的邮箱注册账号（例如 {'@'}qq.com, {'@'}gmail.com）",
         emailSuffixWhitelistPlaceholder: 'example.com',
         emailSuffixWhitelistInputHint: '留空则不限制',
-        promoCode: '优惠码',
-        promoCodeHint: '允许用户在注册时使用优惠码',
         invitationCode: '邀请码注册',
         invitationCodeHint: '开启后，用户注册时需要填写有效的邀请码',
         passwordReset: '忘记密码',

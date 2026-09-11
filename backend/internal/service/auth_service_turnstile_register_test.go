@@ -44,7 +44,7 @@ func newAuthServiceForRegisterTurnstileTest(settings map[string]string, verifier
 
 	return NewAuthService(
 		nil, // entClient
-		&userRepoStub{},
+		&userRepoStub{}, // userRepo
 		nil, // redeemRepo
 		nil, // refreshTokenCache
 		cfg,
@@ -52,7 +52,6 @@ func newAuthServiceForRegisterTurnstileTest(settings map[string]string, verifier
 		nil, // emailService
 		turnstileService,
 		nil, // emailQueueService
-		nil, // promoService
 		nil, // defaultSubAssigner
 	)
 }

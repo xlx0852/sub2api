@@ -448,8 +448,7 @@ func TestAPIContracts(t *testing.T) {
 					service.SettingKeyRegistrationEnabled:              "true",
 					service.SettingKeyEmailVerifyEnabled:               "false",
 					service.SettingKeyRegistrationEmailSuffixWhitelist: "[]",
-					service.SettingKeyPromoCodeEnabled:                 "true",
-
+					
 					service.SettingKeySMTPHost:     "smtp.example.com",
 					service.SettingKeySMTPPort:     "587",
 					service.SettingKeySMTPUsername: "user",
@@ -488,8 +487,7 @@ func TestAPIContracts(t *testing.T) {
 					"registration_enabled": true,
 					"email_verify_enabled": false,
 					"registration_email_suffix_whitelist": [],
-					"promo_code_enabled": true,
-					"password_reset_enabled": false,
+							"password_reset_enabled": false,
 					"frontend_url": "",
 					"totp_enabled": false,
 					"totp_encryption_key_configured": false,

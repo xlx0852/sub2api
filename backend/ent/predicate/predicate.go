@@ -30,12 +30,6 @@ type Group func(*sql.Selector)
 // IdempotencyRecord is the predicate function for idempotencyrecord builders.
 type IdempotencyRecord func(*sql.Selector)
 
-// PromoCode is the predicate function for promocode builders.
-type PromoCode func(*sql.Selector)
-
-// PromoCodeUsage is the predicate function for promocodeusage builders.
-type PromoCodeUsage func(*sql.Selector)
-
 // Proxy is the predicate function for proxy builders.
 type Proxy func(*sql.Selector)
 

@@ -131,15 +131,14 @@ func newAuthService(repo *userRepoStub, settings map[string]string, emailCache E
 
 	return NewAuthService(
 		nil, // entClient
-		repo,
+		repo, // userRepo
 		nil, // redeemRepo
 		nil, // refreshTokenCache
 		cfg,
 		settingService,
 		emailService,
-		nil,
-		nil,
-		nil, // promoService
+		nil, // turnstile
+		nil, // emailQueue
 		nil, // defaultSubAssigner
 	)
 }
