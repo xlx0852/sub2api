@@ -31,7 +31,7 @@ export function prepareQuotaAccounts(
   nowMs: number
 ): PreparedQuotaAccount[] {
   const prepared: PreparedQuotaAccount[] = []
-  for (const account of accounts.slice(0, 24)) {
+  for (const account of accounts) {
     const preferred = pickPreferredWindow(account, nowMs)
     if (!preferred) continue
     prepared.push({

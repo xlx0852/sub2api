@@ -18,6 +18,19 @@ vi.mock('vue-i18n', async () => {
 })
 
 describe('QuotaWindowPanel', () => {
+  it('applies the lane limit after filtering accounts without quota windows', () => {
+    const accounts = Array.from({ length: 25 }, (_, index) => ({
+      account_id: index + 1, account_name: `account-${index}`, platform: 'antigravity',
+      account_type: 'oauth', cost_type: 'subscription' as const, configured: true,
+      requests: 0, revenue: 0, cost: 0, profit: 0, margin: 0, currency: 'USD',
+      quota_windows: index === 24 ? [{
+        id: '7d', kind: '7d', label: '7d', used_percent: 40,
+        start_at: '2026-09-08T00:00:00Z', end_at: '2026-09-15T00:00:00Z', window_minutes: 10080
+      }] : []
+    }))
+    const prepared = prepareQuotaAccounts(accounts, Date.parse('2026-09-10T00:00:00Z'))
+    expect(prepared.map(row => row.account.account_id)).toEqual([25])
+  })
   it('centers today when the timeline appears after async account loading', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-09T12:00:00+08:00'))
@@ -655,9 +668,9 @@ describe('bounded timeline rendering', () => {
     expect(windows.some((window) => window.source === 'projected')).toBe(false)
   })
 
-  it('shares one visible grid across the maximum 24 lanes', () => {
+  it('paginates all eligible accounts while limiting each page to 24 lanes', async () => {
     const now = Date.now()
-    const accounts = Array.from({ length: 24 }, (_, index) => ({
+    const accounts = Array.from({ length: 25 }, (_, index) => ({
       account_id: index + 1,
       account_name: `account-${index + 1}`,
       platform: 'openai',
@@ -686,6 +699,9 @@ describe('bounded timeline rendering', () => {
     const gridLines = wrapper.findAll('[data-testid="quota-window-grid-line"]')
     expect(gridLines.length).toBeGreaterThan(0)
     expect(gridLines.length).toBeLessThan(60)
+    await wrapper.get('[data-testid="quota-account-next"]').trigger('click')
+    expect(wrapper.findAll('[data-testid="profit-quota-window-lane"]')).toHaveLength(1)
+    expect(wrapper.text()).toContain('account-25')
   })
 
   it('keeps content width constant while rebasing at the right edge', async () => {

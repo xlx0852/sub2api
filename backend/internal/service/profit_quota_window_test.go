@@ -51,7 +51,7 @@ func TestFillProfitQuotaWindows_Codex(t *testing.T) {
 	require.WithinDuration(t, reset5h.Add(-5*time.Hour), *five.StartAt, time.Second)
 }
 
-func TestFillProfitQuotaWindows_KimiAndSession(t *testing.T) {
+func TestFillProfitQuotaWindows_KimiIgnoresLegacySession(t *testing.T) {
 	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
 	reset := now.Add(90 * time.Minute)
 	start := now.Add(-210 * time.Minute)
@@ -70,7 +70,8 @@ func TestFillProfitQuotaWindows_KimiAndSession(t *testing.T) {
 	fillProfitQuotaWindows(summary, acc, now)
 	require.NotNil(t, summary.FiveHourUtilization)
 	require.InDelta(t, 91.0, *summary.FiveHourUtilization, 0.01)
-	require.GreaterOrEqual(t, len(summary.QuotaWindows), 2)
+	require.Len(t, summary.QuotaWindows, 1)
+	require.Equal(t, "5h", summary.QuotaWindows[0].Kind)
 }
 
 func TestFillProfitQuotaWindows_AnthropicPassiveSevenDayFallback(t *testing.T) {
@@ -269,7 +270,7 @@ func TestFillProfitQuotaWindows_CapsAtSubscriptionCycleEnd(t *testing.T) {
 	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
 	reset := now.Add(3 * 24 * time.Hour)
 	cycleEnd := now.Add(24 * time.Hour)
-	acc := &Account{Extra: map[string]any{
+	acc := &Account{Platform: PlatformOpenAI, Extra: map[string]any{
 		"codex_7d_used_percent": 50.0,
 		"codex_7d_reset_at":     reset.Format(time.RFC3339),
 	}}

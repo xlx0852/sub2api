@@ -1924,6 +1924,9 @@ func roundMoney(v float64) float64 {
 // fillAccountQuotaWindows builds live windows from extra, then overlays the real
 // account_quota_windows ledger (reset-card / observed official resets).
 func (s *ProfitService) fillAccountQuotaWindows(ctx context.Context, summary *AccountProfitSummary, acc *Account, now time.Time, anchor profitWindowAnchor) {
+	if summary == nil || acc == nil {
+		return
+	}
 	summary.QuotaAvailabilitySpans = profitAvailabilitySpans(anchor)
 	fillProfitQuotaWindowsWithAnchor(summary, acc, now, anchor)
 	// The profit quota timeline is based on long provider windows. Five-hour
@@ -1946,10 +1949,9 @@ func (s *ProfitService) fillAccountQuotaWindows(ctx context.Context, summary *Ac
 	out := make([]ProfitQuotaWindow, 0, len(rows)+2)
 	seenKind := map[string]struct{}{}
 	for _, row := range rows {
-		if row == nil {
+		if row == nil || row.Platform != acc.Platform {
 			continue
 		}
-		seenKind[row.Kind] = struct{}{}
 		start := row.StartAt
 		end := row.EndAt
 		mins := 0
@@ -1958,14 +1960,16 @@ func (s *ProfitService) fillAccountQuotaWindows(ctx context.Context, summary *Ac
 		} else {
 			mins = int(end.Sub(start).Minutes())
 		}
+		kind, label := classifyQuotaWindow(row.Kind, mins)
+		seenKind[kind] = struct{}{}
 		var used *float64
 		if row.IsOpen {
 			used = roundUsagePercent2Ptr(row.UsedPercentOpen)
 			// Prefer fresher live used% from extra snapshot when present.
-			if live, ok := byKindLive[row.Kind]; ok && live.UsedPercent != nil {
+			if live, ok := byKindLive[kind]; ok && live.UsedPercent != nil {
 				used = roundUsagePercent2Ptr(live.UsedPercent)
 			}
-			if live, ok := byKindLive[row.Kind]; ok && live.EndAt != nil {
+			if live, ok := byKindLive[kind]; ok && live.EndAt != nil {
 				// Only absorb small countdown calibration here. A large jump is a
 				// possible new period and must pass through the ledger state machine.
 				if live.EndAt.After(end) && live.EndAt.Sub(end) <= quotaWindowSkew {
@@ -1978,7 +1982,6 @@ func (s *ProfitService) fillAccountQuotaWindows(ctx context.Context, summary *Ac
 				used = roundUsagePercent2Ptr(row.UsedPercentOpen)
 			}
 		}
-		kind, label := classifyQuotaWindow(row.Kind, mins)
 		id := kind
 		if row.IsOpen {
 			id = kind + "-open"
@@ -2154,36 +2157,57 @@ func fillProfitQuotaWindowsWithAnchor(summary *AccountProfitSummary, acc *Accoun
 		return
 	}
 	windows := make([]ProfitQuotaWindow, 0, 4)
+	summary.QuotaWindows = nil
+	summary.FiveHourUtilization = nil
+	summary.SevenDayUtilization = nil
+	if acc.Platform == PlatformCursor {
+		if window := profitWindowFromExtra(acc.Extra, "cursor_sand", "7d", "7d", 10080, now); window != nil {
+			windows = append(windows, *window)
+			summary.SevenDayUtilization = window.UsedPercent
+		}
+	}
+	if acc.Platform == PlatformAntigravity {
+		windows = append(windows, profitWindowsFromAntigravity(acc, now)...)
+		for _, window := range windows {
+			if window.Kind == "7d" {
+				summary.SevenDayUtilization = window.UsedPercent
+			}
+		}
+	}
 
 	// OpenAI / Codex rolling windows from extra.
-	if w := profitWindowFromExtra(acc.Extra, "codex_5h", "5h", "5h", 300, now); w != nil {
-		windows = append(windows, *w)
-		summary.FiveHourUtilization = w.UsedPercent
-	}
-	if w := profitWindowFromExtra(acc.Extra, "codex_7d", "7d", "7d", 10080, now); w != nil {
-		windows = append(windows, *w)
-		summary.SevenDayUtilization = w.UsedPercent
-	}
-
-	// Kimi official rolling windows.
-	if w := profitWindowFromKimi(acc.Extra, "5h", "5h", 300, now); w != nil {
-		if summary.FiveHourUtilization == nil {
+	if acc.Platform == PlatformOpenAI {
+		if w := profitWindowFromExtra(acc.Extra, "codex_5h", "5h", "5h", 300, now); w != nil {
+			windows = append(windows, *w)
 			summary.FiveHourUtilization = w.UsedPercent
 		}
-		// Avoid duplicate 5h if codex already filled (shouldn't happen cross-platform).
-		if !hasProfitWindowKind(windows, "5h") {
+		if w := profitWindowFromExtra(acc.Extra, "codex_7d", "7d", "7d", 10080, now); w != nil {
 			windows = append(windows, *w)
-		}
-	}
-	if w := profitWindowFromKimi(acc.Extra, "7d", "7d", 10080, now); w != nil {
-		if summary.SevenDayUtilization == nil {
 			summary.SevenDayUtilization = w.UsedPercent
 		}
-		if !hasProfitWindowKind(windows, "7d") {
-			windows = append(windows, *w)
-		}
-	}
 
+	}
+	// Kimi official rolling windows.
+	if acc.Platform == PlatformKimi {
+		if w := profitWindowFromKimi(acc.Extra, "5h", "5h", 300, now); w != nil {
+			if summary.FiveHourUtilization == nil {
+				summary.FiveHourUtilization = w.UsedPercent
+			}
+			// Avoid duplicate 5h if codex already filled (shouldn't happen cross-platform).
+			if !hasProfitWindowKind(windows, "5h") {
+				windows = append(windows, *w)
+			}
+		}
+		if w := profitWindowFromKimi(acc.Extra, "7d", "7d", 10080, now); w != nil {
+			if summary.SevenDayUtilization == nil {
+				summary.SevenDayUtilization = w.UsedPercent
+			}
+			if !hasProfitWindowKind(windows, "7d") {
+				windows = append(windows, *w)
+			}
+		}
+
+	}
 	// Claude passive weekly headers are a live fallback before the first ledger
 	// row is persisted. The ledger replaces this same kind once available.
 	if acc.Platform == PlatformAnthropic || acc.Platform == "claude" {
@@ -2202,7 +2226,7 @@ func fillProfitQuotaWindowsWithAnchor(summary *AccountProfitSummary, acc *Accoun
 	}
 
 	// Claude / Anthropic session window columns.
-	if acc.SessionWindowStart != nil && acc.SessionWindowEnd != nil && !acc.SessionWindowEnd.IsZero() {
+	if (acc.Platform == PlatformAnthropic || acc.Platform == "claude") && acc.SessionWindowStart != nil && acc.SessionWindowEnd != nil && !acc.SessionWindowEnd.IsZero() {
 		start := acc.SessionWindowStart.UTC()
 		end := acc.SessionWindowEnd.UTC()
 		if end.After(start) {
@@ -2515,7 +2539,7 @@ func profitWindowFromAnthropicPassive(extra map[string]any, now time.Time) *Prof
 }
 
 func profitWindowFromGrok(acc *Account, now time.Time) *ProfitQuotaWindow {
-	if acc == nil || acc.Extra == nil {
+	if acc == nil || acc.Platform != PlatformGrok || acc.Extra == nil {
 		return nil
 	}
 	// Prefer official billing period (weekly/monthly product quota). This is what

@@ -1060,6 +1060,7 @@ func (s *AccountUsageService) getAntigravityUsage(ctx context.Context, account *
 			return degraded, nil
 		}
 
+		s.persistAntigravityProfitWindows(fetchCtx, account, fetchResult.UsageInfo)
 		enrichUsageWithAccountError(fetchResult.UsageInfo, account)
 		s.cache.antigravityCache.Store(account.ID, &antigravityUsageCache{
 			usageInfo: fetchResult.UsageInfo,
@@ -1200,6 +1201,7 @@ func (s *AccountUsageService) getCursorUsage(ctx context.Context, account *Accou
 	}
 
 	s.attachCursorWindowStats(fetchCtx, account.ID, fetchResult.UsageInfo)
+	s.persistCursorProfitWindows(fetchCtx, account, fetchResult.UsageInfo)
 	enrichUsageWithAccountError(fetchResult.UsageInfo, account)
 	return fetchResult.UsageInfo, nil
 }

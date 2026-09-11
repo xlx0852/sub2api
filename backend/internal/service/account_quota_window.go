@@ -396,6 +396,14 @@ type quotaWindowFieldSpec struct {
 
 // platformQuotaWindowSpecs is the cross-platform registry for passive observation.
 var platformQuotaWindowSpecs = map[string][]quotaWindowFieldSpec{
+	PlatformCursor: {
+		{Kind: "7d", EndKey: "cursor_sand_reset_at", UsedKey: "cursor_sand_used_percent", MinutesKey: "cursor_sand_window_minutes", DefaultMins: 10080},
+	},
+	PlatformAntigravity: {
+		{Kind: "5h", EndKey: "antigravity_5h_reset_at", UsedKey: "antigravity_5h_used_percent", MinutesKey: "antigravity_5h_window_minutes", DefaultMins: 300},
+		{Kind: "24h", EndKey: "antigravity_24h_reset_at", UsedKey: "antigravity_24h_used_percent", MinutesKey: "antigravity_24h_window_minutes", DefaultMins: 1440},
+		{Kind: "7d", EndKey: "antigravity_7d_reset_at", UsedKey: "antigravity_7d_used_percent", MinutesKey: "antigravity_7d_window_minutes", DefaultMins: 10080},
+	},
 	PlatformOpenAI: {
 		{Kind: "5h", EndKey: "codex_5h_reset_at", UsedKey: "codex_5h_used_percent", MinutesKey: "codex_5h_window_minutes", DefaultMins: 300},
 		{Kind: "7d", EndKey: "codex_7d_reset_at", UsedKey: "codex_7d_used_percent", MinutesKey: "codex_7d_window_minutes", DefaultMins: 10080},

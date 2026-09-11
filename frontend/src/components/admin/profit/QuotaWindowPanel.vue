@@ -57,6 +57,19 @@
       </div>
     </div>
 
+    <div v-if="missingAccounts.length" data-testid="quota-missing-accounts" class="border-b border-gray-100 px-5 py-3 text-xs text-gray-500 dark:border-dark-700 dark:text-dark-400">
+      <p>{{ t('admin.profit.quotaMissingHint') }}</p>
+      <div class="mt-2 flex flex-wrap gap-2">
+        <span v-for="account in missingAccounts" :key="account.account_id" class="rounded bg-gray-100 px-2 py-1 dark:bg-dark-700">
+          {{ account.account_name }} #{{ account.account_id }} · {{ account.platform }}
+        </span>
+      </div>
+    </div>
+    <div v-if="pageCount > 1" class="flex items-center justify-end gap-3 px-5 py-2 text-xs">
+      <button data-testid="quota-account-prev" :disabled="accountPage === 0" @click="accountPage--">{{ t('admin.profit.quotaAccountPrev') }}</button>
+      <span>{{ accountPage + 1 }} / {{ pageCount }}</span>
+      <button data-testid="quota-account-next" :disabled="accountPage + 1 >= pageCount" @click="accountPage++">{{ t('admin.profit.quotaAccountNext') }}</button>
+    </div>
     <div v-if="!lanes.length" class="px-5 py-10 text-center text-sm text-gray-400 dark:text-dark-400">
       {{ t('admin.profit.quotaWindowEmpty') }}
     </div>
@@ -453,12 +466,20 @@ const palette = [
 ]
 
 const preparedAccounts = computed(() => prepareQuotaAccounts(props.accounts || [], Date.now()))
+const accountPage = ref(0)
+const pageCount = computed(() => Math.max(1, Math.ceil(preparedAccounts.value.length / 24)))
+const missingAccounts = computed(() => {
+  const visible = new Set(preparedAccounts.value.map(row => row.account.account_id))
+  return props.accounts.filter(account => !visible.has(account.account_id))
+})
+watch(pageCount, count => { accountPage.value = Math.min(accountPage.value, count - 1) })
 
 // Only materialize ledger rows or projections intersecting the viewport overscan.
 const laneSeries = computed(() => {
   const now = Date.now()
   const { start, end } = visibleMs.value
   return preparedAccounts.value
+    .slice(accountPage.value * 24, (accountPage.value + 1) * 24)
     .map((prepared, index) => {
       const { account, preferred } = prepared
       const windows = windowsForRange(prepared, start, end)
