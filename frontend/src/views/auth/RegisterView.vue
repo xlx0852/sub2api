@@ -234,7 +234,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { AuthLayout } from '@/components/layout'
 import LinuxDoOAuthSection from '@/components/auth/LinuxDoOAuthSection.vue'
@@ -253,7 +253,6 @@ const { t, locale } = useI18n()
 // ==================== Router & Stores ====================
 
 const router = useRouter()
-const route = useRoute()
 const authStore = useAuthStore()
 const appStore = useAppStore()
 
