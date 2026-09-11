@@ -22,7 +22,6 @@ type AdminHandlers struct {
 	CursorOAuth           *admin.CursorOAuthHandler
 	Proxy                 *admin.ProxyHandler
 	Redeem                *admin.RedeemHandler
-	Promo                 *admin.PromoHandler
 	Setting               *admin.SettingHandler
 	Ops                   *admin.OpsHandler
 	System                *admin.SystemHandler

@@ -507,18 +507,6 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/admin/promo-codes',
-    name: 'AdminPromoCodes',
-    component: () => import('@/features/admin/views/PromoCodesView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Promo Code Management',
-      titleKey: 'admin.promo.title',
-      descriptionKey: 'admin.promo.description'
-    }
-  },
-  {
     path: '/admin/settings/:tab?',
     name: 'AdminSettings',
     component: () => import('@/features/admin/views/SettingsView.vue'),

@@ -17,7 +17,6 @@ DELETE /api/v1/admin/ops/alert-rules/:id
 DELETE /api/v1/admin/payment/providers/:id
 DELETE /api/v1/admin/profit/configs/:account_id
 DELETE /api/v1/admin/profit/cycles/:id
-DELETE /api/v1/admin/promo-codes/:id
 DELETE /api/v1/admin/proxies/:id
 DELETE /api/v1/admin/redeem-codes/:id
 DELETE /api/v1/admin/risk-control/hashes
@@ -146,9 +145,6 @@ GET /api/v1/admin/profit/configs/:account_id/cycles
 GET /api/v1/admin/profit/overview
 GET /api/v1/admin/profit/summary
 GET /api/v1/admin/profit/trend
-GET /api/v1/admin/promo-codes
-GET /api/v1/admin/promo-codes/:id
-GET /api/v1/admin/promo-codes/:id/usages
 GET /api/v1/admin/proxies
 GET /api/v1/admin/proxies/:id
 GET /api/v1/admin/proxies/:id/accounts
@@ -377,7 +373,6 @@ POST /api/v1/admin/profit/cycles/:id/termination-preview
 POST /api/v1/admin/profit/refunds/:id/void
 POST /api/v1/admin/profit/terminations/:id/refunds
 POST /api/v1/admin/profit/terminations/:id/reverse
-POST /api/v1/admin/promo-codes
 POST /api/v1/admin/proxies
 POST /api/v1/admin/proxies/:id/quality-check
 POST /api/v1/admin/proxies/:id/test
@@ -446,7 +441,6 @@ POST /api/v1/auth/reset-password
 POST /api/v1/auth/revoke-all-sessions
 POST /api/v1/auth/send-verify-code
 POST /api/v1/auth/validate-invitation-code
-POST /api/v1/auth/validate-promo-code
 POST /api/v1/keys
 POST /api/v1/payment/orders
 POST /api/v1/payment/orders/:id/cancel
@@ -525,7 +519,6 @@ PUT /api/v1/admin/payment/config
 PUT /api/v1/admin/payment/providers/:id
 PUT /api/v1/admin/profit/configs/:account_id
 PUT /api/v1/admin/profit/configs/:account_id/auto-renew
-PUT /api/v1/admin/promo-codes/:id
 PUT /api/v1/admin/proxies/:id
 PUT /api/v1/admin/risk-control/config
 PUT /api/v1/admin/risk-control/retrospective/profiles/:user_id

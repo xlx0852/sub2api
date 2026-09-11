@@ -444,26 +444,7 @@ export default {
     },
 
     // Promo Codes
-    promo: {
-      title: '优惠码管理',
-      description: '创建和管理注册优惠码',
-      createCode: '创建优惠码',
-      editCode: '编辑优惠码',
-      deleteCode: '删除优惠码',
-      searchCodes: '搜索优惠码...',
-      emptyDescription: '还没有优惠码，创建后即可用于注册活动和余额奖励。',
-      allStatus: '全部状态',
-      columns: {
-        code: '优惠码',
-        bonusAmount: '赠送金额',
-        maxUses: '最大使用次数',
-        usedCount: '已使用',
-        usage: '使用量',
-        status: '状态',
-        expiresAt: '过期时间',
-        createdAt: '创建时间',
-        actions: '操作'
-      },
+
       // 表单标签（扁平结构便于模板使用）
       code: '优惠码',
       autoGenerate: '留空自动生成',

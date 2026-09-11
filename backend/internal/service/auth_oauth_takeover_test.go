@@ -41,7 +41,7 @@ func TestOAuthEmailTakeover_PendingFlowRealEmailTaken_Rejected(t *testing.T) {
 	service := newAuthService(repo, map[string]string{SettingKeyRegistrationEnabled: "true"}, nil, nil)
 	service.refreshTokenCache = &refreshTokenCacheStub{}
 
-	_, _, err := service.LoginOrRegisterOAuthWithTokenPairAndPromoCode(context.Background(), "victim2@example.com", "attacker", "", "", "", "linuxdo")
+	_, _, err := service.LoginOrRegisterOAuthWithTokenPair(context.Background(), "victim2@example.com", "attacker", "", "", "linuxdo")
 
 	require.ErrorIs(t, err, ErrOAuthEmailOwnershipRequired, "真实邮箱已存在必须拒绝，防账号接管")
 	require.Empty(t, repo.created)
@@ -55,7 +55,7 @@ func TestOAuthEmailTakeover_SyntheticEmailTaken_Allowed(t *testing.T) {
 	service := newAuthService(repo, map[string]string{SettingKeyRegistrationEnabled: "true"}, nil, nil)
 	service.refreshTokenCache = &refreshTokenCacheStub{}
 
-	tokenPair, user, err := service.LoginOrRegisterOAuthWithTokenPairAndPromoCode(context.Background(), "linuxdo-123@linuxdo-connect.invalid", "linuxdo_user", "", "", "", "linuxdo")
+	tokenPair, user, err := service.LoginOrRegisterOAuthWithTokenPair(context.Background(), "linuxdo-123@linuxdo-connect.invalid", "linuxdo_user", "", "", "linuxdo")
 	require.NoError(t, err)
 	require.NotNil(t, tokenPair)
 	require.Equal(t, existing.ID, user.ID)
@@ -67,7 +67,7 @@ func TestOAuthEmailTakeover_EmailNotFound_Registers(t *testing.T) {
 	service := newAuthService(repo, map[string]string{SettingKeyRegistrationEnabled: "true"}, nil, nil)
 	service.refreshTokenCache = &refreshTokenCacheStub{}
 
-	tokenPair, user, err := service.LoginOrRegisterOAuthWithTokenPairAndPromoCode(context.Background(), "newuser@example.com", "newbie", "", "", "", "oidc")
+	tokenPair, user, err := service.LoginOrRegisterOAuthWithTokenPair(context.Background(), "newuser@example.com", "newbie", "", "", "oidc")
 	require.NoError(t, err)
 	require.NotNil(t, tokenPair)
 	require.NotNil(t, user)

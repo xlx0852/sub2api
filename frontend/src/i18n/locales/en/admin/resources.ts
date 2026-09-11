@@ -383,26 +383,7 @@ export default {
     },
 
     // Promo Codes
-    promo: {
-      title: 'Promo Code Management',
-      description: 'Create and manage registration promo codes',
-      createCode: 'Create Promo Code',
-      editCode: 'Edit Promo Code',
-      deleteCode: 'Delete Promo Code',
-      searchCodes: 'Search codes...',
-      emptyDescription: 'No promo codes yet. Create one for registration campaigns and balance rewards.',
-      allStatus: 'All Status',
-      columns: {
-        code: 'Code',
-        bonusAmount: 'Bonus Amount',
-        maxUses: 'Max Uses',
-        usedCount: 'Used',
-        usage: 'Usage',
-        status: 'Status',
-        expiresAt: 'Expires At',
-        createdAt: 'Created At',
-        actions: 'Actions'
-      },
+
       // Form labels (flat structure for template usage)
       code: 'Promo Code',
       autoGenerate: 'auto-generate if empty',

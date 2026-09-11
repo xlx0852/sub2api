@@ -507,26 +507,12 @@ export async function sendPendingOAuthVerifyCode(
 /**
  * Validate promo code response
  */
-export interface ValidatePromoCodeResponse {
-  valid: boolean
-  bonus_amount?: number
-  error_code?: string
-  message?: string
-}
 
 /**
  * Validate promo code (public endpoint, no auth required)
  * @param code - Promo code to validate
  * @returns Validation result with bonus amount if valid
  */
-export async function validatePromoCode(code: string): Promise<ValidatePromoCodeResponse> {
-  const { data } = await controlPlaneRequest<
-    '/api/v1/auth/validate-promo-code',
-    'post',
-    ValidatePromoCodeResponse
-  >('post', '/api/v1/auth/validate-promo-code', { body: { code } })
-  return data
-}
 
 /**
  * Validate invitation code response
@@ -740,7 +726,6 @@ export const authAPI = {
   getPublicSettings,
   sendVerifyCode,
   sendPendingOAuthVerifyCode,
-  validatePromoCode,
   validateInvitationCode,
   forgotPassword,
   resetPassword,

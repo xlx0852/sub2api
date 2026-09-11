@@ -16,9 +16,9 @@ export interface MessagesDispatchFormState {
 export function createDefaultMessagesDispatchFormState(): MessagesDispatchFormState {
   return {
     allow_messages_dispatch: false,
-    opus_mapped_model: "gpt-5.4",
+    opus_mapped_model: "gpt-5.5",
     sonnet_mapped_model: "gpt-5.3-codex",
-    haiku_mapped_model: "gpt-5.4-mini",
+    haiku_mapped_model: "gpt-5.5",
     exact_model_mappings: [],
   };
 }

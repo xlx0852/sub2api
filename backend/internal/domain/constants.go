@@ -68,11 +68,6 @@ const (
 	RedeemTypeInvitation   = "invitation"
 )
 
-// PromoCode status constants
-const (
-	PromoCodeStatusActive   = "active"
-	PromoCodeStatusDisabled = "disabled"
-)
 
 // Admin adjustment type constants
 const (

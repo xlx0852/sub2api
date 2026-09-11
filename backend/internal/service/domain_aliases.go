@@ -128,7 +128,6 @@ var ErrGroupNotFound = domain.ErrGroupNotFound
 var ErrIdentityProviderInvalid = domain.ErrIdentityProviderInvalid
 var ErrInvalidBatchImageQueuePayload = domain.ErrInvalidBatchImageQueuePayload
 var ErrOpsPreaggregatedNotPopulated = domain.ErrOpsPreaggregatedNotPopulated
-var ErrPromoCodeNotFound = domain.ErrPromoCodeNotFound
 var ErrProxyNotFound = domain.ErrProxyNotFound
 var ErrRedeemCodeNotFound = domain.ErrRedeemCodeNotFound
 var ErrRedeemCodeUsed = domain.ErrRedeemCodeUsed
