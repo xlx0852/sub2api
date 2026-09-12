@@ -4524,6 +4524,19 @@ const createAccountAndFinish = async (
     applyGrokAPIKeyRouting(credentials, platform, type)
   }
 
+  if (type === 'apikey' && (platform === 'cursor' || platform === 'devin')) {
+    finalExtra = {
+      ...(finalExtra || {}),
+      external_bridge: true,
+      external_bridge_kind: platform
+    }
+    if (!credentials.base_url) {
+      credentials.base_url = platform === 'cursor'
+        ? 'http://sub2api-cursor-bridge:3000'
+        : 'http://sub2api-devin-bridge:8080'
+    }
+  }
+
   // OAuth/setup-token 与通用 apikey：统一写入模型限制（Antigravity 使用独立映射 UI）
   const shouldApplyStandardModelRestriction =
     platform !== 'antigravity' &&

@@ -210,8 +210,8 @@ export const ACCOUNT_PLATFORM_REGISTRY: readonly PlatformDefinition[] = [
     icon: 'cursor',
     activeClass: 'bg-white text-cyan-700 dark:bg-dark-600 dark:text-cyan-300',
     showInCreatePicker: true,
-    categories: ['oauth-based', 'apikey'],
-    types: ['oauth', 'apikey'],
+    categories: ['apikey'],
+    types: ['apikey'],
     fields: {
       headerOverride: false,
       modelRestriction: true,
@@ -219,19 +219,19 @@ export const ACCOUNT_PLATFORM_REGISTRY: readonly PlatformDefinition[] = [
       upstreamCredentials: false,
       vertexServiceAccount: false,
       mixedScheduling: false,
-      oauthModelRestriction: true,
+      oauthModelRestriction: false,
       interceptWarmup: false,
       openAIAdvanced: false,
       anthropicAdvanced: false,
       antigravityAdvanced: false,
       grokAdvanced: false,
       kimiAdvanced: false,
-      cursorAdvanced: true,
+      cursorAdvanced: false,
       geminiAdvanced: false
     },
     apiKey: {
-      baseUrl: 'https://api2.cursor.sh',
-      placeholder: 'key-...',
+      baseUrl: 'http://sub2api-cursor-bridge:3000',
+      placeholder: 'Cursor access token...',
       baseUrlHintKey: 'admin.accounts.cursor.baseUrlHint',
       apiKeyHintKey: 'admin.accounts.cursor.apiKeyHint'
     }
@@ -262,8 +262,8 @@ export const ACCOUNT_PLATFORM_REGISTRY: readonly PlatformDefinition[] = [
       geminiAdvanced: false
     },
     apiKey: {
-      baseUrl: 'https://server.codeium.com',
-      placeholder: 'devin-session-token$...',
+      baseUrl: 'http://sub2api-devin-bridge:8080',
+      placeholder: 'Devin bridge API key...',
       baseUrlHintKey: 'admin.accounts.devin.baseUrlHint',
       apiKeyHintKey: 'admin.accounts.devin.apiKeyHint'
     }
