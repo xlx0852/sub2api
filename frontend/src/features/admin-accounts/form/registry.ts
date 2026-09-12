@@ -209,7 +209,7 @@ export const ACCOUNT_PLATFORM_REGISTRY: readonly PlatformDefinition[] = [
     label: 'Cursor',
     icon: 'cursor',
     activeClass: 'bg-white text-cyan-700 dark:bg-dark-600 dark:text-cyan-300',
-    showInCreatePicker: true,
+    showInCreatePicker: false,
     categories: ['apikey'],
     types: ['apikey'],
     fields: {
@@ -241,7 +241,7 @@ export const ACCOUNT_PLATFORM_REGISTRY: readonly PlatformDefinition[] = [
     label: 'Devin',
     icon: 'devin',
     activeClass: 'bg-white text-indigo-700 dark:bg-dark-600 dark:text-indigo-300',
-    showInCreatePicker: true,
+    showInCreatePicker: false,
     categories: ['apikey'],
     types: ['apikey'],
     fields: {

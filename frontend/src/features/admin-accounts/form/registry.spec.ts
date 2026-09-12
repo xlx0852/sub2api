@@ -31,9 +31,7 @@ describe('account form registry', () => {
       'openai',
       'antigravity',
       'grok',
-      'kimi',
-      'cursor',
-      'devin'
+      'kimi'
     ])
   })
 
