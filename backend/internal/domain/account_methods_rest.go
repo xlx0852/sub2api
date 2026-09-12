@@ -468,7 +468,7 @@ func (g *Group) ResolveMessagesDispatchModel(requestedModel string) string {
 		}
 		return ""
 	}
-	if g.Platform == PlatformCursor {
+	if g.Platform == PlatformCursor || g.Platform == PlatformDevin {
 		if claudeMessagesDispatchFamily(requestedModel) != "" {
 			return "default"
 		}

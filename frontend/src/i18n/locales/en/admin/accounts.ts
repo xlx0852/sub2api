@@ -137,6 +137,7 @@ export default {
         antigravity: 'Antigravity',
         grok: 'Grok',
         cursor: 'Cursor',
+        devin: 'Devin',
       },
       types: {
         oauth: 'OAuth',
@@ -148,6 +149,8 @@ export default {
         grokOauth: 'Grok OAuth',
         cursorOauth: 'Cursor OAuth',
         cursorApikey: 'Cursor API Key',
+        devinOauth: 'Devin Session Token',
+        devinApikey: 'Devin Session Token',
         antigravityApikey: 'Connect via Base URL + API Key',
         upstream: 'Upstream',
         upstreamDesc: 'Connect via Base URL + API Key'
@@ -544,6 +547,11 @@ export default {
         baseUrlHint: 'Leave default for official Cursor API (https://api2.cursor.sh).',
         apiKeyHint: 'Your Cursor User API Key (key-...)',
         accountTypeHint: 'OAuth uses Cursor browser login / session token; API Key uses Cursor User API Key.'
+      },
+      devin: {
+        baseUrlHint: 'Leave default for Devin Connect (https://server.codeium.com).',
+        apiKeyHint: 'Your Devin session token (devin-session-token$...)',
+        accountTypeHint: 'Use the Devin session token copied from the Devin app local state.'
       },
       anthropic: {
         apiKeyPassthrough: 'Auto passthrough (auth only)',
@@ -1004,6 +1012,22 @@ export default {
             expiresIn: 'Expires in {seconds}s',
             retry: 'Retry Authorization',
             createAccount: 'Create Cursor Account'
+          }
+        },
+        devin: {
+          device: {
+            title: 'Devin Account',
+            description: 'Paste a Devin session token to connect this account.',
+            start: 'Use Token',
+            starting: 'Preparing account...',
+            userCode: 'Token',
+            openAuthorization: 'Devin Token Guide',
+            waiting: 'Waiting for Devin token',
+            authorized: 'Token ready to create account',
+            denied: 'Token missing',
+            expiresIn: '',
+            retry: 'Try Again',
+            createAccount: 'Create Devin Account'
           }
         },
         // Gemini specific

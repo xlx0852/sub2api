@@ -27,6 +27,7 @@ const (
 	PlatformGrok        = "grok"
 	PlatformKimi        = "kimi"
 	PlatformCursor      = "cursor"
+	PlatformDevin       = "devin"
 )
 
 // Privacy mode markers stored on account extra.
@@ -67,7 +68,6 @@ const (
 	RedeemTypeSubscription = "subscription"
 	RedeemTypeInvitation   = "invitation"
 )
-
 
 // Admin adjustment type constants
 const (

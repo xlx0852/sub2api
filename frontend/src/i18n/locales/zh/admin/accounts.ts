@@ -257,6 +257,7 @@ export default {
         antigravity: 'Antigravity',
         grok: 'Grok',
         cursor: 'Cursor',
+        devin: 'Devin',
       },
       types: {
         oauth: 'OAuth',
@@ -268,6 +269,8 @@ export default {
         grokOauth: 'Grok OAuth',
         cursorOauth: 'Cursor OAuth',
         cursorApikey: 'Cursor API Key',
+        devinOauth: 'Devin 会话 Token',
+        devinApikey: 'Devin 会话 Token',
         antigravityApikey: '通过 Base URL + API Key 连接',
         upstream: '对接上游',
         upstreamDesc: '通过 Base URL + API Key 连接上游',
@@ -758,6 +761,11 @@ export default {
         apiKeyHint: '您的 Cursor User API Key（key-...）',
         accountTypeHint: 'OAuth 使用 Cursor 浏览器授权 / 会话 Token；API Key 使用 Cursor User API Key。'
       },
+      devin: {
+        baseUrlHint: '留空使用 Devin Connect（https://server.codeium.com）',
+        apiKeyHint: '您的 Devin 会话 Token（devin-session-token$...）',
+        accountTypeHint: '请从 Devin 应用本地状态复制会话 Token。'
+      },
       anthropic: {
         apiKeyPassthrough: '自动透传（仅替换认证）',
         apiKeyPassthroughDesc:
@@ -1205,6 +1213,22 @@ export default {
             expiresIn: '{seconds} 秒后过期',
             retry: '重新授权',
             createAccount: '创建 Cursor 账号'
+          }
+        },
+        devin: {
+          device: {
+            title: 'Devin 账号',
+            description: '粘贴 Devin 会话 Token 以连接此账号。',
+            start: '使用 Token',
+            starting: '正在准备账号...',
+            userCode: 'Token',
+            openAuthorization: '查看 Devin Token 指引',
+            waiting: '等待 Devin Token',
+            authorized: 'Token 已就绪，可以创建账号',
+            denied: '缺少 Token',
+            expiresIn: '',
+            retry: '重试',
+            createAccount: '创建 Devin 账号'
           }
         },
         // Gemini specific

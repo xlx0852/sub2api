@@ -1044,6 +1044,9 @@ func normalizeOpenAIResponsesImageOnlyModel(reqBody map[string]any) bool {
 }
 
 func normalizeOpenAIModelForUpstream(account *Account, model string) string {
+	if account != nil && account.Platform == PlatformDevin {
+		return strings.TrimSpace(model)
+	}
 	if account != nil && account.Platform == PlatformKimi {
 		return normalizeKimiUpstreamModel(model)
 	}

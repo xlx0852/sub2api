@@ -82,6 +82,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if account.Platform == PlatformCursor {
 		return s.forwardCursorResponses(ctx, c, account, body, originalModel, reqStream, startTime)
 	}
+	if account.Platform == PlatformDevin {
+		return s.forwardDevinResponses(ctx, c, account, body, originalModel, reqStream, startTime)
+	}
 
 	if account.Type == AccountTypeAPIKey && !openai_compat.ShouldUseResponsesAPI(account.Extra) {
 		return s.forwardResponsesViaRawChatCompletions(ctx, c, account, body)

@@ -894,6 +894,7 @@ export default {
         grok: 'Grok',
         kimi: 'Kimi',
         cursor: 'Cursor',
+        devin: 'Devin',
       },
       deleteConfirm:
         "Are you sure you want to delete '{name}'? All associated API keys will no longer belong to any group.",

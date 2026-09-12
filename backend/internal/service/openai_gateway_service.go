@@ -1257,6 +1257,13 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 			}
 			return accessToken, "oauth", nil
 		}
+		if account.Platform == PlatformDevin {
+			accessToken := firstNonEmpty(strings.TrimSpace(account.GetCredential("token")), strings.TrimSpace(account.GetCredential("access_token")), strings.TrimSpace(account.GetCredential("api_key")))
+			if accessToken == "" {
+				return "", "", errors.New("devin token not found in credentials")
+			}
+			return accessToken, "oauth", nil
+		}
 		// 使用 TokenProvider 获取缓存的 token
 		if s.openAITokenProvider != nil {
 			accessToken, err := s.openAITokenProvider.GetAccessToken(ctx, account)
@@ -1286,6 +1293,13 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 			}
 			if apiKey == "" {
 				return "", "", errors.New("cursor api_key or access_token not found in credentials")
+			}
+			return apiKey, "apikey", nil
+		}
+		if account.Platform == PlatformDevin {
+			apiKey := firstNonEmpty(strings.TrimSpace(account.GetCredential("token")), strings.TrimSpace(account.GetCredential("access_token")), strings.TrimSpace(account.GetCredential("api_key")))
+			if apiKey == "" {
+				return "", "", errors.New("devin token not found in credentials")
 			}
 			return apiKey, "apikey", nil
 		}

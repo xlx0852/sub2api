@@ -255,7 +255,7 @@ func (a *Account) IsCursor() bool { return a != nil && a.Platform == PlatformCur
 func (a *Account) IsCursorOAuth() bool { return a.IsCursor() && a.Type == AccountTypeOAuth }
 
 func (a *Account) IsOpenAICompatible() bool {
-	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok || a.Platform == PlatformKimi || a.Platform == PlatformCursor)
+	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok || a.Platform == PlatformKimi || a.Platform == PlatformCursor || a.Platform == PlatformDevin)
 }
 
 func (a *Account) GeminiOAuthType() string {

@@ -104,6 +104,7 @@ const platformLabel = computed(() => {
   if (props.platform === 'grok') return 'Grok'
   if (props.platform === 'kimi') return 'Kimi'
   if (props.platform === 'cursor') return 'Cursor'
+  if (props.platform === 'devin') return 'Devin'
   return 'Gemini'
 })
 

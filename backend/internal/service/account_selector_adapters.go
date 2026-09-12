@@ -46,7 +46,7 @@ func (openAISchedulingStrategy) Name() string { return "openai-compatible" }
 
 func (openAISchedulingStrategy) Supports(req scheduling.Request) bool {
 	switch req.Platform {
-	case "", PlatformOpenAI, PlatformGrok, PlatformKimi, PlatformCursor:
+	case "", PlatformOpenAI, PlatformGrok, PlatformKimi, PlatformCursor, PlatformDevin:
 		return true
 	default:
 		return false

@@ -178,7 +178,7 @@ func (s *OpenAIGatewayService) SelectAccountForModelWithExclusions(ctx context.C
 // while preserving the compact-specific error when applicable.
 func normalizeOpenAICompatiblePlatform(platform string) string {
 	switch platform {
-	case PlatformGrok, PlatformKimi, PlatformCursor:
+	case PlatformGrok, PlatformKimi, PlatformCursor, PlatformDevin:
 		return platform
 	}
 	return PlatformOpenAI

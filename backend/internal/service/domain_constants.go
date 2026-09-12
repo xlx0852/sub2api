@@ -57,6 +57,7 @@ const (
 	PlatformGrok        = domain.PlatformGrok
 	PlatformKimi        = domain.PlatformKimi
 	PlatformCursor      = domain.PlatformCursor
+	PlatformDevin       = domain.PlatformDevin
 
 	PrivacyModeTrainingOff   = domain.PrivacyModeTrainingOff
 	PrivacyModeFailed        = domain.PrivacyModeFailed
@@ -76,6 +77,7 @@ var AllowedQuotaPlatforms = []string{
 	PlatformGrok,
 	PlatformKimi,
 	PlatformCursor,
+	PlatformDevin,
 }
 
 // IsAllowedQuotaPlatform 报告 s 是否为合法的 quota platform 标识。
@@ -105,7 +107,6 @@ const (
 	RedeemTypeInvitation       = domain.RedeemTypeInvitation
 	RedeemTypeAffiliateBalance = "affiliate_balance"
 )
-
 
 // Admin adjustment type constants
 const (

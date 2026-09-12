@@ -41,6 +41,9 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	if account.Platform == PlatformCursor {
 		return s.forwardCursorAnthropic(ctx, c, account, body, defaultMappedModel)
 	}
+	if account.Platform == PlatformDevin {
+		return s.forwardDevinAnthropic(ctx, c, account, body, defaultMappedModel)
+	}
 	if account.Platform == PlatformKimi || (account.Type == AccountTypeAPIKey && !openai_compat.ShouldUseResponsesAPI(account.Extra)) {
 		return s.forwardAnthropicViaRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}

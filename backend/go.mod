@@ -3,6 +3,7 @@ module github.com/Wei-Shaw/sub2api
 go 1.26.4
 
 require (
+	connectrpc.com/connect v1.20.0
 	entgo.io/ent v0.14.5
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/alicebob/miniredis/v2 v2.38.0
@@ -54,7 +55,7 @@ require (
 	modernc.org/sqlite v1.44.3
 )
 
-require google.golang.org/protobuf v1.36.10
+require google.golang.org/protobuf v1.36.11
 
 require (
 	ariga.io/atlas v0.32.1-0.20250325101103-175b25e1c1b9 // indirect

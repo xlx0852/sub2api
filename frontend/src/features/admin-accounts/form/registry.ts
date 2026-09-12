@@ -18,7 +18,7 @@ export interface FieldContext {
 export interface PlatformDefinition {
   id: AccountPlatform
   label: string
-  icon: 'sparkles' | 'bolt' | 'cloud' | 'grok' | 'kimi' | 'cursor'
+  icon: 'sparkles' | 'bolt' | 'cloud' | 'grok' | 'kimi' | 'cursor' | 'devin'
   activeClass: string
   showInCreatePicker: boolean
   categories: AccountCategory[]
@@ -234,6 +234,38 @@ export const ACCOUNT_PLATFORM_REGISTRY: readonly PlatformDefinition[] = [
       placeholder: 'key-...',
       baseUrlHintKey: 'admin.accounts.cursor.baseUrlHint',
       apiKeyHintKey: 'admin.accounts.cursor.apiKeyHint'
+    }
+  },
+  {
+    id: 'devin',
+    label: 'Devin',
+    icon: 'devin',
+    activeClass: 'bg-white text-indigo-700 dark:bg-dark-600 dark:text-indigo-300',
+    showInCreatePicker: true,
+    categories: ['apikey'],
+    types: ['apikey'],
+    fields: {
+      headerOverride: false,
+      modelRestriction: true,
+      antigravityProjectId: false,
+      upstreamCredentials: false,
+      vertexServiceAccount: false,
+      mixedScheduling: false,
+      oauthModelRestriction: true,
+      interceptWarmup: false,
+      openAIAdvanced: false,
+      anthropicAdvanced: false,
+      antigravityAdvanced: false,
+      grokAdvanced: false,
+      kimiAdvanced: false,
+      cursorAdvanced: false,
+      geminiAdvanced: false
+    },
+    apiKey: {
+      baseUrl: 'https://server.codeium.com',
+      placeholder: 'devin-session-token$...',
+      baseUrlHintKey: 'admin.accounts.devin.baseUrlHint',
+      apiKeyHintKey: 'admin.accounts.devin.apiKeyHint'
     }
   },
   {

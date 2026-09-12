@@ -856,6 +856,7 @@ export default {
         grok: 'Grok',
         kimi: 'Kimi',
         cursor: 'Cursor',
+        devin: 'Devin',
       },
       saving: '保存中...',
       noGroups: '暂无分组',
