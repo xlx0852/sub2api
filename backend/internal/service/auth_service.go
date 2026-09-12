@@ -842,7 +842,7 @@ func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 		}
 	}
 	if created {
-		}
+	}
 	// 安全审计：OAuth 补全流程成功登录/注册。该路径的"邮箱命中已有账号"已被
 	// ErrOAuthEmailOwnershipRequired 拦截（见上方），此处仅剩注册或身份已绑定场景。
 	slog.Info("auth.oauth_login_success",
@@ -857,8 +857,6 @@ func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 	}
 	return tokenPair, user, nil
 }
-
-
 
 func (s *AuthService) assignSubscriptions(ctx context.Context, userID int64, items []DefaultSubscriptionSetting, notes string) {
 	// 用户订阅配额模式已退役；保留方法以兼容既有认证流程签名。

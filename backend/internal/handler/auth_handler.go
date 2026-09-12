@@ -420,7 +420,6 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 	response.Success(c, userProfileResponseFromService(user, identities))
 }
 
-
 // ValidateInvitationCodeRequest 验证邀请码请求
 type ValidateInvitationCodeRequest struct {
 	Code string `json:"code" binding:"required"`

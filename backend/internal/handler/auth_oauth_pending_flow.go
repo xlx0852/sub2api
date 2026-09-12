@@ -161,10 +161,6 @@ func readOAuthPendingSessionCookie(c *gin.Context) (string, error) {
 	return readCookieDecoded(c, oauthPendingSessionCookieName)
 }
 
-
-
-
-
 func redirectToFrontendCallback(c *gin.Context, frontendCallback string) {
 	u, err := url.Parse(frontendCallback)
 	if err != nil {
@@ -1827,7 +1823,7 @@ func (h *AuthHandler) createPendingOAuthAccount(c *gin.Context, provider string)
 		return
 	}
 
-		h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
+	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
 	// createPendingOAuthAccount = 注册新账户，需要把钉钉昵称同步到 users.username 作为初始值
 	h.maybeSyncDingTalkAfterRegistration(c.Request.Context(), session, user.ID)
 	clearCookies()

@@ -56,14 +56,14 @@ func (h *KimiOAuthHandler) CancelDeviceAuthorization(c *gin.Context) {
 
 func (h *KimiOAuthHandler) CreateAccountFromDevice(c *gin.Context) {
 	var req struct {
-		SessionID     string         `json:"session_id" binding:"required"`
-		Name          string         `json:"name"`
-		Notes         *string        `json:"notes"`
-		ProxyID       *int64         `json:"proxy_id"`
-		Concurrency   int            `json:"concurrency"`
-		Priority      int            `json:"priority"`
-		GroupIDs      []int64        `json:"group_ids"`
-		ModelMapping  map[string]any `json:"model_mapping"`
+		SessionID    string         `json:"session_id" binding:"required"`
+		Name         string         `json:"name"`
+		Notes        *string        `json:"notes"`
+		ProxyID      *int64         `json:"proxy_id"`
+		Concurrency  int            `json:"concurrency"`
+		Priority     int            `json:"priority"`
+		GroupIDs     []int64        `json:"group_ids"`
+		ModelMapping map[string]any `json:"model_mapping"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())

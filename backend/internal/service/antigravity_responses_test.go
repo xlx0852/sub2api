@@ -211,5 +211,3 @@ func TestAntigravityResponsesClampsLargeMaxOutputTokens(t *testing.T) {
 	require.Equal(t, 2.0, gjson.GetBytes(up.requestBodies[0], "request.generationConfig.temperature").Float())
 	require.Equal(t, 1.0, gjson.GetBytes(up.requestBodies[0], "request.generationConfig.topP").Float())
 }
-
-

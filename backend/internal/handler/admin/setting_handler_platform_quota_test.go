@@ -137,8 +137,7 @@ func TestAppendAuthSourceDefaultChanges_DetectsPerWindow(t *testing.T) {
 func TestSettingHandler_AuthSourcePlatformQuotas_PutGetRoundTrip(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &settingHandlerRepoStub{
-		values: map[string]string{
-		},
+		values: map[string]string{},
 	}
 	svc := service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}})
 	handler := NewSettingHandler(svc, nil, nil, nil, nil, nil, nil)

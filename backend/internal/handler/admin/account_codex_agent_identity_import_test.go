@@ -47,7 +47,6 @@ func TestNormalizeCodexImportEntryAcceptsAgentIdentityAuthJSON(t *testing.T) {
 	require.NotEmpty(t, item.WarningTexts)
 }
 
-
 func TestNormalizeCodexImportEntryAcceptsSub2APIDataAgentIdentityBlob(t *testing.T) {
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)

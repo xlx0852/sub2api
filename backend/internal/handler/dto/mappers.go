@@ -841,8 +841,6 @@ func BulkAssignResultFromService(r *service.BulkAssignResult) *BulkAssignResult 
 	}
 }
 
-
-
 func firstNonNilInt64(vals ...*int64) *int64 {
 	for _, v := range vals {
 		if v != nil {

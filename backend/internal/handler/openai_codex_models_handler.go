@@ -19,6 +19,7 @@ import (
 //   - GET /models?client_version=...              (custom provider base_url root)
 //   - GET /v1/models?client_version=...           (OpenAI-compatible base_url)
 //   - GET /backend-api/codex/models?client_version=... (ChatGPT backend base)
+//
 // The body is proxied verbatim from chatgpt.com using a priority-ordered OAuth
 // probe (TokenProvider-backed): up to a few schedulable accounts, early-exit
 // once a gpt-5.6* family catalog is found. This is a best-effort "rich enough"

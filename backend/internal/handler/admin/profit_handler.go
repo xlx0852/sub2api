@@ -465,7 +465,6 @@ func (h *ProfitHandler) UpsertCostConfig(c *gin.Context) {
 	response.Success(c, cfg)
 }
 
-
 // SetSubscriptionAutoRenew PUT /api/v1/admin/profit/configs/:account_id/auto-renew
 func (h *ProfitHandler) SetSubscriptionAutoRenew(c *gin.Context) {
 	accountID, err := strconv.ParseInt(c.Param("account_id"), 10, 64)

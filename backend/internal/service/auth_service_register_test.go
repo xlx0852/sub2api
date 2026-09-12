@@ -303,7 +303,7 @@ func newAuthService(repo *userRepoStub, settings map[string]string, emailCache E
 		emailService,
 		nil,
 		nil,
-			nil, // defaultSubAssigner
+		nil, // defaultSubAssigner
 		nil, // affiliateService
 		quotaRepo,
 	)

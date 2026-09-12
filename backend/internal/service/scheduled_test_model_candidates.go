@@ -20,6 +20,18 @@ func ResolveScheduledDiagnosticsModels(account *Account, primary string) []strin
 	}
 
 	primary = strings.TrimSpace(primary)
+	if account.IsExternalBridge() {
+		candidates := make([]string, 0, scheduledDiagnosticsMaxModels+1)
+		if defaultModel := strings.TrimSpace(account.GetCredential("model")); defaultModel != "" {
+			candidates = append(candidates, defaultModel)
+		}
+		candidates = append(candidates, modelIDsFromMapping(account.GetModelMapping())...)
+		out := uniqueNonEmptyModels(candidates...)
+		if len(out) > scheduledDiagnosticsMaxModels {
+			out = out[:scheduledDiagnosticsMaxModels]
+		}
+		return out
+	}
 	candidates := make([]string, 0, scheduledDiagnosticsMaxModels+2)
 	if primary != "" {
 		candidates = append(candidates, primary)

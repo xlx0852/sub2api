@@ -40,7 +40,7 @@ func newEmailOAuthAutoAuthService(
 		nil, // emailService
 		nil, // turnstileService
 		nil, // emailQueueService
-				nil, // defaultSubAssigner — nil, assignSubscriptions early return
+		nil, // defaultSubAssigner — nil, assignSubscriptions early return
 		nil, // affiliateService — nil, bindOAuthAffiliate early return
 		quotaRepo,
 	)

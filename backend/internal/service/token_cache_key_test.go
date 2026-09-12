@@ -114,7 +114,7 @@ func TestAntigravityTokenCacheKey(t *testing.T) {
 			expected: "ag:account:115",
 		},
 		{
-			name: "nil_account",
+			name:     "nil_account",
 			account:  nil,
 			expected: "ag:account:0",
 		},

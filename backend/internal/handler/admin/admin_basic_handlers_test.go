@@ -31,17 +31,17 @@ func setupAdminRouter() (*gin.Engine, *stubAdminService) {
 	router.GET("/api/v1/admin/users/:id/api-keys", userHandler.GetUserAPIKeys)
 	router.GET("/api/v1/admin/users/:id/usage", userHandler.GetUserUsage)
 
-router.GET("/api/v1/admin/groups", groupHandler.List)
-		router.GET("/api/v1/admin/groups/all", groupHandler.GetAll)
-		router.GET("/api/v1/admin/groups/:id/models-list-candidates", groupHandler.GetModelsListCandidates)
-		router.GET("/api/v1/admin/groups/:id/pricing-summary", groupHandler.GetPricingSummary)
-		router.PUT("/api/v1/admin/groups/:id/sell-price-policy", groupHandler.BindSellPricePolicy)
-		router.GET("/api/v1/admin/groups/:id", groupHandler.GetByID)
-		router.POST("/api/v1/admin/groups", groupHandler.Create)
-		router.PUT("/api/v1/admin/groups/:id", groupHandler.Update)
-		router.DELETE("/api/v1/admin/groups/:id", groupHandler.Delete)
-		router.GET("/api/v1/admin/groups/:id/stats", groupHandler.GetStats)
-		router.GET("/api/v1/admin/groups/:id/api-keys", groupHandler.GetGroupAPIKeys)
+	router.GET("/api/v1/admin/groups", groupHandler.List)
+	router.GET("/api/v1/admin/groups/all", groupHandler.GetAll)
+	router.GET("/api/v1/admin/groups/:id/models-list-candidates", groupHandler.GetModelsListCandidates)
+	router.GET("/api/v1/admin/groups/:id/pricing-summary", groupHandler.GetPricingSummary)
+	router.PUT("/api/v1/admin/groups/:id/sell-price-policy", groupHandler.BindSellPricePolicy)
+	router.GET("/api/v1/admin/groups/:id", groupHandler.GetByID)
+	router.POST("/api/v1/admin/groups", groupHandler.Create)
+	router.PUT("/api/v1/admin/groups/:id", groupHandler.Update)
+	router.DELETE("/api/v1/admin/groups/:id", groupHandler.Delete)
+	router.GET("/api/v1/admin/groups/:id/stats", groupHandler.GetStats)
+	router.GET("/api/v1/admin/groups/:id/api-keys", groupHandler.GetGroupAPIKeys)
 
 	router.GET("/api/v1/admin/proxies", proxyHandler.List)
 	router.GET("/api/v1/admin/proxies/all", proxyHandler.GetAll)
@@ -210,25 +210,25 @@ func TestGroupHandlerEndpoints(t *testing.T) {
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 
-rec = httptest.NewRecorder()
-		req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups/2/api-keys", nil)
-		router.ServeHTTP(rec, req)
-		require.Equal(t, http.StatusOK, rec.Code)
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups/2/api-keys", nil)
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
 
-		// Pricing summary/bind require ChannelService; without it handlers return 400.
-		rec = httptest.NewRecorder()
-		req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups/2/pricing-summary", nil)
-		router.ServeHTTP(rec, req)
-		require.Equal(t, http.StatusBadRequest, rec.Code)
+	// Pricing summary/bind require ChannelService; without it handlers return 400.
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups/2/pricing-summary", nil)
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
 
-		rec = httptest.NewRecorder()
-		req = httptest.NewRequest(http.MethodPut, "/api/v1/admin/groups/2/sell-price-policy", bytes.NewBufferString(`{"policy_id":null}`))
-		req.Header.Set("Content-Type", "application/json")
-		router.ServeHTTP(rec, req)
-		require.Equal(t, http.StatusBadRequest, rec.Code)
-	}
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/admin/groups/2/sell-price-policy", bytes.NewBufferString(`{"policy_id":null}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
 
-	func TestProxyHandlerEndpoints(t *testing.T) {
+func TestProxyHandlerEndpoints(t *testing.T) {
 	router, _ := setupAdminRouter()
 
 	rec := httptest.NewRecorder()

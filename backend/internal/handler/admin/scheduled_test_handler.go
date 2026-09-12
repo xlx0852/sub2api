@@ -180,4 +180,3 @@ func (h *ScheduledTestHandler) EnsureDefault(c *gin.Context) {
 		"plan":    plan,
 	})
 }
-
