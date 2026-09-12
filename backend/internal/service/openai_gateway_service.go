@@ -1210,6 +1210,9 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 		}
 		return token, "apikey", nil
 	}
+	if account != nil && (account.Platform == PlatformCursor || account.Platform == PlatformDevin) {
+		return "", "", errors.New("native Cursor/Devin integration is disabled; configure an external bridge account")
+	}
 	if account.IsShadow() {
 		credAccount, err := resolveCredentialAccount(ctx, s.accountRepo, account)
 		if err != nil {

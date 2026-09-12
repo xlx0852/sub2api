@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/modelcatalog"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
@@ -175,6 +176,25 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	}
 	if err := rejectRetiredBedrockAccount(account); err != nil {
 		return s.sendErrorAndEnd(c, err.Error())
+	}
+	if account.IsExternalBridge() {
+		testModelID := strings.TrimSpace(modelID)
+		if testModelID == "" {
+			testModelID = strings.TrimSpace(account.GetCredential("model"))
+		}
+		if testModelID == "" {
+			testModelID = openai.CurrentDefaultTestModel()
+		}
+		testModelID = account.GetMappedModel(testModelID)
+		baseURL, err := validateExternalBridgeBaseURL(account.GetOpenAIBaseURL())
+		if err != nil {
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid external bridge base URL: %s", err.Error()))
+		}
+		token := account.GetOpenAIApiKey()
+		if token == "" {
+			return s.sendErrorAndEnd(c, "External bridge API key is missing")
+		}
+		return s.testOpenAIChatCompletionsConnection(c, account, testModelID, prompt, baseURL, token)
 	}
 
 	// Route to platform-specific test method
@@ -412,6 +432,23 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	if testModelID == "" {
 		testModelID = openai.CurrentDefaultTestModel()
 	}
+	if account.IsExternalBridge() {
+		// Scheduled diagnostics use generic OpenAI probe models. A sidecar may
+		// expose a narrower catalog, so select its configured model when the
+		// requested probe is outside the account mapping.
+		bridgeModel := strings.TrimSpace(account.GetCredential("model"))
+		if bridgeModel == "" {
+			for _, mapped := range account.GetModelMapping() {
+				if strings.TrimSpace(mapped) != "" {
+					bridgeModel = strings.TrimSpace(mapped)
+					break
+				}
+			}
+		}
+		if bridgeModel != "" && (strings.TrimSpace(modelID) == "" || !account.IsModelSupported(modelID)) {
+			testModelID = bridgeModel
+		}
+	}
 
 	// Align test routing with gateway behavior: OpenAI accounts apply normal
 	// account model mapping, and compact mode applies compact-only mapping on top.
@@ -470,7 +507,13 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		if baseURL == "" {
 			baseURL = "https://api.openai.com"
 		}
-		normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
+		var normalizedBaseURL string
+		var err error
+		if credentialAccount.IsExternalBridge() {
+			normalizedBaseURL, err = validateExternalBridgeBaseURL(baseURL)
+		} else {
+			normalizedBaseURL, err = s.validateUpstreamBaseURL(baseURL)
+		}
 		if err != nil {
 			return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
 		}
@@ -504,6 +547,9 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		return s.sendErrorAndEnd(c, "Failed to create request")
 	}
 	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
+	if account.IsExternalBridge() {
+		req = req.WithContext(domain.WithHTTPUpstreamPrivateHostsAllowed(req.Context()))
+	}
 
 	// Set common headers
 	req.Header.Set("Content-Type", "application/json")

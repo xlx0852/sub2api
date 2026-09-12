@@ -83,9 +83,15 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	// Cursor 上游没有 Responses 端点：沙箱网关 prompt 是唯一可用的 LLM 通道，
 	// 本地做 Responses ↔ gateway turn 的协议仿真。
 	if account.Platform == PlatformCursor {
+		if !account.IsExternalBridge() {
+			return rejectNativeProviderAccount(c, account)
+		}
 		return s.forwardCursorResponses(ctx, c, account, body, originalModel, reqStream, startTime)
 	}
 	if account.Platform == PlatformDevin {
+		if !account.IsExternalBridge() {
+			return rejectNativeProviderAccount(c, account)
+		}
 		return s.forwardDevinResponses(ctx, c, account, body, originalModel, reqStream, startTime)
 	}
 

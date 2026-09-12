@@ -94,9 +94,15 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
 	if account.Platform == PlatformCursor {
+		if !account.IsExternalBridge() {
+			return rejectNativeProviderAccount(c, account)
+		}
 		return s.forwardCursorChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
 	if account.Platform == PlatformDevin {
+		if !account.IsExternalBridge() {
+			return rejectNativeProviderAccount(c, account)
+		}
 		return s.forwardDevinChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
 

@@ -435,13 +435,14 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 		}
 		return usage, err
 	}
+	if account.Platform == PlatformDevin {
+		now := time.Now()
+		return &UsageInfo{Source: "active", UpdatedAt: &now, Error: "native Devin integration is disabled; configure an external bridge account"}, nil
+	}
 
 	if account.Platform == PlatformCursor {
-		usage, err := s.getCursorUsage(ctx, account, forceProbe)
-		if err == nil {
-			s.tryClearRecoverableAccountError(ctx, account)
-		}
-		return usage, err
+		now := time.Now()
+		return &UsageInfo{Source: "active", UpdatedAt: &now, Error: "native Cursor integration is disabled; configure an external bridge account"}, nil
 	}
 
 	// 只有oauth类型账号可以通过API获取usage（有profile scope）

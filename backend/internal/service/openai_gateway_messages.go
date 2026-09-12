@@ -39,9 +39,21 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	// 会被无条件转为 Responses 格式发往上游 /v1/responses，导致只支持
 	// /v1/chat/completions 的第三方 OpenAI 兼容上游全部 400。
 	if account.Platform == PlatformCursor {
+		if account.IsExternalBridge() {
+			return s.forwardAnthropicViaRawChatCompletions(ctx, c, account, body, defaultMappedModel)
+		}
+		if !account.IsExternalBridge() {
+			return rejectNativeProviderAccount(c, account)
+		}
 		return s.forwardCursorAnthropic(ctx, c, account, body, defaultMappedModel)
 	}
 	if account.Platform == PlatformDevin {
+		if account.IsExternalBridge() {
+			return s.forwardAnthropicViaRawChatCompletions(ctx, c, account, body, defaultMappedModel)
+		}
+		if !account.IsExternalBridge() {
+			return rejectNativeProviderAccount(c, account)
+		}
 		return s.forwardDevinAnthropic(ctx, c, account, body, defaultMappedModel)
 	}
 	if account.Platform == PlatformKimi || (account.Type == AccountTypeAPIKey && !openai_compat.ShouldUseResponsesAPI(account.Extra)) {
