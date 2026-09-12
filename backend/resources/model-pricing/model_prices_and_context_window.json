@@ -6511,10 +6511,11 @@
     "supports_web_search": true
   },
   "k3": {
-    "input_cost_per_token": 3e-06,
-    "output_cost_per_token": 1.5e-05,
-    "cache_read_input_token_cost": 3e-07,
-    "cache_creation_input_token_cost": 3e-06,
+    "currency": "CNY",
+    "input_cost_per_token": 2e-05,
+    "output_cost_per_token": 0.0001,
+    "cache_read_input_token_cost": 2e-06,
+    "cache_creation_input_token_cost": 2e-05,
     "litellm_provider": "moonshot",
     "mode": "chat",
     "max_input_tokens": 1048576,
@@ -6524,10 +6525,11 @@
     "supports_function_calling": true
   },
   "kimi-k3": {
-    "input_cost_per_token": 3e-06,
-    "output_cost_per_token": 1.5e-05,
-    "cache_read_input_token_cost": 3e-07,
-    "cache_creation_input_token_cost": 3e-06,
+    "currency": "CNY",
+    "input_cost_per_token": 2e-05,
+    "output_cost_per_token": 0.0001,
+    "cache_read_input_token_cost": 2e-06,
+    "cache_creation_input_token_cost": 2e-05,
     "litellm_provider": "moonshot",
     "mode": "chat",
     "max_input_tokens": 1048576,
@@ -6537,10 +6539,11 @@
     "supports_function_calling": true
   },
   "kimi-k3-highspeed": {
-    "input_cost_per_token": 3e-06,
-    "output_cost_per_token": 1.5e-05,
-    "cache_read_input_token_cost": 3e-07,
-    "cache_creation_input_token_cost": 3e-06,
+    "currency": "CNY",
+    "input_cost_per_token": 2e-05,
+    "output_cost_per_token": 0.0001,
+    "cache_read_input_token_cost": 2e-06,
+    "cache_creation_input_token_cost": 2e-05,
     "litellm_provider": "moonshot",
     "mode": "chat",
     "max_input_tokens": 1048576,
@@ -6550,10 +6553,11 @@
     "supports_function_calling": true
   },
   "kimi-for-coding-k3": {
-    "input_cost_per_token": 3e-06,
-    "output_cost_per_token": 1.5e-05,
-    "cache_read_input_token_cost": 3e-07,
-    "cache_creation_input_token_cost": 3e-06,
+    "currency": "CNY",
+    "input_cost_per_token": 2e-05,
+    "output_cost_per_token": 0.0001,
+    "cache_read_input_token_cost": 2e-06,
+    "cache_creation_input_token_cost": 2e-05,
     "litellm_provider": "moonshot",
     "mode": "chat",
     "max_input_tokens": 1048576,
