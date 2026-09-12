@@ -888,6 +888,13 @@ func isOpenAIOAuthServableModel(requestedModel string) bool {
 func (a *Account) IsModelSupported(requestedModel string) bool {
 	mapping := a.GetModelMapping()
 	if len(mapping) == 0 {
+		// SWE models are owned by the Devin bridge namespace. Ordinary OpenAI
+		// accounts must not claim them through the legacy empty-mapping
+		// "allow all" behavior, otherwise scheduler selection can bypass the
+		// only account that actually serves Devin SWE traffic.
+		if a.IsOpenAI() && a.ExternalBridgeKind() != "devin" && strings.HasPrefix(strings.ToLower(lastOpenAIModelSegment(requestedModel)), "swe-") {
+			return false
+		}
 		if a.IsOpenAIOAuth() && !a.IsOpenAIPassthroughEnabled() {
 			return isOpenAIOAuthServableModel(requestedModel)
 		}
