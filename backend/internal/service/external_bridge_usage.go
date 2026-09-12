@@ -9,22 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/gin-gonic/gin"
 )
-
-func rejectNativeProviderAccount(c *gin.Context, account *Account) (*OpenAIForwardResult, error) {
-	message := "native Cursor/Devin integration is disabled; configure an external bridge account"
-	if c != nil {
-		c.JSON(http.StatusGone, map[string]any{"error": map[string]any{
-			"type": "provider_configuration_error", "message": message,
-		}})
-	}
-	if account == nil {
-		return nil, fmt.Errorf("%s", message)
-	}
-	return nil, fmt.Errorf("%s for platform %s", message, account.Platform)
-}
 
 // ExternalBridgeUsage is a provider-neutral snapshot returned by a deployed
 // Cursor/Devin sidecar. Fields are intentionally additive so a sidecar can

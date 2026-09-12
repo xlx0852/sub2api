@@ -18,7 +18,7 @@ export interface FieldContext {
 export interface PlatformDefinition {
   id: AccountPlatform
   label: string
-  icon: 'sparkles' | 'bolt' | 'cloud' | 'grok' | 'kimi' | 'cursor' | 'devin'
+  icon: 'sparkles' | 'bolt' | 'cloud' | 'grok' | 'kimi'
   activeClass: string
   showInCreatePicker: boolean
   categories: AccountCategory[]
@@ -37,7 +37,6 @@ export interface PlatformDefinition {
     antigravityAdvanced: boolean
     grokAdvanced: boolean
     kimiAdvanced: boolean
-    cursorAdvanced?: boolean
     geminiAdvanced: boolean
   }
   apiKey: {
@@ -205,70 +204,6 @@ export const ACCOUNT_PLATFORM_REGISTRY: readonly PlatformDefinition[] = [
     }
   },
   {
-    id: 'cursor',
-    label: 'Cursor',
-    icon: 'cursor',
-    activeClass: 'bg-white text-cyan-700 dark:bg-dark-600 dark:text-cyan-300',
-    showInCreatePicker: false,
-    categories: ['apikey'],
-    types: ['apikey'],
-    fields: {
-      headerOverride: false,
-      modelRestriction: true,
-      antigravityProjectId: false,
-      upstreamCredentials: false,
-      vertexServiceAccount: false,
-      mixedScheduling: false,
-      oauthModelRestriction: false,
-      interceptWarmup: false,
-      openAIAdvanced: false,
-      anthropicAdvanced: false,
-      antigravityAdvanced: false,
-      grokAdvanced: false,
-      kimiAdvanced: false,
-      cursorAdvanced: false,
-      geminiAdvanced: false
-    },
-    apiKey: {
-      baseUrl: 'http://sub2api-cursor-bridge:3000',
-      placeholder: 'Cursor access token...',
-      baseUrlHintKey: 'admin.accounts.cursor.baseUrlHint',
-      apiKeyHintKey: 'admin.accounts.cursor.apiKeyHint'
-    }
-  },
-  {
-    id: 'devin',
-    label: 'Devin',
-    icon: 'devin',
-    activeClass: 'bg-white text-indigo-700 dark:bg-dark-600 dark:text-indigo-300',
-    showInCreatePicker: false,
-    categories: ['apikey'],
-    types: ['apikey'],
-    fields: {
-      headerOverride: false,
-      modelRestriction: true,
-      antigravityProjectId: false,
-      upstreamCredentials: false,
-      vertexServiceAccount: false,
-      mixedScheduling: false,
-      oauthModelRestriction: true,
-      interceptWarmup: false,
-      openAIAdvanced: false,
-      anthropicAdvanced: false,
-      antigravityAdvanced: false,
-      grokAdvanced: false,
-      kimiAdvanced: false,
-      cursorAdvanced: false,
-      geminiAdvanced: false
-    },
-    apiKey: {
-      baseUrl: 'http://sub2api-devin-bridge:8080',
-      placeholder: 'Devin bridge API key...',
-      baseUrlHintKey: 'admin.accounts.devin.baseUrlHint',
-      apiKeyHintKey: 'admin.accounts.devin.apiKeyHint'
-    }
-  },
-  {
     id: 'gemini',
     label: 'Gemini',
     icon: 'sparkles',
@@ -389,35 +324,7 @@ const zinc = {
   selectedIconBg: 'bg-zinc-900 text-white',
   hoverBorder: 'border-gray-200 hover:border-zinc-400 dark:border-dark-600 dark:hover:border-zinc-600'
 }
-const cyan = {
-  selectedBorder: 'border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20',
-  selectedBg: 'bg-cyan-500 text-white',
-  selectedIconBg: 'bg-cyan-500 text-white',
-  hoverBorder: 'border-gray-200 hover:border-cyan-300 dark:border-dark-600 dark:hover:border-cyan-700'
-}
-
 export const ACCOUNT_CATEGORY_PICKERS: Record<string, CategoryPickerConfig> = {
-  cursor: {
-    model: 'accountCategory',
-    layoutClass: 'grid-cols-1 sm:grid-cols-2',
-    hintKey: 'admin.accounts.cursor.accountTypeHint',
-    options: [
-      {
-        id: 'oauth-based',
-        title: 'OAuth',
-        subtitleKey: 'admin.accounts.types.cursorOauth',
-        icon: 'platform',
-        ...cyan
-      },
-      {
-        id: 'apikey',
-        title: 'API Key',
-        subtitleKey: 'admin.accounts.types.cursorApikey',
-        icon: 'key',
-        ...purple
-      }
-    ]
-  },
   anthropic: {
     model: 'accountCategory',
     layoutClass: 'grid-cols-2',

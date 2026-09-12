@@ -428,7 +428,6 @@ type OpenAIGatewayService struct {
 	openAITokenProvider   *OpenAITokenProvider
 	grokTokenProvider     *GrokTokenProvider
 	kimiTokenProvider     *KimiTokenProvider
-	cursorTokenProvider   CursorAccessTokenProvider
 	kimiQuotaService      KimiQuotaQuerier
 	grokQuotaService      GrokQuotaProber
 	quotaWindowLedger     *QuotaWindowLedger
@@ -487,12 +486,6 @@ func (s *OpenAIGatewayService) SetGrokQuotaService(service GrokQuotaProber) {
 func (s *OpenAIGatewayService) SetQuotaWindowLedger(ledger *QuotaWindowLedger) {
 	if s != nil {
 		s.quotaWindowLedger = ledger
-	}
-}
-
-func (s *OpenAIGatewayService) SetCursorTokenProvider(provider CursorAccessTokenProvider) {
-	if s != nil {
-		s.cursorTokenProvider = provider
 	}
 }
 
@@ -1210,9 +1203,6 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 		}
 		return token, "apikey", nil
 	}
-	if account != nil && (account.Platform == PlatformCursor || account.Platform == PlatformDevin) {
-		return "", "", errors.New("native Cursor/Devin integration is disabled; configure an external bridge account")
-	}
 	if account.IsShadow() {
 		credAccount, err := resolveCredentialAccount(ctx, s.accountRepo, account)
 		if err != nil {
@@ -1253,27 +1243,6 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 			}
 			return accessToken, "oauth", nil
 		}
-		if account.Platform == PlatformCursor {
-			if s.cursorTokenProvider != nil {
-				accessToken, err := s.cursorTokenProvider.GetAccessToken(ctx, account)
-				if err != nil {
-					return "", "", err
-				}
-				return accessToken, "oauth", nil
-			}
-			accessToken := strings.TrimSpace(account.GetCredential("access_token"))
-			if accessToken == "" {
-				return "", "", errors.New("cursor access_token not found in credentials")
-			}
-			return accessToken, "oauth", nil
-		}
-		if account.Platform == PlatformDevin {
-			accessToken := firstNonEmpty(strings.TrimSpace(account.GetCredential("token")), strings.TrimSpace(account.GetCredential("access_token")), strings.TrimSpace(account.GetCredential("api_key")))
-			if accessToken == "" {
-				return "", "", errors.New("devin token not found in credentials")
-			}
-			return accessToken, "oauth", nil
-		}
 		// 使用 TokenProvider 获取缓存的 token
 		if s.openAITokenProvider != nil {
 			accessToken, err := s.openAITokenProvider.GetAccessToken(ctx, account)
@@ -1293,23 +1262,6 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 			apiKey := strings.TrimSpace(account.GetCredential("api_key"))
 			if apiKey == "" {
 				return "", "", errors.New("api_key not found in credentials")
-			}
-			return apiKey, "apikey", nil
-		}
-		if account.Platform == PlatformCursor {
-			apiKey := strings.TrimSpace(account.GetCredential("api_key"))
-			if apiKey == "" {
-				apiKey = strings.TrimSpace(account.GetCredential("access_token"))
-			}
-			if apiKey == "" {
-				return "", "", errors.New("cursor api_key or access_token not found in credentials")
-			}
-			return apiKey, "apikey", nil
-		}
-		if account.Platform == PlatformDevin {
-			apiKey := firstNonEmpty(strings.TrimSpace(account.GetCredential("token")), strings.TrimSpace(account.GetCredential("access_token")), strings.TrimSpace(account.GetCredential("api_key")))
-			if apiKey == "" {
-				return "", "", errors.New("devin token not found in credentials")
 			}
 			return apiKey, "apikey", nil
 		}

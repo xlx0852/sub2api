@@ -10,7 +10,7 @@ import (
 
 func TestExternalBridgeAccountCredentialsAndURL(t *testing.T) {
 	account := &domain.Account{
-		Platform:    domain.PlatformCursor,
+		Platform:    domain.PlatformOpenAI,
 		Type:        domain.AccountTypeAPIKey,
 		Credentials: map[string]any{"base_url": "http://127.0.0.1:18401", "api_key": "bridge-token"},
 		Extra:       map[string]any{"external_bridge": true, "external_bridge_kind": "cursor"},

@@ -21,7 +21,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// cursorResponsesUnsupportedFields are top-level Responses API parameters that
+// responsesUnsupportedFields are top-level Responses API parameters that
 // Codex upstreams reject with "Unsupported parameter: ...". They must be
 // stripped when forwarding a raw client body through the Responses-shape
 // short-circuit in ForwardAsChatCompletions (see isResponsesShape branch).
@@ -30,7 +30,7 @@ import (
 // fields are dropped naturally by json.Unmarshal. Kept semantically in sync
 // with the list in openai_gateway_service.go:2034 used by the /v1/responses
 // passthrough path.
-var cursorResponsesUnsupportedFields = []string{
+var responsesUnsupportedFields = []string{
 	"prompt_cache_retention",
 	"safety_identifier",
 	"metadata",
@@ -93,19 +93,6 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	if account.IsExternalBridge() {
 		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
-	if account.Platform == PlatformCursor {
-		if !account.IsExternalBridge() {
-			return rejectNativeProviderAccount(c, account)
-		}
-		return s.forwardCursorChatCompletions(ctx, c, account, body, defaultMappedModel)
-	}
-	if account.Platform == PlatformDevin {
-		if !account.IsExternalBridge() {
-			return rejectNativeProviderAccount(c, account)
-		}
-		return s.forwardDevinChatCompletions(ctx, c, account, body, defaultMappedModel)
-	}
-
 	// 入口分流：APIKey 账号 + 强制或已探测确认上游不支持 Responses，走 CC 直转。
 	// 自动模式下标记缺失（未探测）按"现状即证据"原则继续走下方原 Responses 转换路径。
 	if account.Type == AccountTypeAPIKey && !openai_compat.ShouldUseResponsesAPI(account.Extra) {

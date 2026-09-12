@@ -51,7 +51,7 @@ func (s *OpenAIGatewayService) forwardOpenAIChatParse(ex *pipeline.Exchange) err
 		if err != nil {
 			return fmt.Errorf("rewrite model in responses-shape body: %w", err)
 		}
-		for _, field := range cursorResponsesUnsupportedFields {
+		for _, field := range responsesUnsupportedFields {
 			if stripped, derr := sjson.DeleteBytes(responsesBody, field); derr == nil {
 				responsesBody = stripped
 			}

@@ -33,7 +33,7 @@ func RegisterGatewayRoutes(
 
 	isOpenAIResponsesCompatibleGatewayPlatform := func(c *gin.Context) bool {
 		switch getGroupPlatform(c) {
-		case service.PlatformOpenAI, service.PlatformGrok, service.PlatformKimi, service.PlatformCursor, service.PlatformDevin:
+		case service.PlatformOpenAI, service.PlatformGrok, service.PlatformKimi:
 			return true
 		default:
 			return false
@@ -142,10 +142,6 @@ func RegisterGatewayRoutes(
 				h.OpenAIGateway.CodexModels(c)
 				return
 			}
-			if getGroupPlatform(c) == service.PlatformCursor {
-				h.OpenAIGateway.CursorModels(c)
-				return
-			}
 			h.Gateway.Models(c)
 		})
 		gateway.GET("/usage", h.Gateway.Usage)
@@ -231,10 +227,6 @@ func RegisterGatewayRoutes(
 	r.GET("/models", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
 		if isOpenAIGatewayPlatform(c) && c.Query("client_version") != "" {
 			h.OpenAIGateway.CodexModels(c)
-			return
-		}
-		if getGroupPlatform(c) == service.PlatformCursor {
-			h.OpenAIGateway.CursorModels(c)
 			return
 		}
 		h.Gateway.Models(c)

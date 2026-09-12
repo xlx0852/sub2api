@@ -46,7 +46,7 @@ import { useI18n } from 'vue-i18n'
 import type { DeviceAuthorization } from '@/api/admin/deviceOAuth'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 
-type DeviceProvider = 'openai' | 'grok' | 'kimi' | 'cursor'
+type DeviceProvider = 'openai' | 'grok' | 'kimi'
 
 const props = withDefaults(defineProps<{
   session: DeviceAuthorization | null

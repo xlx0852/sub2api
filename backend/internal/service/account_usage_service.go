@@ -259,9 +259,7 @@ type UsageInfo struct {
 	// GrokBilling 来自 cli-chat-proxy /v1/billing（与 CPAMC 同源）
 	GrokBilling *xai.BillingSnapshot `json:"grok_billing,omitempty"`
 
-	// Cursor / Sand 额度信息
-	CursorSandUsage *CursorSandUsageStatus `json:"cursor_sand_usage,omitempty"`
-	ExternalBridge  *ExternalBridgeUsage   `json:"external_bridge,omitempty"`
+	ExternalBridge *ExternalBridgeUsage `json:"external_bridge,omitempty"`
 
 	// Antigravity 账号级信息
 	SubscriptionTier    string `json:"subscription_tier,omitempty"`     // 归一化订阅等级: FREE/PRO/ULTRA/UNKNOWN
@@ -306,7 +304,6 @@ type AccountUsageService struct {
 	geminiQuotaService      *GeminiQuotaService
 	antigravityQuotaFetcher *AntigravityQuotaFetcher
 	grokQuotaFetcher        *GrokQuotaFetcher
-	cursorQuotaFetcher      *CursorQuotaFetcher
 	openAIQuotaService      *OpenAIQuotaService
 	grokQuotaService        *GrokQuotaService
 	kimiQuotaService        KimiQuotaQuerier
@@ -323,12 +320,6 @@ type AccountUsageService struct {
 func (s *AccountUsageService) SetQuotaWindowLedger(ledger *QuotaWindowLedger) {
 	if s != nil {
 		s.quotaWindowLedger = ledger
-	}
-}
-
-func (s *AccountUsageService) SetCursorQuotaFetcher(fetcher *CursorQuotaFetcher) {
-	if s != nil {
-		s.cursorQuotaFetcher = fetcher
 	}
 }
 
@@ -435,16 +426,6 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 		}
 		return usage, err
 	}
-	if account.Platform == PlatformDevin {
-		now := time.Now()
-		return &UsageInfo{Source: "active", UpdatedAt: &now, Error: "native Devin integration is disabled; configure an external bridge account"}, nil
-	}
-
-	if account.Platform == PlatformCursor {
-		now := time.Now()
-		return &UsageInfo{Source: "active", UpdatedAt: &now, Error: "native Cursor integration is disabled; configure an external bridge account"}, nil
-	}
-
 	// 只有oauth类型账号可以通过API获取usage（有profile scope）
 	if account.CanGetUsage() {
 		var apiResp *ClaudeUsageResponse
@@ -1187,60 +1168,6 @@ func (s *AccountUsageService) getGrokUsage(ctx context.Context, account *Account
 
 	enrichUsageWithAccountError(usage, account)
 	return usage, nil
-}
-
-func (s *AccountUsageService) getCursorUsage(ctx context.Context, account *Account, force ...bool) (*UsageInfo, error) {
-	if s.cursorQuotaFetcher == nil || !s.cursorQuotaFetcher.CanFetch(account) {
-		now := time.Now()
-		return &UsageInfo{UpdatedAt: &now}, nil
-	}
-
-	fetchCtx, fetchCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer fetchCancel()
-
-	proxyURL := s.cursorQuotaFetcher.GetProxyURL(fetchCtx, account)
-	fetchResult, err := s.cursorQuotaFetcher.FetchQuota(fetchCtx, account, proxyURL)
-	if err != nil {
-		now := time.Now()
-		degraded := &UsageInfo{
-			Source:    "active",
-			UpdatedAt: &now,
-			Error:     err.Error(),
-		}
-		enrichUsageWithAccountError(degraded, account)
-		return degraded, nil
-	}
-
-	s.attachCursorWindowStats(fetchCtx, account.ID, fetchResult.UsageInfo)
-	s.persistCursorProfitWindows(fetchCtx, account, fetchResult.UsageInfo)
-	enrichUsageWithAccountError(fetchResult.UsageInfo, account)
-	return fetchResult.UsageInfo, nil
-}
-
-func (s *AccountUsageService) attachCursorWindowStats(ctx context.Context, accountID int64, usage *UsageInfo) {
-	if s == nil || s.usageLogRepo == nil || usage == nil || usage.SevenDay == nil {
-		return
-	}
-	now := time.Now()
-	start := codexWindowStatsStart(usage.SevenDay, 7*24*time.Hour, now)
-	if sand := usage.CursorSandUsage; sand != nil && sand.CurrentPeriodStart != "" {
-		if parsed, err := time.Parse(time.RFC3339Nano, sand.CurrentPeriodStart); err == nil && !parsed.After(now) {
-			start = parsed
-		}
-	}
-	var (
-		stats *usagestats.AccountStats
-		err   error
-	)
-	if rangeReader, ok := s.usageLogRepo.(accountWindowStatsRangeReader); ok {
-		stats, err = rangeReader.GetAccountWindowStatsRange(ctx, accountID, start, now)
-	} else {
-		stats, err = s.usageLogRepo.GetAccountWindowStats(ctx, accountID, start)
-	}
-	if err == nil {
-		usage.SevenDay.WindowStats = windowStatsFromAccountStats(stats)
-		attachFullWindowEstimate(usage.SevenDay.WindowStats, usage.SevenDay.Utilization)
-	}
 }
 
 // grokBillingWindowStart returns the start of the official weekly billing

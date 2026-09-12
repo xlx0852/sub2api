@@ -250,10 +250,6 @@ func (a *Account) IsKimi() bool { return a != nil && a.Platform == PlatformKimi 
 
 func (a *Account) IsKimiOAuth() bool { return a.IsKimi() && a.Type == AccountTypeOAuth }
 
-func (a *Account) IsCursor() bool { return a != nil && a.Platform == PlatformCursor }
-
-func (a *Account) IsCursorOAuth() bool { return a.IsCursor() && a.Type == AccountTypeOAuth }
-
 // IsExternalBridge reports whether this account is backed by a separately
 // deployed OpenAI-compatible bridge service. The explicit marker keeps the
 // private bridge URL opt-in and preserves the native provider paths for
@@ -288,7 +284,7 @@ func (a *Account) ExternalBridgeKind() string {
 }
 
 func (a *Account) IsOpenAICompatible() bool {
-	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok || a.Platform == PlatformKimi || a.Platform == PlatformCursor || a.Platform == PlatformDevin)
+	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok || a.Platform == PlatformKimi)
 }
 
 func (a *Account) GeminiOAuthType() string {

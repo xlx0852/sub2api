@@ -468,13 +468,6 @@ func (g *Group) ResolveMessagesDispatchModel(requestedModel string) string {
 		}
 		return ""
 	}
-	if g.Platform == PlatformCursor || g.Platform == PlatformDevin {
-		if claudeMessagesDispatchFamily(requestedModel) != "" {
-			return "default"
-		}
-		return ""
-	}
-
 	cfg := normalizeOpenAIMessagesDispatchModelConfig(g.MessagesDispatchModelConfig)
 	if mappedModel := strings.TrimSpace(cfg.ExactModelMappings[requestedModel]); mappedModel != "" {
 		return mappedModel

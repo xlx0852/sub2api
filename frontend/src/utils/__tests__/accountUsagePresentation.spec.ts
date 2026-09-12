@@ -109,28 +109,6 @@ describe('buildAccountUsagePresentation', () => {
     expect(presentation.plan).not.toBe('TYPE_PURCHASE')
   })
 
-  it('Cursor 使用 7d Sand 窗口并保留本地统计', () => {
-    const stats: WindowStats = { requests: 8, tokens: 1200, cost: 0.8, user_cost: 0.1 }
-    const presentation = buildAccountUsagePresentation({
-      account: makeAccount({ platform: 'cursor' }),
-      usageInfo: baseUsage({
-        subscription_tier: 'supergrok',
-        seven_day: {
-          utilization: 35,
-          resets_at: '2026-09-17T00:00:00Z',
-          remaining_seconds: 0,
-          window_stats: stats
-        }
-      }),
-      todayStats: today,
-      t
-    })
-
-    expect(presentation.windows).toHaveLength(1)
-    expect(presentation.windows[0]).toMatchObject({ label: '7d Sand', utilization: 35, stats })
-    expect(presentation.plan).toBe('supergrok')
-  })
-
   it('Grok 只映射官方周额度到窗口模型', () => {
     const presentation = buildAccountUsagePresentation({
       account: makeAccount({ platform: 'grok' }),

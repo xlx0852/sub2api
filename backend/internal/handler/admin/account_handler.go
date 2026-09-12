@@ -2543,18 +2543,6 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 		return
 	}
 
-	if account.Platform == service.PlatformDevin {
-		model := strings.TrimSpace(account.GetCredential("model"))
-		if model == "" {
-			model = strings.TrimSpace(account.GetCredential("model_uid"))
-		}
-		if model == "" {
-			model = "glm-5-2"
-		}
-		response.Success(c, []openai.Model{{ID: model, Object: "model", Type: "model", DisplayName: model, OwnedBy: "devin"}})
-		return
-	}
-
 	// Handle Claude/Anthropic accounts
 	// For OAuth and Setup-Token accounts: return default models
 	if account.IsOAuth() {

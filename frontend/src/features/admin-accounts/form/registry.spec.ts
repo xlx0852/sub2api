@@ -19,8 +19,6 @@ describe('account form registry', () => {
       'antigravity',
       'grok',
       'kimi',
-      'cursor',
-      'devin',
       'gemini'
     ])
   })

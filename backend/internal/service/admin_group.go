@@ -115,8 +115,6 @@ func defaultModelsListCandidateIDs(platform string) []string {
 		return xai.DefaultModelIDs()
 	case PlatformKimi:
 		return KimiDefaultModelIDs()
-	case PlatformDevin:
-		return []string{"glm-5-2"}
 	default:
 		ids := make([]string, 0, len(claude.CurrentDefaultModels()))
 		for _, model := range claude.CurrentDefaultModels() {

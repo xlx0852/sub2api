@@ -3369,8 +3369,6 @@ const platformOptions = computed(() => [
   { value: "antigravity", label: "Antigravity" },
   { value: "grok", label: "Grok" },
   { value: "kimi", label: "Kimi" },
-  { value: "cursor", label: "Cursor" },
-  { value: "devin", label: "Devin" },
 ]);
 
 const platformFilterOptions = computed(() => [
@@ -3380,8 +3378,6 @@ const platformFilterOptions = computed(() => [
   { value: "antigravity", label: "Antigravity" },
   { value: "grok", label: "Grok" },
   { value: "kimi", label: "Kimi" },
-  { value: "cursor", label: "Cursor" },
-  { value: "devin", label: "Devin" },
 ]);
 
 const editStatusOptions = computed(() => [

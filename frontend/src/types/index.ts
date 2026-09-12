@@ -486,7 +486,7 @@ export interface PaginationConfig {
 
 // ==================== API Key & Group Types ====================
 
-export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kimi' | 'cursor' | 'devin'
+export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kimi'
 
 export type SubscriptionType = 'standard' | 'subscription'
 
@@ -745,7 +745,7 @@ export interface UpdateGroupRequest {
 
 // ==================== Account & Proxy Types ====================
 
-export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kimi' | 'cursor' | 'devin'
+export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kimi'
 export type AccountType = 'oauth' | 'setup-token' | 'apikey' | 'upstream' | 'service_account'
 export type OAuthAddMethod = 'oauth' | 'setup-token'
 export type ProxyProtocol = 'http' | 'https' | 'socks5' | 'socks5h'
@@ -1127,14 +1127,6 @@ export interface AccountUsageInfo {
     amount?: number
     minimum_balance?: number
   }> | null
-  cursor_sand_usage?: {
-    usage_percent: number
-    has_available_usage: boolean
-    current_period_start?: string
-    next_reset_timestamp_utc?: string
-    included_usage_plan?: string
-    grok_plan_label?: string
-  } | null
   external_bridge?: {
     kind?: string
     status?: string

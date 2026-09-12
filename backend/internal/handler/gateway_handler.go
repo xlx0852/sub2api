@@ -1277,8 +1277,6 @@ func defaultModelIDsForPlatform(platform string) []string {
 		return xai.DefaultModelIDs()
 	case service.PlatformKimi:
 		return service.KimiDefaultModelIDs()
-	case service.PlatformDevin:
-		return []string{"glm-5-2"}
 	default:
 		ids := make([]string, 0, len(claude.CurrentDefaultModels()))
 		for _, model := range claude.CurrentDefaultModels() {

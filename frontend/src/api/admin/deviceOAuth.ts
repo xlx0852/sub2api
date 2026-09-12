@@ -27,7 +27,7 @@ export interface DeviceCreateAccountRequest {
   group_ids: number[]
 }
 
-export type DeviceOAuthProvider = 'openai' | 'grok' | 'kimi' | 'cursor'
+export type DeviceOAuthProvider = 'openai' | 'grok' | 'kimi'
 
 const providerPath = (provider: DeviceOAuthProvider) => `/admin/${provider}/oauth/device`
 
@@ -78,12 +78,9 @@ export function createDeviceOAuthAPI(provider: DeviceOAuthProvider) {
 
 export const openAIDeviceOAuthAPI = createDeviceOAuthAPI('openai')
 export const grokDeviceOAuthAPI = createDeviceOAuthAPI('grok')
-export const cursorDeviceOAuthAPI = createDeviceOAuthAPI('cursor')
-
 const deviceOAuthAPI = {
   openai: openAIDeviceOAuthAPI,
   grok: grokDeviceOAuthAPI,
-  cursor: cursorDeviceOAuthAPI
 }
 
 export default deviceOAuthAPI

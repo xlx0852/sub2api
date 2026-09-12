@@ -26,7 +26,7 @@ one Devin account can be migrated one-to-one.
   transport after migration. Provider-specific quota adapters may read JSON
   sidecar endpoints but must not import provider protobuf/client packages.
 - Migrate existing records only after sidecar probes succeed; preserve the
-  original native account data and current release for rollback.
+  original account snapshots and current release for operational rollback.
 
 ## Risks / Trade-offs
 
@@ -44,12 +44,13 @@ one Devin account can be migrated one-to-one.
    routing.
 3. Create external HTTP account configurations and verify billing/scheduling.
 4. Switch traffic and quota reads, then observe and compare with native data.
-5. Retire native provider code only after rollback markers and sidecar health
+5. Remove native provider code after rollback markers and sidecar health
    remain stable for the agreed observation window.
 
 ## Open Questions
 
-- Whether external bridge accounts should retain `cursor`/`devin` labels as
-  metadata or be normalized to `openai` `apikey` records.
+- External bridge accounts are normalized to `openai` `apikey` records; the
+  bridge kind remains only in `extra.external_bridge_kind` for routing and
+  usage projection.
 - Whether sidecar quota data should be displayed as provider credits, usage
   windows, or both when the upstream omits one of them.

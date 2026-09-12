@@ -168,7 +168,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 		if err != nil {
 			return nil, fmt.Errorf("remove Responses-only Grok prompt cache key: %w", err)
 		}
-		// Cursor/Claude Desktop often omit additionalProperties:false on tool
+		// Some desktop clients often omit additionalProperties:false on tool
 		// object schemas; xAI rejects those with 400 invalid_request_error.
 		upstreamBody, err = sanitizeGrokChatTools(upstreamBody)
 		if err != nil {

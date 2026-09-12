@@ -29,4 +29,5 @@ coupling and makes upstream protocol updates independently deployable.
 - Affected code: native provider packages, gateway platform branches, account
   migration/admin UI, sidecar deployment manifests and usage adapters.
 - Rollback: retain the current `0.1.382` native release and account snapshots
-  until the external bridge observation period completes.
+  as an operational fallback; the active source tree contains no native
+  Cursor/Devin transport implementation.

@@ -19,11 +19,11 @@
 
 ## 3. Remove native provider paths
 
-- [ ] 3.1 Remove native Cursor Connect/Sand forwarding, OAuth refresh, and
+- [x] 3.1 Remove native Cursor Connect/Sand forwarding, OAuth refresh, and
   quota transport code after external routing is enabled.
-- [ ] 3.2 Remove native Devin protobuf/Connect forwarding and replace its admin
+- [x] 3.2 Remove native Devin protobuf/Connect forwarding and replace its admin
   form with the external bridge account configuration.
-- [ ] 3.3 Keep rollback-compatible data handling and document the migration.
+- [x] 3.3 Keep rollback-compatible data handling and document the migration.
 
 ## 4. Validation and rollout
 

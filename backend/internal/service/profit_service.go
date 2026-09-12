@@ -2160,12 +2160,6 @@ func fillProfitQuotaWindowsWithAnchor(summary *AccountProfitSummary, acc *Accoun
 	summary.QuotaWindows = nil
 	summary.FiveHourUtilization = nil
 	summary.SevenDayUtilization = nil
-	if acc.Platform == PlatformCursor {
-		if window := profitWindowFromExtra(acc.Extra, "cursor_sand", "7d", "7d", 10080, now); window != nil {
-			windows = append(windows, *window)
-			summary.SevenDayUtilization = window.UsedPercent
-		}
-	}
 	if acc.Platform == PlatformAntigravity {
 		windows = append(windows, profitWindowsFromAntigravity(acc, now)...)
 		for _, window := range windows {

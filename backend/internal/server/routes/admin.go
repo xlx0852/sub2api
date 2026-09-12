@@ -54,15 +54,11 @@ func RegisterAdminRoutes(
 		// Kimi OAuth device authorization
 		registerKimiOAuthRoutes(admin, h)
 
-		// Cursor OAuth authorization
-		registerCursorOAuthRoutes(admin, h)
-
 		// 代理管理
 		registerProxyRoutes(admin, h)
 
 		// 卡密管理
 		registerRedeemCodeRoutes(admin, h)
-
 
 		// 系统设置
 		registerSettingsRoutes(admin, h)
@@ -473,19 +469,6 @@ func registerKimiOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	}
 }
 
-func registerCursorOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
-	cursor := admin.Group("/cursor")
-	{
-		cursor.POST("/oauth/device/start", h.Admin.CursorOAuth.StartDeviceAuthorization)
-		cursor.GET("/oauth/device/status", h.Admin.CursorOAuth.DeviceAuthorizationStatus)
-		cursor.DELETE("/oauth/device/session", h.Admin.CursorOAuth.CancelDeviceAuthorization)
-		cursor.POST("/oauth/create-from-device", h.Admin.CursorOAuth.CreateAccountFromDevice)
-		cursor.POST("/accounts/:id/reauth-from-device", h.Admin.CursorOAuth.ReauthorizeAccountFromDevice)
-		cursor.POST("/accounts/:id/refresh", h.Admin.CursorOAuth.RefreshAccountToken)
-		cursor.POST("/accounts/:id/exchange-key", h.Admin.CursorOAuth.ExchangeUserAPIKey)
-	}
-}
-
 func registerProxyRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	proxies := admin.Group("/proxies")
 	{
@@ -521,7 +504,6 @@ func registerRedeemCodeRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		codes.POST("/:id/expire", h.Admin.Redeem.Expire)
 	}
 }
-
 
 func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	adminSettings := admin.Group("/settings")

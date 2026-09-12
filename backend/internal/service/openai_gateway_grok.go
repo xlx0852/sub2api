@@ -25,7 +25,7 @@ const (
 )
 
 // xAI rejects function tools whose object schemas omit additionalProperties:false
-// (Cursor/Claude Desktop often send open object schemas). Keep empty open-ended
+// (Some desktop clients often send open object schemas). Keep empty open-ended
 // fallbacks closed as well so automation_update and similar tools stay valid.
 var grokSafeFunctionParameters = json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
 
@@ -896,7 +896,7 @@ func normalizeGrokResponsesTool(tool gjson.Result, namespaceName string, transla
 			}
 		}
 		// Force closed object schemas for every function tool. Nested object /
-		// array-item schemas are walked so Cursor-style tools (e.g.
+		// array-item schemas are walked so client-style tools (e.g.
 		// run_terminal_cmd_v2) stop failing xAI's additionalProperties gate.
 		if params, ok := item["parameters"].(map[string]any); ok {
 			enforceGrokClosedObjectSchemas(params)
