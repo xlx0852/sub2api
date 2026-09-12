@@ -1,6 +1,5 @@
 export { default as CreateAccountModal } from './CreateAccountModal.vue'
 export { default as EditAccountModal } from './EditAccountModal.vue'
-export { default as BulkEditAccountModal } from './BulkEditAccountModal.vue'
 export { default as ReAuthAccountModal } from '../admin/account/ReAuthAccountModal.vue'
 export { default as OAuthAuthorizationFlow } from './OAuthAuthorizationFlow.vue'
 export { default as DeviceAuthorizationFlow } from './DeviceAuthorizationFlow.vue'

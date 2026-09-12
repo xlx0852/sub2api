@@ -195,17 +195,6 @@
         </div>
       </template>
       <template #table>
-        <AccountBulkActionsBar
-          :selected-ids="selIds"
-          @delete="handleBulkDelete"
-          @reset-status="handleBulkResetStatus"
-          @refresh-token="handleBulkRefreshToken"
-          @edit-selected="openBulkEditSelected"
-          @edit-filtered="openBulkEditFiltered"
-          @clear="clearSelection"
-          @select-page="selectPage"
-          @toggle-schedulable="handleBulkToggleSchedulable"
-        />
         <div ref="accountTableRef" class="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable
           ref="dataTableRef"
@@ -668,19 +657,8 @@
       @reauthorize="handleReAuth"
     />
     <AccountActionMenu :show="menu.show" :account="menu.acc" :position="menu.pos" @close="menu.show = false" @test="handleTest" @stats="handleViewStats" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
-<SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
+    <SyncFromCrsModal :show="showSync" @close="showSync = false" @synced="reload" />
     <ImportDataModal :show="showImportData" @close="showImportData = false" @imported="handleDataImported" />
-    <BulkEditAccountModal
-      :show="showBulkEdit"
-      :account-ids="selIds"
-      :selected-platforms="selPlatforms"
-      :selected-types="selTypes"
-      :target="bulkEditTarget ?? undefined"
-      :proxies="proxies"
-      :groups="groups"
-      @close="showBulkEdit = false"
-      @updated="handleBulkUpdated"
-    />
     <TempUnschedStatusModal :show="showTempUnsched" :account="tempUnschedAcc" @close="showTempUnsched = false" @reset="handleTempUnschedReset" />
     <ConfirmDialog :show="showDeleteDialog" :title="t('admin.accounts.deleteAccount')" :message="t('admin.accounts.deleteConfirm', { name: deletingAcc?.name })" :confirm-text="t('common.delete')" :cancel-text="t('common.cancel')" :danger="true" @confirm="confirmDelete" @cancel="showDeleteDialog = false" />
     <ConfirmDialog :show="showCreateShadowDialog" :title="t('admin.accounts.createSparkShadow')" :message="t('admin.accounts.createSparkShadowConfirm', { name: creatingShadowAcc?.name })" @confirm="confirmCreateSparkShadow" @cancel="showCreateShadowDialog = false" />
@@ -710,10 +688,9 @@ import DataTable from '@/components/common/DataTable.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Pagination from '@/ui/Pagination.vue'
 import ConfirmDialog from '@/ui/ConfirmDialog.vue'
-import { CreateAccountModal, EditAccountModal, BulkEditAccountModal, SyncFromCrsModal, TempUnschedStatusModal } from '@/components/account'
+import { CreateAccountModal, EditAccountModal, SyncFromCrsModal, TempUnschedStatusModal } from '@/components/account'
 import AccountTableActions from '@/components/admin/account/AccountTableActions.vue'
 import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
-import AccountBulkActionsBar from '@/components/admin/account/AccountBulkActionsBar.vue'
 import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
 import ImportDataModal from '@/components/admin/account/ImportDataModal.vue'
 import ReAuthAccountModal from '@/components/admin/account/ReAuthAccountModal.vue'
@@ -731,7 +708,7 @@ import TLSFingerprintProfilesModal from '@/components/admin/TLSFingerprintProfil
 import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { formatDateTime, formatRelativeTime } from '@/utils/format'
 import { proxyExpiryBadgeClass, proxyExpiryLabelKey } from '@/utils/proxyExpiry'
-import type { Account, AccountPlatform, AccountSchedulerGroupScore, AccountType, Proxy as AccountProxy, AdminGroup, WindowStats } from '@/types'
+import type { Account, AccountSchedulerGroupScore, Proxy as AccountProxy, AdminGroup, WindowStats } from '@/types'
 import type { AccountPerformanceStats } from '@/api/admin/accounts'
 
 const { t } = useI18n()
@@ -741,53 +718,12 @@ const proxies = ref<AccountProxy[]>([])
 const groups = ref<AdminGroup[]>([])
 const accountTableRef = ref<HTMLElement | null>(null)
 const dataTableRef = ref<InstanceType<typeof DataTable> | null>(null)
-type AccountBulkEditTarget =
-  | {
-      mode: 'selected'
-      accountIds: number[]
-      selectedPlatforms: AccountPlatform[]
-      selectedTypes: AccountType[]
-    }
-  | {
-      mode: 'filtered'
-      filters: {
-        platform?: string
-        type?: string
-        status?: string
-        group?: string
-        search?: string
-        privacy_mode?: string
-        sort_by?: string
-        sort_order?: AccountSortOrder
-      }
-      previewCount: number
-      selectedPlatforms: AccountPlatform[]
-      selectedTypes: AccountType[]
-    }
-const selPlatforms = computed<AccountPlatform[]>(() => {
-  const platforms = new Set(
-    accounts.value
-      .filter(a => isSelected(a.id))
-      .map(a => a.platform)
-  )
-  return [...platforms]
-})
-const selTypes = computed<AccountType[]>(() => {
-  const types = new Set(
-    accounts.value
-      .filter(a => isSelected(a.id))
-      .map(a => a.type)
-  )
-  return [...types]
-})
 const showCreate = ref(false)
 const showEdit = ref(false)
 const showSync = ref(false)
 const showImportData = ref(false)
 const showExportDataDialog = ref(false)
 const includeProxyOnExport = ref(true)
-const showBulkEdit = ref(false)
-const bulkEditTarget = ref<AccountBulkEditTarget | null>(null)
 const showTempUnsched = ref(false)
 const showDeleteDialog = ref(false)
 const showCreateShadowDialog = ref(false)
@@ -1167,14 +1103,11 @@ const {
   selectedIds: selIds,
   allVisibleSelected,
   isSelected,
-  setSelectedIds,
   select,
   deselect,
   toggle: toggleSel,
-  clear: clearSelection,
   removeMany: removeSelectedAccounts,
   toggleVisible,
-  selectVisible: selectPage,
   batchUpdate
 } = useTableSelection<Account>({
   rows: accounts,
@@ -1280,7 +1213,6 @@ const isAnyModalOpen = computed(() => {
     showSync.value ||
     showImportData.value ||
     showExportDataDialog.value ||
-    showBulkEdit.value ||
     showTempUnsched.value ||
     showDeleteDialog.value ||
     showReAuth.value ||
@@ -1686,205 +1618,10 @@ const toggleSelectAllVisible = (event: Event) => {
   const target = event.target as HTMLInputElement
   toggleVisible(target.checked)
 }
-const handleBulkDelete = async () => { if(!confirm(t('common.confirm'))) return; try { await Promise.all(selIds.value.map(id => adminAPI.accounts.delete(id))); clearSelection(); reload() } catch (error) { console.error('Failed to bulk delete accounts:', error) } }
-const handleBulkResetStatus = async () => {
-  if (!confirm(t('common.confirm'))) return
-  try {
-    const result = await adminAPI.accounts.batchClearError(selIds.value)
-    if (result.failed > 0) {
-      appStore.showError(t('admin.accounts.bulkActions.partialSuccess', { success: result.success, failed: result.failed }))
-    } else {
-      appStore.showSuccess(t('admin.accounts.bulkActions.resetStatusSuccess', { count: result.success }))
-      clearSelection()
-    }
-    reload()
-  } catch (error) {
-    console.error('Failed to bulk reset status:', error)
-    appStore.showError(String(error))
-  }
-}
-const handleBulkRefreshToken = async () => {
-  if (!confirm(t('common.confirm'))) return
-  try {
-    const result = await adminAPI.accounts.batchRefresh(selIds.value)
-    if (result.failed > 0) {
-      appStore.showError(t('admin.accounts.bulkActions.partialSuccess', { success: result.success, failed: result.failed }))
-    } else {
-      appStore.showSuccess(t('admin.accounts.bulkActions.refreshTokenSuccess', { count: result.success }))
-      clearSelection()
-    }
-    reload()
-  } catch (error) {
-    console.error('Failed to bulk refresh token:', error)
-    appStore.showError(String(error))
-  }
-}
 const updateSchedulableInList = (accountIds: number[], schedulable: boolean) => {
   if (accountIds.length === 0) return
   const idSet = new Set(accountIds)
   accounts.value = accounts.value.map((account) => (idSet.has(account.id) ? { ...account, schedulable } : account))
-}
-const normalizeBulkSchedulableResult = (
-  result: {
-    success?: number
-    failed?: number
-    success_ids?: number[]
-    failed_ids?: number[]
-    results?: Array<{ account_id: number; success: boolean }>
-  },
-  accountIds: number[]
-) => {
-  const responseSuccessIds = Array.isArray(result.success_ids) ? result.success_ids : []
-  const responseFailedIds = Array.isArray(result.failed_ids) ? result.failed_ids : []
-  if (responseSuccessIds.length > 0 || responseFailedIds.length > 0) {
-    return {
-      successIds: responseSuccessIds,
-      failedIds: responseFailedIds,
-      successCount: typeof result.success === 'number' ? result.success : responseSuccessIds.length,
-      failedCount: typeof result.failed === 'number' ? result.failed : responseFailedIds.length,
-      hasIds: true,
-      hasCounts: true
-    }
-  }
-
-  const results = Array.isArray(result.results) ? result.results : []
-  if (results.length > 0) {
-    const successIds = results.filter(item => item.success).map(item => item.account_id)
-    const failedIds = results.filter(item => !item.success).map(item => item.account_id)
-    return {
-      successIds,
-      failedIds,
-      successCount: typeof result.success === 'number' ? result.success : successIds.length,
-      failedCount: typeof result.failed === 'number' ? result.failed : failedIds.length,
-      hasIds: true,
-      hasCounts: true
-    }
-  }
-
-  const hasExplicitCounts = typeof result.success === 'number' || typeof result.failed === 'number'
-  const successCount = typeof result.success === 'number' ? result.success : 0
-  const failedCount = typeof result.failed === 'number' ? result.failed : 0
-  if (hasExplicitCounts && failedCount === 0 && successCount === accountIds.length && accountIds.length > 0) {
-    return {
-      successIds: accountIds,
-      failedIds: [],
-      successCount,
-      failedCount,
-      hasIds: true,
-      hasCounts: true
-    }
-  }
-
-  return {
-    successIds: [],
-    failedIds: [],
-    successCount,
-    failedCount,
-    hasIds: false,
-    hasCounts: hasExplicitCounts
-  }
-}
-const handleBulkToggleSchedulable = async (schedulable: boolean) => {
-  let accountIds = [...selIds.value]
-  if (schedulable) {
-    const blocked = accounts.value.filter((a) => accountIds.includes(a.id) && !canEnableSchedulable(a))
-    accountIds = accountIds.filter((id) => {
-      const acc = accounts.value.find((a) => a.id === id)
-      return acc ? canEnableSchedulable(acc) : false
-    })
-    if (accountIds.length === 0) {
-      appStore.showError(t('admin.accounts.cannotEnableSchedulableBanned'))
-      return
-    }
-    if (blocked.length > 0) {
-      appStore.showError(t('admin.accounts.bulkSchedulableSkippedBanned', { count: blocked.length }))
-    }
-  }
-  try {
-    const result = await adminAPI.accounts.bulkUpdate(accountIds, { schedulable })
-    const { successIds, failedIds, successCount, failedCount, hasIds, hasCounts } = normalizeBulkSchedulableResult(result, accountIds)
-    if (!hasIds && !hasCounts) {
-      appStore.showError(t('admin.accounts.bulkSchedulableResultUnknown'))
-      setSelectedIds(accountIds)
-      load().catch((error) => {
-        console.error('Failed to refresh accounts:', error)
-      })
-      return
-    }
-    if (successIds.length > 0) {
-      updateSchedulableInList(successIds, schedulable)
-    }
-    if (successCount > 0 && failedCount === 0) {
-      const message = schedulable
-        ? t('admin.accounts.bulkSchedulableEnabled', { count: successCount })
-        : t('admin.accounts.bulkSchedulableDisabled', { count: successCount })
-      appStore.showSuccess(message)
-    }
-    if (failedCount > 0) {
-      const message = hasCounts || hasIds
-        ? t('admin.accounts.bulkSchedulablePartial', { success: successCount, failed: failedCount })
-        : t('admin.accounts.bulkSchedulableResultUnknown')
-      appStore.showError(message)
-      setSelectedIds(failedIds.length > 0 ? failedIds : accountIds)
-    } else {
-      if (hasIds) clearSelection()
-      else setSelectedIds(accountIds)
-    }
-  } catch (error) {
-    console.error('Failed to bulk toggle schedulable:', error)
-    appStore.showError(t('common.error'))
-  }
-}
-const buildBulkEditFilterSnapshot = () => {
-  const rawParams = toRaw(params) as Record<string, unknown>
-  const sortOrder: AccountSortOrder = rawParams.sort_order === 'desc' ? 'desc' : 'asc'
-  return {
-    platform: typeof rawParams.platform === 'string' ? rawParams.platform : '',
-    type: typeof rawParams.type === 'string' ? rawParams.type : '',
-    status: typeof rawParams.status === 'string' ? rawParams.status : '',
-    group: typeof rawParams.group === 'string' ? rawParams.group : '',
-    search: typeof rawParams.search === 'string' ? rawParams.search : '',
-    privacy_mode: typeof rawParams.privacy_mode === 'string' ? rawParams.privacy_mode : '',
-    sort_by: typeof rawParams.sort_by === 'string' ? rawParams.sort_by : '',
-    sort_order: sortOrder
-  }
-}
-
-const collectSelectionMetadata = (rows: Account[]) => {
-  const selectedPlatforms = Array.from(new Set(rows.map(account => account.platform)))
-  const selectedTypes = Array.from(new Set(rows.map(account => account.type)))
-  return { selectedPlatforms, selectedTypes }
-}
-
-const openBulkEditSelected = () => {
-  bulkEditTarget.value = {
-    mode: 'selected',
-    accountIds: [...selIds.value],
-    selectedPlatforms: [...selPlatforms.value],
-    selectedTypes: [...selTypes.value]
-  }
-  showBulkEdit.value = true
-}
-
-const openBulkEditFiltered = async () => {
-  const filters = buildBulkEditFilterSnapshot()
-  const preview = await adminAPI.accounts.list(1, 100, filters)
-  const { selectedPlatforms, selectedTypes } = collectSelectionMetadata(preview.items)
-  bulkEditTarget.value = {
-    mode: 'filtered',
-    filters,
-    previewCount: preview.total,
-    selectedPlatforms,
-    selectedTypes
-  }
-  showBulkEdit.value = true
-}
-
-const handleBulkUpdated = () => {
-  showBulkEdit.value = false
-  bulkEditTarget.value = null
-  clearSelection()
-  reload()
 }
 const handleDataImported = () => { showImportData.value = false; reload() }
 const ACCOUNT_UNGROUPED_GROUP_QUERY_VALUE = 'ungrouped'
