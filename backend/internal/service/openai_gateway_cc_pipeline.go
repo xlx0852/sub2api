@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
@@ -132,7 +133,13 @@ func (s *OpenAIGatewayService) openAIChatCompletionsTargetURL(account *Account) 
 	if baseURL == "" {
 		baseURL = "https://api.openai.com"
 	}
-	validatedURL, err := s.validateUpstreamBaseURL(baseURL)
+	var validatedURL string
+	var err error
+	if account != nil && account.IsExternalBridge() {
+		validatedURL, err = validateExternalBridgeBaseURL(baseURL)
+	} else {
+		validatedURL, err = s.validateUpstreamBaseURL(baseURL)
+	}
 	if err != nil {
 		return "", fmt.Errorf("invalid base_url: %w", err)
 	}
@@ -188,6 +195,9 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 		profile = HTTPUpstreamProfileGrok
 	}
 	upstreamReq = upstreamReq.WithContext(WithHTTPUpstreamProfile(upstreamReq.Context(), profile))
+	if account != nil && account.IsExternalBridge() {
+		upstreamReq = upstreamReq.WithContext(domain.WithHTTPUpstreamPrivateHostsAllowed(upstreamReq.Context()))
+	}
 	upstreamReq.Header.Set("Content-Type", "application/json")
 	upstreamReq.Header.Set("Authorization", "Bearer "+bearerToken)
 	if stream {

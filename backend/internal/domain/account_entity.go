@@ -254,6 +254,39 @@ func (a *Account) IsCursor() bool { return a != nil && a.Platform == PlatformCur
 
 func (a *Account) IsCursorOAuth() bool { return a.IsCursor() && a.Type == AccountTypeOAuth }
 
+// IsExternalBridge reports whether this account is backed by a separately
+// deployed OpenAI-compatible bridge service. The explicit marker keeps the
+// private bridge URL opt-in and preserves the native provider paths for
+// rollback accounts.
+func (a *Account) IsExternalBridge() bool {
+	if a == nil || a.Extra == nil {
+		return false
+	}
+	raw, ok := a.Extra["external_bridge"]
+	if !ok || raw == nil {
+		return false
+	}
+	switch value := raw.(type) {
+	case bool:
+		return value
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+		return err == nil && parsed
+	default:
+		return false
+	}
+}
+
+func (a *Account) ExternalBridgeKind() string {
+	if a == nil || a.Extra == nil {
+		return ""
+	}
+	if value, ok := a.Extra["external_bridge_kind"].(string); ok {
+		return strings.ToLower(strings.TrimSpace(value))
+	}
+	return ""
+}
+
 func (a *Account) IsOpenAICompatible() bool {
 	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok || a.Platform == PlatformKimi || a.Platform == PlatformCursor || a.Platform == PlatformDevin)
 }
@@ -1333,10 +1366,10 @@ func (a *Account) IsOpenAIApiKey() bool {
 }
 
 func (a *Account) GetOpenAIBaseURL() string {
-	if !a.IsOpenAI() {
+	if !a.IsOpenAI() && !a.IsExternalBridge() {
 		return ""
 	}
-	if a.Type == AccountTypeAPIKey {
+	if a.Type == AccountTypeAPIKey || a.IsExternalBridge() {
 		baseURL := a.GetCredential("base_url")
 		if baseURL != "" {
 			return baseURL
@@ -1472,10 +1505,25 @@ func (a *Account) GetOpenAIIDToken() string {
 }
 
 func (a *Account) GetOpenAIApiKey() string {
+	if a.IsExternalBridge() {
+		return firstNonEmptyCredential(a, "api_key", "token", "access_token")
+	}
 	if !a.IsOpenAIApiKey() {
 		return ""
 	}
 	return a.GetCredential("api_key")
+}
+
+func firstNonEmptyCredential(a *Account, keys ...string) string {
+	if a == nil {
+		return ""
+	}
+	for _, key := range keys {
+		if value := strings.TrimSpace(a.GetCredential(key)); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (a *Account) GetOpenAIUserAgent() string {

@@ -453,6 +453,9 @@ func (s *httpUpstreamService) validateRequestHost(req *http.Request) error {
 	if !s.shouldValidateResolvedIP() {
 		return nil
 	}
+	if req != nil && domain.HTTPUpstreamPrivateHostsAllowed(req.Context()) {
+		return nil
+	}
 	if req == nil || req.URL == nil {
 		return errors.New("request url is nil")
 	}

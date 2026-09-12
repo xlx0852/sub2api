@@ -1203,6 +1203,13 @@ func hashSensitiveValueForLog(raw string) string {
 
 // GetAccessToken gets the access token for an OpenAI account
 func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Account) (string, string, error) {
+	if account != nil && account.IsExternalBridge() {
+		token := account.GetOpenAIApiKey()
+		if token == "" {
+			return "", "", errors.New("external bridge api_key not found in credentials")
+		}
+		return token, "apikey", nil
+	}
 	if account.IsShadow() {
 		credAccount, err := resolveCredentialAccount(ctx, s.accountRepo, account)
 		if err != nil {

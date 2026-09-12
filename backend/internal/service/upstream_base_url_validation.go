@@ -35,3 +35,16 @@ func validateUpstreamBaseURLWithConfig(cfg *config.Config, raw string) (string, 
 	}
 	return normalized, nil
 }
+
+// validateExternalBridgeBaseURL applies format/scheme validation to a bridge
+// account URL while allowing loopback/private hosts. Bridge accounts are
+// operator-controlled records and are the only callers that need to reach a
+// sidecar on the Docker host; normal user-configured upstreams retain the
+// stricter SSRF validator above.
+func validateExternalBridgeBaseURL(raw string) (string, error) {
+	normalized, err := urlvalidator.ValidateURLFormat(raw, true)
+	if err != nil {
+		return "", fmt.Errorf("invalid external bridge base_url: %w", err)
+	}
+	return normalized, nil
+}

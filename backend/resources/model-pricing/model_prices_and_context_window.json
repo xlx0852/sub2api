@@ -6582,8 +6582,8 @@
   },
   "qwen3.8-flash": {
     "currency": "CNY",
-    "cache_creation_input_token_cost": 1e-08,
-    "cache_read_input_token_cost": 8e-08,
+    "cache_creation_input_token_cost": 1.25e-06,
+    "cache_read_input_token_cost": 1e-07,
     "input_cost_per_token": 8e-07,
     "input_cost_per_token_cache_hit": 8e-08,
     "litellm_provider": "openai",

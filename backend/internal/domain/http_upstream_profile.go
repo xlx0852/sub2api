@@ -19,6 +19,7 @@ const (
 type httpUpstreamProfileContextKey struct{}
 
 type httpUpstreamDisableRedirectsContextKey struct{}
+type httpUpstreamAllowPrivateHostsContextKey struct{}
 
 // WithHTTPUpstreamProfile injects an upstream transport profile into ctx.
 func WithHTTPUpstreamProfile(ctx context.Context, profile HTTPUpstreamProfile) context.Context {
@@ -61,4 +62,18 @@ func WithHTTPUpstreamRedirectsDisabled(ctx context.Context) context.Context {
 // following (used by probes that carry upstream credentials).
 func HTTPUpstreamRedirectsDisabled(ctx context.Context) bool {
 	return ctx != nil && ctx.Value(httpUpstreamDisableRedirectsContextKey{}) == true
+}
+
+// WithHTTPUpstreamPrivateHostsAllowed opts a trusted, operator-managed bridge
+// request into the private sidecar network. Callers must only set this for an
+// explicitly marked external bridge account.
+func WithHTTPUpstreamPrivateHostsAllowed(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, httpUpstreamAllowPrivateHostsContextKey{}, true)
+}
+
+func HTTPUpstreamPrivateHostsAllowed(ctx context.Context) bool {
+	return ctx != nil && ctx.Value(httpUpstreamAllowPrivateHostsContextKey{}) == true
 }

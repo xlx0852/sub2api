@@ -90,6 +90,9 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	if account.Platform == PlatformKimi {
 		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
+	if account.IsExternalBridge() {
+		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
+	}
 	if account.Platform == PlatformCursor {
 		return s.forwardCursorChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}

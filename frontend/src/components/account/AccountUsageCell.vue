@@ -259,6 +259,47 @@
       </div>
     </template>
 
+    <!-- External Cursor/Devin bridge usage -->
+    <template v-else-if="isExternalBridgeAccount">
+      <div v-if="loading" class="space-y-1.5">
+        <div class="h-3 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+      </div>
+      <div v-else-if="error || usageInfo?.error" class="text-xs text-red-500">
+        {{ error || usageInfo?.error }}
+      </div>
+      <div v-else-if="usageInfo" class="space-y-1">
+        <div class="flex items-center gap-1.5">
+          <span v-if="externalPlanLabel" class="inline-block rounded bg-cyan-100 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300">
+            {{ externalPlanLabel }}
+          </span>
+          <span class="text-[9px] text-gray-500 dark:text-gray-400">
+            {{ externalBridgeKindLabel }} bridge
+          </span>
+        </div>
+        <UsageProgressBar
+          v-if="usageInfo.seven_day"
+          label="7d"
+          :utilization="usageInfo.seven_day.utilization"
+          :resets-at="usageInfo.seven_day.resets_at"
+          :window-stats="usageInfo.seven_day.window_stats"
+          :show-now-when-idle="true"
+          color="cyan"
+        />
+        <div v-if="externalCreditSummary" class="text-[10px] text-gray-500 dark:text-gray-400">
+          {{ externalCreditSummary }}
+        </div>
+        <div class="flex items-center gap-1.5 mt-0.5">
+          <QuotaActionButton
+            :loading="activeQueryLoading"
+            :title="t('admin.accounts.usageWindow.activeQuery')"
+            @click="loadActiveUsage"
+          >
+            {{ t('admin.accounts.usageWindow.activeQuery') }}
+          </QuotaActionButton>
+        </div>
+      </div>
+    </template>
+
     <!-- Cursor OAuth accounts: official Sand usage / 7d window -->
     <template v-else-if="account.platform === 'cursor' && account.type === 'oauth'">
       <div v-if="loading" class="space-y-1.5">
@@ -799,6 +840,30 @@ const hasEnteredViewport = ref(false)
 const pendingAutoLoad = ref(false)
 const pendingAutoLoadSource = ref<'passive' | 'active' | undefined>(undefined)
 
+const isExternalBridgeAccount = computed(() => {
+  const extra = props.account.extra as Record<string, unknown> | undefined
+  return extra?.external_bridge === true || extra?.external_bridge === 'true'
+})
+
+const externalBridgeKindLabel = computed(() => {
+  const extra = props.account.extra as Record<string, unknown> | undefined
+  return String(extra?.external_bridge_kind || props.account.platform || 'external').toUpperCase()
+})
+
+const externalPlanLabel = computed(() => {
+  return String(
+    usageInfo.value?.external_bridge?.plan_name || usageInfo.value?.subscription_tier || ''
+  ).trim().toUpperCase()
+})
+
+const externalCreditSummary = computed(() => {
+  const bridge = usageInfo.value?.external_bridge
+  if (!bridge || (bridge.available_prompt_credits == null && bridge.available_flow_credits == null)) return ''
+  const prompt = bridge.available_prompt_credits ?? 0
+  const flow = bridge.available_flow_credits ?? 0
+  return `Prompt ${formatCompactNumber(prompt)} | Flow ${formatCompactNumber(flow)}`
+})
+
 let desktopViewportMediaQuery: MediaQueryList | null = null
 let desktopViewportListener: ((event: MediaQueryListEvent) => void) | null = null
 let visibilityObserver: IntersectionObserver | null = null
@@ -811,6 +876,7 @@ const showUsageWindows = computed(() => {
 })
 
 const shouldFetchUsage = computed(() => {
+  if (isExternalBridgeAccount.value) return true
   if (props.account.platform === 'anthropic') {
     return props.account.type === 'oauth' || props.account.type === 'setup-token'
   }

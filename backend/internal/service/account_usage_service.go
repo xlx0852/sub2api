@@ -102,6 +102,7 @@ type UsageCache struct {
 	kimiQuotaCache    sync.Map           // accountID -> *kimiUsageCache
 	kimiQuotaFlight   singleflight.Group // 防止同一 Kimi 账号的并发额度查询
 	kimiWindowStats   sync.Map           // accountID -> *kimiWindowStatsCache
+	externalBridge    sync.Map           // accountID -> *externalBridgeUsageCache
 }
 
 // NewUsageCache 创建 UsageCache 实例
@@ -260,6 +261,7 @@ type UsageInfo struct {
 
 	// Cursor / Sand 额度信息
 	CursorSandUsage *CursorSandUsageStatus `json:"cursor_sand_usage,omitempty"`
+	ExternalBridge  *ExternalBridgeUsage   `json:"external_bridge,omitempty"`
 
 	// Antigravity 账号级信息
 	SubscriptionTier    string `json:"subscription_tier,omitempty"`     // 归一化订阅等级: FREE/PRO/ULTRA/UNKNOWN
@@ -420,6 +422,14 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 
 	if account.Platform == PlatformGrok {
 		usage, err := s.getGrokUsage(ctx, account, forceProbe)
+		if err == nil {
+			s.tryClearRecoverableAccountError(ctx, account)
+		}
+		return usage, err
+	}
+
+	if account.IsExternalBridge() {
+		usage, err := s.getExternalBridgeUsage(ctx, account, forceProbe)
 		if err == nil {
 			s.tryClearRecoverableAccountError(ctx, account)
 		}

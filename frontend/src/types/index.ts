@@ -1135,6 +1135,22 @@ export interface AccountUsageInfo {
     included_usage_plan?: string
     grok_plan_label?: string
   } | null
+  external_bridge?: {
+    kind?: string
+    status?: string
+    plan_name?: string
+    available_prompt_credits?: number
+    available_flow_credits?: number
+    available_flex_credits?: number
+    used_prompt_credits?: number
+    used_flow_credits?: number
+    used_flex_credits?: number
+    daily_quota_remaining_percent?: number | null
+    weekly_quota_remaining_percent?: number | null
+    daily_quota_reset_at?: string | null
+    weekly_quota_reset_at?: string | null
+    capacity_available?: boolean | null
+  } | null
   // Antigravity 403 forbidden 状态
   is_forbidden?: boolean
   forbidden_reason?: string
