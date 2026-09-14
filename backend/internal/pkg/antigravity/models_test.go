@@ -21,14 +21,9 @@ func TestDefaultModelsContainOnlyTextGemini(t *testing.T) {
 
 	expectedModels := []string{
 		"gemini-3.8-flash",
-		"gemini-3.8-flash-high",
 		"gemini-3.7-flash",
-		"gemini-3.7-flash-high",
 		"gemini-3.6-flash",
-		"gemini-3.6-flash-high",
 		"gemini-3.1-pro",
-		"gemini-3.1-pro-high",
-		"gemini-3.1-pro-low",
 	}
 	for _, exp := range expectedModels {
 		if _, ok := modelMap[exp]; !ok {
@@ -36,9 +31,18 @@ func TestDefaultModelsContainOnlyTextGemini(t *testing.T) {
 		}
 	}
 
-	for _, unexp := range []string{"gemini-3-flash", "gemini-3.1-flash-lite"} {
+	for _, unexp := range []string{
+		"gemini-3-flash",
+		"gemini-3.1-flash-lite",
+		"gemini-3.8-flash-high",
+		"gemini-3.7-flash-high",
+		"gemini-3.6-flash-high",
+		"gemini-3.1-pro-high",
+		"gemini-3.1-pro-low",
+		"gemini-pro-agent",
+	} {
 		if _, ok := modelMap[unexp]; ok {
-			t.Errorf("expected obsolete model %q to NOT be in Antigravity DefaultModels", unexp)
+			t.Errorf("expected internal/effort model %q to NOT be in Antigravity DefaultModels", unexp)
 		}
 	}
 }

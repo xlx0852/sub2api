@@ -39,10 +39,26 @@ type ClaudeModel struct {
 	CreatedAt   string `json:"created_at"`
 }
 
+func isPublicAntigravityModelID(id string) bool {
+	id = strings.ToLower(strings.TrimSpace(id))
+	if id == "" || strings.HasPrefix(id, "MODEL_") || id == "gemini-pro-agent" {
+		return false
+	}
+	for _, suffix := range []string{"-high", "-low", "-minimal"} {
+		if strings.HasSuffix(id, suffix) {
+			return false
+		}
+	}
+	return true
+}
+
 func DefaultModels() []ClaudeModel {
-	result := make([]ClaudeModel, len(geminiModels))
-	for i, model := range geminiModels {
-		result[i] = ClaudeModel{ID: model.ID, Type: "model", DisplayName: model.DisplayName, CreatedAt: model.CreatedAt}
+	result := make([]ClaudeModel, 0, len(geminiModels))
+	for _, model := range geminiModels {
+		if !isPublicAntigravityModelID(model.ID) {
+			continue
+		}
+		result = append(result, ClaudeModel{ID: model.ID, Type: "model", DisplayName: model.DisplayName, CreatedAt: model.CreatedAt})
 	}
 	return result
 }
@@ -60,9 +76,12 @@ type GeminiModelsListResponse struct {
 var defaultGeminiMethods = []string{"generateContent", "streamGenerateContent"}
 
 func DefaultGeminiModels() []GeminiModel {
-	result := make([]GeminiModel, len(geminiModels))
-	for i, model := range geminiModels {
-		result[i] = GeminiModel{Name: "models/" + model.ID, DisplayName: model.DisplayName, SupportedGenerationMethods: defaultGeminiMethods}
+	result := make([]GeminiModel, 0, len(geminiModels))
+	for _, model := range geminiModels {
+		if !isPublicAntigravityModelID(model.ID) {
+			continue
+		}
+		result = append(result, GeminiModel{Name: "models/" + model.ID, DisplayName: model.DisplayName, SupportedGenerationMethods: defaultGeminiMethods})
 	}
 	return result
 }

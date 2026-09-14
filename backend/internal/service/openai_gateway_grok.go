@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ const (
 	grokComposerImageBridgeMaxOutputTokens = 512
 	grokCodexAppNamespaceName              = "codex_app"
 	grokAutomationUpdateToolName           = "automation_update"
+	grokImageGenerationToolType            = "image_generation"
 )
 
 // xAI rejects function tools whose object schemas omit additionalProperties:false
@@ -120,7 +122,7 @@ func patchGrokResponsesBodyWithTranslation(body []byte, upstreamModel string) ([
 	if err != nil {
 		return nil, nil, err
 	}
-	out, err = sanitizeGrokResponsesTools(out, translation)
+	out, err = sanitizeGrokResponsesTools(out, translation, upstreamModel)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -137,6 +139,88 @@ func grokFlagshipModel(model string) bool {
 		model = strings.TrimSpace(model[slash+1:])
 	}
 	return model == "grok-4.5" || model == "grok-4.6"
+}
+
+type grokVersion struct {
+	major int
+	minor int
+}
+
+// grok-4.6 is the first Grok line that accepts xAI's native Responses
+// image_generation tool. grok-4.20-* is an older product line whose dotted
+// minor is not comparable to grok-4.6, so it stays on the strip path.
+var grokImageGenerationMinVersion = grokVersion{major: 4, minor: 6}
+
+func grokSupportsNativeImageGeneration(model string) bool {
+	name := strings.ToLower(strings.TrimSpace(model))
+	if slash := strings.LastIndex(name, "/"); slash >= 0 {
+		name = strings.TrimSpace(name[slash+1:])
+	}
+	if name == "" || !strings.HasPrefix(name, "grok-") {
+		return false
+	}
+	rest := strings.TrimPrefix(name, "grok-")
+	if rest == "4.20" || strings.HasPrefix(rest, "4.20-") {
+		return false
+	}
+	ver, ok := grokParseVersionPrefix(rest)
+	if !ok {
+		return false
+	}
+	return grokCompareVersion(ver, grokImageGenerationMinVersion) >= 0
+}
+
+func grokParseVersionPrefix(rest string) (grokVersion, bool) {
+	i := 0
+	for i < len(rest) && rest[i] >= '0' && rest[i] <= '9' {
+		i++
+	}
+	if i == 0 {
+		return grokVersion{}, false
+	}
+	major, err := strconv.Atoi(rest[:i])
+	if err != nil {
+		return grokVersion{}, false
+	}
+	if i == len(rest) || rest[i] != '.' {
+		return grokVersion{major: major, minor: -1}, true
+	}
+	j := i + 1
+	for j < len(rest) && rest[j] >= '0' && rest[j] <= '9' {
+		j++
+	}
+	if j == i+1 {
+		return grokVersion{major: major, minor: -1}, true
+	}
+	minor, err := strconv.Atoi(rest[i+1 : j])
+	if err != nil {
+		return grokVersion{}, false
+	}
+	return grokVersion{major: major, minor: minor}, true
+}
+
+func grokCompareVersion(a, b grokVersion) int {
+	if a.major != b.major {
+		if a.major < b.major {
+			return -1
+		}
+		return 1
+	}
+	aMinor := a.minor
+	if aMinor < 0 {
+		aMinor = 0
+	}
+	bMinor := b.minor
+	if bMinor < 0 {
+		bMinor = 0
+	}
+	if aMinor < bMinor {
+		return -1
+	}
+	if aMinor > bMinor {
+		return 1
+	}
+	return 0
 }
 
 // sanitizeGrokResponsesModelCapabilities strips reasoning controls that certain
@@ -750,21 +834,23 @@ func deleteJSONFields(value any, fields map[string]struct{}) bool {
 }
 
 var grokResponsesSupportedToolTypes = map[string]struct{}{
-	"code_execution":     {},
-	"code_interpreter":   {},
-	"collections_search": {},
-	"file_search":        {},
-	"function":           {},
-	"mcp":                {},
-	"shell":              {},
-	"web_search":         {},
-	"x_search":           {},
+	"code_execution":            {},
+	"code_interpreter":          {},
+	"collections_search":        {},
+	"file_search":               {},
+	"function":                  {},
+	"mcp":                       {},
+	"shell":                     {},
+	"web_search":                {},
+	"x_search":                  {},
+	grokImageGenerationToolType: {},
 }
 
-func sanitizeGrokResponsesTools(body []byte, translation *grokCodexTranslation) ([]byte, error) {
+func sanitizeGrokResponsesTools(body []byte, translation *grokCodexTranslation, upstreamModel string) ([]byte, error) {
 	tools := gjson.GetBytes(body, "tools")
 	filteredTools := make([]json.RawMessage, 0)
 	var err error
+	keepImageGeneration := grokSupportsNativeImageGeneration(upstreamModel)
 
 	if tools.Exists() && tools.IsArray() {
 		rawTools := tools.Array()
@@ -778,7 +864,7 @@ func sanitizeGrokResponsesTools(body []byte, translation *grokCodexTranslation) 
 					nestedTools = tool.Get("children")
 				}
 				for _, nested := range nestedTools.Array() {
-					normalized, keep, err := normalizeGrokResponsesTool(nested, namespaceName, translation)
+					normalized, keep, err := normalizeGrokResponsesTool(nested, namespaceName, translation, keepImageGeneration)
 					if err != nil {
 						return nil, err
 					}
@@ -788,7 +874,7 @@ func sanitizeGrokResponsesTools(body []byte, translation *grokCodexTranslation) 
 				}
 				continue
 			}
-			normalized, keep, err := normalizeGrokResponsesTool(tool, "", translation)
+			normalized, keep, err := normalizeGrokResponsesTool(tool, "", translation, keepImageGeneration)
 			if err != nil {
 				return nil, err
 			}
@@ -838,6 +924,12 @@ func sanitizeGrokResponsesTools(body []byte, translation *grokCodexTranslation) 
 		}
 		toolChoice = gjson.GetBytes(body, "tool_choice")
 	}
+	body, err = normalizeGrokForcedImageGenerationToolChoice(body)
+	if err != nil {
+		return nil, err
+	}
+	filteredTools = grokResponsesToolMessages(body)
+	toolChoice = gjson.GetBytes(body, "tool_choice")
 	if toolChoice.Exists() && shouldDropGrokToolChoice(toolChoice, filteredTools) {
 		body, err = sjson.DeleteBytes(body, "tool_choice")
 		if err != nil {
@@ -853,15 +945,19 @@ func sanitizeGrokResponsesTools(body []byte, translation *grokCodexTranslation) 
 	return body, nil
 }
 
-func normalizeGrokResponsesTool(tool gjson.Result, namespaceName string, translation *grokCodexTranslation) (json.RawMessage, bool, error) {
+func normalizeGrokResponsesTool(tool gjson.Result, namespaceName string, translation *grokCodexTranslation, keepImageGeneration bool) (json.RawMessage, bool, error) {
 	var item map[string]any
 	if err := decodeGrokJSON([]byte(tool.Raw), &item); err != nil {
 		return nil, false, err
 	}
 	toolType := strings.TrimSpace(tool.Get("type").String())
 	switch toolType {
-	case "tool_search", "image_generation":
+	case "tool_search":
 		return nil, false, nil
+	case grokImageGenerationToolType:
+		if !keepImageGeneration {
+			return nil, false, nil
+		}
 	case "custom":
 		name := strings.TrimSpace(tool.Get("name").String())
 		if name != "" && translation != nil {
@@ -1120,7 +1216,119 @@ func shouldDropGrokToolChoice(toolChoice gjson.Result, tools []json.RawMessage) 
 		}
 		return true
 	}
+	if choiceType != "allowed_tools" {
+		return !grokResponsesToolsContainType(tools, choiceType)
+	}
 	return false
+}
+
+func grokResponsesToolMessages(body []byte) []json.RawMessage {
+	tools := gjson.GetBytes(body, "tools")
+	if !tools.Exists() || !tools.IsArray() {
+		return nil
+	}
+	items := tools.Array()
+	out := make([]json.RawMessage, 0, len(items))
+	for _, tool := range items {
+		out = append(out, json.RawMessage(tool.Raw))
+	}
+	return out
+}
+
+func grokBodyHasImageGenerationTool(body []byte) bool {
+	return grokResponsesToolsContainType(grokResponsesToolMessages(body), grokImageGenerationToolType)
+}
+
+func grokResponsesToolsContainType(tools []json.RawMessage, toolType string) bool {
+	for _, tool := range tools {
+		var item struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(tool, &item); err != nil {
+			continue
+		}
+		if strings.TrimSpace(item.Type) == toolType {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeGrokForcedImageGenerationToolChoice(body []byte) ([]byte, error) {
+	choice := gjson.GetBytes(body, "tool_choice")
+	if !choice.IsObject() {
+		return body, nil
+	}
+	choiceType := strings.TrimSpace(choice.Get("type").String())
+	if choiceType == grokImageGenerationToolType {
+		if !grokBodyHasImageGenerationTool(body) {
+			return sjson.DeleteBytes(body, "tool_choice")
+		}
+		reduced, err := grokKeepOnlyImageGenerationTools(body)
+		if err != nil {
+			return nil, err
+		}
+		return sjson.SetBytes(reduced, "tool_choice", "required")
+	}
+	if choiceType != "allowed_tools" {
+		return body, nil
+	}
+	allowed := choice.Get("tools")
+	if !allowed.IsArray() {
+		return body, nil
+	}
+	filtered := make([]json.RawMessage, 0, len(allowed.Array()))
+	stripped := false
+	for _, tool := range allowed.Array() {
+		if strings.TrimSpace(tool.Get("type").String()) == grokImageGenerationToolType {
+			stripped = true
+			continue
+		}
+		filtered = append(filtered, json.RawMessage(tool.Raw))
+	}
+	if !stripped {
+		return body, nil
+	}
+	if len(filtered) == 0 {
+		if !grokBodyHasImageGenerationTool(body) {
+			return sjson.DeleteBytes(body, "tool_choice")
+		}
+		mode := strings.TrimSpace(choice.Get("mode").String())
+		if mode != "auto" {
+			mode = "required"
+		}
+		reduced, err := grokKeepOnlyImageGenerationTools(body)
+		if err != nil {
+			return nil, err
+		}
+		return sjson.SetBytes(reduced, "tool_choice", mode)
+	}
+	encoded, err := json.Marshal(filtered)
+	if err != nil {
+		return nil, err
+	}
+	return sjson.SetRawBytes(body, "tool_choice.tools", encoded)
+}
+
+func grokKeepOnlyImageGenerationTools(body []byte) ([]byte, error) {
+	tools := gjson.GetBytes(body, "tools")
+	if !tools.IsArray() {
+		return body, nil
+	}
+	kept := make([]json.RawMessage, 0, 1)
+	for _, tool := range tools.Array() {
+		if strings.TrimSpace(tool.Get("type").String()) == grokImageGenerationToolType {
+			kept = append(kept, json.RawMessage(tool.Raw))
+		}
+	}
+	if len(kept) == 0 || len(kept) == len(tools.Array()) {
+		return body, nil
+	}
+	encoded, err := json.Marshal(kept)
+	if err != nil {
+		return nil, err
+	}
+	return sjson.SetRawBytes(body, "tools", encoded)
 }
 
 func (s *OpenAIGatewayService) bridgeGrokComposerImageInputs(

@@ -54,10 +54,10 @@
         <div v-if="usageInfo.error" class="text-xs text-amber-600 dark:text-amber-400 truncate max-w-[200px]" :title="usageInfo.error">
           {{ usageInfo.error }}
         </div>
-        <!-- 5h Window -->
+        <!-- Short rolling window (Codex 5h / Devin 24h / ...) -->
         <UsageProgressBar
           v-if="usageInfo.five_hour"
-          label="5h"
+          :label="usageWindowLabel(usageInfo.five_hour, '5h')"
           :utilization="usageInfo.five_hour.utilization"
           :resets-at="usageInfo.five_hour.resets_at"
           :window-stats="usageInfo.five_hour.window_stats"
@@ -122,7 +122,7 @@
       <div v-if="hasOpenAIUsageFallback" class="space-y-0.5">
         <UsageProgressBar
           v-if="usageInfo?.five_hour"
-          label="5h"
+          :label="usageWindowLabel(usageInfo.five_hour, '5h')"
           :utilization="usageInfo.five_hour.utilization"
           :resets-at="usageInfo.five_hour.resets_at"
           :window-stats="usageInfo.five_hour.window_stats"
@@ -223,7 +223,7 @@
       <div v-else-if="usageInfo" class="space-y-0.5">
         <UsageProgressBar
           v-if="usageInfo.five_hour"
-          label="5h"
+          :label="usageWindowLabel(usageInfo.five_hour, '5h')"
           :utilization="usageInfo.five_hour.utilization"
           :resets-at="usageInfo.five_hour.resets_at"
           :window-stats="usageInfo.five_hour.window_stats"
@@ -277,8 +277,17 @@
           </span>
         </div>
         <UsageProgressBar
+          v-if="usageInfo.five_hour"
+          :label="usageWindowLabel(usageInfo.five_hour, '24h')"
+          :utilization="usageInfo.five_hour.utilization"
+          :resets-at="usageInfo.five_hour.resets_at"
+          :window-stats="usageInfo.five_hour.window_stats"
+          :show-now-when-idle="true"
+          color="indigo"
+        />
+        <UsageProgressBar
           v-if="usageInfo.seven_day"
-          label="7d"
+          :label="usageWindowLabel(usageInfo.seven_day, '7d')"
           :utilization="usageInfo.seven_day.utilization"
           :resets-at="usageInfo.seven_day.resets_at"
           :window-stats="usageInfo.seven_day.window_stats"

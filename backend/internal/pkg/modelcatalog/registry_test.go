@@ -66,6 +66,16 @@ func TestEmbeddedCatalogLoads(t *testing.T) {
 	if !ok || entry.InputCostPerToken != 1e-5 || entry.OutputCostPerToken != 5e-5 {
 		t.Fatalf("expected gpt-6-astra fallback pricing, got %+v ok=%v", entry, ok)
 	}
+	entry, ok = ResolvePriceEntry("swe-2-high")
+	if !ok || entry.InputCostPerToken != 3e-6 || entry.OutputCostPerToken != 15e-6 || entry.CacheReadInputTokenCost != 0.30e-6 {
+		t.Fatalf("expected swe-2-high list pricing, got %+v ok=%v", entry, ok)
+	}
+	for _, id := range []string{"swe-2-medium", "swe-2-max"} {
+		entry, ok = ResolvePriceEntry(id)
+		if !ok || entry.InputCostPerToken != 3e-6 || entry.OutputCostPerToken != 15e-6 {
+			t.Fatalf("expected %s to alias swe-2 list pricing, got %+v ok=%v", id, entry, ok)
+		}
+	}
 	models := OpenAIModels()
 	foundAstra := false
 	for _, model := range models {

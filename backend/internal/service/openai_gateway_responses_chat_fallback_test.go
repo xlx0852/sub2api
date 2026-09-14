@@ -218,3 +218,120 @@ func forceChatResponsesFallbackAccount() *Account {
 	}
 	return account
 }
+
+func forceResponsesExternalBridgeAccount() *Account {
+	account := rawChatCompletionsTestAccount()
+	account.Type = AccountTypeAPIKey
+	account.Credentials = map[string]any{
+		"api_key":  "bridge-key",
+		"base_url": "http://upstream.example/v1",
+	}
+	account.Extra = map[string]any{
+		"external_bridge":               true,
+		"external_bridge_kind":          "devin",
+		openai_compat.ExtraKeyResponsesMode: string(openai_compat.ResponsesSupportModeForceResponses),
+		openai_compat.ExtraKeyResponsesSupported: true,
+	}
+	return account
+}
+
+func TestForwardResponses_ExternalBridgeForceResponsesUsesNativePassthrough(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"swe-2-high","input":"hello","stream":false}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"rid_bridge_resp"}},
+		Body: io.NopCloser(strings.NewReader(
+			`{"id":"resp_bridge","object":"response","model":"swe-2-high","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":120,"output_tokens":8,"total_tokens":128,"input_tokens_details":{"cached_tokens":100}}}`,
+		)),
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:          rawChatCompletionsTestConfig(),
+		httpUpstream: upstream,
+	}
+
+	result, err := svc.Forward(context.Background(), c, forceResponsesExternalBridgeAccount(), body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "http://upstream.example/v1/responses", upstream.lastReq.URL.String())
+	require.Equal(t, "hello", gjson.GetBytes(upstream.lastBody, "input").String())
+	require.False(t, gjson.GetBytes(upstream.lastBody, "messages").Exists())
+	require.Equal(t, 120, result.Usage.InputTokens)
+	require.Equal(t, 8, result.Usage.OutputTokens)
+	require.Equal(t, 100, result.Usage.CacheReadInputTokens)
+	require.Contains(t, rec.Body.String(), `"cached_tokens":100`)
+}
+
+func TestForwardResponses_ExternalBridgeForceChatStillFallsBack(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"swe-2-high","input":"hello","stream":false}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"rid_bridge_chat"}},
+		Body: io.NopCloser(strings.NewReader(
+			`{"id":"chatcmpl_bridge","object":"chat.completion","model":"swe-2-high","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":9,"completion_tokens":2,"total_tokens":11,"prompt_tokens_details":{"cached_tokens":4}}}`,
+		)),
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:          rawChatCompletionsTestConfig(),
+		httpUpstream: upstream,
+	}
+
+	account := forceResponsesExternalBridgeAccount()
+	account.Extra[openai_compat.ExtraKeyResponsesMode] = string(openai_compat.ResponsesSupportModeForceChatCompletions)
+	account.Extra[openai_compat.ExtraKeyResponsesSupported] = false
+
+	result, err := svc.Forward(context.Background(), c, account, body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "http://upstream.example/v1/chat/completions", upstream.lastReq.URL.String())
+	require.Equal(t, 9, result.Usage.InputTokens)
+	require.Equal(t, 4, result.Usage.CacheReadInputTokens)
+}
+
+func TestForwardResponses_ExternalBridgeUnknownDefaultsToChatFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"gpt-5.5-medium","input":"hello","stream":false}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"rid_cursor_unknown"}},
+		Body: io.NopCloser(strings.NewReader(
+			`{"id":"chatcmpl_cursor","object":"chat.completion","model":"gpt-5.5-medium","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":12,"completion_tokens":3,"total_tokens":15}}`,
+		)),
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:          rawChatCompletionsTestConfig(),
+		httpUpstream: upstream,
+	}
+
+	account := rawChatCompletionsTestAccount()
+	account.Extra = map[string]any{
+		"external_bridge":      true,
+		"external_bridge_kind": "cursor",
+	}
+
+	result, err := svc.Forward(context.Background(), c, account, body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "http://upstream.example/v1/chat/completions", upstream.lastReq.URL.String())
+	require.Equal(t, 12, result.Usage.InputTokens)
+	require.Equal(t, 3, result.Usage.OutputTokens)
+}

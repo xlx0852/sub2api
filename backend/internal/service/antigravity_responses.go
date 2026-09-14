@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/app/gateway/pipeline"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/gin-gonic/gin"
@@ -121,6 +122,11 @@ func (s *AntigravityGatewayService) ForwardResponses(ctx context.Context, c *gin
 		return nil, s.writeGoogleError(c, 400, "Missing Responses owner or account")
 	}
 	mapped := s.getMappedModel(account, req.Model)
+	effort := ""
+	if req.Reasoning != nil {
+		effort = req.Reasoning.Effort
+	}
+	mapped = domain.ApplyAntigravityEffortModel(mapped, effort)
 	if !s.IsModelSupported(mapped) {
 		return nil, s.writeGoogleError(c, 400, "Unsupported Antigravity model: text Gemini models only")
 	}

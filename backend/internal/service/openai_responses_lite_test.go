@@ -148,6 +148,28 @@ func TestApplyOpenAIResponsesLiteForUpstream(t *testing.T) {
 		require.True(t, isOpenAIResponsesLiteWebSocketPayload(out))
 	})
 
+	t.Run("external bridge force demotes lite even for astra", func(t *testing.T) {
+		t.Parallel()
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+		c.Request.Header.Set(responsesLiteHeader, "true")
+
+		body := []byte(`{
+			"model":"gpt-6-astra",
+			"input":[
+				{"type":"additional_tools","tools":[{"type":"function","name":"shell","parameters":{"type":"object"}}]},
+				{"type":"message","role":"user","content":[{"type":"input_text","text":"ls"}]}
+			]
+		}`)
+		out, demoted, err := applyOpenAIResponsesLiteForUpstream(c, body, "gpt-6-astra", true)
+		require.NoError(t, err)
+		require.True(t, demoted)
+		require.True(t, isOpenAIResponsesLiteDemoted(c))
+		require.Equal(t, "shell", gjson.GetBytes(out, "tools.0.name").String())
+		require.False(t, gjson.GetBytes(out, `input.#(type=="additional_tools")`).Exists())
+	})
+
 	t.Run("non-lite inbound never promotes", func(t *testing.T) {
 		t.Parallel()
 		w := httptest.NewRecorder()

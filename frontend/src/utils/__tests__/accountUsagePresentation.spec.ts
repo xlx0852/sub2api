@@ -81,6 +81,36 @@ describe('buildAccountUsagePresentation', () => {
     expect(presentation.windows.map(window => window.label)).toEqual(['7d'])
   })
 
+  it('Devin external bridge 的日窗口应显示 24h 而不是 5h', () => {
+    const presentation = buildAccountUsagePresentation({
+      account: makeAccount({
+        type: 'apikey',
+        extra: { external_bridge: true, external_bridge_kind: 'devin' }
+      }),
+      usageInfo: baseUsage({
+        source: 'active',
+        five_hour: {
+          utilization: 18,
+          resets_at: '2026-09-14T08:00:00Z',
+          remaining_seconds: 3600,
+          window_minutes: 24 * 60,
+          window_label: '24h'
+        },
+        seven_day: {
+          utilization: 41,
+          resets_at: '2026-09-20T08:00:00Z',
+          remaining_seconds: 86400,
+          window_minutes: 7 * 24 * 60,
+          window_label: '7d'
+        }
+      }),
+      todayStats: today,
+      t
+    })
+
+    expect(presentation.windows.map(window => window.label)).toEqual(['24h', '7d'])
+  })
+
   it('OpenAI 订阅等级使用大写展示', () => {
     const presentation = buildAccountUsagePresentation({
       account: makeAccount(),

@@ -14,6 +14,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 )
 
 func (s *AntigravityGatewayService) forwardGeminiParse(ex *pipeline.Exchange) error {
@@ -76,6 +77,7 @@ func (s *AntigravityGatewayService) forwardGeminiRewrite(ex *pipeline.Exchange) 
 			MarkOps: true,
 		}
 	}
+	mappedModel = domain.ApplyAntigravityEffortModel(mappedModel, extractAntigravityEffort(ex.Inbound, ""))
 	st.mappedModel = mappedModel
 	st.billingModel = mappedModel
 	ex.UpstreamModel = mappedModel
@@ -469,6 +471,26 @@ func applyForwardGeminiOptions(options []ForwardGeminiOption) forwardGeminiOptio
 		}
 	}
 	return forwardOpts
+}
+
+func extractAntigravityEffort(body []byte, fallback string) string {
+	if level := strings.TrimSpace(gjson.GetBytes(body, "generationConfig.thinkingConfig.thinkingLevel").String()); level != "" {
+		return level
+	}
+	if level := strings.TrimSpace(gjson.GetBytes(body, "generation_config.thinking_config.thinking_level").String()); level != "" {
+		return level
+	}
+	if budget := gjson.GetBytes(body, "generationConfig.thinkingConfig.thinkingBudget"); budget.Exists() {
+		switch {
+		case budget.Int() <= 0:
+			return "none"
+		case budget.Int() <= 4096:
+			return "low"
+		default:
+			return "high"
+		}
+	}
+	return strings.TrimSpace(fallback)
 }
 
 func newGeminiForwardState(c *gin.Context, account *Account, originalModel, action string, stream, isStickySession bool, options []ForwardGeminiOption) *antigravityForwardState {

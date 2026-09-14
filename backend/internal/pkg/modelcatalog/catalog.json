@@ -1,6 +1,6 @@
 {
-  "version": 9,
-  "updated_at": "2026-09-03T00:00:00Z",
+  "version": 10,
+  "updated_at": "2026-09-13T00:00:00Z",
   "platforms": {
     "openai": {
       "default_test_model": "gpt-5.4",
@@ -93,6 +93,27 @@
           "owned_by": "openai",
           "type": "model",
           "created": 1738368000
+        },
+        {
+          "id": "swe-2-high",
+          "display_name": "SWE-2 High",
+          "object": "model",
+          "owned_by": "cognition",
+          "type": "model"
+        },
+        {
+          "id": "swe-2-medium",
+          "display_name": "SWE-2 Medium",
+          "object": "model",
+          "owned_by": "cognition",
+          "type": "model"
+        },
+        {
+          "id": "swe-2-max",
+          "display_name": "SWE-2 Max",
+          "object": "model",
+          "owned_by": "cognition",
+          "type": "model"
         },
         {
           "id": "codex-auto-review",
@@ -997,6 +1018,20 @@
       "output_cost_per_token": 8e-06,
       "cache_creation_input_token_cost": 2e-06,
       "cache_read_input_token_cost": 4e-08
+    },
+    "swe-2": {
+      "input_cost_per_token": 3e-06,
+      "output_cost_per_token": 1.5e-05,
+      "cache_read_input_token_cost": 3e-07
+    },
+    "swe-2-high": {
+      "alias_of": "swe-2"
+    },
+    "swe-2-medium": {
+      "alias_of": "swe-2"
+    },
+    "swe-2-max": {
+      "alias_of": "swe-2"
     }
   },
   "image_defaults": {

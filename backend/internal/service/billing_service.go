@@ -224,6 +224,11 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 		}
 	}
 
+	// Cognition SWE-2: Medium/High/Max share one list price.
+	if strings.HasPrefix(modelLower, "swe-2") {
+		return s.fallbackPrice("swe-2")
+	}
+
 	// 按模型系列匹配
 	if strings.Contains(modelLower, "opus") {
 		// 必须先判断 opus-5；使用裸 "5" 会误伤 claude-opus-4-5。

@@ -171,15 +171,17 @@ func (sess *openAIWSIngressSession) parseClientPayload(raw []byte) (openAIWSClie
 		}
 		normalized = next
 	}
-	if demotedBody, demoted, demoteErr := applyOpenAIResponsesLiteForUpstream(c, normalized, upstreamModel); demoteErr != nil {
+	forceStandardLite := account != nil && account.IsExternalBridge()
+	if demotedBody, demoted, demoteErr := applyOpenAIResponsesLiteForUpstream(c, normalized, upstreamModel, forceStandardLite); demoteErr != nil {
 		return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", demoteErr)
 	} else if demoted {
 		normalized = demotedBody
 		logOpenAIWSModeInfo(
-			"ingress_ws_responses_lite_demoted account_id=%d original_model=%s upstream_model=%s",
+			"ingress_ws_responses_lite_demoted account_id=%d original_model=%s upstream_model=%s force_standard=%v",
 			account.ID,
 			truncateOpenAIWSLogValue(originalModel, openAIWSLogValueMaxLen),
 			truncateOpenAIWSLogValue(upstreamModel, openAIWSLogValueMaxLen),
+			forceStandardLite,
 		)
 	}
 	if isCodexCLI && codexImageGenerationExplicitToolPolicy == codexImageGenerationExplicitToolPolicyStrip {

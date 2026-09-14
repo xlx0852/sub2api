@@ -90,6 +90,8 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	if account.Platform == PlatformKimi {
 		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
+	// External bridge 入站 chat/completions：上游支持 Responses 时仍可走 CC 直转
+	//（bridge 本身提供 /v1/chat/completions）。仅当需要 CC→Responses 映射时才走下方路径。
 	if account.IsExternalBridge() {
 		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}

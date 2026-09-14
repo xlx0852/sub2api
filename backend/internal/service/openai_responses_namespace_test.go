@@ -9,6 +9,13 @@ import (
 func TestShouldFlattenOpenAIResponsesNamespaces(t *testing.T) {
 	oauth := &Account{Type: AccountTypeOAuth}
 	apiKey := &Account{Type: AccountTypeAPIKey}
+	externalBridge := &Account{
+		Type: AccountTypeAPIKey,
+		Extra: map[string]any{
+			"external_bridge":      true,
+			"external_bridge_kind": "devin",
+		},
+	}
 
 	tests := []struct {
 		name               string
@@ -24,6 +31,8 @@ func TestShouldFlattenOpenAIResponsesNamespaces(t *testing.T) {
 		// 透传账号先于 WSv2 分支经 HTTP 转发返回，仍需摊平。
 		{name: "oauth_wsv2_passthrough", account: oauth, transport: OpenAIUpstreamTransportResponsesWebsocketV2, passthroughEnabled: true, want: true},
 		{name: "apikey_http", account: apiKey, transport: OpenAIUpstreamTransportHTTPSSE, want: false},
+		// Devin 等 external bridge 必须摊平 namespace，否则 tools 在桥接侧被整表丢弃。
+		{name: "external_bridge_http", account: externalBridge, transport: OpenAIUpstreamTransportHTTPSSE, passthroughEnabled: true, want: true},
 		{name: "nil_account", account: nil, transport: OpenAIUpstreamTransportHTTPSSE, want: false},
 	}
 	for _, tt := range tests {

@@ -667,3 +667,27 @@ func TestAccountGetModelMapping_CacheInvalidatesOnInPlaceValueChange(t *testing.
 		t.Fatalf("expected cache invalidated after in-place value change, got: %v", second)
 	}
 }
+
+func TestApplyAntigravityEffortModel(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		mapped string
+		effort string
+		want   string
+	}{
+		{"gemini-3.8-flash-high", "", "gemini-3.8-flash-high"},
+		{"gemini-3.8-flash-high", "high", "gemini-3.8-flash-high"},
+		{"gemini-3.8-flash-high", "low", "gemini-3.8-flash"},
+		{"gemini-3.8-flash-high", "none", "gemini-3.8-flash"},
+		{"gemini-3.8-flash", "medium", "gemini-3.8-flash-high"},
+		{"gemini-pro-agent", "", "gemini-pro-agent"},
+		{"gemini-pro-agent", "low", "gemini-3.1-pro-low"},
+		{"gemini-3.1-pro", "high", AntigravityGemini31ProAgentModel},
+		{"gemini-3.1-pro-low", "high", AntigravityGemini31ProAgentModel},
+	}
+	for _, tc := range cases {
+		if got := ApplyAntigravityEffortModel(tc.mapped, tc.effort); got != tc.want {
+			t.Fatalf("ApplyAntigravityEffortModel(%q, %q) = %q, want %q", tc.mapped, tc.effort, got, tc.want)
+		}
+	}
+}

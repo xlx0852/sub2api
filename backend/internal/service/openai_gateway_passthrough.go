@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
@@ -86,11 +87,16 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	if liteUpstreamModel == "" {
 		liteUpstreamModel = billingModel
 	}
-	if demotedBody, demoted, demoteErr := applyOpenAIResponsesLiteForUpstream(c, body, liteUpstreamModel); demoteErr != nil {
+	forceStandardLite := account != nil && account.IsExternalBridge()
+	if demotedBody, demoted, demoteErr := applyOpenAIResponsesLiteForUpstream(c, body, liteUpstreamModel, forceStandardLite); demoteErr != nil {
 		return nil, fmt.Errorf("demote passthrough responses lite body: %w", demoteErr)
 	} else if demoted {
 		body = demotedBody
-		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Passthrough demoted Responses-Lite request for non-lite upstream model=%s (account: %s)", liteUpstreamModel, account.Name)
+		if forceStandardLite {
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Passthrough force-demoted Responses-Lite for external bridge model=%s (account: %s)", liteUpstreamModel, account.Name)
+		} else {
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Passthrough demoted Responses-Lite request for non-lite upstream model=%s (account: %s)", liteUpstreamModel, account.Name)
+		}
 	}
 
 	if account != nil && account.Type == AccountTypeOAuth {
@@ -387,7 +393,13 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	case AccountTypeAPIKey:
 		baseURL := account.GetOpenAIBaseURL()
 		if baseURL != "" {
-			validatedURL, err := s.validateUpstreamBaseURL(baseURL)
+			var validatedURL string
+			var err error
+			if account.IsExternalBridge() {
+				validatedURL, err = validateExternalBridgeBaseURL(baseURL)
+			} else {
+				validatedURL, err = s.validateUpstreamBaseURL(baseURL)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -408,6 +420,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		return nil, err
 	}
 	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
+	if account.IsExternalBridge() {
+		req = req.WithContext(domain.WithHTTPUpstreamPrivateHostsAllowed(req.Context()))
+	}
 
 	// 透传客户端请求头（安全白名单）。
 	allowTimeoutHeaders := s.isOpenAIPassthroughTimeoutHeadersAllowed()

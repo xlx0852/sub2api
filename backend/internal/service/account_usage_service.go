@@ -2144,10 +2144,15 @@ func buildCodexUsageProgressFromExtra(extra map[string]any, window string, now t
 }
 
 func codexWindowStatsStart(progress *UsageProgress, fallbackWindow time.Duration, now time.Time) time.Time {
-	if progress != nil && progress.ResetsAt != nil && now.Before(*progress.ResetsAt) {
-		return progress.ResetsAt.Add(-fallbackWindow)
+	window := fallbackWindow
+	// Prefer upstream-reported window length (e.g. Devin daily=24h mapped into five_hour).
+	if progress != nil && progress.WindowMinutes != nil && *progress.WindowMinutes > 0 {
+		window = time.Duration(*progress.WindowMinutes) * time.Minute
 	}
-	return now.Add(-fallbackWindow)
+	if progress != nil && progress.ResetsAt != nil && now.Before(*progress.ResetsAt) {
+		return progress.ResetsAt.Add(-window)
+	}
+	return now.Add(-window)
 }
 
 func (s *AccountUsageService) GetAccountUsageStats(ctx context.Context, accountID int64, startTime, endTime time.Time) (*usagestats.AccountUsageStatsResponse, error) {

@@ -23,7 +23,14 @@ const openAIResponsesNamespaceNamesContextKey = "openai_responses_namespace_name
 //   - ProxyResponsesWebSocketFromClient / ctx_pool / passthrough 不调用 Forward
 //   - http_bridge 在 proxyOpenAIWSHTTPBridgeTurn 内单独调用 flatten/restore
 func shouldFlattenOpenAIResponsesNamespaces(account *Account, transport OpenAIUpstreamTransport, passthroughEnabled bool) bool {
-	if account == nil || account.Type != AccountTypeOAuth {
+	if account == nil {
+		return false
+	}
+	// OAuth Codex 上游与 external bridge（Devin/Cursor 等）都不吃 namespace 工具树。
+	// 需要在出站前摊平为顶层 function，回程再 restore，否则桥接侧会把整个 tools 丢掉，
+	// 模型就会回复「当前没有可调用工具」。
+	supportsFlatten := account.Type == AccountTypeOAuth || account.IsExternalBridge()
+	if !supportsFlatten {
 		return false
 	}
 	if transport == OpenAIUpstreamTransportResponsesWebsocketV2 && !passthroughEnabled {

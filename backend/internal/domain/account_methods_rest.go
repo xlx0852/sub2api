@@ -405,6 +405,58 @@ func ApplyThinkingModelSuffix(mappedModel string, thinkingEnabled bool) string {
 	return mappedModel
 }
 
+// ApplyAntigravityEffortModel 按请求思考档位把映射后的上游模型切到内部 -low/-high。
+// 未传档位时保持默认映射（flash→flash-high、pro→gemini-pro-agent）。
+func ApplyAntigravityEffortModel(mappedModel, effort string) string {
+	mappedModel = NormalizeAntigravityModelName(mappedModel)
+	if mappedModel == "" {
+		return ""
+	}
+	level := normalizeAntigravityEffort(effort)
+	if level == "" {
+		return mappedModel
+	}
+	switch antigravityGeminiFamily(mappedModel) {
+	case "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash":
+		if level == "low" {
+			return antigravityGeminiFamily(mappedModel)
+		}
+		return antigravityGeminiFamily(mappedModel) + "-high"
+	case "gemini-3.1-pro":
+		if level == "low" {
+			return "gemini-3.1-pro-low"
+		}
+		return AntigravityGemini31ProAgentModel
+	default:
+		return mappedModel
+	}
+}
+
+func normalizeAntigravityEffort(effort string) string {
+	switch strings.ToLower(strings.TrimSpace(effort)) {
+	case "", "default":
+		return ""
+	case "none", "off", "minimal", "low":
+		return "low"
+	default:
+		return "high"
+	}
+}
+
+func antigravityGeminiFamily(model string) string {
+	model = NormalizeAntigravityModelName(model)
+	switch {
+	case model == AntigravityGemini31ProAgentModel || strings.HasPrefix(model, "gemini-3.1-pro"):
+		return "gemini-3.1-pro"
+	case strings.HasSuffix(model, "-high"):
+		return strings.TrimSuffix(model, "-high")
+	case strings.HasSuffix(model, "-low"):
+		return strings.TrimSuffix(model, "-low")
+	default:
+		return model
+	}
+}
+
 func (a *Account) IsSchedulableForModel(requestedModel string) bool {
 	return a.IsSchedulableForModelWithContext(context.Background(), requestedModel)
 }

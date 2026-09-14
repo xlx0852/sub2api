@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/app/gateway/pipeline"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
@@ -77,10 +78,15 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if account.Platform == PlatformKimi {
 		return s.forwardResponsesViaRawChatCompletions(ctx, c, account, body)
 	}
-	if account.IsExternalBridge() {
+	// External bridge：仅在 extra 明确 force_responses / 探测支持=true 时走原生 Responses。
+	// Unknown 不能默认透传：Cursor 等 sidecar 往往只有 /v1/chat/completions，
+	// 误走 /v1/responses 会 404；Devin 需显式 force_responses。
+	externalBridgeResponses := account.IsExternalBridge() &&
+		openai_compat.ResolveResponsesSupport(account.Extra) == openai_compat.ResponsesSupportYes
+	if account.IsExternalBridge() && !externalBridgeResponses {
 		return s.forwardResponsesViaRawChatCompletions(ctx, c, account, body)
 	}
-	if account.Type == AccountTypeAPIKey && !openai_compat.ShouldUseResponsesAPI(account.Extra) {
+	if account.Type == AccountTypeAPIKey && !account.IsExternalBridge() && !openai_compat.ShouldUseResponsesAPI(account.Extra) {
 		return s.forwardResponsesViaRawChatCompletions(ctx, c, account, body)
 	}
 	if account.Platform == PlatformOpenAI && account.Type == AccountTypeAPIKey {
@@ -150,7 +156,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 	}
 
-	passthroughEnabled := account.IsOpenAIPassthroughEnabled()
+	// External bridge 仅在明确支持 Responses 时强制透传：bridge 本身就是 OpenAI 兼容上游，
+	// 再走 Codex/WS pipeline 既无收益，也会因 private host / 协议改写丢掉 usage。
+	passthroughEnabled := account.IsOpenAIPassthroughEnabled() || externalBridgeResponses
 	// Body-signal v2 needs the compact SSE bridge; skip generic passthrough.
 	if passthroughEnabled && !bodySignalCompactV2 {
 		if isCodexCLI && codexImageGenerationExplicitToolPolicy == codexImageGenerationExplicitToolPolicyStrip {
@@ -212,7 +220,13 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		if baseURL == "" {
 			targetURL = openaiPlatformAPIURL
 		} else {
-			validatedURL, err := s.validateUpstreamBaseURL(baseURL)
+			var validatedURL string
+			var err error
+			if account.IsExternalBridge() {
+				validatedURL, err = validateExternalBridgeBaseURL(baseURL)
+			} else {
+				validatedURL, err = s.validateUpstreamBaseURL(baseURL)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -235,6 +249,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		return nil, err
 	}
 	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
+	if account.IsExternalBridge() {
+		req = req.WithContext(domain.WithHTTPUpstreamPrivateHostsAllowed(req.Context()))
+	}
 
 	// Build authentication for this request. Agent Identity signs a fresh
 	// assertion here; OAuth/PAT/API-key keep their existing Bearer behavior.

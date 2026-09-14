@@ -119,6 +119,28 @@ const getAntigravityWindowOrder = (label: string): number => {
   return 4
 }
 
+const formatWindowMinutesLabel = (minutes?: number | null, fallback = 'quota'): string => {
+  if (typeof minutes !== 'number' || minutes <= 0) return fallback
+  if (minutes >= 20 * 24 * 60) return `${Math.round(minutes / (24 * 60))}d`
+  if (minutes >= 36 * 60) {
+    const days = minutes / (24 * 60)
+    return Number.isInteger(days) ? `${days}d` : `${days.toFixed(1)}d`
+  }
+  if (minutes >= 90) {
+    const hours = minutes / 60
+    return Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`
+  }
+  return `${minutes}m`
+}
+
+const resolveUsageProgressLabel = (
+  progress: NonNullable<AccountUsageInfo['five_hour']>,
+  fallback: string
+): string => {
+  if (progress.window_label) return progress.window_label
+  return formatWindowMinutesLabel(progress.window_minutes, fallback)
+}
+
 const addUsageProgress = (
   windows: AccountUsageWindowPresentation[],
   key: string,
@@ -129,7 +151,7 @@ const addUsageProgress = (
   if (!progress) return
   windows.push(makeQuotaWindow(
     key,
-    label,
+    resolveUsageProgressLabel(progress, label),
     progress.utilization,
     progress.resets_at,
     color,

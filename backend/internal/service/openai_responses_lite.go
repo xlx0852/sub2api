@@ -68,13 +68,29 @@ func isOpenAIResponsesLiteDemoted(c *gin.Context) bool {
 // applyOpenAIResponsesLiteForUpstream demotes a Lite request body when the
 // resolved upstream model is not Lite-capable. Callers must still strip the
 // HTTP Lite header on the upstream request (see stripOpenAIResponsesLiteHeader).
-func applyOpenAIResponsesLiteForUpstream(c *gin.Context, body []byte, upstreamModel string) ([]byte, bool, error) {
-	if !shouldDemoteOpenAIResponsesLite(isOpenAIResponsesLiteInbound(c, body), upstreamModel) {
+//
+// forceStandard=true 用于 external bridge（Devin/Cursor）：即使上游模型 slug 被
+// 标成 Lite（如 gpt-6-astra），桥接侧也不理解 additional_tools / base_instructions
+// 这套 Lite 方言，必须强制降级为标准 Responses，否则 tools 会整包丢失。
+func applyOpenAIResponsesLiteForUpstream(c *gin.Context, body []byte, upstreamModel string, forceStandard ...bool) ([]byte, bool, error) {
+	force := len(forceStandard) > 0 && forceStandard[0]
+	liteIn := isOpenAIResponsesLiteInbound(c, body)
+	if !force && !shouldDemoteOpenAIResponsesLite(liteIn, upstreamModel) {
 		return body, false, nil
 	}
-	next, _, err := demoteOpenAIResponsesLiteBody(body)
+	if force && !liteIn && !bytes.Contains(body, []byte(`"additional_tools"`)) &&
+		!bytes.Contains(body, []byte(openAIBaseInstructionsKind)) &&
+		!bytes.Contains(body, []byte(`"all_turns"`)) &&
+		!bytes.Contains(body, []byte(responsesLiteWSMetadataKey)) {
+		// 非 Lite 请求且无 Lite 特征：无需处理。
+		return body, false, nil
+	}
+	next, changed, err := demoteOpenAIResponsesLiteBody(body)
 	if err != nil {
 		return body, false, err
+	}
+	if !changed {
+		return body, false, nil
 	}
 	markOpenAIResponsesLiteDemoted(c)
 	return next, true, nil

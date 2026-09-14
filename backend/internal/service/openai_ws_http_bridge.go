@@ -572,16 +572,18 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	} else {
 		bridgeUpstreamModel = strings.TrimSpace(gjson.GetBytes(body, "model").String())
 	}
-	if demotedBody, demoted, demoteErr := applyOpenAIResponsesLiteForUpstream(c, body, bridgeUpstreamModel); demoteErr != nil {
+	forceStandardLite := account != nil && account.IsExternalBridge()
+	if demotedBody, demoted, demoteErr := applyOpenAIResponsesLiteForUpstream(c, body, bridgeUpstreamModel, forceStandardLite); demoteErr != nil {
 		return nil, fmt.Errorf("demote http bridge responses lite body: %w", demoteErr)
 	} else if demoted {
 		body = demotedBody
 		logOpenAIWSModeInfo(
-			"ingress_ws_http_bridge_responses_lite_demoted account_id=%d turn=%d original_model=%s upstream_model=%s",
+			"ingress_ws_http_bridge_responses_lite_demoted account_id=%d turn=%d original_model=%s upstream_model=%s force_standard=%v",
 			account.ID,
 			turn,
 			truncateOpenAIWSLogValue(originalModel, openAIWSLogValueMaxLen),
 			truncateOpenAIWSLogValue(bridgeUpstreamModel, openAIWSLogValueMaxLen),
+			forceStandardLite,
 		)
 	}
 	// 构建 codex call_id ↔ 上游 call_id 映射（本 turn 内）。客户端 payload 保持
