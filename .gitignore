@@ -94,6 +94,13 @@ temp/
 dist/
 build/
 release/
+.codex-release/
+*.tar.gz
+backend/sub2api-api-*
+backend/artifact-api/release-worktree-*/
+artifact-api/sub2api
+sub2api-api-*.tar.gz
+sub2api-frontend-*.zip
 
 # 后端嵌入的前端构建产物
 # Keep a placeholder file so `//go:embed all:dist` always has a match in CI/lint,
