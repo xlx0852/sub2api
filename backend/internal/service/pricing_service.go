@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -520,6 +521,12 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 		if entry.LongContextOutputCostMultiplier != nil {
 			pricing.LongContextOutputCostMultiplier = *entry.LongContextOutputCostMultiplier
 		}
+
+		// LiteLLM 风格的长上下文绝对价字段（如 input_cost_per_token_above_272k_tokens）
+		// 并未携带 multiplier。解析为「阈值 + 超阈值单价 / 基准单价」的倍率形式，
+		// 使 >threshold 的整请求按官方阶梯翻倍（见 gpt-6-astra、gpt-5.4 等）。
+		applyLiteLLMAbovePricing(rawEntry, pricing)
+
 		if entry.OutputCostPerImage != nil {
 			pricing.OutputCostPerImage = *entry.OutputCostPerImage
 		}
@@ -539,6 +546,100 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 	}
 
 	return result, nil
+}
+
+// liteLLMAboveFieldPattern 匹配 LiteLLM 长上下文绝对价字段，如
+// input_cost_per_token_above_272k_tokens / output_cost_per_token_above_200k_tokens /
+// cache_read_input_token_cost_above_200k_tokens / cache_creation_input_token_cost_above_200k_tokens。
+// 捕获组：1=价格槽位（input/output/cache_read_input/cache_creation_input），2=阈值（千 token）。
+var liteLLMAboveFieldPattern = regexp.MustCompile(
+	`^(input|output|cache_read_input|cache_creation_input)_cost_per_token(?:_priority)?_above_(\d+)k_tokens$`,
+)
+
+// applyLiteLLMAbovePricing 解析 LiteLLM 的 *_above_<N>k_tokens 绝对价字段，
+// 统一换算为 LongContextInputTokenThreshold + Input/Output 倍率。
+//
+// 语义对齐 computeTokenBreakdown：当整请求 input+ cache 超过阈值时，input/output/
+// cache_read/cache_creation 均按 multiplier 翻倍。LiteLLM 的 above 价本身就是「上下文
+// 超阈值时的整单单价」，所以 multiplier = abovePrice / basePrice。
+//
+// 已有显式 multiplier 字段时以显式值为准（如 gpt-5.6-luna 同时给两种格式）。
+func applyLiteLLMAbovePricing(rawEntry json.RawMessage, pricing *LiteLLMModelPricing) {
+	if pricing == nil {
+		return
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(rawEntry, &fields); err != nil {
+		return
+	}
+
+	type abovePrice struct {
+		slot      string // input / output / cache_read_input / cache_creation_input
+		threshold int    // tokens
+		price     float64
+		priority  bool
+	}
+	var found []abovePrice
+	for key, raw := range fields {
+		m := liteLLMAboveFieldPattern.FindStringSubmatch(key)
+		if m == nil {
+			continue
+		}
+		thresholdK, err := strconv.Atoi(m[2])
+		if err != nil || thresholdK <= 0 {
+			continue
+		}
+		var price float64
+		if err := json.Unmarshal(raw, &price); err != nil || price <= 0 {
+			continue
+		}
+		found = append(found, abovePrice{
+			slot:      m[1],
+			threshold: thresholdK * 1000,
+			price:     price,
+			priority:  strings.Contains(key, "_priority"),
+		})
+	}
+	if len(found) == 0 {
+		return
+	}
+
+	// 取最小的 above 阈值作为长上下文阈值（模型可能同时声明 200k/272k 多档，
+	// LiteLLM 对同族模型一般一致；取最小保证 earliest 触发，偏保守）。
+	minThreshold := 0
+	for _, f := range found {
+		if minThreshold == 0 || f.threshold < minThreshold {
+			minThreshold = f.threshold
+		}
+	}
+	if pricing.LongContextInputTokenThreshold <= 0 {
+		pricing.LongContextInputTokenThreshold = minThreshold
+	}
+
+	// 换算 multiplier：above/base。input 基准价与 output 基准价分别对应。
+	// cache_read/cache_creation 本身没有独立倍率字段，复用 input 侧倍率
+	// （computeTokenBreakdown 里 cacheRead 与 input 同乘 LongContextInputMultiplier）。
+	for _, f := range found {
+		if f.threshold != minThreshold {
+			continue
+		}
+		switch f.slot {
+		case "input":
+			if f.priority {
+				continue // priority above 价仅用于 priority tier，不驱动通用倍率
+			}
+			if pricing.InputCostPerToken > 0 && pricing.LongContextInputCostMultiplier <= 0 {
+				pricing.LongContextInputCostMultiplier = f.price / pricing.InputCostPerToken
+			}
+		case "output":
+			if f.priority {
+				continue
+			}
+			if pricing.OutputCostPerToken > 0 && pricing.LongContextOutputCostMultiplier <= 0 {
+				pricing.LongContextOutputCostMultiplier = f.price / pricing.OutputCostPerToken
+			}
+		}
+	}
 }
 
 // loadPricingData 从本地文件加载价格数据

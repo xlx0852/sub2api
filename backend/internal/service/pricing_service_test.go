@@ -702,3 +702,87 @@ func TestListModelNamesByProvider_EmptyCatalog(t *testing.T) {
 	require.NotNil(t, got)
 	require.Empty(t, got)
 }
+
+// LiteLLM 的 *_above_<N>k_tokens 绝对价字段（gpt-6-astra / claude-sonnet / gemini-pro 等）
+// 未带 multiplier 时，需换算成 threshold+multiplier 以触发长上下文翻倍。
+func TestParsePricingData_AboveAbsolutePricingConvertsToMultiplier(t *testing.T) {
+	body := []byte(`{
+		"gpt-6-astra": {
+			"input_cost_per_token": 1e-05,
+			"input_cost_per_token_above_272k_tokens": 2e-05,
+			"output_cost_per_token": 5e-05,
+			"output_cost_per_token_above_272k_tokens": 7.5e-05,
+			"cache_read_input_token_cost": 1e-06,
+			"cache_read_input_token_cost_above_272k_tokens": 2e-06,
+			"long_context_input_token_threshold": 272000
+		}
+	}`)
+	svc := &PricingService{}
+	data, err := svc.parsePricingData(body)
+	require.NoError(t, err)
+	p := data["gpt-6-astra"]
+	require.NotNil(t, p)
+	require.Equal(t, 272000, p.LongContextInputTokenThreshold)
+	require.InDelta(t, 2.0, p.LongContextInputCostMultiplier, 1e-12)
+	require.InDelta(t, 1.5, p.LongContextOutputCostMultiplier, 1e-12)
+}
+
+func TestParsePricingData_AboveFieldDerivesThresholdWhenMissing(t *testing.T) {
+	body := []byte(`{
+		"gpt-5.4": {
+			"input_cost_per_token": 2.5e-06,
+			"input_cost_per_token_above_272k_tokens": 5e-06,
+			"output_cost_per_token": 1.5e-05,
+			"output_cost_per_token_above_272k_tokens": 2.25e-05
+		}
+	}`)
+	svc := &PricingService{}
+	data, err := svc.parsePricingData(body)
+	require.NoError(t, err)
+	p := data["gpt-5.4"]
+	require.NotNil(t, p)
+	require.Equal(t, 272000, p.LongContextInputTokenThreshold)
+	require.InDelta(t, 2.0, p.LongContextInputCostMultiplier, 1e-12)
+	require.InDelta(t, 1.5, p.LongContextOutputCostMultiplier, 1e-12)
+}
+
+func TestParsePricingData_ExplicitMultiplierWinsOverAbove(t *testing.T) {
+	body := []byte(`{
+		"gpt-5.6-luna": {
+			"input_cost_per_token": 2e-07,
+			"input_cost_per_token_above_272k_tokens": 4e-07,
+			"output_cost_per_token": 1e-06,
+			"output_cost_per_token_above_272k_tokens": 2e-06,
+			"long_context_input_token_threshold": 272000,
+			"long_context_input_cost_multiplier": 2.0,
+			"long_context_output_cost_multiplier": 2.0
+		}
+	}`)
+	svc := &PricingService{}
+	data, err := svc.parsePricingData(body)
+	require.NoError(t, err)
+	p := data["gpt-5.6-luna"]
+	require.NotNil(t, p)
+	require.InDelta(t, 2.0, p.LongContextInputCostMultiplier, 1e-12)
+	require.InDelta(t, 2.0, p.LongContextOutputCostMultiplier, 1e-12)
+}
+
+func TestParsePricingData_AboveIgnoresPriorityAndNonPriceFields(t *testing.T) {
+	body := []byte(`{
+		"gemini-3.1-pro": {
+			"input_cost_per_token": 2e-06,
+			"input_cost_per_token_above_200k_tokens": 4e-06,
+			"input_cost_per_token_above_200k_tokens_priority": 8e-06,
+			"output_cost_per_token": 1.2e-05,
+			"output_cost_per_token_above_200k_tokens": 2.4e-05
+		}
+	}`)
+	svc := &PricingService{}
+	data, err := svc.parsePricingData(body)
+	require.NoError(t, err)
+	p := data["gemini-3.1-pro"]
+	require.NotNil(t, p)
+	require.Equal(t, 200000, p.LongContextInputTokenThreshold)
+	require.InDelta(t, 2.0, p.LongContextInputCostMultiplier, 1e-12)
+	require.InDelta(t, 2.0, p.LongContextOutputCostMultiplier, 1e-12)
+}
