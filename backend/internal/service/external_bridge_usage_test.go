@@ -55,3 +55,29 @@ func TestParseExternalBridgeUsage(t *testing.T) {
 	require.Equal(t, 78.0, *cursor.WeeklyQuotaRemaining)
 	require.True(t, *cursor.CapacityAvailable)
 }
+
+func TestParseExternalBridgeUsage_DevinZeroValueOmission(t *testing.T) {
+	dailyReset := time.Now().Add(12 * time.Hour).Unix()
+	weeklyReset := time.Now().Add(5 * 24 * time.Hour).Unix()
+
+	// 模拟 Proto3 场景：当日额度降为 0%，dailyQuotaRemainingPercent 字段被上游 omitempty 省略
+	usage := parseExternalBridgeUsage("devin", map[string]any{
+		"plan_status": map[string]any{
+			"plan_name":               "Pro",
+			"weekly_quota_remaining": 28.0,
+			"weekly_quota_reset":     float64(weeklyReset),
+			"daily_quota_reset":      float64(dailyReset),
+			// daily_quota_remaining 为 nil / 缺失
+		},
+	})
+
+	require.Equal(t, "devin", usage.Kind)
+	require.NotNil(t, usage.DailyQuotaReset)
+	require.NotNil(t, usage.DailyQuotaRemaining, "daily quota remaining should default to 0 when reset is present")
+	require.Equal(t, 0.0, *usage.DailyQuotaRemaining)
+
+	require.NotNil(t, usage.WeeklyQuotaReset)
+	require.NotNil(t, usage.WeeklyQuotaRemaining)
+	require.Equal(t, 28.0, *usage.WeeklyQuotaRemaining)
+}
+

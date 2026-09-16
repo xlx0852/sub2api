@@ -130,6 +130,16 @@ func parseExternalBridgeUsage(kind string, payload map[string]any) *ExternalBrid
 		usage.WeeklyQuotaRemaining = numberPtr(plan, "weekly_quota_remaining", "weekly_quota_remaining_percent", "weeklyQuotaRemainingPercent")
 		usage.DailyQuotaReset = unixTimePtr(plan, "daily_quota_reset", "daily_quota_reset_at_unix", "dailyQuotaResetAtUnix")
 		usage.WeeklyQuotaReset = unixTimePtr(plan, "weekly_quota_reset", "weekly_quota_reset_at_unix", "weeklyQuotaResetAtUnix")
+		// Proto3 规范下整型字段为 0 时会被 omitempty 省略。
+		// 当上游返回了重置时间戳（说明账号启用了日/周配额）但省略了 remaining 字段时，判定为额度耗尽（剩余 0%）。
+		if usage.DailyQuotaReset != nil && usage.DailyQuotaRemaining == nil {
+			zero := 0.0
+			usage.DailyQuotaRemaining = &zero
+		}
+		if usage.WeeklyQuotaReset != nil && usage.WeeklyQuotaRemaining == nil {
+			zero := 0.0
+			usage.WeeklyQuotaRemaining = &zero
+		}
 		return usage
 	}
 
