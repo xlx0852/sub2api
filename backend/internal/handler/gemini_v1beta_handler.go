@@ -252,19 +252,15 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 						zap.String("digest_chain", truncateDigestChain(geminiDigestChain)),
 					)
 
-					// 关键：如果原 sessionKey 为空，使用 prefixHash + uuid 作为 sessionKey
-					// 这样 SelectAccountWithLoadAwareness 的粘性会话逻辑会优先使用匹配到的账号
-					if sessionKey == "" {
-						sessionKey = service.GenerateGeminiDigestSessionKey(geminiPrefixHash, foundUUID)
-					}
+					// 关键：匹配到已有会话，使用该会话固定的 prefixHash + uuid 作为 sessionKey
+					// 确保 SelectAccountWithLoadAwareness 的粘性会话逻辑优先使用匹配到的账号
+					sessionKey = service.GenerateGeminiDigestSessionKey(geminiPrefixHash, foundUUID)
 					_ = h.gatewayService.BindStickySession(c.Request.Context(), apiKey.GroupID, sessionKey, foundAccountID)
 				} else {
 					// 生成新的会话 UUID
 					geminiSessionUUID = uuid.New().String()
-					// 为新会话也生成 sessionKey（用于后续请求的粘性会话）
-					if sessionKey == "" {
-						sessionKey = service.GenerateGeminiDigestSessionKey(geminiPrefixHash, geminiSessionUUID)
-					}
+					// 为新会话生成固定的 sessionKey（用于后续请求的粘性会话）
+					sessionKey = service.GenerateGeminiDigestSessionKey(geminiPrefixHash, geminiSessionUUID)
 				}
 			}
 		}

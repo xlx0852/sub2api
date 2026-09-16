@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log/slog"
 	mathrand "math/rand"
@@ -591,9 +592,9 @@ func (s *AntigravityGatewayService) wrapV1InternalRequest(projectID, model strin
 
 	if reqMap, ok := request.(map[string]any); ok {
 		// 确保 request 包含 sessionId（与 CPA 行为一致）
-		if _, ok := reqMap["sessionId"]; !ok {
-			n := mathrand.Int63n(9_000_000_000_000_000_000)
-			reqMap["sessionId"] = fmt.Sprintf("-%d", n)
+		// 优先从请求内容派生稳定的负数 int64，确保同会话多轮交互命中 Google TPU 节点的 KV Cache
+		if sid, ok := reqMap["sessionId"]; !ok || strings.TrimSpace(fmt.Sprint(sid)) == "" {
+			reqMap["sessionId"] = deriveStableAntigravitySessionID(originalBody)
 		}
 		// Gemini 模型限制 maxOutputTokens 不能超过 65536（Google API 会直接 400 报错）
 		if genConfig, ok := reqMap["generationConfig"].(map[string]any); ok {
@@ -620,6 +621,73 @@ func (s *AntigravityGatewayService) wrapV1InternalRequest(projectID, model strin
 	}
 
 	return json.Marshal(wrapped)
+}
+
+// deriveStableAntigravitySessionID 从请求体派生稳定的会话 ID（负数 int64 字符串），
+// 确保同一会话的多轮交互向 Google Cloud Code (Antigravity/CPA) 提交一致的 sessionId，
+// 从而由 Google 负载均衡器命中相同 TPU 节点的 KV Cache。
+func deriveStableAntigravitySessionID(body []byte) string {
+	if len(body) == 0 {
+		n := mathrand.Int63n(9_000_000_000_000_000_000)
+		return fmt.Sprintf("-%d", n)
+	}
+
+	// 1. 如果客户端已显式传了 sessionId，优先提取使用
+	for _, path := range []string{"sessionId", "session_id", "request.sessionId", "request.session_id"} {
+		if sid := strings.TrimSpace(gjson.GetBytes(body, path).String()); sid != "" {
+			if strings.HasPrefix(sid, "-") {
+				return sid
+			}
+			h := fnv.New64a()
+			_, _ = h.Write([]byte(sid))
+			n := int64(h.Sum64() % 9_000_000_000_000_000_000)
+			if n == 0 {
+				n = 1
+			}
+			return fmt.Sprintf("-%d", n)
+		}
+	}
+
+	// 2. 提取系统提示词 (systemInstruction) + 首个 user turn 作为会话根标识
+	var sb strings.Builder
+	sys := gjson.GetBytes(body, "systemInstruction")
+	if !sys.Exists() {
+		sys = gjson.GetBytes(body, "system_instruction")
+	}
+	if !sys.Exists() {
+		sys = gjson.GetBytes(body, "request.systemInstruction")
+	}
+	if sys.Exists() {
+		sb.WriteString(sys.Raw)
+		sb.WriteString("|")
+	}
+
+	contents := gjson.GetBytes(body, "contents")
+	if !contents.IsArray() {
+		contents = gjson.GetBytes(body, "request.contents")
+	}
+	if contents.IsArray() {
+		for _, content := range contents.Array() {
+			if content.Get("role").String() == "user" {
+				sb.WriteString(content.Raw)
+				break
+			}
+		}
+	}
+
+	if sb.Len() > 0 {
+		h := fnv.New64a()
+		_, _ = h.Write([]byte(sb.String()))
+		n := int64(h.Sum64() % 9_000_000_000_000_000_000)
+		if n == 0 {
+			n = 1
+		}
+		return fmt.Sprintf("-%d", n)
+	}
+
+	// 无法提取任何根内容时（如空请求），兜底使用随机数
+	n := mathrand.Int63n(9_000_000_000_000_000_000)
+	return fmt.Sprintf("-%d", n)
 }
 
 // unwrapV1InternalResponse 解包 v1internal 响应

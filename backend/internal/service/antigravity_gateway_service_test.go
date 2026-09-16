@@ -1124,3 +1124,56 @@ func TestWrapV1InternalRequest_InjectsSessionIDAndStripsMaxOutputTokens(t *testi
 	require.False(t, hasMax, "maxOutputTokens must be stripped for Gemini models")
 	require.Equal(t, 0.5, genConfig["temperature"])
 }
+
+func TestWrapV1InternalRequest_StableSessionIDAcrossTurns(t *testing.T) {
+	svc := &AntigravityGatewayService{}
+
+	// Turn 1: user asks a question
+	turn1 := []byte(`{
+		"systemInstruction": {"parts": [{"text": "You are a helpful assistant."}]},
+		"contents": [{"role": "user", "parts": [{"text": "Hello world"}]}]
+	}`)
+
+	wrappedBytes1, err := svc.wrapV1InternalRequest("test-project", "gemini-3.8-flash-high", turn1)
+	require.NoError(t, err)
+
+	var wrapped1 map[string]any
+	require.NoError(t, json.Unmarshal(wrappedBytes1, &wrapped1))
+	sessionID1 := wrapped1["request"].(map[string]any)["sessionId"].(string)
+	require.True(t, strings.HasPrefix(sessionID1, "-"))
+
+	// Turn 2: conversation grows (assistant replies, user follows up)
+	turn2 := []byte(`{
+		"systemInstruction": {"parts": [{"text": "You are a helpful assistant."}]},
+		"contents": [
+			{"role": "user", "parts": [{"text": "Hello world"}]},
+			{"role": "model", "parts": [{"text": "Hi! How can I help you?"}]},
+			{"role": "user", "parts": [{"text": "Explain quantum computing"}]}
+		]
+	}`)
+
+	wrappedBytes2, err := svc.wrapV1InternalRequest("test-project", "gemini-3.8-flash-high", turn2)
+	require.NoError(t, err)
+
+	var wrapped2 map[string]any
+	require.NoError(t, json.Unmarshal(wrappedBytes2, &wrapped2))
+	sessionID2 := wrapped2["request"].(map[string]any)["sessionId"].(string)
+
+	// Turn 1 and Turn 2 must share the exact same sessionId for TPU KV cache routing!
+	require.Equal(t, sessionID1, sessionID2, "sessionId must be stable across turns of the same conversation")
+
+	// Different conversation: different user prompt -> different sessionId
+	diffTurn := []byte(`{
+		"systemInstruction": {"parts": [{"text": "You are a helpful assistant."}]},
+		"contents": [{"role": "user", "parts": [{"text": "Completely different conversation"}]}]
+	}`)
+
+	wrappedBytesDiff, err := svc.wrapV1InternalRequest("test-project", "gemini-3.8-flash-high", diffTurn)
+	require.NoError(t, err)
+
+	var wrappedDiff map[string]any
+	require.NoError(t, json.Unmarshal(wrappedBytesDiff, &wrappedDiff))
+	sessionIDDiff := wrappedDiff["request"].(map[string]any)["sessionId"].(string)
+	require.NotEqual(t, sessionID1, sessionIDDiff, "different conversations must have different sessionIds")
+}
+
