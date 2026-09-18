@@ -151,7 +151,6 @@ func TestOpenAICapacityABBodyExcerptOmitsPrompt(t *testing.T) {
 func TestOpenAICapacityABOKSamplingSkip(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(openAICapacityABDumpEnv, dir)
-	openAICapacityABDumpOKSeq.Store(0)
 	svc := &OpenAIGatewayService{cfg: &config.Config{}}
 	svc.cfg.Gateway.OpenAICapacityABDumpOKEvery = 3
 	headers := http.Header{}

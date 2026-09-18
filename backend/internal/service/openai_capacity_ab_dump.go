@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -22,8 +21,6 @@ const (
 	openAICapacityABDumpGinKey         = "openai_capacity_ab_dumped"
 	openAICapacityABDumpEntryKey       = "openai_capacity_ab_entry"
 )
-
-var openAICapacityABDumpOKSeq atomic.Uint64
 
 // openAICapacityABDumpRecord is the redacted A/B sample written for capacity vs ok.
 type openAICapacityABDumpRecord struct {
@@ -149,7 +146,7 @@ func (s *OpenAIGatewayService) maybeDumpOpenAICapacityAB(in openAICapacityABDump
 		if every < 0 {
 			return
 		}
-		n := openAICapacityABDumpOKSeq.Add(1)
+		n := s.openAICapacityABDumpOKSeq.Add(1)
 		if n%uint64(every) != 0 {
 			return
 		}
