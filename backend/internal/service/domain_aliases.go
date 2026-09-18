@@ -220,6 +220,13 @@ type OpsOpenAITokenStatsFilter = domain.OpsOpenAITokenStatsFilter
 type OpsOpenAITokenStatsItem = domain.OpsOpenAITokenStatsItem
 type OpsOpenAITokenStatsResponse = domain.OpsOpenAITokenStatsResponse
 type OpsPercentiles = domain.OpsPercentiles
+type OpsPerformanceDeltas = domain.OpsPerformanceDeltas
+type OpsPerformanceFilter = domain.OpsPerformanceFilter
+type OpsPerformanceMetric = domain.OpsPerformanceMetric
+type OpsPerformancePoint = domain.OpsPerformancePoint
+type OpsPerformanceResponse = domain.OpsPerformanceResponse
+type OpsPerformanceSummary = domain.OpsPerformanceSummary
+type OpsPerformanceWindow = domain.OpsPerformanceWindow
 type OpsQueryMode = domain.OpsQueryMode
 
 const OpsQueryModeAuto = domain.OpsQueryModeAuto

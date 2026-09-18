@@ -32,6 +32,37 @@ func TestParseTimeRange(t *testing.T) {
 	require.False(t, end.IsZero())
 }
 
+func TestParseComparisonTimeRangeRequiresEqualPositiveDuration(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	start := time.Date(2026, 9, 18, 1, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour)
+	c.Request = httptest.NewRequest(http.MethodGet, "/?comparison_start_time=2026-09-18T00:00:00Z&comparison_end_time=2026-09-18T01:00:00Z", nil)
+	comparisonStart, comparisonEnd, err := parseComparisonTimeRange(c, start, end)
+	require.NoError(t, err)
+	require.Equal(t, time.Hour, comparisonEnd.Sub(comparisonStart))
+
+	c2, _ := gin.CreateTestContext(w)
+	c2.Request = httptest.NewRequest(http.MethodGet, "/?comparison_start_time=2026-09-18T00:00:00Z&comparison_end_time=2026-09-18T02:00:00Z", nil)
+	_, _, err = parseComparisonTimeRange(c2, start, end)
+	require.Error(t, err)
+}
+
+func TestParseComparisonTimeRangeEmptyIsDisabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	start := time.Now().Add(-time.Hour)
+	end := time.Now()
+	comparisonStart, comparisonEnd, err := parseComparisonTimeRange(c, start, end)
+	require.NoError(t, err)
+	require.True(t, comparisonStart.IsZero())
+
+	require.True(t, comparisonEnd.IsZero())
+}
+
 func TestParseOpsViewParam(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

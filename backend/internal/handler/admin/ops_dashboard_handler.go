@@ -249,6 +249,113 @@ func (h *OpsHandler) GetDashboardErrorDistribution(c *gin.Context) {
 	response.Success(c, data)
 }
 
+// GetDashboardPerformance returns model performance KPIs and bounded request points.
+// GET /api/v1/admin/ops/dashboard/performance
+func (h *OpsHandler) GetDashboardPerformance(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	start, end, err := parseOpsTimeRange(c, "1h")
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	requestType, err := parseOpsRequestType(c)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	groupID, err := parseOpsOptionalPositiveInt64(c.Query("group_id"))
+	if err != nil {
+		response.BadRequest(c, "Invalid group_id")
+		return
+	}
+	pointLimit := 500
+	if raw := strings.TrimSpace(c.Query("point_limit")); raw != "" {
+		pointLimit, err = strconv.Atoi(raw)
+		if err != nil || pointLimit < 1 || pointLimit > 2000 {
+			response.BadRequest(c, "Invalid point_limit")
+			return
+		}
+	}
+	filter := &service.OpsPerformanceFilter{StartTime: start, EndTime: end, Platform: strings.TrimSpace(c.Query("platform")), Model: strings.TrimSpace(c.Query("model")), GroupID: groupID, RequestType: requestType, PointLimit: pointLimit}
+
+	var comparison *service.OpsPerformanceFilter
+	compare := strings.EqualFold(strings.TrimSpace(c.Query("compare")), "true") || c.Query("compare") == "1"
+	comparisonStart, comparisonEnd, comparisonErr := parseComparisonTimeRange(c, start, end)
+	if comparisonErr != nil {
+		response.BadRequest(c, comparisonErr.Error())
+		return
+	}
+	if compare && comparisonStart.IsZero() && comparisonEnd.IsZero() {
+		comparisonStart, comparisonEnd = start.Add(-end.Sub(start)), start
+	}
+	if compare || !comparisonStart.IsZero() || !comparisonEnd.IsZero() {
+		comparison = &service.OpsPerformanceFilter{StartTime: comparisonStart, EndTime: comparisonEnd, Platform: filter.Platform, Model: filter.Model, GroupID: groupID, RequestType: requestType, PointLimit: pointLimit}
+	}
+	timezone := strings.TrimSpace(c.Query("timezone"))
+	if timezone == "" {
+		timezone = "UTC"
+	}
+	data, err := h.opsService.GetPerformanceAnalytics(c.Request.Context(), filter, comparison, timezone)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
+func parseOpsOptionalPositiveInt64(raw string) (*int64, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	value, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil || value <= 0 {
+		return nil, fmt.Errorf("invalid positive integer")
+	}
+	return &value, nil
+}
+
+func parseComparisonTimeRange(c *gin.Context, start, end time.Time) (time.Time, time.Time, error) {
+	comparisonStartRaw := strings.TrimSpace(c.Query("comparison_start_time"))
+	comparisonEndRaw := strings.TrimSpace(c.Query("comparison_end_time"))
+	if comparisonStartRaw == "" && comparisonEndRaw == "" {
+		return time.Time{}, time.Time{}, nil
+	}
+	parseTS := func(value string) (time.Time, error) {
+		if value == "" {
+			return time.Time{}, nil
+		}
+		if parsed, err := time.Parse(time.RFC3339Nano, value); err == nil {
+			return parsed, nil
+		}
+		return time.Parse(time.RFC3339, value)
+	}
+	comparisonStart, err := parseTS(comparisonStartRaw)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("invalid comparison_start_time")
+	}
+	comparisonEnd, err := parseTS(comparisonEndRaw)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("invalid comparison_end_time")
+	}
+	if comparisonEnd.IsZero() {
+		comparisonEnd = comparisonStart.Add(end.Sub(start))
+	}
+	if comparisonStart.IsZero() {
+		comparisonStart = comparisonEnd.Add(-end.Sub(start))
+	}
+	if !comparisonStart.Before(comparisonEnd) || comparisonEnd.Sub(comparisonStart) != end.Sub(start) {
+		return time.Time{}, time.Time{}, fmt.Errorf("comparison window must have the same positive duration")
+	}
+	return comparisonStart, comparisonEnd, nil
+}
+
 // GetDashboardOpenAITokenStats returns OpenAI token efficiency stats grouped by model.
 // GET /api/v1/admin/ops/dashboard/openai-token-stats
 func (h *OpsHandler) GetDashboardOpenAITokenStats(c *gin.Context) {

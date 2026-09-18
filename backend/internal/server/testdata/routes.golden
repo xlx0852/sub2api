@@ -113,6 +113,7 @@ GET /api/v1/admin/ops/dashboard/error-trend
 GET /api/v1/admin/ops/dashboard/latency-histogram
 GET /api/v1/admin/ops/dashboard/openai-token-stats
 GET /api/v1/admin/ops/dashboard/overview
+GET /api/v1/admin/ops/dashboard/performance
 GET /api/v1/admin/ops/dashboard/snapshot-v2
 GET /api/v1/admin/ops/dashboard/throughput-trend
 GET /api/v1/admin/ops/email-notification/config

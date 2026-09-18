@@ -12,7 +12,7 @@
 
       <nav
         v-if="opsEnabled && !isFullscreen && !(loading && !hasLoadedOnce)"
-        class="grid grid-cols-3 gap-1 rounded-xl border border-black/[0.08] bg-black/[0.035] p-1 dark:border-white/[0.09] dark:bg-white/[0.05]"
+        class="grid grid-cols-2 gap-1 rounded-xl border border-black/[0.08] bg-black/[0.035] p-1 dark:border-white/[0.09] dark:bg-white/[0.05] md:grid-cols-4"
         :aria-label="t('admin.ops.sections.label')"
       >
         <button
@@ -135,6 +135,15 @@
         />
       </div>
 
+      <OpsPerformanceAnalytics
+        v-if="opsEnabled && !(loading && !hasLoadedOnce) && !isFullscreen && activeSection === 'performance'"
+        :time-range="timeRange"
+        :platform="platform"
+        :group-id="groupId"
+        :request-type="requestType"
+        :refresh-token="dashboardRefreshToken"
+      />
+
       <!-- Alert Events -->
       <OpsAlertEventsCard
         v-if="opsEnabled && showAlertEvents && !(loading && !hasLoadedOnce) && (isFullscreen || activeSection === 'records')"
@@ -218,6 +227,7 @@ import OpsOpenAITokenStatsCard from '@/views/admin/ops/components/OpsOpenAIToken
 import OpsSystemLogTable from '@/views/admin/ops/components/OpsSystemLogTable.vue'
 import OpsRequestDetailsModal, { type OpsRequestDetailsPreset } from '@/views/admin/ops/components/OpsRequestDetailsModal.vue'
 import OpsProviderStatusCard from '@/views/admin/ops/components/OpsProviderStatusCard.vue'
+import OpsPerformanceAnalytics from '@/views/admin/ops/components/OpsPerformanceAnalytics.vue'
 import OpsSettingsDialog from '@/views/admin/ops/components/OpsSettingsDialog.vue'
 import OpsAlertRulesCard from '@/views/admin/ops/components/OpsAlertRulesCard.vue'
 
@@ -229,11 +239,12 @@ const { t } = useI18n()
 
 const opsEnabled = computed(() => adminSettingsStore.opsMonitoringEnabled)
 
-type DashboardSection = 'overview' | 'analysis' | 'records'
+type DashboardSection = 'overview' | 'analysis' | 'performance' | 'records'
 const activeSection = ref<DashboardSection>('overview')
 const dashboardSections = computed<Array<{ value: DashboardSection; label: string }>>(() => [
   { value: 'overview', label: t('admin.ops.sections.overview') },
   { value: 'analysis', label: t('admin.ops.sections.analysis') },
+  { value: 'performance', label: t('admin.ops.sections.performance') },
   { value: 'records', label: t('admin.ops.sections.records') }
 ])
 

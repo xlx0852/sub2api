@@ -263,6 +263,81 @@ export interface OpsOpenAITokenStatsParams {
   top_n?: number
 }
 
+export interface OpsPerformanceMetric {
+  p50?: number | null
+  p90?: number | null
+  unit: 'ms' | 'tok/s' | 'tok'
+  sample_count: number
+  coverage: number
+}
+
+export interface OpsPerformanceSummary {
+  request_count: number
+  success_count: number
+  failure_count: number
+  success_rate?: number | null
+  ttft: OpsPerformanceMetric
+  generation_tps: OpsPerformanceMetric
+  duration: OpsPerformanceMetric
+  input_tokens: OpsPerformanceMetric
+}
+
+export interface OpsPerformancePoint {
+  at: string
+  model: string
+  success: boolean
+  status_code?: number | null
+  ttft_ms?: number | null
+  generation_tps?: number | null
+  duration_ms?: number | null
+  input_tokens?: number | null
+  failure_type?: string
+}
+
+export interface OpsPerformanceWindow {
+  start_time: string
+  end_time: string
+  summary: OpsPerformanceSummary
+  points: OpsPerformancePoint[]
+  point_limit: number
+  points_sampled: boolean
+}
+
+export interface OpsPerformanceDeltas {
+  success_rate?: number | null
+  ttft_p50?: number | null
+  generation_tps_p50?: number | null
+  duration_p50?: number | null
+  input_tokens_p50?: number | null
+}
+
+export interface OpsPerformanceResponse {
+  generated_at: string
+  comparison_deltas?: OpsPerformanceDeltas | null
+  timezone: string
+  window: OpsPerformanceWindow
+  comparison?: OpsPerformanceWindow | null
+}
+
+export interface OpsPerformanceQueryParams extends OpsDashboardQueryParams {
+  model?: string
+  point_limit?: number
+  compare?: boolean
+  comparison_start_time?: string
+  comparison_end_time?: string
+  timezone?: string
+}
+
+export async function getDashboardPerformance(
+  params: OpsPerformanceQueryParams,
+  options: OpsRequestOptions = {}
+): Promise<OpsPerformanceResponse> {
+  const { data } = await apiClient.get<OpsPerformanceResponse>('/admin/ops/dashboard/performance', {
+    params,
+    signal: options.signal
+  })
+  return data
+}
 export interface OpsSystemMetricsSnapshot {
   id: number
   created_at: string
@@ -1368,6 +1443,7 @@ export const opsAPI = {
   getErrorTrend,
   getErrorDistribution,
   getOpenAITokenStats,
+  getDashboardPerformance,
   getProviderStatus,
   listProviderStatusHistory,
   getConcurrencyStats,
