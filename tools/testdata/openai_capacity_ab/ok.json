@@ -1,0 +1,47 @@
+{
+  "ts": "2026-09-17T13:41:56.110799Z",
+  "label": "ok",
+  "entry": "codex_cli_responses_http",
+  "http_status": 200,
+  "semantic_status": 200,
+  "model": "gpt-6-astra",
+  "upstream_model": "gpt-5.6-luna",
+  "account_type": "chatgpt_oauth",
+  "originator": "codex_cli_rs",
+  "event_type": "response.completed",
+  "error_type": null,
+  "error_code": null,
+  "error_message": null,
+  "capacity_shed": false,
+  "headers": {},
+  "codex_snapshot": null,
+  "account_quota": null,
+  "stream_events": [
+    "response.created",
+    "response.in_progress",
+    "response.output_item.added",
+    "response.content_part.added",
+    "response.output_text.delta",
+    "response.output_text.done",
+    "response.content_part.done",
+    "response.output_item.done",
+    "response.completed"
+  ],
+  "response_id": "resp_0310fdc4f282debe016aabee0abc8887d0b6d98783e56a2d9c",
+  "service_tier_created": "auto",
+  "service_tier_failed": null,
+  "usage": {
+    "input_tokens": 19696,
+    "output_tokens": 5,
+    "total_tokens": 19701,
+    "input_tokens_details": {
+      "cache_write_tokens": 0,
+      "cached_tokens": 0
+    },
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    }
+  },
+  "has_rate_limit_object": false,
+  "body_excerpt": "{\"type\": \"response.completed\", \"response.status\": \"completed\", \"response.model\": \"gpt-5.6-luna\", \"response.id\": \"resp_0310fdc4f282debe016aabee0abc8887d0b6d98783e56a2d9c\", \"response.usage\": {\"input_tokens\": 19696, \"output_tokens\": 5, \"total_tokens\": 19701, \"input_tokens_details\": {\"cache_write_tokens\": 0, \"cached_tokens\": 0}, \"output_tokens_details\": {\"reasoning_tokens\": 0}}}"
+}

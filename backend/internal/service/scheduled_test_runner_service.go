@@ -509,6 +509,11 @@ func shouldDemoteAfterDiagnosticsFailure(errMsg string) bool {
 		"usage_limit_reached",
 		"concurrency limit exceeded",
 		"429",
+		"overloaded",
+		"server_is_overloaded",
+		"at capacity",
+		"502",
+		"503",
 	}
 	for _, m := range quotaMarkers {
 		if strings.Contains(msg, m) {

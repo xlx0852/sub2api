@@ -430,6 +430,23 @@ gateway:
   # Max bytes to log from upstream error body
   # 记录上游错误响应体的最大字节数
   log_upstream_error_body_max_bytes: 2048
+  # Force-replay a successful x-codex-turn-state on later OAuth /responses.
+  # Client inbound values are ignored. Only completed tokens are stored.
+  # 强制回放账号上成功签发的 x-codex-turn-state；忽略客户端入站值。不存 capacity 签发。默认开启。
+  openai_codex_turn_state_reuse_enabled: true
+  # Max age of a cached successful token in seconds. 0=1800.
+  # 成功 token 最长回放秒数；0=1800。
+  openai_codex_turn_state_reuse_ttl_seconds: 1800
+  # Local A/B dump dir for OpenAI capacity vs ok responses. Empty=off.
+  # Captures redacted upstream status/headers/error shape for
+  # "Selected model is at capacity" vs successful requests.
+  # Env SUB2API_OPENAI_CAPACITY_AB_DUMP overrides this path.
+  # OpenAI 容量错误 vs 成功请求的本地对照 dump 目录，空=关闭。
+  # 只写打码后的 status/headers/error 形态，不含 token/cookie/prompt。
+  openai_capacity_ab_dump_dir: ""
+  # Sample 1 successful request every N times. 0=default 20. Negative=disable ok samples.
+  # 成功路径每 N 次采样 1 次；0=默认 20；负数=不采样成功请求。capacity 始终全量。
+  openai_capacity_ab_dump_ok_every: 20
   # Auto inject anthropic-beta header for API-key accounts when needed (default: off)
   # 需要时自动为 API-key 账户注入 anthropic-beta 头（默认：关闭）
   inject_beta_for_apikey: false

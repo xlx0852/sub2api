@@ -48,6 +48,11 @@ func (s *OpenAIGatewayService) markOpenAIStreamTerminalError(
 
 	MarkOpsStreamError(c, errType, message, semanticStatus)
 	setOpsUpstreamError(c, semanticStatus, message, detail)
+	entry := "http_stream"
+	if passthrough {
+		entry = "http_passthrough_stream"
+	}
+	s.dumpOpenAICapacityABStream(c, account, entry, http.StatusOK, nil, payload, message, "")
 	event := OpsUpstreamErrorEvent{
 		Platform:           PlatformOpenAI,
 		UpstreamStatusCode: semanticStatus,

@@ -392,6 +392,9 @@ func (s *OpenAIGatewayService) forwardOpenAIMessagesRelay(ex *pipeline.Exchange)
 			s.updateCodexUsageSnapshot(ctx, account.ID, snapshot)
 		}
 	}
+	if handleErr == nil && st.resp != nil && account.Platform == PlatformOpenAI {
+		s.dumpOpenAICapacityABHTTP(st.c, account, st.resp, "http_messages", firstNonEmpty(st.originalModel, st.billingModel, st.upstreamModel), "", nil, true)
+	}
 
 	st.result = result
 	return handleErr

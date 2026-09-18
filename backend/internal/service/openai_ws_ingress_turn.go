@@ -403,6 +403,9 @@ func (sess *openAIWSIngressSession) runWSTurns(firstPayload openAIWSClientPayloa
 	token := sess.token
 	hooks := sess.hooks
 	isCodexCLI := sess.isCodexCLI
+	if sess.turnState == "" {
+		sess.turnState = s.fallbackOpenAICodexTurnState(account, "")
+	}
 	wsHeaders, _, buildHdrErr := s.buildOpenAIWSHeaders(ctx, c, account, token, sess.wsDecision, isCodexCLI, sess.turnState, strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader)), firstPayload.promptCacheKey)
 	if buildHdrErr != nil {
 		return fmt.Errorf("build ws headers: %w", buildHdrErr)

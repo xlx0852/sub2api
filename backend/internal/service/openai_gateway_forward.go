@@ -15,6 +15,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 )
 
 // Forward forwards request to OpenAI API.
@@ -351,6 +352,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	// 终态收口：originator 必须与最终 User-Agent 首段配套且为官方身份，否则上游 404（issue #3901）。
 	if account.Type == AccountTypeOAuth {
 		s.codexIdentity.enforceHeadersWithUA(req.Header, s.codexIdentityOverrideUA(account))
+		s.applyOpenAICodexTurnStateReuseForModel(req.Header, account, strings.TrimSpace(gjson.GetBytes(body, "model").String()))
 	}
 
 	// Ensure required headers exist

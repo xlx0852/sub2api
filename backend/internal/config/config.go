@@ -661,10 +661,14 @@ func setDefaults() {
 	viper.SetDefault("gateway.openai_high_effort_first_output_timeout_seconds", 0)
 	viper.SetDefault("gateway.log_upstream_error_body", true)
 	viper.SetDefault("gateway.log_upstream_error_body_max_bytes", 2048)
+	viper.SetDefault("gateway.openai_capacity_ab_dump_dir", "")
+	viper.SetDefault("gateway.openai_capacity_ab_dump_ok_every", 20)
 	viper.SetDefault("gateway.inject_beta_for_apikey", false)
 	viper.SetDefault("gateway.failover_on_400", false)
 	viper.SetDefault("gateway.max_account_switches", 10)
 	viper.SetDefault("gateway.max_account_switches_gemini", 3)
+	viper.SetDefault("gateway.openai_codex_turn_state_reuse_enabled", true)
+	viper.SetDefault("gateway.openai_codex_turn_state_reuse_ttl_seconds", 1800)
 	viper.SetDefault("gateway.force_codex_cli", false)
 	viper.SetDefault("gateway.openai_user_pin_enabled", false)
 	viper.SetDefault("gateway.codex_image_generation_bridge_enabled", false)
@@ -1413,6 +1417,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.ProxyProbeResponseReadMaxBytes <= 0 {
 		return fmt.Errorf("gateway.proxy_probe_response_read_max_bytes must be positive")
+	}
+	if envDump := strings.TrimSpace(os.Getenv("SUB2API_OPENAI_CAPACITY_AB_DUMP")); envDump != "" {
+		c.Gateway.OpenAICapacityABDumpDir = envDump
 	}
 	if c.Gateway.ResponseHeaderTimeout < 0 {
 		return fmt.Errorf("gateway.response_header_timeout must be non-negative")

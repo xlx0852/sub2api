@@ -171,6 +171,10 @@ func (s *OpenAIGatewayService) SelectAccountForModelWithExclusions(ctx context.C
 	if selection.ReleaseFunc != nil {
 		selection.Release()
 	}
+	if openAICodexTurnStateReuseEnabled(s.cfg) &&
+		!accountHasOpenAICodexTurnStateReserve(selection.Account, time.Now(), openAICodexTurnStateReuseTTL(s.cfg)) {
+		s.scheduleOpenAICodexTurnStateRefresh(selection.Account)
+	}
 	return selection.Account, nil
 }
 

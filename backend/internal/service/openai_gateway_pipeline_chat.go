@@ -282,6 +282,9 @@ func (s *OpenAIGatewayService) forwardOpenAIChatRelay(ex *pipeline.Exchange) err
 			s.updateCodexUsageSnapshot(ctx, account.ID, snapshot)
 		}
 	}
+	if handleErr == nil && st.resp != nil {
+		s.dumpOpenAICapacityABHTTP(c, account, st.resp, "http_chat", firstNonEmpty(st.originalModel, st.billingModel, st.upstreamModel), "", nil, true)
+	}
 
 	st.result = result
 	return handleErr

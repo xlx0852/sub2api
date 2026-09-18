@@ -65,6 +65,8 @@ func TestShouldDemoteAfterDiagnosticsFailure(t *testing.T) {
 	require.False(t, shouldDemoteAfterDiagnosticsFailure("context deadline exceeded"))
 	require.False(t, shouldDemoteAfterDiagnosticsFailure("model_not_found"))
 	require.False(t, shouldDemoteAfterDiagnosticsFailure("429 rate limit"))
+	require.False(t, shouldDemoteAfterDiagnosticsFailure("all diagnostic models failed\n- gpt-6-astra: server_is_overloaded"))
+	require.False(t, shouldDemoteAfterDiagnosticsFailure("all diagnostic models failed\n- gpt-6-astra: API returned 503"))
 	require.True(t, shouldDemoteAfterDiagnosticsFailure("401 unauthorized invalid api key"))
 	require.True(t, shouldDemoteAfterDiagnosticsFailure("account disabled"))
 	require.False(t, shouldDemoteAfterDiagnosticsFailure("random unknown failure"))

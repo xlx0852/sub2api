@@ -35,6 +35,9 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	if s == nil || account == nil {
 		return nil, wrapOpenAIWSFallback("invalid_state", errors.New("service or account is nil"))
 	}
+	if c != nil {
+		c.Set(openAICapacityABDumpEntryKey, "ws_v2")
+	}
 
 	wsURL, err := s.buildOpenAIResponsesWSURL(account)
 	if err != nil {
@@ -80,7 +83,6 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	turnState := ""
 	turnMetadata := ""
 	if c != nil && c.Request != nil {
-		turnState = strings.TrimSpace(c.GetHeader(openAIWSTurnStateHeader))
 		turnMetadata = strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader))
 	}
 	setOpenAIWSTurnMetadata(payload, turnMetadata)
@@ -123,6 +125,9 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			turnState = savedTurnState
 		}
 	}
+	if turnState == "" {
+		turnState = s.fallbackOpenAICodexTurnState(account, "")
+	}
 	preferredConnID := ""
 	if stateStore != nil && previousResponseID != "" {
 		if connID, ok := stateStore.GetResponseConn(previousResponseID); ok {
@@ -138,7 +143,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	storeDisabledConnMode := s.openAIWSStoreDisabledConnMode()
 	forceNewConnByPolicy := shouldForceNewConnOnStoreDisabled(storeDisabledConnMode, lastFailureReason)
 	forceNewConn := forceNewConnByPolicy && storeDisabled && previousResponseID == "" && sessionHash != "" && preferredConnID == ""
-	wsHeaders, sessionResolution, buildHdrErr := s.buildOpenAIWSHeaders(ctx, c, account, token, decision, isCodexCLI, turnState, turnMetadata, promptCacheKey)
+	wsHeaders, sessionResolution, buildHdrErr := s.buildOpenAIWSHeaders(ctx, c, account, token, decision, isCodexCLI, turnState, turnMetadata, promptCacheKey, firstNonEmpty(mappedModel, originalModel))
 	if buildHdrErr != nil {
 		return nil, fmt.Errorf("build ws headers: %w", buildHdrErr)
 	}
@@ -228,6 +233,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		var dialErr *openAIWSDialError
 		if errors.As(err, &dialErr) && dialErr != nil && dialErr.StatusCode == http.StatusTooManyRequests {
 			s.persistOpenAIWSRateLimitSignal(ctx, account, dialErr.ResponseHeaders, nil, "rate_limit_exceeded", "rate_limit_error", strings.TrimSpace(err.Error()))
+			s.dumpOpenAICapacityABStream(c, account, "ws_handshake", dialErr.StatusCode, dialErr.ResponseHeaders, nil, strings.TrimSpace(err.Error()), originalModel)
 		}
 		return nil, wrapOpenAIWSFallback(classifyOpenAIWSAcquireError(err), err)
 	}
@@ -556,6 +562,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		if eventType == "error" {
 			errCodeRaw, errTypeRaw, errMsgRaw := parseOpenAIWSErrorEventFields(message)
 			s.persistOpenAIWSRateLimitSignal(ctx, account, lease.HandshakeHeaders(), message, errCodeRaw, errTypeRaw, errMsgRaw)
+			s.dumpOpenAICapacityABStream(c, account, "ws_v2", http.StatusOK, lease.HandshakeHeaders(), message, errMsgRaw, originalModel)
 			errMsg := strings.TrimSpace(errMsgRaw)
 			if errMsg == "" {
 				errMsg = "Upstream websocket error"
@@ -652,6 +659,24 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		}
 
 		if isTerminalEvent {
+			if eventType == "response.completed" || eventType == "response.done" {
+				// 归槽以响应真实落点为准（astra 可能落 luna 池），回退请求 slug。
+				respModel := strings.TrimSpace(gjson.GetBytes(finalResponse, "model").String())
+				if respModel == "" {
+					respModel = originalModel
+				}
+				s.captureOpenAICodexTurnState(account, lease.HandshakeHeaders(), respModel, true)
+				s.maybeDumpOpenAICapacityAB(openAICapacityABDumpInput{
+					Label:      "ok",
+					Entry:      "ws_v2",
+					HTTPStatus: http.StatusSwitchingProtocols,
+					Model:      originalModel,
+					EventType:  eventType,
+					Headers:    lease.HandshakeHeaders(),
+					Account:    account,
+					Client:     c,
+				})
+			}
 			cleanExit = true
 			break
 		}

@@ -767,6 +767,7 @@ func (s *OpenAIGatewayService) forwardOpenAITransport(ex *pipeline.Exchange) err
 				continue
 			}
 			if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
+				s.dumpOpenAICapacityABHTTP(st.c, account, resp, "http_responses", firstNonEmpty(st.billingModel, st.upstreamModel, st.originalModel), upstreamMsg, respBody, false)
 				upstreamDetail := ""
 				if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
 					maxBytes := s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes
@@ -900,6 +901,7 @@ func (s *OpenAIGatewayService) forwardOpenAITransport(ex *pipeline.Exchange) err
 				s.updateCodexUsageSnapshot(ex.Ctx, account.ID, snapshot)
 			}
 		}
+		s.dumpOpenAICapacityABHTTP(st.c, account, resp, "http_responses", firstNonEmpty(st.originalModel, st.billingModel, st.upstreamModel), "", nil, true)
 
 		if usage == nil {
 			usage = &OpenAIUsage{}

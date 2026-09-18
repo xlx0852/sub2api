@@ -87,6 +87,12 @@ type GatewayConfig struct {
 	// ForceCodexCLI: 强制将 OpenAI `/v1/responses` 请求按 Codex CLI 处理。
 	// 用于网关未透传/改写 User-Agent 时的兼容兜底（默认关闭，避免影响其他客户端）。
 	ForceCodexCLI bool `mapstructure:"force_codex_cli"`
+	// OpenAICodexTurnStateReuseEnabled: 捕获成功 /responses 签发的 x-codex-turn-state，
+	// 并在同一 OAuth 账号后续出站强制回放。不信任客户端入站的该头。
+	// 过载不清票。有票账号构成储备池，出站强制带票；缺票按入池时间 FIFO 后台补种。默认开启。
+	OpenAICodexTurnStateReuseEnabled bool `mapstructure:"openai_codex_turn_state_reuse_enabled"`
+	// OpenAICodexTurnStateReuseTTLSeconds: 成功 token 最长回放窗口。0=默认 1800s。
+	OpenAICodexTurnStateReuseTTLSeconds int `mapstructure:"openai_codex_turn_state_reuse_ttl_seconds"`
 	// DisableCodexIdentityEnforcement: 关闭「强制统一 Codex 出站身份」。上游 /backend-api/codex
 	// 在容量紧张时按客户端身份分优先级降载，被降载的请求会拿到 HTTP 200 + 流内
 	// server_is_overloaded，该次请求失败。默认强制统一出口：所有 OAuth 出站的
@@ -168,6 +174,14 @@ type GatewayConfig struct {
 	LogUpstreamErrorBody bool `mapstructure:"log_upstream_error_body"`
 	// 上游错误响应体记录最大字节数（超过会截断）
 	LogUpstreamErrorBodyMaxBytes int `mapstructure:"log_upstream_error_body_max_bytes"`
+	// OpenAICapacityABDumpDir: 本地对照 dump 目录。空=关闭。
+	// 用于采集「正常成功」vs「Selected model is at capacity / server_is_overloaded」
+	// 的上游返回形态。不写 token / cookie / prompt。
+	// 环境变量 SUB2API_OPENAI_CAPACITY_AB_DUMP 非空时覆盖本字段。
+	OpenAICapacityABDumpDir string `mapstructure:"openai_capacity_ab_dump_dir"`
+	// OpenAICapacityABDumpOKEvery: 成功路径每 N 次采样 1 次；0 表示沿用默认 20；
+	// <0 表示成功路径不采样。capacity 样本始终全量落盘。
+	OpenAICapacityABDumpOKEvery int `mapstructure:"openai_capacity_ab_dump_ok_every"`
 
 	// API-key 账号在客户端未提供 anthropic-beta 时，是否按需自动补齐（默认关闭以保持兼容）
 	InjectBetaForAPIKey bool `mapstructure:"inject_beta_for_apikey"`

@@ -79,6 +79,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	turnState string,
 	turnMetadata string,
 	promptCacheKey string,
+	reqModel ...string,
 ) (http.Header, openAIWSSessionHeaderResolution, error) {
 	headers := make(http.Header)
 	if account == nil || !account.IsOpenAIAgentIdentity() {
@@ -136,8 +137,15 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	if headers.Get("x-client-request-id") == "" && conversationID != "" {
 		headers.Set("x-client-request-id", conversationID)
 	}
-	if state := strings.TrimSpace(turnState); state != "" {
-		headers.Set(openAIWSTurnStateHeader, state)
+	model := ""
+	if len(reqModel) > 0 {
+		model = strings.TrimSpace(reqModel[0])
+	}
+	s.applyOpenAICodexTurnStateReuseForModel(headers, account, model)
+	if headers.Get(openAIWSTurnStateHeader) == "" {
+		if state := strings.TrimSpace(turnState); state != "" {
+			headers.Set(openAIWSTurnStateHeader, state)
+		}
 	}
 	if metadata := strings.TrimSpace(turnMetadata); metadata != "" {
 		headers.Set(openAIWSTurnMetadataHeader, metadata)

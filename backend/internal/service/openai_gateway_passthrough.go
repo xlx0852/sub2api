@@ -316,6 +316,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			s.updateCodexUsageSnapshot(ctx, account.ID, snapshot)
 		}
 	}
+	s.dumpOpenAICapacityABHTTP(c, account, resp, "http_passthrough", firstNonEmpty(originalReqModel, reqModel), "", nil, true)
 
 	if usage == nil {
 		usage = &OpenAIUsage{}
@@ -534,6 +535,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	// codex_cli_rs 造成的 originator 错配 404），详见 issue #3901。
 	if account.Type == AccountTypeOAuth {
 		s.codexIdentity.enforceHeadersWithUA(req.Header, s.codexIdentityOverrideUA(account))
+		s.applyOpenAICodexTurnStateReuseForModel(req.Header, account, strings.TrimSpace(gjson.GetBytes(body, "model").String()))
 	}
 
 	if req.Header.Get("content-type") == "" {
@@ -617,6 +619,7 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
 	reqModel, _, _ := extractOpenAIRequestMetaFromBody(requestBody)
+	s.dumpOpenAICapacityABHTTP(c, account, resp, "http_passthrough", reqModel, upstreamMsg, body, false)
 	_ = s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, reqModel)
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 		Platform:             account.Platform,
@@ -679,6 +682,8 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
+	reqModelForDump, _, _ := extractOpenAIRequestMetaFromBody(requestBody)
+	s.dumpOpenAICapacityABHTTP(c, account, resp, "http_passthrough", reqModelForDump, upstreamMsg, body, false)
 	// 透传模式保留原始上游错误响应，但运行态账号状态仍需更新，
 	// 避免粘性路由继续复用刚被限流的账号。cyber 例外：不冷却账号。
 	if !cyberHit {
@@ -1102,6 +1107,11 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 		message = "OpenAI stream disconnected before completion"
 	}
 	message = s.recordOpenAIStreamUpstreamError(c, account, passthrough, upstreamRequestID, "failover", payload, message)
+	entry := "http_stream"
+	if passthrough {
+		entry = "http_passthrough_stream"
+	}
+	s.dumpOpenAICapacityABStream(c, account, entry, http.StatusOK, nil, payload, message, "")
 	body, _ := json.Marshal(gin.H{
 		"error": gin.H{
 			"type":    "upstream_error",

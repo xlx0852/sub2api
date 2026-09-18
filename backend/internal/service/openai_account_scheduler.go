@@ -1283,7 +1283,14 @@ func sortOpenAIFreshSessionCandidates(candidates []openAIAccountCandidateScore, 
 	if req.StickyWeighted || req.StickyAccountID > 0 || req.StickyPreviousAccountID > 0 || strings.TrimSpace(req.PreviousResponseID) != "" || strings.TrimSpace(req.SessionHash) != "" {
 		return
 	}
+	reqModel := strings.TrimSpace(req.RequestedModel)
 	sort.SliceStable(candidates, func(i, j int) bool {
+		// 按请求 model 对应池槽位判断：astra 请求只认 luna 槽的票。
+		ri := accountHasOpenAICodexTurnStateReserveForModel(candidates[i].account, reqModel, now, openAICodexTurnStateDefaultTTL)
+		rj := accountHasOpenAICodexTurnStateReserveForModel(candidates[j].account, reqModel, now, openAICodexTurnStateDefaultTTL)
+		if ri != rj {
+			return ri
+		}
 		si := ComputeOpenAIUsageScore(candidates[i].account, now)
 		sj := ComputeOpenAIUsageScore(candidates[j].account, now)
 		if si != sj {

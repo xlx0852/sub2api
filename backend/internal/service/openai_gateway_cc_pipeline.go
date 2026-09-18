@@ -95,6 +95,7 @@ func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
 	if !s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
 		return nil
 	}
+	s.dumpOpenAICapacityABHTTP(c, account, resp, "http_compat", upstreamModel, upstreamMsg, respBody, false)
 	upstreamDetail := ""
 	if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
 		maxBytes := s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes

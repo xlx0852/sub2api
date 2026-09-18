@@ -377,6 +377,14 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
+	reqModelForDump := ""
+	if len(requestedModel) > 0 {
+		reqModelForDump = strings.TrimSpace(requestedModel[0])
+	}
+	if reqModelForDump == "" {
+		reqModelForDump, _, _ = extractOpenAIRequestMetaFromBody(requestBody)
+	}
+	s.dumpOpenAICapacityABHTTP(c, account, resp, "http_responses", reqModelForDump, upstreamMsg, body, false)
 
 	if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
 		logger.LegacyPrintf("service.openai_gateway",

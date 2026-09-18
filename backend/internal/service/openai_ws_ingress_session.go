@@ -355,7 +355,7 @@ func (s *OpenAIGatewayService) newOpenAIWSIngressSession(
 		stateStore:            s.getOpenAIWSStateStore(),
 		groupID:               getOpenAIGroupIDFromContext(c),
 		storeDisabledConnMode: s.openAIWSStoreDisabledConnMode(),
-		turnState:             strings.TrimSpace(c.GetHeader(openAIWSTurnStateHeader)),
+		turnState:             "",
 	}
 }
 

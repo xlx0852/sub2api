@@ -460,6 +460,8 @@ type OpenAIGatewayService struct {
 	openaiWSRetryMetrics                openAIWSRetryMetrics
 	responseHeaderFilter                *responseheaders.CompiledHeaderFilter
 	codexSnapshotThrottle               *accountWriteThrottle
+	codexTurnStateSeedOnce              sync.Once
+	codexTurnStateRefresh               chan int64
 	openaiCompatSessionResponses        sync.Map
 	openaiCompatAnthropicDigestSessions sync.Map
 	codexManifestCache                  sync.Map // key: int64(groupID), value: codexManifestCacheEntry
@@ -560,6 +562,7 @@ func NewOpenAIGatewayService(
 	}
 	svc.accountSelector = NewOpenAIAccountSelector(svc)
 	svc.logOpenAIWSModeBootstrap()
+	svc.startOpenAICodexTurnStateSeeder()
 	return svc
 }
 
