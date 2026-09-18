@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sub2API Tray</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f4f6fb;
+      --card: #ffffffcc;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #dbe3f0;
+      --accent: #2563eb;
+      --accent-2: #1d4ed8;
+      --ok: #15803d;
+      --err: #dc2626;
+      --shadow: 0 10px 30px rgba(15, 23, 42, .08);
+      font-family: ui-sans-serif, system-ui, -apple-system, "SF Pro Text", "Segoe UI", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b1220;
+        --card: #121a2bcc;
+        --text: #e5eefc;
+        --muted: #93a4c3;
+        --line: #243249;
+        --shadow: 0 12px 36px rgba(0,0,0,.35);
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 500px at 10% -10%, #60a5fa33, transparent 55%),
+        radial-gradient(900px 420px at 100% 0%, #a78bfa22, transparent 50%),
+        var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+    .shell {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 22px 18px 28px;
+    }
+    .hero {
+      display: flex; align-items: center; gap: 14px;
+      margin-bottom: 14px;
+    }
+    .logo {
+      width: 42px; height: 42px; border-radius: 12px;
+      background: linear-gradient(145deg, #3b82f6, #1d4ed8);
+      color: white; display: grid; place-items: center;
+      font-weight: 800; letter-spacing: .02em;
+      box-shadow: var(--shadow);
+    }
+    h1 { font-size: 1.28rem; margin: 0; letter-spacing: -.02em; }
+    .sub { margin: 2px 0 0; color: var(--muted); font-size: .92rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      margin: 12px 0;
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+    }
+    h2 { font-size: 1rem; margin: 0 0 6px; }
+    p, label, .hint { color: var(--muted); }
+    .hint { font-size: .88rem; line-height: 1.45; margin: 0 0 8px; }
+    label { display: block; font-size: .82rem; margin: 12px 0 6px; font-weight: 600; }
+    input, select {
+      width: 100%;
+      padding: 11px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--card) 70%, transparent);
+      color: inherit;
+      outline: none;
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+    input:focus {
+      border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+    }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    button {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 0;
+      background: linear-gradient(180deg, var(--accent), var(--accent-2));
+      color: white;
+      cursor: pointer;
+      font-weight: 600;
+      box-shadow: 0 6px 16px rgba(37, 99, 235, .25);
+    }
+    button:active { transform: translateY(1px); }
+    button.secondary {
+      background: color-mix(in srgb, var(--muted) 18%, transparent);
+      color: var(--text);
+      box-shadow: none;
+      border: 1px solid var(--line);
+    }
+    #msg {
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: .82rem;
+      line-height: 1.45;
+      margin: 0;
+      max-height: 260px;
+      overflow: auto;
+    }
+    .ok { color: var(--ok); }
+    .err { color: var(--err); }
+    .tabs { display: flex; gap: 8px; margin: 8px 0 2px; }
+    .tab {
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--card) 80%, transparent);
+      color: inherit;
+      cursor: pointer;
+      box-shadow: none;
+      font-weight: 600;
+    }
+    .tab.active {
+      background: linear-gradient(180deg, var(--accent), var(--accent-2));
+      border-color: transparent;
+      color: #fff;
+    }
+    .hidden { display: none !important; }
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: .78rem; color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 10px;
+      margin-left: auto;
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #94a3b8;
+    }
+    .dot.on { background: #22c55e; box-shadow: 0 0 0 3px #22c55e33; }
+    .footer-note { color: var(--muted); font-size: .8rem; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="hero">
+      <div class="logo">S2A</div>
+      <div>
+        <h1>Sub2API Tray</h1>
+        <div class="sub">本机配置 Codex · 流量走 Sub2API 网关</div>
+      </div>
+      <div class="status-pill"><span class="dot" id="dot"></span><span id="pill">未配置</span></div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" id="tab_login" type="button">账号登录</button>
+      <button class="tab" id="tab_key" type="button">API Key</button>
+    </div>
+
+    <div class="card" id="pane_login">
+      <h2>网站账号登录</h2>
+      <p class="hint">输入站点 + 邮箱密码。会自动创建/复用 <code>sub2api-tray</code> API Key 并写入 Codex。密码不会保存。</p>
+      <label>站点地址</label>
+      <input id="site_url" placeholder="https://code.sicts.shop" />
+      <label>邮箱</label>
+      <input id="email" type="email" autocomplete="username" placeholder="you@example.com" />
+      <label>密码</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" />
+      <div id="totp_wrap" class="hidden">
+        <label>两步验证码（6 位）</label>
+        <input id="totp_code" inputmode="numeric" maxlength="6" placeholder="123456" />
+      </div>
+      <label>Model</label>
+      <input id="model_login" placeholder="gpt-5.6-sol" />
+      <div class="row">
+        <button id="login_btn">登录并写入 Codex</button>
+        <button id="login_2fa_btn" class="secondary hidden">提交验证码</button>
+      </div>
+    </div>
+
+    <div class="card hidden" id="pane_key">
+      <h2>直接填 API Key</h2>
+      <label>Base URL</label>
+      <input id="base_url" placeholder="https://code.example/v1" />
+      <label>API Key</label>
+      <input id="api_key" type="password" placeholder="sk-..." />
+      <label>Model</label>
+      <input id="model" placeholder="gpt-5.6-sol" />
+      <div class="row">
+        <button id="save">保存并写入 Codex</button>
+        <button id="test" class="secondary">测试连接</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-top:0">
+        <button id="repair" class="secondary">修复配置</button>
+        <button id="refresh" class="secondary">刷新状态</button>
+        <button id="autostart" class="secondary">开机启动</button>
+      </div>
+      <div class="footer-note">改完后请完全退出并重启 Codex。托盘菜单也可打开本窗口。</div>
+    </div>
+
+    <div class="card">
+      <div id="msg">加载中…</div>
+    </div>
+  </div>
+
+  <script>
+    const base = location.pathname.replace(/\/?panel\/?$/, '');
+    const $ = (id) => document.getElementById(id);
+    const msg = (text, ok) => {
+      const el = $('msg');
+      el.textContent = text;
+      el.className = ok === true ? 'ok' : ok === false ? 'err' : '';
+    };
+
+    let pending2FA = null;
+
+    async function api(path, opts) {
+      const res = await fetch(base + path, Object.assign({ headers: { 'content-type': 'application/json' } }, opts || {}));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText || String(res.status));
+      return data;
+    }
+
+    function showTab(which) {
+      const login = which === 'login';
+      $('tab_login').classList.toggle('active', login);
+      $('tab_key').classList.toggle('active', !login);
+      $('pane_login').classList.toggle('hidden', !login);
+      $('pane_key').classList.toggle('hidden', login);
+    }
+    $('tab_login').onclick = () => showTab('login');
+    $('tab_key').onclick = () => showTab('key');
+
+    function setPill(configured) {
+      $('pill').textContent = configured ? '已配置' : '未配置';
+      $('dot').classList.toggle('on', !!configured);
+    }
+
+    async function refresh() {
+      const st = await api('/status');
+      if (st.settings) {
+        if (st.settings.site_url) $('site_url').value = st.settings.site_url;
+        else if (st.settings.base_url) $('site_url').value = st.settings.base_url.replace(/\/v1\/?$/, '');
+        if (st.settings.email) $('email').value = st.settings.email;
+        if (st.settings.base_url) $('base_url').value = st.settings.base_url;
+        if (st.settings.api_key) $('api_key').value = st.settings.api_key;
+        if (st.settings.model) {
+          $('model').value = st.settings.model;
+          $('model_login').value = st.settings.model;
+        }
+        if (st.settings.auth_mode === 'api_key') showTab('key');
+        else showTab('login');
+        setPill(!!(st.settings.base_url && st.settings.api_key));
+      }
+      const autoOn = !!(st.autostart && st.autostart.enabled);
+      $('autostart').textContent = autoOn ? '开机启动 ✓' : '开机启动';
+      const safe = JSON.parse(JSON.stringify(st));
+      if (safe.settings && safe.settings.api_key) {
+        const k = safe.settings.api_key;
+        safe.settings.api_key = k.length <= 8 ? '***' : k.slice(0, 4) + '…' + k.slice(-4);
+      }
+      msg(JSON.stringify(safe, null, 2), true);
+    }
+
+    function set2FA(on, info) {
+      pending2FA = on ? info : null;
+      $('totp_wrap').classList.toggle('hidden', !on);
+      $('login_2fa_btn').classList.toggle('hidden', !on);
+      if (on) $('totp_code').focus();
+    }
+
+    $('login_btn').onclick = async () => {
+      try {
+        set2FA(false);
+        const body = {
+          site_url: $('site_url').value.trim(),
+          email: $('email').value.trim(),
+          password: $('password').value,
+          model: $('model_login').value.trim() || 'gpt-5.6-sol',
+        };
+        const out = await api('/login', { method: 'POST', body: JSON.stringify(body) });
+        if (out.requires_2fa) {
+          set2FA(true, out);
+          msg('需要两步验证。请输入验证器中的 6 位码后点「提交验证码」。\n账号: ' + (out.user_email_masked || body.email), true);
+          return;
+        }
+        $('password').value = '';
+        msg('登录成功并已写入 Codex。请完全退出并重启 Codex。\n\n' + JSON.stringify({
+          created_key: out.created_key,
+          reused_key: out.reused_key,
+          login: out.login,
+          model: out.settings && out.settings.model,
+        }, null, 2), true);
+        await refresh();
+      } catch (e) { msg(String(e), false); }
+    };
+
+    $('login_2fa_btn').onclick = async () => {
+      try {
+        if (!pending2FA) throw new Error('没有待完成的 2FA 会话，请重新登录');
+        const body = {
+          site_url: pending2FA.site_url || $('site_url').value.trim(),
+          temp_token: pending2FA.temp_token,
+          totp_code: $('totp_code').value.trim(),
+          email: $('email').value.trim(),
+          model: $('model_login').value.trim() || 'gpt-5.6-sol',
+        };
+        const out = await api('/login/2fa', { method: 'POST', body: JSON.stringify(body) });
+        set2FA(false);
+        $('password').value = '';
+        $('totp_code').value = '';
+        msg('2FA 通过，已写入 Codex。请完全退出并重启 Codex。\n\n' + JSON.stringify({
+          created_key: out.created_key,
+          reused_key: out.reused_key,
+          login: out.login,
+        }, null, 2), true);
+        await refresh();
+      } catch (e) { msg(String(e), false); }
+    };
+
+    $('refresh').onclick = () => refresh().catch((e) => msg(String(e), false));
+    $('autostart').onclick = async () => {
+      try {
+        const st = await api('/status');
+        const cur = !!(st.autostart && st.autostart.enabled);
+        await api('/autostart', { method: 'POST', body: JSON.stringify({ enabled: !cur }) });
+        await refresh();
+      } catch (e) { msg(String(e), false); }
+    };
+    $('save').onclick = async () => {
+      try {
+        const body = {
+          base_url: $('base_url').value.trim(),
+          api_key: $('api_key').value.trim(),
+          model: $('model').value.trim() || 'gpt-5.6-sol',
+        };
+        const out = await api('/setup', { method: 'POST', body: JSON.stringify(body) });
+        msg('已写入 Codex 配置。请完全退出并重启 Codex。\n\n' + JSON.stringify(out.codex || out, null, 2), true);
+        await refresh();
+      } catch (e) { msg(String(e), false); }
+    };
+    $('test').onclick = async () => {
+      try {
+        const out = await api('/test', {
+          method: 'POST',
+          body: JSON.stringify({
+            base_url: $('base_url').value.trim(),
+            api_key: $('api_key').value.trim(),
+          }),
+        });
+        msg(JSON.stringify(out, null, 2), !!out.ok);
+      } catch (e) { msg(String(e), false); }
+    };
+    $('repair').onclick = async () => {
+      try {
+        const out = await api('/repair', { method: 'POST', body: '{}' });
+        msg(JSON.stringify(out, null, 2), true);
+      } catch (e) { msg(String(e), false); }
+    };
+    refresh().catch((e) => msg(String(e), false));
+  </script>
+</body>
+</html>
