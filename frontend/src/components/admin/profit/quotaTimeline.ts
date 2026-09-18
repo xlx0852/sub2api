@@ -158,6 +158,7 @@ export function expandWindowOccurrences(
         closed_reason: undefined,
         status: undefined,
         is_open: undefined,
+        used_percent: undefined,
         startMs,
         endMs
       })

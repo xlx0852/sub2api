@@ -227,12 +227,14 @@ func (l *QuotaWindowLedger) ObserveUpstream(ctx context.Context, obs QuotaWindow
 
 	// Same cycle: upstream often reports a RELATIVE countdown (reset_after_seconds),
 	// so obs.end drifts with observation time even inside one window. Any overlap
-	// between the observed window and the open one means "same cycle" — refresh only.
+	// between the observed window and the open one means "same cycle" — refresh used%
+	// only. Do not slide end_at with the countdown, or profit windows grow past the
+	// real period (e.g. 7d becoming 10180 minutes).
 	// A real reset yields a NEW window whose start is after the open window's end
 	// (no overlap), i.e. the upstream really moved on.
 	endDelta := math.Abs(open.EndAt.Sub(obs.EndAt).Seconds())
 	if endDelta <= quotaWindowSkew.Seconds() {
-		return l.repo.UpsertOpenRefresh(ctx, obs.AccountID, obs.Kind, obs.EndAt, obs.UsedPercent, qwIntPtr(mins))
+		return l.repo.UpsertOpenRefresh(ctx, obs.AccountID, obs.Kind, obs.EndAt, obs.UsedPercent, open.WindowMinutes)
 	}
 	// A provider can reset a period early, so the new seven-day interval may
 	// overlap the old interval's former expected range. A credible reset-at jump
@@ -242,7 +244,7 @@ func (l *QuotaWindowLedger) ObserveUpstream(ctx context.Context, obs QuotaWindow
 	// Otherwise, no overlap means the new period started after the old one ended.
 	nonOverlap := !start.Before(open.EndAt.Add(-quotaWindowSkew))
 	if !nonOverlap && !earlyReset {
-		return l.repo.UpsertOpenRefresh(ctx, obs.AccountID, obs.Kind, obs.EndAt, obs.UsedPercent, qwIntPtr(mins))
+		return l.repo.UpsertOpenRefresh(ctx, obs.AccountID, obs.Kind, sameCycleRefreshEnd(open.EndAt, obs.EndAt), obs.UsedPercent, open.WindowMinutes)
 	}
 
 	// New cycle detected (official reset or reset card reflected upstream).
@@ -303,6 +305,15 @@ func (l *QuotaWindowLedger) captureObservation(ctx context.Context, obs QuotaWin
 
 func quotaUsedNearZero(used *float64) bool {
 	return used != nil && *used >= 0 && *used <= 1
+}
+
+// sameCycleRefreshEnd keeps the ledger end stable when upstream reports a relative
+// countdown. Only a tiny calibration (≤ skew) is applied; larger jumps stay put.
+func sameCycleRefreshEnd(openEnd, observedEnd time.Time) time.Time {
+	if math.Abs(openEnd.Sub(observedEnd).Seconds()) <= quotaWindowSkew.Seconds() {
+		return observedEnd
+	}
+	return openEnd
 }
 
 func quotaUsageReset(previous, current *float64) bool {

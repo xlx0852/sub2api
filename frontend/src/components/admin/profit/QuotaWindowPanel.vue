@@ -371,22 +371,23 @@ const visibleTicks = computed<Tick[]>(() => {
     }
     return ticks
   }
-  let cursor = startOfLocalDay(new Date(start)).getTime()
-  if (cursor < start) cursor += 86_400_000
-  while (cursor < end) {
-    const d = new Date(cursor)
+  const cursorDate = startOfLocalDay(new Date(start))
+  if (cursorDate.getTime() < start) cursorDate.setDate(cursorDate.getDate() + 1)
+  while (cursorDate.getTime() < end) {
+    const d = new Date(cursorDate)
+    const cursor = d.getTime()
     const isMonthStart = d.getDate() === 1
-    const showLabel = viewMode.value !== 'month' || isMonthStart || d.getDate() % 2 === 1
-    const isMinor = viewMode.value === 'month' && !showLabel
+    const showLabel = isMonthStart || d.getDate() % 2 === 1
+    const isMinor = !showLabel
     ticks.push({
       key: `d-${cursor}`,
       left: msToPx(cursor),
       weekday: viewMode.value === 'month' ? '' : formatWeekday(d),
-      day: viewMode.value === 'month' ? formatMonthDay(d) : formatDay(d),
+      day: isMonthStart || d.getDate() === 1 ? formatDay(d) : (viewMode.value === 'month' ? formatMonthDay(d) : formatDay(d)),
       isMonthStart,
       isMinor
     })
-    cursor += 86_400_000
+    cursorDate.setDate(cursorDate.getDate() + 1)
   }
   return ticks
 })
@@ -549,7 +550,8 @@ function buildBar(
           : colors.upcoming
 
   const used = win.used_percent
-  const percentLabel = status === 'current' && used != null && !Number.isNaN(Number(used))
+  const isProjected = win.source === 'projected'
+  const percentLabel = status === 'current' && !isProjected && used != null && !Number.isNaN(Number(used))
     ? formatUsagePercent(Number(used))
     : ''
 

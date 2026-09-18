@@ -1961,6 +1961,14 @@ func (s *ProfitService) fillAccountQuotaWindows(ctx context.Context, summary *Ac
 			mins = int(end.Sub(start).Minutes())
 		}
 		kind, label := classifyQuotaWindow(row.Kind, mins)
+		// Relative countdown can stretch ledger end_at past the real period.
+		// Profit bars must stay on the canonical length, not the drifted boundary.
+		if mins > 0 {
+			maxEnd := start.Add(time.Duration(mins) * time.Minute)
+			if end.After(maxEnd.Add(quotaWindowSkew)) {
+				end = maxEnd
+			}
+		}
 		seenKind[kind] = struct{}{}
 		var used *float64
 		if row.IsOpen {

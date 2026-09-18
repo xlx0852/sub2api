@@ -592,6 +592,9 @@ describe('bounded timeline rendering', () => {
     expect(windows.some((window) => window.id === '7d-history')).toBe(true)
     expect(windows.some((window) => window.id === '7d-open')).toBe(true)
     expect(windows.some((window) => window.source === 'projected' && window.startMs === Date.parse('2026-08-16T12:00:00Z'))).toBe(true)
+    const projected = windows.filter((window) => window.source === 'projected')
+    expect(projected.length).toBeGreaterThan(0)
+    expect(projected.every((window) => window.used_percent == null)).toBe(true)
   })
 
   it('uses one canonical recurrence when an observed ledger end drifts by seconds', () => {

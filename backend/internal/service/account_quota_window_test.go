@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -493,9 +494,9 @@ func TestQuotaWindowLedger_DriftSameCycleRefreshes(t *testing.T) {
 	if open == nil {
 		t.Fatal("no open")
 	}
-	// end should track latest observation, not stick
-	if !open.EndAt.After(end) {
-		t.Fatalf("open end not refreshed: %+v", open)
+	// Relative countdown must not stretch the ledger end past the original cycle.
+	if !open.EndAt.Equal(end) && math.Abs(open.EndAt.Sub(end).Seconds()) > quotaWindowSkew.Seconds() {
+		t.Fatalf("open end drifted: got %s want %s", open.EndAt, end)
 	}
 }
 
