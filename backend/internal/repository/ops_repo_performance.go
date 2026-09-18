@@ -108,7 +108,7 @@ func (r *opsRepository) queryPerformancePoints(ctx context.Context, filter *doma
 		limit = 500
 	}
 	// Query both sources independently so usage and error schemas remain decoupled.
-	usageSQL := `SELECT ul.created_at, ul.model, ul.first_token_ms, ul.output_tokens, ul.duration_ms, ul.input_tokens FROM usage_logs ul ` + usageJoin + ` ` + usageWhere + ` ORDER BY ul.created_at DESC LIMIT $` + fmt.Sprint(usageNext)
+	usageSQL := `SELECT ul.created_at, COALESCE(ul.model, ''), ul.first_token_ms, ul.output_tokens, ul.duration_ms, ul.input_tokens FROM usage_logs ul ` + usageJoin + ` ` + usageWhere + ` ORDER BY ul.created_at DESC LIMIT $` + fmt.Sprint(usageNext)
 	usageQueryArgs := append(append([]any(nil), usageArgs...), limit+1)
 	rows, err := r.db.QueryContext(ctx, usageSQL, usageQueryArgs...)
 	if err != nil {
@@ -117,14 +117,14 @@ func (r *opsRepository) queryPerformancePoints(ctx context.Context, filter *doma
 	points := make([]*domain.OpsPerformancePoint, 0, limit)
 	for rows.Next() {
 		var at time.Time
-		var model string
+		var model sql.NullString
 		var first, duration sql.NullFloat64
 		var output, input sql.NullInt64
 		if err := rows.Scan(&at, &model, &first, &output, &duration, &input); err != nil {
 			rows.Close()
 			return nil, false, err
 		}
-		p := &domain.OpsPerformancePoint{At: at, Model: model, Success: true}
+		p := &domain.OpsPerformancePoint{At: at, Model: nullableSQLString(model), Success: true}
 		if first.Valid {
 			v := first.Float64
 			p.TTFTMs = &v
@@ -158,7 +158,7 @@ func (r *opsRepository) queryPerformancePoints(ctx context.Context, filter *doma
 	}
 	rows.Close()
 
-	errorSQL := `SELECT created_at, model, COALESCE(status_code, upstream_status_code), error_type FROM ops_error_logs ` + errorWhere + ` AND COALESCE(status_code, 0) >= 400 ORDER BY created_at DESC LIMIT $` + fmt.Sprint(errorNext)
+	errorSQL := `SELECT created_at, COALESCE(model, ''), COALESCE(status_code, upstream_status_code), COALESCE(error_type, '') FROM ops_error_logs ` + errorWhere + ` AND COALESCE(status_code, 0) >= 400 ORDER BY created_at DESC LIMIT $` + fmt.Sprint(errorNext)
 	errorQueryArgs := append(append([]any(nil), errorArgs...), limit+1)
 	errorRows, err := r.db.QueryContext(ctx, errorSQL, errorQueryArgs...)
 	if err != nil {
@@ -166,13 +166,13 @@ func (r *opsRepository) queryPerformancePoints(ctx context.Context, filter *doma
 	}
 	for errorRows.Next() {
 		var at time.Time
-		var model, failure string
+		var model, failure sql.NullString
 		var status sql.NullInt64
 		if err := errorRows.Scan(&at, &model, &status, &failure); err != nil {
 			errorRows.Close()
 			return nil, false, err
 		}
-		p := &domain.OpsPerformancePoint{At: at, Model: model, Success: false, FailureType: failure}
+		p := &domain.OpsPerformancePoint{At: at, Model: nullableSQLString(model), Success: false, FailureType: nullableSQLString(failure)}
 		if status.Valid {
 			v := int(status.Int64)
 			p.StatusCode = &v
@@ -195,4 +195,11 @@ func (r *opsRepository) queryPerformancePoints(ctx context.Context, filter *doma
 		points = points[:limit]
 	}
 	return points, sampled, nil
+}
+
+func nullableSQLString(value sql.NullString) string {
+	if !value.Valid {
+		return ""
+	}
+	return value.String
 }
