@@ -23,6 +23,10 @@ const (
 	scheduledTestTickDelay           = 5 * time.Second
 	// Keep demotion shorter than the 5-minute probe cadence can recover from.
 	scheduledDiagnosticsDemoteDuration = 12 * time.Minute
+	// 配额墙/余额墙类错误（grok spending-limit、kimi 周限、apikey 余额不足等）
+	// 12 分钟内不可能恢复，按普通 demote 会造成无限 demote→恢复→失败循环。
+	// 改用长冷却：摘出调度更久（3h），让诊断低频探测而非每 12 分钟空转。
+	scheduledDiagnosticsQuotaWallDuration = 3 * time.Hour
 )
 
 // ScheduledTestRunnerService periodically scans due test plans and executes them.
@@ -391,6 +395,18 @@ func (s *ScheduledTestRunnerService) tryDemoteAccount(ctx context.Context, accou
 		}
 		return
 	}
+	// 配额墙/余额墙：402 spending-limit、403 weekly/balance、insufficient_balance 等，
+	// 短冷却内不可恢复，直接用长冷却摘出，避免每 12 分钟 demote 空转。
+	// 放在 resetAt 之后：带精确重置时间的 usage_limit 优先用真实 reset_at。
+	if isQuotaWallDiagnosticsError(errMsg) {
+		reason := fmt.Sprintf("scheduled diagnostics: quota/balance wall (plan=%d): %s", planID, truncateDiagText(errMsg, 200))
+		if err := s.rateLimitSvc.DemoteAccountAfterFailedDiagnostics(ctx, accountID, scheduledDiagnosticsQuotaWallDuration, reason); err != nil {
+			logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d quota-wall demote failed: %v", planID, err)
+		} else {
+			logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d quota-wall demote: account=%d temp_unschedulable for %s", planID, accountID, scheduledDiagnosticsQuotaWallDuration)
+		}
+		return
+	}
 	if !shouldDemoteAfterDiagnosticsFailure(errMsg) {
 		logger.LegacyPrintf("service.scheduled_test_runner", "[ScheduledTestRunner] plan=%d skip demote for soft failure: %s", planID, truncateDiagText(errMsg, 160))
 		return
@@ -407,6 +423,37 @@ func (s *ScheduledTestRunnerService) tryDemoteAccount(ctx context.Context, accou
 		accountID,
 		scheduledDiagnosticsDemoteDuration,
 	)
+}
+
+// isQuotaWallDiagnosticsError 识别配额墙/余额墙类诊断错误——
+// 这些错误在短冷却（分钟级）内不可能恢复，按普通 demote 只会无限循环。
+// 命中后应走长冷却摘出（scheduledDiagnosticsQuotaWallDuration）。
+func isQuotaWallDiagnosticsError(errMsg string) bool {
+	msg := strings.ToLower(strings.TrimSpace(errMsg))
+	if msg == "" {
+		return false
+	}
+	wallMarkers := []string{
+		"spending-limit",          // grok 402/403 personal-team-blocked:spending-limit
+		"personal-team-blocked",   // grok 团队额度墙
+		"insufficient_balance",    // apikey 余额不足
+		"insufficient account balance",
+		"run out of credits",      // grok 额度耗尽
+		"out of credits",
+		"weekly (7-day) usage limit", // kimi 周限
+		"weekly usage limit",
+		"usage limit reached",
+		"quota exceeded",
+		"exceeded your current quota",
+		"billing",
+		"payment required",
+	}
+	for _, m := range wallMarkers {
+		if strings.Contains(msg, m) {
+			return true
+		}
+	}
+	return false
 }
 
 // parseUsageLimitResetAt extracts the resets_at unix timestamp from a usage_limit_reached

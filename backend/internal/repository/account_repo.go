@@ -1226,11 +1226,48 @@ func (r *accountRepository) GetGroups(ctx context.Context, accountID int64) ([]d
 }
 
 func (r *accountRepository) BindGroups(ctx context.Context, accountID int64, groupIDs []int64) error {
+	// 增量绑定：只删被移除的组、只插新增的组，已存在的绑定保持不动。
+	// 旧实现是「删全部再全量重插」，会：
+	//   1. 把每条绑定的 created_at 刷成 NOW()（丢失真实入组时间）
+	//   2. 把 priority 重置为传入顺序（覆盖原值）
+	//   3. 在 DELETE 与 INSERT 之间让账号短暂脱离所有 group → 调度窗口期 no available
+	// 这里改为 set-diff 增量，已存在的绑定原样保留（created_at / priority 不动）。
 	existingGroupIDs, err := r.loadAccountGroupIDs(ctx, accountID)
 	if err != nil {
 		return err
 	}
-	// 使用事务保证删除旧绑定与创建新绑定的原子性
+
+	target := uniquePositiveInt64s(groupIDs)
+	existingSet := make(map[int64]struct{}, len(existingGroupIDs))
+	for _, gid := range existingGroupIDs {
+		existingSet[gid] = struct{}{}
+	}
+	targetSet := make(map[int64]struct{}, len(target))
+	for _, gid := range target {
+		targetSet[gid] = struct{}{}
+	}
+
+	// 需要删除：existing - target
+	toRemove := make([]int64, 0, len(existingGroupIDs))
+	for _, gid := range existingGroupIDs {
+		if _, ok := targetSet[gid]; !ok {
+			toRemove = append(toRemove, gid)
+		}
+	}
+	// 需要新增：target - existing（保留传入顺序）
+	toAdd := make([]int64, 0, len(target))
+	for _, gid := range target {
+		if _, ok := existingSet[gid]; !ok {
+			toAdd = append(toAdd, gid)
+		}
+	}
+
+	// 无变化时直接返回，避免不必要的事务与调度事件。
+	if len(toRemove) == 0 && len(toAdd) == 0 {
+		return nil
+	}
+
+	// 使用事务保证删除与新增的原子性
 	tx, err := r.client.Tx(ctx)
 	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
 		return err
@@ -1245,28 +1282,29 @@ func (r *accountRepository) BindGroups(ctx context.Context, accountID int64, gro
 		txClient = r.client
 	}
 
-	if _, err := txClient.AccountGroup.Delete().Where(dbaccountgroup.AccountIDEQ(accountID)).Exec(ctx); err != nil {
-		return err
-	}
-
-	if len(groupIDs) == 0 {
-		if tx != nil {
-			return tx.Commit()
+	if len(toRemove) > 0 {
+		if _, err := txClient.AccountGroup.Delete().
+			Where(
+				dbaccountgroup.AccountIDEQ(accountID),
+				dbaccountgroup.GroupIDIn(toRemove...),
+			).
+			Exec(ctx); err != nil {
+			return err
 		}
-		return nil
 	}
 
-	builders := make([]*dbent.AccountGroupCreate, 0, len(groupIDs))
-	for i, groupID := range groupIDs {
-		builders = append(builders, txClient.AccountGroup.Create().
-			SetAccountID(accountID).
-			SetGroupID(groupID).
-			SetPriority(i+1),
-		)
-	}
-
-	if _, err := txClient.AccountGroup.CreateBulk(builders...).Save(ctx); err != nil {
-		return err
+	if len(toAdd) > 0 {
+		builders := make([]*dbent.AccountGroupCreate, 0, len(toAdd))
+		for i, groupID := range toAdd {
+			builders = append(builders, txClient.AccountGroup.Create().
+				SetAccountID(accountID).
+				SetGroupID(groupID).
+				SetPriority(i+1),
+			)
+		}
+		if _, err := txClient.AccountGroup.CreateBulk(builders...).Save(ctx); err != nil {
+			return err
+		}
 	}
 
 	if tx != nil {
