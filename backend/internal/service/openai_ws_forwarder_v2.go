@@ -545,6 +545,12 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		}
 		imageCounter.AddSSEData(message)
 
+		// 312 降智信号：WS 流内事件也可能携带降级 marker。
+		if isOpenAICodexTurnStateRevokedResponse(0, message) {
+			s.invalidateOpenAICodexTurnState(account)
+			s.scheduleOpenAICodexTurnStateRefresh(account)
+		}
+
 		if eventType == "response.failed" {
 			if hit, code, msg := detectOpenAICyberPolicy(message); hit {
 				MarkOpsCyberPolicy(c, CyberPolicyMark{

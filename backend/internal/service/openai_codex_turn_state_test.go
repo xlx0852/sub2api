@@ -202,6 +202,47 @@ func TestCaptureStoresToPoolAndLegacy(t *testing.T) {
 	require.Equal(t, tok2, acc2.Extra[astraKey])
 }
 
+func TestIsOpenAICodexTurnStateRevokedResponse(t *testing.T) {
+	t.Parallel()
+	// HTTP 312 状态码命中
+	require.True(t, isOpenAICodexTurnStateRevokedResponse(312, nil))
+	// 流内 error.code=312
+	require.True(t, isOpenAICodexTurnStateRevokedResponse(200, []byte(`{"type":"response.failed","response":{"error":{"code":"312"}}}`)))
+	// degraded marker
+	require.True(t, isOpenAICodexTurnStateRevokedResponse(200, []byte(`{"type":"error","error":{"code":"turn_state_degraded"}}`)))
+	// state_revoked
+	require.True(t, isOpenAICodexTurnStateRevokedResponse(200, []byte(`{"type":"response.failed","response":{"error":{"code":"state_revoked"}}`)))
+	// 普通 overloaded 不是 312
+	require.False(t, isOpenAICodexTurnStateRevokedResponse(200, []byte(`{"type":"response.failed","response":{"error":{"code":"server_is_overloaded"}}`)))
+	// 空 payload / 200 无 marker 不命中
+	require.False(t, isOpenAICodexTurnStateRevokedResponse(200, nil))
+	require.False(t, isOpenAICodexTurnStateRevokedResponse(200, []byte(`{"type":"response.completed"}`)))
+	// 非 312 状态码不命中
+	require.False(t, isOpenAICodexTurnStateRevokedResponse(200, nil))
+	require.False(t, isOpenAICodexTurnStateRevokedResponse(500, nil))
+}
+
+func TestInvalidateClearsAllPoolSlots(t *testing.T) {
+	svc := &OpenAIGatewayService{cfg: &config.Config{}}
+	svc.cfg.Gateway.OpenAICodexTurnStateReuseEnabled = true
+	tok := "gAAAAABqq_20UDF7Ymoy_iFdYwpAR8Uz" + stringsRepeat("X", 260)
+	acc := &Account{ID: 31, Type: AccountTypeOAuth, Extra: map[string]any{
+		openAICodexTurnStateExtraToken:                                tok,
+		openAICodexTurnStateExtraCapturedAt:                           time.Now().Format(time.RFC3339Nano),
+		openAICodexTurnStateExtraPoolPrefix + "gpt-6-astra":             tok,
+		openAICodexTurnStateExtraPoolPrefix + "gpt-6-astra_model":       "gpt-6-astra",
+		openAICodexTurnStateExtraPoolPrefix + "gpt-6-astra_captured_at": time.Now().Format(time.RFC3339Nano),
+		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-sol":             tok,
+		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-sol_model":       "gpt-5.6-sol",
+	}}
+	svc.invalidateOpenAICodexTurnState(acc)
+	// 单值与所有池槽位全清
+	require.Empty(t, acc.Extra[openAICodexTurnStateExtraToken])
+	require.Empty(t, acc.Extra[openAICodexTurnStateExtraPoolPrefix+"gpt-6-astra"])
+	require.Empty(t, acc.Extra[openAICodexTurnStateExtraPoolPrefix+"gpt-5.6-sol"])
+	require.Empty(t, lookupCachedOpenAICodexTurnStateForModel(acc, "gpt-6-astra", time.Now(), 30*time.Minute))
+}
+
 func TestCaptureOpenAICodexTurnStateTouchesTTLWhenReuseHasNoNewHeader(t *testing.T) {
 	svc := &OpenAIGatewayService{cfg: &config.Config{}}
 	svc.cfg.Gateway.OpenAICodexTurnStateReuseEnabled = true

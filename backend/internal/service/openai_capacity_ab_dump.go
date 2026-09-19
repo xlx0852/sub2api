@@ -434,6 +434,11 @@ func (s *OpenAIGatewayService) dumpOpenAICapacityABHTTP(
 	} else if classifyOpenAICapacityABLabel(resp.StatusCode, message, body) == "capacity" {
 		s.scheduleOpenAICodexTurnStateRefresh(account)
 	}
+	// 312 降智信号：票被服务端撤销，废弃所有池槽位票 + 重采。
+	if isOpenAICodexTurnStateRevokedResponse(resp.StatusCode, body) {
+		s.invalidateOpenAICodexTurnState(account)
+		s.scheduleOpenAICodexTurnStateRefresh(account)
+	}
 	s.maybeDumpOpenAICapacityAB(in)
 }
 
@@ -448,6 +453,11 @@ func (s *OpenAIGatewayService) dumpOpenAICapacityABStream(
 	model string,
 ) {
 	if classifyOpenAICapacityABLabel(httpStatus, message, payload) == "capacity" {
+		s.scheduleOpenAICodexTurnStateRefresh(account)
+	}
+	// 312 降智信号：票被服务端撤销，废弃所有池槽位票 + 重采。
+	if isOpenAICodexTurnStateRevokedResponse(httpStatus, payload) {
+		s.invalidateOpenAICodexTurnState(account)
 		s.scheduleOpenAICodexTurnStateRefresh(account)
 	}
 	s.maybeDumpOpenAICapacityAB(openAICapacityABDumpInput{

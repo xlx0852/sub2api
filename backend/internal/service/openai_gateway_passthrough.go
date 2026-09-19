@@ -249,6 +249,21 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			// a failover so the handler switches to a healthy account.
 			return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, true)
 		}
+		// 312 降智信号（HTTP 状态码形态）：票被服务端撤销。
+		// 312 < 400 会落进正常分支，必须在 break 前拦截——
+		// 收到 312 说明当前 turn-state 已失效，废弃票 + failover 换号重试。
+		if resp.StatusCode == openAICodexTurnStateRevokedHTTPStatus {
+			markFirstOutputAttemptFailed(ctx)
+			s.invalidateOpenAICodexTurnState(account)
+			s.scheduleOpenAICodexTurnStateRefresh(account)
+			_ = resp.Body.Close()
+			return nil, &UpstreamFailoverError{
+				StatusCode:             http.StatusBadGateway,
+				ResponseBody:           []byte(`{"error":{"type":"upstream_error","message":"turn-state revoked by upstream (312)"}}`),
+				RetryableOnSameAccount: false,
+				RequestScopedTransient: true,
+			}
+		}
 		if resp.StatusCode < 400 {
 			break
 		}
@@ -299,7 +314,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		imageCount = result.imageCount
 		imageOutputSizes = result.imageOutputSizes
 	} else {
-		result, err := s.handleNonStreamingResponsePassthrough(ctx, resp, c, reqModel, upstreamPassthroughModel)
+		result, err := s.handleNonStreamingResponsePassthrough(ctx, resp, c, account, reqModel, upstreamPassthroughModel)
 		if err != nil {
 			return nil, err
 		}
@@ -1299,6 +1314,12 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		}
 
 		eventType := strings.TrimSpace(gjson.GetBytes(dataBytes, "type").String())
+		// 312 降智信号：服务端主动撤销 turn-state（文章实测 2026-09）。
+		// 在任何事件中检测到都立即废弃票 + 触发重采，不依赖 dump 开关。
+		if isOpenAICodexTurnStateRevokedResponse(0, dataBytes) {
+			s.invalidateOpenAICodexTurnState(account)
+			s.scheduleOpenAICodexTurnStateRefresh(account)
+		}
 		forceFlushFailedEvent := false
 		if eventType == "response.failed" || eventType == "error" {
 			failedMessage = extractOpenAISSEErrorMessage(dataBytes)
@@ -1488,12 +1509,19 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	ctx context.Context,
 	resp *http.Response,
 	c *gin.Context,
+	account *Account,
 	originalModel string,
 	mappedModel string,
 ) (*openaiNonStreamingResultPassthrough, error) {
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		return nil, err
+	}
+
+	// 312 降智信号：非流式 body 里也可能携带降级 marker（少见，防御性检测）。
+	if isOpenAICodexTurnStateRevokedResponse(resp.StatusCode, body) {
+		s.invalidateOpenAICodexTurnState(account)
+		s.scheduleOpenAICodexTurnStateRefresh(account)
 	}
 
 	// Detect SSE responses from upstream and convert to JSON.

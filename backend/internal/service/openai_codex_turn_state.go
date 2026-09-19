@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/tidwall/gjson"
 )
 
 const (
@@ -334,6 +335,44 @@ func (s *OpenAIGatewayService) persistOpenAICodexTurnStatePool(accountID int64, 
 	}()
 }
 
+// openAICodexTurnStateRevokedSignals 是 312 降智信号的检测标记。
+// 312 是 OpenAI 自定义的状态码（文章实测 2026-09），表示服务端主动撤销当前
+// turn-state——即使票还在 TTL 内，后续请求已被降级（降智/overload）。
+// 形态两种都可能：
+//   1. HTTP 312 状态码（非标准，OpenAI 私有）
+//   2. HTTP 200 流内 SSE 携带降级 marker（待确认字段，先用宽匹配）
+// 一旦命中即废弃该账号所有池槽位票并触发重采。
+const openAICodexTurnStateRevokedHTTPStatus = 312
+
+// isOpenAICodexTurnStateRevokedResponse 判断响应是否携带 312 降智信号。
+// 检查 HTTP 状态码与 SSE payload 两处。
+func isOpenAICodexTurnStateRevokedResponse(httpStatus int, payload []byte) bool {
+	if httpStatus == openAICodexTurnStateRevokedHTTPStatus {
+		return true
+	}
+	if len(payload) == 0 {
+		return false
+	}
+	// 流内 marker：error.code / response.error.code / type 字段含 312 / degraded / downgraded
+	code := strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "response.error.code").String()))
+	if code == "" {
+		code = strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "error.code").String()))
+	}
+	eventType := strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "type").String()))
+	combined := strings.ToLower(strings.TrimSpace(code + " " + eventType))
+	switch {
+	case strings.Contains(combined, "312"),
+		strings.Contains(combined, "degraded"),
+		strings.Contains(combined, "downgraded"),
+		strings.Contains(combined, "state_revoked"),
+		strings.Contains(combined, "turn_state_revoked"):
+		return true
+	}
+	return false
+}
+
+// invalidateOpenAICodexTurnState 废弃账号所有池槽位票并触发重采。
+// 触发条件：收到 312 降智信号（票被服务端撤销）、或明确的容量降级。
 func (s *OpenAIGatewayService) invalidateOpenAICodexTurnState(account *Account) {
 	if account == nil || account.Type != AccountTypeOAuth {
 		return
