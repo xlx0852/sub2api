@@ -1,6 +1,6 @@
 ## 1. Audit and baseline
 
-- [x] 1.1 Inventory Gemini API batch provider production wiring, public types, docs, and tests; confirm Vertex and generic batch infrastructure are separate and remain in scope.
+- [x] 1.1 Inventory Gemini API batch provider production wiring, public types, docs, and tests. Vertex 批图当时仍分离在册；后续整包退役后不再作为保留范围。
 - [x] 1.2 Read-only audit the current US production `batch_image_jobs`, `batch_image_items`, and `batch_image_events` tables; record the 2026-08-16 zero-row snapshot without reading user/account data.
 - [x] 1.3 Capture the targeted pre-change batch image test baseline.
 
@@ -14,8 +14,8 @@
 
 ## 3. Client and documentation cleanup
 
-- [x] 3.1 Remove `gemini_api` from frontend batch-image provider typing while preserving Vertex and backward-compatible unknown-string decoding where required.
-- [x] 3.2 Update `docs/BATCH_IMAGE_MVP.md` to describe Vertex-only provider support and remove Gemini API Batch setup/cost instructions.
+- [x] 3.1 Remove `gemini_api` from frontend batch-image provider typing；后续批图 API 文件已随实现栈删除。
+- [x] 3.2 文档不再把 Vertex 写成仍可用的批图供应；实现栈删除后仅保留 schema/配置键说明。
 - [x] 3.3 Confirm no Gemini Batch-only contract remains in OpenAPI or deployment examples; do not remove generic `batch_image.*` keys.
 
 ## 4. Verification and rollout
@@ -23,6 +23,7 @@
 - [x] 4.1 Run targeted repository/provider/worker/settlement/download/cleanup tests, including race coverage where practical.
 - [x] 4.2 Run archtest, `git diff --check`, strict OpenSpec validation, and root `make build`.
 - [ ] 4.3 In staging, verify explicit `gemini_api` rejection, Vertex registry/worker behavior, startup with batch image disabled, and paired backend rollback.
+  - 备注：Vertex worker 核验已被后续供应退役取代；批图实现栈已从生产删除，不再验证 Vertex registry。
 - [x] 4.4 Immediately before production cutover, re-run the read-only data gate. Abort if any non-terminal Gemini job, unsettled hold, or pending output cleanup exists.
 - [ ] 4.5 Deploy backend-only, verify health and unaffected HTTP/SSE/WS plus billing canaries, retain the old backend for rollback, and archive only after observation.
 
@@ -34,7 +35,7 @@
 - 2026-08-16: 2.2 removed the retired constant and inline-result error, made supported-provider validation and default/config registries Vertex-only, and changed automatic selection order to Vertex only. Generic fixtures are migrated separately in 2.4.
 - 2026-08-16: 2.3 added an explicit public-service regression case for `provider=gemini_api`; validation returns `BATCH_IMAGE_UNSUPPORTED_PROVIDER` before provider/account selection, so the request cannot fall through to Vertex or reach upstream.
 - 2026-08-16: 2.4 migrated public/repository/settlement/download/cleanup/MVP fixtures to Vertex, reduced two-provider expectations to one, and moved the shared bounded HTTP client helper out of the deleted Gemini file. Unit-tag batch/Vertex tests pass; integration-tag repository tests compile but local execution stops in TestMain because rootless Docker is unavailable.
-- 2026-08-16: 3.1 removed the explicit `gemini_api` frontend request option while retaining `string` decoding for old/unknown responses. 3.2 now documents Vertex-only support, the currently unregistered public routes, and the separation from ordinary Gemini/Antigravity gateway traffic; generic batch configuration remains unchanged.
+- 2026-08-16: 3.1 removed the explicit `gemini_api` frontend request option while retaining `string` decoding for old/unknown responses. 3.2 当时仍写 Vertex-only；后续已改为批图运行时删除、仅保留 schema/配置键。
 - 2026-08-16: 3.3 found no Gemini Batch-only OpenAPI or deployment-example contract. Remaining `GEMINI_API_KEY` documentation belongs to the ordinary Gemini-compatible client gateway, not batch supply; all 62 generic `batch_image.*` config references remain intact.
 - 2026-08-16: 4.1 targeted batch/Vertex unit tests pass with `-race`. Integration-tag repository tests compile but cannot execute because local testcontainers cannot find rootless Docker. The full unit-tag service run has unrelated existing failures in quota/subscription/auth dirty WIP; no batch-image test remains in its failure list.
 - 2026-08-16: 4.2 archtest, both strict OpenSpec validations, Gemini Batch symbol/constant residual scans, `git diff --check`, backend build, frontend `vue-tsc`, and Vite production build pass. Remaining `gemini_api` text is limited to the explicit rejection tests and retirement documentation.

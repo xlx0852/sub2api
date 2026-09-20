@@ -4,7 +4,8 @@
   - 备注：生产 `type=service_account` 全库 0 行，近 30 天 usage 0；现网仅 apikey/oauth。
 - [x] 1.2 只读审计批图任务表，确认不存在 Vertex 非终态任务或制定终结方案。
   - 备注：`batch_image_jobs` 0 行，非终态 0。
-- [ ] 1.3 修正 `remove-gemini-api-batch-provider` 中“保留 Vertex”规格、设计、任务和测试边界。
+- [x] 1.3 修正 `remove-gemini-api-batch-provider` 中“保留 Vertex”规格、设计、任务和测试边界。
+  - 备注：proposal/design/spec 已改为最终无 Google 批图 Provider；groups 列与 `batch_image.*` 键仍保留。
 - [x] 1.4 补扫 OpenAPI、modelcatalog、价格、配置、前端、文档和工具中的 Vertex/Service Account 足迹。
   - 备注：控制面/前端建号入口已收口；Vertex 实现文件仍在磁盘，运行时 fail-closed。
 

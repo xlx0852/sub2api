@@ -1,18 +1,14 @@
 # Batch Image MVP
 
-Sub2API Batch Image MVP provides asynchronous Vertex-hosted Gemini image batch generation through a unified service layer backed by Redis workers, PostgreSQL state, and a Vertex batch backend.
+> 状态：批图运行时已删除。`gemini_api` 与 Vertex 批图 Provider、worker/queue/settlement/download 均已退役。groups 表批图列和 `batch_image.*` 配置键暂留，以免 schema 迁移。下文是历史 MVP 说明，不能当作现行供应文档。
 
-Supported providers:
+Sub2API Batch Image MVP 曾提供异步批量生图。公开路由未注册，实现栈已删除。这不影响普通 Gemini/Antigravity HTTP 或 SSE 网关请求。
 
-- `vertex`
-
-`gemini_api` is retired and is rejected as an unsupported batch-image provider. This retirement does not affect ordinary Gemini/Antigravity HTTP or SSE gateway requests.
-
-API users do not see Vertex job names, GCS paths, signed URLs, API keys, or service account material. Downloads are proxied through Sub2API in this MVP.
+历史 MVP 也不向 API 用户暴露 Vertex job 名、GCS 路径、签名 URL 或 service account 材料。
 
 ## API Routes
 
-The current default server does not register these public routes. The service contracts are retained for Vertex worker, settlement, download, and cleanup behavior and must not be treated as a publicly enabled API without a separately approved route change.
+当前服务不注册这些公开路由，也不再装配批图 worker/settlement/download。下列路径只是历史契约，不能当作可用 API。
 
 ```text
 POST   /v1/images/batches

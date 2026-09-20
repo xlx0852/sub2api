@@ -5,11 +5,7 @@
 The system MUST NOT advertise, automatically select, or submit new batch image
 jobs through provider `gemini_api`. An explicit request for `gemini_api` SHALL
 return the existing unsupported-provider error and MUST NOT silently route the
-job to Vertex.
-
-The `vertex` batch image provider and the generic batch image queue, worker,
-settlement, download, cleanup, configuration, and persistence infrastructure
-SHALL remain available and keep their existing behavior.
+job to Vertex or any other provider.
 
 #### Scenario: Explicit Gemini API provider is rejected
 
@@ -19,11 +15,19 @@ SHALL remain available and keep their existing behavior.
 - **AND** no upstream Gemini Batch API request is made
 - **AND** the request is not silently submitted to Vertex
 
-#### Scenario: Vertex batch provider remains supported
+### Requirement: No remaining Google batch-image provider
 
-- **GIVEN** Vertex batch image support is correctly configured
-- **WHEN** a valid batch image job selects provider `vertex`
-- **THEN** the existing Vertex provider, queue, worker, settlement, and cleanup behavior remains available
+After Vertex Service Account supply retirement, the system MUST NOT keep a
+Vertex batch-image Provider, worker, queue, settlement, download, or cleanup
+runtime. Group schema columns and generic `batch_image.*` configuration keys
+MAY remain to avoid a schema migration.
+
+#### Scenario: Vertex batch provider is not available
+
+- **GIVEN** Vertex Service Account supply has been retired
+- **WHEN** a batch image job would select provider `vertex`
+- **THEN** no Vertex batch Provider, worker, or GCS/Batch Prediction client is assembled
+- **AND** the request is not submitted upstream
 
 ### Requirement: Retirement Requires An Empty Financial Lifecycle Gate
 
