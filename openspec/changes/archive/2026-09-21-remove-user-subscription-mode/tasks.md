@@ -27,5 +27,6 @@
 
 - [x] 4.1 增加余额鉴权、余额扣费、无 subscription context、usage subscription_id=NULL 的后端回归测试。
 - [x] 4.2 增加路由不存在、侧栏无入口、分组无订阅模式的前端回归测试。
-- [ ] 4.3 运行 Go 全量测试、前端测试、类型检查、生产构建和 OpenSpec 严格校验。
+- [x] 4.3 运行 Go 全量测试、前端测试、类型检查、生产构建和 OpenSpec 严格校验。
+  - 备注：`openspec validate --strict` 通过；订阅相关 server/handler/service 测试、前端 retirement/sidebar 测试、`vue-tsc` 与生产构建通过。Go `-tags unit` 全包仍有既有基线失败（AuthService 参数、账号 repo mock），未改断言掩盖。
 - [x] 4.4 蓝绿部署并执行迁移前后只读核验，确认新订阅数量不再增长且利润账号订阅成本报表不变。
