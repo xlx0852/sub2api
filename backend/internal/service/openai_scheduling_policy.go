@@ -26,6 +26,21 @@ func (p openAITransportPolicy) Allows(_ context.Context, account *Account, req s
 	return account != nil && p.service != nil && p.service.isOpenAIAccountTransportCompatible(account, required)
 }
 
+// DescribeRejection 在 transport 拒绝时给出可定位的子原因（账号实际解析出的
+// 上游协议/mode），用于 reject_trace 区分"requires ws 但号是 http_bridge"与
+// "号是 off"等情形。非 transport 拒绝返回空。
+func (p openAITransportPolicy) DescribeRejection(account *Account, req scheduling.Request) string {
+	if p.service == nil || account == nil {
+		return ""
+	}
+	required := OpenAIUpstreamTransport(req.RequiredTransport)
+	if required == OpenAIUpstreamTransportAny || required == OpenAIUpstreamTransportHTTPSSE {
+		return ""
+	}
+	dec := p.service.getOpenAIWSProtocolResolver().Resolve(account)
+	return "required=" + string(required) + " resolved=" + string(dec.Transport) + " reason=" + dec.Reason
+}
+
 func (p openAIRuntimePolicy) Name() string {
 	return "runtime_block"
 }

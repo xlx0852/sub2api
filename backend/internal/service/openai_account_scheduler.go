@@ -1616,14 +1616,19 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 			recordShadowPolicy(account, false, requestDecision.RejectedPolicy)
 			continue
 		}
+		transportPolicy := openAITransportPolicy{service: s.service}
 		transportDecision := scheduling.EvaluateCandidate(
 			context.Background(),
 			account,
 			scheduling.Request{RequiredTransport: string(req.RequiredTransport)},
-			openAITransportPolicy{service: s.service},
+			transportPolicy,
 		)
 		if !transportDecision.Allowed {
-			recordShadowPolicy(account, false, transportDecision.RejectedPolicy)
+			policyName := transportDecision.RejectedPolicy
+			if detail := transportPolicy.DescribeRejection(account, scheduling.Request{RequiredTransport: string(req.RequiredTransport)}); detail != "" {
+				policyName = policyName + "(" + detail + ")"
+			}
+			recordShadowPolicy(account, false, policyName)
 			continue
 		}
 		recordShadowPolicy(account, true, "")
@@ -1651,6 +1656,7 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 			"model", req.RequestedModel,
 			"require_compact", req.RequireCompact,
 			"required_capability", string(req.RequiredCapability),
+			"required_transport", string(req.RequiredTransport),
 			"raw_candidate_count", len(accounts),
 			"reject_trace", shadowPolicyTrace,
 		)
