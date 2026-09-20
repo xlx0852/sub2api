@@ -878,6 +878,7 @@
               </div>
             </div>
           </div>
+        </div>
         <!-- 视频生成计费配置（仅 Grok 平台） -->
         <div
           v-if="supportsVideoPricingPlatform(createForm.platform)"
@@ -2100,6 +2101,7 @@
               </div>
             </div>
           </div>
+        </div>
         <!-- 视频生成计费配置（仅 Grok 平台） -->
         <div
           v-if="supportsVideoPricingPlatform(editForm.platform)"
