@@ -187,12 +187,6 @@
             v-model:form="formModel"
             :auth-source-defaults="authSourceDefaults"
             :auth-source-defaults-meta="authSourceDefaultsMeta"
-            :subscription-groups="subscriptionGroups"
-            :default-subscription-group-options="defaultSubscriptionGroupOptions"
-            :add-default-subscription="addDefaultSubscription"
-            :remove-default-subscription="removeDefaultSubscription"
-            :add-auth-source-default-subscription="addAuthSourceDefaultSubscription"
-            :remove-auth-source-default-subscription="removeAuthSourceDefaultSubscription"
           />
         </div>
         <!-- /Tab: Users (extracted) -->
@@ -401,7 +395,6 @@ import type {
   WebSearchTestResult,
 } from "@/api/admin/settings";
 import type {
-  AdminGroup,
   LoginAgreementDocument,
   NotifyEmailEntry,
   Proxy,
@@ -566,7 +559,6 @@ const adminApiKeyExists = ref(false);
 const adminApiKeyMasked = ref("");
 const adminApiKeyOperating = ref(false);
 const newAdminApiKey = ref("");
-const subscriptionGroups = ref<AdminGroup[]>([]);
 
 // Overload Cooldown (529) 状态
 const overloadCooldownLoading = ref(true);
@@ -1063,16 +1055,6 @@ function resetClaudeOAuthSystemPromptBlocks(): void {
   syncClaudeOAuthSystemPromptBlocksFormField();
 }
 
-
-interface DefaultSubscriptionGroupOption {
-  value: number;
-  label: string;
-  description: string | null;
-  platform: AdminGroup["platform"];
-  subscriptionType: AdminGroup["subscription_type"];
-  rate: number;
-  [key: string]: unknown;
-}
 
 type SettingsForm = Omit<
   SystemSettings,
@@ -1591,19 +1573,6 @@ async function saveWebSearchConfig(): Promise<boolean> {
     return false;
   }
 }
-
-const defaultSubscriptionGroupOptions = computed<
-  DefaultSubscriptionGroupOption[]
->(() =>
-  subscriptionGroups.value.map((group) => ({
-    value: group.id,
-    label: group.name,
-    description: group.description,
-    platform: group.platform,
-    subscriptionType: group.subscription_type,
-    rate: group.rate_multiplier,
-  })),
-);
 
 const registrationEmailSuffixWhitelistSeparatorKeys = new Set([
   " ",
@@ -2166,60 +2135,6 @@ async function loadSettings() {
   } finally {
     loading.value = false;
   }
-}
-
-async function loadSubscriptionGroups() {
-  try {
-    const groups = await adminAPI.groups.getAll();
-    subscriptionGroups.value = groups.filter(
-      (group) =>
-        group.subscription_type === "subscription" && group.status === "active",
-    );
-  } catch (_error: unknown) {
-    subscriptionGroups.value = [];
-  }
-}
-
-function findNextAvailableSubscriptionGroup(
-  existingGroupIDs: number[],
-): AdminGroup | undefined {
-  const existing = new Set(existingGroupIDs);
-  return subscriptionGroups.value.find((group) => !existing.has(group.id));
-}
-
-function addDefaultSubscription() {
-  if (subscriptionGroups.value.length === 0) return;
-  const candidate = findNextAvailableSubscriptionGroup(
-    form.default_subscriptions.map((item) => item.group_id),
-  );
-  if (!candidate) return;
-  form.default_subscriptions.push({
-    group_id: candidate.id,
-    validity_days: 30,
-  });
-}
-
-function removeDefaultSubscription(index: number) {
-  form.default_subscriptions.splice(index, 1);
-}
-
-function addAuthSourceDefaultSubscription(source: AuthSourceType) {
-  if (subscriptionGroups.value.length === 0) return;
-  const candidate = findNextAvailableSubscriptionGroup(
-    authSourceDefaults[source].subscriptions.map((item) => item.group_id),
-  );
-  if (!candidate) return;
-  authSourceDefaults[source].subscriptions.push({
-    group_id: candidate.id,
-    validity_days: 30,
-  });
-}
-
-function removeAuthSourceDefaultSubscription(
-  source: AuthSourceType,
-  index: number,
-) {
-  authSourceDefaults[source].subscriptions.splice(index, 1);
 }
 
 async function saveSettings() {
@@ -3529,7 +3444,6 @@ async function handleDeleteProvider() {
 
 onMounted(() => {
   loadSettings();
-  loadSubscriptionGroups();
   loadAdminApiKey();
   loadOverloadCooldownSettings();
   loadRateLimit429CooldownSettings();
