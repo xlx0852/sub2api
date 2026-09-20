@@ -35,33 +35,6 @@ func TestComputeOpenAIUsageScorePrefersHottestWindow(t *testing.T) {
 	require.Equal(t, 88.0, ComputeOpenAIUsageScore(account, now))
 }
 
-func TestFreshSessionCandidateOrderByUsage(t *testing.T) {
-	now := time.Now()
-	candidates := []openAIAccountCandidateScore{
-		{account: &Account{ID: 1, Extra: map[string]any{
-			"codex_primary_used_percent": 90.0,
-			"codex_usage_updated_at":     now.UTC().Format(time.RFC3339),
-		}}, score: 10},
-		{account: &Account{ID: 2, Extra: map[string]any{
-			"codex_primary_used_percent": 10.0,
-			"codex_usage_updated_at":     now.UTC().Format(time.RFC3339),
-		}}, score: 1},
-	}
-	// Mimic buildLoadPlan fresh-session sort.
-	sortFn := func(i, j int) bool {
-		si := ComputeOpenAIUsageScore(candidates[i].account, now)
-		sj := ComputeOpenAIUsageScore(candidates[j].account, now)
-		if si != sj {
-			return si < sj
-		}
-		return candidates[i].account.ID < candidates[j].account.ID
-	}
-	if sortFn(1, 0) {
-		candidates[0], candidates[1] = candidates[1], candidates[0]
-	}
-	require.Equal(t, int64(2), candidates[0].account.ID)
-}
-
 func TestBumpOpenAIAccountStickyEpochInvalidatesMatch(t *testing.T) {
 	account := &Account{ID: 42, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
 	// Ensure deterministic baseline.

@@ -55,7 +55,7 @@ func TestOpenAIAccountScheduler_UserPinHitOverridesLoadBalance(t *testing.T) {
 	}}
 	svc := newUserPinTestService(t, cache, true)
 	ctx := context.WithValue(context.Background(), ctxkey.OpenAIUserPinAPIKeyID, int64(901))
-	require.True(t, svc.isOpenAIAdvancedSchedulerEnabled(ctx))
+	require.NotNil(t, svc.getOpenAIAccountScheduler(ctx))
 
 	// 38002 优先级更高（100 vs 0），负载均衡本应选它；钉号命中必须压过 LB。
 	selection, decision, err := svc.SelectAccountWithScheduler(ctx, &groupID, "", "", "gpt-5.1", nil, OpenAIUpstreamTransportAny, false)

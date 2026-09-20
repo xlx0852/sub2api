@@ -145,40 +145,6 @@ func (s *GatewayService) evaluateGatewayCandidates(
 	return scheduling.EvaluateCandidates(ctx, accounts, request, s.gatewayCandidatePolicies()...)
 }
 
-func (s *GatewayService) evaluateGatewayRoutingShadowCandidates(
-	ctx context.Context,
-	accounts []Account,
-	request scheduling.Request,
-	routingAccountIDs []int64,
-) scheduling.CandidateSetDecision {
-	routingSet := make(map[int64]struct{}, len(routingAccountIDs))
-	for _, accountID := range routingAccountIDs {
-		routingSet[accountID] = struct{}{}
-	}
-	policies := s.gatewayCandidatePolicies()
-	result := scheduling.CandidateSetDecision{
-		AllowedAccounts: make([]*Account, 0, len(accounts)),
-		Trace:           make([]scheduling.CandidatePolicyTrace, 0, len(accounts)),
-	}
-	for i := range accounts {
-		account := &accounts[i]
-		if _, ok := routingSet[account.ID]; !ok {
-			result.Trace = append(result.Trace, scheduling.CandidatePolicyTrace{AccountID: account.ID, RejectedPolicy: "model_routing"})
-			continue
-		}
-		decision := scheduling.EvaluateCandidate(ctx, account, request, policies...)
-		result.Trace = append(result.Trace, scheduling.CandidatePolicyTrace{
-			AccountID:      account.ID,
-			Allowed:        decision.Allowed,
-			RejectedPolicy: decision.RejectedPolicy,
-		})
-		if decision.Allowed {
-			result.AllowedAccounts = append(result.AllowedAccounts, account)
-		}
-	}
-	return result
-}
-
 func (s *GatewayService) isAccountAllowedForPlatform(account *Account, platform string, useMixed bool) bool {
 	return scheduling.EvaluateCandidate(
 		context.Background(),

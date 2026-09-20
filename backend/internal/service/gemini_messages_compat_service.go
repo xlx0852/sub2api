@@ -46,6 +46,7 @@ type GeminiMessagesCompatService struct {
 	groupRepo                 GroupRepository
 	cache                     GatewayCache
 	schedulerSnapshot         *SchedulerSnapshotService
+	concurrencyService        *ConcurrencyService
 	tokenProvider             *GeminiTokenProvider
 	rateLimitService          *RateLimitService
 	httpUpstream              HTTPUpstream
@@ -71,6 +72,7 @@ func NewGeminiMessagesCompatService(
 	groupRepo GroupRepository,
 	cache GatewayCache,
 	schedulerSnapshot *SchedulerSnapshotService,
+	concurrencyService *ConcurrencyService,
 	tokenProvider *GeminiTokenProvider,
 	rateLimitService *RateLimitService,
 	httpUpstream HTTPUpstream,
@@ -78,6 +80,7 @@ func NewGeminiMessagesCompatService(
 	cfg *config.Config,
 ) *GeminiMessagesCompatService {
 	return &GeminiMessagesCompatService{
+		concurrencyService:        concurrencyService,
 		accountRepo:               accountRepo,
 		groupRepo:                 groupRepo,
 		cache:                     cache,
@@ -130,8 +133,7 @@ func (s *GeminiMessagesCompatService) SelectAccountForModelWithExclusions(ctx co
 		}
 	}
 
-	// 4. 按优先级 + LRU 选择最佳账号
-	// Select best account by priority + LRU
+	// 4. 通过共享 priority/load 排序选择账号，无 LRU 或凭证类型加分。
 	selected := s.selectBestGeminiAccount(ctx, accounts, requestedModel, excludedIDs, platform, useMixedScheduling)
 
 	if selected == nil {
@@ -312,10 +314,10 @@ func (s *GeminiMessagesCompatService) passesRateLimitPreCheckWithCache(ctx conte
 	return ok
 }
 
-// selectBestGeminiAccount 从候选账号中选择最佳账号（优先级 + LRU + OAuth 优先）。
+// selectBestGeminiAccount 使用共享 priority/load/equal-shuffle 排序。
 // 返回 nil 表示无可用账号。
 //
-// selectBestGeminiAccount selects best account from candidates (priority + LRU + OAuth preferred).
+// Model/usage eligibility remains Gemini-specific.
 // Returns nil if no available account.
 func (s *GeminiMessagesCompatService) selectBestGeminiAccount(
 	ctx context.Context,
@@ -325,34 +327,22 @@ func (s *GeminiMessagesCompatService) selectBestGeminiAccount(
 	platform string,
 	useMixedScheduling bool,
 ) *Account {
-	var selected *Account
 	precheckResult := s.buildPreCheckUsageResultMap(ctx, accounts, requestedModel)
-
+	candidates := make([]*Account, 0, len(accounts))
 	for i := range accounts {
-		acc := &accounts[i]
-
-		// 跳过被排除的账号
-		if _, excluded := excludedIDs[acc.ID]; excluded {
+		a := &accounts[i]
+		if _, excluded := excludedIDs[a.ID]; excluded {
 			continue
 		}
-
-		// 检查账号是否可用于当前请求
-		if !s.isAccountUsableForRequestWithPrecheck(ctx, acc, requestedModel, platform, useMixedScheduling, precheckResult) {
-			continue
-		}
-
-		// 选择最佳账号
-		if selected == nil {
-			selected = acc
-			continue
-		}
-
-		if s.isBetterGeminiAccount(acc, selected) {
-			selected = acc
+		if s.isAccountUsableForRequestWithPrecheck(ctx, a, requestedModel, platform, useMixedScheduling, precheckResult) {
+			candidates = append(candidates, a)
 		}
 	}
-
-	return selected
+	ordered := s.simpleGeminiAccountOrder(ctx, candidates)
+	if len(ordered) == 0 {
+		return nil
+	}
+	return ordered[0]
 }
 
 func (s *GeminiMessagesCompatService) buildPreCheckUsageResultMap(ctx context.Context, accounts []Account, requestedModel string) map[int64]bool {
@@ -370,37 +360,6 @@ func (s *GeminiMessagesCompatService) buildPreCheckUsageResultMap(ctx context.Co
 		logger.LegacyPrintf("service.gemini_messages_compat", "[Gemini PreCheckBatch] failed: %v", err)
 	}
 	return result
-}
-
-// isBetterGeminiAccount 判断 candidate 是否比 current 更优。
-// 规则：优先级更高（数值更小）优先；同优先级时，未使用过的优先（OAuth > 非 OAuth），其次是最久未使用的。
-//
-// isBetterGeminiAccount checks if candidate is better than current.
-// Rules: higher priority (lower value) wins; same priority: never used (OAuth > non-OAuth) > least recently used.
-func (s *GeminiMessagesCompatService) isBetterGeminiAccount(candidate, current *Account) bool {
-	// 优先级更高（数值更小）
-	if candidate.Priority < current.Priority {
-		return true
-	}
-	if candidate.Priority > current.Priority {
-		return false
-	}
-
-	// 同优先级，比较最后使用时间
-	switch {
-	case candidate.LastUsedAt == nil && current.LastUsedAt != nil:
-		// candidate 从未使用，优先
-		return true
-	case candidate.LastUsedAt != nil && current.LastUsedAt == nil:
-		// current 从未使用，保持
-		return false
-	case candidate.LastUsedAt == nil && current.LastUsedAt == nil:
-		// 都未使用，优先选择 OAuth 账号（更兼容 Code Assist 流程）
-		return candidate.Type == AccountTypeOAuth && current.Type != AccountTypeOAuth
-	default:
-		// 都使用过，选择最久未使用的
-		return candidate.LastUsedAt.Before(*current.LastUsedAt)
-	}
 }
 
 // isModelSupportedByAccount 根据账户平台检查模型支持
@@ -503,41 +462,29 @@ func (s *GeminiMessagesCompatService) SelectAccountForAIStudioEndpoints(ctx cont
 		}
 	}
 
-	var selected *Account
+	bestRank := 999
+	candidates := make([]*Account, 0, len(accounts))
 	for i := range accounts {
-		acc := &accounts[i]
-		if selected == nil {
-			selected = acc
+		a := &accounts[i]
+		if !a.IsSchedulable() {
 			continue
 		}
-
-		r1, r2 := rank(acc), rank(selected)
-		if r1 < r2 {
-			selected = acc
+		r := rank(a)
+		if r >= 999 {
 			continue
 		}
-		if r1 > r2 {
-			continue
+		if r < bestRank {
+			bestRank = r
+			candidates = candidates[:0]
 		}
-
-		if acc.Priority < selected.Priority {
-			selected = acc
-		} else if acc.Priority == selected.Priority {
-			switch {
-			case acc.LastUsedAt == nil && selected.LastUsedAt != nil:
-				selected = acc
-			case acc.LastUsedAt != nil && selected.LastUsedAt == nil:
-				// keep selected
-			case acc.LastUsedAt == nil && selected.LastUsedAt == nil:
-				if acc.Type == AccountTypeOAuth && selected.Type != AccountTypeOAuth {
-					selected = acc
-				}
-			default:
-				if acc.LastUsedAt.Before(*selected.LastUsedAt) {
-					selected = acc
-				}
-			}
+		if r == bestRank {
+			candidates = append(candidates, a)
 		}
+	}
+	ordered := s.simpleGeminiAccountOrder(ctx, candidates)
+	var selected *Account
+	if len(ordered) > 0 {
+		selected = ordered[0]
 	}
 
 	if selected == nil {
@@ -2523,4 +2470,16 @@ func (s *GeminiMessagesCompatService) extractImageInputSize(body []byte) string 
 	}
 
 	return ""
+}
+
+func (s *GeminiMessagesCompatService) simpleGeminiAccountOrder(ctx context.Context, accounts []*Account) []*Account {
+	var loads map[int64]*AccountLoadInfo
+	if s.concurrencyService != nil {
+		req := make([]AccountWithConcurrency, 0, len(accounts))
+		for _, a := range accounts {
+			req = append(req, AccountWithConcurrency{ID: a.ID, MaxConcurrency: a.Concurrency})
+		}
+		loads, _ = s.concurrencyService.GetAccountsLoadBatch(ctx, req)
+	}
+	return simpleAccountOrder(accounts, loads)
 }

@@ -4,16 +4,14 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
-// TestOpenAIGatewayService_SelectAccountWithScheduler_CompactPrefersSupportedOverUnknown
+// TestOpenAIGatewayService_SelectAccountWithScheduler_CompactAllowsSupportedAndUnknown
 // 验证 compact 调度时显式支持 (tier=2) 优先于未探测 (tier=1)。
-func TestOpenAIGatewayService_SelectAccountWithScheduler_CompactPrefersSupportedOverUnknown(t *testing.T) {
+func TestOpenAIGatewayService_SelectAccountWithScheduler_CompactAllowsSupportedAndUnknown(t *testing.T) {
 	resetOpenAIAdvancedSchedulerSettingCacheForTest()
 	defer resetOpenAIAdvancedSchedulerSettingCacheForTest()
 
@@ -64,7 +62,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_CompactPrefersSupported
 	require.NoError(t, err)
 	require.NotNil(t, selection)
 	require.NotNil(t, selection.Account)
-	require.Equal(t, int64(71002), selection.Account.ID, "compact-supported account should win over unknown")
+	require.Contains(t, []int64{71001, 71002}, selection.Account.ID, "supported and unknown remain eligible; no capability score")
 }
 
 // TestOpenAIGatewayService_SelectAccountWithScheduler_CompactRejectsExplicitlyUnsupported
@@ -176,125 +174,6 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_CompactFallsBackToUnkno
 	require.Equal(t, int64(71021), selection.Account.ID, "unknown account should be picked when no supported account available")
 }
 
-func TestOpenAIGatewayService_SelectAccountWithScheduler_CompactPenalizesRecentFailures(t *testing.T) {
-	resetOpenAIAdvancedSchedulerSettingCacheForTest()
-	defer resetOpenAIAdvancedSchedulerSettingCacheForTest()
-
-	ctx := context.Background()
-	groupID := int64(91004)
-	accounts := []Account{
-		{
-			ID:          71030,
-			Platform:    PlatformOpenAI,
-			Type:        AccountTypeAPIKey,
-			Status:      StatusActive,
-			Schedulable: true,
-			Concurrency: 1,
-			Priority:    0,
-			Extra:       map[string]any{"openai_compact_supported": true},
-		},
-		{
-			ID:          71031,
-			Platform:    PlatformOpenAI,
-			Type:        AccountTypeAPIKey,
-			Status:      StatusActive,
-			Schedulable: true,
-			Concurrency: 1,
-			Priority:    0,
-			Extra:       map[string]any{"openai_compact_supported": true},
-		},
-	}
-	cfg := &config.Config{}
-	cfg.Gateway.Scheduling.LoadBatchEnabled = false
-	// Explicit compact weights: config.LoadConfig sets these via viper.IsSet;
-	// bare test configs need them manually so penalty scoring is effective.
-	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.CompactError = 1.0
-	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.CompactLatency = 0.5
-	svc := &OpenAIGatewayService{
-		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: accounts},
-		cache:              &schedulerTestGatewayCache{},
-		cfg:                cfg,
-		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
-		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true"),
-	}
-
-	svc.ReportOpenAICompactScheduleResult(71030, false, 55*time.Second)
-	svc.ReportOpenAICompactScheduleResult(71031, true, 10*time.Second)
-
-	selection, _, err := svc.SelectAccountWithScheduler(
-		ctx,
-		&groupID,
-		"",
-		"",
-		"gpt-5.4",
-		nil,
-		OpenAIUpstreamTransportAny,
-		true,
-	)
-	require.NoError(t, err)
-	require.NotNil(t, selection)
-	require.NotNil(t, selection.Account)
-	require.Equal(t, int64(71031), selection.Account.ID, "compact request should avoid account with recent compact failure")
-}
-
-func TestOpenAIGatewayService_SelectAccountWithScheduler_CompactHardPenaltyUsesUnknownHealthy(t *testing.T) {
-	resetOpenAIAdvancedSchedulerSettingCacheForTest()
-	defer resetOpenAIAdvancedSchedulerSettingCacheForTest()
-
-	ctx := context.Background()
-	groupID := int64(91005)
-	accounts := []Account{
-		{
-			ID:          71040,
-			Platform:    PlatformOpenAI,
-			Type:        AccountTypeAPIKey,
-			Status:      StatusActive,
-			Schedulable: true,
-			Concurrency: 1,
-			Priority:    0,
-			Extra:       map[string]any{"openai_compact_supported": true},
-		},
-		{
-			ID:          71041,
-			Platform:    PlatformOpenAI,
-			Type:        AccountTypeAPIKey,
-			Status:      StatusActive,
-			Schedulable: true,
-			Concurrency: 1,
-			Priority:    0,
-			Extra:       map[string]any{},
-		},
-	}
-	cfg := &config.Config{}
-	cfg.Gateway.Scheduling.LoadBatchEnabled = false
-	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.CompactError = 1.0
-	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.CompactLatency = 0.5
-	svc := &OpenAIGatewayService{
-		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: accounts},
-		cache:              &schedulerTestGatewayCache{},
-		cfg:                cfg,
-		concurrencyService: NewConcurrencyService(schedulerTestConcurrencyCache{}),
-		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true"),
-	}
-
-	svc.ReportOpenAICompactScheduleResult(71040, false, 45*time.Second)
-
-	selection, _, err := svc.SelectAccountWithScheduler(
-		ctx,
-		&groupID,
-		"",
-		"",
-		"gpt-5.4",
-		nil,
-		OpenAIUpstreamTransportAny,
-		true,
-	)
-	require.NoError(t, err)
-	require.NotNil(t, selection)
-	require.NotNil(t, selection.Account)
-	require.Equal(t, int64(71041), selection.Account.ID, "compact hard penalty should put slow supported account behind healthy unknown candidates")
-}
-
 // TestOpenAICompactSupportTier 验证 tier 分类逻辑。
 func TestOpenAICompactSupportTier(t *testing.T) {
 	tests := []struct {
@@ -317,33 +196,4 @@ func TestOpenAICompactSupportTier(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestOpenAIShadowRecordsAllCompactCandidatesRejected(t *testing.T) {
-	repo := &openAIAdvancedSchedulerSettingRepoStub{values: map[string]string{
-		SettingKeySchedulerScoringRollout: `{"platforms":{"openai":"shadow"}}`,
-	}}
-	svc := &OpenAIGatewayService{
-		cfg:            &config.Config{},
-		settingService: NewSettingService(repo, &config.Config{}),
-	}
-	scheduler := &defaultOpenAIAccountScheduler{service: svc}
-	accounts := []*Account{
-		{ID: 72001, Platform: PlatformOpenAI, Extra: map[string]any{"openai_compact_mode": OpenAICompactModeForceOff}},
-		{ID: 72002, Platform: PlatformOpenAI, Extra: map[string]any{"openai_compact_supported": false}},
-	}
-
-	plan := scheduler.buildOpenAIAccountLoadPlan(context.Background(), OpenAIAccountScheduleRequest{
-		Platform:       PlatformOpenAI,
-		RequireCompact: true,
-	}, accounts, nil)
-
-	require.Equal(t, scheduling.RolloutShadow, plan.scoringMode)
-	require.NotNil(t, plan.shadowComparison)
-	require.Equal(t, []int64{72001, 72002}, plan.shadowComparison.CandidateIDs)
-	require.Empty(t, plan.shadowComparison.EligibleCandidateIDs)
-	require.Equal(t, []int64{72001, 72002}, plan.shadowComparison.CompactRejectedIDs)
-	require.Empty(t, plan.shadowComparison.LegacySelectionOrder)
-	require.Empty(t, plan.shadowComparison.SharedSelectionOrder)
-	require.False(t, plan.shadowComparison.HardGateViolation)
 }

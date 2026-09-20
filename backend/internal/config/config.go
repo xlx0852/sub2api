@@ -733,7 +733,6 @@ func setDefaults() {
 	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.session_sticky", 3.0)
 	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.compact_error", 1.0)
 	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.compact_latency", 0.5)
-	viper.SetDefault("gateway.openai_scheduler.simple_selection_group_ids", []int64{})
 	viper.SetDefault("gateway.openai_scheduler.sticky_escape_enabled", true)
 	viper.SetDefault("gateway.openai_scheduler.sticky_escape_ttft_ms", 15000)
 	viper.SetDefault("gateway.openai_scheduler.sticky_escape_error_rate", 0.5)
@@ -1664,11 +1663,6 @@ func (c *Config) Validate() error {
 		c.Gateway.OpenAIWS.SchedulerScoreWeights.QuotaHeadroom
 	if weightSum <= 0 {
 		return fmt.Errorf("gateway.openai_ws.scheduler_score_weights must not all be zero")
-	}
-	for _, groupID := range c.Gateway.OpenAIScheduler.SimpleSelectionGroupIDs {
-		if groupID <= 0 {
-			return fmt.Errorf("gateway.openai_scheduler.simple_selection_group_ids must contain positive IDs")
-		}
 	}
 	if c.Gateway.OpenAIScheduler.StickyEscapeTTFTMs <= 0 {
 		return fmt.Errorf("gateway.openai_scheduler.sticky_escape_ttft_ms must be positive")

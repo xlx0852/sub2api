@@ -19,25 +19,6 @@ func (r *writableSchedulerRolloutRepo) Set(_ context.Context, key, value string)
 	return nil
 }
 
-func TestOpenAIGatewayServiceSchedulerScoringRolloutModeReadsDatabaseScope(t *testing.T) {
-	groupID := int64(25)
-	repo := &openAIAdvancedSchedulerSettingRepoStub{values: map[string]string{
-		SettingKeySchedulerScoringRollout: `{"default":"off","platforms":{"openai":"shadow"},"groups":{"openai":{"25":"enforce"}}}`,
-	}}
-	service := &OpenAIGatewayService{
-		settingService: NewSettingService(repo, &config.Config{}),
-	}
-
-	require.Equal(t, scheduling.RolloutEnforce, service.schedulerScoringRolloutMode(context.Background(), PlatformOpenAI, &groupID))
-	require.Equal(t, scheduling.RolloutShadow, service.schedulerScoringRolloutMode(context.Background(), PlatformOpenAI, nil))
-	require.Equal(t, scheduling.RolloutOff, service.schedulerScoringRolloutMode(context.Background(), PlatformGrok, &groupID))
-}
-
-func TestOpenAIGatewayServiceSchedulerScoringRolloutModeFailsClosed(t *testing.T) {
-	service := &OpenAIGatewayService{}
-	require.Equal(t, scheduling.RolloutOff, service.schedulerScoringRolloutMode(context.Background(), PlatformOpenAI, nil))
-}
-
 func TestSettingServiceSetSchedulerScoringRolloutPersistsAndRefreshesCacheImmediately(t *testing.T) {
 	repo := &writableSchedulerRolloutRepo{openAIAdvancedSchedulerSettingRepoStub: &openAIAdvancedSchedulerSettingRepoStub{values: map[string]string{
 		SettingKeySchedulerScoringRollout: `{"platforms":{"openai":"shadow"}}`,

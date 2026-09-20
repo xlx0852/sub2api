@@ -190,61 +190,20 @@ describe('admin AccountsView scheduler score column', () => {
     getAllGroups.mockResolvedValue([])
   })
 
-  it('falls back to the base score for ungrouped accounts instead of showing a dash', async () => {
+  it('does not request or render retired composite scores even when old API data contains them', async () => {
     const wrapper = mountView()
     await flushPromises()
-
-    expect(listAccounts.mock.calls[0]?.[2]).toEqual(expect.objectContaining({
-      include_scheduler_score: '0'
-    }))
-
-    const ungroupedCell = wrapper.find('[data-test="scheduler-score-1"]')
-    expect(ungroupedCell.exists()).toBe(true)
-    expect(ungroupedCell.text()).toContain('1.234567')
-    expect(ungroupedCell.text()).toContain('admin.accounts.schedulerScore.ungrouped')
-    expect(ungroupedCell.text()).not.toBe('-')
+    expect(listAccounts.mock.calls[0]?.[2]).toEqual(expect.objectContaining({ include_scheduler_score: '0' }))
+    expect(wrapper.text()).not.toContain('1.234567')
+    expect(wrapper.text()).not.toContain('group-five')
   })
 
-  it('renders per-group scores for grouped accounts', async () => {
-    const wrapper = mountView()
-    await flushPromises()
-
-    const groupedCell = wrapper.find('[data-test="scheduler-score-2"]')
-    expect(groupedCell.exists()).toBe(true)
-    expect(groupedCell.text()).toContain('group-five')
-    expect(groupedCell.text()).toContain('2')
-  })
-
-  it('keeps scheduler score hidden for old saved column settings until the admin opts in again', async () => {
-    localStorage.setItem('account-hidden-columns', JSON.stringify(['today_stats']))
-
-    mountView()
-    await flushPromises()
-
-    expect(listAccounts.mock.calls[0]?.[2]).toEqual(expect.objectContaining({
-      include_scheduler_score: '0'
-    }))
-    expect(JSON.parse(localStorage.getItem('account-hidden-columns') || '[]')).toContain('scheduler_score')
-  })
-
-  it('requests scheduler scores when the migrated column settings explicitly show the column', async () => {
+  it('ignores saved layouts that used to show the score column', async () => {
     localStorage.setItem('account-hidden-columns', JSON.stringify(['today_stats']))
     localStorage.setItem('account-hidden-columns-version', 'scheduler-score-hidden-by-default')
-
-    mountView()
-    await flushPromises()
-
-    expect(listAccounts.mock.calls[0]?.[2]).toEqual(expect.objectContaining({
-      include_scheduler_score: '1'
-    }))
-  })
-
-  it('still shows a dash when no scheduler score is available', async () => {
     const wrapper = mountView()
     await flushPromises()
-
-    const emptyCell = wrapper.find('[data-test="scheduler-score-3"]')
-    expect(emptyCell.exists()).toBe(true)
-    expect(emptyCell.text()).toBe('-')
+    expect(listAccounts.mock.calls[0]?.[2]).toEqual(expect.objectContaining({ include_scheduler_score: '0' }))
+    expect(wrapper.text()).not.toContain('1.234567')
   })
 })

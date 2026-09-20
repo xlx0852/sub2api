@@ -369,7 +369,7 @@ type GatewayOpenAIWSConfig struct {
 	// PayloadLogSampleRate: payload_schema 日志采样率（0-1）
 	PayloadLogSampleRate float64 `mapstructure:"payload_log_sample_rate"`
 
-	// 账号调度与粘连参数
+	// Deprecated: retained only for configuration compatibility; no candidate truncation.
 	LBTopK int `mapstructure:"lb_top_k"`
 	// StickySessionTTLSeconds: session_hash -> account_id 粘连 TTL
 	StickySessionTTLSeconds int `mapstructure:"sticky_session_ttl_seconds"`
@@ -387,7 +387,8 @@ type GatewayOpenAIWSConfig struct {
 	SchedulerScoreWeights GatewayOpenAIWSSchedulerScoreWeights `mapstructure:"scheduler_score_weights"`
 }
 
-// GatewayOpenAIWSSchedulerScoreWeights 账号调度打分权重。
+// GatewayOpenAIWSSchedulerScoreWeights is deprecated config/API compatibility data.
+// No production selector consumes these weights.
 type GatewayOpenAIWSSchedulerScoreWeights struct {
 	Priority  float64 `mapstructure:"priority"`
 	Load      float64 `mapstructure:"load"`
@@ -410,14 +411,11 @@ type GatewayOpenAIWSSchedulerScoreWeights struct {
 
 // GatewayOpenAISchedulerConfig OpenAI 高级调度器配置。
 type GatewayOpenAISchedulerConfig struct {
-	// SimpleSelectionGroupIDs opts OpenAI non-compact groups into priority/load selection.
-	// Empty (default) preserves the existing profile.
-	SimpleSelectionGroupIDs []int64 `mapstructure:"simple_selection_group_ids"`
-	// StickyEscapeEnabled: 是否允许 session_hash sticky 在账号健康度劣化时临时逃逸
+	// Deprecated sticky-escape tuning fields: accepted for compatibility only.
 	StickyEscapeEnabled bool `mapstructure:"sticky_escape_enabled"`
-	// StickyEscapeTTFTMs: TTFT EWMA 超过该阈值时跳过 sticky
+	// Deprecated: not a selection input.
 	StickyEscapeTTFTMs int `mapstructure:"sticky_escape_ttft_ms"`
-	// StickyEscapeErrorRate: 错误率 EWMA 超过该阈值时跳过 sticky
+	// Deprecated: not a selection input.
 	StickyEscapeErrorRate float64 `mapstructure:"sticky_escape_error_rate"`
 	// CodexCompactSoftTimeoutMs: /responses/compact soft-timeout 换号阈值（毫秒）。
 	// 默认 45000；仅在首次 compact 尝试上生效，超时且客户端仍在线、响应未提交时换号一次。

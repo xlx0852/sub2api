@@ -17,7 +17,6 @@ internal/service: var authPendingIdentityScopedKeyLocks
 internal/service: var defaultOpenAICodexSnapshotPersistThrottle
 internal/service: var openAIStickyInvalidEpoch
 internal/service: var sharedUserGroupRateCache
-internal/service: var stickyReevalLastAt
 
 # ---- service 包级可变状态：进程内指标计数器 ----
 internal/service: var modelsListCacheHitTotal

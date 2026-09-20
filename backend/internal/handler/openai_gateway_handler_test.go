@@ -1290,6 +1290,9 @@ func (s *openAIWSUsageHandlerAccountRepoStub) ListSchedulableByPlatform(ctx cont
 }
 
 func (s *openAIWSUsageHandlerAccountRepoStub) ListSchedulableByGroupIDAndPlatform(ctx context.Context, groupID int64, platform string) ([]service.Account, error) {
+	if len(s.account.GroupIDs) == 0 {
+		s.account.GroupIDs = []int64{groupID}
+	}
 	return s.ListSchedulableByPlatform(ctx, platform)
 }
 
@@ -1318,6 +1321,11 @@ func (s *openAIWSFailoverHandlerAccountRepoStub) ListSchedulableByPlatform(ctx c
 }
 
 func (s *openAIWSFailoverHandlerAccountRepoStub) ListSchedulableByGroupIDAndPlatform(ctx context.Context, groupID int64, platform string) ([]service.Account, error) {
+	for i := range s.accounts {
+		if len(s.accounts[i].GroupIDs) == 0 {
+			s.accounts[i].GroupIDs = []int64{groupID}
+		}
+	}
 	return s.ListSchedulableByPlatform(ctx, platform)
 }
 

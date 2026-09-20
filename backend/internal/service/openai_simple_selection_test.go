@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +17,6 @@ func simpleTestAccount(id int64, typ string) Account {
 
 func simpleTestService(accounts []Account, cc schedulerTestConcurrencyCache) *OpenAIGatewayService {
 	cfg := newSchedulerTestOpenAIWSV2Config()
-	cfg.Gateway.OpenAIScheduler.SimpleSelectionGroupIDs = []int64{4}
 	return &OpenAIGatewayService{cfg: cfg, accountRepo: schedulerTestOpenAIAccountRepo{accounts: accounts}, cache: &schedulerTestGatewayCache{sessionBindings: map[string]int64{}}, rateLimitService: newOpenAIAdvancedSchedulerRateLimitService("true"), concurrencyService: NewConcurrencyService(cc)}
 }
 
@@ -92,17 +90,6 @@ func TestSimpleSelection_RequestCredentialFailureIsolation(t *testing.T) {
 	a.Type = AccountTypeOAuth
 	recordOpenAICredentialFailover(ctx, &a, http.StatusForbidden)
 	require.Equal(t, OpenAICredentialClassAPIKey, openAICredentialFailoverClass(ctx), "first failed class remains locked")
-}
-
-func TestSimpleSelection_Scope(t *testing.T) {
-	s := &OpenAIGatewayService{cfg: &config.Config{}}
-	require.False(t, s.simpleOpenAISelectionEnabled(int64PtrForTest(4), PlatformOpenAI, false))
-	s.cfg.Gateway.OpenAIScheduler.SimpleSelectionGroupIDs = []int64{4}
-	require.True(t, s.simpleOpenAISelectionEnabled(int64PtrForTest(4), PlatformOpenAI, false))
-	require.False(t, s.simpleOpenAISelectionEnabled(int64PtrForTest(5), PlatformOpenAI, false))
-	require.False(t, s.simpleOpenAISelectionEnabled(nil, PlatformOpenAI, false))
-	require.False(t, s.simpleOpenAISelectionEnabled(int64PtrForTest(4), PlatformGrok, false))
-	require.False(t, s.simpleOpenAISelectionEnabled(int64PtrForTest(4), PlatformOpenAI, true))
 }
 
 func TestSimpleSelection_PreviousResponseKeepsOriginalAccount(t *testing.T) {
@@ -185,7 +172,7 @@ func TestSimpleSelection_RecheckRejectsChangedDBAccount(t *testing.T) {
 	fresh.Schedulable = false
 	svc := simpleTestService([]Account{fresh}, schedulerTestConcurrencyCache{})
 	s := newDefaultOpenAIAccountScheduler(svc, nil).(*defaultOpenAIAccountScheduler)
-	req := OpenAIAccountScheduleRequest{SimpleSelection: true, GroupID: int64PtrForTest(4), Platform: PlatformOpenAI, RequestedModel: "gpt-6-astra"}
+	req := OpenAIAccountScheduleRequest{GroupID: int64PtrForTest(4), Platform: PlatformOpenAI, RequestedModel: "gpt-6-astra"}
 	require.True(t, s.simpleCandidateDecision(context.Background(), &cached, req).Allowed)
 	require.Nil(t, s.recheckLoadCandidate(context.Background(), &cached, req))
 }
@@ -288,7 +275,6 @@ func TestSimpleSelection_UserPinIsOnlyAnEligiblePreference(t *testing.T) {
 
 func TestSimpleSelection_AuthenticationLockSurvivesProfileRollback(t *testing.T) {
 	svc := simpleTestService([]Account{simpleTestAccount(89, AccountTypeAPIKey)}, schedulerTestConcurrencyCache{})
-	svc.cfg.Gateway.OpenAIScheduler.SimpleSelectionGroupIDs = nil
 	svc.rateLimitService = newOpenAIAdvancedSchedulerRateLimitService("false")
 	ctx := WithOpenAICredentialFailoverState(context.Background())
 	a := simpleTestAccount(132, AccountTypeOAuth)

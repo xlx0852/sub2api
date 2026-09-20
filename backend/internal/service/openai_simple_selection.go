@@ -12,18 +12,6 @@ import (
 // ErrOpenAIContinuationUnavailable is distinct from capacity exhaustion.
 var ErrOpenAIContinuationUnavailable = errors.New("continuation_unavailable: previous response requires an unavailable account")
 
-func (s *OpenAIGatewayService) simpleOpenAISelectionEnabled(groupID *int64, platform string, compact bool) bool {
-	if s == nil || s.cfg == nil || groupID == nil || compact || normalizeOpenAICompatiblePlatform(platform) != PlatformOpenAI {
-		return false
-	}
-	for _, id := range s.cfg.Gateway.OpenAIScheduler.SimpleSelectionGroupIDs {
-		if id == *groupID {
-			return true
-		}
-	}
-	return false
-}
-
 // One eligibility contract for preferences, candidate filtering and final
 // rechecks. Slot ownership remains the responsibility of atomic acquire.
 func (s *defaultOpenAIAccountScheduler) simpleCandidateDecision(ctx context.Context, account *Account, req OpenAIAccountScheduleRequest) scheduling.PolicyDecision {
@@ -106,22 +94,22 @@ func (s *defaultOpenAIAccountScheduler) prepareSimplePreferences(ctx context.Con
 
 func (s *defaultOpenAIAccountScheduler) buildSimpleLoadPlan(req OpenAIAccountScheduleRequest, accounts []*Account, loads map[int64]*AccountLoadInfo, seed uint64) openAIAccountLoadPlan {
 	snapshots := make([]scheduling.CandidateSnapshot, 0, len(accounts))
-	byID := make(map[int64]openAIAccountCandidateScore, len(accounts))
+	byID := make(map[int64]openAIAccountCandidate, len(accounts))
 	for _, a := range accounts {
 		c := scheduling.CandidateSnapshot{AccountID: a.ID, Priority: a.Priority}
 		if load := loads[a.ID]; load != nil {
 			c.Signals.LoadRate = scheduling.AvailableSignal(float64(load.LoadRate), time.Time{})
 		}
 		snapshots = append(snapshots, c)
-		byID[a.ID] = openAIAccountCandidateScore{account: a, priority: a.Priority, loadInfo: loads[a.ID]}
+		byID[a.ID] = openAIAccountCandidate{account: a, priority: a.Priority, loadInfo: loads[a.ID]}
 	}
 	rng := scheduling.NewSelectionRNG(seed)
 	ordered := scheduling.OrderByPriorityAndLoad(snapshots, &rng)
-	candidates := make([]openAIAccountCandidateScore, 0, len(ordered))
+	candidates := make([]openAIAccountCandidate, 0, len(ordered))
 	for _, c := range ordered {
 		candidates = append(candidates, byID[c.AccountID])
 	}
-	order := make([]openAIAccountCandidateScore, 0, len(candidates))
+	order := make([]openAIAccountCandidate, 0, len(candidates))
 	preferred := map[int64]bool{}
 	for _, id := range []int64{req.UserPinAccountID, req.StickyAccountID} {
 		if c, ok := byID[id]; ok && !preferred[id] {
@@ -136,13 +124,22 @@ func (s *defaultOpenAIAccountScheduler) buildSimpleLoadPlan(req OpenAIAccountSch
 	}
 	// topK is the explored candidate count for the existing decision contract;
 	// no eligible candidate is truncated in the simple profile.
-	return openAIAccountLoadPlan{allCandidates: candidates, candidates: candidates, selectionOrder: order, candidateCount: len(candidates), topK: len(candidates)}
+	sum, sumSquares, n := 0.0, 0.0, 0
+	for _, c := range candidates {
+		if c.loadInfo != nil {
+			v := float64(c.loadInfo.LoadRate)
+			sum += v
+			sumSquares += v * v
+			n++
+		}
+	}
+	return openAIAccountLoadPlan{allCandidates: candidates, candidates: candidates, selectionOrder: order, candidateCount: len(candidates), topK: len(candidates), loadSkew: calcLoadSkewByMoments(sum, sumSquares, n)}
 }
 
 func (s *defaultOpenAIAccountScheduler) selectSimplePreviousResponse(ctx context.Context, req OpenAIAccountScheduleRequest) (*AccountSelectionResult, error) {
-	_, a, responseID, store := s.service.resolveAccountByPreviousResponseIDForCapability(ctx, req.GroupID, req.PreviousResponseID, req.RequestedModel, req.ExcludedIDs, req.RequiredCapability, false)
+	_, a, responseID, store := s.service.resolveAccountByPreviousResponseIDForCapability(ctx, req.GroupID, req.PreviousResponseID, req.RequestedModel, req.ExcludedIDs, req.RequiredCapability, req.RequireCompact)
 	a = s.recheckSimpleCandidate(ctx, a, req)
-	if a == nil {
+	if a == nil || (req.RequireCompact && openAICompactSupportTier(a) == 0) {
 		if req.PreviousResponseCanMove {
 			return nil, nil
 		}
@@ -170,16 +167,5 @@ func (s *defaultOpenAIAccountScheduler) selectSimplePreviousResponse(ctx context
 }
 
 func (s *defaultOpenAIAccountScheduler) recheckLoadCandidate(ctx context.Context, account *Account, req OpenAIAccountScheduleRequest) *Account {
-	if req.SimpleSelection {
-		return s.recheckSimpleCandidate(ctx, account, req)
-	}
-	fresh := s.service.resolveFreshSchedulableOpenAIAccount(ctx, account, req.Platform, req.RequestedModel, false, req.RequiredCapability)
-	if fresh == nil || !OpenAICredentialClassMatches(fresh, req.RequiredCredentialClass) || !s.isAccountTransportCompatible(fresh, req.RequiredTransport) || !s.isAccountRequestCompatible(ctx, fresh, req) {
-		return nil
-	}
-	fresh = s.service.recheckSelectedOpenAIAccountFromDB(ctx, fresh, req.Platform, req.RequestedModel, false, req.RequiredCapability)
-	if fresh == nil || !OpenAICredentialClassMatches(fresh, req.RequiredCredentialClass) || !s.isAccountTransportCompatible(fresh, req.RequiredTransport) || !s.isAccountRequestCompatible(ctx, fresh, req) {
-		return nil
-	}
-	return fresh
+	return s.recheckSimpleCandidate(ctx, account, req)
 }

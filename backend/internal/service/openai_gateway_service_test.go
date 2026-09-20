@@ -58,7 +58,11 @@ func (r stubOpenAIAccountRepo) GetByID(ctx context.Context, id int64) (*Account,
 
 func (r stubOpenAIAccountRepo) ListSchedulableByGroupIDAndPlatform(ctx context.Context, groupID int64, platform string) ([]Account, error) {
 	var result []Account
-	for _, acc := range r.accounts {
+	for i := range r.accounts {
+		if len(r.accounts[i].GroupIDs) == 0 && len(r.accounts[i].AccountGroups) == 0 {
+			r.accounts[i].GroupIDs = []int64{groupID}
+		}
+		acc := r.accounts[i]
 		if acc.Platform == platform {
 			result = append(result, acc)
 		}
@@ -1016,6 +1020,7 @@ func TestOpenAISelectAccountWithLoadAwareness_AllFullWaitPlan(t *testing.T) {
 	}
 	cache := &stubGatewayCache{}
 	concurrencyCache := stubConcurrencyCache{
+		acquireResults: map[int64]bool{1: false},
 		loadMap: map[int64]*AccountLoadInfo{
 			1: {AccountID: 1, LoadRate: 100},
 		},
@@ -1090,65 +1095,8 @@ func TestOpenAISelectAccountWithLoadAwareness_MissingLoadInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SelectAccountWithLoadAwareness error: %v", err)
 	}
-	if selection == nil || selection.Account == nil || selection.Account.ID != 2 {
-		t.Fatalf("expected account 2")
-	}
-}
-
-func TestOpenAISelectAccountForModelWithExclusions_LeastRecentlyUsed(t *testing.T) {
-	oldTime := time.Now().Add(-2 * time.Hour)
-	newTime := time.Now().Add(-1 * time.Hour)
-	repo := stubOpenAIAccountRepo{
-		accounts: []Account{
-			{ID: 1, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true, Priority: 1, LastUsedAt: &newTime},
-			{ID: 2, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true, Priority: 1, LastUsedAt: &oldTime},
-		},
-	}
-	cache := &stubGatewayCache{}
-
-	svc := &OpenAIGatewayService{
-		accountRepo: repo,
-		cache:       cache,
-	}
-
-	acc, err := svc.SelectAccountForModelWithExclusions(context.Background(), nil, "", "gpt-4", nil)
-	if err != nil {
-		t.Fatalf("SelectAccountForModelWithExclusions error: %v", err)
-	}
-	if acc == nil || acc.ID != 2 {
-		t.Fatalf("expected account 2")
-	}
-}
-
-func TestOpenAISelectAccountWithLoadAwareness_PreferNeverUsed(t *testing.T) {
-	groupID := int64(1)
-	lastUsed := time.Now().Add(-1 * time.Hour)
-	repo := stubOpenAIAccountRepo{
-		accounts: []Account{
-			{ID: 1, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 1, LastUsedAt: &lastUsed},
-			{ID: 2, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 1},
-		},
-	}
-	cache := &stubGatewayCache{}
-	concurrencyCache := stubConcurrencyCache{
-		loadMap: map[int64]*AccountLoadInfo{
-			1: {AccountID: 1, LoadRate: 10},
-			2: {AccountID: 2, LoadRate: 10},
-		},
-	}
-
-	svc := &OpenAIGatewayService{
-		accountRepo:        repo,
-		cache:              cache,
-		concurrencyService: NewConcurrencyService(concurrencyCache),
-	}
-
-	selection, err := svc.SelectAccountWithLoadAwareness(context.Background(), &groupID, "", "gpt-4", nil)
-	if err != nil {
-		t.Fatalf("SelectAccountWithLoadAwareness error: %v", err)
-	}
-	if selection == nil || selection.Account == nil || selection.Account.ID != 2 {
-		t.Fatalf("expected account 2")
+	if selection == nil || selection.Account == nil || selection.Account.ID != 1 {
+		t.Fatalf("expected known-load account 1; unknown is not measured zero")
 	}
 }
 

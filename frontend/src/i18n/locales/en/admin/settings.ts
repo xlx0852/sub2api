@@ -297,6 +297,8 @@ export default {
           'Reject Claude Code clients above this version (semver format). Leave empty to allow any version.'
       },
       scheduling: {
+        simpleTitle: 'Unified account selection',
+        simpleDescription: 'After model, quota and cooldown checks, all providers use priority, current concurrent load and randomized ties. Valid affinity is preferred; busy ordinary bindings yield. Continuation and authentication isolation remain enforced. Composite scores, TopK and rollout switches are retired.',
         title: 'Gateway Scheduling Settings',
         description: 'Control API Key scheduling behavior',
         allowUngroupedKey: 'Allow Ungrouped Key Scheduling',

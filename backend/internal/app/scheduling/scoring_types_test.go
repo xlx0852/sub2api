@@ -37,23 +37,6 @@ func TestNewCandidateSnapshotCopiesCapabilities(t *testing.T) {
 	require.Equal(t, []string{"responses", "compact"}, snapshot.Capabilities)
 }
 
-func TestScoreBreakdownComponentTotal(t *testing.T) {
-	breakdown := ScoreBreakdown{
-		Priority:         1,
-		Load:             2,
-		Queue:            3,
-		ErrorRate:        4,
-		TTFT:             5,
-		Reset:            6,
-		QuotaHeadroom:    7,
-		CompactError:     8,
-		CompactLatency:   9,
-		PreviousResponse: 10,
-		SessionSticky:    11,
-	}
-	require.Equal(t, float64(66), breakdown.ComponentTotal())
-}
-
 func TestNoAffinityDecisionIsExplicit(t *testing.T) {
 	require.Equal(t, AffinityDecision{Kind: AffinityNone}, NoAffinityDecision())
 }

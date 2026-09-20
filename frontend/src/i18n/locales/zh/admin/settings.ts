@@ -291,6 +291,8 @@ export default {
         maxVersionHint: '拒绝高于此版本的 Claude Code 客户端请求（semver 格式）。留空则不限制最高版本。'
       },
       scheduling: {
+        simpleTitle: '全平台统一选号',
+        simpleDescription: '通过模型、配额、冷却等硬门槛后，按优先级、当前并发占用率排序，同档随机打散。有效会话优先复用，普通绑定忙时让路；真实续链和认证隔离保留。不再使用综合评分、TopK 或灰度开关。',
         title: '网关调度设置',
         description: '控制 API Key 的调度行为',
         allowUngroupedKey: '允许未分组 Key 调度',

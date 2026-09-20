@@ -814,16 +814,14 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(getProviders).toHaveBeenCalledTimes(2);
   });
 
-  it("renders advanced scheduler copy as local experimental gateway policy", async () => {
+  it("shows the unified policy without retired tuning controls", async () => {
     const wrapper = mountView();
-
     await flushPromises();
-
-    expect(wrapper.text()).toContain("OpenAI 实验调度策略");
-    expect(wrapper.text()).toContain(
-      "默认关闭。开启后仅影响本网关在 OpenAI 账号间的实验性调度选择逻辑",
-    );
-    expect(wrapper.text()).not.toContain("OpenAI 高级调度器");
+    const policy = wrapper.get('[data-test="simple-scheduler-policy"]');
+    expect(policy.text()).toContain('admin.settings.scheduling.simpleTitle');
+    expect(policy.text()).toContain('admin.settings.scheduling.simpleDescription');
+    expect(wrapper.text()).not.toContain('OpenAI 实验调度策略');
+    expect(wrapper.text()).not.toContain('调度权值覆盖');
   });
 
   it("passes translated upload and remove labels to the payment help image uploader", async () => {

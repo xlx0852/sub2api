@@ -251,3 +251,13 @@ func validPositiveFeedbackValue(value *float64) bool {
 func validNonNegativeFeedbackValue(value *float64) bool {
 	return validFeedbackValue(value) && (value == nil || *value >= 0)
 }
+
+func clampUnit(value float64) float64 {
+	if value < 0 {
+		return 0
+	}
+	if value > 1 {
+		return 1
+	}
+	return value
+}

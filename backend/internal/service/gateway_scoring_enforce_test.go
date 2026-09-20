@@ -11,15 +11,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGatewayEnforceUsesSharedOrderAfterRuntimeStatsWarm(t *testing.T) {
+func TestGatewayRetiredRolloutCannotOverrideSimpleOrder(t *testing.T) {
 	off := captureGatewayScoringEnforceSelection(t, scheduling.RolloutOff)
 	shadow := captureGatewayScoringEnforceSelection(t, scheduling.RolloutShadow)
 	enforce := captureGatewayScoringEnforceSelection(t, scheduling.RolloutEnforce)
 
 	require.Equal(t, int64(61002), off.SelectedID)
 	require.Equal(t, off, shadow, "shadow must keep the legacy live selection and side effects")
-	require.Equal(t, int64(61001), enforce.SelectedID, "enforce must use the warmed shared score order")
-	require.Equal(t, []int64{61001}, enforce.SideEffects.AcquireOrder)
+	require.Equal(t, off, enforce, "retired enforce setting must not change selection or side effects")
+	require.Equal(t, []int64{61002}, enforce.SideEffects.AcquireOrder)
 	require.Equal(t, 1, enforce.SideEffects.LoadBatchCalls)
 }
 

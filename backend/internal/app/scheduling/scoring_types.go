@@ -65,41 +65,6 @@ func NewCandidateSnapshot(snapshot CandidateSnapshot) CandidateSnapshot {
 	return snapshot
 }
 
-type ScoreWeights struct {
-	Priority         float64
-	Load             float64
-	Queue            float64
-	ErrorRate        float64
-	TTFT             float64
-	Reset            float64
-	QuotaHeadroom    float64
-	CompactError     float64
-	CompactLatency   float64
-	PreviousResponse float64
-	SessionSticky    float64
-}
-
-type ScoreBreakdown struct {
-	Priority         float64
-	Load             float64
-	Queue            float64
-	ErrorRate        float64
-	TTFT             float64
-	Reset            float64
-	QuotaHeadroom    float64
-	CompactError     float64
-	CompactLatency   float64
-	PreviousResponse float64
-	SessionSticky    float64
-	Total            float64
-}
-
-func (b ScoreBreakdown) ComponentTotal() float64 {
-	return b.Priority + b.Load + b.Queue + b.ErrorRate + b.TTFT + b.Reset +
-		b.QuotaHeadroom + b.CompactError + b.CompactLatency +
-		b.PreviousResponse + b.SessionSticky
-}
-
 type AffinityKind string
 
 const (

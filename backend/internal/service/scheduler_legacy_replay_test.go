@@ -431,7 +431,8 @@ func TestOpenAISingleAccountWithoutRequestedModelFailsIdenticallyAcrossRolloutMo
 				false, false,
 			)
 			require.Nil(t, selection)
-			require.EqualError(t, err, "no available OpenAI accounts supporting model: gpt-5.6-luna")
+			require.ErrorIs(t, err, ErrNoAvailableAccounts)
+			require.ErrorContains(t, err, "gpt-5.6-luna")
 			require.Empty(t, concurrency.acquireOrder)
 			require.Zero(t, concurrency.loadBatchCalls)
 			require.Zero(t, cache.setCalls)
@@ -497,62 +498,6 @@ func captureGatewayStickyReplayWithRollout(t *testing.T, mode scheduling.Rollout
 	}
 }
 
-func TestGatewayShadowComparisonKeepsHardPoliciesAheadOfScoring(t *testing.T) {
-	accounts := []Account{
-		{ID: 101, Platform: PlatformAnthropic, Type: AccountTypeAPIKey, Priority: 1, Status: StatusActive, Schedulable: true},
-		{ID: 102, Platform: PlatformGemini, Type: AccountTypeAPIKey, Priority: 0, Status: StatusActive, Schedulable: true},
-	}
-	allowed := []*Account{&accounts[0]}
-	service := &GatewayService{
-		cfg:                 &config.Config{},
-		gatewayRuntimeStats: scheduling.NewRuntimeStatsStore(time.Hour, 16, 1, nil),
-	}
-	errorRate, ttft := 0.2, 1200.0
-	require.True(t, service.gatewayRuntimeStats.Report(scheduling.RuntimeFeedback{AccountID: 101, ErrorSample: &errorRate, TTFTMillis: &ttft}))
-	comparison := service.evaluateGatewayScoringShadow(
-		context.Background(), PlatformAnthropic, nil, "shadow-session", "claude-sonnet-4-6", 0, false, false,
-		accounts,
-		scheduling.CandidateSetDecision{
-			AllowedAccounts: allowed,
-			Trace: []scheduling.CandidatePolicyTrace{
-				{AccountID: 101, Allowed: true},
-				{AccountID: 102, RejectedPolicy: "gateway_platform"},
-			},
-		},
-		map[int64]*AccountLoadInfo{101: {AccountID: 101, LoadRate: 40}}, true,
-	)
-
-	require.Equal(t, []int64{101, 102}, comparison.CandidateIDs)
-	require.Equal(t, []int64{101}, comparison.EligibleCandidateIDs)
-	require.Equal(t, []int64{101}, comparison.SharedSelectionOrder)
-	require.Equal(t, []int64{101}, comparison.LegacySelectionCandidates)
-	require.False(t, comparison.SelectionDiff)
-	require.False(t, comparison.HardGateViolation)
-	require.False(t, comparison.Fallback)
-	require.Len(t, comparison.RuntimeSignals, 1)
-	require.True(t, comparison.RuntimeSignals[0].ErrorRateAvailable)
-	require.True(t, comparison.RuntimeSignals[0].TTFTAvailable)
-	require.Equal(t, int64(1), service.schedulerShadowMetrics.snapshot().EvaluationTotal)
-}
-
-func TestSchedulerShadowCountersTrackOpsFields(t *testing.T) {
-	var counters schedulerShadowCounters
-	first := counters.record(3, true, true, false, false)
-	require.Equal(t, schedulerShadowCountersSnapshot{
-		EvaluationTotal:     1,
-		CandidateTotal:      3,
-		SelectionDiffTotal:  1,
-		AffinityEscapeTotal: 1,
-	}, first)
-	second := counters.record(2, false, false, true, true)
-	require.Equal(t, int64(2), second.EvaluationTotal)
-	require.Equal(t, int64(5), second.CandidateTotal)
-	require.Equal(t, int64(1), second.SelectionDiffTotal)
-	require.Equal(t, int64(1), second.AffinityEscapeTotal)
-	require.Equal(t, int64(1), second.HardGateViolationTotal)
-	require.Equal(t, int64(1), second.FallbackTotal)
-}
-
 func legacyReplayPolicyResults(accounts []Account, req scheduling.Request, policies []scheduling.CandidatePolicy) []legacyReplayPolicyResult {
 	result := make([]legacyReplayPolicyResult, 0, len(accounts))
 	for i := range accounts {
@@ -590,170 +535,16 @@ func legacyReplayTimePtr(value time.Time) *time.Time {
 	return &value
 }
 
-func TestSharedScorerMatchesLegacyOpenAIScoreAndTieBreak(t *testing.T) {
-	stats := newOpenAIAccountRuntimeStats()
-	setLegacyReplayRuntimeStat(stats, 3001, 0.2, 1200)
-	setLegacyReplayRuntimeStat(stats, 3002, 0.6, 4200)
-	setLegacyReplayRuntimeStat(stats, 3003, 0.2, 1200)
-
-	accounts := []*Account{
-		{ID: 3001, Priority: 1},
-		{ID: 3002, Priority: 3},
-		{ID: 3003, Priority: 1},
-	}
-	loads := map[int64]*AccountLoadInfo{
-		3001: {AccountID: 3001, LoadRate: 20, WaitingCount: 1},
-		3002: {AccountID: 3002, LoadRate: 80, WaitingCount: 4},
-		3003: {AccountID: 3003, LoadRate: 20, WaitingCount: 1},
-	}
-	cfg := &config.Config{}
-	cfg.Gateway.OpenAIWS.LBTopK = 3
-	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Priority = 1
-	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Load = 1
-	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Queue = 0.7
-	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.ErrorRate = 0.8
-	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.TTFT = 0.5
-	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.PreviousResponse = 5
-	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.SessionSticky = 3
-	service := &OpenAIGatewayService{cfg: cfg}
-	scheduler := &defaultOpenAIAccountScheduler{service: service, stats: stats}
-	req := OpenAIAccountScheduleRequest{
-		SessionHash:             "scorer-characterization",
-		StickyWeighted:          true,
-		StickyPreviousAccountID: 3001,
-		StickyAccountID:         3003,
-		PreviousResponseCanMove: true,
-	}
-
-	legacyPlan := scheduler.buildOpenAIAccountLoadPlan(context.Background(), req, accounts, loads)
-	require.InDelta(t, 8.465, legacyPlan.candidates[0].score, 1e-12)
-	require.InDelta(t, 0.520, legacyPlan.candidates[1].score, 1e-12)
-	require.InDelta(t, 6.465, legacyPlan.candidates[2].score, 1e-12)
-	snapshots := make([]scheduling.CandidateSnapshot, 0, len(legacyPlan.candidates))
-	for _, candidate := range legacyPlan.candidates {
-		snapshot := scheduling.CandidateSnapshot{
-			AccountID: candidate.account.ID,
-			Priority:  candidate.priority,
-			Signals: scheduling.CandidateSignals{
-				LoadRate:   scheduling.AvailableSignal(float64(candidate.loadInfo.LoadRate), time.Time{}),
-				QueueDepth: scheduling.AvailableSignal(float64(candidate.loadInfo.WaitingCount), time.Time{}),
-				ErrorRate:  scheduling.AvailableSignal(candidate.errorRate, time.Time{}),
-			},
-			Affinity: scheduling.AffinitySignals{
-				PreviousResponse: candidate.account.ID == req.StickyPreviousAccountID,
-				SessionSticky:    candidate.account.ID == req.StickyAccountID,
-			},
-		}
-		if candidate.hasTTFT {
-			snapshot.Signals.TTFTMillis = scheduling.AvailableSignal(candidate.ttft, time.Time{})
-		}
-		snapshots = append(snapshots, snapshot)
-	}
-	weights := scheduling.ScoreWeights{
-		Priority:         cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Priority,
-		Load:             cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Load,
-		Queue:            cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Queue,
-		ErrorRate:        cfg.Gateway.OpenAIWS.SchedulerScoreWeights.ErrorRate,
-		TTFT:             cfg.Gateway.OpenAIWS.SchedulerScoreWeights.TTFT,
-		PreviousResponse: cfg.Gateway.OpenAIWS.SchedulerScoreWeights.PreviousResponse,
-		SessionSticky:    cfg.Gateway.OpenAIWS.SchedulerScoreWeights.SessionSticky,
-	}
-	shared := scheduling.ScoreCandidates(snapshots, weights, scheduling.ScoreOptions{StickyWeighted: true})
-	require.Len(t, shared, len(legacyPlan.candidates))
-	sharedByID := make(map[int64]scheduling.ScoredCandidate, len(shared))
-	for _, candidate := range shared {
-		sharedByID[candidate.Candidate.AccountID] = candidate
-	}
-	for _, candidate := range legacyPlan.candidates {
-		require.InDelta(t, candidate.score, sharedByID[candidate.account.ID].Score(), 1e-12, "account %d", candidate.account.ID)
-	}
-
-	legacyRanked := selectTopKOpenAICandidatesShared(legacyPlan.candidates, len(legacyPlan.candidates))
-	sharedRanked := append([]scheduling.ScoredCandidate(nil), shared...)
-	scheduling.SortScoredCandidates(sharedRanked)
-	require.Equal(t, legacyReplayOpenAIIDs(legacyRanked), legacyReplaySharedIDs(sharedRanked))
-
-	legacyTopK := selectTopKOpenAICandidatesShared(legacyPlan.candidates, 3)
-	sharedTopK := scheduling.SelectTopK(shared, 3)
-	require.Equal(t, legacyReplayOpenAIIDs(legacyTopK), legacyReplaySharedIDs(sharedTopK))
-	require.Equal(t, legacyReplayOpenAIIDs(legacyTopK), legacyReplayOpenAIIDs(selectTopKOpenAICandidatesShared(legacyPlan.candidates, 3)))
-	legacyWeighted := buildOpenAIWeightedSelectionOrderShared(legacyTopK, req)
-	require.Equal(t, []int64{3001, 3003, 3002}, legacyReplayOpenAIIDs(legacyWeighted))
-	seed := scheduling.DeriveSelectionSeed(scheduling.SelectionSeedInput{
-		StickyKey:          req.SessionHash,
-		PreviousResponseID: req.PreviousResponseID,
-		RequestedModel:     req.RequestedModel,
-		GroupID:            req.GroupID,
-	})
-	rng := scheduling.NewSelectionRNG(seed)
-	sharedWeighted := scheduling.BuildWeightedSelectionOrder(sharedTopK, &rng)
-	require.Equal(t, legacyReplayOpenAIIDs(legacyWeighted), legacyReplaySharedIDs(sharedWeighted))
-	require.Equal(t, legacyReplayOpenAIIDs(legacyWeighted), legacyReplayOpenAIIDs(buildOpenAIWeightedSelectionOrderShared(legacyTopK, req)))
-
-	for _, testCase := range []struct {
-		name string
-		mode scheduling.RolloutMode
-	}{
-		{name: "off", mode: scheduling.RolloutOff},
-		{name: "shadow", mode: scheduling.RolloutShadow},
-		{name: "enforce", mode: scheduling.RolloutEnforce},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			repo := &openAIAdvancedSchedulerSettingRepoStub{values: map[string]string{
-				SettingKeySchedulerScoringRollout: fmt.Sprintf(`{"platforms":{"openai":%q}}`, testCase.mode),
-			}}
-			modeService := &OpenAIGatewayService{
-				cfg:            cfg,
-				settingService: NewSettingService(repo, cfg),
-			}
-			modeScheduler := &defaultOpenAIAccountScheduler{service: modeService, stats: stats}
-			modePlan := modeScheduler.buildOpenAIAccountLoadPlan(context.Background(), req, accounts, loads)
-
-			require.Equal(t, testCase.mode, modePlan.scoringMode)
-			require.Equal(t, []int64{3001, 3003, 3002}, legacyReplayOpenAIIDs(modePlan.selectionOrder))
-			for i, expected := range []float64{8.465, 0.520, 6.465} {
-				require.InDelta(t, expected, modePlan.candidates[i].score, 1e-12)
-			}
-			if testCase.mode == scheduling.RolloutShadow {
-				require.NotNil(t, modePlan.shadowComparison)
-				require.Equal(t, []int64{3001, 3002, 3003}, modePlan.shadowComparison.CandidateIDs)
-				require.Equal(t, []int64{3001, 3003, 3002}, modePlan.shadowComparison.LegacyTopK)
-				require.Equal(t, modePlan.shadowComparison.LegacyTopK, modePlan.shadowComparison.SharedTopK)
-				require.Equal(t, []int64{3001, 3003, 3002}, modePlan.shadowComparison.LegacySelectionOrder)
-				require.Equal(t, modePlan.shadowComparison.LegacySelectionOrder, modePlan.shadowComparison.SharedSelectionOrder)
-				require.Zero(t, modePlan.shadowComparison.ScoreDiffCount)
-				require.False(t, modePlan.shadowComparison.SelectionDiff)
-				require.False(t, modePlan.shadowComparison.HardGateViolation)
-			} else {
-				require.Nil(t, modePlan.shadowComparison)
-			}
-		})
-	}
-}
-
-func TestOpenAIShadowHardGateViolationDetection(t *testing.T) {
-	require.False(t, hasOpenAIShadowSelectionOutsideEligible([]int64{3, 1}, []int64{1, 2, 3}))
-	require.True(t, hasOpenAIShadowSelectionOutsideEligible([]int64{3, 4}, []int64{1, 2, 3}))
-}
-
 func setLegacyReplayRuntimeStat(stats *openAIAccountRuntimeStats, accountID int64, errorRate, ttft float64) {
 	stat := stats.loadOrCreate(accountID)
 	stat.errorRateEWMABits.Store(math.Float64bits(errorRate))
 	stat.ttftEWMABits.Store(math.Float64bits(ttft))
 }
 
-func legacyReplayOpenAIIDs(candidates []openAIAccountCandidateScore) []int64 {
+func legacyReplayOpenAIIDs(candidates []openAIAccountCandidate) []int64 {
 	result := make([]int64, 0, len(candidates))
 	for _, candidate := range candidates {
 		result = append(result, candidate.account.ID)
-	}
-	return result
-}
-
-func legacyReplaySharedIDs(candidates []scheduling.ScoredCandidate) []int64 {
-	result := make([]int64, 0, len(candidates))
-	for _, candidate := range candidates {
-		result = append(result, candidate.Candidate.AccountID)
 	}
 	return result
 }

@@ -130,12 +130,9 @@ func (s *RateLimitService) SetQuotaWindowLedger(ledger *QuotaWindowLedger) {
 	}
 }
 
+// Deprecated compatibility accessor. Sticky is no longer a score bonus.
 func (s *RateLimitService) IsOpenAIAdvancedSchedulerStickyWeightedEnabled(ctx context.Context) bool {
-	if s == nil || s.settingService == nil {
-		return false
-	}
-	gateway := &OpenAIGatewayService{rateLimitService: s}
-	return gateway.isOpenAIAdvancedSchedulerStickyWeightedEnabled(ctx)
+	return false
 }
 
 func (s *RateLimitService) notifyAccountSchedulingBlocked(account *Account, until time.Time, reason string) {

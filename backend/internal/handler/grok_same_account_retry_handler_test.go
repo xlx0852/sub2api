@@ -43,8 +43,13 @@ type grokRetryHandlerAccountRepo struct {
 	events   *grokRetryHandlerEvents
 }
 
-func (r *grokRetryHandlerAccountRepo) ListSchedulableByGroupIDAndPlatform(_ context.Context, _ int64, platform string) ([]service.Account, error) {
+func (r *grokRetryHandlerAccountRepo) ListSchedulableByGroupIDAndPlatform(_ context.Context, groupID int64, platform string) ([]service.Account, error) {
 	r.events.add("select")
+	for i := range r.accounts {
+		if len(r.accounts[i].GroupIDs) == 0 {
+			r.accounts[i].GroupIDs = []int64{groupID}
+		}
+	}
 	return r.accountsForPlatform(platform), nil
 }
 
@@ -65,6 +70,16 @@ func (r *grokRetryHandlerAccountRepo) SetTempUnschedulable(_ context.Context, id
 
 func (r *grokRetryHandlerAccountRepo) UpdateExtra(_ context.Context, _ int64, _ map[string]any) error {
 	return nil
+}
+
+func (r *grokRetryHandlerAccountRepo) GetByID(_ context.Context, id int64) (*service.Account, error) {
+	for i := range r.accounts {
+		if r.accounts[i].ID == id {
+			account := r.accounts[i]
+			return &account, nil
+		}
+	}
+	return nil, nil
 }
 
 func (r *grokRetryHandlerAccountRepo) accountsForPlatform(platform string) []service.Account {

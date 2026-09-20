@@ -97,18 +97,3 @@ func normalizeSchedulerScoringRolloutRaw(raw string) (string, error) {
 	}
 	return string(normalized), nil
 }
-
-func (s *OpenAIGatewayService) schedulerScoringRolloutMode(ctx context.Context, platform string, groupID *int64) scheduling.RolloutMode {
-	settingService := s.openAIAdvancedSchedulerSettingService()
-	if settingService == nil {
-		return scheduling.RolloutOff
-	}
-	return settingService.schedulerScoringRollout(ctx).Resolve(platform, groupID)
-}
-
-func (s *GatewayService) schedulerScoringRolloutMode(ctx context.Context, platform string, groupID *int64) scheduling.RolloutMode {
-	if s == nil || s.settingService == nil {
-		return scheduling.RolloutOff
-	}
-	return s.settingService.schedulerScoringRollout(ctx).Resolve(platform, groupID)
-}

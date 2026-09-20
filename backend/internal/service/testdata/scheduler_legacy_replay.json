@@ -1,18 +1,50 @@
 {
   "gateway": {
-    "raw_candidates": [1001, 1002, 1003, 1004, 1005],
-    "policies": [
-      {"account_id": 1001, "allowed": true},
-      {"account_id": 1002, "allowed": true},
-      {"account_id": 1003, "allowed": false, "rejected_policy": "not_excluded"},
-      {"account_id": 1004, "allowed": false, "rejected_policy": "schedulable"},
-      {"account_id": 1005, "allowed": false, "rejected_policy": "platform"}
+    "raw_candidates": [
+      1001,
+      1002,
+      1003,
+      1004,
+      1005
     ],
-    "selected_id": 1001,
+    "policies": [
+      {
+        "account_id": 1001,
+        "allowed": true
+      },
+      {
+        "account_id": 1002,
+        "allowed": true
+      },
+      {
+        "account_id": 1003,
+        "allowed": false,
+        "rejected_policy": "not_excluded"
+      },
+      {
+        "account_id": 1004,
+        "allowed": false,
+        "rejected_policy": "schedulable"
+      },
+      {
+        "account_id": 1005,
+        "allowed": false,
+        "rejected_policy": "platform"
+      }
+    ],
+    "selected_id": 1002,
     "acquired": false,
-    "wait_plan": {"account_id": 1001, "max_concurrency": 2, "timeout_ms": 9000, "max_waiting": 4},
+    "wait_plan": {
+      "account_id": 1002,
+      "max_concurrency": 3,
+      "timeout_ms": 9000,
+      "max_waiting": 4
+    },
     "side_effects": {
-      "acquire_order": [1002, 1001],
+      "acquire_order": [
+        1002,
+        1001
+      ],
       "release_calls": 0,
       "load_batch_calls": 1,
       "sticky_sets": 0,
@@ -21,20 +53,54 @@
     }
   },
   "openai": {
-    "raw_candidates": [2001, 2002, 2003, 2004, 2005],
+    "raw_candidates": [
+      2001,
+      2002,
+      2003,
+      2004,
+      2005
+    ],
     "policies": [
-      {"account_id": 2001, "allowed": true},
-      {"account_id": 2002, "allowed": true},
-      {"account_id": 2003, "allowed": false, "rejected_policy": "not_excluded"},
-      {"account_id": 2004, "allowed": false, "rejected_policy": "platform"},
-      {"account_id": 2005, "allowed": false, "rejected_policy": "schedulable"}
+      {
+        "account_id": 2001,
+        "allowed": true
+      },
+      {
+        "account_id": 2002,
+        "allowed": true
+      },
+      {
+        "account_id": 2003,
+        "allowed": false,
+        "rejected_policy": "not_excluded"
+      },
+      {
+        "account_id": 2004,
+        "allowed": false,
+        "rejected_policy": "platform"
+      },
+      {
+        "account_id": 2005,
+        "allowed": false,
+        "rejected_policy": "schedulable"
+      }
     ],
     "selected_id": 2002,
     "acquired": false,
     "layer": "load_balance",
-    "wait_plan": {"account_id": 2002, "max_concurrency": 3, "timeout_ms": 11000, "max_waiting": 5},
+    "wait_plan": {
+      "account_id": 2002,
+      "max_concurrency": 3,
+      "timeout_ms": 11000,
+      "max_waiting": 5
+    },
     "side_effects": {
-      "acquire_order": [2002, 2002],
+      "acquire_order": [
+        2002,
+        2001,
+        2002,
+        2001
+      ],
       "release_calls": 0,
       "load_batch_calls": 2,
       "sticky_sets": 0,
