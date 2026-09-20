@@ -9,9 +9,6 @@ import (
 
 type UsageBillingRepository interface {
 	Apply(ctx context.Context, cmd *domain.UsageBillingCommand) (*domain.UsageBillingApplyResult, error)
-	ReserveBatchImageBalance(ctx context.Context, cmd *domain.BatchImageBalanceHoldCommand) (*domain.BatchImageBalanceHoldResult, error)
-	CaptureBatchImageBalance(ctx context.Context, cmd *domain.BatchImageBalanceHoldCommand) (*domain.BatchImageBalanceHoldResult, error)
-	ReleaseBatchImageBalance(ctx context.Context, cmd *domain.BatchImageBalanceHoldCommand) (*domain.BatchImageBalanceHoldResult, error)
 }
 
 type UsageSettlementBillingRepository interface {

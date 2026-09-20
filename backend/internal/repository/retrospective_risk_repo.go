@@ -843,6 +843,10 @@ FROM content_moderation_user_risk_profiles p LEFT JOIN users u ON u.id=p.user_id
 	return scanRiskProfile(row)
 }
 
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
 func scanRiskProfile(row rowScanner) (*domain.UserRiskProfile, error) {
 	var item domain.UserRiskProfile
 	var reasons []byte

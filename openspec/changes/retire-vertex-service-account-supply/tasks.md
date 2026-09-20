@@ -32,7 +32,8 @@
 ## 5. Vertex 批图删除
 
 - [x] 5.1 删除 Vertex Batch Prediction/GCS Provider、client、registry、配置校验和专用测试。
-- [ ] 5.2 将批图公共类型、worker/queue/settlement/download/cleanup 收敛到退役后的真实 Provider 集合。
+- [x] 5.2 将批图公共类型、worker/queue/settlement/download/cleanup 收敛到退役后的真实 Provider 集合。
+  - 备注：无可用 Provider 后删除 service/repository/ports 批图实现；分组字段与 `batch_image.*` 配置键保留以免动 schema。
 - [x] 5.3 更新批图文档和前端 API 类型，删除 Vertex 设置与操作入口。
   - 备注：配置入口已删；批图公开 API 仍可识别历史 `provider=vertex` 字符串，但不再支持提交。
 

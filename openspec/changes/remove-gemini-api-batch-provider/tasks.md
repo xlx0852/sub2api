@@ -8,6 +8,7 @@
 
 - [x] 2.1 Remove `GeminiAPIBatchImageProvider`, its Gemini Batch HTTP client/JSONL/state mapping, and provider-specific tests.
 - [x] 2.2 Remove `gemini_api` from domain/service provider constants, registry construction, supported-provider validation, and automatic selection order; preserve `vertex`.
+  - 后续：Vertex 供应已整包退役，批图实现栈已删除，不再保留 Vertex Provider。
 - [x] 2.3 Make explicit `gemini_api` requests return the existing unsupported-provider error without falling through to Vertex.
 - [x] 2.4 Migrate generic repository/settlement/download/cleanup tests from the retired constant to Vertex or local fake providers.
 

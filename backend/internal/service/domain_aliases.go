@@ -48,27 +48,7 @@ type AnnouncementListFilters = domain.AnnouncementListFilters
 type BackupObjectStore = domain.BackupObjectStore
 type BackupObjectStoreFactory = domain.BackupObjectStoreFactory
 type BackupS3Config = domain.BackupS3Config
-type BatchImageBalanceHoldCommand = domain.BatchImageBalanceHoldCommand
-type BatchImageBalanceHoldResult = domain.BatchImageBalanceHoldResult
-type BatchImageCounts = domain.BatchImageCounts
-type BatchImageItem = domain.BatchImageItem
-type BatchImageItemFilter = domain.BatchImageItemFilter
-type BatchImageJob = domain.BatchImageJob
-type BatchImageJobFilter = domain.BatchImageJobFilter
 
-const BatchImageJobStatusCancelled = domain.BatchImageJobStatusCancelled
-const BatchImageJobStatusCompleted = domain.BatchImageJobStatusCompleted
-const BatchImageJobStatusCreated = domain.BatchImageJobStatusCreated
-const BatchImageJobStatusFailed = domain.BatchImageJobStatusFailed
-const BatchImageJobStatusIndexing = domain.BatchImageJobStatusIndexing
-const BatchImageJobStatusOutputDeleted = domain.BatchImageJobStatusOutputDeleted
-const BatchImageJobStatusRunning = domain.BatchImageJobStatusRunning
-const BatchImageJobStatusSettling = domain.BatchImageJobStatusSettling
-const BatchImageJobStatusSubmitted = domain.BatchImageJobStatusSubmitted
-const BatchImageJobStatusUploading = domain.BatchImageJobStatusUploading
-const BatchImageProviderVertex = domain.BatchImageProviderVertex
-
-type BatchImageTransitionOptions = domain.BatchImageTransitionOptions
 type BillingMode = domain.BillingMode
 
 const BillingModeImage = domain.BillingModeImage
@@ -84,8 +64,6 @@ type ContentModerationElevatedUserCacheEntry = domain.ContentModerationElevatedU
 type ContentModerationLog = domain.ContentModerationLog
 type ContentModerationLogFilter = domain.ContentModerationLogFilter
 type ContentModerationLogSummary = domain.ContentModerationLogSummary
-type CreateBatchImageItemParams = domain.CreateBatchImageItemParams
-type CreateBatchImageJobParams = domain.CreateBatchImageJobParams
 type DeletedKeyAuditResult = domain.DeletedKeyAuditResult
 
 const DingTalkConnectSyntheticEmailDomain = domain.DingTalkConnectSyntheticEmailDomain
@@ -107,29 +85,12 @@ var ErrAffiliateProfileNotFound = domain.ErrAffiliateProfileNotFound
 var ErrAffiliateQuotaEmpty = domain.ErrAffiliateQuotaEmpty
 var ErrAttributeDefinitionNotFound = domain.ErrAttributeDefinitionNotFound
 var ErrAttributeKeyExists = domain.ErrAttributeKeyExists
-var ErrBatchImageAlreadyQueued = domain.ErrBatchImageAlreadyQueued
-var ErrBatchImageAlreadySettled = domain.ErrBatchImageAlreadySettled
-var ErrBatchImageDownloadLimited = domain.ErrBatchImageDownloadLimited
-var ErrBatchImageIndexStateConflict = domain.ErrBatchImageIndexStateConflict
-var ErrBatchImageInsufficientBalance = domain.ErrBatchImageInsufficientBalance
-var ErrBatchImageInvalidProvider = domain.ErrBatchImageInvalidProvider
-var ErrBatchImageInvalidTransition = domain.ErrBatchImageInvalidTransition
-var ErrBatchImageItemExists = domain.ErrBatchImageItemExists
-var ErrBatchImageItemNotFound = domain.ErrBatchImageItemNotFound
-var ErrBatchImageJobExists = domain.ErrBatchImageJobExists
-var ErrBatchImageJobNotFound = domain.ErrBatchImageJobNotFound
-var ErrBatchImageQueueEmpty = domain.ErrBatchImageQueueEmpty
-var ErrBatchImageRecordDeleteNotReady = domain.ErrBatchImageRecordDeleteNotReady
-var ErrBatchImageSettlementCostExceedsHold = domain.ErrBatchImageSettlementCostExceedsHold
-var ErrBatchImageSettlementInvalidStatus = domain.ErrBatchImageSettlementInvalidStatus
-var ErrBatchImageSettlementManifestConflict = domain.ErrBatchImageSettlementManifestConflict
 var ErrChannelExists = domain.ErrChannelExists
 var ErrChannelNotFound = domain.ErrChannelNotFound
 var ErrDashboardStatsCacheMiss = domain.ErrDashboardStatsCacheMiss
 var ErrGroupExists = domain.ErrGroupExists
 var ErrGroupNotFound = domain.ErrGroupNotFound
 var ErrIdentityProviderInvalid = domain.ErrIdentityProviderInvalid
-var ErrInvalidBatchImageQueuePayload = domain.ErrInvalidBatchImageQueuePayload
 var ErrOpsPreaggregatedNotPopulated = domain.ErrOpsPreaggregatedNotPopulated
 var ErrProxyNotFound = domain.ErrProxyNotFound
 var ErrRedeemCodeNotFound = domain.ErrRedeemCodeNotFound
@@ -187,7 +148,6 @@ type KimiOAuthTokenInfo = domain.KimiOAuthTokenInfo
 
 const LinuxDoConnectSyntheticEmailDomain = domain.LinuxDoConnectSyntheticEmailDomain
 
-type MarkBatchImageJobSettledParams = domain.MarkBatchImageJobSettledParams
 type NotifyEmailEntry = domain.NotifyEmailEntry
 type NullableInt64Update = domain.NullableInt64Update
 type NullableTimeUpdate = domain.NullableTimeUpdate
@@ -317,7 +277,6 @@ const RequestTypeSync = domain.RequestTypeSync
 const RequestTypeUnknown = domain.RequestTypeUnknown
 const RequestTypeWSV2 = domain.RequestTypeWSV2
 
-type ReservedBatchImageJob = domain.ReservedBatchImageJob
 type ScheduledDiagnosticsStatus = domain.ScheduledDiagnosticsStatus
 type ScheduledTestPlan = domain.ScheduledTestPlan
 type ScheduledTestResult = domain.ScheduledTestResult
@@ -350,7 +309,6 @@ type TotpSetupSession = domain.TotpSetupSession
 type TrafficAvailability = domain.TrafficAvailability
 type TrafficAvailabilityBucket = domain.TrafficAvailabilityBucket
 type TurnstileVerifyResponse = domain.TurnstileVerifyResponse
-type UpdateBatchImageJobProviderSubmitParams = domain.UpdateBatchImageJobProviderSubmitParams
 type UpdateUserAttributeInput = domain.UpdateUserAttributeInput
 type UpsertUserAvatarInput = domain.UpsertUserAvatarInput
 
@@ -398,16 +356,6 @@ const WeChatConnectSyntheticEmailDomain = domain.WeChatConnectSyntheticEmailDoma
 func ApplyLegacyRequestFields(requestType RequestType, fallbackStream bool, fallbackOpenAIWSMode bool) (bool, bool) {
 	return domain.ApplyLegacyRequestFields(requestType, fallbackStream, fallbackOpenAIWSMode)
 }
-func BatchImageCaptureRequestID(batchID string) string {
-	return domain.BatchImageCaptureRequestID(batchID)
-}
-func BatchImageHoldRequestID(batchID string) string { return domain.BatchImageHoldRequestID(batchID) }
-func BatchImageReleaseRequestID(batchID string) string {
-	return domain.BatchImageReleaseRequestID(batchID)
-}
-func CanTransitionBatchImageJob(from string, to string) bool {
-	return domain.CanTransitionBatchImageJob(from, to)
-}
 func FindMatchingInterval(intervals []PricingInterval, totalTokens int) *PricingInterval {
 	return domain.FindMatchingInterval(intervals, totalTokens)
 }
@@ -417,15 +365,8 @@ func HTTPUpstreamProfileFromContext(ctx context.Context) HTTPUpstreamProfile {
 func HTTPUpstreamRedirectsDisabled(ctx context.Context) bool {
 	return domain.HTTPUpstreamRedirectsDisabled(ctx)
 }
-func IsSupportedBatchImageProvider(provider string) bool {
-	return domain.IsSupportedBatchImageProvider(provider)
-}
-func IsTerminalBatchImageJobStatus(status string) bool {
-	return domain.IsTerminalBatchImageJobStatus(status)
-}
 func IsUsageLogCreateDropped(err error) bool      { return domain.IsUsageLogCreateDropped(err) }
 func IsUsageLogCreateNotPersisted(err error) bool { return domain.IsUsageLogCreateNotPersisted(err) }
-func IsValidBatchImageID(batchID string) bool     { return domain.IsValidBatchImageID(batchID) }
 func IsWindowExpired(windowStart *time.Time, duration time.Duration) bool {
 	return domain.IsWindowExpired(windowStart, duration)
 }
@@ -436,7 +377,6 @@ func MarkUsageLogCreateNotPersisted(err error) error {
 func MarshalNotifyEmails(entries []NotifyEmailEntry) string {
 	return domain.MarshalNotifyEmails(entries)
 }
-func NewBatchImageID() (string, error)                { return domain.NewBatchImageID() }
 func ParseNotifyEmails(raw string) []NotifyEmailEntry { return domain.ParseNotifyEmails(raw) }
 func ParseSchedulerBucket(raw string) (SchedulerBucket, bool) {
 	return domain.ParseSchedulerBucket(raw)
