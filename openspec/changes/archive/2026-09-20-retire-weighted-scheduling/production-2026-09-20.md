@@ -60,3 +60,8 @@ compact 的 capability/unknown/全局模型并发预算/续链与工具语义通
 ## 后续
 
 继续按真实业务窗口监控 routing-503、credential-class 误拒、各平台模型门槛、工具续链和 busy wait。不要以短窗口零错误代替长期容量验证，也不要为了分流数据人为恢复停用账号。
+
+## 延长观察更新（23:12 左右）
+
+延长窗口后不再声称“没有任何错误记录”：近五分钟出现 40 条账号 69 的 `model_mismatch` warning（sent=gpt-6-astra、responded=gpt-5.6-luna，HTTP status 字段为空）。这是独立的上游模型标识不一致观测，不能误归为 503，也不能单凭该条 warning 断言每次业务请求的最终结果。
+截至该次查询，自 23:01:50 切流以来 `ops_error_logs.status_code>=500` 为 0，routing-503 为 0。API 仍 healthy、restart=0，nginx/current SPA 指向本次发布。后续模型标识排查与本次选号退役分开处理。
