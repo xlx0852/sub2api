@@ -13,3 +13,9 @@
 - [x] 3.1 聚焦 scheduler/policy/affinity/failover 与 HTTP/SSE/WS/tool continuation 回归通过。
 - [x] 3.2 race、编译、vet、diff check、OpenSpec strict；基线失败单列。
 - [x] 3.3 交付 Linux 候选与验证记录；生产灰度状态明确，不提前声明线上完成。
+
+## 4. 用户授权后的生产上线（2026-09-20）
+- [x] 4.1 核对候选哈希和线上配置；仅给 group 4 启用简化 profile。
+- [x] 4.2 独立 synthetic session 重现旧 503，对照新版本 JSON/SSE completed 与 132 用量。
+- [x] 4.3 蓝绿切流、真实 origin 健康、sol/astra 冒烟、错误与用量窗口验证。
+- [x] 4.4 记录回滚点与旧连接排空状态，保留其他账号设置和既有工作区改动。
