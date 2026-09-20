@@ -682,6 +682,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					h.gatewayService.RecordOpenAIAccountSwitch()
 					failedAccountIDs[account.ID] = struct{}{}
 					lastFailoverErr = failoverErr
+					// 上游 5xx：累计该号连续失败，达阈值清 turn-state 票重抓
+					h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode)
 					if switchCount >= maxAccountSwitches {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
