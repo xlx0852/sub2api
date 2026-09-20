@@ -48,3 +48,7 @@
 
 原有 item-ID 超长修复五个生产文件的 binary diff 与清理前逐字一致；OpenSpec 历史归档变更不加入本次提交。
 候选须从独立 clean worktree 构建前端 dist 后再 embed 构建后端；外部 Nginx SPA 另行发布，并保留 API/SPA 成对回滚。
+
+## 生产发布
+
+用户授权后已于 2026-09-20 23:01:50（北京时间）将共享 priority/load/equal-shuffle 选号发布到所有当前平台。API 18344 与匹配的外部 SPA 已成对切换；五个平台的正式 TLS origin 冒烟均 200/完成，切流后观察窗口 0 条 ops error。完整过程与边界见 [production-2026-09-20.md](production-2026-09-20.md)。
