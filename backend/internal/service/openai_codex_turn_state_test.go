@@ -153,9 +153,9 @@ func TestPoolTicketIsolation(t *testing.T) {
 	lunaTok := "gAAAAABqq_20UDF7Ymoy_iFdYwpAR8Uz" + stringsRepeat("L", 260)
 	now := time.Now()
 	acc := &Account{Type: AccountTypeOAuth, Extra: map[string]any{
-		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-sol":             solTok,
-		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-sol_model":       "gpt-5.6-sol",
-		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-sol_captured_at": now.Format(time.RFC3339Nano),
+		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-sol":              solTok,
+		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-sol_model":        "gpt-5.6-sol",
+		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-sol_captured_at":  now.Format(time.RFC3339Nano),
 		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-luna":             lunaTok,
 		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-luna_model":       "gpt-5.6-luna",
 		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-luna_captured_at": now.Format(time.RFC3339Nano),
@@ -176,8 +176,12 @@ func TestPoolTicketFallsBackToLegacySingle(t *testing.T) {
 		openAICodexTurnStateExtraToken:      legacy,
 		openAICodexTurnStateExtraCapturedAt: time.Now().Format(time.RFC3339Nano),
 	}}
-	// 池槽空时退回单值
-	require.Equal(t, legacy, lookupCachedOpenAICodexTurnStateForPool(acc, "gpt-5.6-sol", time.Now(), 30*time.Minute))
+	// Unknown/cross-pool legacy tickets must not bypass pool isolation.
+	require.Empty(t, lookupCachedOpenAICodexTurnStateForPool(acc, "gpt-5.6-sol", time.Now(), time.Hour))
+	require.Empty(t, lookupCachedOpenAICodexTurnStateForModel(acc, "gpt-5.6-sol", time.Now(), time.Hour))
+	acc.Extra[openAICodexTurnStateExtraModel] = "gpt-5.6-sol"
+	require.Equal(t, legacy, lookupCachedOpenAICodexTurnStateForModel(acc, "gpt-5.6-sol", time.Now(), time.Hour))
+	require.Empty(t, lookupCachedOpenAICodexTurnStateForModel(acc, "gpt-5.6-terra", time.Now(), time.Hour))
 }
 
 func TestCaptureStoresToPoolAndLegacy(t *testing.T) {
@@ -228,8 +232,8 @@ func TestInvalidateClearsAllPoolSlots(t *testing.T) {
 	svc.cfg.Gateway.OpenAICodexTurnStateReuseEnabled = true
 	tok := "gAAAAABqq_20UDF7Ymoy_iFdYwpAR8Uz" + stringsRepeat("X", 260)
 	acc := &Account{ID: 31, Type: AccountTypeOAuth, Extra: map[string]any{
-		openAICodexTurnStateExtraToken:                                tok,
-		openAICodexTurnStateExtraCapturedAt:                           time.Now().Format(time.RFC3339Nano),
+		openAICodexTurnStateExtraToken:                                  tok,
+		openAICodexTurnStateExtraCapturedAt:                             time.Now().Format(time.RFC3339Nano),
 		openAICodexTurnStateExtraPoolPrefix + "gpt-6-astra":             tok,
 		openAICodexTurnStateExtraPoolPrefix + "gpt-6-astra_model":       "gpt-6-astra",
 		openAICodexTurnStateExtraPoolPrefix + "gpt-6-astra_captured_at": time.Now().Format(time.RFC3339Nano),
@@ -244,7 +248,7 @@ func TestInvalidateClearsAllPoolSlots(t *testing.T) {
 	require.Empty(t, lookupCachedOpenAICodexTurnStateForModel(acc, "gpt-6-astra", time.Now(), 30*time.Minute))
 }
 
-func TestCaptureOpenAICodexTurnStateTouchesTTLWhenReuseHasNoNewHeader(t *testing.T) {
+func TestCaptureOpenAICodexTurnStateDoesNotRenewWithoutNewHeader(t *testing.T) {
 	svc := &OpenAIGatewayService{cfg: &config.Config{}}
 	svc.cfg.Gateway.OpenAICodexTurnStateReuseEnabled = true
 	token := "gAAAAABqq_20UDF7Ymoy_iFdYwpAR8Uz" + stringsRepeat("F", 260)
@@ -255,6 +259,6 @@ func TestCaptureOpenAICodexTurnStateTouchesTTLWhenReuseHasNoNewHeader(t *testing
 	}}
 	svc.captureOpenAICodexTurnState(acc, http.Header{}, "gpt-6-astra", true)
 	got, _ := acc.Extra[openAICodexTurnStateExtraCapturedAt].(string)
-	require.NotEqual(t, old, got)
+	require.Equal(t, old, got)
 	require.Equal(t, token, acc.Extra[openAICodexTurnStateExtraToken])
 }

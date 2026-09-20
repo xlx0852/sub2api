@@ -2393,6 +2393,12 @@ func (s *OpenAIGatewayService) isOpenAIAccountTransportCompatible(account *Accou
 }
 
 func (s *OpenAIGatewayService) ReportOpenAIAccountScheduleResult(accountID int64, success bool, firstTokenMs *int) {
+	if s != nil && success {
+		s.codexTurnStateFailureMu.Lock()
+		s.codexTurnStateUpstream5xx.Delete(accountID)
+		s.codexTurnStateFailureMu.Unlock()
+	}
+
 	scheduler := s.getOpenAIAccountScheduler(context.Background())
 	if scheduler == nil {
 		return
@@ -2401,6 +2407,12 @@ func (s *OpenAIGatewayService) ReportOpenAIAccountScheduleResult(accountID int64
 }
 
 func (s *OpenAIGatewayService) ReportOpenAICompactScheduleResult(accountID int64, success bool, duration time.Duration) {
+	if s != nil && success {
+		s.codexTurnStateFailureMu.Lock()
+		s.codexTurnStateUpstream5xx.Delete(accountID)
+		s.codexTurnStateFailureMu.Unlock()
+	}
+
 	scheduler := s.getOpenAIAccountScheduler(context.Background())
 	if scheduler == nil {
 		return

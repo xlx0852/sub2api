@@ -79,14 +79,9 @@ func openAICodexTurnStateReuseEnabled(cfg *config.Config) bool {
 	return cfg != nil && cfg.Gateway.OpenAICodexTurnStateReuseEnabled
 }
 
-func openAICodexTurnStateReuseTTL(cfg *config.Config) time.Duration {
-	if cfg == nil || cfg.Gateway.OpenAICodexTurnStateReuseTTLSeconds == 0 {
-		return openAICodexTurnStateDefaultTTL
-	}
-	if cfg.Gateway.OpenAICodexTurnStateReuseTTLSeconds < 0 {
-		return 0
-	}
-	return time.Duration(cfg.Gateway.OpenAICodexTurnStateReuseTTLSeconds) * time.Second
+// Ticket lifetime is fixed; legacy configuration must not disable or extend it.
+func openAICodexTurnStateReuseTTL(_ *config.Config) time.Duration {
+	return openAICodexTurnStateDefaultTTL
 }
 
 func isReusableOpenAICodexTurnState(token string) bool {
@@ -113,8 +108,7 @@ func lookupCachedOpenAICodexTurnState(account *Account, now time.Time, ttl time.
 // pool 为空时退回兼容行为：优先读单值 openai_codex_turn_state。
 //
 // 票龄硬失效：捕获时间超过 ttl（默认 1h）的票不再返回给上游——
-// 旧行为是 stale-while-revalidate 过期照发，会导致过期/被吊销的票一直
-// 打到上游 502。现在满 ttl 即作废，交给 seeder 重抓后再用。
+// 不再采用 stale-while-revalidate；过期票不能继续回放。
 func lookupCachedOpenAICodexTurnStateForPool(account *Account, pool string, now time.Time, ttl time.Duration) string {
 	if account == nil || account.Type != AccountTypeOAuth || account.Extra == nil {
 		return ""
@@ -133,21 +127,17 @@ func lookupCachedOpenAICodexTurnStateForPool(account *Account, pool string, now 
 	return ""
 }
 
-// openAICodexTurnStateTicketExpired 判断票龄是否超过 ttl（硬失效）。
-// 无捕获时间按不过期处理（兼容旧数据，刷新逻辑会补抓）。
+// Missing/invalid/future capture times cannot establish a valid ticket age.
 func openAICodexTurnStateTicketExpired(capturedRaw any, now time.Time, ttl time.Duration) bool {
-	if ttl <= 0 {
-		return false
+	if ttl <= 0 || ttl > openAICodexTurnStateDefaultTTL {
+		ttl = openAICodexTurnStateDefaultTTL
 	}
 	captured := parseOpenAICodexTurnStateTimeValue(capturedRaw)
-	if captured.IsZero() {
-		return false
-	}
-	return now.Sub(captured) > ttl
+	return captured.IsZero() || captured.After(now) || now.Sub(captured) >= ttl
 }
 
 // lookupCachedOpenAICodexTurnStateForModel 按请求 model 的候选槽列表依次查票。
-// astra 请求先试 astra 本名槽，再试 luna 槽，最后退回单值。
+// astra 请求先试 astra 本名槽，再试 luna 槽；单值兜底必须匹配供应池。
 func lookupCachedOpenAICodexTurnStateForModel(account *Account, reqModel string, now time.Time, ttl time.Duration) string {
 	if account == nil || account.Type != AccountTypeOAuth || account.Extra == nil {
 		return ""
@@ -161,10 +151,16 @@ func lookupCachedOpenAICodexTurnStateForModel(account *Account, reqModel string,
 			return strings.TrimSpace(token)
 		}
 	}
-	// 候选槽都空时退回兼容单值。
-	token, _ := account.Extra[openAICodexTurnStateExtraToken].(string)
-	if isReusableOpenAICodexTurnState(token) && !openAICodexTurnStateTicketExpired(account.Extra[openAICodexTurnStateExtraCapturedAt], now, ttl) {
-		return strings.TrimSpace(token)
+	// Only reuse the legacy single slot when its recorded model matches a candidate pool.
+	// A fresh astra ticket must not conceal an expired terra/sol slot.
+	if strings.TrimSpace(reqModel) == "" {
+		return lookupCachedOpenAICodexTurnState(account, now, ttl)
+	}
+	legacyModel, _ := account.Extra[openAICodexTurnStateExtraModel].(string)
+	for _, pool := range openAICodexTurnStateCandidatePools(reqModel) {
+		if legacyModel == pool {
+			return lookupCachedOpenAICodexTurnState(account, now, ttl)
+		}
 	}
 	return ""
 }
@@ -258,31 +254,12 @@ func (s *OpenAIGatewayService) captureOpenAICodexTurnStateForPool(account *Accou
 		token = strings.TrimSpace(headers.Get(openAIWSTurnStateHeader))
 	}
 	if !isReusableOpenAICodexTurnState(token) {
-		if lookupCachedOpenAICodexTurnState(account, time.Now(), openAICodexTurnStateReuseTTL(s.cfg)) != "" {
-			s.touchOpenAICodexTurnState(account)
-		}
 		return
 	}
 	if pool == "" {
 		pool = openAICodexTurnStatePoolForRequest(respModel)
 	}
 	s.storeOpenAICodexTurnStateForPool(account, pool, token, respModel)
-}
-
-func (s *OpenAIGatewayService) touchOpenAICodexTurnState(account *Account) {
-	if account == nil {
-		return
-	}
-	now := time.Now().UTC()
-	openAICodexTurnStateMu.Lock()
-	if account.Extra == nil {
-		account.Extra = map[string]any{}
-	}
-	account.Extra[openAICodexTurnStateExtraCapturedAt] = now.Format(time.RFC3339Nano)
-	token, _ := account.Extra[openAICodexTurnStateExtraToken].(string)
-	model, _ := account.Extra[openAICodexTurnStateExtraModel].(string)
-	openAICodexTurnStateMu.Unlock()
-	s.persistOpenAICodexTurnState(account.ID, token, model, now)
 }
 
 func (s *OpenAIGatewayService) storeOpenAICodexTurnState(account *Account, token, model string) {
@@ -293,6 +270,8 @@ func (s *OpenAIGatewayService) storeOpenAICodexTurnState(account *Account, token
 // pool 为空时用 openAICodexTurnStatePoolForRequest(model) 归槽。
 // 单值 openai_codex_turn_state 仍保留为最后写入的一张（兼容旧读路径与兜底）。
 func (s *OpenAIGatewayService) storeOpenAICodexTurnStateForPool(account *Account, pool, token, model string) {
+	s.codexTurnStatePersistMu.Lock()
+	defer s.codexTurnStatePersistMu.Unlock()
 	now := time.Now().UTC()
 	if pool == "" {
 		pool = openAICodexTurnStatePoolForRequest(model)
@@ -301,6 +280,11 @@ func (s *OpenAIGatewayService) storeOpenAICodexTurnStateForPool(account *Account
 	openAICodexTurnStateMu.Lock()
 	if account.Extra == nil {
 		account.Extra = map[string]any{}
+	}
+	// Repeated response headers do not create a new issuance time.
+	if previous, _ := account.Extra[tokKey].(string); tokKey != "" && previous == token {
+		openAICodexTurnStateMu.Unlock()
+		return
 	}
 	// 池槽位
 	if tokKey != "" {
@@ -313,55 +297,36 @@ func (s *OpenAIGatewayService) storeOpenAICodexTurnStateForPool(account *Account
 	account.Extra[openAICodexTurnStateExtraModel] = strings.TrimSpace(model)
 	account.Extra[openAICodexTurnStateExtraCapturedAt] = now.Format(time.RFC3339Nano)
 	openAICodexTurnStateMu.Unlock()
-	s.persistOpenAICodexTurnState(account.ID, token, model, now)
-	if tokKey != "" {
-		s.persistOpenAICodexTurnStatePool(account.ID, pool, token, model, now)
-	}
-}
-
-func (s *OpenAIGatewayService) persistOpenAICodexTurnState(accountID int64, token, model string, now time.Time) {
-	if s == nil || s.accountRepo == nil || accountID <= 0 || token == "" {
-		return
-	}
 	updates := map[string]any{
 		openAICodexTurnStateExtraToken:      token,
 		openAICodexTurnStateExtraModel:      strings.TrimSpace(model),
 		openAICodexTurnStateExtraCapturedAt: now.Format(time.RFC3339Nano),
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = s.accountRepo.UpdateExtra(ctx, accountID, updates)
-	}()
+	if tokKey != "" {
+		updates[tokKey], updates[modelKey], updates[capturedKey] = token, strings.TrimSpace(model), now.Format(time.RFC3339Nano)
+	}
+	s.persistOpenAICodexTurnStateUpdates(account.ID, updates)
 }
 
-// persistOpenAICodexTurnStatePool 把池槽位三键落库。
-func (s *OpenAIGatewayService) persistOpenAICodexTurnStatePool(accountID int64, pool, token, model string, now time.Time) {
-	if s == nil || s.accountRepo == nil || accountID <= 0 || token == "" {
+// Complete persistence before a seeder job finishes or a subsequent invalidation runs.
+func (s *OpenAIGatewayService) persistOpenAICodexTurnStateUpdates(accountID int64, updates map[string]any) {
+	if s == nil || s.accountRepo == nil || accountID <= 0 {
 		return
 	}
-	tokKey, modelKey, capturedKey := openAICodexTurnStatePoolKeys(pool)
-	if tokKey == "" {
-		return
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.accountRepo.UpdateExtra(ctx, accountID, updates); err != nil {
+		logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] persist failed account=%d", accountID)
 	}
-	updates := map[string]any{
-		tokKey:      token,
-		modelKey:    strings.TrimSpace(model),
-		capturedKey: now.Format(time.RFC3339Nano),
-	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = s.accountRepo.UpdateExtra(ctx, accountID, updates)
-	}()
 }
 
 // openAICodexTurnStateRevokedSignals 是 312 降智信号的检测标记。
 // 312 是 OpenAI 自定义的状态码（文章实测 2026-09），表示服务端主动撤销当前
 // turn-state——即使票还在 TTL 内，后续请求已被降级（降智/overload）。
 // 形态两种都可能：
-//   1. HTTP 312 状态码（非标准，OpenAI 私有）
-//   2. HTTP 200 流内 SSE 携带降级 marker（待确认字段，先用宽匹配）
+//  1. HTTP 312 状态码（非标准，OpenAI 私有）
+//  2. HTTP 200 流内 SSE 携带降级 marker（待确认字段，先用宽匹配）
+//
 // 一旦命中即废弃该账号所有池槽位票并触发重采。
 const openAICodexTurnStateRevokedHTTPStatus = 312
 
@@ -395,9 +360,11 @@ func isOpenAICodexTurnStateRevokedResponse(httpStatus int, payload []byte) bool 
 // invalidateOpenAICodexTurnState 废弃账号所有池槽位票并触发重采。
 // 触发条件：收到 312 降智信号（票被服务端撤销）、或明确的容量降级。
 func (s *OpenAIGatewayService) invalidateOpenAICodexTurnState(account *Account) {
-	if account == nil || account.Type != AccountTypeOAuth {
+	if s == nil || account == nil || account.Type != AccountTypeOAuth {
 		return
 	}
+	s.codexTurnStatePersistMu.Lock()
+	defer s.codexTurnStatePersistMu.Unlock()
 	// 先收集要清理的池槽位 key（锁内），再统一清内存与落库。
 	poolKeys := make([]string, 0, 8)
 	openAICodexTurnStateMu.Lock()
@@ -426,11 +393,7 @@ func (s *OpenAIGatewayService) invalidateOpenAICodexTurnState(account *Account) 
 	for _, k := range poolKeys {
 		clearUpdates[k] = nil
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = s.accountRepo.UpdateExtra(ctx, account.ID, clearUpdates)
-	}()
+	s.persistOpenAICodexTurnStateUpdates(account.ID, clearUpdates)
 }
 
 func (s *OpenAIGatewayService) scheduleOpenAICodexTurnStateRefresh(account *Account) {
@@ -445,44 +408,107 @@ func (s *OpenAIGatewayService) scheduleOpenAICodexTurnStateRefresh(account *Acco
 	if ch == nil {
 		return
 	}
+	if !s.claimOpenAICodexTurnStateRefresh(account.ID, time.Now()) {
+		return
+	}
 	select {
 	case ch <- account.ID:
 	default:
+		s.finishOpenAICodexTurnStateRefresh(account.ID, time.Now())
 	}
+}
+
+type codexTurnStateRefreshState struct {
+	pending bool
+	next    time.Time
+}
+
+func (s *OpenAIGatewayService) claimOpenAICodexTurnStateRefresh(id int64, now time.Time) bool {
+	s.codexTurnStateWorkMu.Lock()
+	defer s.codexTurnStateWorkMu.Unlock()
+	if s.codexTurnStateWork == nil {
+		s.codexTurnStateWork = make(map[int64]codexTurnStateRefreshState)
+	}
+	for key, state := range s.codexTurnStateWork {
+		if !state.pending && !now.Before(state.next) {
+			delete(s.codexTurnStateWork, key)
+		}
+	}
+	state := s.codexTurnStateWork[id]
+	if state.pending || now.Before(state.next) {
+		return false
+	}
+	s.codexTurnStateWork[id] = codexTurnStateRefreshState{pending: true}
+	return true
+}
+
+func (s *OpenAIGatewayService) finishOpenAICodexTurnStateRefresh(id int64, now time.Time) {
+	s.codexTurnStateWorkMu.Lock()
+	defer s.codexTurnStateWorkMu.Unlock()
+	s.codexTurnStateWork[id] = codexTurnStateRefreshState{next: now.Add(2 * time.Minute)}
+}
+
+// Each pool needs its own refresh deadline, independent of the last-issued single slot.
+var openAICodexTurnStateSeedModels = []string{
+	"gpt-6-astra", "gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-image-2", "codex-auto-review",
+}
+
+func openAICodexTurnStateModelsNeedingRefresh(account *Account, now time.Time, ttl time.Duration) []string {
+	var models []string
+	for _, model := range openAICodexTurnStateSeedModels {
+		if account.IsModelSupported(model) && lookupCachedOpenAICodexTurnStateForModel(account, model, now, ttl*3/4) == "" {
+			models = append(models, model)
+		}
+	}
+	return models
 }
 
 // openAICodexTurnStateUpstream5xxInvalidateThreshold 同号连续上游 5xx 达到该次数时
 // 认为其 turn-state 票可能已被服务端吊销/变质，主动清票重抓。
 // 502 不是 312 降智信号，但观测到某号带票持续 502（而其他号同模型正常）——
-// 多半是票过期/被吊销但上游以过载形式返回。连续阈值避免单次抖动误清。
+// 这里只作为恢复启发式，不代表 5xx 已证实是票失效。
 const openAICodexTurnStateUpstream5xxInvalidateThreshold = 3
 
 // NoteOpenAICodexTurnStateUpstreamResult 记录该号一次上游结果：
 //   - status>=500：累计连续 5xx；达到阈值 → invalidate 所有池票 + 触发重抓，并清零计数。
 //   - status<500：成功/4xx，清零计数。
+//
 // 只对 oauth（Codex 上游）号生效。
 func (s *OpenAIGatewayService) NoteOpenAICodexTurnStateUpstreamResult(account *Account, upstreamStatus int) {
-	if s == nil || account == nil || account.Type != AccountTypeOAuth || account.ID <= 0 {
+	if s == nil || account == nil || !account.IsOpenAIOAuth() || account.ID <= 0 || !openAICodexTurnStateReuseEnabled(s.cfg) {
 		return
 	}
-	if !openAICodexTurnStateReuseEnabled(s.cfg) {
+	if !s.shouldInvalidateOpenAICodexTurnState(account.ID, upstreamStatus, time.Now()) {
 		return
 	}
+	logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] invalidate account=%d reason=consecutive_5xx threshold=%d", account.ID, openAICodexTurnStateUpstream5xxInvalidateThreshold)
+	s.invalidateOpenAICodexTurnState(account)
+	s.scheduleOpenAICodexTurnStateRefresh(account)
+}
+
+func (s *OpenAIGatewayService) shouldInvalidateOpenAICodexTurnState(accountID int64, upstreamStatus int, now time.Time) bool {
+	s.codexTurnStateFailureMu.Lock()
+	defer s.codexTurnStateFailureMu.Unlock()
 	if upstreamStatus < 500 {
-		s.codexTurnStateUpstream5xx.Delete(account.ID)
-		return
+		s.codexTurnStateUpstream5xx.Delete(accountID)
+		return false
 	}
-	raw, _ := s.codexTurnStateUpstream5xx.LoadOrStore(account.ID, 0)
+	raw, _ := s.codexTurnStateUpstream5xx.LoadOrStore(accountID, 0)
 	count, _ := raw.(int)
 	count++
 	if count < openAICodexTurnStateUpstream5xxInvalidateThreshold {
-		s.codexTurnStateUpstream5xx.Store(account.ID, count)
-		return
+		s.codexTurnStateUpstream5xx.Store(accountID, count)
+		return false
 	}
-	// 达阈值：认为票已坏，清票重抓，并复位计数避免风暴。
-	s.codexTurnStateUpstream5xx.Delete(account.ID)
-	s.invalidateOpenAICodexTurnState(account)
-	s.scheduleOpenAICodexTurnStateRefresh(account)
+	s.codexTurnStateUpstream5xx.Delete(accountID)
+	if s.codexTurnStateInvalidatedAt == nil {
+		s.codexTurnStateInvalidatedAt = make(map[int64]time.Time)
+	}
+	if now.Sub(s.codexTurnStateInvalidatedAt[accountID]) < 2*time.Minute {
+		return false
+	}
+	s.codexTurnStateInvalidatedAt[accountID] = now
+	return true
 }
 
 func (s *OpenAIGatewayService) startOpenAICodexTurnStateSeeder() {
@@ -513,6 +539,9 @@ func (s *OpenAIGatewayService) refreshOpenAICodexTurnStateAccounts(ctx context.C
 	if s == nil || s.accountRepo == nil {
 		return
 	}
+	if onlyID > 0 {
+		defer func() { s.finishOpenAICodexTurnStateRefresh(onlyID, time.Now()) }()
+	}
 	accounts, err := s.accountRepo.ListByPlatform(ctx, PlatformOpenAI)
 	if err != nil {
 		return
@@ -522,13 +551,13 @@ func (s *OpenAIGatewayService) refreshOpenAICodexTurnStateAccounts(ctx context.C
 	need := make([]Account, 0, len(accounts))
 	for i := range accounts {
 		acc := accounts[i]
-		if acc.Type != AccountTypeOAuth || acc.Status != StatusActive {
+		if acc.Type != AccountTypeOAuth || !acc.IsSchedulable() || acc.IsOpenAIAgentIdentity() {
 			continue
 		}
 		if onlyID > 0 && acc.ID != onlyID {
 			continue
 		}
-		if !openAICodexTurnStateNeedsRefresh(&acc, now, ttl) && onlyID == 0 {
+		if len(openAICodexTurnStateModelsNeedingRefresh(&acc, now, ttl)) == 0 {
 			continue
 		}
 		need = append(need, acc)
@@ -542,7 +571,13 @@ func (s *OpenAIGatewayService) refreshOpenAICodexTurnStateAccounts(ctx context.C
 		logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] refresh need=%d onlyID=%d ids=%v", len(need), onlyID, ids)
 	}
 	for i := range need {
+		if onlyID == 0 && !s.claimOpenAICodexTurnStateRefresh(need[i].ID, time.Now()) {
+			continue
+		}
 		s.seedOpenAICodexTurnState(ctx, &need[i])
+		if onlyID == 0 {
+			s.finishOpenAICodexTurnStateRefresh(need[i].ID, time.Now())
+		}
 		time.Sleep(400 * time.Millisecond)
 	}
 }
@@ -569,6 +604,10 @@ func accountHasOpenAICodexTurnStateReserveForModel(account *Account, reqModel st
 }
 
 func (s *OpenAIGatewayService) seedOpenAICodexTurnState(ctx context.Context, account *Account) {
+	s.seedOpenAICodexTurnStateWithClient(ctx, account, &http.Client{Timeout: 45 * time.Second})
+}
+
+func (s *OpenAIGatewayService) seedOpenAICodexTurnStateWithClient(ctx context.Context, account *Account, client *http.Client) {
 	if account == nil || account.IsOpenAIAgentIdentity() {
 		return
 	}
@@ -578,23 +617,33 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnState(ctx context.Context, acc
 		logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] skip account=%d missing_token=%v missing_cid=%v", account.ID, token == "", chatgptID == "")
 		return
 	}
-	models := []string{"gpt-6-astra", "gpt-5.5", "gpt-5.6-sol"}
-	client := &http.Client{Timeout: 45 * time.Second}
+	models := openAICodexTurnStateModelsNeedingRefresh(account, time.Now(), openAICodexTurnStateReuseTTL(s.cfg))
 	for _, model := range models {
-		ok, hdr := probeOpenAICodexTurnState(ctx, client, token, chatgptID, model)
-		if !ok {
-			logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] probe failed account=%d model=%s", account.ID, model)
-			continue
-		}
-		s.captureOpenAICodexTurnState(account, hdr, model, true)
-		if lookupCachedOpenAICodexTurnState(account, time.Now(), openAICodexTurnStateReuseTTL(s.cfg)) != "" {
-			logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] seeded account=%d model=%s", account.ID, model)
+		if ctx.Err() != nil {
 			return
 		}
+		result := probeOpenAICodexTurnState(ctx, client, token, chatgptID, model)
+		if !result.completed || !isReusableOpenAICodexTurnState(result.headers.Get(openAICodexTurnStateHeader)) {
+			logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] probe_no_ticket account=%d model=%s status=%d completed=%v", account.ID, model, result.status, result.completed)
+			continue
+		}
+		pool := result.model
+		if pool == "" {
+			pool = model
+		}
+		s.captureOpenAICodexTurnStateForPool(account, result.headers, pool, pool, true)
+		logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] seeded account=%d requested_model=%s pool=%s", account.ID, model, pool)
 	}
 }
 
-func probeOpenAICodexTurnState(ctx context.Context, client *http.Client, accessToken, chatgptAccountID, model string) (bool, http.Header) {
+type codexTurnStateProbeResult struct {
+	completed bool
+	status    int
+	headers   http.Header
+	model     string
+}
+
+func probeOpenAICodexTurnState(ctx context.Context, client *http.Client, accessToken, chatgptAccountID, model string) codexTurnStateProbeResult {
 	payload, err := json.Marshal(map[string]any{
 		"model":               model,
 		"instructions":        "Reply with exactly OK. Do not use tools.",
@@ -607,11 +656,11 @@ func probeOpenAICodexTurnState(ctx context.Context, client *http.Client, accessT
 		"include":             []string{"reasoning.encrypted_content"},
 	})
 	if err != nil {
-		return false, nil
+		return codexTurnStateProbeResult{}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chatgptCodexURL, bytes.NewReader(payload))
 	if err != nil {
-		return false, nil
+		return codexTurnStateProbeResult{}
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("ChatGPT-Account-ID", chatgptAccountID)
@@ -622,14 +671,29 @@ func probeOpenAICodexTurnState(ctx context.Context, client *http.Client, accessT
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		return false, nil
+		return codexTurnStateProbeResult{}
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
-	if !bytes.Contains(body, []byte(`"type":"response.completed"`)) && !bytes.Contains(body, []byte(`"type": "response.completed"`)) {
-		return false, resp.Header
+	result := codexTurnStateProbeResult{status: resp.StatusCode, headers: resp.Header}
+	if resp.StatusCode != http.StatusOK {
+		return result
 	}
-	return true, resp.Header
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
+	if err != nil {
+		return result
+	}
+	for _, line := range bytes.Split(body, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, []byte("data:")) {
+			continue
+		}
+		data := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
+		if gjson.GetBytes(data, "type").String() == "response.completed" {
+			result.completed = true
+			result.model = gjson.GetBytes(data, "response.model").String()
+		}
+	}
+	return result
 }
 
 func (s *OpenAIGatewayService) fallbackOpenAICodexTurnState(account *Account, current string) string {

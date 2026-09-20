@@ -1864,6 +1864,13 @@ func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates m
 	if affected == 0 {
 		return domain.ErrAccountNotFound
 	}
+	// Turn-state changes affect immediate reuse; do not wait for the outbox consumer.
+	for key := range updates {
+		if strings.HasPrefix(key, "openai_codex_turn_state") {
+			r.syncSchedulerAccountSnapshot(ctx, id)
+			break
+		}
+	}
 	if shouldEnqueueSchedulerOutboxForExtraUpdates(updates) {
 		if err := enqueueSchedulerOutbox(ctx, r.sql, domain.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
 			logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue extra update failed: account=%d err=%v", id, err)

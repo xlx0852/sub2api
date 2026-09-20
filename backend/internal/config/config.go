@@ -668,7 +668,7 @@ func setDefaults() {
 	viper.SetDefault("gateway.max_account_switches", 10)
 	viper.SetDefault("gateway.max_account_switches_gemini", 3)
 	viper.SetDefault("gateway.openai_codex_turn_state_reuse_enabled", true)
-	viper.SetDefault("gateway.openai_codex_turn_state_reuse_ttl_seconds", 1800)
+	viper.SetDefault("gateway.openai_codex_turn_state_reuse_ttl_seconds", 3600)
 	viper.SetDefault("gateway.force_codex_cli", false)
 	viper.SetDefault("gateway.openai_user_pin_enabled", false)
 	viper.SetDefault("gateway.codex_image_generation_bridge_enabled", false)

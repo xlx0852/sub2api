@@ -91,7 +91,7 @@ type GatewayConfig struct {
 	// 并在同一 OAuth 账号后续出站强制回放。不信任客户端入站的该头。
 	// 过载不清票。有票账号构成储备池，出站强制带票；缺票按入池时间 FIFO 后台补种。默认开启。
 	OpenAICodexTurnStateReuseEnabled bool `mapstructure:"openai_codex_turn_state_reuse_enabled"`
-	// OpenAICodexTurnStateReuseTTLSeconds: 成功 token 最长回放窗口。0=默认 1800s。
+	// OpenAICodexTurnStateReuseTTLSeconds: 兼容旧配置字段；票固定在捕获后 3600s 失效。
 	OpenAICodexTurnStateReuseTTLSeconds int `mapstructure:"openai_codex_turn_state_reuse_ttl_seconds"`
 	// DisableCodexIdentityEnforcement: 关闭「强制统一 Codex 出站身份」。上游 /backend-api/codex
 	// 在容量紧张时按客户端身份分优先级降载，被降载的请求会拿到 HTTP 200 + 流内

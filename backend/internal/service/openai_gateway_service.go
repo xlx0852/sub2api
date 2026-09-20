@@ -463,6 +463,11 @@ type OpenAIGatewayService struct {
 	codexSnapshotThrottle               *accountWriteThrottle
 	codexTurnStateSeedOnce              sync.Once
 	codexTurnStateRefresh               chan int64
+	codexTurnStateWorkMu                sync.Mutex
+	codexTurnStateWork                  map[int64]codexTurnStateRefreshState
+	codexTurnStatePersistMu             sync.Mutex
+	codexTurnStateFailureMu             sync.Mutex
+	codexTurnStateInvalidatedAt         map[int64]time.Time
 	codexTurnStateUpstream5xx           sync.Map // key: accountID(int64), value: int 连续上游 5xx 次数
 	openaiCompatSessionResponses        sync.Map
 	openaiCompatAnthropicDigestSessions sync.Map

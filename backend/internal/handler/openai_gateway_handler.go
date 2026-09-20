@@ -614,6 +614,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				}
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
+					h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode)
 					if !canRetryCompact {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted || service.OpenAICompactKeepaliveAdjustedWrittenSize(c) != writerSizeBeforeForward)
 						return
@@ -656,8 +657,6 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					}
 					// 池模式：同账号重试（凭据失败不走同号重试）
 					if !failoverErr.IsCredentialFailure() && shouldRetrySameAccountBeforeSwitching(failoverErr.RetryableOnSameAccount, scheduleDecision.CandidateCount) && !failoverErr.GrokSameAccountRetry {
-						// 同号重试也计入连续 5xx
-						h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode)
 						retryLimit := account.GetPoolModeRetryCount()
 						if sameAccountRetryCount[account.ID] < retryLimit {
 							sameAccountRetryCount[account.ID]++
@@ -682,8 +681,6 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					h.gatewayService.RecordOpenAIAccountSwitch()
 					failedAccountIDs[account.ID] = struct{}{}
 					lastFailoverErr = failoverErr
-					// 上游 5xx：累计该号连续失败，达阈值清 turn-state 票重抓
-					h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode)
 					if switchCount >= maxAccountSwitches {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
@@ -751,8 +748,6 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			if requireCompact {
 				h.gatewayService.ReportOpenAICompactScheduleResult(account.ID, true, result.Duration)
 			}
-			// 成功：清该号连续上游 5xx 计数（turn-state 票视为仍有效）
-			h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, 200)
 		} else if err == nil {
 			// err==nil && result==nil should not happen on the success path; do not
 			// mark compact health as success (would poison EWMA).
@@ -1242,6 +1237,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			} else {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
+					h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode)
 					if c.Writer.Size() != writerSizeBeforeForward {
 						h.handleAnthropicFailoverExhausted(c, failoverErr, true)
 						return
@@ -1932,8 +1928,6 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				h.gatewayService.RecordOpenAIAccountSwitch()
 				failedAccountIDs[account.ID] = struct{}{}
 				lastFailoverErr = failoverErr
-				// 上游 5xx：累计该号连续失败，达阈值清 turn-state 票重抓
-				h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode)
 				if switchCount >= maxAccountSwitches {
 					closeOpenAIWSFailoverExhausted(wsConn, failoverErr)
 					return
@@ -2167,6 +2161,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		if err := h.gatewayService.ProxyResponsesWebSocketFromClient(ctx, c, wsConn, account, token, wsFirstMessage, hooks); err != nil {
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
+				h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode)
 				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
 				releaseAccountSlot()
 				failedAccountIDs[account.ID] = struct{}{}
