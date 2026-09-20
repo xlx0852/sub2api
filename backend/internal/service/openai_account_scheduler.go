@@ -1549,7 +1549,7 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 		return nil, 0, 0, 0, err
 	}
 	if len(accounts) == 0 {
-		return nil, 0, 0, 0, noAvailableOpenAISelectionError(req.RequestedModel, false)
+		return nil, 0, 0, 0, noAvailableOpenAISelectionErrorWithReason(req.RequestedModel, "platform_empty", false)
 	}
 
 	// require_privacy_set: 获取分组信息
@@ -1562,10 +1562,9 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 	loadReq := make([]AccountWithConcurrency, 0, len(accounts))
 	shadowPolicyEnabled := s.service.schedulerScoringRolloutMode(ctx, normalizeOpenAICompatiblePlatform(req.Platform), req.GroupID) == scheduling.RolloutShadow
 	shadowPolicyTrace := make([]scheduling.CandidatePolicyTrace, 0, len(accounts))
+	// 始终收集拒绝明细：正常路径开销极小，而当 filtered 为空（"无号可选"）时
+	// 它是定位"哪个号被哪条规则刷掉"的唯一现场证据——不再靠猜。
 	recordShadowPolicy := func(account *Account, allowed bool, rejectedPolicy string) {
-		if !shadowPolicyEnabled {
-			return
-		}
 		accountID := int64(0)
 		if account != nil {
 			accountID = account.ID
@@ -1644,7 +1643,18 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 		)
 	}
 	if len(filtered) == 0 {
-		return nil, 0, 0, 0, noAvailableOpenAISelectionError(req.RequestedModel, false)
+		// 空候选时输出每个平台级候选被哪条 policy 拒绝的明细，区分
+		// "平台级无候选"与"模型级/能力级无候选"，避免 no-available 误导读。
+		slog.Warn("openai_scheduler_no_candidates_reject_trace",
+			"platform", normalizeOpenAICompatiblePlatform(req.Platform),
+			"group_id", derefGroupID(req.GroupID),
+			"model", req.RequestedModel,
+			"require_compact", req.RequireCompact,
+			"required_capability", string(req.RequiredCapability),
+			"raw_candidate_count", len(accounts),
+			"reject_trace", shadowPolicyTrace,
+		)
+		return nil, 0, 0, 0, noAvailableOpenAISelectionErrorWithReason(req.RequestedModel, "filtered_all", false)
 	}
 
 	// 请求级预取:对全部候选(含 shadow 母账号)做一次性 GetByIDs,供 recheck / parent
@@ -1815,7 +1825,7 @@ func (s *defaultOpenAIAccountScheduler) finishLoadBalanceSelectionFallback(
 	loadSkew := attempt.loadSkew
 
 	if len(attempt.selectionOrder) == 0 {
-		return nil, candidateCount, topK, loadSkew, noAvailableOpenAISelectionError(req.RequestedModel, attempt.compactBlocked)
+		return nil, candidateCount, topK, loadSkew, noAvailableOpenAISelectionErrorWithReason(req.RequestedModel, "model_filtered", attempt.compactBlocked)
 	}
 
 	if stickyFallback, stickyErr := s.tryFallbackToWeightedSticky(ctx, req); stickyErr != nil {
@@ -1846,7 +1856,7 @@ func (s *defaultOpenAIAccountScheduler) finishLoadBalanceSelectionFallback(
 		}, candidateCount, topK, loadSkew, nil
 	}
 
-	return nil, candidateCount, topK, loadSkew, noAvailableOpenAISelectionError(req.RequestedModel, compactBlocked)
+	return nil, candidateCount, topK, loadSkew, noAvailableOpenAISelectionErrorWithReason(req.RequestedModel, "acquire_or_recheck_failed", compactBlocked)
 }
 
 func (s *defaultOpenAIAccountScheduler) isAccountTransportCompatible(account *Account, requiredTransport OpenAIUpstreamTransport) bool {

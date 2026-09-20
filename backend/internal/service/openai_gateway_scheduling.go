@@ -190,11 +190,17 @@ func normalizeOpenAICompatiblePlatform(platform string) string {
 
 type noAvailableOpenAIAccountError struct {
 	requestedModel string
+	// reason 区分无候选层级：platform_empty（平台级候选池为空）或
+	// model_filtered（平台级有候选但均被模型/能力/冷却刷掉）。
+	reason string
 }
 
 func (e *noAvailableOpenAIAccountError) Error() string {
 	if e == nil || e.requestedModel == "" {
 		return "no available OpenAI accounts"
+	}
+	if e.reason != "" {
+		return fmt.Sprintf("no available OpenAI accounts supporting model: %s (reason=%s)", e.requestedModel, e.reason)
 	}
 	return fmt.Sprintf("no available OpenAI accounts supporting model: %s", e.requestedModel)
 }
@@ -208,6 +214,14 @@ func noAvailableOpenAISelectionError(requestedModel string, compactBlocked bool)
 		return ErrNoAvailableCompactAccounts
 	}
 	return &noAvailableOpenAIAccountError{requestedModel: requestedModel}
+}
+
+// noAvailableOpenAISelectionErrorWithReason 与上者相同，但带缺失层级原因。
+func noAvailableOpenAISelectionErrorWithReason(requestedModel, reason string, compactBlocked bool) error {
+	if compactBlocked {
+		return ErrNoAvailableCompactAccounts
+	}
+	return &noAvailableOpenAIAccountError{requestedModel: requestedModel, reason: reason}
 }
 
 // openAICompactSupportTier classifies an OpenAI account by compact capability.
