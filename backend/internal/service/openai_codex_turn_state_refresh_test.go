@@ -135,7 +135,7 @@ func TestTurnStateSeedRefreshesEveryPoolAndPersistsAtomically(t *testing.T) {
 		return &http.Response{StatusCode: 200, Header: h, Body: io.NopCloser(strings.NewReader(`data: {"type":"response.completed","response":{"model":"` + model + `"}}` + "\n\n"))}, nil
 	})}
 	svc.seedOpenAICodexTurnStateWithClient(context.Background(), acc, client)
-	require.Equal(t, openAICodexTurnStateSeedModels, models)
+	require.Equal(t, openAICodexTurnStateSeedModels[:len(openAICodexTurnStateSeedModels)-1], models, "review alias reuses the luna pool seeded earlier in this job")
 	require.Len(t, repo.updates, len(models))
 	for i, model := range models {
 		tk, _, ck := openAICodexTurnStatePoolKeys(model)
@@ -143,7 +143,7 @@ func TestTurnStateSeedRefreshesEveryPoolAndPersistsAtomically(t *testing.T) {
 		require.Equal(t, repo.updates[i][ck], repo.updates[i][openAICodexTurnStateExtraCapturedAt])
 	}
 	svc.seedOpenAICodexTurnStateWithClient(context.Background(), acc, client)
-	require.Len(t, models, len(openAICodexTurnStateSeedModels), "fresh DB state must suppress queued reprobes")
+	require.Len(t, models, len(openAICodexTurnStateSeedModels)-1, "fresh DB state must suppress queued reprobes")
 }
 
 type turnStatePersistRepo struct {

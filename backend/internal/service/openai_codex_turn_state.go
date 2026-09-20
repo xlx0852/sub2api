@@ -55,6 +55,9 @@ func openAICodexTurnStateCandidatePools(reqModel string) []string {
 	switch m {
 	case "gpt-6-astra":
 		return []string{"gpt-6-astra", "gpt-5.6-luna"}
+	case "codex-auto-review":
+		// Completed probe responses on both OAuth accounts identify the luna pool.
+		return []string{"codex-auto-review", "gpt-5.6-luna"}
 	}
 	if m == "" {
 		return nil
@@ -450,7 +453,7 @@ func (s *OpenAIGatewayService) finishOpenAICodexTurnStateRefresh(id int64, now t
 
 // Each pool needs its own refresh deadline, independent of the last-issued single slot.
 var openAICodexTurnStateSeedModels = []string{
-	"gpt-6-astra", "gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-image-2", "codex-auto-review",
+	"gpt-6-astra", "gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "codex-auto-review",
 }
 
 func openAICodexTurnStateModelsNeedingRefresh(account *Account, now time.Time, ttl time.Duration) []string {
@@ -619,6 +622,9 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnStateWithClient(ctx context.Co
 	}
 	models := openAICodexTurnStateModelsNeedingRefresh(account, time.Now(), openAICodexTurnStateReuseTTL(s.cfg))
 	for _, model := range models {
+		if lookupCachedOpenAICodexTurnStateForModel(account, model, time.Now(), openAICodexTurnStateReuseTTL(s.cfg)*3/4) != "" {
+			continue
+		}
 		if ctx.Err() != nil {
 			return
 		}
