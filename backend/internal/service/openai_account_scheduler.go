@@ -851,8 +851,13 @@ func deriveOpenAISelectionSeed(req OpenAIAccountScheduleRequest) uint64 {
 	}
 
 	seed := hasher.Sum64()
-	// 对“无会话锚点”的纯负载均衡请求引入时间熵，避免固定命中同一账号。
-	if strings.TrimSpace(req.SessionHash) == "" && strings.TrimSpace(req.PreviousResponseID) == "" {
+	// 对“无粘性锚点”的请求引入时间熵，避免固定命中同一账号。
+	// 判据用真实粘性来源（sticky/previous_response 命中）而非 sessionHash 非空：
+	// WS ingress 的 fallback sessionHash 在无绑定记录时 StickyAccountID=0，若仍用
+	// 固定 seed 会让同 user/apikey/group 的请求恒命中同一高分账号，新号永不吃量。
+	hasStickyAnchor := req.StickyAccountID > 0 || req.StickyPreviousAccountID > 0 ||
+		strings.TrimSpace(req.PreviousResponseID) != ""
+	if !hasStickyAnchor {
 		seed ^= uint64(time.Now().UnixNano())
 	}
 	if seed == 0 {

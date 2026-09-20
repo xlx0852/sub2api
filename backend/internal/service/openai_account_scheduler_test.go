@@ -2782,10 +2782,13 @@ func TestBuildOpenAIWeightedSelectionOrder_DeterministicBySessionSeed(t *testing
 			score:    2.1,
 		},
 	}
+	// 确定性锚点是真实粘性命中（StickyAccountID），而非裸 sessionHash：
+	// fallback sessionHash 无绑定记录时应打散而非固定同号。
 	req := OpenAIAccountScheduleRequest{
-		GroupID:        int64PtrForTest(99),
-		SessionHash:    "session_seed_fixed",
-		RequestedModel: "gpt-5.1",
+		GroupID:         int64PtrForTest(99),
+		SessionHash:     "session_seed_fixed",
+		StickyAccountID: 101,
+		RequestedModel:  "gpt-5.1",
 	}
 
 	first := buildOpenAIWeightedSelectionOrderShared(candidates, req)
@@ -2795,6 +2798,22 @@ func TestBuildOpenAIWeightedSelectionOrder_DeterministicBySessionSeed(t *testing
 	for i := range first {
 		require.Equal(t, first[i].account.ID, second[i].account.ID)
 	}
+}
+
+// 裸 sessionHash 无绑定（fallback seed，StickyAccountID=0）时 seed 混时间熵，
+// 排序应跨请求打散，让空闲新号参与竞争而非恒命中同一高分号。
+func TestDeriveOpenAISelectionSeed_UnboundSessionHashVaries(t *testing.T) {
+	req := OpenAIAccountScheduleRequest{
+		GroupID:        int64PtrForTest(99),
+		SessionHash:    "fallback_hash_no_binding",
+		RequestedModel: "gpt-5.1",
+	}
+	seed1 := deriveOpenAISelectionSeed(req)
+	time.Sleep(1 * time.Millisecond)
+	seed2 := deriveOpenAISelectionSeed(req)
+	require.NotZero(t, seed1)
+	require.NotZero(t, seed2)
+	require.NotEqual(t, seed1, seed2)
 }
 
 func TestOpenAIGatewayService_SelectAccountWithScheduler_LoadBalanceDistributesAcrossSessions(t *testing.T) {
