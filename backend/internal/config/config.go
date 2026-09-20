@@ -733,6 +733,7 @@ func setDefaults() {
 	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.session_sticky", 3.0)
 	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.compact_error", 1.0)
 	viper.SetDefault("gateway.openai_ws.scheduler_score_weights.compact_latency", 0.5)
+	viper.SetDefault("gateway.openai_scheduler.simple_selection_group_ids", []int64{})
 	viper.SetDefault("gateway.openai_scheduler.sticky_escape_enabled", true)
 	viper.SetDefault("gateway.openai_scheduler.sticky_escape_ttft_ms", 15000)
 	viper.SetDefault("gateway.openai_scheduler.sticky_escape_error_rate", 0.5)

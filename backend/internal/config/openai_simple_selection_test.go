@@ -1,8 +1,9 @@
 package config
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestSimpleSelectionGroupConfig(t *testing.T) {
@@ -16,4 +17,12 @@ func TestSimpleSelectionGroupConfig(t *testing.T) {
 		cfg.Gateway.OpenAIScheduler.SimpleSelectionGroupIDs = []int64{id}
 		require.ErrorContains(t, cfg.Validate(), "simple_selection_group_ids")
 	}
+}
+
+func TestSimpleSelectionGroupConfigFromEnvironment(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("GATEWAY_OPENAI_SCHEDULER_SIMPLE_SELECTION_GROUP_IDS", "4,42")
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, []int64{4, 42}, cfg.Gateway.OpenAIScheduler.SimpleSelectionGroupIDs)
 }
