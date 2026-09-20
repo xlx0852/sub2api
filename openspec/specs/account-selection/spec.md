@@ -1,7 +1,7 @@
 # account-selection Specification
 
 ## Purpose
-TBD - created by archiving change retire-weighted-scheduling. Update Purpose after archive.
+定义所有平台账号选号的统一硬门槛、优先级、实时负载与同档随机规则，同时保留平台协议、配额、续链和并发边界。用于防止历史评分、TopK 或无效粘性绑定把健康账号错误排除。
 
 ## Requirements
 
