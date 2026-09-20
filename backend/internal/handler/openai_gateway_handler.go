@@ -614,7 +614,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				}
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
-					h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode)
+					h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode, failoverErr.TransportOnly)
 					if !canRetryCompact {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted || service.OpenAICompactKeepaliveAdjustedWrittenSize(c) != writerSizeBeforeForward)
 						return
@@ -1237,7 +1237,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			} else {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
-					h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode)
+					h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode, failoverErr.TransportOnly)
 					if c.Writer.Size() != writerSizeBeforeForward {
 						h.handleAnthropicFailoverExhausted(c, failoverErr, true)
 						return
@@ -2161,7 +2161,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		if err := h.gatewayService.ProxyResponsesWebSocketFromClient(ctx, c, wsConn, account, token, wsFirstMessage, hooks); err != nil {
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
-				h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode)
+				h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode, failoverErr.TransportOnly)
 				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
 				releaseAccountSlot()
 				failedAccountIDs[account.ID] = struct{}{}

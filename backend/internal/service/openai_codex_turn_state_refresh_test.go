@@ -179,6 +179,27 @@ func TestTurnStateConsecutiveFailuresAndRecovery(t *testing.T) {
 	require.NotEmpty(t, acc.Extra[openAICodexTurnStateExtraToken], "cooldown must prevent repeated invalidation of freshly seeded tickets")
 }
 
+func TestTurnStateTransportErrorDoesNotInvalidate(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Gateway.OpenAICodexTurnStateReuseEnabled = true
+	svc := &OpenAIGatewayService{cfg: cfg}
+	acc := &Account{ID: 69, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: map[string]any{}}
+	tok := "gAAAAA" + strings.Repeat("T", 250)
+	svc.storeOpenAICodexTurnState(acc, tok, "gpt-5.6-sol")
+	// transport 错误（proxy/DNS/TLS 超时）被 handler 包装成 failover.StatusCode=502，
+	// 但上游未返回真实 HTTP 响应，不得计入连续 5xx，更不得清票。
+	for i := 0; i < 5; i++ {
+		svc.NoteOpenAICodexTurnStateUpstreamResult(acc, 502, true /* transportOnly */)
+	}
+	require.NotEmpty(t, acc.Extra[openAICodexTurnStateExtraToken],
+		"transport-only errors must not invalidate cached turn-state tickets")
+	// 真实上游 5xx（transportOnly=false）仍按阈值清票。
+	for i := 0; i < 3; i++ {
+		svc.NoteOpenAICodexTurnStateUpstreamResult(acc, 502, false)
+	}
+	require.Empty(t, acc.Extra[openAICodexTurnStateExtraToken])
+}
+
 func TestTurnStateConcurrent5xxInvalidatesOncePerCooldown(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	now := time.Now()

@@ -629,6 +629,10 @@ type UpstreamFailoverError struct {
 	GrokSameAccountRetry      bool // Grok HTTP Responses/Chat 安全同账号重试；由 handler 精确固定账号并延迟健康惩罚
 	GrokAccountPenaltyApplied bool // Grok 已按当前失败更新账号健康，handler 不应再应用先前延迟的惩罚
 	GrokStaleCredential       bool // Grok 401 使用了已轮换凭据；允许切号但不得降低被选账号健康
+	// TransportOnly 标记该 failover 来自传输层（proxy/DNS/TCP/TLS/连接超时），
+	// 上游未返回任何 HTTP 响应。StatusCode 仍是给客户端的网关包装码（如 502），
+	// 但不得被当作真实上游 5xx 计入票失效/上游健康统计。
+	TransportOnly bool
 }
 
 func (e *UpstreamFailoverError) Error() string {

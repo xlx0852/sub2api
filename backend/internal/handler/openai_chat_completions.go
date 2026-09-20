@@ -277,7 +277,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			} else {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
-					h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode)
+					h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode, failoverErr.TransportOnly)
 					if c.Writer.Size() != writerSizeBeforeForward {
 						h.handleFailoverExhausted(c, failoverErr, true)
 						return

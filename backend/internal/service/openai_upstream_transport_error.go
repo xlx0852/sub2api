@@ -166,6 +166,7 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 		StatusCode:             http.StatusBadGateway,
 		ResponseBody:           body,
 		RetryableOnSameAccount: retrySame,
+		TransportOnly:          true,
 	}
 }
 

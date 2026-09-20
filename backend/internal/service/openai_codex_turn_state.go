@@ -477,8 +477,14 @@ const openAICodexTurnStateUpstream5xxInvalidateThreshold = 3
 //   - status<500：成功/4xx，清零计数。
 //
 // 只对 oauth（Codex 上游）号生效。
-func (s *OpenAIGatewayService) NoteOpenAICodexTurnStateUpstreamResult(account *Account, upstreamStatus int) {
+// transportOnly=true 表示该次失败是传输层错误（代理/DNS/TCP/TLS），上游未返回
+// 真实 HTTP 响应；这类错误既不是票失效也不是上游过载，不得计入连续 5xx，否则
+// 会出现"代理断了却反复清票重抓"的误判。
+func (s *OpenAIGatewayService) NoteOpenAICodexTurnStateUpstreamResult(account *Account, upstreamStatus int, transportOnly ...bool) {
 	if s == nil || account == nil || !account.IsOpenAIOAuth() || account.ID <= 0 || !openAICodexTurnStateReuseEnabled(s.cfg) {
+		return
+	}
+	if len(transportOnly) > 0 && transportOnly[0] {
 		return
 	}
 	if !s.shouldInvalidateOpenAICodexTurnState(account.ID, upstreamStatus, time.Now()) {
