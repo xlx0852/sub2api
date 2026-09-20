@@ -79,9 +79,11 @@ func prepareOpenAIWSHTTPBridgeBody(payload []byte) ([]byte, error) {
 	delete(body, "generate")
 	delete(body, "previous_response_id")
 	// Codex treats call_id as an opaque association key and emits native
-	// custom_tool_call/custom_tool_call_output pairs. Keep the client payload
-	// byte-for-byte semantic here. Compatibility adaptation is applied only to
-	// server-collected replay items, or after an explicit upstream rejection.
+	// custom_tool_call/custom_tool_call_output pairs. Keep those fields intact.
+	// Replay assembly can append items after ingress sanitization, so also drop
+	// overlong optional item IDs at this final upstream boundary. Do not hash
+	// item IDs into fictitious references or change call_id/name/arguments.
+	stripOverlongOpenAIResponsesInputItemIDsInMap(body)
 	body["stream"] = true
 	return json.Marshal(body)
 }

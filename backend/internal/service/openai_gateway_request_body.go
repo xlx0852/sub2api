@@ -586,7 +586,7 @@ var openAIPassthroughOAuthUnsupportedFields = []string{
 // 1) 删除 ChatGPT internal API 不支持的顶层 Responses 参数
 // 2) 删除 max_output_tokens / max_completion_tokens（第三方客户端兼容）
 // 3) store=false 4) 非 compact 保持 stream=true；compact 强制 stream=false
-// 5) clamp 超长 call_id
+// 5) clamp 超长 call_id，删除回放项可选的超长 id（保留 item_reference）
 func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, bool, error) {
 	if len(body) == 0 {
 		return body, false, nil
@@ -657,6 +657,14 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, boo
 	}
 
 	// 透传路径不走 codex transform，需在此收敛超长 call_id，避免上游 400。
+	next, itemIDsChanged, err := stripOverlongOpenAIResponsesInputItemIDs(normalized)
+	if err != nil {
+		return body, false, err
+	}
+	if itemIDsChanged {
+		normalized = next
+		changed = true
+	}
 	next, callIDsChanged, err := clampOpenAIResponsesCallIDsInBody(normalized)
 	if err != nil {
 		return body, false, err

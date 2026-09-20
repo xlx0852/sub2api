@@ -228,13 +228,14 @@ func (s *OpenAIGatewayService) buildOpenAIWSCreatePayload(reqBody map[string]any
 	if account != nil && account.Type == AccountTypeOAuth && !s.isOpenAIWSStoreRecoveryAllowed(account) {
 		payload["store"] = false
 	}
-	// 与 HTTP 路径对齐：超长 call_id 必须在进上游前收敛，否则 WS 同样 400。
+	// 与 HTTP 路径对齐：可选 item id 与 call_id 分别满足上游长度限制。
+	stripOverlongOpenAIResponsesInputItemIDsInMap(payload)
 	clampOpenAIResponsesCallIDsInMap(payload)
 	return payload
 }
 
 // sanitizeOpenAIWSResponseCreateFrame 收敛 WS response.create 帧的兼容性字段：
-//  1. clamp input[].call_id（所有账号）
+//  1. 删除可选的超长 input[].id，clamp input[].call_id（所有账号）
 //  2. OAuth 路径额外剥离 max_output_tokens / max_completion_tokens
 //     （与 HTTP OAuth 透传/非 CLI strip 一致，避免 ChatGPT internal 400）
 func sanitizeOpenAIWSResponseCreateFrame(frame []byte, account *Account) ([]byte, bool, error) {
@@ -251,6 +252,14 @@ func sanitizeOpenAIWSResponseCreateFrame(frame []byte, account *Account) ([]byte
 	normalized := frame
 	changed := false
 
+	next, itemIDsChanged, err := stripOverlongOpenAIResponsesInputItemIDs(normalized)
+	if err != nil {
+		return frame, false, err
+	}
+	if itemIDsChanged {
+		normalized = next
+		changed = true
+	}
 	next, callIDsChanged, err := clampOpenAIResponsesCallIDsInBody(normalized)
 	if err != nil {
 		return frame, false, err
