@@ -68,7 +68,7 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 		// Invalidate process-local sticky epochs so subsequent sticky hits fall through.
 		BumpOpenAIAccountStickyEpoch(account.ID)
 	}
-	if shouldDisable {
+	if shouldDisable && !(statusCode == http.StatusUnauthorized && account.IsIgnoreUpstream401Enabled()) {
 		s.BlockAccountScheduling(account, time.Time{}, "upstream_disable")
 	}
 	return shouldDisable

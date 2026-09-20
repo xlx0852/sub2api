@@ -596,6 +596,7 @@ func filterSchedulerExtra(extra map[string]any) map[string]any {
 		"responses_websockets_v2_enabled",
 		"openai_ws_enabled",
 		"openai_ws_force_http",
+		"ignore_upstream_401",
 		"openai_responses_mode",
 		"openai_responses_supported",
 		// external bridge 路由/工具摊平依赖这些标记；丢了会导致 IsExternalBridge=false。

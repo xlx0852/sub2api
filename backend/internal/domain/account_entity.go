@@ -1936,6 +1936,17 @@ func (a *Account) IsOpenAIWSForceHTTPEnabled() bool {
 	return ok && enabled
 }
 
+// IsIgnoreUpstream401Enabled 返回账号级"忽视上游 401、继续调度"开关。
+// 字段：accounts.extra.ignore_upstream_401。
+// 打开后：本次请求仍可失败转移，但账号不 SetError、不 temp_unschedulable、不进内存拉黑。
+func (a *Account) IsIgnoreUpstream401Enabled() bool {
+	if a == nil || a.Extra == nil {
+		return false
+	}
+	enabled, ok := a.Extra["ignore_upstream_401"].(bool)
+	return ok && enabled
+}
+
 // IsOpenAIWSAllowStoreRecoveryEnabled 返回账号级 store 恢复开关。
 // 字段：accounts.extra.openai_ws_allow_store_recovery。
 func (a *Account) IsOpenAIWSAllowStoreRecoveryEnabled() bool {
