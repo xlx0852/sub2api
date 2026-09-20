@@ -13,6 +13,8 @@ gateway:
     simple_selection_group_ids: [4]
 ```
 
+也可使用环境变量 `GATEWAY_OPENAI_SCHEDULER_SIMPLE_SELECTION_GROUP_IDS=4`；环境变量变化需重建 API 容器，不能只修改旧容器外部文件。
+
 按现有发布流程加载新配置后，group 4 的普通 OpenAI 请求使用新 profile。
 其他 group、Grok/Kimi/Anthropic/Gemini/Antigravity、compact 请求保留原策略。
 旧 `scheduler_score_weights`/TopK/sticky-weight/subscription-priority 参数保留，

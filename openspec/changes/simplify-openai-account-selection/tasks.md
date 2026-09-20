@@ -12,4 +12,4 @@
 ## 3. 验证
 - [x] 3.1 聚焦 scheduler/policy/affinity/failover 与 HTTP/SSE/WS/tool continuation 回归通过。
 - [x] 3.2 race、编译、vet、diff check、OpenSpec strict；基线失败单列。
-- [ ] 3.3 交付 Linux 候选与验证记录；生产灰度状态明确，不提前声明线上完成。
+- [x] 3.3 交付 Linux 候选与验证记录；生产灰度状态明确，不提前声明线上完成。

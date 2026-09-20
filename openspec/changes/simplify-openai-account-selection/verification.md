@@ -43,3 +43,13 @@
 
 默认 `simple_selection_group_ids: []`，本记录不表示生产已启用。
 生产灰度与观测需要按 operations.md 选择 scope；未执行全局切换或清理真实用户会话。
+
+## 隔离候选交付
+
+- 源码提交：`1817d36270384cc6f49c9ef89e9bac034dd238c3`（主体实现 `4a20f5e8c`，配置环境变量补全 `1817d3627`）。
+- 使用 detached clean worktree 重跑 config/scheduling/middleware/archtest 全包，以及前述去除两项基线失败后的 service/handler 扩大回归，均通过。
+- 候选：`/tmp/sub2api-simple-selection-candidate`，Linux amd64，CGO=0，embed；前端未改，复用现有已构建的 dist，不包含任何前端功能改动。
+- SHA-256：`c8706411f738964adb7e7c2ccc88207df92684bbb63080c40cc258fa4b2fa45e`。
+- 该环境 detached worktree 构建未自动记录 `vcs.revision`；已显式通过 `-X main.Commit=1817d36270384cc6f49c9ef89e9bac034dd238c3` 写入源码版本，并用构建信息与校验和核对。不把 release 标签当作版本证据。
+- 已验证 `GATEWAY_OPENAI_SCHEDULER_SIMPLE_SELECTION_GROUP_IDS=4,42` 可加载为 `[4,42]`；未配置时仍为空。
+- 生产状态：未上传、未切流、未变更分组 scope；本次完成的是实现、回归与候选交付。
