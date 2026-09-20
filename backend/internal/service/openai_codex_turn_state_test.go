@@ -35,7 +35,8 @@ func TestLookupCachedOpenAICodexTurnStateTTL(t *testing.T) {
 		openAICodexTurnStateExtraCapturedAt: time.Now().UTC().Add(-10 * time.Minute).Format(time.RFC3339Nano),
 	}}
 	require.Equal(t, token, lookupCachedOpenAICodexTurnState(acc, time.Now(), 30*time.Minute))
-	require.Equal(t, token, lookupCachedOpenAICodexTurnState(acc, time.Now(), 5*time.Minute))
+	// 票龄 10min > ttl=5min → 硬失效，不再返回旧票（SWR 已改为过期即废）。
+	require.Empty(t, lookupCachedOpenAICodexTurnState(acc, time.Now(), 5*time.Minute))
 	require.True(t, openAICodexTurnStateNeedsRefresh(acc, time.Now(), 5*time.Minute))
 	acc.Type = AccountTypeAPIKey
 	require.Empty(t, lookupCachedOpenAICodexTurnState(acc, time.Now(), 30*time.Minute))

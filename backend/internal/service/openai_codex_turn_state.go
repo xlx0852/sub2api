@@ -21,7 +21,7 @@ const (
 	openAICodexTurnStateExtraToken      = "openai_codex_turn_state"
 	openAICodexTurnStateExtraModel      = "openai_codex_turn_state_model"
 	openAICodexTurnStateExtraCapturedAt = "openai_codex_turn_state_captured_at"
-	openAICodexTurnStateDefaultTTL      = 30 * time.Minute
+	openAICodexTurnStateDefaultTTL      = 60 * time.Minute
 	openAICodexTurnStateMinLen          = 200
 	openAICodexTurnStateMaxLen          = 400
 )
@@ -110,24 +110,39 @@ func lookupCachedOpenAICodexTurnState(account *Account, now time.Time, ttl time.
 
 // lookupCachedOpenAICodexTurnStateForPool 返回某供应池槽位的票。
 // pool 为空时退回兼容行为：优先读单值 openai_codex_turn_state。
+//
+// 票龄硬失效：捕获时间超过 ttl（默认 1h）的票不再返回给上游——
+// 旧行为是 stale-while-revalidate 过期照发，会导致过期/被吊销的票一直
+// 打到上游 502。现在满 ttl 即作废，交给 seeder 重抓后再用。
 func lookupCachedOpenAICodexTurnStateForPool(account *Account, pool string, now time.Time, ttl time.Duration) string {
 	if account == nil || account.Type != AccountTypeOAuth || account.Extra == nil {
 		return ""
 	}
-	_ = now
-	_ = ttl
-	// Stale-while-revalidate: even expired tickets go out; seeder replaces them.
 	if pool != "" {
-		tokKey, _, _ := openAICodexTurnStatePoolKeys(pool)
-		if token, _ := account.Extra[tokKey].(string); isReusableOpenAICodexTurnState(token) {
+		tokKey, _, capturedKey := openAICodexTurnStatePoolKeys(pool)
+		if token, _ := account.Extra[tokKey].(string); isReusableOpenAICodexTurnState(token) && !openAICodexTurnStateTicketExpired(account.Extra[capturedKey], now, ttl) {
 			return strings.TrimSpace(token)
 		}
+		return ""
 	}
 	token, _ := account.Extra[openAICodexTurnStateExtraToken].(string)
-	if isReusableOpenAICodexTurnState(token) {
+	if isReusableOpenAICodexTurnState(token) && !openAICodexTurnStateTicketExpired(account.Extra[openAICodexTurnStateExtraCapturedAt], now, ttl) {
 		return strings.TrimSpace(token)
 	}
 	return ""
+}
+
+// openAICodexTurnStateTicketExpired 判断票龄是否超过 ttl（硬失效）。
+// 无捕获时间按不过期处理（兼容旧数据，刷新逻辑会补抓）。
+func openAICodexTurnStateTicketExpired(capturedRaw any, now time.Time, ttl time.Duration) bool {
+	if ttl <= 0 {
+		return false
+	}
+	captured := parseOpenAICodexTurnStateTimeValue(capturedRaw)
+	if captured.IsZero() {
+		return false
+	}
+	return now.Sub(captured) > ttl
 }
 
 // lookupCachedOpenAICodexTurnStateForModel 按请求 model 的候选槽列表依次查票。
@@ -137,17 +152,17 @@ func lookupCachedOpenAICodexTurnStateForModel(account *Account, reqModel string,
 		return ""
 	}
 	for _, pool := range openAICodexTurnStateCandidatePools(reqModel) {
-		tokKey, _, _ := openAICodexTurnStatePoolKeys(pool)
+		tokKey, _, capturedKey := openAICodexTurnStatePoolKeys(pool)
 		if tokKey == "" {
 			continue
 		}
-		if token, _ := account.Extra[tokKey].(string); isReusableOpenAICodexTurnState(token) {
+		if token, _ := account.Extra[tokKey].(string); isReusableOpenAICodexTurnState(token) && !openAICodexTurnStateTicketExpired(account.Extra[capturedKey], now, ttl) {
 			return strings.TrimSpace(token)
 		}
 	}
 	// 候选槽都空时退回兼容单值。
 	token, _ := account.Extra[openAICodexTurnStateExtraToken].(string)
-	if isReusableOpenAICodexTurnState(token) {
+	if isReusableOpenAICodexTurnState(token) && !openAICodexTurnStateTicketExpired(account.Extra[openAICodexTurnStateExtraCapturedAt], now, ttl) {
 		return strings.TrimSpace(token)
 	}
 	return ""
@@ -157,7 +172,12 @@ func parseOpenAICodexTurnStateCapturedAt(account *Account) time.Time {
 	if account == nil || account.Extra == nil {
 		return time.Time{}
 	}
-	switch v := account.Extra[openAICodexTurnStateExtraCapturedAt].(type) {
+	return parseOpenAICodexTurnStateTimeValue(account.Extra[openAICodexTurnStateExtraCapturedAt])
+}
+
+// parseOpenAICodexTurnStateTimeValue 解析捕获时间原始值（string/time.Time/unix）。
+func parseOpenAICodexTurnStateTimeValue(raw any) time.Time {
+	switch v := raw.(type) {
 	case time.Time:
 		return v
 	case string:
