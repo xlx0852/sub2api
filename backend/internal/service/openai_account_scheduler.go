@@ -2330,17 +2330,16 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerStrategy(
 	// keep Unspecified for first hop. If sticky account is known, pin class to that account.
 	userPinAPIKeyID := openAIUserPinAPIKeyIDFromContext(ctx)
 	userPinAccountID := s.getUserPinnedAccountID(ctx, groupID, userPinAPIKeyID)
+	pinSources := make([]*Account, 0, 3)
 	for _, id := range []int64{stickyAccountID, stickyPreviousAccountID, userPinAccountID} {
 		if id <= 0 {
 			continue
 		}
 		if acc, err := s.getSchedulableAccount(ctx, id); err == nil && acc != nil {
-			if class := OpenAIAccountCredentialClass(acc); class != OpenAICredentialClassUnspecified {
-				requiredCredentialClass = class
-				break
-			}
+			pinSources = append(pinSources, acc)
 		}
 	}
+	requiredCredentialClass = resolvePinnedCredentialClass(pinSources, requestedModel)
 
 	selection, decision, err := scheduler.Select(ctx, OpenAIAccountScheduleRequest{
 		GroupID:                 groupID,
@@ -2376,6 +2375,28 @@ func normalizeOpenAILegacyCompatibilityError(err error, requestedModel string) e
 		return noAvailableOpenAISelectionError(requestedModel, false)
 	}
 	return err
+}
+
+// resolvePinnedCredentialClass 从 sticky / previous_response / user_pin 钉选来源
+// 推导 RequiredCredentialClass。仅当来源账号本身支持 requestedModel 时才钉其
+// credential class；否则跳过该来源。
+//
+// 若不加模型校验，sticky 钉到一个不支持目标模型的 apikey 号时，会把唯一支持
+// 该模型的 oauth 号全部按 credential_class 拒掉 → routing 空池 503。
+func resolvePinnedCredentialClass(pinSources []*Account, requestedModel string) OpenAICredentialClass {
+	for _, acc := range pinSources {
+		if acc == nil {
+			continue
+		}
+		if requestedModel != "" && !acc.IsModelSupported(requestedModel) {
+			// 钉选来源不支持本次模型：不钉其 class，放开全类竞争。
+			continue
+		}
+		if class := OpenAIAccountCredentialClass(acc); class != OpenAICredentialClassUnspecified {
+			return class
+		}
+	}
+	return OpenAICredentialClassUnspecified
 }
 
 func accountSupportsOpenAICapabilities(account *Account, requiredCapability OpenAIEndpointCapability, requiredImageCapability OpenAIImagesCapability) bool {
