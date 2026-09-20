@@ -97,7 +97,10 @@ var ErrAccountNotFound = domain.ErrAccountNotFound
 var ErrAccountNotInFallback = domain.ErrAccountNotInFallback
 var ErrAccountNotSchedulable = domain.ErrAccountNotSchedulable
 var ErrRetiredBedrockAccount = domain.ErrRetiredBedrockAccount
-var ErrVertexServiceAccountOnboardingDisabled = domain.ErrVertexServiceAccountOnboardingDisabled
+var ErrRetiredVertexServiceAccount = domain.ErrRetiredVertexServiceAccount
+
+// ErrVertexServiceAccountOnboardingDisabled is retained as an alias for existing tests and call sites.
+var ErrVertexServiceAccountOnboardingDisabled = domain.ErrRetiredVertexServiceAccount
 var ErrAffiliateCodeInvalid = domain.ErrAffiliateCodeInvalid
 var ErrAffiliateCodeTaken = domain.ErrAffiliateCodeTaken
 var ErrAffiliateProfileNotFound = domain.ErrAffiliateProfileNotFound

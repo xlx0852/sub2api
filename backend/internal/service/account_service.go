@@ -167,7 +167,7 @@ func (s *AccountService) Update(ctx context.Context, id int64, req UpdateAccount
 	if err != nil {
 		return nil, fmt.Errorf("get account: %w", err)
 	}
-	if err := rejectRetiredBedrockAccount(account); err != nil {
+	if err := rejectRetiredSupplyAccount(account); err != nil {
 		return nil, err
 	}
 
@@ -307,7 +307,7 @@ func (s *AccountService) UpdateStatus(ctx context.Context, id int64, status stri
 	if err != nil {
 		return fmt.Errorf("get account: %w", err)
 	}
-	if err := rejectRetiredBedrockAccount(account); err != nil {
+	if err := rejectRetiredSupplyAccount(account); err != nil {
 		return err
 	}
 

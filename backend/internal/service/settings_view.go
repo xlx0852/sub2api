@@ -524,11 +524,11 @@ func DefaultRateLimit429CooldownSettings() *RateLimit429CooldownSettings {
 // 白名单需要覆盖每个上游路径的模型 ID 变形：
 //   - 直连 Anthropic API（OAuth mimic / API Key / SetupToken）：模型保持客户端原样
 //     （如 "claude-sonnet-5"、"claude-sonnet-5-YYYYMMDD"、"claude-sonnet-5-thinking"）。
-//   - Vertex AI：normalizeVertexAnthropicModelID 会把 "-YYYYMMDD" 后缀转成 "@YYYYMMDD"
-//     （如 "claude-sonnet-5@YYYYMMDD"）。
+//   - 历史 Vertex 路径曾把 "-YYYYMMDD" 转成 "@YYYYMMDD"；该供应已退役，
+//     白名单仍保留 "@*" 以免存量 beta-policy 规则失效。
 //
 // 白名单只用后缀通配符（matchModelPattern 语义），因此每个路径都需要显式列出前缀。
-// 精确匹配 "claude-sonnet-5" + 后缀 "-*" 与 "@*"，可覆盖直连/Vertex 场景，同时避免误伤
+// 精确匹配 "claude-sonnet-5" + 后缀 "-*" 与 "@*"，同时避免误伤
 // 未来可能出现的 "claude-sonnet-50" 或 "claude-sonnet-5.x" 之类的意外命名。
 func DefaultBetaPolicySettings() *BetaPolicySettings {
 	return &BetaPolicySettings{
@@ -546,7 +546,7 @@ func DefaultBetaPolicySettings() *BetaPolicySettings {
 					// 直连 Anthropic API（客户端请求 model 原样）
 					"claude-sonnet-5",
 					"claude-sonnet-5-*",
-					// Vertex AI 走 normalizeVertexAnthropicModelID 后 "@YYYYMMDD" 格式
+					// 历史 Vertex 模型 ID 形态，保留以免存量规则失效
 					"claude-sonnet-5@*",
 				},
 				FallbackAction: BetaPolicyActionFilter,

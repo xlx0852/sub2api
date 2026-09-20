@@ -2,8 +2,6 @@ package domain
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"strings"
 	"time"
 
@@ -22,7 +20,6 @@ const (
 	AnthropicAPIKeyAuthSchemeAuthorizationBearer = "authorization_bearer"
 
 	OpenAIAuthModeAgentIdentity = "agentIdentity"
-	vertexDefaultLocation       = "us-central1"
 
 	featureKeyCodexImageGenerationBridge             = "codex_image_generation_bridge"
 	featureKeyCodexImageGenerationExplicitToolPolicy = "codex_image_generation_explicit_tool_policy"
@@ -33,8 +30,6 @@ const (
 	defaultOpenAIMessagesDispatchSonnetMappedModel = "gpt-5.3-codex"
 	defaultOpenAIMessagesDispatchHaikuMappedModel  = "gpt-5.4-mini"
 )
-
-var errVertexServiceAccountMissing = errors.New("service account credentials not configured")
 
 func NormalizeAccountNotes(value *string) *string {
 	return normalizeAccountNotes(value)
@@ -57,76 +52,6 @@ func (a *Account) IsOpenAIAgentIdentity() bool {
 		return false
 	}
 	return strings.EqualFold(strings.TrimSpace(a.GetCredential(openAIAuthModeCredentialKey)), OpenAIAuthModeAgentIdentity)
-}
-
-func (a *Account) IsVertexServiceAccount() bool {
-	return a != nil && a.Type == AccountTypeServiceAccount
-}
-
-func (a *Account) VertexProjectID() string {
-	if a == nil {
-		return ""
-	}
-	if v := strings.TrimSpace(a.GetCredential("project_id")); v != "" {
-		return v
-	}
-	if key, err := parseVertexServiceAccountKeyLite(a); err == nil {
-		return strings.TrimSpace(key.ProjectID)
-	}
-	return ""
-}
-
-func (a *Account) VertexLocation(model string) string {
-	if a == nil {
-		return vertexDefaultLocation
-	}
-	if model != "" && a.Credentials != nil {
-		if raw, ok := a.Credentials["vertex_model_locations"].(map[string]any); ok {
-			if loc, ok := raw[model].(string); ok && strings.TrimSpace(loc) != "" {
-				return strings.TrimSpace(loc)
-			}
-		}
-	}
-	if v := strings.TrimSpace(a.GetCredential("location")); v != "" {
-		return v
-	}
-	if v := strings.TrimSpace(a.GetCredential("vertex_location")); v != "" {
-		return v
-	}
-	return vertexDefaultLocation
-}
-
-type vertexServiceAccountKeyLite struct {
-	ProjectID string `json:"project_id"`
-}
-
-func parseVertexServiceAccountKeyLite(account *Account) (*vertexServiceAccountKeyLite, error) {
-	if account == nil || account.Credentials == nil {
-		return nil, errVertexServiceAccountMissing
-	}
-	if raw := strings.TrimSpace(account.GetCredential("service_account_json")); raw != "" {
-		return parseVertexServiceAccountJSONLite([]byte(raw))
-	}
-	if raw := strings.TrimSpace(account.GetCredential("service_account")); raw != "" {
-		return parseVertexServiceAccountJSONLite([]byte(raw))
-	}
-	if nested, ok := account.Credentials["service_account_json"].(map[string]any); ok {
-		b, _ := json.Marshal(nested)
-		return parseVertexServiceAccountJSONLite(b)
-	}
-	if nested, ok := account.Credentials["service_account"].(map[string]any); ok {
-		b, _ := json.Marshal(nested)
-		return parseVertexServiceAccountJSONLite(b)
-	}
-	return nil, errVertexServiceAccountMissing
-}
-
-func parseVertexServiceAccountJSONLite(raw []byte) (*vertexServiceAccountKeyLite, error) {
-	var key vertexServiceAccountKeyLite
-	if err := json.Unmarshal(raw, &key); err != nil {
-		return nil, err
-	}
-	return &key, nil
 }
 
 func (a *Account) CodexImageGenerationBridgeOverride() *bool {

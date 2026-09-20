@@ -557,11 +557,15 @@ func rejectDeprecatedBedrockType(accountType string) error {
 	return nil
 }
 
-func rejectRetiredVertexServiceAccountOnboarding(accountType string) error {
+func rejectDeprecatedVertexServiceAccountType(accountType string) error {
 	if strings.EqualFold(strings.TrimSpace(accountType), AccountTypeServiceAccount) {
-		return ErrVertexServiceAccountOnboardingDisabled
+		return ErrRetiredVertexServiceAccount
 	}
 	return nil
+}
+
+func rejectRetiredVertexServiceAccountOnboarding(accountType string) error {
+	return rejectDeprecatedVertexServiceAccountType(accountType)
 }
 
 func rejectRetiredBedrockAccount(account *Account) error {
@@ -569,4 +573,18 @@ func rejectRetiredBedrockAccount(account *Account) error {
 		return nil
 	}
 	return rejectDeprecatedBedrockType(account.Type)
+}
+
+func rejectRetiredVertexServiceAccount(account *Account) error {
+	if account == nil {
+		return nil
+	}
+	return rejectDeprecatedVertexServiceAccountType(account.Type)
+}
+
+func rejectRetiredSupplyAccount(account *Account) error {
+	if err := rejectRetiredBedrockAccount(account); err != nil {
+		return err
+	}
+	return rejectRetiredVertexServiceAccount(account)
 }

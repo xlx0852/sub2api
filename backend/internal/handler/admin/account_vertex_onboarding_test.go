@@ -27,7 +27,7 @@ func TestVertexServiceAccountCreationBindingIsRetired(t *testing.T) {
 func TestVertexServiceAccountBatchCreationFailsClosed(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	adminSvc := newStubAdminService()
-	adminSvc.createAccountErr = service.ErrVertexServiceAccountOnboardingDisabled
+	adminSvc.createAccountErr = service.ErrRetiredVertexServiceAccount
 	handler := NewAccountHandler(adminSvc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	router := gin.New()
 	router.POST("/api/v1/admin/accounts/batch", handler.BatchCreate)
@@ -40,6 +40,6 @@ func TestVertexServiceAccountBatchCreationFailsClosed(t *testing.T) {
 	router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "vertex service account onboarding has been retired")
+	require.Contains(t, recorder.Body.String(), "vertex service account has been retired")
 	require.Contains(t, recorder.Body.String(), `"failed":1`)
 }

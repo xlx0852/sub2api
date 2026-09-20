@@ -1154,17 +1154,7 @@ func (s *GatewayService) GetAccessToken(ctx context.Context, account *Account) (
 		}
 		return apiKey, "apikey", nil
 	case AccountTypeServiceAccount:
-		if account.Platform != PlatformAnthropic {
-			return "", "", fmt.Errorf("unsupported service account platform: %s", account.Platform)
-		}
-		if s.claudeTokenProvider == nil {
-			return "", "", errors.New("claude token provider not configured")
-		}
-		accessToken, err := s.claudeTokenProvider.GetAccessToken(ctx, account)
-		if err != nil {
-			return "", "", err
-		}
-		return accessToken, "service_account", nil
+		return "", "", ErrRetiredVertexServiceAccount
 	default:
 		return "", "", fmt.Errorf("unsupported account type: %s", account.Type)
 	}

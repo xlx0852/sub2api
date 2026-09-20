@@ -10,6 +10,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type betaPolicySettingRepoStub struct {
+	values map[string]string
+}
+
+func (s *betaPolicySettingRepoStub) Get(context.Context, string) (*Setting, error) {
+	panic("unexpected Get call")
+}
+
+func (s *betaPolicySettingRepoStub) GetValue(_ context.Context, key string) (string, error) {
+	if value, ok := s.values[key]; ok {
+		return value, nil
+	}
+	return "", ErrSettingNotFound
+}
+
+func (s *betaPolicySettingRepoStub) Set(_ context.Context, key, value string) error {
+	if s.values == nil {
+		s.values = map[string]string{}
+	}
+	s.values[key] = value
+	return nil
+}
+
+func (s *betaPolicySettingRepoStub) GetMultiple(context.Context, []string) (map[string]string, error) {
+	panic("unexpected GetMultiple call")
+}
+
+func (s *betaPolicySettingRepoStub) SetMultiple(context.Context, map[string]string) error {
+	panic("unexpected SetMultiple call")
+}
+
+func (s *betaPolicySettingRepoStub) GetAll(context.Context) (map[string]string, error) {
+	panic("unexpected GetAll call")
+}
+
+func (s *betaPolicySettingRepoStub) Delete(context.Context, string) error {
+	panic("unexpected Delete call")
+}
+
 func TestMergeAnthropicBeta(t *testing.T) {
 	got := mergeAnthropicBeta(
 		[]string{"oauth-2025-04-20", "interleaved-thinking-2025-05-14"},

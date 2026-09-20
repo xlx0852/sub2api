@@ -1262,7 +1262,7 @@ func batchImageProviderSelectionOrder(requestedProvider string) []string {
 	if strings.TrimSpace(requestedProvider) != "" {
 		return []string{strings.TrimSpace(requestedProvider)}
 	}
-	return []string{BatchImageProviderVertex}
+	return nil
 }
 
 func batchImageModelsFromAccountMapping(account *Account) []string {

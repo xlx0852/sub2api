@@ -341,9 +341,8 @@ func (r *accountRepository) Update(ctx context.Context, account *domain.Account)
 	if account == nil {
 		return nil
 	}
-	if strings.EqualFold(strings.TrimSpace(account.Type), domain.RetiredAccountTypeBedrock) &&
-		(account.Status == domain.StatusActive || account.Schedulable) {
-		return domain.ErrRetiredBedrockAccount
+	if err := retiredSupplyWriteError(account.Type); err != nil && (account.Status == domain.StatusActive || account.Schedulable) {
+		return err
 	}
 	schedulable := account.Schedulable
 	if account.Status == domain.StatusError {
@@ -1107,14 +1106,10 @@ func (r *accountRepository) syncSchedulerAccountSnapshots(ctx context.Context, a
 }
 
 func (r *accountRepository) ClearError(ctx context.Context, id int64) error {
-	retired, err := r.isRetiredBedrockAccount(ctx, id)
-	if err != nil {
+	if err := r.rejectRetiredSupplyAccountID(ctx, id); err != nil {
 		return err
 	}
-	if retired {
-		return domain.ErrRetiredBedrockAccount
-	}
-	_, err = r.client.Account.Update().
+	_, err := r.client.Account.Update().
 		Where(dbaccount.IDEQ(id)).
 		SetStatus(domain.StatusActive).
 		SetErrorMessage("").
@@ -1140,8 +1135,8 @@ func (r *accountRepository) Restore(ctx context.Context, id int64) error {
 		}
 		return err
 	}
-	if strings.EqualFold(strings.TrimSpace(accountType), domain.RetiredAccountTypeBedrock) {
-		return domain.ErrRetiredBedrockAccount
+	if err := retiredSupplyWriteError(accountType); err != nil {
+		return err
 	}
 
 	// 若存在成本配置手动封号，先撤销未冲销的 termination，再恢复服役。
@@ -1770,12 +1765,8 @@ func (r *accountRepository) UpdateSessionWindowEnd(ctx context.Context, id int64
 
 func (r *accountRepository) SetSchedulable(ctx context.Context, id int64, schedulable bool) error {
 	if schedulable {
-		retired, err := r.isRetiredBedrockAccount(ctx, id)
-		if err != nil {
+		if err := r.rejectRetiredSupplyAccountID(ctx, id); err != nil {
 			return err
-		}
-		if retired {
-			return domain.ErrRetiredBedrockAccount
 		}
 	}
 	upd := r.client.Account.Update().Where(dbaccount.IDEQ(id))
@@ -1799,18 +1790,29 @@ func (r *accountRepository) SetSchedulable(ctx context.Context, id int64, schedu
 	return nil
 }
 
-func (r *accountRepository) isRetiredBedrockAccount(ctx context.Context, id int64) (bool, error) {
+func retiredSupplyWriteError(accountType string) error {
+	switch strings.ToLower(strings.TrimSpace(accountType)) {
+	case domain.RetiredAccountTypeBedrock:
+		return domain.ErrRetiredBedrockAccount
+	case domain.AccountTypeServiceAccount:
+		return domain.ErrRetiredVertexServiceAccount
+	default:
+		return nil
+	}
+}
+
+func (r *accountRepository) rejectRetiredSupplyAccountID(ctx context.Context, id int64) error {
 	accountType, err := r.client.Account.Query().
 		Where(dbaccount.IDEQ(id)).
 		Select(dbaccount.FieldType).
 		String(ctx)
 	if err != nil {
 		if dbent.IsNotFound(err) {
-			return false, domain.ErrAccountNotFound
+			return domain.ErrAccountNotFound
 		}
-		return false, err
+		return err
 	}
-	return strings.EqualFold(strings.TrimSpace(accountType), domain.RetiredAccountTypeBedrock), nil
+	return retiredSupplyWriteError(accountType)
 }
 
 func (r *accountRepository) SetExpiresAt(ctx context.Context, id int64, expiresAt *time.Time) error {

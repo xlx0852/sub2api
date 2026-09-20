@@ -328,13 +328,13 @@ func (s *adminServiceImpl) CleanupOAuthEmailDuplicates(ctx context.Context) (kep
 
 func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccountInput) (*Account, error) {
 	if input != nil {
-		if err := rejectRetiredVertexServiceAccountOnboarding(input.Type); err != nil {
-			return nil, err
-		}
 		if err := rejectDeprecatedGeminiPlatform(input.Platform); err != nil {
 			return nil, err
 		}
 		if err := rejectDeprecatedBedrockType(input.Type); err != nil {
+			return nil, err
+		}
+		if err := rejectDeprecatedVertexServiceAccountType(input.Type); err != nil {
 			return nil, err
 		}
 	}
@@ -503,12 +503,15 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		if err := rejectDeprecatedBedrockType(input.Type); err != nil {
 			return nil, err
 		}
+		if err := rejectDeprecatedVertexServiceAccountType(input.Type); err != nil {
+			return nil, err
+		}
 	}
 	account, err := s.accountRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	if err := rejectRetiredBedrockAccount(account); err != nil {
+	if err := rejectRetiredSupplyAccount(account); err != nil {
 		return nil, err
 	}
 	// 安全/身份不变量(影子账号):通用更新路径被 edit/re-auth/refresh/batch 共用,
@@ -731,7 +734,7 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 		cachedTargets = loaded
 	}
 	for _, account := range cachedTargets {
-		if err := rejectRetiredBedrockAccount(account); err != nil {
+		if err := rejectRetiredSupplyAccount(account); err != nil {
 			return nil, err
 		}
 	}
@@ -948,7 +951,7 @@ func (s *adminServiceImpl) RefreshAccountCredentials(ctx context.Context, id int
 
 func (s *adminServiceImpl) RestoreAccount(ctx context.Context, id int64) (*Account, error) {
 	if account, err := s.accountRepo.GetByID(ctx, id); err == nil {
-		if err := rejectRetiredBedrockAccount(account); err != nil {
+		if err := rejectRetiredSupplyAccount(account); err != nil {
 			return nil, err
 		}
 	}
@@ -971,7 +974,7 @@ func (s *adminServiceImpl) ClearAccountError(ctx context.Context, id int64) (*Ac
 	if err != nil {
 		return nil, err
 	}
-	if err := rejectRetiredBedrockAccount(account); err != nil {
+	if err := rejectRetiredSupplyAccount(account); err != nil {
 		return nil, err
 	}
 	if err := s.accountRepo.ClearError(ctx, id); err != nil {
@@ -1005,7 +1008,7 @@ func (s *adminServiceImpl) SetAccountSchedulable(ctx context.Context, id int64, 
 		if err != nil {
 			return nil, err
 		}
-		if err := rejectRetiredBedrockAccount(account); err != nil {
+		if err := rejectRetiredSupplyAccount(account); err != nil {
 			return nil, err
 		}
 		if account == nil || account.Status != StatusActive || account.SubscriptionBanned {

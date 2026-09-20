@@ -264,7 +264,7 @@ func NewBatchImageID() (string, error) {
 }
 
 func IsSupportedBatchImageProvider(provider string) bool {
-	return provider == BatchImageProviderVertex
+	return false
 }
 
 func IsTerminalBatchImageJobStatus(status string) bool {

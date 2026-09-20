@@ -9,15 +9,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestVertexServiceAccountOnboardingIsCreateOnlyRetired(t *testing.T) {
+func TestVertexServiceAccountWritePathsFailClosed(t *testing.T) {
 	ctx := context.Background()
 	repo := &accountRepoStub{account: &Account{
 		ID:          92,
 		Name:        "existing-vertex",
 		Platform:    PlatformAnthropic,
 		Type:        AccountTypeServiceAccount,
-		Status:      StatusActive,
-		Schedulable: true,
+		Status:      StatusDisabled,
+		Schedulable: false,
 	}}
 
 	accountService := NewAccountService(repo, nil)
@@ -27,7 +27,7 @@ func TestVertexServiceAccountOnboardingIsCreateOnlyRetired(t *testing.T) {
 			Platform: platform,
 			Type:     AccountTypeServiceAccount,
 		})
-		require.ErrorIs(t, err, ErrVertexServiceAccountOnboardingDisabled)
+		require.ErrorIs(t, err, ErrRetiredVertexServiceAccount)
 		require.Nil(t, repo.created)
 	}
 
@@ -38,13 +38,24 @@ func TestVertexServiceAccountOnboardingIsCreateOnlyRetired(t *testing.T) {
 			Platform: platform,
 			Type:     AccountTypeServiceAccount,
 		})
-		require.ErrorIs(t, err, ErrVertexServiceAccountOnboardingDisabled)
+		require.ErrorIs(t, err, ErrRetiredVertexServiceAccount)
 		require.Nil(t, repo.created)
 	}
 
-	updatedName := "existing-vertex-updated"
-	updated, err := accountService.Update(ctx, repo.account.ID, UpdateAccountRequest{Name: &updatedName})
-	require.NoError(t, err)
-	require.Equal(t, updatedName, updated.Name)
-	require.Same(t, repo.account, repo.updated)
+	active := StatusActive
+	_, err := accountService.Update(ctx, repo.account.ID, UpdateAccountRequest{Status: &active})
+	require.ErrorIs(t, err, ErrRetiredVertexServiceAccount)
+	require.Nil(t, repo.updated)
+	require.ErrorIs(t, accountService.UpdateStatus(ctx, repo.account.ID, StatusActive, ""), ErrRetiredVertexServiceAccount)
+
+	_, err = admin.UpdateAccount(ctx, repo.account.ID, &UpdateAccountInput{Status: StatusActive})
+	require.ErrorIs(t, err, ErrRetiredVertexServiceAccount)
+	_, err = admin.BulkUpdateAccounts(ctx, &BulkUpdateAccountsInput{AccountIDs: []int64{repo.account.ID}, Status: StatusActive})
+	require.ErrorIs(t, err, ErrRetiredVertexServiceAccount)
+	_, err = admin.RestoreAccount(ctx, repo.account.ID)
+	require.ErrorIs(t, err, ErrRetiredVertexServiceAccount)
+	_, err = admin.ClearAccountError(ctx, repo.account.ID)
+	require.ErrorIs(t, err, ErrRetiredVertexServiceAccount)
+	_, err = admin.SetAccountSchedulable(ctx, repo.account.ID, true)
+	require.ErrorIs(t, err, ErrRetiredVertexServiceAccount)
 }

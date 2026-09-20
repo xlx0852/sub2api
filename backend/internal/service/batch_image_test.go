@@ -49,7 +49,7 @@ func TestIsTerminalBatchImageJobStatus(t *testing.T) {
 }
 
 func TestIsSupportedBatchImageProvider(t *testing.T) {
-	require.True(t, IsSupportedBatchImageProvider(BatchImageProviderVertex))
+	require.False(t, IsSupportedBatchImageProvider(BatchImageProviderVertex))
 	require.False(t, IsSupportedBatchImageProvider("gemini_api"))
 	require.False(t, IsSupportedBatchImageProvider("gemini_oauth"))
 	require.False(t, IsSupportedBatchImageProvider(""))
