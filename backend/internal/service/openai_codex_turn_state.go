@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/tidwall/gjson"
 )
 
@@ -533,6 +534,13 @@ func (s *OpenAIGatewayService) refreshOpenAICodexTurnStateAccounts(ctx context.C
 		need = append(need, acc)
 	}
 	sortOpenAICodexTurnStateSeedQueue(need)
+	if len(need) > 0 {
+		ids := make([]int64, 0, len(need))
+		for i := range need {
+			ids = append(ids, need[i].ID)
+		}
+		logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] refresh need=%d onlyID=%d ids=%v", len(need), onlyID, ids)
+	}
 	for i := range need {
 		s.seedOpenAICodexTurnState(ctx, &need[i])
 		time.Sleep(400 * time.Millisecond)
@@ -567,6 +575,7 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnState(ctx context.Context, acc
 	token := strings.TrimSpace(account.GetOpenAIAccessToken())
 	chatgptID := strings.TrimSpace(account.GetCredential("chatgpt_account_id"))
 	if token == "" || chatgptID == "" {
+		logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] skip account=%d missing_token=%v missing_cid=%v", account.ID, token == "", chatgptID == "")
 		return
 	}
 	models := []string{"gpt-6-astra", "gpt-5.5", "gpt-5.6-sol"}
@@ -574,10 +583,12 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnState(ctx context.Context, acc
 	for _, model := range models {
 		ok, hdr := probeOpenAICodexTurnState(ctx, client, token, chatgptID, model)
 		if !ok {
+			logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] probe failed account=%d model=%s", account.ID, model)
 			continue
 		}
 		s.captureOpenAICodexTurnState(account, hdr, model, true)
 		if lookupCachedOpenAICodexTurnState(account, time.Now(), openAICodexTurnStateReuseTTL(s.cfg)) != "" {
+			logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] seeded account=%d model=%s", account.ID, model)
 			return
 		}
 	}
