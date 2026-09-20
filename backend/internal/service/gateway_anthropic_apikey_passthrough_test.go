@@ -794,7 +794,7 @@ func TestGatewayService_AnthropicOAuth_NotAffectedByAPIKeyPassthroughToggle(t *t
 	require.Contains(t, getHeaderRaw(req.Header, "anthropic-beta"), claude.BetaOAuth, "OAuth 链路仍应按原逻辑补齐 oauth beta")
 }
 
-func TestGatewayService_AnthropicOAuth_ForwardPreservesBillingHeaderSystemBlock(t *testing.T) {
+func TestGatewayService_AnthropicOAuth_ForwardDoesNotInjectClaudeCodeMimicry(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
@@ -864,27 +864,9 @@ func TestGatewayService_AnthropicOAuth_ForwardPreservesBillingHeaderSystemBlock(
 			require.Equal(t, "Bearer oauth-token", getHeaderRaw(upstream.lastReq.Header, "authorization"))
 			require.Contains(t, getHeaderRaw(upstream.lastReq.Header, "anthropic-beta"), claude.BetaOAuth)
 
-			system := gjson.GetBytes(upstream.lastBody, "system")
-			require.True(t, system.Exists())
-			require.True(t, system.IsArray(), "system should be an array")
-			arr := system.Array()
-			require.Len(t, arr, 3, "system array should have billing block + cc prompt block + expansion block")
-
-			require.Contains(t, arr[0].Get("text").String(), "x-anthropic-billing-header:")
-			require.Contains(t, arr[0].Get("text").String(), "cc_version=")
-
-			require.Equal(t, claudeCodeSystemPrompt, arr[1].Get("text").String())
-			require.False(t, arr[1].Get("cache_control").Exists(), "身份前缀 block 不应带 cache_control")
-
-			require.Equal(t, claudeCodeSystemPromptExpansion, arr[2].Get("text").String())
-			require.Equal(t, "ephemeral", arr[2].Get("cache_control.type").String())
-
-			// 原始 system prompt 应迁移至 messages 中
-			messages := gjson.GetBytes(upstream.lastBody, "messages")
-			require.True(t, messages.IsArray())
-			firstMsg := messages.Array()[0]
-			require.Equal(t, "user", firstMsg.Get("role").String())
-			require.Contains(t, firstMsg.Get("content.0.text").String(), "x-anthropic-billing-header keep")
+			require.Contains(t, string(upstream.lastBody), "x-anthropic-billing-header keep")
+			require.NotContains(t, string(upstream.lastBody), "cc_version=")
+			require.NotContains(t, string(upstream.lastBody), claudeCodeSystemPromptExpansion)
 		})
 	}
 }

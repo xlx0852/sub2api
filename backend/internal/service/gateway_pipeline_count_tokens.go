@@ -86,36 +86,12 @@ func (s *GatewayService) forwardClaudeCountTokensRewrite(ex *pipeline.Exchange) 
 	}
 	account := ex.Account
 	c := st.c
-	ctx := ex.Ctx
 
 	if err := st.replaceBody(StripEmptyTextBlocks(st.body)); err != nil {
 		return err
 	}
 
-	isClaudeCodeCT := IsClaudeCodeClient(ctx) || isClaudeCodeClient(c.GetHeader("User-Agent"), st.parsed.MetadataUserID)
-	st.shouldMimicClaudeCode = account.IsOAuth() && !isClaudeCodeCT
-
-	if st.shouldMimicClaudeCode {
-		normalizeOpts := claudeOAuthNormalizeOptions{stripSystemCacheControl: true}
-		normalizedBody, reqModel := normalizeClaudeOAuthRequestBody(st.body, st.reqModel, normalizeOpts)
-		if err := st.replaceBody(normalizedBody); err != nil {
-			return err
-		}
-		st.reqModel = reqModel
-
-		if err := st.replaceBody(s.rewriteMessageCacheControlIfEnabled(ctx, st.body)); err != nil {
-			return err
-		}
-		if rw := buildToolNameRewriteFromBody(st.body); rw != nil {
-			if err := st.replaceBody(applyToolNameRewriteToBody(st.body, rw)); err != nil {
-				return err
-			}
-		} else {
-			if err := st.replaceBody(applyToolsLastCacheBreakpoint(st.body)); err != nil {
-				return err
-			}
-		}
-	}
+	st.shouldMimicClaudeCode = false
 
 	// Antigravity 账户不支持 count_tokens，返回 404 让客户端 fallback 到本地估算。
 	// 返回 nil 避免 handler 层记录为错误，也不设置 ops 上游错误上下文。

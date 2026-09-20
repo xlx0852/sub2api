@@ -38,10 +38,10 @@ func TestGeminiV1BetaHandler_PlatformRoutingInvariant(t *testing.T) {
 		description     string
 	}{
 		{
-			name:            "Gemini平台使用ForwardNative",
+			name:            "Gemini平台已退役返回410",
 			platform:        service.PlatformGemini,
-			expectedService: "GeminiMessagesCompatService.ForwardNative",
-			description:     "Gemini OAuth 账户直接调用 Google API",
+			expectedService: "retired",
+			description:     "原生 Gemini 供应已下线，非 Antigravity 账号不再转发",
 		},
 		{
 			name:            "Antigravity平台使用ForwardGemini",
@@ -58,7 +58,7 @@ func TestGeminiV1BetaHandler_PlatformRoutingInvariant(t *testing.T) {
 			if tt.platform == service.PlatformAntigravity {
 				routedService = "AntigravityGatewayService.ForwardGemini"
 			} else {
-				routedService = "GeminiMessagesCompatService.ForwardNative"
+				routedService = "retired"
 			}
 
 			require.Equal(t, tt.expectedService, routedService,
@@ -68,94 +68,61 @@ func TestGeminiV1BetaHandler_PlatformRoutingInvariant(t *testing.T) {
 	}
 }
 
-// TestGeminiV1BetaHandler_ListModelsAntigravityFallback 验证 ListModels 的 antigravity 降级逻辑
-// 当没有 gemini 账户但有 antigravity 账户时，应返回静态模型列表
+// TestGeminiV1BetaHandler_ListModelsAntigravityFallback 验证 ListModels 仅在 Antigravity force-platform 下返回静态列表
 func TestGeminiV1BetaHandler_ListModelsAntigravityFallback(t *testing.T) {
 	tests := []struct {
-		name             string
-		hasGeminiAccount bool
-		hasAntigravity   bool
-		expectedBehavior string
+		name                string
+		hasForceAntigravity bool
+		expectedBehavior    string
 	}{
 		{
-			name:             "有Gemini账户-调用ForwardAIStudioGET",
-			hasGeminiAccount: true,
-			hasAntigravity:   false,
-			expectedBehavior: "forward_to_upstream",
+			name:                "非Antigravity-返回410",
+			hasForceAntigravity: false,
+			expectedBehavior:    "gone",
 		},
 		{
-			name:             "无Gemini有Antigravity-返回静态列表",
-			hasGeminiAccount: false,
-			hasAntigravity:   true,
-			expectedBehavior: "static_fallback",
-		},
-		{
-			name:             "无任何账户-返回503",
-			hasGeminiAccount: false,
-			hasAntigravity:   false,
-			expectedBehavior: "service_unavailable",
+			name:                "Antigravity force-platform-返回静态列表",
+			hasForceAntigravity: true,
+			expectedBehavior:    "static_fallback",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 模拟 GeminiV1BetaListModels 的逻辑 (lines 33-44 in gemini_v1beta_handler.go)
-			var behavior string
-
-			if tt.hasGeminiAccount {
-				behavior = "forward_to_upstream"
-			} else if tt.hasAntigravity {
+			behavior := "gone"
+			if tt.hasForceAntigravity {
 				behavior = "static_fallback"
-			} else {
-				behavior = "service_unavailable"
 			}
-
 			require.Equal(t, tt.expectedBehavior, behavior)
 		})
 	}
 }
 
-// TestGeminiV1BetaHandler_GetModelAntigravityFallback 验证 GetModel 的 antigravity 降级逻辑
+// TestGeminiV1BetaHandler_GetModelAntigravityFallback 验证 GetModel 仅在 Antigravity force-platform 下返回静态模型
 func TestGeminiV1BetaHandler_GetModelAntigravityFallback(t *testing.T) {
 	tests := []struct {
-		name             string
-		hasGeminiAccount bool
-		hasAntigravity   bool
-		expectedBehavior string
+		name                string
+		hasForceAntigravity bool
+		expectedBehavior    string
 	}{
 		{
-			name:             "有Gemini账户-调用ForwardAIStudioGET",
-			hasGeminiAccount: true,
-			hasAntigravity:   false,
-			expectedBehavior: "forward_to_upstream",
+			name:                "非Antigravity-返回410",
+			hasForceAntigravity: false,
+			expectedBehavior:    "gone",
 		},
 		{
-			name:             "无Gemini有Antigravity-返回静态模型信息",
-			hasGeminiAccount: false,
-			hasAntigravity:   true,
-			expectedBehavior: "static_model_info",
-		},
-		{
-			name:             "无任何账户-返回503",
-			hasGeminiAccount: false,
-			hasAntigravity:   false,
-			expectedBehavior: "service_unavailable",
+			name:                "Antigravity force-platform-返回静态模型信息",
+			hasForceAntigravity: true,
+			expectedBehavior:    "static_model_info",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// 模拟 GeminiV1BetaGetModel 的逻辑 (lines 77-87 in gemini_v1beta_handler.go)
-			var behavior string
-
-			if tt.hasGeminiAccount {
-				behavior = "forward_to_upstream"
-			} else if tt.hasAntigravity {
+			behavior := "gone"
+			if tt.hasForceAntigravity {
 				behavior = "static_model_info"
-			} else {
-				behavior = "service_unavailable"
 			}
-
 			require.Equal(t, tt.expectedBehavior, behavior)
 		})
 	}

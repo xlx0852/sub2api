@@ -628,7 +628,6 @@ func ProvideOpsService(
 		concurrencyService,
 		gatewayService,
 		openAIGatewayService,
-		nil,
 		antigravityGatewayService,
 		systemLogSink,
 	)

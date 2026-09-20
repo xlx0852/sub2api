@@ -23,7 +23,7 @@ func TestOpsServiceGetProviderStatusCurrentFreshAndStale(t *testing.T) {
 	}
 	svc := NewOpsService(repo, nil, &config.Config{Ops: config.OpsConfig{Enabled: true, ProviderStatus: config.OpsProviderStatusConfig{
 		Enabled: true, PollIntervalSeconds: 60, StaleAfterSeconds: 180,
-	}}}, nil, nil, nil, nil, nil, nil, nil, nil)
+	}}}, nil, nil, nil, nil, nil, nil, nil)
 
 	current, err := svc.GetProviderStatusCurrent(context.Background(), ProviderStatusOpenAI)
 	require.NoError(t, err)

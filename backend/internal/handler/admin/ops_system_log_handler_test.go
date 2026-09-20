@@ -47,7 +47,7 @@ func TestOpsSystemLogHandler_ListUnavailable(t *testing.T) {
 }
 
 func TestOpsSystemLogHandler_ListInvalidUserID(t *testing.T) {
-	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h := NewOpsHandler(svc)
 	r := newOpsSystemLogTestRouter(h, false)
 
@@ -60,7 +60,7 @@ func TestOpsSystemLogHandler_ListInvalidUserID(t *testing.T) {
 }
 
 func TestOpsSystemLogHandler_ListInvalidAccountID(t *testing.T) {
-	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h := NewOpsHandler(svc)
 	r := newOpsSystemLogTestRouter(h, false)
 
@@ -73,7 +73,7 @@ func TestOpsSystemLogHandler_ListInvalidAccountID(t *testing.T) {
 }
 
 func TestOpsSystemLogHandler_ListInvalidAPIKeyID(t *testing.T) {
-	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h := NewOpsHandler(svc)
 	r := newOpsSystemLogTestRouter(h, false)
 
@@ -88,7 +88,7 @@ func TestOpsSystemLogHandler_ListInvalidAPIKeyID(t *testing.T) {
 func TestOpsSystemLogHandler_ListMonitoringDisabled(t *testing.T) {
 	svc := service.NewOpsService(nil, nil, &config.Config{
 		Ops: config.OpsConfig{Enabled: false},
-	}, nil, nil, nil, nil, nil, nil, nil, nil)
+	}, nil, nil, nil, nil, nil, nil, nil)
 	h := NewOpsHandler(svc)
 	r := newOpsSystemLogTestRouter(h, false)
 
@@ -101,7 +101,7 @@ func TestOpsSystemLogHandler_ListMonitoringDisabled(t *testing.T) {
 }
 
 func TestOpsSystemLogHandler_ListSuccess(t *testing.T) {
-	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h := NewOpsHandler(svc)
 	r := newOpsSystemLogTestRouter(h, false)
 
@@ -122,7 +122,7 @@ func TestOpsSystemLogHandler_ListSuccess(t *testing.T) {
 }
 
 func TestOpsSystemLogHandler_CleanupUnauthorized(t *testing.T) {
-	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h := NewOpsHandler(svc)
 	r := newOpsSystemLogTestRouter(h, false)
 
@@ -136,7 +136,7 @@ func TestOpsSystemLogHandler_CleanupUnauthorized(t *testing.T) {
 }
 
 func TestOpsSystemLogHandler_CleanupInvalidPayload(t *testing.T) {
-	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h := NewOpsHandler(svc)
 	r := newOpsSystemLogTestRouter(h, true)
 
@@ -150,7 +150,7 @@ func TestOpsSystemLogHandler_CleanupInvalidPayload(t *testing.T) {
 }
 
 func TestOpsSystemLogHandler_CleanupInvalidTime(t *testing.T) {
-	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h := NewOpsHandler(svc)
 	r := newOpsSystemLogTestRouter(h, true)
 
@@ -164,7 +164,7 @@ func TestOpsSystemLogHandler_CleanupInvalidTime(t *testing.T) {
 }
 
 func TestOpsSystemLogHandler_CleanupInvalidEndTime(t *testing.T) {
-	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h := NewOpsHandler(svc)
 	r := newOpsSystemLogTestRouter(h, true)
 
@@ -178,7 +178,7 @@ func TestOpsSystemLogHandler_CleanupInvalidEndTime(t *testing.T) {
 }
 
 func TestOpsSystemLogHandler_CleanupServiceUnavailable(t *testing.T) {
-	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h := NewOpsHandler(svc)
 	r := newOpsSystemLogTestRouter(h, true)
 
@@ -192,7 +192,7 @@ func TestOpsSystemLogHandler_CleanupServiceUnavailable(t *testing.T) {
 }
 
 func TestOpsSystemLogHandler_CleanupAcceptsAPIKeyID(t *testing.T) {
-	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h := NewOpsHandler(svc)
 	r := newOpsSystemLogTestRouter(h, true)
 
@@ -206,7 +206,7 @@ func TestOpsSystemLogHandler_CleanupAcceptsAPIKeyID(t *testing.T) {
 }
 
 func TestOpsSystemLogHandler_CleanupInvalidAPIKeyID(t *testing.T) {
-	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h := NewOpsHandler(svc)
 	r := newOpsSystemLogTestRouter(h, true)
 
@@ -222,7 +222,7 @@ func TestOpsSystemLogHandler_CleanupInvalidAPIKeyID(t *testing.T) {
 func TestOpsSystemLogHandler_CleanupMonitoringDisabled(t *testing.T) {
 	svc := service.NewOpsService(nil, nil, &config.Config{
 		Ops: config.OpsConfig{Enabled: false},
-	}, nil, nil, nil, nil, nil, nil, nil, nil)
+	}, nil, nil, nil, nil, nil, nil, nil)
 	h := NewOpsHandler(svc)
 	r := newOpsSystemLogTestRouter(h, true)
 
@@ -237,7 +237,7 @@ func TestOpsSystemLogHandler_CleanupMonitoringDisabled(t *testing.T) {
 
 func TestOpsSystemLogHandler_Health(t *testing.T) {
 	sink := service.NewOpsSystemLogSink(nil)
-	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, sink)
+	svc := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, sink)
 	h := NewOpsHandler(svc)
 	r := newOpsSystemLogTestRouter(h, false)
 
@@ -262,7 +262,7 @@ func TestOpsSystemLogHandler_HealthUnavailableAndMonitoringDisabled(t *testing.T
 
 	svc := service.NewOpsService(nil, nil, &config.Config{
 		Ops: config.OpsConfig{Enabled: false},
-	}, nil, nil, nil, nil, nil, nil, nil, nil)
+	}, nil, nil, nil, nil, nil, nil, nil)
 	h = NewOpsHandler(svc)
 	r = newOpsSystemLogTestRouter(h, false)
 	w = httptest.NewRecorder()

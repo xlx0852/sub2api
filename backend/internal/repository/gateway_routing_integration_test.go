@@ -219,9 +219,9 @@ func (s *GatewayRoutingSuite) TestPlatformRoutingDecision() {
 		expectedService string
 	}{
 		{
-			name:            "Gemini账户路由到ForwardNative",
+			name:            "Gemini账户已退役",
 			accountID:       geminiAcc.ID,
-			expectedService: "GeminiMessagesCompatService.ForwardNative",
+			expectedService: "retired",
 		},
 		{
 			name:            "Antigravity账户路由到ForwardGemini",
@@ -241,7 +241,7 @@ func (s *GatewayRoutingSuite) TestPlatformRoutingDecision() {
 			if account.Platform == domain.PlatformAntigravity {
 				routedService = "AntigravityGatewayService.ForwardGemini"
 			} else {
-				routedService = "GeminiMessagesCompatService.ForwardNative"
+				routedService = "retired"
 			}
 
 			s.Require().Equal(tt.expectedService, routedService)

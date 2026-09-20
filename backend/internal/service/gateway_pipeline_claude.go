@@ -63,79 +63,9 @@ func (s *GatewayService) forwardClaudeRewrite(ex *pipeline.Exchange) error {
 		})
 	}
 
-	// Claude Code 客户端判定：UA 匹配 claude-cli/* 且携带 metadata.user_id。
-	// 真正的 Claude Code 客户端自带完整的 system prompt、cache_control 断点和 header，
-	// 不需要代理做任何 body 级别的 mimicry；强行替换反而会破坏客户端的缓存策略
-	// （长 system prompt 被替换为 ~45 tokens 的短 prompt，低于 Anthropic 1024 token
-	// 最低缓存门槛，导致系统级缓存失效）。
-	//
-	// 对于非 Claude Code 的第三方客户端（opencode 等），仍然走完整 mimicry。
-	var clientUserAgent string
-	if c != nil {
-		clientUserAgent = c.GetHeader("User-Agent")
-	}
-	isClaudeCode := IsClaudeCodeClient(ex.Ctx) || isClaudeCodeClient(clientUserAgent, st.parsed.MetadataUserID)
-	st.shouldMimicClaudeCode = account.IsOAuth() && !isClaudeCode
-
-	if st.shouldMimicClaudeCode {
-		// 与 Parrot 对齐：OAuth 账号无条件重写 system（即使客户端已发了 Claude Code
-		// 风格的 system prompt）。原因：第三方工具（opencode 等）会发 "You are Claude
-		// Code..." system prompt 但缺少 billing attribution block，导致 Anthropic
-		// 检测到"有 CC prompt 但无 billing block"的不一致而判为 third-party。
-		// Parrot 的 transform_request 从不检查客户端 system 内容，直接覆盖。
-		systemRewritten := false
-		if !strings.Contains(strings.ToLower(st.reqModel), "haiku") {
-			systemRaw, _ := st.parsed.SystemValue()
-			systemPromptInjectionEnabled, systemPrompt, systemPromptBlocks := s.claudeOAuthSystemPromptInjectionSettings(ex.Ctx)
-			if systemPromptInjectionEnabled {
-				if err := st.replaceBody(rewriteSystemForNonClaudeCodeWithPromptBlocks(st.body, systemRaw, systemPrompt, systemPromptBlocks)); err != nil {
-					return err
-				}
-				systemRewritten = true
-			}
-		}
-
-		// system 被重写时保留 CC prompt 的 cache_control: ephemeral（匹配真实 Claude Code 行为）；
-		// 未重写时（haiku / 注入开关关闭）剥离客户端 cache_control，与原有行为一致。
-		// 两种情况下 enforceCacheControlLimit 都会兜底处理上限。
-		normalizeOpts := claudeOAuthNormalizeOptions{stripSystemCacheControl: !systemRewritten}
-		if s.identityService != nil && c != nil {
-			fp, err := s.identityService.GetOrCreateFingerprint(ex.Ctx, account.ID, c.Request.Header)
-			if err == nil && fp != nil {
-				// metadata 透传开启时跳过 metadata 注入
-				_, mimicMPT, _ := s.settingService.GetGatewayForwardingSettings(ex.Ctx)
-				if !mimicMPT {
-					if metadataUserID := s.buildOAuthMetadataUserID(st.parsed, account, fp); metadataUserID != "" {
-						normalizeOpts.injectMetadata = true
-						normalizeOpts.metadataUserID = metadataUserID
-					}
-				}
-			}
-		}
-
-		var normalizedBody []byte
-		normalizedBody, st.reqModel = normalizeClaudeOAuthRequestBody(st.body, st.reqModel, normalizeOpts)
-		if err := st.replaceBody(normalizedBody); err != nil {
-			return err
-		}
-
-		// D/E/F: 可选 messages cache 策略 + 工具名混淆 + tools[-1] 断点
-		// 与 forward_as_chat_completions / forward_as_responses 路径对齐，
-		// 原生 /v1/messages 路径也走同一套可配置字段级改写。
-		if err := st.replaceBody(s.rewriteMessageCacheControlIfEnabled(ex.Ctx, st.body)); err != nil {
-			return err
-		}
-		if rw := buildToolNameRewriteFromBody(st.body); rw != nil {
-			if err := st.replaceBody(applyToolNameRewriteToBody(st.body, rw)); err != nil {
-				return err
-			}
-			if c != nil {
-				c.Set(toolNameRewriteKey, rw)
-			}
-		} else if err := st.replaceBody(applyToolsLastCacheBreakpoint(st.body)); err != nil {
-			return err
-		}
-	}
+	// Claude OAuth CLI 拟态已退役：不再为第三方客户端伪造 Claude Code system/billing block。
+	// API Key 透传、模型映射、cache_control 上限和 dateline 归一化仍然生效。
+	st.shouldMimicClaudeCode = false
 
 	// 客户端 dateline 归一化：仅对 Anthropic OAuth/SetupToken 账号生效。
 	// 抹除 "Today's date is …" 语句里可能被注入的隐写指纹（4 种撇号 × 2 种日期
@@ -161,18 +91,6 @@ func (s *GatewayService) forwardClaudeRewrite(ex *pipeline.Exchange) error {
 		st.mappedModel = account.GetMappedModel(st.reqModel)
 		if st.mappedModel != st.reqModel {
 			mappingSource = "account"
-		}
-	}
-	if mappingSource == "" && account.Platform == PlatformAnthropic && account.Type == AccountTypeServiceAccount {
-		if candidate, matched := account.ResolveMappedModel(st.reqModel); matched {
-			st.mappedModel = candidate
-			mappingSource = "account"
-		} else {
-			normalized := normalizeVertexAnthropicModelID(claude.NormalizeModelID(st.reqModel))
-			if normalized != st.reqModel {
-				st.mappedModel = normalized
-				mappingSource = "vertex"
-			}
 		}
 	}
 	if mappingSource == "" && account.Platform == PlatformAnthropic && account.Type != AccountTypeAPIKey {

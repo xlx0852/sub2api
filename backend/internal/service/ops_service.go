@@ -65,7 +65,6 @@ func NewOpsService(
 	concurrencyService *ConcurrencyService,
 	gatewayService *GatewayService,
 	openAIGatewayService *OpenAIGatewayService,
-	_ *GeminiMessagesCompatService,
 	antigravityGatewayService *AntigravityGatewayService,
 	systemLogSink *OpsSystemLogSink,
 ) *OpsService {

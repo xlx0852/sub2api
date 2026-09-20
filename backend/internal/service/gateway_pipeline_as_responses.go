@@ -62,11 +62,7 @@ func (s *GatewayService) forwardClaudeAsResponsesRewrite(ex *pipeline.Exchange) 
 		return fmt.Errorf("marshal anthropic request: %w", err)
 	}
 
-	isClaudeCode := false
-	st.shouldMimic = account.IsOAuth() && !isClaudeCode
-	if st.shouldMimic {
-		anthropicBody = s.applyClaudeCodeOAuthMimicryToBody(ex.Ctx, st.c, account, anthropicBody, st.anthropicReq.System, st.mappedModel)
-	}
+	st.shouldMimic = false
 	st.anthropicBody = enforceCacheControlLimit(anthropicBody)
 	ex.Outbound = st.anthropicBody
 	return nil
