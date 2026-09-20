@@ -527,15 +527,6 @@ func setDefaults() {
 	viper.SetDefault("batch_image.recovery_interval_seconds", 300)
 	viper.SetDefault("batch_image.delayed_move_limit", 100)
 	viper.SetDefault("batch_image.recover_limit", 100)
-	viper.SetDefault("batch_image.vertex_enabled", false)
-	viper.SetDefault("batch_image.vertex_project_id", "")
-	viper.SetDefault("batch_image.vertex_location", "global")
-	viper.SetDefault("batch_image.vertex_managed_gcs_bucket", "")
-	viper.SetDefault("batch_image.vertex_managed_gcs_prefix", "batch-image/{env}/{batch_id}")
-	viper.SetDefault("batch_image.vertex_input_retention_hours", 24)
-	viper.SetDefault("batch_image.vertex_output_retention_hours", 72)
-	viper.SetDefault("batch_image.vertex_batch_prediction_base_url", "")
-	viper.SetDefault("batch_image.vertex_gcs_base_url", "")
 
 	// Ops (vNext)
 	viper.SetDefault("ops.enabled", true)
@@ -1214,29 +1205,6 @@ func (c *Config) Validate() error {
 		}
 		if c.BatchImage.RecoverLimit <= 0 {
 			return fmt.Errorf("batch_image.recover_limit must be positive")
-		}
-	}
-	if c.BatchImage.VertexEnabled {
-		if strings.TrimSpace(c.BatchImage.VertexManagedGCSBucket) == "" {
-			return fmt.Errorf("batch_image.vertex_managed_gcs_bucket must not be empty when vertex is enabled")
-		}
-		if strings.Contains(c.BatchImage.VertexManagedGCSBucket, "://") {
-			return fmt.Errorf("batch_image.vertex_managed_gcs_bucket must be a bucket name, not a URI")
-		}
-		if strings.TrimSpace(c.BatchImage.VertexLocation) == "" {
-			return fmt.Errorf("batch_image.vertex_location must not be empty when vertex is enabled")
-		}
-		if strings.TrimSpace(c.BatchImage.VertexManagedGCSPrefix) == "" {
-			return fmt.Errorf("batch_image.vertex_managed_gcs_prefix must not be empty when vertex is enabled")
-		}
-		if !strings.Contains(c.BatchImage.VertexManagedGCSPrefix, "{batch_id}") {
-			return fmt.Errorf("batch_image.vertex_managed_gcs_prefix must contain {batch_id}")
-		}
-		if c.BatchImage.VertexInputRetentionHours <= 0 {
-			return fmt.Errorf("batch_image.vertex_input_retention_hours must be positive")
-		}
-		if c.BatchImage.VertexOutputRetentionHours <= 0 {
-			return fmt.Errorf("batch_image.vertex_output_retention_hours must be positive")
 		}
 	}
 	if c.Dashboard.Enabled {

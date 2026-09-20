@@ -810,9 +810,7 @@ const shouldFetchUsage = computed(() => {
   return false
 })
 
-const showGeminiTodayStats = computed(() => {
-  return props.account.platform === 'gemini' && props.account.type === 'service_account'
-})
+const showGeminiTodayStats = computed(() => false)
 
 const geminiUsageAvailable = computed(() => {
   return (

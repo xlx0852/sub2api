@@ -74,7 +74,8 @@ describe('account form registry', () => {
   })
 
   it('centralizes platform blocks and API key presentation metadata', () => {
-    expect(isFieldVisible('vertexServiceAccount', { platform: 'gemini' })).toBe(true)
+    expect(isFieldVisible('vertexServiceAccount', { platform: 'gemini' })).toBe(false)
+    expect(isFieldVisible('vertexServiceAccount', { platform: 'anthropic' })).toBe(false)
     expect(isFieldVisible('upstreamCredentials', { platform: 'antigravity' })).toBe(true)
     expect(isFieldVisible('oauthModelRestriction', { platform: 'antigravity' })).toBe(false)
     expect(platformsShareField(['openai'], 'openAIAdvanced')).toBe(true)

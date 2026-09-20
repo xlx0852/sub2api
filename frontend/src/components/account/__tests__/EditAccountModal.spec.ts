@@ -187,31 +187,6 @@ function buildOpenAISparkShadowAccount() {
   } as any
 }
 
-function buildVertexAccount() {
-  return {
-    id: 2,
-    name: 'Vertex SA',
-    notes: '',
-    platform: 'gemini',
-    type: 'service_account',
-    credentials: {
-      service_account_json: '{"type":"service_account","client_email":"sa@example.iam.gserviceaccount.com","private_key":"-----BEGIN PRIVATE KEY-----\\nMIIE\\n-----END PRIVATE KEY-----\\n"}',
-      project_id: 'demo-project',
-      client_email: 'sa@example.iam.gserviceaccount.com',
-      location: 'us-central1',
-      tier_id: 'vertex'
-    },
-    extra: {},
-    proxy_id: null,
-    concurrency: 1,
-    priority: 1,
-    rate_multiplier: 1,
-    status: 'active',
-    group_ids: [],
-    expires_at: null,
-    auto_pause_on_expired: false
-  } as any
-}
 
 function buildAntigravityAccount(projectId = 'configured-project') {
   return {
@@ -747,66 +722,6 @@ describe('EditAccountModal', () => {
       base_url: 'https://api.openai.com'
     }
     // 既没有 credentials_status 也没有旧的 api_key
-    updateAccountMock.mockReset()
-    checkMixedChannelRiskMock.mockReset()
-    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
-
-    const wrapper = mountModal(account)
-
-    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
-
-    expect(updateAccountMock).not.toHaveBeenCalled()
-  })
-
-  it('allows saving Vertex SA account when backend redacted service_account_json but credentials_status reports it exists', async () => {
-    // 新前端 + 新后端：响应已脱敏，credentials 里没有 service_account_json，credentials_status.has_service_account_json=true
-    const account = buildVertexAccount()
-    account.credentials = {
-      project_id: 'demo-project',
-      client_email: 'sa@example.iam.gserviceaccount.com',
-      location: 'us-central1',
-      tier_id: 'vertex'
-    }
-    account.credentials_status = { has_service_account_json: true }
-    updateAccountMock.mockReset()
-    checkMixedChannelRiskMock.mockReset()
-    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
-    updateAccountMock.mockResolvedValue(account)
-
-    const wrapper = mountModal(account)
-
-    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
-
-    expect(updateAccountMock).toHaveBeenCalledTimes(1)
-    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.project_id).toBe('demo-project')
-  })
-
-  it('allows saving Vertex SA account against legacy backend without credentials_status', async () => {
-    // 新前端 + 旧后端：credentials_status 缺失，但 credentials.service_account_json 仍是明文，应允许保存
-    const account = buildVertexAccount()
-    expect(account.credentials_status).toBeUndefined()
-    expect(account.credentials.service_account_json).toBeTruthy()
-    updateAccountMock.mockReset()
-    checkMixedChannelRiskMock.mockReset()
-    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
-    updateAccountMock.mockResolvedValue(account)
-
-    const wrapper = mountModal(account)
-
-    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
-
-    expect(updateAccountMock).toHaveBeenCalledTimes(1)
-  })
-
-  it('blocks Vertex SA save when neither credentials_status nor legacy json indicates existence', async () => {
-    const account = buildVertexAccount()
-    account.credentials = {
-      project_id: 'demo-project',
-      client_email: 'sa@example.iam.gserviceaccount.com',
-      location: 'us-central1',
-      tier_id: 'vertex'
-    }
-    // 既没有 credentials_status 也没有旧的 service_account_json
     updateAccountMock.mockReset()
     checkMixedChannelRiskMock.mockReset()
     checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })

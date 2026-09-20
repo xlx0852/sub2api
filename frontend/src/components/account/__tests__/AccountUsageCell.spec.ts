@@ -1025,7 +1025,7 @@ describe('AccountUsageCell', () => {
 		expect(wrapper.text().trim()).toBe('-')
   })
 
-  it('Vertex 账号会在 Gemini 用量窗口里展示 today stats 徽章', async () => {
+  it('Vertex 账号不再展示 Gemini today stats 徽章', async () => {
 		const wrapper = mount(AccountUsageCell, {
 		  props: {
 		    account: makeAccount({
@@ -1058,10 +1058,7 @@ describe('AccountUsageCell', () => {
 
 		await flushPromises()
 
-		expect(wrapper.text()).toContain('0 req')
-		expect(wrapper.text()).toContain('0')
-		expect(wrapper.text()).toContain('A $0.00')
-		expect(wrapper.text()).toContain('U $0.00')
+		expect(wrapper.text()).not.toContain('0 req')
   })
 
   it('Anthropic OAuth 会渲染 7d F (Fable) 进度条，且 7d S 逻辑保留', async () => {

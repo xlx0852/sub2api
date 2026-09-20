@@ -117,17 +117,6 @@ type BatchImageConfig struct {
 	RecoveryIntervalSeconds           int    `mapstructure:"recovery_interval_seconds"`
 	DelayedMoveLimit                  int    `mapstructure:"delayed_move_limit"`
 	RecoverLimit                      int    `mapstructure:"recover_limit"`
-	VertexEnabled                     bool   `mapstructure:"vertex_enabled"`
-	VertexProjectID                   string `mapstructure:"vertex_project_id"`
-	VertexLocation                    string `mapstructure:"vertex_location"`
-	// VertexManagedGCSBucket is a server-owned bucket for batch JSONL input/output.
-	// Disable Cloud Storage soft delete on this bucket to avoid retaining deleted batch objects.
-	VertexManagedGCSBucket       string `mapstructure:"vertex_managed_gcs_bucket"`
-	VertexManagedGCSPrefix       string `mapstructure:"vertex_managed_gcs_prefix"`
-	VertexInputRetentionHours    int    `mapstructure:"vertex_input_retention_hours"`
-	VertexOutputRetentionHours   int    `mapstructure:"vertex_output_retention_hours"`
-	VertexBatchPredictionBaseURL string `mapstructure:"vertex_batch_prediction_base_url"`
-	VertexGCSBaseURL             string `mapstructure:"vertex_gcs_base_url"`
 }
 
 // TokenRefreshConfig OAuth token自动刷新配置
