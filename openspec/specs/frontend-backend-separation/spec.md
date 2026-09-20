@@ -1,7 +1,8 @@
 # frontend-backend-separation Specification
 
 ## Purpose
-TBD - created by archiving change refactor-architecture. Update Purpose after archive.
+定义独立前端产物、公共运行时配置、控制面契约与版本兼容边界，兼顾外部静态托管和嵌入式部署。 本规范用于约束相关实现、回归测试与后续变更评审，具体可观测行为以下列场景为准。
+
 ## Requirements
 ### Requirement: Environment-agnostic frontend artifact
 

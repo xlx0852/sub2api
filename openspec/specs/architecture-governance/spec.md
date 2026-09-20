@@ -1,8 +1,10 @@
 # architecture-governance Specification
 
 ## Purpose
-TBD - created by archiving change refactor-architecture. Update Purpose after archive.
+约束后端依赖方向、统一网关与调度结算边界及前端模块职责，防止平台迁移形成重复主体和隐式副作用。 本规范用于约束相关实现、回归测试与后续变更评审，具体可观测行为以下列场景为准。
+
 ## Requirements
+
 ### Requirement: Layered dependency direction
 
 The backend SHALL be organized into `domain`, `ports`, `app`, `infra`, and `transport` layers with inward-only dependencies: `domain` MUST NOT import any other internal layer, `ports` MAY import only `domain`, `app` MAY import `domain`, `ports`, and stateless `pkg` libraries, `infra` MAY import `domain`, `ports`, `ent`, and `pkg` but MUST NOT import `app`, and `transport` MAY import `app` but MUST NOT be imported by it.
@@ -71,3 +73,36 @@ The frontend SHALL organize code into feature modules with colocated views, comp
 - **WHEN** a user opens the admin settings area
 - **THEN** each settings section is a lazily loaded sub-route component rather than one monolithic view
 
+### Requirement: Scheduling primitive extraction preserves selection semantics
+
+The system SHALL share behavior-equivalent scheduling primitives across Gateway and OpenAI without changing either Strategy's candidate thresholds, sticky-session policy, scoring, cooldown, quota pause, failure punishment, or credential-class behavior.
+
+#### Scenario: A common primitive replaces duplicate code
+
+- **WHEN** channel restriction, account listing, sorting, shuffling, or sticky candidate validation is migrated to a shared primitive
+- **THEN** the old and shared implementations produce the same candidate set, ordering groups, exclusion result, and sticky decision for the same inputs
+
+#### Scenario: Strategies differ after the common boundary
+
+- **WHEN** Gateway requires session registration or OpenAI requires sticky epoch, quota re-evaluation, escape, runtime blocking, or transport compatibility checks
+- **THEN** those checks remain in their existing Strategy and execute in the same order as before the extraction
+
+#### Scenario: Advanced scheduler behavior is active
+
+- **WHEN** OpenAI advanced scheduling, sticky weighted selection, lowest-usage selection, or TopK exploration is enabled
+- **THEN** this refactor does not change its score inputs, weights, candidate gates, exploration set, or selected account
+
+### Requirement: Removed quota auto-pause controls have no enforcement path
+The system SHALL remove the OpenAI 5h and 7d quota auto-pause controls and enforcement path. Historical per-account metadata MAY remain stored but MUST NOT affect account selection, sticky routing, or schedulability. Expiry auto-pause, provider cooldowns, and Grok quota behavior SHALL remain independent.
+
+#### Scenario: OpenAI account exceeds historical 5h or 7d threshold
+- **WHEN** an OpenAI account contains historical `auto_pause_5h_threshold` or `auto_pause_7d_threshold` metadata and its usage exceeds that value
+- **THEN** OpenAI scheduling does not skip the account because of that metadata
+
+#### Scenario: Admin opens Ops settings
+- **WHEN** an administrator views advanced Ops settings
+- **THEN** no 5h/7d OpenAI quota auto-pause controls or validation fields are rendered or accepted
+
+#### Scenario: Expired account is evaluated
+- **WHEN** an account reaches its configured expiration and `auto_pause_on_expired` is enabled
+- **THEN** expiry handling continues unchanged
