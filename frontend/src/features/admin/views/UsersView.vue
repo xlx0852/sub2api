@@ -1636,7 +1636,6 @@ const loadUsers = async () => {
         group_name: filters.group || undefined,
         api_key_group_id: filters.apiKeyGroup ?? undefined,
         attributes: Object.keys(attrFilters).length > 0 ? attrFilters : undefined,
-        include_subscriptions: false,
         sort_by: sortState.sort_by,
         sort_order: sortState.sort_order
       },

@@ -2310,40 +2310,9 @@ async function saveSettings() {
       form.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
     form.login_agreement_documents = normalizedLoginAgreementDocuments;
 
-    const normalizedDefaultSubscriptions = normalizeDefaultSubscriptionSettings(
-      form.default_subscriptions,
-    );
-    const duplicateDefaultSubscription = findDuplicateDefaultSubscription(
-      normalizedDefaultSubscriptions,
-    );
-    if (duplicateDefaultSubscription) {
-      appStore.showError(
-        t("admin.settings.defaults.defaultSubscriptionsDuplicate", {
-          groupId: duplicateDefaultSubscription.group_id,
-        }),
-      );
-      return;
-    }
-
+    const normalizedDefaultSubscriptions: DefaultSubscriptionSetting[] = [];
     for (const authSource of authSourceDefaultsMeta.value) {
-      authSourceDefaults[authSource.source].subscriptions =
-        normalizeDefaultSubscriptionSettings(
-          authSourceDefaults[authSource.source].subscriptions,
-        );
-      const duplicate = findDuplicateDefaultSubscription(
-        authSourceDefaults[authSource.source].subscriptions,
-      );
-      if (duplicate) {
-        appStore.showError(
-          `${authSource.title}: ${t(
-            "admin.settings.defaults.defaultSubscriptionsDuplicate",
-            {
-              groupId: duplicate.group_id,
-            },
-          )}`,
-        );
-        return;
-      }
+      authSourceDefaults[authSource.source].subscriptions = [];
     }
 
     if (form.wechat_connect_mp_enabled && form.wechat_connect_mobile_enabled) {

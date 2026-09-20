@@ -20,29 +20,10 @@ func (r *dailyResetTrackingUserSubRepo) ResetDailyUsage(context.Context, int64, 
 	return nil
 }
 
-func TestAssignOrExtendSubscription_ExpiredDailyCardStartsNewOneTimeQuota(t *testing.T) {
-	groupRepo := &subscriptionGroupRepoStub{
+func TestAssignOrExtendSubscription_Retired(t *testing.T) {
+	svc := NewSubscriptionService(&subscriptionGroupRepoStub{
 		group: &Group{ID: 1, SubscriptionType: SubscriptionTypeSubscription},
-	}
-	subRepo := newSubscriptionUserSubRepoStub()
-	oldStart := time.Now().AddDate(0, 0, -3)
-	oldWindowStart := startOfDay(oldStart)
-	subRepo.seed(&UserSubscription{
-		ID:                 100,
-		UserID:             200,
-		GroupID:            1,
-		StartsAt:           oldStart,
-		ExpiresAt:          oldStart.AddDate(0, 0, 1),
-		Status:             SubscriptionStatusExpired,
-		DailyWindowStart:   &oldWindowStart,
-		WeeklyWindowStart:  &oldWindowStart,
-		MonthlyWindowStart: &oldWindowStart,
-		DailyUsageUSD:      10,
-		WeeklyUsageUSD:     20,
-		MonthlyUsageUSD:    30,
-		Notes:              "old",
-	})
-	svc := NewSubscriptionService(groupRepo, subRepo, nil, nil, nil)
+	}, newSubscriptionUserSubRepoStub(), nil, nil, nil)
 
 	renewed, reused, err := svc.AssignOrExtendSubscription(context.Background(), &AssignSubscriptionInput{
 		UserID:       200,
@@ -51,18 +32,10 @@ func TestAssignOrExtendSubscription_ExpiredDailyCardStartsNewOneTimeQuota(t *tes
 		Notes:        "new",
 	})
 
-	require.NoError(t, err)
-	require.True(t, reused)
-	require.True(t, renewed.HasOneTimeDailyQuota(), "过期后重新购买 1 日卡仍应被识别为一次性日额度")
-	require.Equal(t, SubscriptionStatusActive, renewed.Status)
-	require.True(t, renewed.StartsAt.After(oldStart), "重新购买过期订阅时应重置当前周期 StartsAt")
-	require.False(t, renewed.ExpiresAt.After(renewed.StartsAt.AddDate(0, 0, 1)))
-	require.NotNil(t, renewed.DailyWindowStart)
-	require.Equal(t, startOfDay(renewed.StartsAt), *renewed.DailyWindowStart)
-	require.Equal(t, 0.0, renewed.DailyUsageUSD)
-	require.Equal(t, 0.0, renewed.WeeklyUsageUSD)
-	require.Equal(t, 0.0, renewed.MonthlyUsageUSD)
-	require.Equal(t, "old\nnew", renewed.Notes)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "SUBSCRIPTION_MODE_RETIRED")
+	require.False(t, reused)
+	require.Nil(t, renewed)
 }
 
 func TestUserSubscriptionNeedsDailyReset_DailyCardKeepsOneTimeQuota(t *testing.T) {

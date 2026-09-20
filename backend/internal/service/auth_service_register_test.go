@@ -743,12 +743,7 @@ func TestAuthService_Register_AssignsDefaultSubscriptions(t *testing.T) {
 	_, user, err := service.Register(context.Background(), "default-sub@test.com", "password")
 	require.NoError(t, err)
 	require.NotNil(t, user)
-	require.Len(t, assigner.calls, 2)
-	require.Equal(t, int64(42), assigner.calls[0].UserID)
-	require.Equal(t, int64(11), assigner.calls[0].GroupID)
-	require.Equal(t, 30, assigner.calls[0].ValidityDays)
-	require.Equal(t, int64(12), assigner.calls[1].GroupID)
-	require.Equal(t, 7, assigner.calls[1].ValidityDays)
+	require.Empty(t, assigner.calls)
 }
 
 func TestAuthService_Register_UsesEmailAuthSourceDefaultsWhenGrantEnabled(t *testing.T) {
@@ -769,9 +764,7 @@ func TestAuthService_Register_UsesEmailAuthSourceDefaultsWhenGrantEnabled(t *tes
 	require.NotNil(t, user)
 	require.Equal(t, 12.5, user.Balance)
 	require.Equal(t, 7, user.Concurrency)
-	require.Len(t, assigner.calls, 1)
-	require.Equal(t, int64(11), assigner.calls[0].GroupID)
-	require.Equal(t, 30, assigner.calls[0].ValidityDays)
+	require.Empty(t, assigner.calls)
 }
 
 func TestAuthService_Register_GrantOnSignupFalseFallsBackToGlobalDefaults(t *testing.T) {
@@ -792,9 +785,7 @@ func TestAuthService_Register_GrantOnSignupFalseFallsBackToGlobalDefaults(t *tes
 	require.NotNil(t, user)
 	require.Equal(t, 3.5, user.Balance)
 	require.Equal(t, 2, user.Concurrency)
-	require.Len(t, assigner.calls, 1)
-	require.Equal(t, int64(31), assigner.calls[0].GroupID)
-	require.Equal(t, 5, assigner.calls[0].ValidityDays)
+	require.Empty(t, assigner.calls)
 }
 
 func TestAuthService_Register_GrantOnSignupMergesSourceOverridesWithGlobalDefaults(t *testing.T) {
@@ -815,9 +806,7 @@ func TestAuthService_Register_GrantOnSignupMergesSourceOverridesWithGlobalDefaul
 	require.NotNil(t, user)
 	require.Equal(t, 9.5, user.Balance)
 	require.Equal(t, 5, user.Concurrency)
-	require.Len(t, assigner.calls, 1)
-	require.Equal(t, int64(31), assigner.calls[0].GroupID)
-	require.Equal(t, 5, assigner.calls[0].ValidityDays)
+	require.Empty(t, assigner.calls)
 }
 
 func TestAuthService_LoginOrRegisterOAuthWithTokenPair_UsesLinuxDoAuthSourceDefaultsOnSignup(t *testing.T) {
@@ -842,9 +831,7 @@ func TestAuthService_LoginOrRegisterOAuthWithTokenPair_UsesLinuxDoAuthSourceDefa
 	require.Equal(t, 21.75, user.Balance)
 	require.Equal(t, 9, user.Concurrency)
 	require.Len(t, repo.created, 1)
-	require.Len(t, assigner.calls, 1)
-	require.Equal(t, int64(22), assigner.calls[0].GroupID)
-	require.Equal(t, 14, assigner.calls[0].ValidityDays)
+	require.Empty(t, assigner.calls)
 }
 
 func TestAuthService_LoginOrRegisterOAuthWithTokenPair_ExistingUserDoesNotGrantAgain(t *testing.T) {

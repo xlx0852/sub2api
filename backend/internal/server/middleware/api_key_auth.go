@@ -16,7 +16,7 @@ import (
 
 // NewAPIKeyAuthMiddleware 创建 API Key 认证中间件。
 // subscriptionService 参数仅为兼容现有依赖注入签名保留；用户订阅配额模式已退役。
-func NewAPIKeyAuthMiddleware(apiKeyService *service.APIKeyService, _ *service.SubscriptionService, cfg *config.Config) APIKeyAuthMiddleware {
+func NewAPIKeyAuthMiddleware(apiKeyService *service.APIKeyService, cfg *config.Config) APIKeyAuthMiddleware {
 	return APIKeyAuthMiddleware(apiKeyAuthWithBalance(apiKeyService, cfg))
 }
 

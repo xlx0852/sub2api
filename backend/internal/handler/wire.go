@@ -27,7 +27,6 @@ func ProvideAdminHandlers(
 	settingHandler *admin.SettingHandler,
 	opsHandler *admin.OpsHandler,
 	systemHandler *admin.SystemHandler,
-	subscriptionHandler *admin.SubscriptionHandler,
 	usageHandler *admin.UsageHandler,
 	userAttributeHandler *admin.UserAttributeHandler,
 	errorPassthroughHandler *admin.ErrorPassthroughHandler,
@@ -49,7 +48,6 @@ func ProvideAdminHandlers(
 	proxyHandler.SetIdempotencyCoordinator(idempotency)
 	redeemHandler.SetIdempotencyCoordinator(idempotency)
 	usageHandler.SetIdempotencyCoordinator(idempotency)
-	subscriptionHandler.SetIdempotencyCoordinator(idempotency)
 	return &AdminHandlers{
 		Dashboard:             dashboardHandler,
 		User:                  userHandler,
@@ -69,7 +67,6 @@ func ProvideAdminHandlers(
 		Setting:               settingHandler,
 		Ops:                   opsHandler,
 		System:                systemHandler,
-		Subscription:          subscriptionHandler,
 		Usage:                 usageHandler,
 		UserAttribute:         userAttributeHandler,
 		ErrorPassthrough:      errorPassthroughHandler,
@@ -112,7 +109,6 @@ func ProvideHandlers(
 	apiKeyHandler *APIKeyHandler,
 	usageHandler *UsageHandler,
 	redeemHandler *RedeemHandler,
-	subscriptionHandler *SubscriptionHandler,
 	announcementHandler *AnnouncementHandler,
 	adminHandlers *AdminHandlers,
 	gatewayHandler *GatewayHandler,
@@ -131,7 +127,6 @@ func ProvideHandlers(
 		APIKey:           apiKeyHandler,
 		Usage:            usageHandler,
 		Redeem:           redeemHandler,
-		Subscription:     subscriptionHandler,
 		Announcement:     announcementHandler,
 		Admin:            adminHandlers,
 		Gateway:          gatewayHandler,
@@ -152,7 +147,6 @@ var ProviderSet = wire.NewSet(
 	NewAPIKeyHandler,
 	NewUsageHandler,
 	NewRedeemHandler,
-	NewSubscriptionHandler,
 	NewAnnouncementHandler,
 	NewGatewayHandler,
 	NewOpenAIGatewayHandler,
@@ -181,7 +175,6 @@ var ProviderSet = wire.NewSet(
 	ProvideAdminSettingHandler,
 	admin.NewOpsHandler,
 	ProvideSystemHandler,
-	admin.NewSubscriptionHandler,
 	admin.NewUsageHandler,
 	admin.NewUserAttributeHandler,
 	admin.NewErrorPassthroughHandler,

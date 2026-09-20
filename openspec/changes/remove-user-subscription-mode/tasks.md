@@ -8,7 +8,8 @@
 
 - [x] 2.1 从 API Key 鉴权和网关上下文移除 UserSubscription 加载、配额窗口校验及订阅优先分支，统一余额校验。
 - [x] 2.2 从用量结算移除 subscription billing type、订阅额度增量和 subscription_id 写入；历史查询兼容保留。
-- [ ] 2.3 停止注册 admin/user subscription handlers 和 routes，并移除服务器依赖注入中的运行时 SubscriptionService。
+- [x] 2.3 停止注册 admin/user subscription handlers 和 routes，并移除服务器依赖注入中的运行时 SubscriptionService。
+  - 备注：HTTP handler 已从 wire/routes 拆除；鉴权中间件不再注入 SubscriptionService。Payment/Auth 仍保留可空的 DefaultSubscriptionAssigner 以便历史邮件变量读取，不再对外提供订阅 API。
 - [x] 2.4 移除订阅分配、续期、恢复、配额重置、过期任务、通知和缓存维护的生产调用链。
 - [x] 2.5 移除支付、兑换码、OAuth 首次绑定和默认策略创建订阅的路径；余额及非订阅履约保持不变。
 - [x] 2.6 分组服务强制标准模式，拒绝新的 subscription 类型输入，并移除订阅专属校验。

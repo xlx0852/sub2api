@@ -129,7 +129,6 @@ func enumerateRoutes(t *testing.T) []string {
 		middleware2.AdminAuthMiddleware(noop),
 		middleware2.APIKeyAuthMiddleware(noop),
 		nil, // apiKeyService：仅被请求期闭包捕获
-		nil, // subscriptionService：同上
 		nil, // opsService：同上
 		nil, // settingService：同上
 		cfg,

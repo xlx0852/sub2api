@@ -165,10 +165,7 @@ func TestAuthServiceBindEmailIdentity_UpdatesEmailAndAppliesFirstBindDefaults(t 
 	require.NoError(t, err)
 	require.Equal(t, 1, identityCount)
 
-	require.Len(t, assigner.calls, 1)
-	require.Equal(t, user.ID, assigner.calls[0].UserID)
-	require.Equal(t, int64(11), assigner.calls[0].GroupID)
-	require.Equal(t, 30, assigner.calls[0].ValidityDays)
+	require.Empty(t, assigner.calls)
 	require.Equal(t, 1, countProviderGrantRecords(t, client, user.ID, "email", "first_bind"))
 }
 
@@ -214,7 +211,7 @@ func TestAuthServiceBindEmailIdentity_RejectsExistingEmailOnAnotherUser(t *testi
 	require.Equal(t, 0, countProviderGrantRecords(t, client, sourceUser.ID, "email", "first_bind"))
 }
 
-func TestAuthServiceBindEmailIdentity_RollsBackWhenFirstBindDefaultsFail(t *testing.T) {
+func TestAuthServiceBindEmailIdentity_IgnoresRetiredSubscriptionAssigner(t *testing.T) {
 	assigner := &flakyEmailBindDefaultSubAssignerStub{err: errors.New("temporary assign failure")}
 	cache := &emailBindCacheStub{
 		data: &service.VerificationCodeData{
@@ -231,10 +228,9 @@ func TestAuthServiceBindEmailIdentity_RollsBackWhenFirstBindDefaultsFail(t *test
 	}, cache, assigner)
 
 	ctx := context.Background()
-	originalEmail := "legacy-rollback" + service.LinuxDoConnectSyntheticEmailDomain
 	user, err := client.User.Create().
-		SetEmail(originalEmail).
-		SetUsername("legacy-rollback").
+		SetEmail("legacy-retired" + service.LinuxDoConnectSyntheticEmailDomain).
+		SetUsername("legacy-retired").
 		SetPasswordHash("old-hash").
 		SetBalance(2.5).
 		SetConcurrency(1).
@@ -243,31 +239,18 @@ func TestAuthServiceBindEmailIdentity_RollsBackWhenFirstBindDefaultsFail(t *test
 		Save(ctx)
 	require.NoError(t, err)
 
-	updatedUser, err := svc.BindEmailIdentity(ctx, user.ID, "rollback@example.com", "123456", "new-password")
-	require.ErrorContains(t, err, "apply email first bind defaults")
-	require.ErrorContains(t, err, "temporary assign failure")
-	require.Nil(t, updatedUser)
+	updatedUser, err := svc.BindEmailIdentity(ctx, user.ID, "retired-sub@example.com", "123456", "new-password")
+	require.NoError(t, err)
+	require.NotNil(t, updatedUser)
+	require.Equal(t, "retired-sub@example.com", updatedUser.Email)
 
 	storedUser, err := client.User.Get(ctx, user.ID)
 	require.NoError(t, err)
-	require.Equal(t, originalEmail, storedUser.Email)
-	require.Equal(t, "old-hash", storedUser.PasswordHash)
-	require.Equal(t, 2.5, storedUser.Balance)
-	require.Equal(t, 1, storedUser.Concurrency)
-
-	identityCount, err := client.AuthIdentity.Query().
-		Where(
-			authidentity.UserIDEQ(user.ID),
-			authidentity.ProviderTypeEQ("email"),
-			authidentity.ProviderKeyEQ("email"),
-			authidentity.ProviderSubjectEQ("rollback@example.com"),
-		).
-		Count(ctx)
-	require.NoError(t, err)
-	require.Equal(t, 0, identityCount)
-
-	require.Len(t, assigner.calls, 1)
-	require.Equal(t, 0, countProviderGrantRecords(t, client, user.ID, "email", "first_bind"))
+	require.Equal(t, "retired-sub@example.com", storedUser.Email)
+	require.Equal(t, 11.0, storedUser.Balance)
+	require.Equal(t, 5, storedUser.Concurrency)
+	require.Empty(t, assigner.calls)
+	require.Equal(t, 1, countProviderGrantRecords(t, client, user.ID, "email", "first_bind"))
 }
 
 func TestAuthServiceBindEmailIdentity_RejectsReservedEmail(t *testing.T) {

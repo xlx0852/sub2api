@@ -141,8 +141,5 @@ func TestAdminService_CreateUser_AssignsDefaultSubscriptions(t *testing.T) {
 		Password: "password",
 	})
 	require.NoError(t, err)
-	require.Len(t, assigner.calls, 1)
-	require.Equal(t, int64(21), assigner.calls[0].UserID)
-	require.Equal(t, int64(5), assigner.calls[0].GroupID)
-	require.Equal(t, 30, assigner.calls[0].ValidityDays)
+	require.Empty(t, assigner.calls)
 }

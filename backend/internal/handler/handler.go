@@ -24,7 +24,6 @@ type AdminHandlers struct {
 	Setting               *admin.SettingHandler
 	Ops                   *admin.OpsHandler
 	System                *admin.SystemHandler
-	Subscription          *admin.SubscriptionHandler
 	Usage                 *admin.UsageHandler
 	UserAttribute         *admin.UserAttributeHandler
 	ErrorPassthrough      *admin.ErrorPassthroughHandler
@@ -46,7 +45,6 @@ type Handlers struct {
 	APIKey           *APIKeyHandler
 	Usage            *UsageHandler
 	Redeem           *RedeemHandler
-	Subscription     *SubscriptionHandler
 	Announcement     *AnnouncementHandler
 	Admin            *AdminHandlers
 	Gateway          *GatewayHandler

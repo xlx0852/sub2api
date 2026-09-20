@@ -522,7 +522,7 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 		userMap[u.ID] = &outUsers[len(outUsers)-1]
 	}
 
-	shouldLoadSubscriptions := filters.IncludeSubscriptions == nil || *filters.IncludeSubscriptions
+	shouldLoadSubscriptions := filters.IncludeSubscriptions != nil && *filters.IncludeSubscriptions
 	if shouldLoadSubscriptions {
 		// Batch load active subscriptions with groups to avoid N+1.
 		subs, err := r.client.UserSubscription.Query().

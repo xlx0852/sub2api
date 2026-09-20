@@ -15,7 +15,7 @@ import (
 
 // APIKeyAuthGoogle is a Google-style error wrapper for API key auth.
 func APIKeyAuthGoogle(apiKeyService *service.APIKeyService, cfg *config.Config) gin.HandlerFunc {
-	return APIKeyAuthWithSubscriptionGoogle(apiKeyService, nil, cfg)
+	return APIKeyAuthWithSubscriptionGoogle(apiKeyService, cfg)
 }
 
 // APIKeyAuthWithSubscriptionGoogle keeps its historical name/signature for route compatibility,
@@ -23,7 +23,7 @@ func APIKeyAuthGoogle(apiKeyService *service.APIKeyService, cfg *config.Config) 
 // {"error":{"code":401,"message":"...","status":"UNAUTHENTICATED"}}
 //
 // It is intended for Gemini native endpoints (/v1beta) to match Gemini SDK expectations.
-func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, _ *service.SubscriptionService, cfg *config.Config) gin.HandlerFunc {
+func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if v := strings.TrimSpace(c.Query("api_key")); v != "" {
 			abortWithGoogleError(c, 400, "Query parameter api_key is deprecated. Use Authorization header or key instead.")

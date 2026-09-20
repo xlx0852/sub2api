@@ -1842,10 +1842,7 @@ func TestBindOIDCOAuthLoginAppliesFirstBindGrantOnce(t *testing.T) {
 	require.Equal(t, 17.5, storedUser.Balance)
 	require.Equal(t, 5, storedUser.Concurrency)
 	require.Zero(t, storedUser.TotalRecharged)
-	require.Len(t, defaultSubAssigner.calls, 1)
-	require.Equal(t, int64(existingUser.ID), defaultSubAssigner.calls[0].UserID)
-	require.Equal(t, int64(101), defaultSubAssigner.calls[0].GroupID)
-	require.Equal(t, 30, defaultSubAssigner.calls[0].ValidityDays)
+	require.Empty(t, defaultSubAssigner.calls)
 	require.Equal(t, 1, countProviderGrantRecords(t, client, existingUser.ID, "oidc", "first_bind"))
 
 	secondSession, err := client.PendingAuthSession.Create().
@@ -1884,7 +1881,7 @@ func TestBindOIDCOAuthLoginAppliesFirstBindGrantOnce(t *testing.T) {
 	require.Equal(t, 17.5, storedUser.Balance)
 	require.Equal(t, 5, storedUser.Concurrency)
 	require.Zero(t, storedUser.TotalRecharged)
-	require.Len(t, defaultSubAssigner.calls, 1)
+	require.Empty(t, defaultSubAssigner.calls)
 	require.Equal(t, 1, countProviderGrantRecords(t, client, existingUser.ID, "oidc", "first_bind"))
 }
 

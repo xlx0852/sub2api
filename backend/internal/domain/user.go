@@ -24,8 +24,7 @@ type UserListFilters struct {
 	APIKeyGroupID int64
 	Attributes    map[int64]string // Custom attribute filters: attributeID -> value
 	// IncludeSubscriptions controls whether ListWithFilters should load active subscriptions.
-	// For large datasets this can be expensive; admin list pages should enable it on demand.
-	// nil means not specified (default: load subscriptions for backward compatibility).
+	// User subscription mode is retired; default is false even when the query param is omitted.
 	IncludeSubscriptions *bool
 	// IncludeDeleted 为 true 时绕过软删除过滤，返回含已删除（deleted_at 非空）的用户。
 	// 仅供 /admin/usage 的 SearchUsers 端点使用，其他列表调用方不要设置。

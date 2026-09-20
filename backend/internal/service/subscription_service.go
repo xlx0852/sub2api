@@ -173,7 +173,7 @@ func (s *SubscriptionService) AssignSubscription(ctx context.Context, input *Ass
 //
 // 如果没有订阅：创建新订阅
 func (s *SubscriptionService) AssignOrExtendSubscription(ctx context.Context, input *AssignSubscriptionInput) (*UserSubscription, bool, error) {
-	return s.assignOrExtendSubscription(ctx, input, false)
+	return nil, false, infraerrors.BadRequest("SUBSCRIPTION_MODE_RETIRED", "user subscription assignment is no longer supported")
 }
 
 func (s *SubscriptionService) assignOrExtendSubscription(ctx context.Context, input *AssignSubscriptionInput, deferCacheInvalidation bool) (*UserSubscription, bool, error) {
