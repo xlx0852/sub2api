@@ -450,6 +450,40 @@ func (s *OpenAIGatewayService) scheduleOpenAICodexTurnStateRefresh(account *Acco
 	}
 }
 
+// openAICodexTurnStateUpstream5xxInvalidateThreshold 同号连续上游 5xx 达到该次数时
+// 认为其 turn-state 票可能已被服务端吊销/变质，主动清票重抓。
+// 502 不是 312 降智信号，但观测到某号带票持续 502（而其他号同模型正常）——
+// 多半是票过期/被吊销但上游以过载形式返回。连续阈值避免单次抖动误清。
+const openAICodexTurnStateUpstream5xxInvalidateThreshold = 3
+
+// NoteOpenAICodexTurnStateUpstreamResult 记录该号一次上游结果：
+//   - status>=500：累计连续 5xx；达到阈值 → invalidate 所有池票 + 触发重抓，并清零计数。
+//   - status<500：成功/4xx，清零计数。
+// 只对 oauth（Codex 上游）号生效。
+func (s *OpenAIGatewayService) NoteOpenAICodexTurnStateUpstreamResult(account *Account, upstreamStatus int) {
+	if s == nil || account == nil || account.Type != AccountTypeOAuth || account.ID <= 0 {
+		return
+	}
+	if !openAICodexTurnStateReuseEnabled(s.cfg) {
+		return
+	}
+	if upstreamStatus < 500 {
+		s.codexTurnStateUpstream5xx.Delete(account.ID)
+		return
+	}
+	raw, _ := s.codexTurnStateUpstream5xx.LoadOrStore(account.ID, 0)
+	count, _ := raw.(int)
+	count++
+	if count < openAICodexTurnStateUpstream5xxInvalidateThreshold {
+		s.codexTurnStateUpstream5xx.Store(account.ID, count)
+		return
+	}
+	// 达阈值：认为票已坏，清票重抓，并复位计数避免风暴。
+	s.codexTurnStateUpstream5xx.Delete(account.ID)
+	s.invalidateOpenAICodexTurnState(account)
+	s.scheduleOpenAICodexTurnStateRefresh(account)
+}
+
 func (s *OpenAIGatewayService) startOpenAICodexTurnStateSeeder() {
 	if s == nil || s.accountRepo == nil || !openAICodexTurnStateReuseEnabled(s.cfg) {
 		return
