@@ -2222,20 +2222,6 @@ function removeAuthSourceDefaultSubscription(
   authSourceDefaults[source].subscriptions.splice(index, 1);
 }
 
-function findDuplicateDefaultSubscription(
-  subscriptions: DefaultSubscriptionSetting[],
-): DefaultSubscriptionSetting | undefined {
-  const seenGroupIDs = new Set<number>();
-
-  return subscriptions.find((item) => {
-    if (seenGroupIDs.has(item.group_id)) {
-      return true;
-    }
-    seenGroupIDs.add(item.group_id);
-    return false;
-  });
-}
-
 async function saveSettings() {
   saving.value = true;
   try {
