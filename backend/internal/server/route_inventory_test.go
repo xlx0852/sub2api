@@ -107,6 +107,30 @@ func TestRouteInventoryCoversGatewayEndpoints(t *testing.T) {
 	}
 }
 
+func TestRouteInventoryDoesNotExposeGitHubUpdateEndpoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	routes := make(map[string]bool)
+	for _, line := range enumerateRoutes(t) {
+		routes[line] = true
+	}
+
+	requireAbsent := []string{
+		"GET /api/v1/admin/system/update",
+		"POST /api/v1/admin/system/update",
+		"POST /api/v1/admin/system/rollback",
+		"GET /api/v1/admin/system/releases",
+	}
+	for _, path := range requireAbsent {
+		if routes[path] {
+			t.Errorf("已退役的 GitHub 更新入口仍被注册: %s", path)
+		}
+	}
+	if !routes["GET /api/v1/admin/system/version"] {
+		t.Error("本地版本接口未注册: GET /api/v1/admin/system/version")
+	}
+}
+
 // enumerateRoutes 以最小打桩实例化全部路由注册，返回排序后的 "METHOD PATH" 清单。
 func enumerateRoutes(t *testing.T) []string {
 	t.Helper()
