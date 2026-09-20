@@ -403,19 +403,8 @@ export interface ConversionResult {
 
 // ==================== Statistics Types ====================
 
-export interface SubscriptionStats {
-  subscription_id: number
-  total_nodes: number
-  available_nodes: number
-  avg_latency: number | null
-  by_type: Record<ProxyNode['type'], number>
-  last_update: string
-}
-
 export interface UserStats {
-  total_subscriptions: number
   total_nodes: number
-  active_subscriptions: number
   total_conversions: number
   last_conversion: string | null
 }
@@ -1779,46 +1768,6 @@ export interface UserSubscription {
   expires_at: string | null
   user?: User
   group?: Group
-}
-
-export interface SubscriptionProgress {
-  subscription_id: number
-  daily: {
-    used: number
-    limit: number | null
-    percentage: number
-    reset_in_seconds: number | null
-  } | null
-  weekly: {
-    used: number
-    limit: number | null
-    percentage: number
-    reset_in_seconds: number | null
-  } | null
-  monthly: {
-    used: number
-    limit: number | null
-    percentage: number
-    reset_in_seconds: number | null
-  } | null
-  expires_at: string | null
-  days_remaining: number | null
-}
-
-export interface AssignSubscriptionRequest {
-  user_id: number
-  group_id: number
-  validity_days?: number
-}
-
-export interface BulkAssignSubscriptionRequest {
-  user_ids: number[]
-  group_id: number
-  validity_days?: number
-}
-
-export interface ExtendSubscriptionRequest {
-  days: number
 }
 
 // ==================== Query Parameters ====================
