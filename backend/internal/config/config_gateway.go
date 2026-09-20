@@ -410,6 +410,9 @@ type GatewayOpenAIWSSchedulerScoreWeights struct {
 
 // GatewayOpenAISchedulerConfig OpenAI 高级调度器配置。
 type GatewayOpenAISchedulerConfig struct {
+	// SimpleSelectionGroupIDs opts OpenAI non-compact groups into priority/load selection.
+	// Empty (default) preserves the existing profile.
+	SimpleSelectionGroupIDs []int64 `mapstructure:"simple_selection_group_ids"`
 	// StickyEscapeEnabled: 是否允许 session_hash sticky 在账号健康度劣化时临时逃逸
 	StickyEscapeEnabled bool `mapstructure:"sticky_escape_enabled"`
 	// StickyEscapeTTFTMs: TTFT EWMA 超过该阈值时跳过 sticky

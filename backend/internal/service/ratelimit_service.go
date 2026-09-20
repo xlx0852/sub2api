@@ -199,6 +199,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			)
 		}
 	}
+	recordOpenAICredentialFailover(ctx, account, statusCode)
 	customErrorCodesEnabled := account.IsCustomErrorCodesEnabled()
 
 	// 池模式默认不标记本地账号状态；仅当用户显式配置自定义错误码时按本地策略处理。

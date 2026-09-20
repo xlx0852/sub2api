@@ -2,6 +2,7 @@ package service
 
 import (
 	"testing"
+	"time"
 )
 
 // 构造带模型映射的 OpenAI 账号。
@@ -14,7 +15,7 @@ func pinTestAccount(id int64, typ string, models ...string) *Account {
 		}
 		creds["model_mapping"] = m
 	}
-	return &Account{ID: id, Platform: PlatformOpenAI, Type: typ, Credentials: creds}
+	return &Account{ID: id, Platform: PlatformOpenAI, Type: typ, Credentials: creds, Status: StatusActive, Schedulable: true}
 }
 
 // sticky 钉到不支持目标模型的 apikey 号时，不得把 class 钉成 api_key，
@@ -62,5 +63,15 @@ func TestResolvePinnedCredentialClass_EmptyModelPinsFirst(t *testing.T) {
 	got := resolvePinnedCredentialClass([]*Account{sticky}, "")
 	if got != OpenAICredentialClassAPIKey {
 		t.Fatalf("expected api_key pin on empty model, got %q", got)
+	}
+}
+
+func TestResolvePinnedCredentialClass_SkipsUnschedulableSources(t *testing.T) {
+	for _, mutate := range []func(*Account){func(a *Account) { a.Schedulable = false }, func(a *Account) { a.Status = "error" }, func(a *Account) { until := time.Now().Add(time.Hour); a.RateLimitResetAt = &until }, func(a *Account) { until := time.Now().Add(time.Hour); a.TempUnschedulableUntil = &until }} {
+		a := pinTestAccount(89, AccountTypeAPIKey, "gpt-6-astra")
+		mutate(a)
+		if got := resolvePinnedCredentialClass([]*Account{a}, "gpt-6-astra"); got != OpenAICredentialClassUnspecified {
+			t.Fatalf("ineligible source locked class: %s", got)
+		}
 	}
 }

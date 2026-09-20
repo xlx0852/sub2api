@@ -425,6 +425,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			if failoverClientGone(c) {
 				return
 			}
+			if errors.Is(err, service.ErrOpenAIContinuationUnavailable) {
+				h.handleStreamingAwareError(c, http.StatusBadRequest, "invalid_request_error", "Previous response cannot be continued on its original account; provide complete context or start a new conversation", streamStarted)
+				return
+			}
 			reqLog.Warn("openai.account_select_failed",
 				zap.Error(err),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
@@ -1839,6 +1843,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			requestPlatform,
 		)
 		if err != nil {
+			if errors.Is(err, service.ErrOpenAIContinuationUnavailable) {
+				closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "previous response continuation unavailable; provide complete context")
+				return
+			}
 			reqLog.Warn("openai.websocket_account_select_failed",
 				zap.Error(err),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),

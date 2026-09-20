@@ -1664,6 +1664,11 @@ func (c *Config) Validate() error {
 	if weightSum <= 0 {
 		return fmt.Errorf("gateway.openai_ws.scheduler_score_weights must not all be zero")
 	}
+	for _, groupID := range c.Gateway.OpenAIScheduler.SimpleSelectionGroupIDs {
+		if groupID <= 0 {
+			return fmt.Errorf("gateway.openai_scheduler.simple_selection_group_ids must contain positive IDs")
+		}
+	}
 	if c.Gateway.OpenAIScheduler.StickyEscapeTTFTMs <= 0 {
 		return fmt.Errorf("gateway.openai_scheduler.sticky_escape_ttft_ms must be positive")
 	}

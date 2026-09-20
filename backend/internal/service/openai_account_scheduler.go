@@ -63,6 +63,8 @@ type openAIAdvancedSchedulerRuntimeSettings struct {
 var stickyReevalLastAt sync.Map // sessionHash -> int64 unix nano
 
 type OpenAIAccountScheduleRequest struct {
+	SimpleSelection         bool
+	simpleGroup             *Group
 	GroupID                 *int64
 	Platform                string
 	SessionHash             string
@@ -420,8 +422,44 @@ func (s *defaultOpenAIAccountScheduler) Select(
 		s.metrics.recordSelect(decision)
 	}()
 
+	if class := openAICredentialFailoverClass(ctx); class != OpenAICredentialClassUnspecified {
+		req.RequiredCredentialClass = class
+	}
+	if req.SimpleSelection {
+		if req.GroupID != nil && s.service.schedulerSnapshot != nil {
+			group, err := s.service.schedulerSnapshot.GetGroupByID(ctx, *req.GroupID)
+			if err != nil {
+				return nil, decision, err
+			}
+			if group == nil {
+				return nil, decision, noAvailableOpenAISelectionErrorWithReason(req.RequestedModel, "group_unavailable", false)
+			}
+			req.simpleGroup = group
+		}
+		s.prepareSimplePreferences(ctx, &req)
+		defer func() {
+			slog.Info("openai_simple_selection", "group_id", derefGroupID(req.GroupID),
+				"model", req.RequestedModel, "selected_account_id", decision.SelectedAccountID,
+				"layer", decision.Layer, "candidate_count", decision.CandidateCount,
+				"required_credential_class", string(req.RequiredCredentialClass))
+		}()
+		if strings.TrimSpace(req.PreviousResponseID) != "" {
+			selection, err := s.selectSimplePreviousResponse(ctx, req)
+			if err != nil {
+				return nil, decision, err
+			}
+			if selection != nil {
+				decision.Layer = openAIAccountScheduleLayerPreviousResponse
+				decision.StickyPreviousHit = true
+				decision.SelectedAccountID = selection.Account.ID
+				decision.SelectedAccountType = selection.Account.Type
+				return selection, decision, nil
+			}
+		}
+	}
+
 	previousResponseID := strings.TrimSpace(req.PreviousResponseID)
-	if previousResponseID != "" && normalizeOpenAICompatiblePlatform(req.Platform) == PlatformOpenAI &&
+	if !req.SimpleSelection && previousResponseID != "" && normalizeOpenAICompatiblePlatform(req.Platform) == PlatformOpenAI &&
 		(!req.StickyWeighted || !req.PreviousResponseCanMove) {
 		selection, err := s.service.selectAccountByPreviousResponseIDForCapability(
 			ctx,
@@ -436,7 +474,7 @@ func (s *defaultOpenAIAccountScheduler) Select(
 			return nil, decision, err
 		}
 		if selection != nil && selection.Account != nil {
-			if !s.isAccountTransportCompatible(selection.Account, req.RequiredTransport) {
+			if !OpenAICredentialClassMatches(selection.Account, req.RequiredCredentialClass) || !s.isAccountTransportCompatible(selection.Account, req.RequiredTransport) {
 				if selection.ReleaseFunc != nil {
 					selection.ReleaseFunc()
 				}
@@ -460,7 +498,7 @@ func (s *defaultOpenAIAccountScheduler) Select(
 	// 优先级在 previous_response（续链必须跟原号）之后、会话粘性之前。
 	// 注意：这里只做硬失败判断（排除/不可调度/能力不匹配），不做用量分、TTFT、
 	// 并发满之类的软换号——那些正是把同一用户洒到多台账号上的来源。
-	if req.UserPinAccountID > 0 && req.APIKeyID > 0 {
+	if !req.SimpleSelection && req.UserPinAccountID > 0 && req.APIKeyID > 0 {
 		if selection, brokenReason := s.selectByUserPin(ctx, req); selection != nil && selection.Account != nil {
 			decision.Layer = openAIAccountScheduleLayerUserPin
 			decision.UserPinHit = true
@@ -479,7 +517,7 @@ func (s *defaultOpenAIAccountScheduler) Select(
 		}
 	}
 
-	if !req.StickyWeighted {
+	if !req.SimpleSelection && !req.StickyWeighted {
 		selection, escapedSticky, err := s.selectBySessionHash(ctx, req)
 		if err != nil {
 			return nil, decision, err
@@ -536,6 +574,13 @@ func (s *defaultOpenAIAccountScheduler) Select(
 	if selection != nil && selection.Account != nil {
 		decision.SelectedAccountID = selection.Account.ID
 		decision.SelectedAccountType = selection.Account.Type
+		if req.SimpleSelection {
+			decision.UserPinHit = req.UserPinAccountID > 0 && selection.Account.ID == req.UserPinAccountID
+			if decision.UserPinHit {
+				s.service.refreshUserPinTTL(ctx, req.GroupID, req.APIKeyID)
+			}
+			decision.StickySessionHit = req.StickyAccountID > 0 && selection.Account.ID == req.StickyAccountID
+		}
 		if req.StickyWeighted {
 			if req.StickyPreviousAccountID > 0 && selection.Account.ID == req.StickyPreviousAccountID {
 				decision.StickyPreviousHit = true
@@ -1182,6 +1227,9 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAIAccountLoadPlan(
 	filtered []*Account,
 	loadMap map[int64]*AccountLoadInfo,
 ) openAIAccountLoadPlan {
+	if req.SimpleSelection {
+		return s.buildSimpleLoadPlan(req, filtered, loadMap, uint64(time.Now().UnixNano()))
+	}
 	allCandidates := make([]openAIAccountCandidateScore, 0, len(filtered))
 	for _, account := range filtered {
 		loadInfo := loadMap[account.ID]
@@ -1438,12 +1486,8 @@ func (s *defaultOpenAIAccountScheduler) tryAcquireOpenAISelectionOrder(
 	compactBlocked := false
 	for i := 0; i < len(selectionOrder); i++ {
 		candidate := selectionOrder[i]
-		fresh := s.service.resolveFreshSchedulableOpenAIAccount(ctx, candidate.account, req.Platform, req.RequestedModel, false, req.RequiredCapability)
-		if fresh == nil || !s.isAccountTransportCompatible(fresh, req.RequiredTransport) || !s.isAccountRequestCompatible(ctx, fresh, req) {
-			continue
-		}
-		fresh = s.service.recheckSelectedOpenAIAccountFromDB(ctx, fresh, req.Platform, req.RequestedModel, false, req.RequiredCapability)
-		if fresh == nil || !s.isAccountTransportCompatible(fresh, req.RequiredTransport) || !s.isAccountRequestCompatible(ctx, fresh, req) {
+		fresh := s.recheckLoadCandidate(ctx, candidate.account, req)
+		if fresh == nil {
 			continue
 		}
 		if req.RequireCompact && openAICompactSupportTier(fresh) == 0 {
@@ -1479,7 +1523,7 @@ func (s *defaultOpenAIAccountScheduler) tryFallbackToWeightedSticky(
 	ctx context.Context,
 	req OpenAIAccountScheduleRequest,
 ) (*AccountSelectionResult, error) {
-	if !req.StickyWeighted {
+	if req.SimpleSelection || !req.StickyWeighted {
 		return nil, nil
 	}
 	for _, accountID := range []int64{req.StickyPreviousAccountID, req.StickyAccountID} {
@@ -1495,11 +1539,11 @@ func (s *defaultOpenAIAccountScheduler) tryFallbackToWeightedSticky(
 		if err != nil || account == nil {
 			continue
 		}
-		if !s.isAccountRequestCompatible(ctx, account, req) || !s.isAccountTransportCompatible(account, req.RequiredTransport) {
+		if !OpenAICredentialClassMatches(account, req.RequiredCredentialClass) || !s.isAccountRequestCompatible(ctx, account, req) || !s.isAccountTransportCompatible(account, req.RequiredTransport) {
 			continue
 		}
 		account = s.service.recheckSelectedOpenAIAccountFromDB(ctx, account, req.Platform, req.RequestedModel, req.RequireCompact, req.RequiredCapability)
-		if account == nil || !s.isAccountRequestCompatible(ctx, account, req) || !s.isAccountTransportCompatible(account, req.RequiredTransport) {
+		if account == nil || !OpenAICredentialClassMatches(account, req.RequiredCredentialClass) || !s.isAccountRequestCompatible(ctx, account, req) || !s.isAccountTransportCompatible(account, req.RequiredTransport) {
 			continue
 		}
 		// 粘性绑定只证明绑定时账号在分组内；账号被移出分组后绑定仍会在 TTL 内存活，
@@ -1558,8 +1602,8 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 	}
 
 	// require_privacy_set: 获取分组信息
-	var schedGroup *Group
-	if req.GroupID != nil && s.service.schedulerSnapshot != nil {
+	schedGroup := req.simpleGroup
+	if !req.SimpleSelection && req.GroupID != nil && s.service.schedulerSnapshot != nil {
 		schedGroup, _ = s.service.schedulerSnapshot.GetGroupByID(ctx, *req.GroupID)
 	}
 
@@ -1582,6 +1626,15 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 	}
 	for i := range accounts {
 		account := &accounts[i]
+		if req.SimpleSelection {
+			d := s.simpleCandidateDecision(ctx, account, req)
+			recordShadowPolicy(account, d.Allowed, d.RejectedPolicy)
+			if d.Allowed {
+				filtered = append(filtered, account)
+				loadReq = append(loadReq, AccountWithConcurrency{ID: account.ID, MaxConcurrency: account.Concurrency})
+			}
+			continue
+		}
 		if req.ExcludedIDs != nil {
 			if _, excluded := req.ExcludedIDs[account.ID]; excluded {
 				recordShadowPolicy(account, false, "not_excluded")
@@ -1680,7 +1733,7 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 		}
 	}
 
-	if req.SubscriptionPriority {
+	if !req.SimpleSelection && req.SubscriptionPriority {
 		subscriptionAccounts, regularAccounts := partitionOpenAIChatGPTSubscriptionAccounts(filtered)
 		if len(subscriptionAccounts) > 0 {
 			attempt := s.trySelectByLoadBalancePool(ctx, req, subscriptionAccounts, loadMap)
@@ -1784,6 +1837,11 @@ func (s *defaultOpenAIAccountScheduler) trySelectByLoadBalancePool(
 
 	if s.service.concurrencyService != nil {
 		loadReq := buildOpenAIAccountLoadRequest(filtered)
+		if req.SimpleSelection {
+			for i, account := range filtered {
+				loadReq[i].MaxConcurrency = account.Concurrency
+			}
+		}
 		if freshLoadMap, loadErr := s.service.concurrencyService.GetAccountsLoadBatchFresh(ctx, loadReq); loadErr == nil {
 			freshPlan := s.buildOpenAIAccountLoadPlan(ctx, req, filtered, freshLoadMap)
 			if len(freshPlan.selectionOrder) > 0 {
@@ -1849,12 +1907,8 @@ func (s *defaultOpenAIAccountScheduler) finishLoadBalanceSelectionFallback(
 	compactBlocked := attempt.compactBlocked
 	// WaitPlan.MaxConcurrency 使用 Concurrency（非 EffectiveLoadFactor），因为 WaitPlan 控制的是 Redis 实际并发槽位等待。
 	for _, candidate := range attempt.selectionOrder {
-		fresh := s.service.resolveFreshSchedulableOpenAIAccount(ctx, candidate.account, req.Platform, req.RequestedModel, false, req.RequiredCapability)
-		if fresh == nil || !s.isAccountTransportCompatible(fresh, req.RequiredTransport) || !s.isAccountRequestCompatible(ctx, fresh, req) {
-			continue
-		}
-		fresh = s.service.recheckSelectedOpenAIAccountFromDB(ctx, fresh, req.Platform, req.RequestedModel, false, req.RequiredCapability)
-		if fresh == nil || !s.isAccountTransportCompatible(fresh, req.RequiredTransport) || !s.isAccountRequestCompatible(ctx, fresh, req) {
+		fresh := s.recheckLoadCandidate(ctx, candidate.account, req)
+		if fresh == nil {
 			continue
 		}
 		if req.RequireCompact && openAICompactSupportTier(fresh) == 0 {
@@ -2169,11 +2223,11 @@ func cloneOpenAIAdvancedSchedulerWeightOverrides(in map[string]float64) map[stri
 	return out
 }
 
-func (s *OpenAIGatewayService) getOpenAIAccountScheduler(ctx context.Context) OpenAIAccountScheduler {
+func (s *OpenAIGatewayService) getOpenAIAccountScheduler(ctx context.Context, force ...bool) OpenAIAccountScheduler {
 	if s == nil {
 		return nil
 	}
-	if !s.isOpenAIAdvancedSchedulerEnabled(ctx) {
+	if !(len(force) > 0 && force[0]) && !s.isOpenAIAdvancedSchedulerEnabled(ctx) {
 		return nil
 	}
 	s.openaiSchedulerOnce.Do(func() {
@@ -2262,7 +2316,8 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerStrategy(
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
 	platform = normalizeOpenAICompatiblePlatform(platform)
 	decision := OpenAIAccountScheduleDecision{}
-	scheduler := s.getOpenAIAccountScheduler(ctx)
+	simpleSelection := s.simpleOpenAISelectionEnabled(groupID, platform, requireCompact)
+	scheduler := s.getOpenAIAccountScheduler(ctx, simpleSelection || (platform == PlatformOpenAI && openAICredentialFailoverClass(ctx) != OpenAICredentialClassUnspecified))
 	if scheduler == nil {
 		decision.Layer = openAIAccountScheduleLayerLoadBalance
 		if requiredTransport == OpenAIUpstreamTransportAny || requiredTransport == OpenAIUpstreamTransportHTTPSSE {
@@ -2327,7 +2382,7 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerStrategy(
 	stickyWeighted := s.isOpenAIAdvancedSchedulerStickyWeightedEnabled(ctx)
 	subscriptionPriority := s.isOpenAIAdvancedSchedulerSubscriptionPriorityEnabled(ctx)
 	stickyPreviousAccountID := int64(0)
-	if stickyWeighted && previousResponseCanMove && strings.TrimSpace(previousResponseID) != "" && platform == PlatformOpenAI {
+	if !simpleSelection && stickyWeighted && previousResponseCanMove && strings.TrimSpace(previousResponseID) != "" && platform == PlatformOpenAI {
 		stickyPreviousAccountID = s.ResolveAccountIDByPreviousResponseIDForScheduler(ctx, groupID, previousResponseID, requestedModel, excludedIDs, requiredCapability, requireCompact)
 	}
 	requiredCredentialClass := OpenAICredentialClassUnspecified
@@ -2335,18 +2390,26 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerStrategy(
 	// keep Unspecified for first hop. If sticky account is known, pin class to that account.
 	userPinAPIKeyID := openAIUserPinAPIKeyIDFromContext(ctx)
 	userPinAccountID := s.getUserPinnedAccountID(ctx, groupID, userPinAPIKeyID)
-	pinSources := make([]*Account, 0, 3)
-	for _, id := range []int64{stickyAccountID, stickyPreviousAccountID, userPinAccountID} {
-		if id <= 0 {
-			continue
+	if simpleSelection {
+		requiredCredentialClass = openAICredentialFailoverClass(ctx)
+	} else {
+		pinSources := make([]*Account, 0, 3)
+		for _, id := range []int64{stickyAccountID, stickyPreviousAccountID, userPinAccountID} {
+			if id <= 0 {
+				continue
+			}
+			if acc, err := s.getSchedulableAccount(ctx, id); err == nil && acc != nil {
+				pinSources = append(pinSources, acc)
+			}
 		}
-		if acc, err := s.getSchedulableAccount(ctx, id); err == nil && acc != nil {
-			pinSources = append(pinSources, acc)
+		requiredCredentialClass = resolvePinnedCredentialClass(pinSources, requestedModel)
+		if class := openAICredentialFailoverClass(ctx); class != OpenAICredentialClassUnspecified {
+			requiredCredentialClass = class
 		}
 	}
-	requiredCredentialClass = resolvePinnedCredentialClass(pinSources, requestedModel)
 
 	selection, decision, err := scheduler.Select(ctx, OpenAIAccountScheduleRequest{
+		SimpleSelection:         simpleSelection,
 		GroupID:                 groupID,
 		Platform:                platform,
 		SessionHash:             sessionHash,
@@ -2383,14 +2446,14 @@ func normalizeOpenAILegacyCompatibilityError(err error, requestedModel string) e
 }
 
 // resolvePinnedCredentialClass 从 sticky / previous_response / user_pin 钉选来源
-// 推导 RequiredCredentialClass。仅当来源账号本身支持 requestedModel 时才钉其
+// 推导 RequiredCredentialClass。仅当来源账号可调度且支持 requestedModel 时才钉其
 // credential class；否则跳过该来源。
 //
 // 若不加模型校验，sticky 钉到一个不支持目标模型的 apikey 号时，会把唯一支持
 // 该模型的 oauth 号全部按 credential_class 拒掉 → routing 空池 503。
 func resolvePinnedCredentialClass(pinSources []*Account, requestedModel string) OpenAICredentialClass {
 	for _, acc := range pinSources {
-		if acc == nil {
+		if acc == nil || !acc.IsSchedulableForModel(requestedModel) {
 			continue
 		}
 		if requestedModel != "" && !acc.IsModelSupported(requestedModel) {

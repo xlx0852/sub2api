@@ -165,7 +165,7 @@ func apiKeyAuthWithBalance(apiKeyService *service.APIKeyService, cfg *config.Con
 		// 把本地 API Key ID 注入请求 context：调度层据此做「同一 Key 钉同一上游账号」的
 		// 用户级粘性（gin 只存对象，service 层拿不到 request context 里的标量）。
 		if c.Request != nil {
-			c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), ctxkey.OpenAIUserPinAPIKeyID, apiKey.ID))
+			c.Request = c.Request.WithContext(service.WithOpenAICredentialFailoverState(context.WithValue(c.Request.Context(), ctxkey.OpenAIUserPinAPIKeyID, apiKey.ID)))
 		}
 		c.Set(string(ContextKeyUser), AuthSubject{
 			UserID:      apiKey.User.ID,
