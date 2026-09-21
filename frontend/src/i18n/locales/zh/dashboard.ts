@@ -155,7 +155,7 @@ export default {
       grok: {
         description:
           '将以下配置文件添加到 Codex CLI 配置目录中，通过 Gateway 的 Grok 分组使用 Grok 模型（OpenAI Responses 兼容）。',
-        configTomlHint: '请确保以下内容位于 config.toml 文件的开头部分；默认模型为 grok-4.6',
+        configTomlHint: '请确保以下内容位于 config.toml 文件的开头部分；默认模型为 grok-4.7',
         note: '请确保配置目录存在。macOS/Linux 用户可运行 mkdir -p ~/.codex 创建目录。auth.json 中的 OPENAI_API_KEY 填写本站 API 密钥。',
         noteWindows:
           '按 Win+R，输入 %userprofile%\\.codex 打开配置目录。如目录不存在，请先手动创建。auth.json 中的 OPENAI_API_KEY 填写本站 API 密钥。',

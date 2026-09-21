@@ -138,7 +138,7 @@ func grokFlagshipModel(model string) bool {
 	if slash := strings.LastIndex(model, "/"); slash >= 0 {
 		model = strings.TrimSpace(model[slash+1:])
 	}
-	return model == "grok-4.5" || model == "grok-4.6"
+	return model == "grok-4.5" || model == "grok-4.6" || model == "grok-4.7"
 }
 
 type grokVersion struct {
@@ -146,9 +146,9 @@ type grokVersion struct {
 	minor int
 }
 
-// grok-4.6 is the first Grok line that accepts xAI's native Responses
-// image_generation tool. grok-4.20-* is an older product line whose dotted
-// minor is not comparable to grok-4.6, so it stays on the strip path.
+// grok-4.6 introduced xAI's native Responses image_generation tool and
+// grok-4.7 carries it forward. grok-4.20-* is an older product line whose
+// dotted minor is not comparable to grok-4.6, so it stays on the strip path.
 var grokImageGenerationMinVersion = grokVersion{major: 4, minor: 6}
 
 func grokSupportsNativeImageGeneration(model string) bool {

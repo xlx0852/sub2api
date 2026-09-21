@@ -1318,7 +1318,7 @@ func (a *Account) IsOpenAI() bool {
 }
 
 // IsOpenAILongContextBillingEnabled reports whether this OpenAI-compatible account should
-// apply whole-session long-context multipliers (gpt-5.4/5.5, grok-4.6, ... above threshold).
+// apply whole-session long-context multipliers (gpt-5.4/5.5, grok-4.6/4.7, ... above threshold).
 // OpenAI-compatible accounts (openai/grok/kimi) default to enabled when the setting is
 // missing or invalid; an explicit false remains an account-level opt-out. Other providers
 // are never enabled by this OpenAI-specific switch.

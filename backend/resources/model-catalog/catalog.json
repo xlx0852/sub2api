@@ -1,6 +1,6 @@
 {
-  "version": 10,
-  "updated_at": "2026-09-13T00:00:00Z",
+  "version": 11,
+  "updated_at": "2026-09-22T00:00:00Z",
   "platforms": {
     "openai": {
       "default_test_model": "gpt-5.5",
@@ -393,9 +393,15 @@
       }
     },
     "grok": {
-      "default_chat_model": "grok-4.6",
-      "default_test_model": "grok-4.6",
+      "default_chat_model": "grok-4.7",
+      "default_test_model": "grok-4.7",
       "models": [
+        {
+          "id": "grok-4.7",
+          "display_name": "Grok 4.7",
+          "object": "model",
+          "owned_by": "xai"
+        },
         {
           "id": "grok-4.6",
           "display_name": "Grok 4.6",
@@ -500,12 +506,13 @@
         }
       ],
       "default_mapping": {
-        "grok": "grok-4.6",
-        "grok-latest": "grok-4.6",
+        "grok": "grok-4.7",
+        "grok-latest": "grok-4.7",
+        "grok-4.7": "grok-4.7",
         "grok-4.6": "grok-4.6",
         "grok-4.5-latest": "grok-4.5",
         "grok-build": "grok-build-0.1",
-        "grok-build-latest": "grok-4.6",
+        "grok-build-latest": "grok-4.7",
         "grok-composer": "grok-composer-2.5-fast",
         "composer-2.5": "grok-composer-2.5-fast",
         "grok-4.20-reasoning": "grok-4.20-0309-reasoning",
@@ -860,6 +867,18 @@
       "image_input_cost_per_token": 2.52e-07,
       "output_cost_per_token": 0
     },
+    "grok-4.7": {
+      "input_cost_per_token": 2e-06,
+      "input_cost_per_token_priority": 4e-06,
+      "output_cost_per_token": 6e-06,
+      "output_cost_per_token_priority": 1.2e-05,
+      "cache_read_input_token_cost": 5e-07,
+      "cache_read_input_token_cost_priority": 1e-06,
+      "supports_cache_breakdown": true,
+      "long_context_input_token_threshold": 200000,
+      "long_context_input_cost_multiplier": 2,
+      "long_context_output_cost_multiplier": 2
+    },
     "grok-4.6": {
       "input_cost_per_token": 2e-06,
       "input_cost_per_token_priority": 4e-06,
@@ -1105,6 +1124,11 @@
     ],
     "grok": [
       {
+        "label": "Grok 4.7",
+        "from": "grok-4.7",
+        "to": "grok-4.7"
+      },
+      {
         "label": "Grok 4.6",
         "from": "grok-4.6",
         "to": "grok-4.6"
@@ -1117,7 +1141,7 @@
       {
         "label": "Grok Latest",
         "from": "grok-latest",
-        "to": "grok-4.6"
+        "to": "grok-4.7"
       },
       {
         "label": "Build 0.1",

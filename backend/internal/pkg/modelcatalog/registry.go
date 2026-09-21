@@ -218,7 +218,7 @@ func GrokDefaultChatModel() string {
 	if v := platform("grok").DefaultTestModel; v != "" {
 		return v
 	}
-	return "grok-4.6"
+	return "grok-4.7"
 }
 
 func GrokDefaultMapping() map[string]string {

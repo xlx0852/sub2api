@@ -181,7 +181,7 @@ func (s *BillingService) initFallbackPricing() {
 	// Ensure grok flagship key is always addressable via live DefaultChatModel string.
 	if p, ok := s.fallbackPrices[xai.CurrentDefaultChatModel()]; ok {
 		s.fallbackPrices[xai.CurrentDefaultChatModel()] = p
-	} else if p, ok := s.fallbackPrices["grok-4.6"]; ok {
+	} else if p, ok := s.fallbackPrices["grok-4.7"]; ok {
 		s.fallbackPrices[xai.CurrentDefaultChatModel()] = p
 	}
 }
@@ -435,8 +435,10 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	}
 
 	switch modelLower {
-	case "grok", "grok-latest", "grok-4.6", "grok-build-latest":
+	case "grok", "grok-latest", "grok-4.7", "grok-build-latest":
 		return s.fallbackPrice(xai.CurrentDefaultChatModel())
+	case "grok-4.6":
+		return s.fallbackPrice("grok-4.6")
 	case "grok-4.5", "grok-4.5-latest":
 		return s.fallbackPrice("grok-4.5")
 	case "grok-4.3":
@@ -455,9 +457,9 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 			}
 		}
 	}
-	// Cursor 自研 Composer 无公开价目；锚定 grok-4.6 兜底价，渠道价可覆盖。
+	// Cursor 自研 Composer 无公开价目；锚定 grok-4.7 兜底价，渠道价可覆盖。
 	if modelLower == "composer-2.5" || modelLower == "composer-2.5-fast" {
-		return s.fallbackPrice("grok-4.6")
+		return s.fallbackPrice("grok-4.7")
 	}
 
 	return nil

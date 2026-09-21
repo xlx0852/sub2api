@@ -102,8 +102,9 @@ describe('useModelWhitelist', () => {
     expect(models).not.toContain('gemini-3-pro-preview')
   })
 
-  it('xAI 模型列表包含 Grok 4.6 和官方别名', () => {
+  it('xAI 模型列表包含 Grok 4.7 和官方别名', () => {
     const models = getModelsByPlatform('grok')
+    expect(models).toContain('grok-4.7')
     expect(models).toContain('grok-4.6')
     expect(models).toContain('grok-4.5')
     expect(models).toContain('grok-4.5-latest')
@@ -119,15 +120,15 @@ describe('useModelWhitelist', () => {
 
 	it('强制刷新会重新请求模型目录并替换旧 Grok 快照', async () => {
 		getModelCatalogMock
-			.mockResolvedValueOnce({ platforms: { grok: { models: [{ id: 'grok-4.5' }] } } })
-			.mockResolvedValueOnce({ platforms: { grok: { models: [{ id: 'grok-4.6' }, { id: 'grok-4.5' }] } } })
+			.mockResolvedValueOnce({ platforms: { grok: { models: [{ id: 'grok-4.6' }] } } })
+			.mockResolvedValueOnce({ platforms: { grok: { models: [{ id: 'grok-4.7' }, { id: 'grok-4.6' }] } } })
 
 		await ensureModelCatalogLoaded({ force: true })
-		expect(getModelsByPlatform('grok')).toEqual(['grok-4.5'])
+		expect(getModelsByPlatform('grok')).toEqual(['grok-4.6'])
 		await ensureModelCatalogLoaded({ force: true })
 
 		expect(getModelCatalogMock).toHaveBeenCalledTimes(2)
-		expect(getModelsByPlatform('grok')).toEqual(['grok-4.6', 'grok-4.5'])
+		expect(getModelsByPlatform('grok')).toEqual(['grok-4.7', 'grok-4.6'])
 	})
 
   it('antigravity 模型列表不包含图片模型', () => {

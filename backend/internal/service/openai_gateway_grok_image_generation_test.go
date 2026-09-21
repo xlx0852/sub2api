@@ -24,6 +24,8 @@ func TestGrokSupportsNativeImageGeneration(t *testing.T) {
 		{model: "grok-4.6", want: true},
 		{model: "xai/grok-4.6", want: true},
 		{model: "grok-4.6-beta", want: true},
+		{model: "grok-4.7", want: true},
+		{model: "xai/grok-4.7", want: true},
 		{model: "grok-5", want: true},
 	}
 	for _, tt := range tests {
@@ -45,6 +47,7 @@ func TestPatchGrokResponsesBodyImageGenerationByModel(t *testing.T) {
 		{name: "grok-4.5 strips", model: "grok-4.5", wantKeep: false},
 		{name: "grok-4.20 strips", model: "grok-4.20-0309-reasoning", wantKeep: false},
 		{name: "grok-4.6 keeps", model: "grok-4.6", wantKeep: true},
+		{name: "grok-4.7 keeps", model: "grok-4.7", wantKeep: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

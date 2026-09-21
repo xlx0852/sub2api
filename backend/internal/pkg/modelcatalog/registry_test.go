@@ -30,7 +30,20 @@ func TestEmbeddedCatalogLoads(t *testing.T) {
 	if m := AntigravityDefaultMapping(); len(m) == 0 {
 		t.Fatalf("expected antigravity mapping")
 	}
-	entry, ok := ResolvePriceEntry("grok-4.5")
+	if GrokDefaultChatModel() != "grok-4.7" {
+		t.Fatalf("GrokDefaultChatModel() = %q, want grok-4.7", GrokDefaultChatModel())
+	}
+	entry, ok := ResolvePriceEntry("grok-4.7")
+	if !ok || entry.InputCostPerToken != 2e-6 || entry.OutputCostPerToken != 6e-6 || entry.CacheReadInputTokenCost != 0.5e-6 {
+		t.Fatalf("expected official grok-4.7 fallback pricing, got %+v ok=%v", entry, ok)
+	}
+	if entry.LongContextInputTokenThreshold != 200000 || entry.LongContextInputCostMultiplier != 2 || entry.LongContextOutputCostMultiplier != 2 {
+		t.Fatalf("expected grok-4.7 long-context pricing, got %+v", entry)
+	}
+	if entry.InputCostPerTokenPriority != 4e-6 || entry.OutputCostPerTokenPriority != 12e-6 || entry.CacheReadInputTokenCostPriority != 1e-6 {
+		t.Fatalf("expected grok-4.7 priority pricing, got %+v", entry)
+	}
+	entry, ok = ResolvePriceEntry("grok-4.5")
 	if !ok || entry.InputCostPerToken <= 0 {
 		t.Fatalf("expected grok-4.5 fallback pricing, got %+v ok=%v", entry, ok)
 	}
