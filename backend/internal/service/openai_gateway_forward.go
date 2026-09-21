@@ -331,6 +331,13 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			alignCodexTurnMetadataWithIsolatedSession(req.Header, isolated, isolated,
 				func(raw string) string { return isolateOpenAISessionID(apiKeyID, raw) })
 		}
+		// x-codex-routing-hint：官方客户端（App / TUI / exec）在 /responses 上
+		// 100% 都会发送它，且实测与 body.model 严格相等（均为客户端请求的模型，
+		// 而非实际服务的模型）。网关此前从不发，是一条稳定的缺失特征。
+		// 这里取**出站 body 的 model**，保证与 body 自洽（网关可能已改写模型）。
+		if model := strings.TrimSpace(gjson.GetBytes(body, "model").String()); model != "" {
+			req.Header.Set("x-codex-routing-hint", "model="+model)
+		}
 	} else if isOpenAIResponsesCompactPath(c) {
 		// compact 上游是 unary JSON 协议：API-key 账号也显式声明 Accept，
 		// 避免 OpenAI 兼容网关按 SSE 返回（#3777 期望行为 4）。
@@ -358,7 +365,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 
 	// 终态收口：originator 必须与最终 User-Agent 首段配套且为官方身份，否则上游 404（issue #3901）。
 	if account.Type == AccountTypeOAuth {
-		s.codexIdentity.enforceHeadersWithUA(req.Header, s.codexIdentityOverrideUA(account))
+		s.codexIdentity.enforceHeadersWithUA(req.Header, s.codexIdentityCandidateUA(c, account))
 		s.applyOpenAICodexTurnStateReuseForModel(req.Header, account, strings.TrimSpace(gjson.GetBytes(body, "model").String()))
 	}
 

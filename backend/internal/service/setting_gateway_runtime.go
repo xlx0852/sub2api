@@ -357,6 +357,11 @@ func (s *SettingService) GetOpenAICodexCanonicalUserAgent(ctx context.Context) s
 		return buildCodexCLIUserAgent(version)
 	}
 	if rebuilt := openai.SetCodexUserAgentVersion(ua, version); rebuilt != "" {
+		// 规范 UA 必须是完整形态：官方客户端 UA 一律带 `(<originator>; <版本>)` 尾段，
+		// 缺段本身即为可识别特征。面板只填了首段/OS 组时在这里补齐。
+		if origin, _, ok := openai.PairCodexClientIdentity(rebuilt); ok {
+			rebuilt = openai.EnsureCodexUserAgentTrailer(rebuilt, origin, version)
+		}
 		return rebuilt
 	}
 	// 非 `{client}/{version}` 形态：交给 PairCodexClientIdentity 判定，

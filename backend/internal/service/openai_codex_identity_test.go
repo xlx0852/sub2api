@@ -122,7 +122,7 @@ func TestEnforceCodexIdentityHeadersWithAccountOverrideUA(t *testing.T) {
 		enforceCodexIdentityHeadersWithUA(h, "codex_vscode/0.150.0 (Ubuntu 22.4.0; x86_64) vscode")
 
 		require.Equal(t, "codex_vscode", h.Get("originator"))
-		require.Equal(t, "codex_vscode/"+codexCLIVersion+" (Ubuntu 22.4.0; x86_64) vscode", h.Get("user-agent"))
+		require.Equal(t, "codex_vscode/"+codexCLIVersion+" (Ubuntu 22.4.0; x86_64) vscode (codex_vscode; "+codexCLIVersion+")", h.Get("user-agent"))
 		require.Equal(t, codexCLIVersion, h.Get("version"))
 	})
 
@@ -147,7 +147,7 @@ func TestEnforceCodexIdentityHeadersWithAccountOverrideUA(t *testing.T) {
 		enforceCodexIdentityHeadersWithUA(h, "codex_cli_rs/0.125.0 (Ubuntu 22.4.0; x86_64) xterm-256color")
 
 		require.Equal(t, "codex_cli_rs", h.Get("originator"))
-		require.Equal(t, "codex_cli_rs/"+codexCLIVersion+" (Ubuntu 22.4.0; x86_64) xterm-256color", h.Get("user-agent"))
+		require.Equal(t, "codex_cli_rs/"+codexCLIVersion+" (Ubuntu 22.4.0; x86_64) xterm-256color"+codexUserAgentTrailer, h.Get("user-agent"))
 		require.Equal(t, codexCLIVersion, h.Get("version"))
 		require.NotContains(t, h.Get("user-agent"), "0.125.0")
 	})
@@ -164,7 +164,7 @@ func TestEnforceCodexIdentityHeadersWithAccountOverrideUA(t *testing.T) {
 		id.enforceHeadersWithUA(h, "codex-tui/0.125.0 (Mac OS X 14.0; arm64) iTerm")
 
 		require.Equal(t, "codex-tui", h.Get("originator"))
-		require.Equal(t, "codex-tui/0.200.1 (Mac OS X 14.0; arm64) iTerm", h.Get("user-agent"))
+		require.Equal(t, "codex-tui/0.200.1 (Mac OS X 14.0; arm64) iTerm (codex-tui; 0.200.1)", h.Get("user-agent"))
 		require.Equal(t, "0.200.1", h.Get("version"))
 	})
 }
@@ -172,7 +172,7 @@ func TestEnforceCodexIdentityHeadersWithAccountOverrideUA(t *testing.T) {
 // 规范身份跟随注入的解析器（后台面板 UA / 自动同步版本号），无需重启或发版。
 func TestEnforceCodexIdentityHeadersFollowsCanonicalResolver(t *testing.T) {
 	id := newCodexIdentity(true, func() string {
-		return "codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+		return "codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color (codex_cli_rs; 0.200.1)"
 	})
 
 	h := make(http.Header)
@@ -182,7 +182,7 @@ func TestEnforceCodexIdentityHeadersFollowsCanonicalResolver(t *testing.T) {
 	id.enforceHeaders(h)
 
 	require.Equal(t, "codex_cli_rs", h.Get("originator"))
-	require.Equal(t, "codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color", h.Get("user-agent"))
+	require.Equal(t, "codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color (codex_cli_rs; 0.200.1)", h.Get("user-agent"))
 	require.Equal(t, "0.200.1", h.Get("version"))
 }
 

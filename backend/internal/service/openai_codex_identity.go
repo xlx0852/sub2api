@@ -118,6 +118,9 @@ func (c *CodexIdentity) resolveOutboundIdentity(candidateUA string) codexOutboun
 	// 生效版本只有一个来源：规范身份（面板版本号 → 自动同步值 → 内置常量，见
 	// SettingService.GetOpenAICodexClientVersion）。UA 与 version 头由此同源派生。
 	version := codexClientVersionFromUA(canonical)
+	// 必须在替换版本之前补尾段：TUI/exec 的尾段是同一个版本号，需一起换；
+	// ChatGPT.app 的尾段是构建号，必须保留。顺序反了就换不动。
+	pairedUA = openai.EnsureCodexUserAgentTrailer(pairedUA, originator, version)
 	if rebuilt := openai.SetCodexUserAgentVersion(pairedUA, version); rebuilt != "" {
 		pairedUA = rebuilt
 	}

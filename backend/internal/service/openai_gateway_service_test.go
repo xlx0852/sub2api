@@ -2757,25 +2757,28 @@ func TestOpenAIBuildUpstreamRequestPreservesCompactPathForAPIKeyBaseURL(t *testi
 func TestOpenAIBuildUpstreamRequestOAuthOfficialClientOriginatorCompatibility(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	// 上游要求 originator 与最终 User-Agent 首段配套（issue #3901）：
-	// originator 一律由最终 UA 推导；推导不出官方身份时整体回退默认 Codex CLI 身份。
+	// 上游要求 originator 与最终 User-Agent 首段配套（issue #3901）。
+	//
+	// 出站身份规则（2026-09-22 调整）：
+	//   - 入站 UA 属于**官方 Codex 家族** → 镜像该家族（originator 取自 UA 首段，
+	//     UA 形状/平台/终端指纹沿用客户端），版本段仍由规范版本重建以免被钉在陈旧版本；
+	//   - 第三方或无法识别的 UA → 整体回退规范 Codex CLI 身份。
+	//
+	// 之所以改为镜像：App 与 CLI 的 turn-metadata 内容不同且由客户端原样带出，
+	// 固定发某一种身份会让另一类流量出现「头说 CLI、元数据说 Desktop」的自相矛盾。
+	// 原安全目标不变：任何请求都不得带第三方或陈旧身份出站。
 	tests := []struct {
-		name           string
-		userAgent      string
-		originator     string
-		wantOriginator string
-		wantUA         string
+		name         string
+		userAgent    string
+		originator   string
+		wantMirrored bool
+		wantOrigin   string // wantMirrored=true 时忽略，改由 UA 首段推导
 	}{
-		{name: "client ua is masked to canonical identity", userAgent: "Codex Desktop/1.2.3", wantOriginator: "codex_cli_rs", wantUA: codexCLIUserAgent},
-		{
-			name:           "mismatched originator repaired from ua",
-			userAgent:      "codex-tui/0.140.2 (Mac OS X 14.0; arm64) iTerm (codex-tui; 0.140.2)",
-			originator:     "codex_cli_rs",
-			wantOriginator: "codex_cli_rs",
-			wantUA:         codexCLIUserAgent,
-		},
-		{name: "official originator without ua falls back to default identity", originator: "codex_vscode", wantOriginator: "codex_cli_rs", wantUA: codexCLIUserAgent},
-		{name: "third-party ua masked to default identity", userAgent: "luna/1.2.0", wantOriginator: "codex_cli_rs", wantUA: codexCLIUserAgent},
+		{name: "官方 App UA 镜像", userAgent: "Codex Desktop/1.2.3 (Mac OS 27.0.0; arm64) unknown (Codex Desktop; 26.915.31945)", wantMirrored: true},
+		{name: "官方 TUI UA 镜像", userAgent: "codex-tui/0.140.2 (Mac OS X 14.0; arm64) iTerm (codex-tui; 0.140.2)", wantMirrored: true},
+		{name: "originator 与 UA 不符时按 UA 修正", userAgent: "codex-tui/0.140.2 (Mac OS X 14.0; arm64) iTerm (codex-tui; 0.140.2)", originator: "codex_cli_rs", wantMirrored: true},
+		{name: "只有官方 originator 无 UA 时回退规范身份", originator: "codex_vscode", wantOrigin: "codex_cli_rs"},
+		{name: "第三方 UA 回退规范身份", userAgent: "luna/1.2.0", wantOrigin: "codex_cli_rs"},
 	}
 
 	for _, tt := range tests {
@@ -2799,8 +2802,22 @@ func TestOpenAIBuildUpstreamRequestOAuthOfficialClientOriginatorCompatibility(t 
 			isCodexCLI := openai.IsCodexOfficialClientByHeaders(c.GetHeader("User-Agent"), c.GetHeader("originator"))
 			req, err := svc.buildUpstreamRequest(c.Request.Context(), c, account, []byte(`{"model":"gpt-5"}`), "token", false, "", isCodexCLI)
 			require.NoError(t, err)
-			require.Equal(t, tt.wantOriginator, req.Header.Get("originator"))
-			require.Equal(t, tt.wantUA, req.Header.Get("User-Agent"))
+
+			gotUA := req.Header.Get("User-Agent")
+			gotOrigin := req.Header.Get("originator")
+			if tt.wantMirrored {
+				family := strings.TrimSpace(tt.userAgent)
+				if i := strings.IndexByte(family, '/'); i > 0 {
+					family = family[:i]
+				}
+				require.Equal(t, family, gotOrigin, "官方家族应镜像为客户端自身身份")
+				require.True(t, strings.HasPrefix(gotUA, family+"/"), "UA 首段必须与 originator 配套：ua=%q", gotUA)
+				require.Contains(t, gotUA, "("+family+"; ", "官方家族 UA 必须带 (originator; 版本) 尾段：ua=%q", gotUA)
+			} else {
+				require.Equal(t, tt.wantOrigin, gotOrigin)
+				require.Equal(t, codexCLIUserAgent, gotUA)
+			}
+			require.NotContains(t, gotUA, "luna/", "第三方身份绝不外发")
 		})
 	}
 }

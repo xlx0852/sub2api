@@ -76,9 +76,11 @@ func TestForwardAlphaSearchOAuthStripsClientMetadataForAllFingerprintModes(t *te
 		wantThreadHeader      bool
 	}{
 		{mode: "off", path: "/alpha/search"},
-		{mode: "device", path: "/v1/alpha/search", wantFingerprintHeader: true},
-		{mode: "session", path: "/backend-api/codex/alpha/search", wantFingerprintHeader: true, wantThreadHeader: true},
-		{mode: "full", path: "/v1/alpha/search", wantFingerprintHeader: true, wantThreadHeader: true},
+		// wantFingerprintHeader 恒为 false：真实客户端都不发 x-codex-installation-id 独立头，
+		// 网关已不再新增它（仅收敛进 turn-metadata），故任何模式都不应出现该头。
+		{mode: "device", path: "/v1/alpha/search"},
+		{mode: "session", path: "/backend-api/codex/alpha/search", wantThreadHeader: true},
+		{mode: "full", path: "/v1/alpha/search", wantThreadHeader: true},
 	}
 
 	for _, tt := range modes {

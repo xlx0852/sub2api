@@ -334,7 +334,7 @@ func TestGetOpenAICodexCanonicalUserAgentBuildsFromVersion(t *testing.T) {
 	}}, nil)
 
 	require.Equal(t,
-		"codex_cli_rs/0.200.1"+codexCLIUserAgentSuffix,
+		"codex_cli_rs/0.200.1"+codexCLIUserAgentSuffix+" (codex_cli_rs; 0.200.1)",
 		svc.GetOpenAICodexCanonicalUserAgent(context.Background()),
 	)
 }
@@ -351,7 +351,7 @@ func TestGetOpenAICodexCanonicalUserAgentRebuildsPanelUAVersion(t *testing.T) {
 		}}, nil)
 
 		require.Equal(t,
-			"codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color",
+			"codex_cli_rs/0.200.1 (Ubuntu 22.4.0; x86_64) xterm-256color (codex_cli_rs; 0.200.1)",
 			svc.GetOpenAICodexCanonicalUserAgent(context.Background()),
 		)
 	})
@@ -363,7 +363,7 @@ func TestGetOpenAICodexCanonicalUserAgentRebuildsPanelUAVersion(t *testing.T) {
 		}}, nil)
 
 		require.Equal(t,
-			"codex_cli_rs/0.200.1 (Mac OS X 15.1.0; arm64) iTerm.app",
+			"codex_cli_rs/0.200.1 (Mac OS X 15.1.0; arm64) iTerm.app (codex_cli_rs; 0.200.1)",
 			svc.GetOpenAICodexCanonicalUserAgent(context.Background()),
 		)
 	})
@@ -377,7 +377,7 @@ func TestGetOpenAICodexCanonicalUserAgentRebuildsPanelUAVersion(t *testing.T) {
 		}}, nil)
 
 		require.Equal(t,
-			"codex_cli_rs/0.150.0 (Ubuntu 22.4.0; x86_64) xterm-256color",
+			"codex_cli_rs/0.150.0 (Ubuntu 22.4.0; x86_64) xterm-256color (codex_cli_rs; 0.150.0)",
 			svc.GetOpenAICodexCanonicalUserAgent(context.Background()),
 		)
 	})

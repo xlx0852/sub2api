@@ -48,10 +48,16 @@ const (
 	// a newer release; this value must never advertise an unreleased version.
 	codexCLIVersion         = "0.153.3"
 	codexCLIUserAgentSuffix = " (Ubuntu 22.4.0; x86_64) xterm-256color"
+	// codexUserAgentTrailer 是官方客户端 UA 统一具备的尾段 `(<originator>; <版本>)`。
+	// 2026-09-22 对 App / TUI / exec 三个入口的**全量头**抓包显示三者无一例外都有该段：
+	//	codex-tui/0.155.1 (Mac OS 27.0.0; arm64) xterm-256color (codex-tui; 0.155.1)
+	//	Codex Desktop/0.155.0-alpha.9.2 (...) unknown (Codex Desktop; 26.915.31945)
+	// 规范 UA 构造上缺这一段会形成稳定的可识别特征，故常量本身必须完整。
+	codexUserAgentTrailer = " (codex_cli_rs; " + codexCLIVersion + ")"
 	// codexCLIUserAgent 是编译期兜底 UA；运行时优先使用由后台版本号拼出的规范 UA。
 	// 版本段必须来自 codexCLIVersion：UA 与 version 头是同一个版本声明的两个出口，
 	// 各自硬编码会漂移成互相矛盾的身份。
-	codexCLIUserAgent = "codex_cli_rs/" + codexCLIVersion + codexCLIUserAgentSuffix
+	codexCLIUserAgent = "codex_cli_rs/" + codexCLIVersion + codexCLIUserAgentSuffix + codexUserAgentTrailer
 	// codex_cli_only 拒绝时单个请求头日志长度上限（字符）
 	codexCLIOnlyHeaderValueMaxBytes = 256
 
@@ -1293,6 +1299,48 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 // 跨账号多样，避免所有账号共用同一「机器指纹」暴露网关聚合特征。
 // 派生值仍是官方 Codex 形态（codex_cli_rs/{version} (...); ... 终端），
 // 经 resolveOutboundIdentity 保证 originator/UA 配套（issue #3901）。
+// codexIdentityCandidateUA 选择出站身份的候选 UA，实现「按入站客户端类型镜像」。
+//
+// 为什么需要镜像：App 与 CLI 的 turn-metadata 内容不同（App 独有
+// turn_trigger=composer / workspace_kind=projectless 等），而 turn-metadata 由客户端原样带出。
+// 若网关固定发某一种身份，另一类流量必然出现「头说 CLI、元数据说 Desktop」的自相矛盾，
+// 而这类矛盾比统一成任意一种都更易被识别（2026-09-22 实测确认）。
+//
+// 优先级：
+//  1. 账号级显式 UA（管理员配置）—— 显式配置优先于自动镜像；
+//  2. 入站 UA 属于官方 Codex 家族 → 用它自己作为候选，使 originator / 平台 /
+//     终端指纹与客户端一致（版本段仍由规范版本重建，避免被钉在陈旧版本）；
+//  3. 回退到账号派生 UA（现状）。
+func (s *OpenAIGatewayService) codexIdentityCandidateUA(c *gin.Context, account *Account) string {
+	if account == nil {
+		return ""
+	}
+	if ua := strings.TrimSpace(account.GetOpenAIUserAgent()); ua != "" {
+		return ua
+	}
+	if c != nil && c.Request != nil {
+		inbound := strings.TrimSpace(c.Request.Header.Get("User-Agent"))
+		if _, _, ok := openai.PairCodexClientIdentity(inbound); ok && isCompleteCodexClientUA(inbound) {
+			return inbound
+		}
+	}
+	return derivedAccountCodexUserAgent(account.ID)
+}
+
+// isCompleteCodexClientUA 判断入站 UA 是否为**完整形态**的 Codex 客户端 UA。
+//
+// 完整形态 = `{client}/{version} (<OS>; <arch>) <终端或 unknown> [(name; version)]`，
+// 即至少带一个 OS 组。只有完整形态才适合镜像：残缺 UA（如裸 `codex_cli_rs/0.1.0`）
+// 镜像后会产生现实中不存在的 UA 形态（没有 OS / 终端段），比统一到账号派生身份更糟，
+// 反而更易被识别。缺失量因此回退到带完整 OS profile 的账号派生 UA。
+func isCompleteCodexClientUA(ua string) bool {
+	ua = strings.TrimSpace(ua)
+	if ua == "" || !strings.ContainsRune(ua, '(') || !strings.ContainsRune(ua, ')') {
+		return false
+	}
+	return strings.TrimSpace(openai.CodexUserAgentVersion(ua)) != ""
+}
+
 func (s *OpenAIGatewayService) codexIdentityOverrideUA(account *Account) string {
 	if account == nil {
 		return ""
@@ -1327,5 +1375,7 @@ func derivedAccountCodexUserAgent(accountID int64) string {
 	// 稳定散列到 profile 池
 	h := sha256.Sum256([]byte(fmt.Sprintf("codex-ua-profile:v1:%d", accountID)))
 	idx := binary.BigEndian.Uint32(h[:4]) % uint32(len(codexUAOSProfiles))
-	return "codex_cli_rs/" + codexCLIVersion + codexUAOSProfiles[idx]
+	// 尾段与首段版本必须一致：EnsureCodexUserAgentTrailer 依赖该一致性来识别
+	// 「尾段是版本号」还是「尾段是构建号」。
+	return "codex_cli_rs/" + codexCLIVersion + codexUAOSProfiles[idx] + codexUserAgentTrailer
 }

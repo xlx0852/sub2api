@@ -1365,8 +1365,12 @@ func TestOpenAIGatewayService_OAuthPassthrough_CodexTuiIdentityUnified(t *testin
 	_, err := svc.Forward(context.Background(), c, account, inputBody)
 	require.NoError(t, err)
 	require.NotNil(t, upstream.lastReq)
-	require.Equal(t, derivedAccountCodexUserAgent(123), upstream.lastReq.Header.Get("User-Agent"))
-	require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("originator"))
+	// 出站身份按入站客户端镜像：官方 codex-tui UA 的**形状/平台/终端指纹**逐字保留，
+	// 只把版本段（首段与尾段）换成规范版本，避免被钉在陈旧版本。
+	// 该用例守护的不变量不变：originator 必须与最终 UA 首段配套（issue #3901）。
+	require.Equal(t, "codex-tui/"+codexCLIVersion+" (Mac OS X 14.0; arm64) iTerm (codex-tui; "+codexCLIVersion+")",
+		upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, "codex-tui", upstream.lastReq.Header.Get("originator"))
 	require.Equal(t, codexCLIVersion, upstream.lastReq.Header.Get("version"))
 }
 

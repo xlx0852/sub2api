@@ -131,6 +131,72 @@ func isCodexOfficialClientRequest(userAgent string, strict bool) bool {
 // （isCodexOfficialClientRequest 传入已小写化的 UA 做匹配；PairCodexClientIdentity
 // 传入原始大小写以保留 originator 的真实大小写）。
 // 若无法解析则返回空字符串。
+// EnsureCodexUserAgentTrailer 保证 UA 末尾带有官方客户端统一具备的 `(<originator>; <版本>)` 段。
+//
+// 依据 2026-09-22 对三个入口的**全量头**抓包，三者无一例外都有该段：
+//
+//	codex-tui/0.155.1 (Mac OS 27.0.0; arm64) xterm-256color (codex-tui; 0.155.1)
+//	codex_exec/0.155.1 (Mac OS 27.0.0; arm64) unknown (codex_exec; 0.155.1)
+//	Codex Desktop/0.155.0-alpha.9.2 (...) unknown (Codex Desktop; 26.915.31945)
+//
+// 而网关的规范 UA（codex_cli_rs/<ver> + " (Ubuntu …) xterm-256color"）构造上缺这一段，
+// 是一条稳定的可识别特征。
+//
+// 已有尾段时的处理：**只有当尾段等于该 UA 首段原本的版本时**才同步为目标版本。
+// 依据是实测的两种真实形态：
+//   - TUI/exec：首段与尾段都是同一个版本号（`codex-tui/0.155.1 … (codex-tui; 0.155.1)`），
+//     网关换版本时两处必须一起换，否则自相矛盾；
+//   - ChatGPT.app：尾段是**构建号**（`… (Codex Desktop; 26.915.31945)`）而非版本，
+//     与首段本就不同，必须原样保留 —— 把它改成版本号会制造现实中不存在的形态。
+//
+// 不用「像不像版本号」的形状判断：`26.915.31945` 同样能解析成三段数字，形状无法区分。
+func EnsureCodexUserAgentTrailer(userAgent, originator, version string) string {
+	ua := strings.TrimSpace(userAgent)
+	originator = strings.TrimSpace(originator)
+	version = strings.TrimSpace(version)
+	if ua == "" || originator == "" || version == "" {
+		return ua
+	}
+	// 只有「最后一个括号组的名字部分是官方客户端标识」时才算已有尾段。
+	// 否则 `(Ubuntu 22.4.0; x86_64)` 这类 **OS 组**会被误认成尾段，
+	// 导致本该追加的 UA 被判定为已有（实测踩过）。
+	if name := codexUATrailerName(ua); name != "" && IsCodexOfficialClientOriginator(name) {
+		return syncCodexUserAgentTrailerVersion(ua, version)
+	}
+	return ua + " (" + originator + "; " + version + ")"
+}
+
+// syncCodexUserAgentTrailerVersion 仅当尾段版本与首段版本一致时改写尾段。
+//
+// 实测两种真实形态（2026-09-22）：
+//   - TUI/exec：首段与尾段是同一个版本号（`codex-tui/0.155.1 … (codex-tui; 0.155.1)`），
+//     换版本时两处必须一起换，否则自相矛盾；
+//   - ChatGPT.app：尾段是**构建号**（`… (Codex Desktop; 26.915.31945)`）而非版本，
+//     与首段本就不同，必须原样保留 —— 改成版本号会制造现实中不存在的形态。
+//
+// 不用「像不像版本号」的形状判断：`26.915.31945` 同样能解析成三段数字，形状无法区分。
+func syncCodexUserAgentTrailerVersion(ua, version string) string {
+	last := strings.LastIndex(ua, "(")
+	if last < 0 {
+		return ua
+	}
+	rest := ua[last+1:]
+	closeIdx := strings.Index(rest, ")")
+	if closeIdx < 0 {
+		return ua
+	}
+	inner := rest[:closeIdx]
+	semi := strings.Index(inner, ";")
+	if semi < 0 {
+		return ua
+	}
+	trailerValue := strings.TrimSpace(inner[semi+1:])
+	if trailerValue == "" || trailerValue != strings.TrimSpace(CodexUserAgentVersion(ua)) || trailerValue == version {
+		return ua
+	}
+	return ua[:last] + "(" + inner[:semi] + "; " + version + ")" + rest[closeIdx+1:]
+}
+
 func codexUATrailerName(ua string) string {
 	last := strings.LastIndex(ua, "(")
 	if last < 0 {
@@ -254,7 +320,6 @@ func canonicalizeCodexOriginator(name string) string {
 	}
 	return name
 }
-
 
 // CodexCLIOriginator 官方 Codex CLI 默认 originator（codex-rs DEFAULT_ORIGINATOR），
 // 也是身份归一化的目标身份。

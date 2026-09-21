@@ -13,6 +13,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 // 抓包式验证：用假上游跑**真实 Forward 路径**，把网关实际发出的头与体原样打印出来。
@@ -188,18 +189,24 @@ func TestGatewayOutboundCodexFingerprint_ObservedShape(t *testing.T) {
 			}
 
 			// ---------- 锁定不变量 ----------
-			// 1) 身份统一对 OAuth 出站始终生效：与指纹模式无关。
-			require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("originator"))
-			require.True(t, strings.HasPrefix(upstream.lastReq.Header.Get("user-agent"), "codex_cli_rs/"))
+			// 1) 出站身份按入站客户端镜像（官方家族），且 UA 首段与 originator 配套。
+			require.Equal(t, "codex_exec", upstream.lastReq.Header.Get("originator"),
+				"应镜像入站客户端的 originator，而不是固定 codex_cli_rs")
+			require.True(t, strings.HasPrefix(upstream.lastReq.Header.Get("user-agent"), "codex_exec/"))
+			require.Contains(t, upstream.lastReq.Header.Get("user-agent"), "(codex_exec; ",
+				"UA 必须带 (originator; 版本) 尾段")
 			require.NotEmpty(t, upstream.lastReq.Header.Get("version"))
-			// 2) 下划线兼容头被删除（真实客户端会发它）。
+			// 2) routing-hint 必须与出站 body 的 model 一致（三个真实客户端都发它）。
+			require.Equal(t, "model="+gjson.GetBytes(upstream.lastBody, "model").String(),
+				upstream.lastReq.Header.Get("x-codex-routing-hint"))
+			// 3) 下划线兼容头被删除。
 			require.Empty(t, upstream.lastReq.Header.Get("session_id"))
-			// 3) off 模式并非纯透传：thread/session 被隔离为另一值。
+			// 4) off 模式并非纯透传：thread/session 被隔离为另一值。
 			if mode == "off" || mode == "device" {
 				require.NotEqual(t, clientThread, upstream.lastReq.Header.Get("thread-id"),
 					"off/device 模式下 header thread-id 应已被隔离")
 			}
-			// 4) session/full 模式：头 turn-metadata 与体 client_metadata 的派生身份必须一致。
+			// 5) session/full 模式：头 turn-metadata 与体 client_metadata 的派生身份必须一致。
 			if mode == "session" || mode == "full" {
 				var hm, bm map[string]any
 				require.NoError(t, json.Unmarshal([]byte(upstream.lastReq.Header.Get("x-codex-turn-metadata")), &hm))
@@ -364,5 +371,83 @@ func realCodexClientRequestHeaders(thread, install, turnMetadata string) map[str
 		// ChatGPT.app 独有：设备证明（密码学可验证，内含 locale/时区/bundle id）。
 		// CLI 两个入口都不发这个头。
 		"x-oai-attestation": `{"v":1,"s":0,"t":"v1.client-attestation-placeholder"}`,
+	}
+}
+
+// --- 按入站客户端类型镜像出站身份 ---
+
+func TestCodexIdentityCandidateUA_MirrorsOfficialClientFamily(t *testing.T) {
+	svc := newOverloadRotationTestService(false)
+	account := newTestOAuthAccount(7001, nil)
+
+	cases := []struct {
+		name    string
+		inbound string
+		wantMir bool
+	}{
+		{"TUI", "codex-tui/0.155.1 (Mac OS 27.0.0; arm64) xterm-256color (codex-tui; 0.155.1)", true},
+		{"exec", "codex_exec/0.155.1 (Mac OS 27.0.0; arm64) unknown (codex_exec; 0.155.1)", true},
+		{"Desktop", "Codex Desktop/0.155.0-alpha.9.2 (Mac OS 27.0.0; arm64) unknown (Codex Desktop; 26.915.31945)", true},
+		{"非官方客户端", "MyCustomClient/1.2.3 (Linux; x86_64)", false},
+		{"空", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := newFingerprintTestContext("sess")
+			if tc.inbound != "" {
+				c.Request.Header.Set("User-Agent", tc.inbound)
+			}
+			got := svc.codexIdentityCandidateUA(c, account)
+			if tc.wantMir {
+				require.Equal(t, tc.inbound, got, "官方家族应镜像入站 UA")
+			} else {
+				require.NotEqual(t, tc.inbound, got, "非官方客户端不得被镜像")
+				require.True(t, strings.HasPrefix(got, "codex_cli_rs/"), "应回退到账号派生 UA")
+			}
+		})
+	}
+}
+
+// 管理员显式配置的账号级 UA 优先于自动镜像（显式意图不被覆盖）。
+func TestCodexIdentityCandidateUA_ExplicitAccountUAPrecedence(t *testing.T) {
+	svc := newOverloadRotationTestService(false)
+	account := newTestOAuthAccount(7002, nil)
+	// GetOpenAIUserAgent 读的是 Credentials.user_agent（不是 extra）。
+	account.Credentials = map[string]any{"user_agent": "PinnedAgent/9.9.9 (Plan9; mips)"}
+	c := newFingerprintTestContext("sess")
+	c.Request.Header.Set("User-Agent", "codex-tui/0.155.1 (Mac OS 27.0.0; arm64) xterm-256color (codex-tui; 0.155.1)")
+	require.Equal(t, "PinnedAgent/9.9.9 (Plan9; mips)", svc.codexIdentityCandidateUA(c, account))
+}
+
+// 端到端：镜像后出站 originator 与 UA 首段一致，且都跟随客户端家族。
+func TestCodexIdentityCandidateUA_EndToEndIdentityIsSelfConsistent(t *testing.T) {
+	cfg := &config.Config{}
+	identity := newCodexIdentityFromConfig(cfg, nil)
+	for _, inbound := range []string{
+		"codex-tui/0.155.1 (Mac OS 27.0.0; arm64) xterm-256color (codex-tui; 0.155.1)",
+		"codex_exec/0.155.1 (Mac OS 27.0.0; arm64) unknown (codex_exec; 0.155.1)",
+	} {
+		resolved := identity.resolveOutboundIdentity(inbound)
+		require.True(t, strings.HasPrefix(resolved.userAgent, resolved.originator+"/"),
+			"UA 首段必须与 originator 配套（上游会校验，issue #3901）：ua=%q og=%q", resolved.userAgent, resolved.originator)
+	}
+}
+
+// 残缺的官方 UA（无 OS 组）不得被镜像：镜像会产出不存在的 UA 形态。
+func TestCodexIdentityCandidateUA_RejectsIncompleteOfficialUA(t *testing.T) {
+	svc := newOverloadRotationTestService(false)
+	account := newTestOAuthAccount(7003, nil)
+	for _, inbound := range []string{
+		"codex_cli_rs/0.1.0",
+		"codex_cli_rs/0.144.1",
+		"codex_cli_rs/",
+	} {
+		c := newFingerprintTestContext("sess")
+		c.Request.Header.Set("User-Agent", inbound)
+		got := svc.codexIdentityCandidateUA(c, account)
+		require.NotEqual(t, inbound, got, "残缺 UA 不得被镜像：%q", inbound)
+		require.True(t, strings.HasPrefix(got, "codex_cli_rs/"), "应回退账号派生 UA")
+		require.Contains(t, got, "(", "回退 UA 必须带 OS 组")
+		require.Contains(t, got, ")", "回退 UA 必须带 OS 组")
 	}
 }

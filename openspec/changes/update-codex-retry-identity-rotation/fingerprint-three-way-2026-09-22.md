@@ -94,10 +94,33 @@ base64 解出可读片段：`zh-CN` / `Asia/Shanghai` / `5c18dd97-8646-4a92-8144
    拿一个入口的结论推广到「CLI 整体」是错的（我犯过两次）。
 3. **「终端串」不能作为判假依据**：TUI 就用 `xterm-256color`。真正的判据是**尾段的有无**。
 
-## 七、下一步可验证的动作
+## 七、阶段 1 实现记录（2026-09-22）
+
+按「扮 App」方向落地了四项**自洽性**修复（不含 attestation）：
+
+| # | 改动 | 位置 |
+|---|---|---|
+| 1 | 补 `x-codex-routing-hint: model=<出站 body 的 model>` | `openai_gateway_forward.go` |
+| 2 | UA 保证带 `(<originator>; <版本>)` 尾段；规范 UA 常量本身补全 | `openai/request.go`、`codexCLIUserAgent` |
+| 3 | 不再新增 `x-codex-installation-id` 独立头（只保留在 turn-metadata 内） | `openai_codex_fingerprint.go` |
+| 4 | **按入站客户端类型镜像出站身份**（originator + UA 形状/平台/终端） | `openai_gateway_service.go` `codexIdentityCandidateUA` |
+
+镜像的优先级：账号级显式 UA > 官方 Codex 家族（镜像）> 账号派生 UA（回退）。
+
+**镜像必须带完整性守卫**：残缺 UA（如裸 `codex_cli_rs/0.1.0`，无 OS 组）镜像后会产生现实中
+不存在的 UA 形态（`codex_cli_rs/0.153.3 (codex_cli_rs; 0.153.3)`），比统一到账号派生身份更糟。
+因此只镜像「至少带一个 OS 组」的完整形态，其余回退。这条由实测中的既有测试暴露。
+
+尾段同步规则（`EnsureCodexUserAgentTrailer`）：**仅当尾段等于首段原版本时**才随版本改写；
+ChatGPT.app 的尾段是构建号（`26.915.31945`）与首段版本本就不同，必须原样保留。
+不用「像不像版本号」的形状判断 —— `26.915.31945` 同样能解析成三段数字。
+
+## 八、下一步可验证的动作
 
 | 动作 | 说明 | 风险 |
 |---|---|---|
 | 把 outbound 对齐到 **CLI** 身份 | 补 UA 尾段、删 `version`、补 `x-codex-routing-hint`、增 `zstd` | 中（`version` 删除需单账号先验） |
 | 给 `turn-metadata` 对齐 CLI 语义 | 去掉/伪造 Desktop 独有字段，或反过来把 UA 换成 Desktop | 需先决定「扮 CLI 还是扮 Desktop」 |
-| 测 attestation 影响 | 无法生成，只能测「有/无」在上游的表现差异 | 需要上游可观测指标 |
+| 阶段 2：删 `version` 头 | 三个真实客户端都不发 | ⚠️ 需单账号先验 404 风险 |
+| 阶段 2：转发 App 的 `x-oai-attestation` | token 内无账号标识（只有 bundle/locale/tz/设备 UUID） | 需接受隐私代价 + 单账号灰度 |
+| 阶段 3：`content-encoding: zstd` | 真实客户端会压缩请求体 | 待评估 |

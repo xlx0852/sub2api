@@ -151,7 +151,9 @@ func TestApplyCodexFingerprintHeaders_DeviceMode(t *testing.T) {
 	ids := resolveCodexFingerprintIDsFromRequest(account, nil)
 	applyCodexFingerprintHeaders(h, ids)
 
-	assert.Equal(t, "converged-device", h.Get("x-codex-installation-id"), "installation_id 应收敛")
+	// 真实客户端（App/TUI/exec）都不发 x-codex-installation-id 独立头，只把它放在
+	// turn-metadata 里；网关因此不再新增该头，客户端自带值原样保留（透传白名单）。
+	assert.Equal(t, "user-install", h.Get("x-codex-installation-id"), "网关不应改写/新增该头")
 	assert.Equal(t, "user-window:0", h.Get("x-codex-window-id"), "device 模式不改写 window_id")
 
 	var meta map[string]any
@@ -185,7 +187,8 @@ func TestApplyCodexFingerprintHeaders_SessionMode(t *testing.T) {
 	convergedSession := resolveConvergedSessionID(account)
 	convergedThread := resolveConvergedThreadID(account, "client-session-aaa", 0, 0)
 
-	assert.Equal(t, convergedInstall, h.Get("x-codex-installation-id"))
+	// 同上：installation_id 只收敛到 turn-metadata，不写独立头（下面有 meta 断言）。
+	assert.Equal(t, "user-install", h.Get("x-codex-installation-id"), "网关不应改写/新增该头")
 	assert.Equal(t, convergedSession, h.Get("session-id"))
 	assert.Empty(t, h.Get("session_id"), "不再写下划线兼容头")
 	assert.Equal(t, convergedThread, h.Get("thread-id"))

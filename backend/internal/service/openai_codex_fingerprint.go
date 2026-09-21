@@ -344,9 +344,9 @@ func applyCodexFingerprintHeaders(h http.Header, ids *codexFingerprintIDs) {
 		return
 	}
 
-	// 所有非 off 模式都收敛 installation_id
-	h.Set("x-codex-installation-id", ids.installationID)
-
+	// installation_id **只写进 x-codex-turn-metadata**，不再单独发 x-codex-installation-id 头：
+	// 实测（2026-09-22 全量抓包）App / TUI / exec 三个入口都把它放在 turn-metadata 里，
+	// 没有任何一个客户端发这个独立头。单独发它会凭空多出一个客户端从不产生的头。
 	if ids.mode == codexFingerprintDevice {
 		rewriteCodexTurnMetadata(h, ids, map[string]any{
 			"installation_id": ids.installationID,
