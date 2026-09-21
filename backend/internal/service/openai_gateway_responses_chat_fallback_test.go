@@ -227,9 +227,9 @@ func forceResponsesExternalBridgeAccount() *Account {
 		"base_url": "http://upstream.example/v1",
 	}
 	account.Extra = map[string]any{
-		"external_bridge":               true,
-		"external_bridge_kind":          "devin",
-		openai_compat.ExtraKeyResponsesMode: string(openai_compat.ResponsesSupportModeForceResponses),
+		"external_bridge":                        true,
+		"external_bridge_kind":                   "devin",
+		openai_compat.ExtraKeyResponsesMode:      string(openai_compat.ResponsesSupportModeForceResponses),
 		openai_compat.ExtraKeyResponsesSupported: true,
 	}
 	return account

@@ -200,24 +200,38 @@ func (s *OpenAIGatewayService) OpenAICodexOverloadBurstAttempt(accountID int64) 
 // 只有「明确的容量过载 + 处于爆发窗口内」才放宽到 base+bonus；
 // 其余情况（包括窗口外过载、以及非过载的可重试错误）一律返回 base。
 // base < 0 视为 0；加成后仍受 base+openAICodexOverloadBurstRetryBonus 封顶。
-func (s *OpenAIGatewayService) OpenAICodexOverloadRetryBudget(accountID int64, base int, overloaded bool) int {
+func (s *OpenAIGatewayService) OpenAICodexOverloadRetryBudget(account *Account, base int, overloaded bool) int {
 	if base < 0 {
 		base = 0
 	}
-	if !overloaded || accountID <= 0 || !s.CodexOverloadIdentityRotationEnabled() {
+	if !overloaded || account == nil || account.ID <= 0 || !s.CodexOverloadIdentityRotationEnabledFor(account) {
 		return base
 	}
-	if s.OpenAICodexOverloadBurstAttempt(accountID) < 2 {
+	if s.OpenAICodexOverloadBurstAttempt(account.ID) < 2 {
 		// 首次过载不额外放宽：这是抽签而非趋势，基线预算已经覆盖。
 		return base
 	}
 	return base + openAICodexOverloadBurstRetryBonus
 }
 
-// CodexOverloadIdentityRotationEnabled 报告「容量过载时重抽会话身份」是否生效。
-// 默认开启；配置 DisableCodexOverloadIdentityRotation 可整体回滚。
+// CodexOverloadIdentityRotationEnabled 报告全局「容量过载时重抽会话身份」是否生效。
+// 默认开启；配置 disable_codex_overload_identity_rotation 可整体回滚。
+// 账号级覆盖见 CodexOverloadIdentityRotationEnabledFor。
 func (s *OpenAIGatewayService) CodexOverloadIdentityRotationEnabled() bool {
 	return s != nil && s.cfg != nil && !s.cfg.Gateway.DisableCodexOverloadIdentityRotation
+}
+
+// CodexOverloadIdentityRotationEnabledFor 在全局开关基础上应用账号级覆盖。
+// 账号 extra 未配置时等价于全局开关（零值安全）。
+//
+// 灰度用法：把实验组与对照组都放在同一指纹模式下（否则「改指纹模式」与
+// 「开轮换」两个变量会混在一起），只用账号 extra 的
+// codex_overload_identity_rotation=on/off 区分。
+func (s *OpenAIGatewayService) CodexOverloadIdentityRotationEnabledFor(account *Account) bool {
+	if enabled, ok := GetCodexOverloadRotationOverride(account); ok {
+		return enabled
+	}
+	return s.CodexOverloadIdentityRotationEnabled()
 }
 
 // pruneOpenAICodexOverloadBurstLocked 清理已过期条目；调用方必须持有锁。

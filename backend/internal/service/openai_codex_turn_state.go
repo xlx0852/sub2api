@@ -508,7 +508,7 @@ func (s *OpenAIGatewayService) HandleOpenAICodexOverload(account *Account, overl
 	if s == nil || account == nil || !account.IsOpenAIOAuth() || account.ID <= 0 {
 		return
 	}
-	if !s.CodexOverloadIdentityRotationEnabled() {
+	if !s.CodexOverloadIdentityRotationEnabledFor(account) {
 		return
 	}
 	// 爆发窗口与 epoch 记录与票据复用解耦：重试预算（OpenAICodexOverloadRetryBudget）

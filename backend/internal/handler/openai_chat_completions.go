@@ -318,7 +318,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 					if !failoverErr.IsCredentialFailure() && shouldRetrySameAccountBeforeSwitching(failoverErr.RetryableOnSameAccount, scheduleDecision.CandidateCount) && !failoverErr.GrokSameAccountRetry {
 						retryLimit := account.GetPoolModeRetryCount()
 						// 容量过载爆发窗口内放宽同账号重试上限（窗口外/非过载保持基线）。
-						retryLimit = h.gatewayService.OpenAICodexOverloadRetryBudget(account.ID, retryLimit, failoverErr.IsServerOverloaded())
+						retryLimit = h.gatewayService.OpenAICodexOverloadRetryBudget(account, retryLimit, failoverErr.IsServerOverloaded())
 						if sameAccountRetryCount[account.ID] < retryLimit {
 							sameAccountRetryCount[account.ID]++
 							retryDelay := sameAccountRetryDelayFor(failoverErr, sameAccountRetryCount[account.ID])

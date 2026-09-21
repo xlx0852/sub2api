@@ -434,11 +434,11 @@ func isQuotaWallDiagnosticsError(errMsg string) bool {
 		return false
 	}
 	wallMarkers := []string{
-		"spending-limit",          // grok 402/403 personal-team-blocked:spending-limit
-		"personal-team-blocked",   // grok 团队额度墙
-		"insufficient_balance",    // apikey 余额不足
+		"spending-limit",        // grok 402/403 personal-team-blocked:spending-limit
+		"personal-team-blocked", // grok 团队额度墙
+		"insufficient_balance",  // apikey 余额不足
 		"insufficient account balance",
-		"run out of credits",      // grok 额度耗尽
+		"run out of credits", // grok 额度耗尽
 		"out of credits",
 		"weekly (7-day) usage limit", // kimi 周限
 		"weekly usage limit",

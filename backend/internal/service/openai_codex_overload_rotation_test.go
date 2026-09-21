@@ -204,23 +204,23 @@ func TestOpenAICodexOverloadRetryBudget_OutsideBurstIsBaseline(t *testing.T) {
 	// 非过载：即使窗口内有历史过载也不放宽。
 	svc.OnOpenAICodexOverload(4242)
 	svc.OnOpenAICodexOverload(4242)
-	assert.Equal(t, 3, svc.OpenAICodexOverloadRetryBudget(4242, 3, false))
+	assert.Equal(t, 3, svc.OpenAICodexOverloadRetryBudget(newTestOAuthAccount(4242, nil), 3, false))
 
 	// 窗口内首次过载也不放宽（单次是抽签而非趋势）。
 	clearOverloadBurstStateForTest(4243)
 	svc.OnOpenAICodexOverload(4243)
-	assert.Equal(t, 3, svc.OpenAICodexOverloadRetryBudget(4243, 3, true))
+	assert.Equal(t, 3, svc.OpenAICodexOverloadRetryBudget(newTestOAuthAccount(4243, nil), 3, true))
 }
 
 func TestOpenAICodexOverloadRetryBudget_RaisesInsideBurst(t *testing.T) {
 	svc := newOverloadRotationTestService(false)
 	svc.OnOpenAICodexOverload(555)
 	svc.OnOpenAICodexOverload(555) // 第 2 次 => 进入爆发窗口
-	assert.Equal(t, 3+openAICodexOverloadBurstRetryBonus, svc.OpenAICodexOverloadRetryBudget(555, 3, true))
+	assert.Equal(t, 3+openAICodexOverloadBurstRetryBonus, svc.OpenAICodexOverloadRetryBudget(newTestOAuthAccount(555, nil), 3, true))
 	// 其它账号不受影响。
-	assert.Equal(t, 3, svc.OpenAICodexOverloadRetryBudget(556, 3, true))
+	assert.Equal(t, 3, svc.OpenAICodexOverloadRetryBudget(newTestOAuthAccount(556, nil), 3, true))
 	// 非正 base 归零后仍不越界。
-	assert.Equal(t, openAICodexOverloadBurstRetryBonus, svc.OpenAICodexOverloadRetryBudget(555, -5, true))
+	assert.Equal(t, openAICodexOverloadBurstRetryBonus, svc.OpenAICodexOverloadRetryBudget(newTestOAuthAccount(555, nil), -5, true))
 }
 
 func TestOpenAICodexOverloadRetryBudget_DisabledByConfig(t *testing.T) {
@@ -228,7 +228,7 @@ func TestOpenAICodexOverloadRetryBudget_DisabledByConfig(t *testing.T) {
 	svc.OnOpenAICodexOverload(777)
 	svc.OnOpenAICodexOverload(777)
 	assert.False(t, svc.CodexOverloadIdentityRotationEnabled())
-	assert.Equal(t, 3, svc.OpenAICodexOverloadRetryBudget(777, 3, true), "开关关闭时不得改动重试上限")
+	assert.Equal(t, 3, svc.OpenAICodexOverloadRetryBudget(newTestOAuthAccount(777, nil), 3, true), "开关关闭时不得改动重试上限")
 }
 
 func TestCodexOverloadIdentityRotationEnabled_NilSafe(t *testing.T) {
@@ -550,4 +550,86 @@ func TestOpenAICodexOverloadSessionKey_EmptyInputs(t *testing.T) {
 	require.NotEmpty(t, openAICodexOverloadSessionKey(1, "s"))
 	// 键不包含原始 session-id。
 	require.NotContains(t, openAICodexOverloadSessionKey(1, "secret-session-value"), "secret-session-value")
+}
+
+// --- 账号级覆盖（灰度 A/B 用）---
+
+func TestGetCodexOverloadRotationOverride(t *testing.T) {
+	cases := []struct {
+		extra   map[string]any
+		enabled bool
+		ok      bool
+	}{
+		{nil, false, false},
+		{map[string]any{codexOverloadRotationExtraKey: ""}, false, false},
+		{map[string]any{codexOverloadRotationExtraKey: "bogus"}, false, false},
+		{map[string]any{codexOverloadRotationExtraKey: "on"}, true, true},
+		{map[string]any{codexOverloadRotationExtraKey: "ON"}, true, true},
+		{map[string]any{codexOverloadRotationExtraKey: "true"}, true, true},
+		{map[string]any{codexOverloadRotationExtraKey: "1"}, true, true},
+		{map[string]any{codexOverloadRotationExtraKey: "off"}, false, true},
+		{map[string]any{codexOverloadRotationExtraKey: "Off"}, false, true},
+		{map[string]any{codexOverloadRotationExtraKey: "0"}, false, true},
+	}
+	for _, tc := range cases {
+		enabled, ok := GetCodexOverloadRotationOverride(newTestOAuthAccount(1, tc.extra))
+		require.Equal(t, tc.ok, ok, "extra=%v", tc.extra)
+		if tc.ok {
+			require.Equal(t, tc.enabled, enabled, "extra=%v", tc.extra)
+		}
+	}
+	// nil 账号不参与覆盖。
+	if _, ok := GetCodexOverloadRotationOverride(nil); ok {
+		t.Fatal("nil 账号不应有覆盖值")
+	}
+}
+
+// 账号级覆盖优先于全局开关：这是 A/B 的基础（同指纹模式下只用开关区分两组）。
+func TestCodexOverloadIdentityRotationEnabledFor_AccountOverrideWins(t *testing.T) {
+	// 全局开，账号显式关 → 关
+	svc := newOverloadRotationTestService(false)
+	offAccount := newTestOAuthAccount(601, map[string]any{codexOverloadRotationExtraKey: "off"})
+	require.False(t, svc.CodexOverloadIdentityRotationEnabledFor(offAccount))
+	// 全局开，账号显式开/未配置 → 开
+	require.True(t, svc.CodexOverloadIdentityRotationEnabledFor(newTestOAuthAccount(602, map[string]any{codexOverloadRotationExtraKey: "on"})))
+	require.True(t, svc.CodexOverloadIdentityRotationEnabledFor(newTestOAuthAccount(603, nil)))
+
+	// 全局关，账号显式开 → 开
+	svcOff := newOverloadRotationTestService(true)
+	require.False(t, svcOff.CodexOverloadIdentityRotationEnabled())
+	require.True(t, svcOff.CodexOverloadIdentityRotationEnabledFor(newTestOAuthAccount(604, map[string]any{codexOverloadRotationExtraKey: "on"})))
+	require.False(t, svcOff.CodexOverloadIdentityRotationEnabledFor(newTestOAuthAccount(605, nil)))
+}
+
+// 对照组账号（extra=off）不得清票、不得推进 epoch、不得放宽重试预算。
+func TestOverloadRecovery_ControlAccountIsUnaffected(t *testing.T) {
+	account := newTestOAuthAccount(611, map[string]any{codexOverloadRotationExtraKey: "off"})
+	clientSession := "client-session-control"
+	resetSessionEpochForTest(account.ID, clientSession)
+	clearOverloadBurstStateForTest(account.ID)
+
+	svc := newOverloadRotationTestService(false)
+	svc.storeOpenAICodexTurnStateForPool(account, "gpt-5.6-luna", reusableTurnStateToken(), "gpt-5.6-luna")
+
+	svc.HandleOpenAICodexOverload(account, OverloadPathHTTP503, clientSession)
+
+	require.NotEmpty(t, lookupCachedOpenAICodexTurnStateForPool(account, "gpt-5.6-luna", time.Now(), openAICodexTurnStateDefaultTTL),
+		"对照组账号不得清票")
+	require.Equal(t, 0, openAICodexOverloadSessionEpoch(account.ID, clientSession),
+		"对照组账号不得推进 epoch")
+	require.Equal(t, 3, svc.OpenAICodexOverloadRetryBudget(account, 3, true),
+		"对照组账号不得放宽重试预算")
+}
+
+// 实验组账号（extra=on）在全局关闭时仍然生效。
+func TestOverloadRecovery_TreatmentAccountWinsOverGlobalOff(t *testing.T) {
+	account := newTestOAuthAccount(612, map[string]any{codexOverloadRotationExtraKey: "on"})
+	clientSession := "client-session-treatment"
+	resetSessionEpochForTest(account.ID, clientSession)
+	clearOverloadBurstStateForTest(account.ID)
+
+	svc := newOverloadRotationTestService(true) // 全局关
+	svc.HandleOpenAICodexOverload(account, OverloadPathHTTP503, clientSession)
+
+	require.Equal(t, 1, openAICodexOverloadSessionEpoch(account.ID, clientSession))
 }

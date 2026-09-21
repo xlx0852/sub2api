@@ -286,7 +286,7 @@ func rotateCodexSessionIdentityForSameAccountRetry(c *gin.Context, svc *service.
 	if c == nil || account == nil || !account.IsOpenAIOAuth() {
 		return 0
 	}
-	if !svc.CodexOverloadIdentityRotationEnabled() {
+	if !svc.CodexOverloadIdentityRotationEnabledFor(account) {
 		return 0
 	}
 	return service.BumpCodexFingerprintAttempt(c)

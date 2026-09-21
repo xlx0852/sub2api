@@ -1176,4 +1176,3 @@ func TestWrapV1InternalRequest_StableSessionIDAcrossTurns(t *testing.T) {
 	sessionIDDiff := wrappedDiff["request"].(map[string]any)["sessionId"].(string)
 	require.NotEqual(t, sessionID1, sessionIDDiff, "different conversations must have different sessionIds")
 }
-

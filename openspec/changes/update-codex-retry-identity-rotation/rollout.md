@@ -21,6 +21,8 @@
 
 1. 过载后**同一客户端会话的下一条请求**拿到不同 `thread-id`（日志侧只能看到 `session_epoch>0`；如需直接比对，可临时开启请求头审计）。
 2. 窗口（30 分钟）内无新过载后，该会话回到 `v1` 确定性派生。
+   若日志里出现 `thread_id_rotated=true` 但**该账号是 `device` 模式**，说明前置条件没满足——
+   此时不会有任何轮换，需先切模式。
 3. **prompt cache 命中率**在窗口内下降属预期；需确认下降幅度与「发生过过载的会话占比」量级一致，否则说明轮换扩散到了未过载的会话（应用 `TestOverloadEpoch_UnaffectedSessionKeepsLegacyDerivation` 的逻辑排查）。
 
 ### 必须为 0 的异常
@@ -44,12 +46,27 @@
 
 同一分组内按账号二选一，运行 1-2 天，尽量覆盖不同时段（过载有日级潮汐：多数日子 0%，个别日高达 70%）。
 
+### 前置条件（必须先确认，否则实验无效）
+
+**轮换只在 `session` / `full` 指纹模式下有对象。** `device` 模式在
+`applyCodexFingerprintHeaders` 里提前 return，只写 `x-codex-installation-id`，**完全不碰
+`thread-id`**，因此 `resolveConvergedThreadID` 不会被调用。
+
+当前生产 5 个活跃 OpenAI OAuth 账号全部是 `device` 模式 → **上线前必须先把它们切到
+`session`**（`extra.codex_fingerprint_mode=session`）。`session` 是
+`add-codex-fingerprint-convergence` 里「新建 OAuth 账号的默认值」，属于受支持的目标配置；
+但切模式本身会改变上游可见指纹（1 设备 + 1 会话 + N 线程），所以两组必须都切，
+只用下面的开关区分，否则两个变量混在一起无法归因。
+
+### 分组（账号级覆盖）
+
 | 组 | 账号 `extra` | 行为 |
 |---|---|---|
-| A（对照） | `disable_codex_overload_identity_rotation=true` | 旧行为：过载只做同账号原样重试，票需连续 3 次 5xx 才清 |
-| B（实验） | 不设置（默认） | 首次过载即清票 + 同账号重试轮换 `thread-id` + 爆发窗口 +2 重试预算 |
+| A（对照） | `codex_overload_identity_rotation=off` | 旧行为：过载只做同账号原样重试，票需连续 3 次 5xx 才清 |
+| B（实验） | `codex_overload_identity_rotation=on`（或不设置，跟随全局） | 首次过载即清票 + 同账号重试/跨请求轮换 `thread-id` + 爆发窗口 +2 重试预算 |
 
-也可用配置整体切换（`gateway.disable_codex_overload_identity_rotation`）做整组对照，但账号级对照能天然控制时段差异。
+全局配置 `gateway.disable_codex_overload_identity_rotation=true` 仍可一键整体回滚；
+账号级覆盖优先于全局（便于单账号紧急退出）。
 
 ### 验收指标
 

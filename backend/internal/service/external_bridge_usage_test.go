@@ -63,7 +63,7 @@ func TestParseExternalBridgeUsage_DevinZeroValueOmission(t *testing.T) {
 	// 模拟 Proto3 场景：当日额度降为 0%，dailyQuotaRemainingPercent 字段被上游 omitempty 省略
 	usage := parseExternalBridgeUsage("devin", map[string]any{
 		"plan_status": map[string]any{
-			"plan_name":               "Pro",
+			"plan_name":              "Pro",
 			"weekly_quota_remaining": 28.0,
 			"weekly_quota_reset":     float64(weeklyReset),
 			"daily_quota_reset":      float64(dailyReset),
@@ -80,4 +80,3 @@ func TestParseExternalBridgeUsage_DevinZeroValueOmission(t *testing.T) {
 	require.NotNil(t, usage.WeeklyQuotaRemaining)
 	require.Equal(t, 28.0, *usage.WeeklyQuotaRemaining)
 }
-

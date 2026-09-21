@@ -34,7 +34,35 @@ const (
 	codexFingerprintFull codexFingerprintMode = "full"
 )
 
+// codexFingerprintModeExtraKey 指纹收敛模式（off/device/session/full）。
 const codexFingerprintModeExtraKey = "codex_fingerprint_mode"
+
+// codexOverloadRotationExtraKey 按账号覆盖「容量过载时重抽会话身份」。
+// 取值 on/off；缺失或非法时跟随全局配置
+// gateway.disable_codex_overload_identity_rotation。
+//
+// 为什么要按账号可覆盖：该行为只在 session/full 指纹模式下有对象（device 模式
+// 不改写 thread-id）。灰度时需要把实验组与对照组都放在同一指纹模式下，
+// 只用本开关区分，否则「改指纹模式」与「开轮换」两个变量会混在一起。
+const codexOverloadRotationExtraKey = "codex_overload_identity_rotation"
+
+// GetCodexOverloadRotationOverride 返回账号级覆盖值：
+//   - true/false：显式开/关
+//   - ok=false：未配置或非法，调用方应回退全局配置
+func GetCodexOverloadRotationOverride(a *Account) (enabled bool, ok bool) {
+	if a == nil || !a.IsOpenAIOAuth() {
+		return false, false
+	}
+	switch strings.ToLower(strings.TrimSpace(a.GetExtraString(codexOverloadRotationExtraKey))) {
+	case "on", "true", "1", "yes":
+		return true, true
+	case "off", "false", "0", "no":
+		return false, true
+	default:
+		return false, false
+	}
+}
+
 const codexFingerprintIDsContextKey = "codex_fingerprint_ids"
 const codexFingerprintAttemptContextKey = "codex_fingerprint_attempt"
 
