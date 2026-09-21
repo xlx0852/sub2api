@@ -14,6 +14,8 @@
 - [x] 2.6 过载爆发窗口预算：`openai_codex_overload_burst.go` 按账号记录 30 分钟窗口，第 2 次及以后的过载在同账号重试上限上 +2（`OpenAICodexOverloadRetryBudget`），窗口外/非过载保持基线
 - [x] 2.7 结构化观测字段：`overload_path`、`fingerprint_attempt`、`thread_id_rotated`、`thread_id_rotated`（WS 重连日志）、`burst_attempt`（清票日志）
 
+- [x] 2.8 流内降载但**不可重放**（已输出可见内容）时也要清票 + 记爆发窗口：两条流式路径此前返回普通 error（非 `*UpstreamFailoverError`），过载处理完全不会触发（生产实测 151 例）
+
 ## 3. 验证
 
 - [x] 3.1 单测：`TestResolveConvergedThreadID_AttemptZeroIsLegacySeed` 断言 attempt=0（及负值）与历史种子逐字节一致
@@ -22,6 +24,7 @@
 - [x] 3.4 单测：`TestIsOpenAIServerOverloadedError`、`TestNewOpenAIUpstreamFailoverError_MarksHTTP503Overload`、`TestClassifyOpenAIWSErrorEventFromRaw_ServerOverloaded`、`TestClassifyOpenAIWSReconnectReason_ServerOverloadedIsRetryable` 覆盖两条通道进入同一恢复分支
 - [x] 3.5 单测：`TestBumpCodexFingerprintAttempt_FullModeKeepsThreadEqualToSession`（full 模式语义不被轮换破坏）+ 既有流重放安全测试保持通过
 - [x] 3.6 运行定向 Go 测试与构建（见下方「验证记录」）
+- [x] 3.8 单测：流内降载「已输出可见内容」时清票、不重放；对照组「非降载流内失败」不清票（删掉新代码块后该用例失败，确认覆盖有效）
 - [x] 3.7 `openspec validate update-codex-retry-identity-rotation --strict`
 
 ## 4. 灰度与验收
@@ -34,6 +37,18 @@
 灰度与验收的执行细节见 `rollout.md`（A/B 分组、日志字段、验收指标、回滚与停止条件）。
 
 生产基线实测与观测限制见 `production-baseline-2026-09-21.md`；其中第四节记录了当前实现「仅覆盖请求内重试、未覆盖跨请求」的局限。
+
+## 待决策（未纳入本次实现）
+
+**跨请求的会话身份轮换**。当前轮换轮次存在 gin context（单个 HTTP 请求）内，因此：
+
+- 覆盖：同一请求内的同账号重试（生产实测最多 3 轮，且打满 3 轮的最终成功率仅 7.1%）。
+- 未覆盖：客户端**跨请求**复用同一 `session-id` 重试 —— 下一次请求轮次归零，派生回同一个 `thread-id`。
+
+而本地实测的 3.36×（同 thread 19.6% vs 新 thread 65.7%）来自客户端跨请求复用同一会话标识。
+若要让收益最大化，需要一个按 (account, client session) 维度的**过载 epoch**：过载后该组合的派生
+进入新 epoch，持续到爆发窗口过期。代价是客户端正常续聊在该窗口内失去 thread 亲和（丢 prompt cache），
+属于需要用 A/B 验证的权衡。详见 `production-baseline-2026-09-21.md` 第四节。
 
 ## 验证记录
 
