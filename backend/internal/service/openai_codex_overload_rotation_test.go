@@ -1,6 +1,8 @@
 package service
 
 import (
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -285,4 +287,109 @@ func TestDiscardOpenAICodexTurnStateForOverload_NilSafe(t *testing.T) {
 	assert.NotPanics(t, func() { svc.DiscardOpenAICodexTurnStateForOverload(nil, OverloadPathHTTP503) })
 	svc2 := newOverloadRotationTestService(false)
 	assert.NotPanics(t, func() { svc2.DiscardOpenAICodexTurnStateForOverload(nil, OverloadPathHTTP503) })
+}
+
+// --- 流式过载：可重放 vs 不可重放 ---
+
+// newCapacityShedStreamResponse 构造一段以容量降载 response.failed 收尾的 SSE 流。
+// withDelta=true 时先输出一段可见内容，使网关判定「已向客户端输出」。
+func newCapacityShedStreamResponse(withDelta bool) (*http.Response, func()) {
+	pr, pw := io.Pipe()
+	var b strings.Builder
+	b.WriteString(`data: {"type":"response.created","response":{"id":"resp_shed","model":"gpt-5.6-luna"}}` + "\n\n")
+	if withDelta {
+		b.WriteString(`data: {"type":"response.output_text.delta","delta":"partial"}` + "\n\n")
+	}
+	b.WriteString(`data: {"type":"response.failed","response":{"id":"resp_shed","status":"failed",` +
+		`"error":{"code":"server_is_overloaded","message":"Our servers are currently overloaded. Please try again later."}}}` + "\n\n")
+	go func() {
+		_, _ = pw.Write([]byte(b.String()))
+		_ = pw.Close()
+	}()
+	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: pr}
+	return resp, func() { _ = pr.Close() }
+}
+
+func newCapacityShedTestAccount(id int64) *Account {
+	account := newTestOAuthAccount(id, nil)
+	account.Type = AccountTypeOAuth
+	account.Platform = PlatformOpenAI
+	return account
+}
+
+// 未向客户端输出时，流内过载走 failover 分支，返回 *UpstreamFailoverError。
+func TestOpenAIStreamingCapacityShedBeforeOutputFailsOver(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := newOverloadRotationTestService(false)
+	account := newCapacityShedTestAccount(41)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/responses", nil)
+
+	resp, closeFn := newCapacityShedStreamResponse(false)
+	defer closeFn()
+
+	_, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, account, time.Now(), "gpt-6-astra", "gpt-6-astra")
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr, "未输出可见内容时应返回可 failover 的错误")
+	require.True(t, failoverErr.IsServerOverloaded())
+	require.Equal(t, OverloadPathStreamFailed, failoverErr.OverloadPath)
+}
+
+// 已向客户端输出可见内容时不得重放（既有边界），
+// 但仍必须清掉被钉住的票：过载是上游容量压力，下一次请求要重抽。
+func TestOpenAIStreamingCapacityShedAfterOutputStillDiscardsTicket(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := newOverloadRotationTestService(false)
+	account := newCapacityShedTestAccount(42)
+
+	svc.storeOpenAICodexTurnStateForPool(account, "gpt-5.6-luna", reusableTurnStateToken(), "gpt-5.6-luna")
+	require.NotEmpty(t, lookupCachedOpenAICodexTurnStateForPool(account, "gpt-5.6-luna", time.Now(), openAICodexTurnStateDefaultTTL))
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/responses", nil)
+
+	resp, closeFn := newCapacityShedStreamResponse(true)
+	defer closeFn()
+
+	_, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, account, time.Now(), "gpt-6-astra", "gpt-5.6-luna")
+	// 不得重放：返回普通错误而非 *UpstreamFailoverError。
+	var failoverErr *UpstreamFailoverError
+	require.False(t, errors.As(err, &failoverErr), "已输出可见内容后不得重放")
+
+	require.Empty(t, lookupCachedOpenAICodexTurnStateForPool(account, "gpt-5.6-luna", time.Now(), openAICodexTurnStateDefaultTTL),
+		"即使无法重放，容量过载也必须清掉被钉住的票")
+	require.GreaterOrEqual(t, svc.OpenAICodexOverloadBurstAttempt(account.ID), 1,
+		"过载应记入爆发窗口，供后续请求的重试预算使用")
+}
+
+// 对照组：非容量降载的流内失败（普通 upstream 错误）不得清票。
+func TestOpenAIStreamingNonShedFailureKeepsPinnedTicket(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := newOverloadRotationTestService(false)
+	account := newCapacityShedTestAccount(43)
+
+	svc.storeOpenAICodexTurnStateForPool(account, "gpt-5.6-luna", reusableTurnStateToken(), "gpt-5.6-luna")
+
+	pr, pw := io.Pipe()
+	go func() {
+		_, _ = pw.Write([]byte(`data: {"type":"response.created","response":{"id":"resp_x","model":"gpt-5.6-luna"}}` + "\n\n"))
+		_, _ = pw.Write([]byte(`data: {"type":"response.output_text.delta","delta":"partial"}` + "\n\n"))
+		_, _ = pw.Write([]byte(`data: {"type":"response.failed","response":{"id":"resp_x","status":"failed",` +
+			`"error":{"code":"upstream_timeout","message":"upstream timed out"}}}` + "\n\n"))
+		_ = pw.Close()
+	}()
+	resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: pr}
+	defer func() { _ = pr.Close() }()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/responses", nil)
+
+	_, _ = svc.handleStreamingResponse(c.Request.Context(), resp, c, account, time.Now(), "gpt-6-astra", "gpt-5.6-luna")
+
+	require.NotEmpty(t, lookupCachedOpenAICodexTurnStateForPool(account, "gpt-5.6-luna", time.Now(), openAICodexTurnStateDefaultTTL),
+		"非容量降载的流内失败不应清票")
 }

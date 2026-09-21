@@ -1361,6 +1361,12 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 					return s.newOpenAIStreamFailoverError(c, account, true, upstreamRequestID, dataBytes, failedMessage)
 				}
 			}
+			// 容量降载但无法重放（已向客户端输出可见内容，或闸门判定不可重试）：
+			// 本次按既有边界原样终态，但过载必须让「下一次请求」重抽——立即丢弃被
+			// 钉住的票 + 记入爆发窗口。
+			if isOpenAIUpstreamCapacityShedEvent(dataBytes) {
+				s.DiscardOpenAICodexTurnStateForOverload(account, OverloadPathStreamFailed)
+			}
 			s.markOpenAIStreamTerminalError(c, account, true, upstreamRequestID, dataBytes, failedMessage)
 			forceFlushFailedEvent = true
 			sawFailedEvent = true
