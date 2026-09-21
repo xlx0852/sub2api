@@ -184,7 +184,7 @@ func TestGatewayOutboundCodexFingerprint_ObservedShape(t *testing.T) {
 			t.Logf("---------- mode=%s 客户端字段是否原样透传 ----------", mode)
 			_ = mode
 			meta := upstream.lastReq.Header.Get("x-codex-turn-metadata")
-			leaks := []string{}
+			var leaks []string
 			if meta != "" {
 				var m map[string]any
 				if json.Unmarshal([]byte(meta), &m) == nil {
@@ -200,11 +200,99 @@ func TestGatewayOutboundCodexFingerprint_ObservedShape(t *testing.T) {
 					}
 				}
 			}
-			if len(leaks) > 0 {
-				t.Logf("  !! 客户端原始 thread 经 turn-metadata 泄漏: %v", leaks)
-			} else {
-				t.Logf("  turn-metadata 未泄漏客户端原始 thread")
+			require.Empty(t, leaks,
+				"任何模式下会话元数据都不得回泄客户端原始 thread（否则头部的隔离/派生被绕过）")
+			// 窗口头必须与 thread 头同源：否则元数据里留下的窗口号仍指向原始线程。
+			windowHeader := upstream.lastReq.Header.Get("x-codex-window-id")
+			if windowHeader != "" {
+				require.NotContains(t, windowHeader, clientThread)
 			}
 		})
+	}
+}
+
+// --- 会话元数据对齐的边界 ---
+
+func TestAlignCodexTurnMetadataWithIsolatedSession(t *testing.T) {
+	const raw = "01a0c48d-5710-7c03-9065-ced0ad8c374f"
+	isolate := func(v string) string { return "iso(" + v + ")" }
+
+	t.Run("同步 session/thread/window 与父子线程", func(t *testing.T) {
+		h := http.Header{}
+		h.Set("x-codex-window-id", raw+":3")
+		h.Set("x-codex-turn-metadata", `{"session_id":"`+raw+`","thread_id":"`+raw+`",`+
+			`"window_id":"`+raw+`:1","parent_thread_id":"`+raw+`","forked_from_thread_id":"`+raw+`",`+
+			`"agent_name":"/root","turn_trigger":"composer"}`)
+
+		alignCodexTurnMetadataWithIsolatedSession(h, "iso-session", "iso-thread", isolate)
+
+		require.Equal(t, "iso-thread:3", h.Get("x-codex-window-id"), "窗口号后缀必须保留")
+		var m map[string]any
+		require.NoError(t, json.Unmarshal([]byte(h.Get("x-codex-turn-metadata")), &m))
+		require.Equal(t, "iso-session", m["session_id"])
+		require.Equal(t, "iso-thread", m["thread_id"])
+		require.Equal(t, "iso-thread:1", m["window_id"])
+		require.Equal(t, "iso("+raw+")", m["parent_thread_id"])
+		require.Equal(t, "iso("+raw+")", m["forked_from_thread_id"])
+		// 非身份字段必须原样保留。
+		require.Equal(t, "/root", m["agent_name"])
+		require.Equal(t, "composer", m["turn_trigger"])
+	})
+
+	t.Run("thread 为空时回退 session", func(t *testing.T) {
+		h := http.Header{}
+		h.Set("x-codex-turn-metadata", `{"thread_id":"`+raw+`"}`)
+		alignCodexTurnMetadataWithIsolatedSession(h, "iso-session", "", isolate)
+		require.Contains(t, h.Get("x-codex-turn-metadata"), "iso-session")
+	})
+
+	t.Run("元数据不可解析时不破坏原始字节", func(t *testing.T) {
+		h := http.Header{}
+		h.Set("x-codex-turn-metadata", "{not json")
+		alignCodexTurnMetadataWithIsolatedSession(h, "iso", "iso", isolate)
+		require.Equal(t, "{not json", h.Get("x-codex-turn-metadata"),
+			"解析失败必须原样保留：身份改写不得成为新的失败点")
+	})
+
+	t.Run("缺失字段不被凭空写入", func(t *testing.T) {
+		h := http.Header{}
+		h.Set("x-codex-turn-metadata", `{"agent_name":"/root"}`)
+		alignCodexTurnMetadataWithIsolatedSession(h, "iso", "iso", isolate)
+		var m map[string]any
+		require.NoError(t, json.Unmarshal([]byte(h.Get("x-codex-turn-metadata")), &m))
+		_, hasSession := m["session_id"]
+		require.False(t, hasSession, "客户端没发的字段不应被补齐")
+	})
+
+	t.Run("空隔离值等同不做处理", func(t *testing.T) {
+		h := http.Header{}
+		h.Set("x-codex-turn-metadata", `{"session_id":"`+raw+`"}`)
+		alignCodexTurnMetadataWithIsolatedSession(h, "", "", isolate)
+		require.Contains(t, h.Get("x-codex-turn-metadata"), raw)
+	})
+
+	t.Run("nil isolate 时跳过父子线程", func(t *testing.T) {
+		h := http.Header{}
+		h.Set("x-codex-turn-metadata", `{"session_id":"`+raw+`","parent_thread_id":"`+raw+`"}`)
+		require.NotPanics(t, func() { alignCodexTurnMetadataWithIsolatedSession(h, "iso", "iso", nil) })
+		var m map[string]any
+		require.NoError(t, json.Unmarshal([]byte(h.Get("x-codex-turn-metadata")), &m))
+		require.Equal(t, "iso", m["session_id"])
+		require.Equal(t, raw, m["parent_thread_id"], "无隔离函数时不得改成无法对齐的值")
+	})
+}
+
+func TestCodexWindowIDSuffix(t *testing.T) {
+	cases := map[string]string{
+		"01a0-abc:0":  ":0",
+		"01a0-abc:12": ":12",
+		"01a0-abc":    ":0",
+		"01a0-abc:":   ":0",
+		"01a0-abc:x":  ":0",
+		"":            ":0",
+		"a:b:7":       ":7",
+	}
+	for in, want := range cases {
+		require.Equal(t, want, codexWindowIDSuffix(in), "input=%q", in)
 	}
 }

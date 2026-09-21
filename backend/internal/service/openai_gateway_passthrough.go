@@ -513,7 +513,10 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			clientConversationID = promptCacheKey
 		}
 		if clientSessionID != "" {
-			setOpenAIIsolatedSessionHeaders(req.Header, isolateOpenAISessionID(apiKeyID, clientSessionID), false)
+			isolatedSession := isolateOpenAISessionID(apiKeyID, clientSessionID)
+			setOpenAIIsolatedSessionHeaders(req.Header, isolatedSession, false)
+			alignCodexTurnMetadataWithIsolatedSession(req.Header, isolatedSession, "",
+				func(raw string) string { return isolateOpenAISessionID(apiKeyID, raw) })
 		}
 		if clientConversationID != "" {
 			// conversation/thread 与 session 可能不同；隔离后写官方 thread-id。
@@ -522,6 +525,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			if req.Header.Get("x-client-request-id") == "" {
 				req.Header.Set("x-client-request-id", isolatedConversation)
 			}
+			alignCodexTurnMetadataWithIsolatedSession(req.Header, "", isolatedConversation,
+				func(raw string) string { return isolateOpenAISessionID(apiKeyID, raw) })
 		}
 	} else if isOpenAIResponsesCompactPath(c) {
 		// 透传白名单会放行客户端的 Accept: text/event-stream；compact 上游是

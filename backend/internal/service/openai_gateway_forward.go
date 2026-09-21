@@ -316,13 +316,20 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		if isOpenAICompactUpstreamRequest(c) {
 			req.Header.Set("accept", "application/json")
 			compactSession := resolveOpenAICompactSessionID(c)
-			setOpenAIIsolatedSessionHeaders(req.Header, isolateOpenAISessionID(apiKeyID, compactSession), true)
+			isolatedCompact := isolateOpenAISessionID(apiKeyID, compactSession)
+			setOpenAIIsolatedSessionHeaders(req.Header, isolatedCompact, true)
+			// 隔离必须同时覆盖会话元数据，否则上游仍能从 x-codex-turn-metadata 读到原始 thread。
+			alignCodexTurnMetadataWithIsolatedSession(req.Header, isolatedCompact, isolatedCompact,
+				func(raw string) string { return isolateOpenAISessionID(apiKeyID, raw) })
 		} else {
 			req.Header.Set("accept", "text/event-stream")
 		}
 		if promptCacheKey != "" {
 			isolated := isolateOpenAISessionID(apiKeyID, promptCacheKey)
-			setOpenAIIsolatedSessionHeaders(req.Header, isolated, !compatMessagesBridge || clientConversationID != "")
+			withConversation := !compatMessagesBridge || clientConversationID != ""
+			setOpenAIIsolatedSessionHeaders(req.Header, isolated, withConversation)
+			alignCodexTurnMetadataWithIsolatedSession(req.Header, isolated, isolated,
+				func(raw string) string { return isolateOpenAISessionID(apiKeyID, raw) })
 		}
 	} else if isOpenAIResponsesCompactPath(c) {
 		// compact 上游是 unary JSON 协议：API-key 账号也显式声明 Accept，

@@ -501,3 +501,98 @@ func requestClientSessionID(c *gin.Context) string {
 	}
 	return extractClientSessionID(c.Request.Header)
 }
+
+// codexWindowIDSuffix 返回 window-id 中 `<thread>:` 之后的部分（如 `:3`）。
+// 无法解析为 `:<数字>` 时回退 `:0`，与官方客户端的首窗口形态一致。
+func codexWindowIDSuffix(raw string) string {
+	idx := strings.LastIndexByte(strings.TrimSpace(raw), ':')
+	if idx < 0 {
+		return ":0"
+	}
+	suffix := strings.TrimSpace(raw[idx+1:])
+	if suffix == "" {
+		return ":0"
+	}
+	for _, r := range suffix {
+		if r < '0' || r > '9' {
+			return ":0"
+		}
+	}
+	return ":" + suffix
+}
+
+// alignCodexTurnMetadataWithIsolatedSession 把会话元数据对齐到刚刚写进会话头的隔离值。
+//
+// isolatedSession / isolatedThread 就是调用方写入 session-id / thread-id 头的值；
+// isolatedThread 为空时回退到 isolatedSession（仅隔离 session 的场景）。
+// isolate 用于以同一套派生规则隔离父子线程字段，与头保持一致。
+//
+// 为什么必须做（2026-09-22 实测抓包）：
+//   - 隔离逻辑只改写 session-id / thread-id / x-client-request-id 头，而
+//     x-codex-turn-metadata 里仍留着**客户端原始** session_id / thread_id / window_id，
+//     x-codex-window-id 头也仍是客户端原值。结果是：
+//     ① 上游能从元数据头读到已被“隔离”掉的原始 thread，隔离被绕过；
+//     ② 同一请求的头与元数据互相矛盾（一个说隔离值，一个说原值）。
+//   - 该矛盾在 off / device 指纹模式下出现；session / full 会整体重写，不受影响。
+func alignCodexTurnMetadataWithIsolatedSession(h http.Header, isolatedSession, isolatedThread string, isolate func(string) string) {
+	if h == nil {
+		return
+	}
+	isolatedSession = strings.TrimSpace(isolatedSession)
+	isolatedThread = strings.TrimSpace(isolatedThread)
+	if isolatedSession == "" && isolatedThread == "" {
+		return
+	}
+	if isolatedThread == "" {
+		isolatedThread = isolatedSession
+	}
+	if isolatedSession == "" {
+		isolatedSession = isolatedThread
+	}
+
+	// window-id 与 thread 同源：保留客户端原有窗口序号后缀。
+	if raw := strings.TrimSpace(h.Get("x-codex-window-id")); raw != "" {
+		h.Set("x-codex-window-id", isolatedThread+codexWindowIDSuffix(raw))
+	}
+
+	raw := strings.TrimSpace(h.Get("x-codex-turn-metadata"))
+	if raw == "" {
+		return
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(raw), &metadata); err != nil {
+		// 元数据不可解析时不破坏原始字节：宁可不改，也不要把身份改写变成新的失败点。
+		return
+	}
+
+	changed := false
+	for key, value := range map[string]string{"session_id": isolatedSession, "thread_id": isolatedThread} {
+		if original, _ := metadata[key].(string); strings.TrimSpace(original) != "" {
+			metadata[key] = value
+			changed = true
+		}
+	}
+	if original, _ := metadata["window_id"].(string); strings.TrimSpace(original) != "" {
+		metadata["window_id"] = isolatedThread + codexWindowIDSuffix(original)
+		changed = true
+	}
+	// 父子线程同样指向客户端真实线程；不隔离就等于从头元数据反推出原始线程。
+	if isolate != nil {
+		for _, key := range []string{"parent_thread_id", "forked_from_thread_id"} {
+			original, _ := metadata[key].(string)
+			if strings.TrimSpace(original) == "" {
+				continue
+			}
+			if isolated := strings.TrimSpace(isolate(original)); isolated != "" {
+				metadata[key] = isolated
+				changed = true
+			}
+		}
+	}
+	if !changed {
+		return
+	}
+	if rebuilt, err := json.Marshal(metadata); err == nil {
+		h.Set("x-codex-turn-metadata", string(rebuilt))
+	}
+}
