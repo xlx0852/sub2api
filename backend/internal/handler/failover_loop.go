@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -250,14 +251,27 @@ func sleepWithContext(ctx context.Context, d time.Duration) bool {
 //     锁在同一个已饱和后端的原因。
 //
 // 过载只清票、不动账号健康（请求级信号而非账号级故障）。
-func noteOpenAICodexUpstreamOutcome(svc *service.OpenAIGatewayService, account *service.Account, failoverErr *service.UpstreamFailoverError) {
+func noteOpenAICodexUpstreamOutcome(c *gin.Context, svc *service.OpenAIGatewayService, account *service.Account, failoverErr *service.UpstreamFailoverError) {
 	if svc == nil || failoverErr == nil {
 		return
 	}
 	svc.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode, failoverErr.TransportOnly)
 	if failoverErr.IsServerOverloaded() {
-		svc.DiscardOpenAICodexTurnStateForOverload(account, failoverErr.OverloadPath)
+		// 客户端会话标识用于推进跨请求过载 epoch：下一条同会话请求必须拿到新的
+		// thread-id，否则会重新被路由回刚失败的后端。
+		svc.HandleOpenAICodexOverload(account, failoverErr.OverloadPath, clientSessionIDFromRequest(c))
 	}
+}
+
+// clientSessionIDFromRequest 提取客户端原始的会话标识（连字符形式优先）。
+func clientSessionIDFromRequest(c *gin.Context) string {
+	if c == nil || c.Request == nil {
+		return ""
+	}
+	if v := strings.TrimSpace(c.Request.Header.Get("session-id")); v != "" {
+		return v
+	}
+	return strings.TrimSpace(c.Request.Header.Get("session_id"))
 }
 
 // rotateCodexSessionIdentityForSameAccountRetry 为「不换账号的重试」轮换派生的

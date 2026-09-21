@@ -1,7 +1,10 @@
 package service
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -39,6 +42,115 @@ type codexOverloadBurstState struct {
 var openAICodexOverloadBurst struct {
 	mu    sync.Mutex
 	state map[int64]codexOverloadBurstState
+}
+
+// ---------------------------------------------------------------------------
+// 会话级过载 epoch
+// ---------------------------------------------------------------------------
+//
+// 为什么需要它：thread-id 是在「单个 HTTP 请求」的 gin context 内按失败重试轮次派生的
+// （见 BumpCodexFingerprintAttempt）。客户端跨请求重试时（同一个客户端 session-id 发
+// 下一条请求），轮次归零，派生回**同一个** thread-id——正好又回到被钉死的路由。
+//
+// 实测（本地 20159 个 turn / 190 次过载）：同一会话标识上重试成功率 19.6%，
+// 换成新的会话标识 65.7%（同 30 分钟窗口对照 3.36×）。因此需要在过载后让
+// **同一客户端会话**拿到新的派生值，持续到爆发窗口结束。
+//
+// 代价：该客户端会话在窗口内失去 thread 亲和（丢 prompt cache）。这是刻意的权衡：
+// 窗口内本来就在严重降载，而失败重试的代价（整轮重发）远大于一次 cache miss。
+//
+// 键为 (accountID, 客户端 session-id) 的摘要，不保存原始 session-id。
+// epoch 单调递增，只在窗口内生效；窗口外返回 0，派生回到确定性值。
+type codexOverloadSessionEpochState struct {
+	epoch    int
+	lastSeen time.Time
+}
+
+var openAICodexOverloadSessionEpochs struct {
+	mu sync.Mutex
+	// active 为活跃条目数，用于让「从未发生过过载」的常见路径免于加锁。
+	active int64
+	state  map[string]codexOverloadSessionEpochState
+}
+
+// openAICodexOverloadSessionKey 返回 (accountID, clientSessionID) 的定长键。
+// 用摘要而非原文，避免在内存里保留客户端会话标识。
+func openAICodexOverloadSessionKey(accountID int64, clientSessionID string) string {
+	if accountID <= 0 || clientSessionID == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(clientSessionID))
+	return fmt.Sprintf("%d:%x", accountID, sum[:8])
+}
+
+// rotateOpenAICodexOverloadSessionEpoch 记录一次过载并推进该 (账号, 客户端会话)
+// 的派生 epoch，返回新值（>=1）。
+//
+// 返回值只用于观测与测试；生效与否由 OpenAICodexOverloadSessionEpoch 按窗口判定。
+func rotateOpenAICodexOverloadSessionEpoch(accountID int64, clientSessionID string) int {
+	key := openAICodexOverloadSessionKey(accountID, clientSessionID)
+	if key == "" {
+		return 0
+	}
+	now := time.Now()
+	openAICodexOverloadSessionEpochs.mu.Lock()
+	defer openAICodexOverloadSessionEpochs.mu.Unlock()
+	if openAICodexOverloadSessionEpochs.state == nil {
+		openAICodexOverloadSessionEpochs.state = make(map[string]codexOverloadSessionEpochState, 16)
+	}
+	st, ok := openAICodexOverloadSessionEpochs.state[key]
+	if !ok {
+		if len(openAICodexOverloadSessionEpochs.state) >= openAICodexOverloadBurstMaxEntries {
+			pruneOpenAICodexOverloadSessionEpochsLocked(now)
+		}
+		openAICodexOverloadSessionEpochs.active++
+	}
+	// epoch 单调递增，不随窗口过期回退到旧值：避免同一会话重新拿到用过的派生值。
+	st.epoch++
+	st.lastSeen = now
+	openAICodexOverloadSessionEpochs.state[key] = st
+	return st.epoch
+}
+
+// OpenAICodexOverloadSessionEpoch 返回该 (账号, 客户端会话) 当前生效的过载 epoch，
+// 窗口外或从未过载时为 0。
+//
+// 常见路径（从未发生过过载）靠 active 计数免于加锁。
+func openAICodexOverloadSessionEpoch(accountID int64, clientSessionID string) int {
+	if atomic.LoadInt64(&openAICodexOverloadSessionEpochs.active) == 0 {
+		return 0
+	}
+	key := openAICodexOverloadSessionKey(accountID, clientSessionID)
+	if key == "" {
+		return 0
+	}
+	now := time.Now()
+	openAICodexOverloadSessionEpochs.mu.Lock()
+	defer openAICodexOverloadSessionEpochs.mu.Unlock()
+	st, ok := openAICodexOverloadSessionEpochs.state[key]
+	if !ok || now.Sub(st.lastSeen) > openAICodexOverloadBurstWindow {
+		return 0
+	}
+	return st.epoch
+}
+
+// pruneOpenAICodexOverloadSessionEpochsLocked 清理已过期条目；调用方必须持有锁。
+// 若清理后仍超限（窗口内过载会话极多），整体重置：epoch 只是路由启发式，
+// 丢失历史只意味着回到确定性派生，不影响正确性，有界内存更重要。
+func pruneOpenAICodexOverloadSessionEpochsLocked(now time.Time) {
+	for key, st := range openAICodexOverloadSessionEpochs.state {
+		if now.Sub(st.lastSeen) > openAICodexOverloadBurstWindow {
+			delete(openAICodexOverloadSessionEpochs.state, key)
+		}
+	}
+	if len(openAICodexOverloadSessionEpochs.state) < openAICodexOverloadBurstMaxEntries {
+		atomic.StoreInt64(&openAICodexOverloadSessionEpochs.active, int64(len(openAICodexOverloadSessionEpochs.state)))
+		return
+	}
+	logger.LegacyPrintf("service.openai_codex_overload",
+		"overload session epoch tracker at capacity entries=%d, resetting", len(openAICodexOverloadSessionEpochs.state))
+	openAICodexOverloadSessionEpochs.state = make(map[string]codexOverloadSessionEpochState, 16)
+	atomic.StoreInt64(&openAICodexOverloadSessionEpochs.active, 0)
 }
 
 // OnOpenAICodexOverload 记录一次明确的容量过载，返回它在当前爆发窗口内的序号。

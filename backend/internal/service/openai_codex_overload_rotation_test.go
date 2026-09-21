@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -53,24 +54,24 @@ func reusableTurnStateToken() string {
 func TestResolveConvergedThreadID_AttemptZeroIsLegacySeed(t *testing.T) {
 	account := newTestOAuthAccount(7, nil)
 	legacy := deriveStableUUIDv4("codex:thread-id:v1:7:session-aaa")
-	assert.Equal(t, legacy, resolveConvergedThreadID(account, "session-aaa", 0))
+	assert.Equal(t, legacy, resolveConvergedThreadID(account, "session-aaa", 0, 0))
 	// 负值按首次尝试处理，避免调用方传错时产生第三套种子。
-	assert.Equal(t, legacy, resolveConvergedThreadID(account, "session-aaa", -3))
+	assert.Equal(t, legacy, resolveConvergedThreadID(account, "session-aaa", -3, 0))
 }
 
 func TestResolveConvergedThreadID_AttemptRotatesThread(t *testing.T) {
 	account := newTestOAuthAccount(7, nil)
-	base := resolveConvergedThreadID(account, "session-aaa", 0)
+	base := resolveConvergedThreadID(account, "session-aaa", 0, 0)
 	for attempt := 1; attempt <= 3; attempt++ {
-		got := resolveConvergedThreadID(account, "session-aaa", attempt)
+		got := resolveConvergedThreadID(account, "session-aaa", attempt, 0)
 		assert.NotEqual(t, base, got, "attempt=%d 应轮换 thread_id", attempt)
 		// 同一 attempt 内必须稳定（头改写与体改写需一致）。
-		assert.Equal(t, got, resolveConvergedThreadID(account, "session-aaa", attempt))
+		assert.Equal(t, got, resolveConvergedThreadID(account, "session-aaa", attempt, 0))
 	}
 	// 不同 attempt 之间也要不同，否则重试仍会撞回同一后端。
 	assert.NotEqual(t,
-		resolveConvergedThreadID(account, "session-aaa", 1),
-		resolveConvergedThreadID(account, "session-aaa", 2))
+		resolveConvergedThreadID(account, "session-aaa", 1, 0),
+		resolveConvergedThreadID(account, "session-aaa", 2, 0))
 }
 
 // --- BumpCodexFingerprintAttempt + 上下文缓存 ---
@@ -255,7 +256,7 @@ func TestOnOpenAICodexOverload_SequenceAndWindowReset(t *testing.T) {
 
 // --- 过载即时清票 ---
 
-func TestDiscardOpenAICodexTurnStateForOverload_ClearsPinnedTicket(t *testing.T) {
+func TestHandleOpenAICodexOverload_ClearsPinnedTicket(t *testing.T) {
 	account := newTestOAuthAccount(31, nil)
 	account.Type = AccountTypeOAuth
 	svc := newOverloadRotationTestService(false)
@@ -264,29 +265,29 @@ func TestDiscardOpenAICodexTurnStateForOverload_ClearsPinnedTicket(t *testing.T)
 	svc.storeOpenAICodexTurnStateForPool(account, "gpt-5.6-luna", reusableTurnStateToken(), "gpt-5.6-luna")
 	require.NotEmpty(t, lookupCachedOpenAICodexTurnStateForPool(account, "gpt-5.6-luna", time.Now(), openAICodexTurnStateDefaultTTL))
 
-	svc.DiscardOpenAICodexTurnStateForOverload(account, OverloadPathHTTP503)
+	svc.HandleOpenAICodexOverload(account, OverloadPathHTTP503, "client-session-aaa")
 
 	assert.Empty(t, lookupCachedOpenAICodexTurnStateForPool(account, "gpt-5.6-luna", time.Now(), openAICodexTurnStateDefaultTTL),
 		"首次容量过载即应清掉被钉住的票")
 }
 
-func TestDiscardOpenAICodexTurnStateForOverload_RespectsDisableSwitch(t *testing.T) {
+func TestHandleOpenAICodexOverload_RespectsDisableSwitch(t *testing.T) {
 	account := newTestOAuthAccount(32, nil)
 	account.Type = AccountTypeOAuth
 	svc := newOverloadRotationTestService(true)
 
 	svc.storeOpenAICodexTurnStateForPool(account, "gpt-5.6-luna", reusableTurnStateToken(), "gpt-5.6-luna")
-	svc.DiscardOpenAICodexTurnStateForOverload(account, OverloadPathHTTP503)
+	svc.HandleOpenAICodexOverload(account, OverloadPathHTTP503, "client-session-aaa")
 
 	assert.NotEmpty(t, lookupCachedOpenAICodexTurnStateForPool(account, "gpt-5.6-luna", time.Now(), openAICodexTurnStateDefaultTTL),
 		"开关关闭时必须保留旧行为（过载不清票）")
 }
 
-func TestDiscardOpenAICodexTurnStateForOverload_NilSafe(t *testing.T) {
+func TestHandleOpenAICodexOverload_NilSafe(t *testing.T) {
 	var svc *OpenAIGatewayService
-	assert.NotPanics(t, func() { svc.DiscardOpenAICodexTurnStateForOverload(nil, OverloadPathHTTP503) })
+	assert.NotPanics(t, func() { svc.HandleOpenAICodexOverload(nil, OverloadPathHTTP503, "") })
 	svc2 := newOverloadRotationTestService(false)
-	assert.NotPanics(t, func() { svc2.DiscardOpenAICodexTurnStateForOverload(nil, OverloadPathHTTP503) })
+	assert.NotPanics(t, func() { svc2.HandleOpenAICodexOverload(nil, OverloadPathHTTP503, "") })
 }
 
 // --- 流式过载：可重放 vs 不可重放 ---
@@ -392,4 +393,161 @@ func TestOpenAIStreamingNonShedFailureKeepsPinnedTicket(t *testing.T) {
 
 	require.NotEmpty(t, lookupCachedOpenAICodexTurnStateForPool(account, "gpt-5.6-luna", time.Now(), openAICodexTurnStateDefaultTTL),
 		"非容量降载的流内失败不应清票")
+}
+
+// --- 跨请求过载 epoch ---
+
+func resetSessionEpochForTest(accountID int64, clientSessionID string) {
+	key := openAICodexOverloadSessionKey(accountID, clientSessionID)
+	openAICodexOverloadSessionEpochs.mu.Lock()
+	defer openAICodexOverloadSessionEpochs.mu.Unlock()
+	if key != "" {
+		if _, ok := openAICodexOverloadSessionEpochs.state[key]; ok {
+			delete(openAICodexOverloadSessionEpochs.state, key)
+			if openAICodexOverloadSessionEpochs.active > 0 {
+				openAICodexOverloadSessionEpochs.active--
+			}
+		}
+	}
+}
+
+// 关键用例：过载后，同一客户端会话的**下一条请求**（轮次归零）必须拿到不同的 thread-id。
+func TestOverloadEpoch_RotatesThreadIDAcrossRequests(t *testing.T) {
+	account := newTestOAuthAccount(501, map[string]any{codexFingerprintModeExtraKey: "session"})
+	clientSession := "client-session-epoch"
+	resetSessionEpochForTest(account.ID, clientSession)
+	clearOverloadBurstStateForTest(account.ID)
+
+	// 过载前的确定性派生（也是历史行为）。
+	first := resolveCodexFingerprintIDsFromContext(newFingerprintTestContext(clientSession), account)
+	require.NotNil(t, first)
+
+	// 上游报过载。
+	svc := newOverloadRotationTestService(false)
+	svc.HandleOpenAICodexOverload(account, OverloadPathHTTP503, clientSession)
+	require.Equal(t, 1, openAICodexOverloadSessionEpoch(account.ID, clientSession))
+
+	// 下一条请求是全新的 gin context（轮次 0），但 epoch 生效 → thread-id 必须不同。
+	second := resolveCodexFingerprintIDsFromContext(newFingerprintTestContext(clientSession), account)
+	require.NotNil(t, second)
+	require.NotEqual(t, first.threadID, second.threadID,
+		"过载后同一客户端会话的下一条请求必须轮换 thread-id，否则会回到同一后端")
+	require.Equal(t, 0, CodexFingerprintAttempt(newFingerprintTestContext(clientSession)),
+		"新请求的请求内轮次应为 0；轮换只能来自 epoch")
+	// session_id 仍必须是账号级恒定值。
+	require.Equal(t, first.sessionID, second.sessionID)
+
+	// 再次过载 → epoch 递增 → 又是一个新值。
+	svc.HandleOpenAICodexOverload(account, OverloadPathStreamFailed, clientSession)
+	third := resolveCodexFingerprintIDsFromContext(newFingerprintTestContext(clientSession), account)
+	require.NotNil(t, third)
+	require.NotEqual(t, second.threadID, third.threadID)
+	require.NotEqual(t, first.threadID, third.threadID)
+}
+
+// 未过载的会话必须保持历史派生（逐字节）——这是防回归的核心。
+func TestOverloadEpoch_UnaffectedSessionKeepsLegacyDerivation(t *testing.T) {
+	account := newTestOAuthAccount(502, map[string]any{codexFingerprintModeExtraKey: "session"})
+	clientSession := "client-session-clean"
+	resetSessionEpochForTest(account.ID, clientSession)
+
+	require.Equal(t, 0, openAICodexOverloadSessionEpoch(account.ID, clientSession))
+	got := resolveConvergedThreadID(account, clientSession, 0, 0)
+	legacy := deriveStableUUIDv4("codex:thread-id:v1:502:client-session-clean")
+	require.Equal(t, legacy, got)
+
+	ids := resolveCodexFingerprintIDsFromContext(newFingerprintTestContext(clientSession), account)
+	require.NotNil(t, ids)
+	require.Equal(t, legacy, ids.threadID)
+}
+
+// 窗口过期后必须回到确定性派生。
+func TestOverloadEpoch_ExpiresWithBurstWindow(t *testing.T) {
+	account := newTestOAuthAccount(503, map[string]any{codexFingerprintModeExtraKey: "session"})
+	clientSession := "client-session-expiry"
+	resetSessionEpochForTest(account.ID, clientSession)
+
+	svc := newOverloadRotationTestService(false)
+	svc.HandleOpenAICodexOverload(account, OverloadPathHTTP503, clientSession)
+	require.Equal(t, 1, openAICodexOverloadSessionEpoch(account.ID, clientSession))
+
+	// 手工把 lastSeen 推到窗口外（模拟时间流逝，避免测试 sleep 30 分钟）。
+	key := openAICodexOverloadSessionKey(account.ID, clientSession)
+	openAICodexOverloadSessionEpochs.mu.Lock()
+	st := openAICodexOverloadSessionEpochs.state[key]
+	st.lastSeen = time.Now().Add(-2 * openAICodexOverloadBurstWindow)
+	openAICodexOverloadSessionEpochs.state[key] = st
+	openAICodexOverloadSessionEpochs.mu.Unlock()
+
+	require.Equal(t, 0, openAICodexOverloadSessionEpoch(account.ID, clientSession),
+		"窗口外 epoch 不生效")
+	ids := resolveCodexFingerprintIDsFromContext(newFingerprintTestContext(clientSession), account)
+	require.NotNil(t, ids)
+	require.Equal(t, deriveStableUUIDv4("codex:thread-id:v1:503:client-session-expiry"), ids.threadID,
+		"窗口过期后必须回到确定性派生")
+
+	// epoch 值本身单调递增，不回退到用过的值。
+	resetSessionEpochForTest(account.ID, clientSession)
+	svc.HandleOpenAICodexOverload(account, OverloadPathHTTP503, clientSession)
+	require.Equal(t, 1, openAICodexOverloadSessionEpoch(account.ID, clientSession))
+}
+
+// 不同账号 / 不同客户端会话互不影响。
+func TestOverloadEpoch_ScopedToAccountAndSession(t *testing.T) {
+	accountA := newTestOAuthAccount(511, map[string]any{codexFingerprintModeExtraKey: "session"})
+	accountB := newTestOAuthAccount(512, map[string]any{codexFingerprintModeExtraKey: "session"})
+	sessionX, sessionY := "client-x", "client-y"
+	for _, acc := range []*Account{accountA, accountB} {
+		for _, s := range []string{sessionX, sessionY} {
+			resetSessionEpochForTest(acc.ID, s)
+		}
+	}
+
+	svc := newOverloadRotationTestService(false)
+	svc.HandleOpenAICodexOverload(accountA, OverloadPathHTTP503, sessionX)
+
+	require.Equal(t, 1, openAICodexOverloadSessionEpoch(accountA.ID, sessionX))
+	require.Equal(t, 0, openAICodexOverloadSessionEpoch(accountA.ID, sessionY), "同账号其它会话不受影响")
+	require.Equal(t, 0, openAICodexOverloadSessionEpoch(accountB.ID, sessionX), "其它账号不受影响")
+
+	baseA := deriveStableUUIDv4(fmt.Sprintf("codex:thread-id:v1:%d:%s", accountA.ID, sessionY))
+	require.Equal(t, baseA, resolveConvergedThreadID(accountA, sessionY, 0, 0))
+}
+
+// 关闭开关时不得写入 epoch（整体回滚语义）。
+func TestOverloadEpoch_DisabledByConfig(t *testing.T) {
+	account := newTestOAuthAccount(521, map[string]any{codexFingerprintModeExtraKey: "session"})
+	clientSession := "client-session-disabled"
+	resetSessionEpochForTest(account.ID, clientSession)
+
+	svc := newOverloadRotationTestService(true)
+	svc.HandleOpenAICodexOverload(account, OverloadPathHTTP503, clientSession)
+
+	require.Equal(t, 0, openAICodexOverloadSessionEpoch(account.ID, clientSession),
+		"开关关闭时不得推进 epoch")
+}
+
+// epoch 与请求内轮次互不干扰，且两者都为 0 时与历史派生一致。
+func TestResolveConvergedThreadID_EpochAndAttemptCombine(t *testing.T) {
+	account := newTestOAuthAccount(531, nil)
+	legacy := deriveStableUUIDv4("codex:thread-id:v1:531:s1")
+	byAttempt := deriveStableUUIDv4("codex:thread-id:v1:531:s1:1")
+	byEpoch := deriveStableUUIDv4("codex:thread-id:v2:531:s1:1")
+	byBoth := deriveStableUUIDv4("codex:thread-id:v2:531:s1:1:2")
+
+	require.Equal(t, legacy, resolveConvergedThreadID(account, "s1", 0, 0))
+	require.Equal(t, byAttempt, resolveConvergedThreadID(account, "s1", 1, 0))
+	require.Equal(t, byEpoch, resolveConvergedThreadID(account, "s1", 0, 1))
+	require.Equal(t, byBoth, resolveConvergedThreadID(account, "s1", 2, 1))
+
+	// epoch=1/attempt=1 与仅 attempt=1 必须不同（种子版本位隔离）。
+	require.NotEqual(t, byAttempt, resolveConvergedThreadID(account, "s1", 1, 1))
+}
+
+func TestOpenAICodexOverloadSessionKey_EmptyInputs(t *testing.T) {
+	require.Empty(t, openAICodexOverloadSessionKey(0, "s"))
+	require.Empty(t, openAICodexOverloadSessionKey(1, ""))
+	require.NotEmpty(t, openAICodexOverloadSessionKey(1, "s"))
+	// 键不包含原始 session-id。
+	require.NotContains(t, openAICodexOverloadSessionKey(1, "secret-session-value"), "secret-session-value")
 }

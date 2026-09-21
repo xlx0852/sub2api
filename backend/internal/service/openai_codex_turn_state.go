@@ -495,27 +495,26 @@ func (s *OpenAIGatewayService) NoteOpenAICodexTurnStateUpstreamResult(account *A
 	s.scheduleOpenAICodexTurnStateRefresh(account)
 }
 
-// DiscardOpenAICodexTurnStateForOverload 在明确的容量过载（server_is_overloaded /
-// slow_down）出现时立即丢弃该账号所有池槽位的票，并触发重采。
+// HandleOpenAICodexOverload 处理一次明确的容量过载（server_is_overloaded / slow_down）。
+// 做三件事：记录爆发窗口、推进 (账号, 客户端会话) 的过载 epoch、丢弃被钉住的票。
 //
-// 与 NoteOpenAICodexTurnStateUpstreamResult 的区别（为什么需要这个独立入口）：
-//   - 后者要求「同号连续 5xx 达 openAICodexTurnStateUpstream5xxInvalidateThreshold 次」
-//     且有 2 分钟冷却，是「票可能已被服务端吊销」的恢复启发式。
-//   - 容量过载是上游容量的瞬时抽签：同一账号同一会话在数十秒内会交替成败，
-//     被钉住的票正是把重试锁在同一个已饱和后端的原因。等 3 次意味着前两次
-//     白白钉死，所以过载需要第 1 次就重抽，且不受失效冷却阻塞。
+// 为什么要清票（而非等连续 5xx 阈值）：票是路由提示，被钉住的票正是把重试锁在
+// 同一个已饱和后端的原因；过载是瞬时抽签，第 1 次就应重抽。
+// 为什么要 epoch：客户端跨请求重试时请求内轮次会归零，只有 epoch 能让下一条请求
+// 拿到新的 thread-id（实测同会话重试 19.6% vs 换会话 65.7%）。
 //
-// 过载是请求级信号而非账号级故障：本入口只清票、不动账号健康与调度状态。
-func (s *OpenAIGatewayService) DiscardOpenAICodexTurnStateForOverload(account *Account, overloadPath string) {
+// 过载是请求级信号而非账号级故障：本入口只清票/推进 epoch，不动账号健康与调度状态。
+func (s *OpenAIGatewayService) HandleOpenAICodexOverload(account *Account, overloadPath, clientSessionID string) {
 	if s == nil || account == nil || !account.IsOpenAIOAuth() || account.ID <= 0 {
 		return
 	}
 	if !s.CodexOverloadIdentityRotationEnabled() {
 		return
 	}
-	// 爆发窗口记录与票据复用解耦：重试预算（OpenAICodexOverloadRetryBudget）
-	// 依赖这份计数，即使账号没启用票据复用也应当记录。
+	// 爆发窗口与 epoch 记录与票据复用解耦：重试预算（OpenAICodexOverloadRetryBudget）
+	// 与跨请求重抽依赖它们，即使账号没启用票据复用也应当记录。
 	burstAttempt := s.OnOpenAICodexOverload(account.ID)
+	epoch := rotateOpenAICodexOverloadSessionEpoch(account.ID, clientSessionID)
 	if !openAICodexTurnStateReuseEnabled(s.cfg) {
 		return
 	}
@@ -525,8 +524,8 @@ func (s *OpenAIGatewayService) DiscardOpenAICodexTurnStateForOverload(account *A
 	s.codexTurnStateUpstream5xx.Delete(account.ID)
 	s.codexTurnStateFailureMu.Unlock()
 	logger.LegacyPrintf("service.openai_codex_turn_state",
-		"[CodexTurnStateSeed] invalidate account=%d reason=server_overloaded path=%s burst_attempt=%d",
-		account.ID, overloadPath, burstAttempt)
+		"[CodexTurnStateSeed] invalidate account=%d reason=server_overloaded path=%s burst_attempt=%d session_epoch=%d",
+		account.ID, overloadPath, burstAttempt, epoch)
 	s.invalidateOpenAICodexTurnState(account)
 	s.scheduleOpenAICodexTurnStateRefresh(account)
 }

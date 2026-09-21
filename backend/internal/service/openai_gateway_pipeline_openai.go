@@ -513,7 +513,7 @@ func (s *OpenAIGatewayService) forwardOpenAITransport(ex *pipeline.Exchange) err
 					if errors.As(wsErr, &dialErr) {
 						overloadPath = OverloadPathHTTP503
 					}
-					s.DiscardOpenAICodexTurnStateForOverload(account, overloadPath)
+					s.HandleOpenAICodexOverload(account, overloadPath, requestClientSessionID(st.c))
 					if s.CodexOverloadIdentityRotationEnabled() {
 						rotatedFingerprintAttempt = BumpCodexFingerprintAttempt(st.c)
 					}

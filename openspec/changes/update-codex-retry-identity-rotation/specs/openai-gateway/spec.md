@@ -2,7 +2,7 @@
 
 ### Requirement: Session identity rotation on overload retry
 
-The OpenAI gateway SHALL rotate the derived Codex `thread-id` on every retry attempt issued against the same account after a retryable upstream overload, so that the retry is not bound to the routing affinity of the failed attempt. The account-level converged `session_id` MUST NOT be rotated.
+The OpenAI gateway SHALL rotate the derived Codex `thread-id` both within a request's same-account retries and across subsequent requests that reuse the same client session, after a retryable upstream overload is observed on that account. Rotation MUST be bounded to an overload burst window and MUST return to the deterministic derivation once the window elapses without a further overload. The account-level converged `session_id` MUST NOT be rotated.
 
 #### Scenario: Same-account retry carries a fresh thread-id
 
@@ -10,25 +10,40 @@ The OpenAI gateway SHALL rotate the derived Codex `thread-id` on every retry att
 - **THEN** the retry request carries a `thread-id` derived with the attempt index included, differing from the failed attempt's `thread-id`
 - **AND** the `session-id` on the retry equals the account-level converged value used by the failed attempt
 
-#### Scenario: First attempt keeps the deterministic identity
+#### Scenario: Next request from the same client session also rotates
 
-- **WHEN** the gateway sends the first attempt of a request for a given client session
-- **THEN** the `thread-id` is the deterministic derivation of account identity and client session, with no attempt component
+- **WHEN** an account reports `server_is_overloaded` for a request whose client session identity is known, and that client later issues a further request under the same client session identity within the burst window
+- **THEN** the further request carries a `thread-id` derived with the overload epoch included, differing from the derivation used before the overload, even though the further request starts with attempt index zero
+
+#### Scenario: Rotation expires with the burst window
+
+- **WHEN** the burst window elapses with no further overload for that account and client session
+- **THEN** subsequent requests from that client session derive the deterministic `thread-id` again
+
+#### Scenario: The first attempt of an unaffected session is unchanged
+
+- **WHEN** a client session has no recorded overload for the selected account
+- **THEN** the `thread-id` is the deterministic derivation of account identity and client session, with no attempt or epoch component
 
 #### Scenario: Rotation is observable
 
-- **WHEN** a retry rotates the derived `thread-id`
+- **WHEN** a retry or a subsequent request rotates the derived `thread-id`
 - **THEN** the gateway records a structured field indicating rotation occurred, without logging credentials or request content
 
 ### Requirement: Immediate turn-state discard on overload
 
-The OpenAI gateway SHALL discard the pinned `x-codex-turn-state` for the affected account and pool on the first `server_is_overloaded` outcome, and MUST NOT require a run of consecutive 5xx responses before discarding.
+The OpenAI gateway SHALL discard the pinned `x-codex-turn-state` for the affected account and pool on the first `server_is_overloaded` outcome, and MUST NOT require a run of consecutive 5xx responses before discarding. The discard MUST also apply when the overload cannot be replayed because visible output was already sent to the client.
 
 #### Scenario: First overload drops the pinned ticket
 
 - **WHEN** an upstream response reports `server_is_overloaded` for an account/pool that has a pinned turn-state
 - **THEN** the gateway discards that pinned turn-state so the next attempt re-draws pool routing
 - **AND** the discard is recorded as a structured event
+
+#### Scenario: Unreplayable stream overload still drops the ticket
+
+- **WHEN** a stream fails with `server_is_overloaded` after visible content has already reached the client, so the request cannot be replayed
+- **THEN** the gateway still discards the pinned turn-state and records the burst, without replaying the request
 
 #### Scenario: Existing backoff is not an obstacle
 

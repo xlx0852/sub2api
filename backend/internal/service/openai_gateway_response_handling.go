@@ -430,7 +430,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			// 立即丢弃被钉住的票 + 记入爆发窗口。此处不轮换会话身份（本次已结束，
 			// 轮次随请求结束归零）。
 			if isOpenAIUpstreamCapacityShedEvent(dataBytes) {
-				s.DiscardOpenAICodexTurnStateForOverload(account, OverloadPathStreamFailed)
+				s.HandleOpenAICodexOverload(account, OverloadPathStreamFailed, requestClientSessionID(c))
 			}
 			s.markOpenAIStreamTerminalError(c, account, false, upstreamRequestID, dataBytes, failedMessage)
 			forceFlushFailedEvent = true

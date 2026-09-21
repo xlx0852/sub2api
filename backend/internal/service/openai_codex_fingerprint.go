@@ -100,16 +100,25 @@ func resolveConvergedSessionID(account *Account) string {
 // 每个真实 Codex 会话（不同客户端启动实例）获得一个独立线程，
 // 模拟正常用户 spawn 子代理或开多窗口的模式。
 //
-// attempt 为请求内已发生的失败重试轮次（首次尝试为 0）：
-//   - attempt == 0 时派生结果与历史实现逐字节一致（防回归）；
-//   - attempt > 0 时在种子里追加轮次，使重试拿到不同的 thread_id。
+// attempt 为请求内已发生的失败重试轮次（首次尝试为 0）；
+// epoch 为该 (账号, 客户端会话) 的过载 epoch（未发生过载为 0，见 openai_codex_overload_burst.go）。
 //
-// 这样做的理由：thread-id 即上游的会话路由提示，同一个 thread_id 重试会被
-// 反复送回同一个已饱和的后端；轮换后重试获得新的路由。session_id 仍是账号级
-// 恒定值（见 resolveConvergedSessionID），不随重试变化。
-func resolveConvergedThreadID(account *Account, clientSessionID string, attempt int) string {
+//   - attempt<=0 且 epoch<=0 时派生结果与历史实现逐字节一致（防回归）；
+//   - 否则在种子里追加重试轮次 / 过载 epoch，使重试与过载后的下一条请求拿到不同的 thread_id。
+//
+// 这样做的理由：thread-id 即上游的会话路由提示，同一个 thread_id 会被反复送回
+// 同一个已饱和的后端；换新值才能重新路由。session_id 仍是账号级恒定值
+// （见 resolveConvergedSessionID），不随重试/过载变化。
+func resolveConvergedThreadID(account *Account, clientSessionID string, attempt, epoch int) string {
 	if account == nil || clientSessionID == "" {
 		return ""
+	}
+	// 过载 epoch 单独一个种子版本：即使 epoch 与 attempt 数值碰撞也不会派生同值。
+	if epoch > 0 {
+		if attempt > 0 {
+			return deriveStableUUIDv4(fmt.Sprintf("codex:thread-id:v2:%d:%s:%d:%d", account.ID, clientSessionID, epoch, attempt))
+		}
+		return deriveStableUUIDv4(fmt.Sprintf("codex:thread-id:v2:%d:%s:%d", account.ID, clientSessionID, epoch))
 	}
 	if attempt <= 0 {
 		return deriveStableUUIDv4(fmt.Sprintf("codex:thread-id:v1:%d:%s", account.ID, clientSessionID))
@@ -133,10 +142,11 @@ type codexFingerprintIDs struct {
 // resolveCodexFingerprintIDs 按收敛模式计算出站 ID 集合。
 // clientSessionID 是客户端原始的 session-id 头值（连字符形式），用于 session 模式下
 // 的 thread_id 派生——每个真实 Codex 会话得到一个独立线程。
-// attempt 是请求内已发生的失败重试轮次，仅影响派生的 thread_id（见 resolveConvergedThreadID）。
+// attempt 是请求内已发生的失败重试轮次，epoch 是该会话的过载 epoch；
+// 两者都只影响派生的 thread_id（见 resolveConvergedThreadID）。
 // 返回 nil 表示 off 模式，不需要改写。
 // 注意：包含随机生成的 turn_id，调用方必须只调用一次并共享结果给头改写和体改写。
-func resolveCodexFingerprintIDs(account *Account, clientSessionID string, mode codexFingerprintMode, attempt int) *codexFingerprintIDs {
+func resolveCodexFingerprintIDs(account *Account, clientSessionID string, mode codexFingerprintMode, attempt, epoch int) *codexFingerprintIDs {
 	if mode == codexFingerprintOff {
 		return nil
 	}
@@ -154,7 +164,7 @@ func resolveCodexFingerprintIDs(account *Account, clientSessionID string, mode c
 
 	case codexFingerprintSession:
 		ids.sessionID = resolveConvergedSessionID(account)
-		ids.threadID = resolveConvergedThreadID(account, clientSessionID, attempt)
+		ids.threadID = resolveConvergedThreadID(account, clientSessionID, attempt, epoch)
 		if ids.threadID == "" {
 			ids.threadID = ids.sessionID
 		}
@@ -186,7 +196,7 @@ func extractClientSessionID(h http.Header) string {
 // resolveCodexFingerprintIDsFromRequest 从客户端原始请求头中提取 session-id，
 // 结合账号配置一次性解析收敛 ID 集合。调用方应将返回的 ids 同时传给
 // applyCodexFingerprintHeaders 和 applyCodexFingerprintClientMetadata。
-// 等价于 attempt=0 的首次尝试；带重试轮次的调用方走 resolveCodexFingerprintIDsFromContext。
+// 不带重试轮次与过载 epoch（等价于 attempt=0/epoch=0）。
 func resolveCodexFingerprintIDsFromRequest(account *Account, clientHeaders http.Header) *codexFingerprintIDs {
 	if account == nil {
 		return nil
@@ -199,14 +209,16 @@ func resolveCodexFingerprintIDsFromRequest(account *Account, clientHeaders http.
 	if clientHeaders != nil {
 		clientSessionID = extractClientSessionID(clientHeaders)
 	}
-	return resolveCodexFingerprintIDs(account, clientSessionID, mode, 0)
+	return resolveCodexFingerprintIDs(account, clientSessionID, mode, 0, 0)
 }
 
-// codexFingerprintIDsEntry 缓存一次解析结果，并记录它对应的重试轮次。
-// 同一轮次内头改写与体改写必须共享同一实例（turn_id 等随机字段一致性）；
-// 轮次变化时必须重新解析，否则重试会带着与失败尝试完全相同的 thread_id 出站。
+// codexFingerprintIDsEntry 缓存一次解析结果，并记录它对应的 (重试轮次, 过载 epoch)。
+// 同一组内头改写与体改写必须共享同一实例（turn_id 等随机字段一致性）；
+// 任一分量变化时必须重新解析，否则重试或过载后的请求会带着与失败尝试完全相同的
+// thread_id 出站。
 type codexFingerprintIDsEntry struct {
 	attempt int
+	epoch   int
 	ids     *codexFingerprintIDs
 }
 
@@ -240,26 +252,31 @@ func BumpCodexFingerprintAttempt(c *gin.Context) int {
 	return next
 }
 
-// resolveCodexFingerprintIDsFromContext 返回本次尝试的收敛 ID 集合，按重试轮次缓存。
-// attempt 来自 BumpCodexFingerprintAttempt；轮次变化时自动重新派生 thread_id。
+// resolveCodexFingerprintIDsFromContext 返回本次尝试的收敛 ID 集合，按 (重试轮次, 过载 epoch) 缓存。
+// attempt 来自 BumpCodexFingerprintAttempt；epoch 来自账号+客户端会话的过载窗口。
+// 两者变化时自动重新派生 thread_id。
 func resolveCodexFingerprintIDsFromContext(c *gin.Context, account *Account) *codexFingerprintIDs {
 	if c == nil || account == nil {
 		return nil
 	}
 	attempt := CodexFingerprintAttempt(c)
-	if existing, ok := c.Get(codexFingerprintIDsContextKey); ok {
-		if entry, ok := existing.(*codexFingerprintIDsEntry); ok && entry != nil && entry.attempt == attempt {
-			return entry.ids
-		}
-	}
-	mode := GetCodexFingerprintMode(account)
 	var headers http.Header
 	if c.Request != nil {
 		headers = c.Request.Header
 	}
-	// attempt 只参与 thread_id 派生；attempt=0 与 resolveCodexFingerprintIDsFromRequest 等价。
-	ids := resolveCodexFingerprintIDs(account, extractClientSessionID(headers), mode, attempt)
-	c.Set(codexFingerprintIDsContextKey, &codexFingerprintIDsEntry{attempt: attempt, ids: ids})
+	clientSessionID := extractClientSessionID(headers)
+	// 过载 epoch：客户端跨请求重试时，轮次归零但 epoch 仍在窗口内，
+	// 保证下一条请求不会拿到与失败尝试相同的 thread-id。
+	epoch := openAICodexOverloadSessionEpoch(account.ID, clientSessionID)
+	if existing, ok := c.Get(codexFingerprintIDsContextKey); ok {
+		if entry, ok := existing.(*codexFingerprintIDsEntry); ok && entry != nil && entry.attempt == attempt && entry.epoch == epoch {
+			return entry.ids
+		}
+	}
+	mode := GetCodexFingerprintMode(account)
+	// attempt/epoch 只参与 thread_id 派生；两者均为 0 时与 resolveCodexFingerprintIDsFromRequest 等价。
+	ids := resolveCodexFingerprintIDs(account, clientSessionID, mode, attempt, epoch)
+	c.Set(codexFingerprintIDsContextKey, &codexFingerprintIDsEntry{attempt: attempt, epoch: epoch, ids: ids})
 	return ids
 }
 
@@ -446,4 +463,13 @@ func rewriteClientMetadataEmbeddedTurnMetadata(clientMetadata map[string]any, id
 	if rebuilt, err := json.Marshal(metadata); err == nil {
 		clientMetadata["x-codex-turn-metadata"] = string(rebuilt)
 	}
+}
+
+// requestClientSessionID 从 gin 请求头提取客户端原始会话标识，供过载 epoch 使用。
+// 与 extractClientSessionID 同义，但接受 *gin.Context 以简化调用点。
+func requestClientSessionID(c *gin.Context) string {
+	if c == nil || c.Request == nil {
+		return ""
+	}
+	return extractClientSessionID(c.Request.Header)
 }

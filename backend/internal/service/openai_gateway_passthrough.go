@@ -1365,7 +1365,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			// 本次按既有边界原样终态，但过载必须让「下一次请求」重抽——立即丢弃被
 			// 钉住的票 + 记入爆发窗口。
 			if isOpenAIUpstreamCapacityShedEvent(dataBytes) {
-				s.DiscardOpenAICodexTurnStateForOverload(account, OverloadPathStreamFailed)
+				s.HandleOpenAICodexOverload(account, OverloadPathStreamFailed, extractClientSessionID(c.Request.Header))
 			}
 			s.markOpenAIStreamTerminalError(c, account, true, upstreamRequestID, dataBytes, failedMessage)
 			forceFlushFailedEvent = true
