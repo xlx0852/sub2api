@@ -23,10 +23,28 @@
 
 ### Decision 1: 轮换派生的 `thread-id`，固定 `session_id`
 
-- **做法**：`resolveConvergedThreadID(account, clientSessionID, attempt)`，attempt=0 时产出与现状**逐字节一致**，attempt>0 时并在派生输入中加入序号。
-- **理由**：实测同会话重试 19.6% vs 新会话 65.7%。`thread-id`/`session-id` 即客户端的 `prompt_cache_key`，决定上游路由与缓存亲和；同 `thread-id` 会把重试反复送回同一个饱和后端。
-- **Alternative considered**：轮换 `session_id`。**否决** —— `openai_codex_fingerprint.go:18` 明确 `session_id` 是刻意收敛为账号级常量以控制上游"设备数/会话数"判定的；而 `thread-id` 本就按客户端会话变化（`:28-29`），在其上加 attempt 维度不改变敏感语义。
-- **Alternative considered**：换模型。**否决** —— 原始数据中 astra 过载率 13.82% 远高于其他模型，但同 30 分钟窗口内对照仅 1.39×，属时间混淆；2×2 分解显示新会话下不论是否换模型都是 71-73%。换模型不是杠杆。
+- **做法**：`resolveConvergedThreadID(account, clientSessionID, attempt, epoch)`。
+  - `attempt<=0 && epoch<=0` 时产出与现状**逐字节一致**（种子 `codex:thread-id:v1:<acc>:<sess>`）；
+  - `attempt>0` 时 `v1:<acc>:<sess>:<attempt>`；
+  - `epoch>0` 时换种子版本 `v2:<acc>:<sess>:<epoch>[:<attempt>]`，避免 epoch 与 attempt 数值碰撞派生出同值。
+- **理由**：实测同会话重试 19.6% vs 新会话 65.7%。`thread-id`/`session-id` 即客户端的 `prompt_cache_key`，决定上游路由与缓存亲和。
+- **Alternative considered**：轮换 `session_id`。**否决** —— `openai_codex_fingerprint.go:18` 明确 `session_id` 是刻意收敛为账号级常量以控制上游“设备数/会话数”判定的。
+- **Alternative considered**：换模型。**否决** —— 同 30 分钟窗口内对照仅 1.39×，属时间混淆；2×2 分解显示新会话下不换模型也是 71-73%。
+
+### Decision 1b: 跨请求需要独立的过载 epoch（而非复用请求内轮次）
+
+- **问题**：`attempt` 存在 gin context（单个 HTTP 请求）内。客户端跨请求重试时轮次归零，派生回**同一个** `thread-id` —— 而 3.36× 的实测收益恰恰来自跨请求场景。
+- **做法**：按 `(account.ID, 客户端 session-id)` 维护过载 epoch。过载时 `epoch++`；窗口（复用 30 分钟的爆发窗口）内派生使用 `v2` 种子；窗口外回到 `v1`。
+- **键与内存**：键为 `sha256(clientSessionID)[:8]` 前缀 + accountID，**不保留原始 session-id**；上限 4096 条，超限清理过期项、仍超限则整体重置（epoch 只是路由启发式，丢失只意味着回到确定性派生）；另用 `atomic` 计数做「从未过载」的免锁快路径。
+- **epoch 单调不回退**：窗口过期只用“是否生效”判定，不把计数器归零，避免同一会话重新拿到用过的派生值。
+- **代价与权衡**：客户端自身续聊在该窗口内失去 thread 亲和（丢 prompt cache）。接受理由：窗口内正是上游降载期，而一次失败重试的代价（整轮重发全部历史，`store=false`）远大于一次 cache miss；且仅对**发生过过载的那个账号+会话**生效。
+- **Alternative considered**：只在请求内轮换，跨请求交给客户端换会话。**否决** —— 那等于要求用户放弃当前对话，产品上不可接受，也是本变更要消除的负担。
+
+### Decision 1c: 过载副作用收敛到单一入口
+
+- **做法**：`HandleOpenAICodexOverload(account, overloadPath, clientSessionID)` 同时做「记爆发窗口 + 推进 epoch + 清票」。
+- **理由**：三者必须同步，分散在多个调用点会漂移；且它们的前置条件不同（清票需要票据复用开关，其余不需要），放在一处才好表达。
+- **附带**：WS ingress session 的指纹快照按 `(attempt, epoch)` 双维度校验刷新，否则头（从 context 重新解析）与体（`client_metadata`）会携带不同的 `thread-id`。
 
 ### Decision 2: 首次过载即丢弃被钉住的 `x-codex-turn-state`
 

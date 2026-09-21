@@ -13,7 +13,15 @@
 | `openai_chat_completions.pool_mode_same_account_retry` | 同上 | Chat Completions 入口 |
 | `openai_alpha_search.pool_mode_same_account_retry` | 同上 | Alpha Search 入口 |
 | `reconnect_retry`（WS） | `reason=server_overloaded`、`thread_id_rotated` | WS 重连重试的轮换 |
-| `[CodexTurnStateSeed] invalidate … reason=server_overloaded path=… burst_attempt=N` | `burst_attempt` | 首次过载即清票；`burst_attempt=1` 为爆发窗口首个 |
+| `[CodexTurnStateSeed] invalidate … reason=server_overloaded path=… burst_attempt=N session_epoch=M` | `session_epoch` | 首次过载即清票；`burst_attempt=1` 为爆发窗口首个；`session_epoch` 随该(账号,会话)每次过载递增 |
+
+### 跨请求轮换的观察要点
+
+`session_epoch` 是本次新增的跨请求维度（`thread-id` 派生换到 `v2` 种子）。灰度期应确认：
+
+1. 过载后**同一客户端会话的下一条请求**拿到不同 `thread-id`（日志侧只能看到 `session_epoch>0`；如需直接比对，可临时开启请求头审计）。
+2. 窗口（30 分钟）内无新过载后，该会话回到 `v1` 确定性派生。
+3. **prompt cache 命中率**在窗口内下降属预期；需确认下降幅度与「发生过过载的会话占比」量级一致，否则说明轮换扩散到了未过载的会话（应用 `TestOverloadEpoch_UnaffectedSessionKeepsLegacyDerivation` 的逻辑排查）。
 
 ### 必须为 0 的异常
 
@@ -53,7 +61,7 @@
 2. **辅指标**：用户可见 503 / `Selected model is at capacity` 次数
 3. **代价指标**（应无显著恶化）：
    - 上游请求总量（重试预算放宽最多 +2 次/请求，且仅在爆发窗口内）
-   - prompt cache 命中率（轮换会丢缓存，但仅发生在失败之后）
+   - prompt cache 命中率：**跨请求 epoch 会让发生过过载的会话在窗口内丢缓存**，下降属预期；需与「发生过过载的会话占比」量级一致
    - 单请求尾延迟
 
 ### 统计口径
