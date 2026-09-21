@@ -57,14 +57,13 @@ func TestGatewayOutboundCodexFingerprint_ObservedShape(t *testing.T) {
 			}
 			c, _ := newOpenAIImageGenerationControlTestContext(true, "Codex Desktop/0.155.0-alpha.9.2")
 			// 覆盖成 Codex Desktop 的真实入站头
-			c.Request.Header.Set("user-agent", "Codex Desktop/0.155.0-alpha.9.2 (Mac OS 27.0.0; arm64) unknown (Codex Desktop; 26.915.31945)")
-			c.Request.Header.Set("originator", "Codex Desktop")
-			c.Request.Header.Set("session-id", clientThread)
-			c.Request.Header.Set("session_id", clientThread)
-			c.Request.Header.Set("thread-id", clientThread)
-			c.Request.Header.Set("x-client-request-id", clientThread)
-			c.Request.Header.Set("x-codex-window-id", clientThread+":0")
-			c.Request.Header.Set("x-codex-turn-metadata", clientTurnMetadata)
+			// 用**真实客户端的完整入站头集合**（mitm 全量抓包，无白名单）灌入，
+			// 这样出站差异才可归因：凡客户端发过而出站没有的头，都是网关丢的。
+			for k, v := range realCodexClientRequestHeaders(clientThread, clientInstall, clientTurnMetadata) {
+				c.Request.Header.Set(k, v)
+			}
+			// 生产里 apiKeyID 非 0；为 0 会让隔离值退化成 k0 前缀，抓包结果不可比。
+			c.Set("api_key", &APIKey{ID: 4242})
 
 			// 必须是 OAuth 账号：所有指纹改写与身份统一都是 OAuth 专属路径。
 			account := &Account{
@@ -108,6 +107,37 @@ func TestGatewayOutboundCodexFingerprint_ObservedShape(t *testing.T) {
 				}
 				t.Logf("  %-28s %s", k, v)
 			}
+
+			// ---------- 与真实客户端的逐头差异（本轮最关键的输出） ----------
+			inbound := realCodexClientRequestHeaders(clientThread, clientInstall, clientTurnMetadata)
+			outbound := map[string]string{}
+			for k := range upstream.lastReq.Header {
+				outbound[strings.ToLower(k)] = upstream.lastReq.Header.Get(k)
+			}
+			var added, removed, changed []string
+			for k, v := range outbound {
+				in, had := inbound[k]
+				switch {
+				case !had:
+					if k != "authorization" { // 鉴权头本就必须替换
+						added = append(added, k+"="+shortHeaderValueForLog(v))
+					}
+				case in != v:
+					changed = append(changed, k)
+				}
+			}
+			for k := range inbound {
+				if _, ok := outbound[k]; !ok {
+					removed = append(removed, k)
+				}
+			}
+			sort.Strings(added)
+			sort.Strings(removed)
+			sort.Strings(changed)
+			t.Logf("---------- mode=%s 相对真实客户端的差异 ----------", mode)
+			t.Logf("  [新增] 客户端没发、网关发了 : %v", added)
+			t.Logf("  [丢失] 客户端发了、网关没发 : %v", removed)
+			t.Logf("  [改写] 两边都有但值不同   : %v", changed)
 
 			// ---------- 出站体里的身份字段 ----------
 			t.Logf("---------- mode=%s 出站体身份字段 ----------", mode)
@@ -294,5 +324,42 @@ func TestCodexWindowIDSuffix(t *testing.T) {
 	}
 	for in, want := range cases {
 		require.Equal(t, want, codexWindowIDSuffix(in), "input=%q", in)
+	}
+}
+
+// realCodexClientRequestHeaders 是真实 Codex 客户端 /responses 的**全量**请求头，
+// 来自 2026-09-22 的 mitm 全量抓包（无白名单）。
+//
+// 记录在案的两个坑：
+//   - 客户端**不发** `session_id`(下划线) 也**不发** `version`。此前用白名单 addon 得到的
+//     「客户端会发下划线 session_id」是 addon 里 `name.replace("_","-")` 回退造成的假象。
+//   - authorization / cookie 用占位值：本测试只验证网关**是否**透传它们，不验内容。
+//
+// shortHeaderValueForLog 截断用于日志的头值，避免把长令牌刷进测试输出。
+func shortHeaderValueForLog(v string) string {
+	if len(v) > 48 {
+		return v[:48] + "…"
+	}
+	return v
+}
+
+func realCodexClientRequestHeaders(thread, install, turnMetadata string) map[string]string {
+	return map[string]string{
+		"accept":                                 "text/event-stream",
+		"authorization":                          "Bearer client-token-placeholder",
+		"chatgpt-account-id":                     "d8ee690b-9098-43d7-a525-79044f324b8e",
+		"content-encoding":                       "zstd",
+		"content-type":                           "application/json",
+		"cookie":                                 "__Secure-next-auth.session-token=client-cookie-placeholder",
+		"originator":                             "codex_exec",
+		"session-id":                             thread,
+		"thread-id":                              thread,
+		"user-agent":                             "codex_exec/0.155.1 (Mac OS 27.0.0; arm64) unknown (codex_exec; 0.155.1)",
+		"x-client-request-id":                    thread,
+		"x-codex-beta-features":                  "prevent_idle_sleep,remote_compaction_v2",
+		"x-codex-routing-hint":                   "model=gpt-6-astra",
+		"x-codex-turn-metadata":                  turnMetadata,
+		"x-codex-window-id":                      thread + ":0",
+		"x-openai-internal-codex-responses-lite": "true",
 	}
 }
