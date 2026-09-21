@@ -27,11 +27,13 @@
 ## 4. 灰度与验收
 
 - [x] 4.1 设计 A/B：同账号重试分两组，A 组 `disable_codex_overload_identity_rotation=true`（保留确定性 `thread-id`），B 组默认（带 attempt 序号）；对比重试成功率与用户可见 503
-- [x] 4.2 记录基线指标：`openai.pool_mode_same_account_retry` / `openai_messages.pool_mode_same_account_retry` / `openai_chat_completions.pool_mode_same_account_retry` / `openai_alpha_search.pool_mode_same_account_retry` 的 `thread_id_rotated`、`overload_path`、`fingerprint_attempt`；WS 侧 `reconnect_retry` 的同名字段；票侧 `[CodexTurnStateSeed] reason=server_overloaded`
+- [x] 4.2 记录基线指标（实测见 `production-baseline-2026-09-21.md`：同账号重试最终成功 32.8%=45/137；打满 3 轮仅 7.1%=7/99；403 触发 0/42；40 天日志内字面量 `server_is_overloaded` 0 次，但网关不打印上游 code，故仅可由新增 `overload_path` 判定）：`openai.pool_mode_same_account_retry` / `openai_messages.pool_mode_same_account_retry` / `openai_chat_completions.pool_mode_same_account_retry` / `openai_alpha_search.pool_mode_same_account_retry` 的 `thread_id_rotated`、`overload_path`、`fingerprint_attempt`；WS 侧 `reconnect_retry` 的同名字段；票侧 `[CodexTurnStateSeed] reason=server_overloaded`
 - [x] 4.3 定义验收阈值（预期 B 组重试成功率从约 20% 升至 60%+）
 - [x] 4.4 文档化回滚方式与停止条件：回滚开关 `gateway.disable_codex_overload_identity_rotation=true`；停止条件 = 重复计费、prompt cache 命中率异常下降、或转号后账号健康指标恶化
 
 灰度与验收的执行细节见 `rollout.md`（A/B 分组、日志字段、验收指标、回滚与停止条件）。
+
+生产基线实测与观测限制见 `production-baseline-2026-09-21.md`；其中第四节记录了当前实现「仅覆盖请求内重试、未覆盖跨请求」的局限。
 
 ## 验证记录
 
