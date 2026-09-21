@@ -190,13 +190,19 @@ func (h *OpenAIGatewayHandler) AlphaSearch(c *gin.Context) {
 		}
 		if failoverErr.RetryableOnSameAccount {
 			retryLimit := account.GetPoolModeRetryCount()
+			// 容量过载爆发窗口内放宽同账号重试上限（窗口外/非过载保持基线）。
+			retryLimit = h.gatewayService.OpenAICodexOverloadRetryBudget(account.ID, retryLimit, failoverErr.IsServerOverloaded())
 			if sameAccountRetryCount[account.ID] < retryLimit {
 				sameAccountRetryCount[account.ID]++
+				fingerprintAttempt := rotateCodexSessionIdentityForSameAccountRetry(c, h.gatewayService, account)
 				reqLog.Warn("openai_alpha_search.pool_mode_same_account_retry",
 					zap.Int64("account_id", account.ID),
 					zap.Int("upstream_status", failoverErr.StatusCode),
 					zap.Int("retry_limit", retryLimit),
 					zap.Int("retry_count", sameAccountRetryCount[account.ID]),
+					zap.String("overload_path", failoverErr.OverloadPath),
+					zap.Int("fingerprint_attempt", fingerprintAttempt),
+					zap.Bool("thread_id_rotated", fingerprintAttempt > 0),
 				)
 				select {
 				case <-c.Request.Context().Done():

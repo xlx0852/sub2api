@@ -1133,12 +1133,21 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 			"message": message,
 		},
 	})
-	return &UpstreamFailoverError{
+	capacityShed := isOpenAIUpstreamCapacityShedEvent(payload)
+	failoverErr := &UpstreamFailoverError{
 		StatusCode:             http.StatusBadGateway,
 		ResponseBody:           body,
 		RetryableOnSameAccount: openAIStreamFailedEventRetryableOnSameAccount(account, payload, message),
-		RequestScopedTransient: isOpenAIUpstreamCapacityShedEvent(payload),
+		RequestScopedTransient: capacityShed,
 	}
+	// 流内降载与 HTTP 503 是同一上游错误的两个通道（同一错误码 server_is_overloaded）。
+	// 标出通道供恢复决策使用：立即丢弃被钉住的票 + 轮换会话身份。
+	// 注意：此处仅是分类，是否重放仍由调用方的「已输出可见内容不重放」边界决定。
+	if capacityShed {
+		failoverErr.ServerOverloaded = true
+		failoverErr.OverloadPath = OverloadPathStreamFailed
+	}
+	return failoverErr
 }
 
 func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(

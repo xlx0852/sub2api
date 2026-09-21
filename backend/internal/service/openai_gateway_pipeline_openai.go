@@ -504,13 +504,29 @@ func (s *OpenAIGatewayService) forwardOpenAITransport(ex *pipeline.Exchange) err
 					break
 				}
 				s.recordOpenAIWSRetryAttempt(backoff)
+				// 容量过载：重试前轮换派生的会话身份，否则重连会带着与失败尝试完全相同的
+				// thread-id 回到同一个已饱和后端（实测同会话重试 19.6% vs 新会话 65.7%）。
+				rotatedFingerprintAttempt := 0
+				if reason == "server_overloaded" {
+					overloadPath := OverloadPathStreamFailed
+					var dialErr *openAIWSDialError
+					if errors.As(wsErr, &dialErr) {
+						overloadPath = OverloadPathHTTP503
+					}
+					s.DiscardOpenAICodexTurnStateForOverload(account, overloadPath)
+					if s.CodexOverloadIdentityRotationEnabled() {
+						rotatedFingerprintAttempt = BumpCodexFingerprintAttempt(st.c)
+					}
+				}
 				logOpenAIWSModeInfo(
-					"reconnect_retry account_id=%d retry=%d max_retries=%d reason=%s backoff_ms=%d",
+					"reconnect_retry account_id=%d retry=%d max_retries=%d reason=%s backoff_ms=%d fingerprint_attempt=%d thread_id_rotated=%t",
 					account.ID,
 					attempt,
 					openAIWSReconnectRetryLimit,
 					normalizeOpenAIWSLogValue(reason),
 					backoff.Milliseconds(),
+					rotatedFingerprintAttempt,
+					rotatedFingerprintAttempt > 0,
 				)
 				if backoff > 0 {
 					timer := time.NewTimer(backoff)

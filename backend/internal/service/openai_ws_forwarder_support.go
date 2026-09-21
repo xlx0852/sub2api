@@ -464,6 +464,10 @@ func classifyOpenAIWSAcquireError(err error) string {
 			return "upstream_rate_limited"
 		}
 		if dialErr.StatusCode >= 500 {
+			// WS 握手被拒时的容量过载：与 HTTP 503 同一错误码，需要重抽会话身份。
+			if isOpenAIServerOverloadedError(dialErr.ResponseBody) {
+				return "server_overloaded"
+			}
 			return "upstream_5xx"
 		}
 		return "dial_failed"
@@ -526,6 +530,10 @@ func classifyOpenAIWSErrorEventFromRaw(codeRaw, errTypeRaw, msgRaw string) (stri
 		return "invalid_encrypted_content", true
 	case "previous_response_not_found":
 		return "previous_response_not_found", true
+	case "server_is_overloaded", "slow_down":
+		// 容量过载的流内通道（与 HTTP 503 同一错误码）：可重连重试，
+		// 并触发会话身份轮换（见 openai_gateway_pipeline_openai.go 的 wsRetryLoop）。
+		return "server_overloaded", true
 	}
 	if isOpenAIWSRateLimitError(codeRaw, errTypeRaw, msgRaw) {
 		return "upstream_rate_limited", false

@@ -89,7 +89,9 @@ type GatewayConfig struct {
 	ForceCodexCLI bool `mapstructure:"force_codex_cli"`
 	// OpenAICodexTurnStateReuseEnabled: 捕获成功 /responses 签发的 x-codex-turn-state，
 	// 并在同一 OAuth 账号后续出站强制回放。不信任客户端入站的该头。
-	// 过载不清票。有票账号构成储备池，出站强制带票；缺票按入池时间 FIFO 后台补种。默认开启。
+	// 明确的容量过载（server_is_overloaded / slow_down）会立即清票重抽，见
+	// DisableCodexOverloadIdentityRotation；其余情况下过载不清票。
+	// 有票账号构成储备池，出站强制带票；缺票按入池时间 FIFO 后台补种。默认开启。
 	OpenAICodexTurnStateReuseEnabled bool `mapstructure:"openai_codex_turn_state_reuse_enabled"`
 	// OpenAICodexTurnStateReuseTTLSeconds: 兼容旧配置字段；票固定在捕获后 3600s 失效。
 	OpenAICodexTurnStateReuseTTLSeconds int `mapstructure:"openai_codex_turn_state_reuse_ttl_seconds"`
@@ -100,6 +102,16 @@ type GatewayConfig struct {
 	// 「仅按最终 User-Agent 配对 originator」的收口语义，供上游策略变动时回滚。
 	// 取反义命名是为了让零值安全。
 	DisableCodexIdentityEnforcement bool `mapstructure:"disable_codex_identity_enforcement"`
+	// DisableCodexOverloadIdentityRotation: 关闭「容量过载时重抽会话身份」。
+	// 上游明确报告 server_is_overloaded / slow_down（HTTP 503 响应体，或 HTTP 200
+	// 流内 response.failed）时，网关会：
+	//   1) 立即丢弃该账号被钉住的 x-codex-turn-state（不等连续 5xx 阈值）；
+	//   2) 若仍用同一账号重试，轮换派生的 thread-id（加入重试轮次）。
+	// 依据是实测：同一会话标识上重试成功率 19.6%，换新会话标识 65.7%
+	// （同 30 分钟窗口对照 3.36×）——被钉住的票/线程把重试路由回同一个已饱和后端。
+	// 置 true 可退回「过载只做同账号原样重试」的旧行为，供灰度回滚。
+	// 取反义命名是为了让零值安全（默认开启）。
+	DisableCodexOverloadIdentityRotation bool `mapstructure:"disable_codex_overload_identity_rotation"`
 	// OpenAIUserPinEnabled: OpenAI 调度启用「API Key → 上游账号」用户级钉号。
 	// 同一本地 API Key 的请求固定走同一台上游 OAuth 账号，直到该账号硬失败
 	//（额度尽/被排除/不可调度/能力不匹配）才换号重钉。目的：减少同一用户把

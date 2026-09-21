@@ -618,7 +618,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				}
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
-					h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode, failoverErr.TransportOnly)
+					noteOpenAICodexUpstreamOutcome(h.gatewayService, account, failoverErr)
 					if !canRetryCompact {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted || service.OpenAICompactKeepaliveAdjustedWrittenSize(c) != writerSizeBeforeForward)
 						return
@@ -662,14 +662,20 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					// 池模式：同账号重试（凭据失败不走同号重试）
 					if !failoverErr.IsCredentialFailure() && shouldRetrySameAccountBeforeSwitching(failoverErr.RetryableOnSameAccount, scheduleDecision.CandidateCount) && !failoverErr.GrokSameAccountRetry {
 						retryLimit := account.GetPoolModeRetryCount()
+						// 容量过载爆发窗口内放宽同账号重试上限（窗口外/非过载保持基线）。
+						retryLimit = h.gatewayService.OpenAICodexOverloadRetryBudget(account.ID, retryLimit, failoverErr.IsServerOverloaded())
 						if sameAccountRetryCount[account.ID] < retryLimit {
 							sameAccountRetryCount[account.ID]++
 							retryDelay := sameAccountRetryDelayFor(failoverErr, sameAccountRetryCount[account.ID])
+							fingerprintAttempt := rotateCodexSessionIdentityForSameAccountRetry(c, h.gatewayService, account)
 							reqLog.Warn("openai.pool_mode_same_account_retry",
 								zap.Int64("account_id", account.ID),
 								zap.Int("upstream_status", failoverErr.StatusCode),
 								zap.Int("retry_limit", retryLimit),
 								zap.Int("retry_count", sameAccountRetryCount[account.ID]),
+								zap.String("overload_path", failoverErr.OverloadPath),
+								zap.Int("fingerprint_attempt", fingerprintAttempt),
+								zap.Bool("thread_id_rotated", fingerprintAttempt > 0),
 								zap.Duration("retry_delay", retryDelay),
 								zap.Int("candidate_count", scheduleDecision.CandidateCount),
 								zap.String("retry_strategy", "same_account_single_candidate"),
@@ -1241,7 +1247,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			} else {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
-					h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode, failoverErr.TransportOnly)
+					noteOpenAICodexUpstreamOutcome(h.gatewayService, account, failoverErr)
 					if c.Writer.Size() != writerSizeBeforeForward {
 						h.handleAnthropicFailoverExhausted(c, failoverErr, true)
 						return
@@ -1250,14 +1256,20 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 					// 池模式：同账号重试
 					if shouldRetrySameAccountBeforeSwitching(failoverErr.RetryableOnSameAccount, scheduleDecision.CandidateCount) {
 						retryLimit := account.GetPoolModeRetryCount()
+						// 容量过载爆发窗口内放宽同账号重试上限（窗口外/非过载保持基线）。
+						retryLimit = h.gatewayService.OpenAICodexOverloadRetryBudget(account.ID, retryLimit, failoverErr.IsServerOverloaded())
 						if sameAccountRetryCount[account.ID] < retryLimit {
 							sameAccountRetryCount[account.ID]++
 							retryDelay := sameAccountRetryDelayFor(failoverErr, sameAccountRetryCount[account.ID])
+							fingerprintAttempt := rotateCodexSessionIdentityForSameAccountRetry(c, h.gatewayService, account)
 							reqLog.Warn("openai_messages.pool_mode_same_account_retry",
 								zap.Int64("account_id", account.ID),
 								zap.Int("upstream_status", failoverErr.StatusCode),
 								zap.Int("retry_limit", retryLimit),
 								zap.Int("retry_count", sameAccountRetryCount[account.ID]),
+								zap.String("overload_path", failoverErr.OverloadPath),
+								zap.Int("fingerprint_attempt", fingerprintAttempt),
+								zap.Bool("thread_id_rotated", fingerprintAttempt > 0),
 								zap.Duration("retry_delay", retryDelay),
 								zap.Int("candidate_count", scheduleDecision.CandidateCount),
 								zap.String("retry_strategy", "same_account_single_candidate"),
@@ -2169,7 +2181,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		if err := h.gatewayService.ProxyResponsesWebSocketFromClient(ctx, c, wsConn, account, token, wsFirstMessage, hooks); err != nil {
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
-				h.gatewayService.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode, failoverErr.TransportOnly)
+				noteOpenAICodexUpstreamOutcome(h.gatewayService, account, failoverErr)
 				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
 				releaseAccountSlot()
 				failedAccountIDs[account.ID] = struct{}{}

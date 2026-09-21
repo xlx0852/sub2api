@@ -239,3 +239,41 @@ func sleepWithContext(ctx context.Context, d time.Duration) bool {
 		return true
 	}
 }
+
+// noteOpenAICodexUpstreamOutcome 记录一次 OpenAI Codex 上游失败结果，并在明确的
+// 容量过载上执行「立即重抽」。
+//
+// 两类处理共用同一入口，因为两者的触发条件不同：
+//   - NoteOpenAICodexTurnStateUpstreamResult：常规 5xx 计数，需达阈值才清票；
+//   - DiscardOpenAICodexTurnStateForOverload：server_is_overloaded / slow_down
+//     第 1 次出现即清票，因为过载是上游容量的瞬时抽签，被钉住的票正是把重试
+//     锁在同一个已饱和后端的原因。
+//
+// 过载只清票、不动账号健康（请求级信号而非账号级故障）。
+func noteOpenAICodexUpstreamOutcome(svc *service.OpenAIGatewayService, account *service.Account, failoverErr *service.UpstreamFailoverError) {
+	if svc == nil || failoverErr == nil {
+		return
+	}
+	svc.NoteOpenAICodexTurnStateUpstreamResult(account, failoverErr.StatusCode, failoverErr.TransportOnly)
+	if failoverErr.IsServerOverloaded() {
+		svc.DiscardOpenAICodexTurnStateForOverload(account, failoverErr.OverloadPath)
+	}
+}
+
+// rotateCodexSessionIdentityForSameAccountRetry 为「不换账号的重试」轮换派生的
+// 会话身份（thread_id），使重试不再被路由到上一次失败的后端。
+//
+// 背景（本地 20159 个 turn / 190 次过载的实测）：同一会话标识上重试成功率 19.6%，
+// 换新会话标识重试 65.7%（同 30 分钟窗口对照 3.36×）。换账号的 failover 不需要
+// 它：account.ID 变化本身就会改变派生出的 thread_id。
+//
+// 返回轮换后的轮次（>=1），供结构化观测；开关关闭、非 Codex 账号或轮换未生效时返回 0。
+func rotateCodexSessionIdentityForSameAccountRetry(c *gin.Context, svc *service.OpenAIGatewayService, account *service.Account) int {
+	if c == nil || account == nil || !account.IsOpenAIOAuth() {
+		return 0
+	}
+	if !svc.CodexOverloadIdentityRotationEnabled() {
+		return 0
+	}
+	return service.BumpCodexFingerprintAttempt(c)
+}

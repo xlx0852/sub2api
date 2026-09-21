@@ -116,6 +116,26 @@ func isOpenAIInstructionsRequiredError(upstreamStatusCode int, upstreamMsg strin
 	return false
 }
 
+// isOpenAIServerOverloadedError 判断上游响应体是否明确报告容量过载。
+//
+// 上游用同一个错误码 server_is_overloaded 表达容量过载，有两条到达通道：
+// HTTP 503 响应体，以及 HTTP 200 流内 response.failed 事件（后者见
+// isOpenAIUpstreamCapacityShedEvent）。slow_down 在语义上同属降载信号。
+//
+// 与 isOpenAITransientProcessingError 的区别：后者是「可重试的瞬时故障」的宽集合
+// （含连接重置、通用 400 文案），本函数只认明确的过载码，用于需要「立即重抽会话
+// 身份 + 丢弃被钉住的票」的精确分支。
+func isOpenAIServerOverloadedError(upstreamBody []byte) bool {
+	if len(upstreamBody) == 0 {
+		return false
+	}
+	code := strings.ToLower(strings.TrimSpace(gjson.GetBytes(upstreamBody, "error.code").String()))
+	if code == "" {
+		code = strings.ToLower(strings.TrimSpace(gjson.GetBytes(upstreamBody, "response.error.code").String()))
+	}
+	return code == "server_is_overloaded" || code == "slow_down"
+}
+
 func isOpenAITransientProcessingError(upstreamStatusCode int, upstreamMsg string, upstreamBody []byte) bool {
 	// Envoy/proxy reset before headers may arrive as 502/503 body text.
 	if isOpenAIUpstreamConnectionResetMessage(upstreamMsg) || isOpenAIUpstreamConnectionResetMessage(string(upstreamBody)) {
@@ -125,15 +145,7 @@ func isOpenAITransientProcessingError(upstreamStatusCode int, upstreamMsg string
 		return false
 	}
 
-	hasOpenAIServerOverloadedCode := func(payload []byte) bool {
-		code := strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "error.code").String()))
-		if code == "" {
-			code = strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "response.error.code").String()))
-		}
-		return code == "server_is_overloaded" || code == "slow_down"
-	}
-
-	if len(upstreamBody) > 0 && hasOpenAIServerOverloadedCode(upstreamBody) {
+	if isOpenAIServerOverloadedError(upstreamBody) {
 		return true
 	}
 	if upstreamStatusCode != http.StatusBadRequest {
@@ -257,6 +269,12 @@ func newOpenAIUpstreamFailoverError(
 		ResponseBody:           responseBody,
 		ResponseHeaders:        responseHeaders.Clone(),
 		RetryableOnSameAccount: retryableOnSameAccount,
+	}
+	// 明确的容量过载：两个通道共用同一错误码，这里标出 HTTP 503 通道。
+	// 消费方据此做「立即丢弃被钉住的票 + 轮换会话身份」，不等待连续多 5xx。
+	if isOpenAIServerOverloadedError(responseBody) {
+		failoverErr.ServerOverloaded = true
+		failoverErr.OverloadPath = OverloadPathHTTP503
 	}
 	if isOpenAIRequestBodyTooLargeError(statusCode, upstreamMsg, responseBody) {
 		failoverErr.RetryableOnSameAccount = false

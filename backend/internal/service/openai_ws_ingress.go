@@ -51,6 +51,11 @@ type openAIWSIngressSession struct {
 	ingressSessionOriginalModel string
 	fingerprintIDs              *codexFingerprintIDs
 	fingerprintTurn             int
+	// fingerprintAttempt 记录 fingerprintIDs 快照对应的重试轮次。
+	// 上游容量过载会通过 BumpCodexFingerprintAttempt 递增轮次，
+	// 此时快照已过期，必须重新解析，否则同一请求的头（thread-id，走 context
+	// 重新解析）与体（client_metadata，走这里快照）会携带不一致的会话身份。
+	fingerprintAttempt int
 
 	turnState             string
 	stateStore            OpenAIWSStateStore

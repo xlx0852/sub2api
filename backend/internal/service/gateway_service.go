@@ -633,6 +633,16 @@ type UpstreamFailoverError struct {
 	// 上游未返回任何 HTTP 响应。StatusCode 仍是给客户端的网关包装码（如 502），
 	// 但不得被当作真实上游 5xx 计入票失效/上游健康统计。
 	TransportOnly bool
+	// ServerOverloaded 标记上游明确报告「容量过载」（错误码 server_is_overloaded / slow_down）。
+	// 两条到达通道：HTTP 503 响应体（OverloadPathHTTP503），或 HTTP 200 流内
+	// response.failed 事件（OverloadPathStreamFailed）。
+	//
+	// 与 StatusCode 的区别：过度载是上游容量的瞬时抽签——同一账号、同一会话在
+	// 数十秒内会交替成败，因此它不应当作账号级健康信号，也不应等待连续多 5xx
+	// 才做恢复动作（清票/轮换会话身份）。
+	ServerOverloaded bool
+	// OverloadPath 记录过载的到达通道，仅用于结构化观测；非过载时为空。
+	OverloadPath string
 }
 
 func (e *UpstreamFailoverError) Error() string {
@@ -648,6 +658,19 @@ func (e *UpstreamFailoverError) ShouldRetryNextAccount() bool {
 
 func (e *UpstreamFailoverError) IsCredentialFailure() bool {
 	return e != nil && e.Stage == GatewayFailureStageAccountAuth
+}
+
+// 过载到达通道取值。两项都表示上游容量过载，仅区分传输形态，
+// 便于灰度期分别统计 HTTP 503 与流内 response.failed 的占比与恢复效果。
+const (
+	OverloadPathHTTP503      = "http_503"
+	OverloadPathStreamFailed = "stream_failed"
+)
+
+// IsServerOverloaded reports whether the upstream explicitly reported capacity
+// overload (error code server_is_overloaded / slow_down), on either transport path.
+func (e *UpstreamFailoverError) IsServerOverloaded() bool {
+	return e != nil && e.ServerOverloaded
 }
 
 // ShouldReportAccountScheduleFailure prevents provider- and request-scoped

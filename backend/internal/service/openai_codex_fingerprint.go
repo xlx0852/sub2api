@@ -36,6 +36,7 @@ const (
 
 const codexFingerprintModeExtraKey = "codex_fingerprint_mode"
 const codexFingerprintIDsContextKey = "codex_fingerprint_ids"
+const codexFingerprintAttemptContextKey = "codex_fingerprint_attempt"
 
 // GetCodexFingerprintMode 从账号 extra JSON 读取指纹收敛模式。
 // 未设置或值无效时保持 off，避免升级后静默改变历史账号的出站指纹。
@@ -98,11 +99,22 @@ func resolveConvergedSessionID(account *Account) string {
 // resolveConvergedThreadID 按客户端原始 session-id 确定性派生 thread_id。
 // 每个真实 Codex 会话（不同客户端启动实例）获得一个独立线程，
 // 模拟正常用户 spawn 子代理或开多窗口的模式。
-func resolveConvergedThreadID(account *Account, clientSessionID string) string {
+//
+// attempt 为请求内已发生的失败重试轮次（首次尝试为 0）：
+//   - attempt == 0 时派生结果与历史实现逐字节一致（防回归）；
+//   - attempt > 0 时在种子里追加轮次，使重试拿到不同的 thread_id。
+//
+// 这样做的理由：thread-id 即上游的会话路由提示，同一个 thread_id 重试会被
+// 反复送回同一个已饱和的后端；轮换后重试获得新的路由。session_id 仍是账号级
+// 恒定值（见 resolveConvergedSessionID），不随重试变化。
+func resolveConvergedThreadID(account *Account, clientSessionID string, attempt int) string {
 	if account == nil || clientSessionID == "" {
 		return ""
 	}
-	return deriveStableUUIDv4(fmt.Sprintf("codex:thread-id:v1:%d:%s", account.ID, clientSessionID))
+	if attempt <= 0 {
+		return deriveStableUUIDv4(fmt.Sprintf("codex:thread-id:v1:%d:%s", account.ID, clientSessionID))
+	}
+	return deriveStableUUIDv4(fmt.Sprintf("codex:thread-id:v1:%d:%s:%d", account.ID, clientSessionID, attempt))
 }
 
 // codexFingerprintIDs 收敛后的完整 ID 集合。
@@ -121,9 +133,10 @@ type codexFingerprintIDs struct {
 // resolveCodexFingerprintIDs 按收敛模式计算出站 ID 集合。
 // clientSessionID 是客户端原始的 session-id 头值（连字符形式），用于 session 模式下
 // 的 thread_id 派生——每个真实 Codex 会话得到一个独立线程。
+// attempt 是请求内已发生的失败重试轮次，仅影响派生的 thread_id（见 resolveConvergedThreadID）。
 // 返回 nil 表示 off 模式，不需要改写。
 // 注意：包含随机生成的 turn_id，调用方必须只调用一次并共享结果给头改写和体改写。
-func resolveCodexFingerprintIDs(account *Account, clientSessionID string, mode codexFingerprintMode) *codexFingerprintIDs {
+func resolveCodexFingerprintIDs(account *Account, clientSessionID string, mode codexFingerprintMode, attempt int) *codexFingerprintIDs {
 	if mode == codexFingerprintOff {
 		return nil
 	}
@@ -141,7 +154,7 @@ func resolveCodexFingerprintIDs(account *Account, clientSessionID string, mode c
 
 	case codexFingerprintSession:
 		ids.sessionID = resolveConvergedSessionID(account)
-		ids.threadID = resolveConvergedThreadID(account, clientSessionID)
+		ids.threadID = resolveConvergedThreadID(account, clientSessionID, attempt)
 		if ids.threadID == "" {
 			ids.threadID = ids.sessionID
 		}
@@ -173,6 +186,7 @@ func extractClientSessionID(h http.Header) string {
 // resolveCodexFingerprintIDsFromRequest 从客户端原始请求头中提取 session-id，
 // 结合账号配置一次性解析收敛 ID 集合。调用方应将返回的 ids 同时传给
 // applyCodexFingerprintHeaders 和 applyCodexFingerprintClientMetadata。
+// 等价于 attempt=0 的首次尝试；带重试轮次的调用方走 resolveCodexFingerprintIDsFromContext。
 func resolveCodexFingerprintIDsFromRequest(account *Account, clientHeaders http.Header) *codexFingerprintIDs {
 	if account == nil {
 		return nil
@@ -185,23 +199,67 @@ func resolveCodexFingerprintIDsFromRequest(account *Account, clientHeaders http.
 	if clientHeaders != nil {
 		clientSessionID = extractClientSessionID(clientHeaders)
 	}
-	return resolveCodexFingerprintIDs(account, clientSessionID, mode)
+	return resolveCodexFingerprintIDs(account, clientSessionID, mode, 0)
 }
 
-func resolveCodexFingerprintIDsFromContext(c *gin.Context, account *Account) *codexFingerprintIDs {
+// codexFingerprintIDsEntry 缓存一次解析结果，并记录它对应的重试轮次。
+// 同一轮次内头改写与体改写必须共享同一实例（turn_id 等随机字段一致性）；
+// 轮次变化时必须重新解析，否则重试会带着与失败尝试完全相同的 thread_id 出站。
+type codexFingerprintIDsEntry struct {
+	attempt int
+	ids     *codexFingerprintIDs
+}
+
+// CodexFingerprintAttempt 返回当前请求已发生的失败重试轮次（首次尝试为 0）。
+func CodexFingerprintAttempt(c *gin.Context) int {
 	if c == nil {
+		return 0
+	}
+	if v, ok := c.Get(codexFingerprintAttemptContextKey); ok {
+		if n, ok := v.(int); ok && n > 0 {
+			return n
+		}
+	}
+	return 0
+}
+
+// BumpCodexFingerprintAttempt 记录一次「不换账号的失败重试」：递增轮次并使已缓存的
+// 指纹失效，使下一次出站请求以新的轮次重新派生会话身份。
+// 返回递增后的轮次（>=1），供调用方做结构化观测。
+//
+// 调用点必须在确认「本次尝试会重新发同一个账号的上游请求」之后调用，
+// 换账号的 failover 不需要它（account.ID 变化本身就会改变 thread_id）。
+func BumpCodexFingerprintAttempt(c *gin.Context) int {
+	if c == nil {
+		return 0
+	}
+	next := CodexFingerprintAttempt(c) + 1
+	c.Set(codexFingerprintAttemptContextKey, next)
+	// 显式清除缓存，让下一次解析按新轮次重新派生。
+	c.Set(codexFingerprintIDsContextKey, nil)
+	return next
+}
+
+// resolveCodexFingerprintIDsFromContext 返回本次尝试的收敛 ID 集合，按重试轮次缓存。
+// attempt 来自 BumpCodexFingerprintAttempt；轮次变化时自动重新派生 thread_id。
+func resolveCodexFingerprintIDsFromContext(c *gin.Context, account *Account) *codexFingerprintIDs {
+	if c == nil || account == nil {
 		return nil
 	}
+	attempt := CodexFingerprintAttempt(c)
 	if existing, ok := c.Get(codexFingerprintIDsContextKey); ok {
-		ids, _ := existing.(*codexFingerprintIDs)
-		return ids
+		if entry, ok := existing.(*codexFingerprintIDsEntry); ok && entry != nil && entry.attempt == attempt {
+			return entry.ids
+		}
 	}
+	mode := GetCodexFingerprintMode(account)
 	var headers http.Header
 	if c.Request != nil {
 		headers = c.Request.Header
 	}
-	ids := resolveCodexFingerprintIDsFromRequest(account, headers)
-	c.Set(codexFingerprintIDsContextKey, ids)
+	// attempt 只参与 thread_id 派生；attempt=0 与 resolveCodexFingerprintIDsFromRequest 等价。
+	ids := resolveCodexFingerprintIDs(account, extractClientSessionID(headers), mode, attempt)
+	c.Set(codexFingerprintIDsContextKey, &codexFingerprintIDsEntry{attempt: attempt, ids: ids})
 	return ids
 }
 

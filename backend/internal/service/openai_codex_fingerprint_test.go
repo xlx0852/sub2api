@@ -91,21 +91,21 @@ func TestResolveConvergedInstallationID_DifferentAccounts(t *testing.T) {
 
 func TestResolveConvergedThreadID_PerClientSession(t *testing.T) {
 	account := newTestOAuthAccount(1, nil)
-	a := resolveConvergedThreadID(account, "session-aaa")
-	b := resolveConvergedThreadID(account, "session-bbb")
+	a := resolveConvergedThreadID(account, "session-aaa", 0)
+	b := resolveConvergedThreadID(account, "session-bbb", 0)
 	assert.NotEqual(t, a, b, "不同客户端 session 应得到不同 thread_id")
 }
 
 func TestResolveConvergedThreadID_Deterministic(t *testing.T) {
 	account := newTestOAuthAccount(1, nil)
-	a := resolveConvergedThreadID(account, "session-aaa")
-	b := resolveConvergedThreadID(account, "session-aaa")
+	a := resolveConvergedThreadID(account, "session-aaa", 0)
+	b := resolveConvergedThreadID(account, "session-aaa", 0)
 	assert.Equal(t, a, b, "同一客户端 session 应得到相同 thread_id")
 }
 
 func TestResolveConvergedThreadID_EmptySession(t *testing.T) {
 	account := newTestOAuthAccount(1, nil)
-	assert.Equal(t, "", resolveConvergedThreadID(account, ""))
+	assert.Equal(t, "", resolveConvergedThreadID(account, "", 0))
 }
 
 // --- off 模式：resolveCodexFingerprintIDsFromRequest 返回 nil ---
@@ -183,7 +183,7 @@ func TestApplyCodexFingerprintHeaders_SessionMode(t *testing.T) {
 
 	convergedInstall := resolveConvergedInstallationID(account)
 	convergedSession := resolveConvergedSessionID(account)
-	convergedThread := resolveConvergedThreadID(account, "client-session-aaa")
+	convergedThread := resolveConvergedThreadID(account, "client-session-aaa", 0)
 
 	assert.Equal(t, convergedInstall, h.Get("x-codex-installation-id"))
 	assert.Equal(t, convergedSession, h.Get("session-id"))
@@ -417,7 +417,7 @@ func TestApplyCodexFingerprintClientMetadata_SessionMode(t *testing.T) {
 	cm := reqBody["client_metadata"].(map[string]any)
 	convergedInstall := resolveConvergedInstallationID(account)
 	convergedSession := resolveConvergedSessionID(account)
-	convergedThread := resolveConvergedThreadID(account, "client-session-aaa")
+	convergedThread := resolveConvergedThreadID(account, "client-session-aaa", 0)
 
 	assert.Equal(t, convergedInstall, cm["x-codex-installation-id"])
 	assert.Equal(t, convergedSession, cm["session_id"])

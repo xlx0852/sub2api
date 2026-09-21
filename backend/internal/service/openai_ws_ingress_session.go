@@ -116,6 +116,15 @@ func (sess *openAIWSIngressSession) parseClientPayload(raw []byte) (openAIWSClie
 		normalized = next
 	}
 	if sess.fingerprintIDs != nil {
+		// 重试轮次变化（容量过载后重抽）时刷新快照，保证头（从 context 重新解析）/ 体 /
+		// 后续 turn 使用同一套会话身份；否则两处会携带不同的 thread_id。
+		if attempt := CodexFingerprintAttempt(c); attempt != sess.fingerprintAttempt {
+			sess.fingerprintIDs = resolveCodexFingerprintIDsFromContext(c, account)
+			sess.fingerprintAttempt = attempt
+			sess.fingerprintTurn = 0
+		}
+	}
+	if sess.fingerprintIDs != nil {
 		turnIDs := sess.fingerprintIDs
 		if sess.fingerprintTurn > 0 {
 			turnIDs = nextCodexFingerprintTurnIDs(sess.fingerprintIDs)

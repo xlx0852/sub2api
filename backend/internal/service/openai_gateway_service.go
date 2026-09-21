@@ -764,6 +764,7 @@ func classifyOpenAIWSReconnectReason(err error) (string, bool) {
 		"conn_queue_full",
 		"dial_failed",
 		"upstream_5xx",
+		"server_overloaded",
 		"event_error",
 		"error_event",
 		"upstream_error_event",

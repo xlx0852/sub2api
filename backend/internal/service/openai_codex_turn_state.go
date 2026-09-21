@@ -495,6 +495,42 @@ func (s *OpenAIGatewayService) NoteOpenAICodexTurnStateUpstreamResult(account *A
 	s.scheduleOpenAICodexTurnStateRefresh(account)
 }
 
+// DiscardOpenAICodexTurnStateForOverload 在明确的容量过载（server_is_overloaded /
+// slow_down）出现时立即丢弃该账号所有池槽位的票，并触发重采。
+//
+// 与 NoteOpenAICodexTurnStateUpstreamResult 的区别（为什么需要这个独立入口）：
+//   - 后者要求「同号连续 5xx 达 openAICodexTurnStateUpstream5xxInvalidateThreshold 次」
+//     且有 2 分钟冷却，是「票可能已被服务端吊销」的恢复启发式。
+//   - 容量过载是上游容量的瞬时抽签：同一账号同一会话在数十秒内会交替成败，
+//     被钉住的票正是把重试锁在同一个已饱和后端的原因。等 3 次意味着前两次
+//     白白钉死，所以过载需要第 1 次就重抽，且不受失效冷却阻塞。
+//
+// 过载是请求级信号而非账号级故障：本入口只清票、不动账号健康与调度状态。
+func (s *OpenAIGatewayService) DiscardOpenAICodexTurnStateForOverload(account *Account, overloadPath string) {
+	if s == nil || account == nil || !account.IsOpenAIOAuth() || account.ID <= 0 {
+		return
+	}
+	if !s.CodexOverloadIdentityRotationEnabled() {
+		return
+	}
+	// 爆发窗口记录与票据复用解耦：重试预算（OpenAICodexOverloadRetryBudget）
+	// 依赖这份计数，即使账号没启用票据复用也应当记录。
+	burstAttempt := s.OnOpenAICodexOverload(account.ID)
+	if !openAICodexTurnStateReuseEnabled(s.cfg) {
+		return
+	}
+	// 过载不代表票“被吊销”，但必须重抽：同时清零连续 5xx 计数，
+	// 避免后续真实 5xx 因过载计数被提前触发连续阈值语义。
+	s.codexTurnStateFailureMu.Lock()
+	s.codexTurnStateUpstream5xx.Delete(account.ID)
+	s.codexTurnStateFailureMu.Unlock()
+	logger.LegacyPrintf("service.openai_codex_turn_state",
+		"[CodexTurnStateSeed] invalidate account=%d reason=server_overloaded path=%s burst_attempt=%d",
+		account.ID, overloadPath, burstAttempt)
+	s.invalidateOpenAICodexTurnState(account)
+	s.scheduleOpenAICodexTurnStateRefresh(account)
+}
+
 func (s *OpenAIGatewayService) shouldInvalidateOpenAICodexTurnState(accountID int64, upstreamStatus int, now time.Time) bool {
 	s.codexTurnStateFailureMu.Lock()
 	defer s.codexTurnStateFailureMu.Unlock()
