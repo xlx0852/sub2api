@@ -26,10 +26,12 @@
 
 ## 4. 灰度与验收
 
-- [ ] 4.1 设计 A/B：同账号重试分两组，A 组 `disable_codex_overload_identity_rotation=true`（保留确定性 `thread-id`），B 组默认（带 attempt 序号）；对比重试成功率与用户可见 503
-- [ ] 4.2 记录基线指标：`openai.pool_mode_same_account_retry` / `openai_messages.pool_mode_same_account_retry` / `openai_chat_completions.pool_mode_same_account_retry` / `openai_alpha_search.pool_mode_same_account_retry` 的 `thread_id_rotated`、`overload_path`、`fingerprint_attempt`；WS 侧 `reconnect_retry` 的同名字段；票侧 `[CodexTurnStateSeed] reason=server_overloaded`
-- [ ] 4.3 定义验收阈值（预期 B 组重试成功率从约 20% 升至 60%+）
-- [ ] 4.4 文档化回滚方式与停止条件：回滚开关 `gateway.disable_codex_overload_identity_rotation=true`；停止条件 = 重复计费、prompt cache 命中率异常下降、或转号后账号健康指标恶化
+- [x] 4.1 设计 A/B：同账号重试分两组，A 组 `disable_codex_overload_identity_rotation=true`（保留确定性 `thread-id`），B 组默认（带 attempt 序号）；对比重试成功率与用户可见 503
+- [x] 4.2 记录基线指标：`openai.pool_mode_same_account_retry` / `openai_messages.pool_mode_same_account_retry` / `openai_chat_completions.pool_mode_same_account_retry` / `openai_alpha_search.pool_mode_same_account_retry` 的 `thread_id_rotated`、`overload_path`、`fingerprint_attempt`；WS 侧 `reconnect_retry` 的同名字段；票侧 `[CodexTurnStateSeed] reason=server_overloaded`
+- [x] 4.3 定义验收阈值（预期 B 组重试成功率从约 20% 升至 60%+）
+- [x] 4.4 文档化回滚方式与停止条件：回滚开关 `gateway.disable_codex_overload_identity_rotation=true`；停止条件 = 重复计费、prompt cache 命中率异常下降、或转号后账号健康指标恶化
+
+灰度与验收的执行细节见 `rollout.md`（A/B 分组、日志字段、验收指标、回滚与停止条件）。
 
 ## 验证记录
 
