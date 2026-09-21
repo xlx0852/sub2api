@@ -361,5 +361,8 @@ func realCodexClientRequestHeaders(thread, install, turnMetadata string) map[str
 		"x-codex-turn-metadata":                  turnMetadata,
 		"x-codex-window-id":                      thread + ":0",
 		"x-openai-internal-codex-responses-lite": "true",
+		// ChatGPT.app 独有：设备证明（密码学可验证，内含 locale/时区/bundle id）。
+		// CLI 两个入口都不发这个头。
+		"x-oai-attestation": `{"v":1,"s":0,"t":"v1.client-attestation-placeholder"}`,
 	}
 }
