@@ -15,6 +15,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 )
 
@@ -706,9 +707,12 @@ func accountHasOpenAICodexTurnStateReserveForModel(account *Account, reqModel st
 }
 
 func (s *OpenAIGatewayService) seedOpenAICodexTurnState(ctx context.Context, account *Account) {
-	s.seedOpenAICodexTurnStateWithClient(ctx, account, &http.Client{Timeout: 45 * time.Second})
+	s.seedOpenAICodexTurnStateWithClient(ctx, account, nil)
 }
 
+// seedOpenAICodexTurnStateWithClient 采票。
+// client 仅用于单测注入传输层；生产传 nil，走 s.httpUpstream + 账号代理，
+// 保证**采票出口与业务出口一致**。
 func (s *OpenAIGatewayService) seedOpenAICodexTurnStateWithClient(ctx context.Context, account *Account, client *http.Client) {
 	if account == nil || account.IsOpenAIAgentIdentity() {
 		return
@@ -727,9 +731,10 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnStateWithClient(ctx context.Co
 		if ctx.Err() != nil {
 			return
 		}
-		result := probeOpenAICodexTurnState(ctx, client, token, chatgptID, model)
+		result := s.probeOpenAICodexTurnState(ctx, account, token, chatgptID, model, client)
 		if !result.completed || !isReusableOpenAICodexTurnState(result.headers.Get(openAICodexTurnStateHeader)) {
-			logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] probe_no_ticket account=%d model=%s status=%d completed=%v", account.ID, model, result.status, result.completed)
+			logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] probe_no_ticket account=%d model=%s status=%d completed=%v egress=%s",
+				account.ID, model, result.status, result.completed, codexTurnStateProbeEgressLabel(account, client))
 			continue
 		}
 		pool := result.model
@@ -737,8 +742,22 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnStateWithClient(ctx context.Co
 			pool = model
 		}
 		s.captureOpenAICodexTurnStateForPool(account, result.headers, pool, pool, true)
-		logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] seeded account=%d requested_model=%s pool=%s", account.ID, model, pool)
+		logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] seeded account=%d requested_model=%s pool=%s egress=%s",
+			account.ID, model, pool, codexTurnStateProbeEgressLabel(account, client))
 	}
+}
+
+// codexTurnStateProbeEgressLabel 标明本次采票的出口类型，用于生产取证：
+// 采票出口必须与业务出口一致（account-proxy），不能是服务器直连。
+// **只输出标签，绝不输出代理地址本身**（代理 URL 可能含凭据）。
+func codexTurnStateProbeEgressLabel(account *Account, testClient *http.Client) string {
+	if testClient != nil {
+		return "test-injected"
+	}
+	if account != nil && account.Proxy != nil {
+		return "account-proxy"
+	}
+	return "direct"
 }
 
 type codexTurnStateProbeResult struct {
@@ -748,7 +767,12 @@ type codexTurnStateProbeResult struct {
 	model     string
 }
 
-func probeOpenAICodexTurnState(ctx context.Context, client *http.Client, accessToken, chatgptAccountID, model string) codexTurnStateProbeResult {
+// codexTurnStateProbeBetaFeatures 是真实客户端在 /responses 上恒定发送的 beta 特性串。
+// 实测（2026-09-22 全量抓包，/responses 123 条）123/123 都是这个值。
+const codexTurnStateProbeBetaFeatures = "prevent_idle_sleep,remote_compaction_v2"
+
+// codexTurnStateProbeBody 构造采票请求体。
+func codexTurnStateProbeBody(model string) []byte {
 	payload, err := json.Marshal(map[string]any{
 		"model":               model,
 		"instructions":        "Reply with exactly OK. Do not use tools.",
@@ -761,20 +785,139 @@ func probeOpenAICodexTurnState(ctx context.Context, client *http.Client, accessT
 		"include":             []string{"reasoning.encrypted_content"},
 	})
 	if err != nil {
+		return nil
+	}
+	return payload
+}
+
+// codexTurnStateProbeTurnMetadata 合成 x-codex-turn-metadata。
+//
+// 键集合与取值全部取自实测（2026-09-22 全量抓包 /responses，23 个键）：键名一个不造，
+// 枚举值取该抓包里出现过的组合。探针是账号级后台行为，没有入站客户端可转发，
+// 所以只能合成——但合成的依据是真实流量而不是猜测。
+func codexTurnStateProbeTurnMetadata(account *Account, sessionID, installationID, turnID, windowID, model string) string {
+	metadata := map[string]any{
+		"installation_id":                installationID,
+		"session_id":                     sessionID,
+		"thread_id":                      sessionID,
+		"agent_name":                     "/root",
+		"turn_id":                        turnID,
+		"window_id":                      windowID,
+		"window_number":                  0,
+		"context_window_id":              deriveStableUUIDv4(fmt.Sprintf("codex:probe-context-window:v1:%d", account.ID)),
+		"request_kind":                   "turn",
+		"root_turn_id":                   turnID,
+		"thread_source":                  "user",
+		"turn_trigger":                   "composer",
+		"sandbox":                        "none",
+		"sandbox_mode":                   "danger-full-access",
+		"auto_review_enabled":            false,
+		"node_repl_auto_review_required": false,
+		"node_repl_disabled":             false,
+		"turn_started_at_unix_ms":        time.Now().UnixMilli(),
+		"analytics_enabled":              true,
+		"reasoning_effort":               "high",
+		"workspace_kind":                 "project",
+	}
+	// 真实客户端在元数据里放的是**它请求的模型**（抓包里 102/120 是 gpt-6-astra，
+	// 而实际服务模型多是 luna），所以这里也放请求模型而不是服务模型。
+	if model = strings.TrimSpace(model); model != "" {
+		metadata["model"] = model
+	}
+	raw, err := json.Marshal(metadata)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+// applyCodexTurnStateProbeIdentity 把采票请求做成与业务出站**同形**，并补齐真实客户端必定发送的头。
+//
+// 依据：2026-09-22 mitm 全量抓包（/responses 123 条，App/TUI/exec 三入口一致）。真实客户端
+// 每一轮都带 accept / originator / session-id / thread-id / user-agent / x-client-request-id /
+// x-codex-beta-features / x-codex-routing-hint / x-codex-turn-metadata / x-codex-window-id /
+// x-openai-internal-codex-responses-lite。
+//
+// 此前探针只发 6 个头，于是**同一个账号、同一张票**出现两种请求形态：
+// 极简 CLI 探针去采票，全副身份的业务请求去回放。这里让探针补齐同一套。
+//
+// 取值全部来自既有账号级身份派生（与 device/session 模式同源），不新造身份体系。
+// 实测 session-id == thread-id == x-client-request-id（123/123），故三者取同一个账号级稳定值。
+func applyCodexTurnStateProbeIdentity(h http.Header, svc *OpenAIGatewayService, account *Account, accessToken, chatgptAccountID, model string) {
+	if h == nil {
+		return
+	}
+	h.Set("Authorization", "Bearer "+accessToken)
+	h.Set("ChatGPT-Account-ID", chatgptAccountID)
+	h.Set("Accept", "text/event-stream")
+	h.Set("Content-Type", "application/json")
+	// 身份统一与业务出站共用同一入口：账号显式 UA 优先，否则账号派生 UA。
+	// enforceHeadersWithUA 在 originator 为空时直接返回，故先落一个默认值再由它覆写。
+	h.Set("originator", "codex_cli_rs")
+	if svc != nil && svc.codexIdentity != nil {
+		svc.codexIdentity.enforceHeadersWithUA(h, svc.codexIdentityCandidateUA(nil, account))
+	} else {
+		h.Set("User-Agent", codexCLIUserAgent)
+	}
+	if account == nil {
+		return
+	}
+	sessionID := resolveConvergedSessionID(account)
+	if sessionID == "" {
+		return
+	}
+	turnID := uuid.Must(uuid.NewV7()).String()
+	windowID := sessionID + ":0"
+	h.Set("session-id", sessionID)
+	h.Set("thread-id", sessionID)
+	h.Set("x-client-request-id", sessionID)
+	h.Set("x-codex-window-id", windowID)
+	h.Set("x-codex-beta-features", codexTurnStateProbeBetaFeatures)
+	if model = strings.TrimSpace(model); model != "" {
+		// 与业务出站同一规则：取**出站 body 的 model**，保证头与体自洽。
+		h.Set("x-codex-routing-hint", "model="+model)
+	}
+	// 真实客户端 123/123 必带；业务出站也会转发同一个头（除非被 lite demotion 剥掉）。
+	h.Set("x-openai-internal-codex-responses-lite", "true")
+	if metadata := codexTurnStateProbeTurnMetadata(account, sessionID, resolveConvergedInstallationID(account), turnID, windowID, model); metadata != "" {
+		h.Set("x-codex-turn-metadata", metadata)
+	}
+}
+
+// probeOpenAICodexTurnState 发出一次采票请求。
+//
+// 出口：默认走 s.httpUpstream + **账号代理**，与业务请求同一出口。
+// 此前探针用裸 http.Client 直连服务器 IP，而有代理的账号其业务流量走代理——
+// 于是采票与回放在两个 IP 上发生（同一个会话/同一张票跨 IP），这是一个真实不一致。
+// client 非 nil 时走注入的传输层，仅供单测使用。
+func (s *OpenAIGatewayService) probeOpenAICodexTurnState(ctx context.Context, account *Account, accessToken, chatgptAccountID, model string, client *http.Client) codexTurnStateProbeResult {
+	payload := codexTurnStateProbeBody(model)
+	if payload == nil {
 		return codexTurnStateProbeResult{}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chatgptCodexURL, bytes.NewReader(payload))
 	if err != nil {
 		return codexTurnStateProbeResult{}
 	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("ChatGPT-Account-ID", chatgptAccountID)
-	req.Header.Set("originator", "codex_cli_rs")
-	req.Header.Set("User-Agent", "codex_cli_rs/"+codexCLIVersion)
-	// 不发 version 头：实测真实客户端（App/TUI/exec）在所有 Codex 端点上都不发它。
-	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := client.Do(req)
+	applyCodexTurnStateProbeIdentity(req.Header, s, account, accessToken, chatgptAccountID, model)
+
+	var resp *http.Response
+	if client != nil {
+		resp, err = client.Do(req)
+	} else if s != nil && s.httpUpstream != nil {
+		proxyURL := ""
+		if account != nil && account.Proxy != nil {
+			proxyURL = account.Proxy.URL()
+		}
+		var accountID int64
+		var concurrency int
+		if account != nil {
+			accountID, concurrency = account.ID, account.Concurrency
+		}
+		resp, err = s.httpUpstream.Do(req, proxyURL, accountID, concurrency)
+	} else {
+		return codexTurnStateProbeResult{}
+	}
 	if err != nil {
 		return codexTurnStateProbeResult{}
 	}
