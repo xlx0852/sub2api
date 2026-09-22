@@ -25,9 +25,27 @@ var openAICodexRouteStats = struct {
 	mu      sync.Mutex
 	pool    map[string]int
 	shape   map[int]int
+	routes  map[string]int
 	total   int
 	windowT time.Time
-}{pool: map[string]int{}, shape: map[int]int{}, windowT: time.Now()}
+}{pool: map[string]int{}, shape: map[int]int{}, routes: map[string]int{}, windowT: time.Now()}
+
+// recordOpenAICodexRouteMapping 记录一次「请求模型 → 实际落池」的映射。
+//
+// 与 recordOpenAICodexRouteStat 分开的理由：两个业务采集点传进 capture 的 model
+// **语义并不一致**——WS 路径传的是响应真实落点（正确），HTTP 路径传的是请求模型。
+// 所以落池统计不能用来回答「请求 astra 到底有没有拿到 astra」，只有在**两个模型都明确
+// 在作用域里**的调用点（如 WS 终端事件）才能记这条映射。探针的 seeded 日志同理。
+func recordOpenAICodexRouteMapping(requested, served string) {
+	requested = strings.TrimSpace(requested)
+	served = strings.TrimSpace(served)
+	if requested == "" || served == "" {
+		return
+	}
+	openAICodexRouteStats.mu.Lock()
+	openAICodexRouteStats.routes[requested+"→"+served]++
+	openAICodexRouteStats.mu.Unlock()
+}
 
 // recordOpenAICodexRouteStat 记录一次「该轮被接受」的落池与票形态。
 // 只计数，不存内容；不参与任何决策。
@@ -57,15 +75,29 @@ func flushOpenAICodexRouteStats(now time.Time) string {
 	total := openAICodexRouteStats.total
 	pool := openAICodexRouteStats.pool
 	shape := openAICodexRouteStats.shape
+	routes := openAICodexRouteStats.routes
 	elapsed := now.Sub(openAICodexRouteStats.windowT)
 	openAICodexRouteStats.pool = map[string]int{}
 	openAICodexRouteStats.shape = map[int]int{}
+	openAICodexRouteStats.routes = map[string]int{}
 	openAICodexRouteStats.total = 0
 	openAICodexRouteStats.windowT = now
 
-	return fmt.Sprintf("[CodexRouteStat] window=%s accepted=%d rates=%.1f/min pools=%s shapes=%s",
+	line := fmt.Sprintf("[CodexRouteStat] window=%s accepted=%d rates=%.1f/min pools=%s shapes=%s",
 		elapsed.Round(time.Second), total, perMinute(total, elapsed),
 		formatCountMap(pool, total), formatShapeMap(shape, total))
+	if len(routes) > 0 {
+		line += " routes=" + formatCountMap(routes, sumCounts(routes))
+	}
+	return line
+}
+
+func sumCounts(m map[string]int) int {
+	total := 0
+	for _, v := range m {
+		total += v
+	}
+	return total
 }
 
 func perMinute(n int, d time.Duration) float64 {
