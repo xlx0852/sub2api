@@ -351,6 +351,8 @@ func TestOpenAIStreamingCapacityShedAfterOutputStillDiscardsTicket(t *testing.T)
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/responses", nil)
+	// 生产里 Codex 客户端会带 session-id；epoch 需要它才能推进。
+	c.Request.Header.Set("session-id", "client-session-shed")
 
 	resp, closeFn := newCapacityShedStreamResponse(true)
 	defer closeFn()
@@ -364,6 +366,9 @@ func TestOpenAIStreamingCapacityShedAfterOutputStillDiscardsTicket(t *testing.T)
 		"即使无法重放，容量过载也必须清掉被钉住的票")
 	require.GreaterOrEqual(t, svc.OpenAICodexOverloadBurstAttempt(account.ID), 1,
 		"过载应记入爆发窗口，供后续请求的重试预算使用")
+	// 关键：真实调用点必须把入站 session-id 传到 epoch，否则跨请求轮换在生产等于死代码。
+	require.GreaterOrEqual(t, openAICodexOverloadSessionEpoch(account.ID, "client-session-shed"), 1,
+		"过载后该(账号,客户端会话)的 epoch 必须推进")
 }
 
 // 对照组：非容量降载的流内失败（普通 upstream 错误）不得清票。
