@@ -667,7 +667,10 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		if isTerminalEvent {
 			if eventType == "response.completed" || eventType == "response.done" {
 				// 归槽以响应真实落点为准（astra 可能落 luna 池），回退请求 slug。
-				respModel := strings.TrimSpace(gjson.GetBytes(finalResponse, "model").String())
+				// rawServed 是上游**真实回显**的落点；下面的 fallback 只是给归槽兜底，
+				// 不能用来判断落点，否则「上游没回显 model」会被误记成「落在请求的那个池」。
+				rawServed := strings.TrimSpace(gjson.GetBytes(finalResponse, "model").String())
+				respModel := rawServed
 				if respModel == "" {
 					respModel = originalModel
 				}
@@ -675,7 +678,9 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 				// 这里 requested 与 served 都在作用域内，是唯一能无歧义记录
 				// 「请求模型 → 实际落池」的业务调用点（capture 的 model 参数在两个
 				// 业务路径上语义不一致：WS 传落点、HTTP 传请求模型）。
-				recordOpenAICodexRouteMapping(originalModel, respModel, len(strings.TrimSpace(lease.HandshakeHeaders().Get("x-codex-turn-state"))))
+				if rawServed != "" {
+					recordOpenAICodexRouteMapping(originalModel, rawServed, len(strings.TrimSpace(lease.HandshakeHeaders().Get("x-codex-turn-state"))))
+				}
 				s.maybeDumpOpenAICapacityAB(openAICapacityABDumpInput{
 					Label:      "ok",
 					Entry:      "ws_v2",
