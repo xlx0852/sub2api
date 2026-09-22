@@ -290,3 +290,43 @@ OpenAI 请求全部 200（账号 120 OAuth ×9、账号 89 API-key ×4），**�
 4. `user-agent` 版本段归一 —— 防止身份被钉在陈旧版本（陈旧身份会被上游优先降载）。
 
 **结构性不可消除的部分**：`x-oai-attestation` 只有 ChatGPT.app 会带，网关只能转发、无法生成（需客户端设备能力）。
+
+# 十二、生产实据：轮换机制在真实客户端上生效（2026-09-22）
+
+阶段 3 上线后 17 分钟窗口（账号 120，全部 `path=stream_failed`）：
+
+```
+account=120 reason=server_overloaded path=stream_failed
+  burst_attempt=1  session_epoch=1
+  burst_attempt=2  session_epoch=2
+  burst_attempt=3  session_epoch=1
+  burst_attempt=4  session_epoch=1
+  burst_attempt=5  session_epoch=2
+  burst_attempt=6  session_epoch=1
+  burst_attempt=7  session_epoch=2
+```
+
+解读：
+
+- **`burst_attempt` 1→7**：爆发窗口计数生效（同一窗口内的连续过载累加）。
+- **`session_epoch` 在 1/2 之间**：epoch 是**按 (账号, 客户端会话)** 计的，每个真实客户端会话各有一条计数；
+  同一会话重复过载时 1→2 递增 —— **跨请求身份轮换已在真实 Codex 客户端上生效**。
+- 对比此前 4 条 `session_epoch=0`：那批请求未带 Codex 会话头（`/v1/responses` 上的第三方客户端），
+  没有会话标识就无从轮换，属预期。
+
+同窗口整体健康度：
+
+```
+/responses 状态码: {200: 154, 101: 9}        ← 零 4xx/5xx
+全部状态码:        {200: 483, 404: 4, 101: 9, 401: 2}
+上游 4xx/5xx:      无
+ERROR:             无
+容器:              running/healthy 重启=0
+```
+
+`404` 全为客户端打错 `/v1/user/balance`，`401` 为客户端鉴权失败。
+
+**两项仍未观测到**（需要相应条件，非缺陷）：
+
+- `overload_path=http_503`：至今所有过载都走流内通道（path2），HTTP 503 通道（path1）未出现；
+- `thread_id_rotated=true`：同账号重试路径尚未被触发（`openai.pool_mode_same_account_retry` 零次）。
