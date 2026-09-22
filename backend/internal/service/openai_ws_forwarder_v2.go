@@ -679,7 +679,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 				// 「请求模型 → 实际落池」的业务调用点（capture 的 model 参数在两个
 				// 业务路径上语义不一致：WS 传落点、HTTP 传请求模型）。
 				if rawServed != "" {
-					recordOpenAICodexRouteMapping(originalModel, rawServed, len(strings.TrimSpace(lease.HandshakeHeaders().Get("x-codex-turn-state"))))
+					recordOpenAICodexRouteMapping(originalModel, rawServed, len(strings.TrimSpace(lease.HandshakeHeaders().Get("x-codex-turn-state"))), accountIDOf(account))
 				}
 				s.maybeDumpOpenAICapacityAB(openAICapacityABDumpInput{
 					Label:      "ok",
