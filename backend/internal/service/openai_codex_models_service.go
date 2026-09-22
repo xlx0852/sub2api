@@ -393,7 +393,8 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Originator", "codex_cli_rs")
-	req.Header.Set("Version", clientVersion)
+	// 不发 version 头：真实客户端拉 /codex/models 时只带 accept/authorization/
+	// chatgpt-account-id/originator/user-agent 五个头。
 	req.Header.Set("User-Agent", codexCLIUserAgentForVersion(clientVersion))
 	if ifNoneMatch = strings.TrimSpace(ifNoneMatch); ifNoneMatch != "" {
 		req.Header.Set("If-None-Match", ifNoneMatch)

@@ -1306,7 +1306,7 @@ func requireOpenAIMessagesCodexIdentity(t *testing.T, req *http.Request, wantUse
 	require.NotNil(t, req)
 	require.Equal(t, wantUserAgent, req.Header.Get("User-Agent"))
 	require.Equal(t, wantOriginator, req.Header.Get("originator"))
-	require.Equal(t, codexCLIVersion, req.Header.Get("version"))
+	require.Empty(t, req.Header.Get("version"), "真实客户端不发 version 头")
 	require.Empty(t, req.Header.Get("OpenAI-Beta"), "官方 HTTP 自 #5892 起不带 responses=experimental")
 }
 

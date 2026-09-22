@@ -284,6 +284,11 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			}
 		}
 	}
+	// 设备证明只对 ChatGPT 内部接口（OAuth）有意义：API-key 账号打的是 api.openai.com，
+	// 把 ChatGPT.app 的设备证明发过去既无意义也多余。
+	if account.Type != AccountTypeOAuth {
+		req.Header.Del(openaiAttestationHeader)
+	}
 	// Lite demotion rewrites body shape for non-lite upstream models; the matching
 	// internal header must not ride along or ChatGPT rejects the model.
 	if isOpenAIResponsesLiteDemoted(c) {
@@ -309,10 +314,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			req.Header.Set("originator", resolveOpenAIUpstreamOriginator(c, isCodexCLI))
 		}
 		apiKeyID := getAPIKeyIDFromContext(c)
-		// 官方 openai provider 固定带 version=CARGO_PKG_VERSION；客户端未带时补默认伪装版本。
-		if req.Header.Get("version") == "" {
-			req.Header.Set("version", codexCLIVersion)
-		}
+		// 不再发送 version 头：实测（142 条全量抓包，App/TUI/exec 三个入口）真实客户端
+		// 一律不发它。此前按「官方 provider 固定带 version」的注释补齐，是一个纯增量特征。
 		if isOpenAICompactUpstreamRequest(c) {
 			req.Header.Set("accept", "application/json")
 			compactSession := resolveOpenAICompactSessionID(c)

@@ -131,9 +131,9 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchRequest(ctx context.Context
 		req.Header.Del("OpenAI-Beta")
 	}
 	if version := strings.TrimSpace(c.GetHeader("Version")); version != "" {
-		req.Header.Set("Version", version)
+		// 不发 version 头（真实客户端不发）。
 	} else if account.Type == AccountTypeOAuth {
-		req.Header.Set("Version", codexCLIVersion)
+		// 不发 version 头（真实客户端不发）。
 	}
 	return req, nil
 }

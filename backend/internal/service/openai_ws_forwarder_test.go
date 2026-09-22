@@ -179,7 +179,7 @@ func TestBuildOpenAIWSHeaders_Codex144Fingerprint(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, openAIWSBetaV2Value, headers.Get("OpenAI-Beta"))
-	require.Equal(t, codexCLIVersion, headers.Get("version"))
+	require.Empty(t, headers.Get("version"), "真实客户端不发 version 头")
 	require.Equal(t, "sess-1", headers.Get("session-id"))
 	require.Empty(t, headers.Get("session_id"), "不再写下划线兼容头")
 	require.Empty(t, headers.Get("conversation_id"), "不再写下划线兼容头")

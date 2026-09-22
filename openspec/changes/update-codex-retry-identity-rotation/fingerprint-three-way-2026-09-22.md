@@ -117,14 +117,36 @@ base64 解出可读片段：`zh-CN` / `Asia/Shanghai` / `5c18dd97-8646-4a92-8144
 ChatGPT.app 的尾段是构建号（`26.915.31945`）与首段版本本就不同，必须原样保留。
 不用「像不像版本号」的形状判断 —— `26.915.31945` 同样能解析成三段数字。
 
-## 八、下一步可验证的动作
+## 八、阶段 2 实现记录（删 version 头 + 转发 attestation）
+
+| # | 改动 | 结果 |
+|---|---|---|
+| 5 | **不再发送 `version` 头** | 清除了 9 处写入点（forward / passthrough / 身份收口 3 处 / WS / alpha search / 票探针 / 模型目录 / 账号测试 / 用量探针），并把 `version` 从两个透传白名单移除 |
+| 6 | **转发客户端自带的 `x-oai-attestation`** | 加入两个透传白名单，并限定只对 OAuth 账号（API-key 走 api.openai.com，设备证明无意义） |
+
+`version` 的判据是**实测**而非注释：142 条全量抓包（App / TUI / exec 三个入口、`/responses` 与 `/codex/models`）
+里**没有任何含 "version" 的请求头**。源码里内置 `openai` provider 确实声明了
+`http_headers: {"version": CARGO_PKG_VERSION}`，但它没有出现在打往 `chatgpt.com` 的请求上
+（机制未定位，但不影响结论：以实测为准）。
+
+阶段 2 后的出站差异（同一份真实客户端头集合回放）：
+
+```
+[新增] 客户端没发、网关发了 : []                          ← 关键：不再凭空新增任何头
+[丢失] 客户端发了、网关没发 : [content-encoding cookie]    ← cookie 正确丢弃；zstd 属阶段 3
+[改写] 两边都有但值不同   : [authorization chatgpt-account-id
+                            session-id thread-id x-client-request-id x-codex-window-id
+                            user-agent x-codex-turn-metadata]
+                            ← 前两个是正确替换；中间四个是多租户隔离；
+                              后两个只归一化版本段 / 改写身份字段
+```
+
+## 九、下一步可验证的动作
 
 | 动作 | 说明 | 风险 |
 |---|---|---|
 | 把 outbound 对齐到 **CLI** 身份 | 补 UA 尾段、删 `version`、补 `x-codex-routing-hint`、增 `zstd` | 中（`version` 删除需单账号先验） |
 | 给 `turn-metadata` 对齐 CLI 语义 | 去掉/伪造 Desktop 独有字段，或反过来把 UA 换成 Desktop | 需先决定「扮 CLI 还是扮 Desktop」 |
-| 阶段 2：删 `version` 头 | 三个真实客户端都不发 | ⚠️ 需单账号先验 404 风险 |
-| 阶段 2：转发 App 的 `x-oai-attestation` | token 内无账号标识（只有 bundle/locale/tz/设备 UUID） | 需接受隐私代价 + 单账号灰度 |
 | 阶段 3：`content-encoding: zstd` | 真实客户端会压缩请求体 | 待评估 |
 
 ---

@@ -596,3 +596,8 @@ func alignCodexTurnMetadataWithIsolatedSession(h http.Header, isolatedSession, i
 		h.Set("x-codex-turn-metadata", string(rebuilt))
 	}
 }
+
+// openaiAttestationHeader 是 ChatGPT.app 的设备证明头。
+// 网关只转发客户端自带值，绝不生成（需要客户端设备能力，见 app-server 的
+// request_attestation 通道）。
+const openaiAttestationHeader = "x-oai-attestation"

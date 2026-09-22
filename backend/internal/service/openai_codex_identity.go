@@ -152,9 +152,6 @@ func (c *CodexIdentity) ensureHeaders(h http.Header) {
 	if strings.TrimSpace(h.Get("originator")) == "" {
 		h.Set("originator", identity.originator)
 	}
-	if strings.TrimSpace(h.Get("version")) == "" {
-		h.Set("version", identity.version)
-	}
 }
 
 // enforceHeaders 收口 OAuth（ChatGPT 内部接口）出站请求的客户端身份头。
@@ -188,7 +185,8 @@ func (c *CodexIdentity) enforceHeadersWithUA(h http.Header, overrideUA string) {
 	identity := c.resolveOutboundIdentity(overrideUA)
 	h.Set("user-agent", identity.userAgent)
 	h.Set("originator", identity.originator)
-	h.Set("version", identity.version)
+	// 不发 version 头：真实客户端（App/TUI/exec）一律不发（见 forward 路径注释）。
+	h.Del("version")
 }
 
 // pairIdentityHeaders 是关闭强制统一后的兜底收口：保留客户端真实身份，
@@ -198,13 +196,11 @@ func (c *CodexIdentity) pairIdentityHeaders(h http.Header) {
 	if !ok {
 		identity := c.resolveOutboundIdentity("")
 		originator, pairedUA = identity.originator, identity.userAgent
-		h.Set("version", identity.version)
+		// 不发 version 头（真实客户端不发）。
 	}
 	h.Set("user-agent", pairedUA)
 	h.Set("originator", originator)
-	if v := strings.TrimSpace(h.Get("version")); v != "" && CompareVersions(v, codexUpstreamMinVersion) < 0 {
-		h.Set("version", codexCLIVersion)
-	}
+	h.Del("version")
 }
 
 // 包级包装保留给默认身份用例（nil 接收者 = 强制统一开启 + 编译期规范 UA）。

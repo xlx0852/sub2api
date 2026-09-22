@@ -104,8 +104,8 @@ func TestFetchCodexModelsManifestPassthrough(t *testing.T) {
 	if gotClientVersion != "0.137.0" {
 		t.Errorf("client_version query: got %q", gotClientVersion)
 	}
-	if gotVersion != "0.137.0" {
-		t.Errorf("Version header: got %q", gotVersion)
+	if gotVersion != "" {
+		t.Errorf("不得发送 Version 头（真实客户端不发），got %q", gotVersion)
 	}
 	if !strings.Contains(gotUserAgent, "codex_cli_rs/0.137.0") {
 		t.Errorf("User-Agent should include client version, got %q", gotUserAgent)

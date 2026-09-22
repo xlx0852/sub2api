@@ -812,7 +812,7 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	// 对齐 Codex 0.144 HTTP：不再注入已废弃的 responses=experimental。
 	req.Header.Set("Originator", "codex_cli_rs")
 	req.Header.Set("User-Agent", codexCLIUserAgent)
-	req.Header.Set("Version", codexCLIVersion)
+	// 不发 version 头：实测真实客户端（App/TUI/exec）在所有 Codex 端点上都不发它。
 	probeSessionID := compactProbeSessionID(account.ID)
 	req.Header.Set("Session_ID", probeSessionID)
 	req.Header.Set("Conversation_ID", probeSessionID)

@@ -104,7 +104,7 @@ func TestTurnStateProbeRequiresCompletionAndUsesResponseModel(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			client := &http.Client{Transport: turnStateRoundTripper(func(r *http.Request) (*http.Response, error) {
 				require.Empty(t, r.Header.Get(openAICodexTurnStateHeader))
-				require.Equal(t, codexCLIVersion, r.Header.Get("version"))
+				require.Empty(t, r.Header.Get("version"), "真实客户端不发 version 头")
 				h := http.Header{}
 				h.Set(openAICodexTurnStateHeader, tok)
 				return &http.Response{StatusCode: tc.status, Header: h, Body: io.NopCloser(strings.NewReader(tc.body + "\n\n"))}, nil

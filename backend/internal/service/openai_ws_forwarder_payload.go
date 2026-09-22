@@ -98,7 +98,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 			}
 		}
 		if v := strings.TrimSpace(c.Request.Header.Get("version")); v != "" {
-			headers.Set("version", v)
+			// 不透传/补齐 version 头（真实客户端不发）。
 		}
 		if v := strings.TrimSpace(c.Request.Header.Get("x-client-request-id")); v != "" {
 			headers.Set("x-client-request-id", v)
@@ -172,7 +172,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 
 	// 官方 openai provider 固定 version=CARGO_PKG_VERSION。
 	if headers.Get("version") == "" {
-		headers.Set("version", codexCLIVersion)
+		// 不发 version 头（真实客户端不发）。
 	}
 
 	betaValue := openAIWSBetaV2Value

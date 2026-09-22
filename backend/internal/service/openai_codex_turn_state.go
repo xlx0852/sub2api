@@ -713,7 +713,7 @@ func probeOpenAICodexTurnState(ctx context.Context, client *http.Client, accessT
 	req.Header.Set("ChatGPT-Account-ID", chatgptAccountID)
 	req.Header.Set("originator", "codex_cli_rs")
 	req.Header.Set("User-Agent", "codex_cli_rs/"+codexCLIVersion)
-	req.Header.Set("version", codexCLIVersion)
+	// 不发 version 头：实测真实客户端（App/TUI/exec）在所有 Codex 端点上都不发它。
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)

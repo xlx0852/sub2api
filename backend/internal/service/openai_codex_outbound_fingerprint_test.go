@@ -195,7 +195,12 @@ func TestGatewayOutboundCodexFingerprint_ObservedShape(t *testing.T) {
 			require.True(t, strings.HasPrefix(upstream.lastReq.Header.Get("user-agent"), "codex_exec/"))
 			require.Contains(t, upstream.lastReq.Header.Get("user-agent"), "(codex_exec; ",
 				"UA 必须带 (originator; 版本) 尾段")
-			require.NotEmpty(t, upstream.lastReq.Header.Get("version"))
+			// 真实客户端不发 version 头 → 网关也不发（此前是纯增量特征）。
+			require.Empty(t, upstream.lastReq.Header.Get("version"), "不得发送 version 头")
+			// 客户端自带 attestation 应原样转发（网关无法生成，只能转发）。
+			require.Equal(t, `{"v":1,"s":0,"t":"v1.client-attestation-placeholder"}`,
+				upstream.lastReq.Header.Get(openaiAttestationHeader),
+				"应转发客户端设备证明")
 			// 2) routing-hint 必须与出站 body 的 model 一致（三个真实客户端都发它）。
 			require.Equal(t, "model="+gjson.GetBytes(upstream.lastBody, "model").String(),
 				upstream.lastReq.Header.Get("x-codex-routing-hint"))
@@ -364,7 +369,7 @@ func realCodexClientRequestHeaders(thread, install, turnMetadata string) map[str
 		"user-agent":                             "codex_exec/0.155.1 (Mac OS 27.0.0; arm64) unknown (codex_exec; 0.155.1)",
 		"x-client-request-id":                    thread,
 		"x-codex-beta-features":                  "prevent_idle_sleep,remote_compaction_v2",
-		"x-codex-routing-hint":                   "model=gpt-6-astra",
+		"x-codex-routing-hint":                   "model=gpt-5.6-terra",
 		"x-codex-turn-metadata":                  turnMetadata,
 		"x-codex-window-id":                      thread + ":0",
 		"x-openai-internal-codex-responses-lite": "true",

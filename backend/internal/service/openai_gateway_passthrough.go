@@ -489,9 +489,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		req.Header.Del("thread-id")
 		req.Header.Del("thread_id")
 		// 官方 openai provider 固定带 version=CARGO_PKG_VERSION；客户端未带时补默认伪装版本。
-		if req.Header.Get("version") == "" {
-			req.Header.Set("version", codexCLIVersion)
-		}
+		// 同上：真实客户端不发 version 头，网关也不补。
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
 			if clientSessionID == "" {
@@ -554,7 +552,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	// 默认 Codex CLI 身份（承接原「非 Codex UA 安全兜底」，并修复其把 codex-tui 等官方 UA 改写为
 	// codex_cli_rs 造成的 originator 错配 404），详见 issue #3901。
 	if account.Type == AccountTypeOAuth {
-		s.codexIdentity.enforceHeadersWithUA(req.Header, s.codexIdentityOverrideUA(account))
+		s.codexIdentity.enforceHeadersWithUA(req.Header, s.codexIdentityCandidateUA(c, account))
 		s.applyOpenAICodexTurnStateReuseForModel(req.Header, account, strings.TrimSpace(gjson.GetBytes(body, "model").String()))
 	}
 

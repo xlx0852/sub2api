@@ -90,7 +90,6 @@ var openaiAllowedHeaders = map[string]bool{
 	"user-agent":               true,
 	"originator":               true,
 	"openai-beta":              true, // 官方 HTTP 已不再强制；仅透传客户端自带值
-	"version":                  true, // provider http_headers: CARGO_PKG_VERSION
 	"x-client-request-id":      true,
 	"x-codex-beta-features":    true,
 	"x-codex-image-turn-id":    true,
@@ -101,6 +100,13 @@ var openaiAllowedHeaders = map[string]bool{
 	responsesLiteHeaderKey:     true,
 	"x-codex-window-id":        true,
 	"x-openai-subagent":        true,
+	// x-oai-attestation：ChatGPT.app（macOS）的设备证明，由客户端经 app-server 的
+	// "请求 attestation" 通道生成（空参数、不随线程；codex 层只做 {v,s,t} 信封包装）。
+	// CLI/TUI 没有支持该能力的连接，因此从不发送。
+	// 网关无法自行生成（需客户端设备能力），只能转发进来的值；不转发的话
+	// 「App 流量」会缺失一个真实 App 请求必然携带的头。
+	// 注意：其载荷内含客户端 locale / 时区 / 设备 UUID，转发即把这些交给上游（已确认接受）。
+	"x-oai-attestation": true,
 }
 
 // OpenAI passthrough allowed headers whitelist.
@@ -117,7 +123,6 @@ var openaiPassthroughAllowedHeaders = map[string]bool{
 	"openai-beta":              true,
 	"user-agent":               true,
 	"originator":               true,
-	"version":                  true,
 	"x-client-request-id":      true,
 	"x-codex-beta-features":    true,
 	"x-codex-image-turn-id":    true,
@@ -128,6 +133,13 @@ var openaiPassthroughAllowedHeaders = map[string]bool{
 	responsesLiteHeaderKey:     true,
 	"x-codex-window-id":        true,
 	"x-openai-subagent":        true,
+	// x-oai-attestation：ChatGPT.app（macOS）的设备证明，由客户端经 app-server 的
+	// "请求 attestation" 通道生成（空参数、不随线程；codex 层只做 {v,s,t} 信封包装）。
+	// CLI/TUI 没有支持该能力的连接，因此从不发送。
+	// 网关无法自行生成（需客户端设备能力），只能转发进来的值；不转发的话
+	// 「App 流量」会缺失一个真实 App 请求必然携带的头。
+	// 注意：其载荷内含客户端 locale / 时区 / 设备 UUID，转发即把这些交给上游（已确认接受）。
+	"x-oai-attestation": true,
 }
 
 // codex_cli_only 拒绝时记录的请求头白名单（仅用于诊断日志，不参与上游透传）
