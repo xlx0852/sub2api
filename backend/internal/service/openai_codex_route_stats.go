@@ -22,13 +22,14 @@ import (
 // 与真实客户端基线的对比口径见 openspec 第十七章（归档抓包 123 条：
 // 312 占 99.2%、292 占 0.8%、astra 命中 1.0%）。
 var openAICodexRouteStats = struct {
-	mu      sync.Mutex
-	pool    map[string]int
-	shape   map[int]int
-	routes  map[string]int
-	total   int
-	windowT time.Time
-}{pool: map[string]int{}, shape: map[int]int{}, routes: map[string]int{}, windowT: time.Now()}
+	mu       sync.Mutex
+	pool     map[string]int
+	shape    map[int]int
+	routes   map[string]int
+	routeLen map[string]int
+	total    int
+	windowT  time.Time
+}{pool: map[string]int{}, shape: map[int]int{}, routes: map[string]int{}, routeLen: map[string]int{}, windowT: time.Now()}
 
 // recordOpenAICodexRouteMapping 记录一次「请求模型 → 实际落池」的映射。
 //
@@ -36,7 +37,7 @@ var openAICodexRouteStats = struct {
 // **语义并不一致**——WS 路径传的是响应真实落点（正确），HTTP 路径传的是请求模型。
 // 所以落池统计不能用来回答「请求 astra 到底有没有拿到 astra」，只有在**两个模型都明确
 // 在作用域里**的调用点（如 WS 终端事件）才能记这条映射。探针的 seeded 日志同理。
-func recordOpenAICodexRouteMapping(requested, served string) {
+func recordOpenAICodexRouteMapping(requested, served string, ticketLen int) {
 	requested = strings.TrimSpace(requested)
 	served = strings.TrimSpace(served)
 	if requested == "" || served == "" {
@@ -44,6 +45,14 @@ func recordOpenAICodexRouteMapping(requested, served string) {
 	}
 	openAICodexRouteStats.mu.Lock()
 	openAICodexRouteStats.routes[requested+"→"+served]++
+	// 同时记下这一次响应的票长（0 = 没发可复用票）。两者必须一起看：
+	// 否则会出现「落点是 astra」与「形态直方图全是 312」这种看似矛盾的组合，
+	// 而真实原因往往是**某些落点的响应根本不发可复用票**，因而从不进形态统计。
+	shape := "none"
+	if ticketLen > 0 {
+		shape = fmt.Sprintf("len%d", ticketLen)
+	}
+	openAICodexRouteStats.routeLen[served+"#"+shape]++
 	openAICodexRouteStats.mu.Unlock()
 }
 
@@ -76,10 +85,12 @@ func flushOpenAICodexRouteStats(now time.Time) string {
 	pool := openAICodexRouteStats.pool
 	shape := openAICodexRouteStats.shape
 	routes := openAICodexRouteStats.routes
+	routeLen := openAICodexRouteStats.routeLen
 	elapsed := now.Sub(openAICodexRouteStats.windowT)
 	openAICodexRouteStats.pool = map[string]int{}
 	openAICodexRouteStats.shape = map[int]int{}
 	openAICodexRouteStats.routes = map[string]int{}
+	openAICodexRouteStats.routeLen = map[string]int{}
 	openAICodexRouteStats.total = 0
 	openAICodexRouteStats.windowT = now
 
@@ -88,6 +99,9 @@ func flushOpenAICodexRouteStats(now time.Time) string {
 		formatCountMap(pool, total), formatShapeMap(shape, total))
 	if len(routes) > 0 {
 		line += " routes=" + formatCountMap(routes, sumCounts(routes))
+	}
+	if len(routeLen) > 0 {
+		line += " route_served_ticket=" + formatCountMap(routeLen, sumCounts(routeLen))
 	}
 	return line
 }

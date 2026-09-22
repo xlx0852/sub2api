@@ -675,7 +675,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 				// 这里 requested 与 served 都在作用域内，是唯一能无歧义记录
 				// 「请求模型 → 实际落池」的业务调用点（capture 的 model 参数在两个
 				// 业务路径上语义不一致：WS 传落点、HTTP 传请求模型）。
-				recordOpenAICodexRouteMapping(originalModel, respModel)
+				recordOpenAICodexRouteMapping(originalModel, respModel, len(strings.TrimSpace(lease.HandshakeHeaders().Get("x-codex-turn-state"))))
 				s.maybeDumpOpenAICapacityAB(openAICapacityABDumpInput{
 					Label:      "ok",
 					Entry:      "ws_v2",

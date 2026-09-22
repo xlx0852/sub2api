@@ -392,8 +392,9 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			if served := extractOpenAIResponseModelFromJSONBytes(dataBytes); served != "" {
 				responseModel = served
 				// 请求模型与上游真实落点在此同域，且 responseModel 的空值守卫保证
-				// 每个响应只记一次。这是 HTTP 流式主力路径上唯一能无歧义配对的点。
-				recordOpenAICodexRouteMapping(originalModel, responseModel)
+				// 每个响应只记一次。连票长一起记：某些落点的响应可能根本不发可复用票，
+				// 只看形态直方图会把「没有票」误读成「没落到该池」。
+				recordOpenAICodexRouteMapping(originalModel, responseModel, len(strings.TrimSpace(resp.Header.Get("x-codex-turn-state"))))
 			}
 		}
 		forceFlushFailedEvent := false
