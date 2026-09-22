@@ -269,6 +269,12 @@ func (s *OpenAIGatewayService) captureOpenAICodexTurnStateForPool(account *Accou
 	// 拿到可复用票 = 该轮被上游接受。**只有被接受的响应才能刷新 cookie**：
 	// 失败/被拒的响应若也能刷新，一次失败就会把上一份可用会话冲掉。
 	s.captureCodexTurnStateCookies(account, headers, time.Now().UTC())
+	// 顺带记一次路由形态（落池 + 票长），供 CodexRouteStat 滚动汇总。
+	// 这里在“该轮被接受”的唯一入口上，样本口径与票一致。
+	if pool == "" {
+		pool = openAICodexTurnStatePoolForRequest(respModel)
+	}
+	recordOpenAICodexRouteStat(pool, len(token))
 	if pool == "" {
 		pool = openAICodexTurnStatePoolForRequest(respModel)
 	}
@@ -642,12 +648,20 @@ func (s *OpenAIGatewayService) runOpenAICodexTurnStateSeeder() {
 	ticker := time.NewTicker(2 * time.Minute)
 	defer ticker.Stop()
 	s.refreshOpenAICodexTurnStateAccounts(context.Background(), 0)
+	// 每 5 个 tick（10 分钟）吐一行路由形态汇总；窗口内无样本时不输出。
+	ticks := 0
 	for {
 		select {
 		case id := <-s.codexTurnStateRefresh:
 			s.refreshOpenAICodexTurnStateAccounts(context.Background(), id)
 		case <-ticker.C:
 			s.refreshOpenAICodexTurnStateAccounts(context.Background(), 0)
+			ticks++
+			if ticks%5 == 0 {
+				if line := flushOpenAICodexRouteStats(time.Now()); line != "" {
+					logger.LegacyPrintf("service.openai_codex_turn_state", "%s", line)
+				}
+			}
 		}
 	}
 }
