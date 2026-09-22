@@ -155,11 +155,14 @@ func (s *OpenAIGatewayService) captureCodexTurnStateCookies(account *Account, he
 	}
 	changed := false
 	for _, c := range set {
-		if c == nil || strings.TrimSpace(c.Name) == "" || c.Value == "" {
+		if c == nil || strings.TrimSpace(c.Name) == "" {
 			continue
 		}
-		// Max-Age<=0 表示上游在删除该 cookie，不该再回放。
-		if c.MaxAge < 0 {
+		// 删除型 Set-Cookie 有三种写法：Max-Age<=0、空值、Expires 已过。
+		// 必须在这三种情况下把已存的同名 cookie 移除，否则网关会继续回放
+		// 一个上游已经作废的会话令牌。
+		// （注意：删除型 cookie 的值本来就是空的，不能先被空值守卫拦掉。）
+		if c.MaxAge < 0 || strings.TrimSpace(c.Value) == "" || (!c.Expires.IsZero() && !now.Before(c.Expires)) {
 			if i, ok := index[c.Name]; ok {
 				merged = append(merged[:i], merged[i+1:]...)
 				index = make(map[string]int, len(merged))
