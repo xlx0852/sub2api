@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/ports"
+	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -171,7 +173,7 @@ func TestTurnStateSeedRefreshesEveryPoolAndPersistsAtomically(t *testing.T) {
 	client := &http.Client{Transport: turnStateRoundTripper(func(r *http.Request) (*http.Response, error) {
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
-		model := gjson.GetBytes(body, "model").String()
+		model := gjson.GetBytes(decodeRequestCompressionForTest(t, r, body), "model").String()
 		models = append(models, model)
 		h := http.Header{}
 		h.Set(openAICodexTurnStateHeader, "gAAAAA"+strings.Repeat("T", 250))
@@ -265,4 +267,19 @@ func TestTurnStateConcurrent5xxInvalidatesOncePerCooldown(t *testing.T) {
 	require.False(t, svc.shouldInvalidateOpenAICodexTurnState(69, 502, now.Add(2*time.Minute)))
 	require.False(t, svc.shouldInvalidateOpenAICodexTurnState(69, 502, now.Add(2*time.Minute)))
 	require.True(t, svc.shouldInvalidateOpenAICodexTurnState(69, 502, now.Add(2*time.Minute)))
+}
+
+// decodeRequestCompressionForTest 代表真上游的解压行为：探针与业务出站一样会
+// zstd 压缩请求体并声明 content-encoding，假传输层必须先解压才能按 body 断言。
+func decodeRequestCompressionForTest(t *testing.T, r *http.Request, raw []byte) []byte {
+	t.Helper()
+	if !strings.EqualFold(strings.TrimSpace(r.Header.Get(openAIRequestCompressionHeader)), "zstd") {
+		return raw
+	}
+	zr, err := zstd.NewReader(bytes.NewReader(raw))
+	require.NoError(t, err)
+	defer zr.Close()
+	plain, err := io.ReadAll(zr)
+	require.NoError(t, err)
+	return plain
 }
