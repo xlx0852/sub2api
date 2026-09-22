@@ -746,7 +746,8 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnStateWithClient(ctx context.Co
 			return
 		}
 		result := s.probeOpenAICodexTurnState(ctx, account, token, chatgptID, model, client)
-		if !result.completed || !isReusableOpenAICodexTurnState(result.headers.Get(openAICodexTurnStateHeader)) {
+		probeTicket := strings.TrimSpace(result.headers.Get(openAICodexTurnStateHeader))
+		if !result.completed || !isReusableOpenAICodexTurnState(probeTicket) {
 			logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] probe_no_ticket account=%d model=%s status=%d completed=%v egress=%s",
 				account.ID, model, result.status, result.completed, codexTurnStateProbeEgressLabel(account, client))
 			continue
@@ -756,8 +757,11 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnStateWithClient(ctx context.Co
 			pool = model
 		}
 		s.captureOpenAICodexTurnStateForPool(account, result.headers, pool, pool, true)
-		logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] seeded account=%d requested_model=%s pool=%s egress=%s cookies=%d",
-			account.ID, model, pool, codexTurnStateProbeEgressLabel(account, client), codexTurnStateCookieCount(account, time.Now()))
+		// len 记录票的**形态**。形态与落池并不一一对应（实测 292↔astra、312↔luna/terra、
+		// 332 也出现过在 luna），所以两个都记：requested_model 看请求、pool 看真实落点、
+		// len 看形态。三者放在同一行才能回答「请求 astra 到底有没有拿到 astra」。
+		logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] seeded account=%d requested_model=%s pool=%s len=%d egress=%s cookies=%d",
+			account.ID, model, pool, len(probeTicket), codexTurnStateProbeEgressLabel(account, client), codexTurnStateCookieCount(account, time.Now()))
 	}
 }
 
