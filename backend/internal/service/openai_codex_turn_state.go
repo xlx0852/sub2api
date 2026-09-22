@@ -877,8 +877,11 @@ func applyCodexTurnStateProbeIdentity(h http.Header, svc *OpenAIGatewayService, 
 		// 与业务出站同一规则：取**出站 body 的 model**，保证头与体自洽。
 		h.Set("x-codex-routing-hint", "model="+model)
 	}
-	// 真实客户端 123/123 必带；业务出站也会转发同一个头（除非被 lite demotion 剥掉）。
-	h.Set("x-openai-internal-codex-responses-lite", "true")
+	// 这里**不发** x-openai-internal-codex-responses-lite：该头是「本体是 Lite 形态」的声明，
+	// 而探针体是标准 Responses 形态（tools/include/instructions）。实测（2026-09-22）：
+	// 给标准体加这个头，上游直接回 HTTP 400（旧探针基线里没有 400，只有 200 completed=false）。
+	// 本仓已有同类注释：lite 头必须与体形状配套，否则 ChatGPT 拒绝。
+	// 真实客户端发它是因为**它的体就是 Lite 形态**，不是「所有请求都该带它」。
 	if metadata := codexTurnStateProbeTurnMetadata(account, sessionID, resolveConvergedInstallationID(account), turnID, windowID, model); metadata != "" {
 		h.Set("x-codex-turn-metadata", metadata)
 	}

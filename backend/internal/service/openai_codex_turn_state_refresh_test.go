@@ -139,7 +139,9 @@ func assertCodexTurnStateProbeIdentityHeaders(t *testing.T, r *http.Request, mod
 	require.Equal(t, sessionID+":0", h.Get("x-codex-window-id"), "实测 window-id 形态 = <thread>:0")
 	require.Equal(t, "prevent_idle_sleep,remote_compaction_v2", h.Get("x-codex-beta-features"))
 	require.Equal(t, "model="+model, h.Get("x-codex-routing-hint"), "routing-hint 必须与 body.model 自洽")
-	require.Equal(t, "true", h.Get("x-openai-internal-codex-responses-lite"))
+	// 探针体是标准 Responses 形态，因此**不得**声明 Lite：实测带上它上游回 400。
+	require.Empty(t, h.Get("x-openai-internal-codex-responses-lite"),
+		"lite 头必须与体形状配套；探针体不是 Lite 形态")
 	require.Equal(t, "text/event-stream", h.Get("accept"))
 	require.Equal(t, "application/json", h.Get("Content-Type"))
 	// 身份首段与 originator 必须配套（不能 UA 说 exec、originator 说 CLI）。

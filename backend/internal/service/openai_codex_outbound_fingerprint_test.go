@@ -605,8 +605,10 @@ func TestCodexTurnStateProbeOutboundFingerprint(t *testing.T) {
 	// （authorization 在 fixture 里也存在，只是值被替换；content-length 由 Go 在
 	//  真正写出时填充，不在 Header map 里。）
 	require.Empty(t, added, "探针不得引入真实客户端之外的任何头")
-	// 允许的丢失只有两项，且都是结构性原因：
-	//   cookie            —— 网关用账号 OAuth 鉴权，上游 LB cookie 注入是独立的一件事；
-	//   x-oai-attestation —— 设备证明只能转发、无法生成。
-	require.Equal(t, []string{"cookie", "x-oai-attestation"}, removed)
+	// 允许的丢失只有三项，均为结构性或不适用：
+	//   cookie                                  —— 网关用账号 OAuth 鉴权，LB cookie 注入是独立的一件事；
+	//   x-oai-attestation                       —— 设备证明只能转发、无法生成；
+	//   x-openai-internal-codex-responses-lite  —— 该头声明本体是 Lite 形态，探针体不是；
+	//                                             实测带上它上游回 HTTP 400。
+	require.Equal(t, []string{"cookie", "x-oai-attestation", "x-openai-internal-codex-responses-lite"}, removed)
 }
