@@ -249,3 +249,44 @@ struct AppServerAttestationEnvelope { v: u8, s: u8, t: Option<&str> }  // t = �
 **阶段 2 最大风险（删 `version` 头是否触发上游 404）已实测排除**：上线后 10 分钟内
 OpenAI 请求全部 200（账号 120 OAuth ×9、账号 89 API-key ×4），**无 404、无身份相关错误**；
 仅 4 条与身份无关的 429 failover。零 ERROR。
+
+# 十一、阶段 3 上线记录（请求体 zstd 压缩，2026-09-22）
+
+| 项 | 结果 |
+|---|---|
+| 方式 | 新建候选容器（18350）+ nginx 上游切换 + reload |
+| 版本 | `0.1.391-zstd-2a1f9696c`（公网可见） |
+| 绿灯 | `healthy`，重启 0 |
+| 回滚 | nginx 改回 `18349` + reload（配置已备份） |
+
+**上游是否接受 `content-encoding: zstd` 已实测确认**（这是本阶段唯一的大风险）：
+
+```
+切换后 4 分钟累计：
+  /responses 状态码: {200: 15}     ← 全部走通
+  全部状态码:        {200: 88, 401: 2, 404: 1}
+  上游失败事件:      0
+  ERROR:            0
+```
+
+（401×2 为客户端鉴权失败，404×1 为客户端打错 `/v1/user/balance`，均与压缩无关。）
+
+## 三阶段完成后的出站差异（对照真实客户端全量头集合）
+
+```
+[新增] 客户端没发、网关发了 : []            ← 已清零
+[丢失] 客户端发了、网关没发 : [cookie]      ← 正确（网关用账号鉴权，不带客户端 cookie）
+[改写] authorization chatgpt-account-id     ← 正确替换为账号鉴权
+       session-id thread-id x-client-request-id x-codex-window-id  ← 多租户隔离（设计）
+       user-agent                            ← 仅版本段归一化（防钉在陈旧版本）
+       x-codex-turn-metadata                 ← 仅身份字段改写，语义字段透传
+```
+
+**头级别与请求体编码的冒充差距已全部清除**，剩余差异均为「刻意为之」：
+
+1. `cookie` 不带 —— 网关用账号鉴权；
+2. `authorization` / `chatgpt-account-id` 替换 —— 多租户必然；
+3. 会话标识隔离 —— 防跨用户会话碰撞，且是 `thread-id` 轮换机制的基础；
+4. `user-agent` 版本段归一 —— 防止身份被钉在陈旧版本（陈旧身份会被上游优先降载）。
+
+**结构性不可消除的部分**：`x-oai-attestation` 只有 ChatGPT.app 会带，网关只能转发、无法生成（需客户端设备能力）。
