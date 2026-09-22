@@ -448,3 +448,27 @@ ERROR:             无
 
 排查记录：切换前一度以为新容器独有 pricing ERROR，实为**我先前用 `2>/dev/null` 丢掉了 stderr**
 （`legacy_printf` 走 stderr）而误判线上"零 ERROR"。改用 `2>&1` 后两容器 ERROR 集合一致。
+
+## 13.8 抓包收尾（12 小时后主动结束）
+
+抓包（mitmproxy + ChatGPT.app）已停止，App 已恢复正常直连。终止依据：
+
+**12 小时 296 条 `/responses` 记录的票长分布**
+
+| 位置 | 长度 | 次数 |
+|---|---|---|
+| 请求票（被复用的） | 312 | 105 |
+| 响应票 | 312 | 122 |
+| 响应票 | **292** | **1** |
+
+**关键结论：292 的请求票一次都没出现。** 也就是说这个 App 实例 12 小时里
+始终被路由在 luna(312) 池，**继续抓也拿不到 292 的复用样本**——13.2 节留下的
+「292 无复用样本」这一空白**无法通过继续抓包补齐**，只能等自然路由变更。
+
+处置：原始抓包压缩归档到 `scripts/capture-archive/live-2026-09-22-full.jsonl.gz`
+（62.2MB → 12MB，读回 296 条一致；`scripts/` 已被 gitignore，不进仓库）。
+`/tmp/codex-capture-live/` 保留原文件（可随时删除）。
+
+**收尾核验**：`18888` 无监听、无残留 mitmdump、系统代理 untouched
+（`HTTPEnable/HTTPSEnable=0`，脚本本就只用环境变量）、新 App 实例
+（pid 25268）**零 18888 连接**且进程树完整（含 `codex app-server`）。
