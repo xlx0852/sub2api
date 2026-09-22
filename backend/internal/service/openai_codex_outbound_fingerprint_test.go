@@ -614,15 +614,19 @@ func TestCodexTurnStateProbeOutboundFingerprint(t *testing.T) {
 	require.Equal(t, []string{"cookie", "x-oai-attestation", "x-openai-internal-codex-responses-lite"}, removed)
 }
 
-// 采集到上游签发的 cookie 后，探针必须把它带上：真实客户端 123/123 都发 cookie，
+// 采集到上游签发的 cookie 后，后续探针必须把它带上：真实客户端 123/123 都发 cookie，
 // 票由探针采、由业务回放，两边带不同的亲和状态就等于又造了两种会话形态。
-func TestCodexTurnStateProbeSendsCapturedCookies(t *testing.T) {
+//
+// 走**真实 seeder 路径**（而不是直接调 probe），这样「探针→采集→下一次注入」的接线
+// 也被覆盖：同一次 seed 作业里，第一条探针没有 cookie，之后几条就带上了。
+func TestCodexTurnStateSeederCapturesAndReplaysCookies(t *testing.T) {
 	upstream := &httpUpstreamRecorder{
 		resp: &http.Response{
 			StatusCode: http.StatusOK,
 			Header: http.Header{
 				openAICodexTurnStateHeader: []string{"gAAAAA" + strings.Repeat("Q", 250)},
 				"Set-Cookie":               []string{"__oailb=fresh-lb; Max-Age=3600; Path=/"},
+				"Content-Type":             []string{"text/event-stream"},
 			},
 			Body: io.NopCloser(strings.NewReader(
 				`data: {"type":"response.completed","response":{"model":"gpt-6-astra"}}` + "\n\n")),
@@ -637,12 +641,13 @@ func TestCodexTurnStateProbeSendsCapturedCookies(t *testing.T) {
 		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
 	}
 
-	// 第一轮：响应下发 cookie → 被采下来。
-	first := svc.probeOpenAICodexTurnState(context.Background(), acc, "oauth-token", "chatgpt-acc", "gpt-6-astra", nil)
-	require.True(t, first.completed)
-	require.Contains(t, codexTurnStateCookieHeaderValue(acc, time.Now()), "__oailb=fresh-lb")
+	svc.seedOpenAICodexTurnStateWithClient(context.Background(), acc, nil)
+	require.GreaterOrEqual(t, len(upstream.requests), 2, "采票模型列表应有多条")
 
-	// 第二轮：探针必须带上它。
-	svc.probeOpenAICodexTurnState(context.Background(), acc, "oauth-token", "chatgpt-acc", "gpt-6-astra", nil)
-	require.Equal(t, "__oailb=fresh-lb", upstream.lastReq.Header.Get("Cookie"))
+	// 第一条：尚无 cookie 可用。
+	require.Empty(t, upstream.requests[0].Header.Get("Cookie"))
+	// 之后各条：已从上一条的响应里采到，必须回放。
+	require.Equal(t, "__oailb=fresh-lb", upstream.requests[1].Header.Get("Cookie"))
+	// 采下来的 cookie 确实进了账号状态（持久化形态可读）。
+	require.Contains(t, codexTurnStateCookieHeaderValue(acc, time.Now()), "__oailb=fresh-lb")
 }
