@@ -233,6 +233,11 @@ func (s *OpenAIGatewayService) applyOpenAICodexTurnStateReuseForModel(headers ht
 		return
 	}
 	headers.Set(openAICodexTurnStateHeader, token)
+	// 票与 cookie 同属一个会话：票命中就一并注入上游签发的会话 cookie。
+	// 出口指纹不匹配或已过期时返回空串（见 codexTurnStateCookieHeaderValue）。
+	if cookie := codexTurnStateCookieHeaderValue(account, now); cookie != "" {
+		headers.Set("Cookie", cookie)
+	}
 	if openAICodexTurnStateNeedsRefresh(account, now, ttl) {
 		s.scheduleOpenAICodexTurnStateRefresh(account)
 	}
@@ -261,6 +266,9 @@ func (s *OpenAIGatewayService) captureOpenAICodexTurnStateForPool(account *Accou
 	if !isReusableOpenAICodexTurnState(token) {
 		return
 	}
+	// 拿到可复用票 = 该轮被上游接受。**只有被接受的响应才能刷新 cookie**：
+	// 失败/被拒的响应若也能刷新，一次失败就会把上一份可用会话冲掉。
+	s.captureCodexTurnStateCookies(account, headers, time.Now().UTC())
 	if pool == "" {
 		pool = openAICodexTurnStatePoolForRequest(respModel)
 	}
@@ -382,6 +390,10 @@ func (s *OpenAIGatewayService) invalidateOpenAICodexTurnState(account *Account) 
 		delete(account.Extra, openAICodexTurnStateExtraToken)
 		delete(account.Extra, openAICodexTurnStateExtraModel)
 		delete(account.Extra, openAICodexTurnStateExtraCapturedAt)
+		// cookie 也一并清：它固定的是上游后端（亲和），而失效的语义是
+		// 「当前这个会话不要了」——过载后只换票不换后端，等于继续钉在已经饱和的后端上。
+		delete(account.Extra, openAICodexTurnStateCookieExtra)
+		delete(account.Extra, openAICodexTurnStateCookieEgressExtra)
 		for _, k := range poolKeys {
 			delete(account.Extra, k)
 		}
@@ -391,9 +403,11 @@ func (s *OpenAIGatewayService) invalidateOpenAICodexTurnState(account *Account) 
 		return
 	}
 	clearUpdates := map[string]any{
-		openAICodexTurnStateExtraToken:      nil,
-		openAICodexTurnStateExtraModel:      nil,
-		openAICodexTurnStateExtraCapturedAt: nil,
+		openAICodexTurnStateExtraToken:        nil,
+		openAICodexTurnStateExtraModel:        nil,
+		openAICodexTurnStateExtraCapturedAt:   nil,
+		openAICodexTurnStateCookieExtra:       nil,
+		openAICodexTurnStateCookieEgressExtra: nil,
 	}
 	for _, k := range poolKeys {
 		clearUpdates[k] = nil
@@ -742,8 +756,8 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnStateWithClient(ctx context.Co
 			pool = model
 		}
 		s.captureOpenAICodexTurnStateForPool(account, result.headers, pool, pool, true)
-		logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] seeded account=%d requested_model=%s pool=%s egress=%s",
-			account.ID, model, pool, codexTurnStateProbeEgressLabel(account, client))
+		logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] seeded account=%d requested_model=%s pool=%s egress=%s cookies=%d",
+			account.ID, model, pool, codexTurnStateProbeEgressLabel(account, client), codexTurnStateCookieCount(account, time.Now()))
 	}
 }
 
@@ -873,6 +887,11 @@ func applyCodexTurnStateProbeIdentity(h http.Header, svc *OpenAIGatewayService, 
 	h.Set("x-client-request-id", sessionID)
 	h.Set("x-codex-window-id", windowID)
 	h.Set("x-codex-beta-features", codexTurnStateProbeBetaFeatures)
+	// 采票与业务共用同一份会话 cookie：票由探针采、由业务回放，
+	// 两边带不同的亲和状态就等于又造了两种会话形态。
+	if cookie := codexTurnStateCookieHeaderValue(account, time.Now()); cookie != "" {
+		h.Set("Cookie", cookie)
+	}
 	if model = strings.TrimSpace(model); model != "" {
 		// 与业务出站同一规则：取**出站 body 的 model**，保证头与体自洽。
 		h.Set("x-codex-routing-hint", "model="+model)

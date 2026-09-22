@@ -605,10 +605,43 @@ func TestCodexTurnStateProbeOutboundFingerprint(t *testing.T) {
 	// （authorization 在 fixture 里也存在，只是值被替换；content-length 由 Go 在
 	//  真正写出时填充，不在 Header map 里。）
 	require.Empty(t, added, "探针不得引入真实客户端之外的任何头")
-	// 允许的丢失只有三项，均为结构性或不适用：
+	// 允许的丢失只有三项，均为结构性或不适用（本用例没有采集到 cookie）：
 	//   cookie                                  —— 网关用账号 OAuth 鉴权，LB cookie 注入是独立的一件事；
 	//   x-oai-attestation                       —— 设备证明只能转发、无法生成；
 	//   x-openai-internal-codex-responses-lite  —— 该头声明本体是 Lite 形态，探针体不是；
 	//                                             实测带上它上游回 HTTP 400。
 	require.Equal(t, []string{"cookie", "x-oai-attestation", "x-openai-internal-codex-responses-lite"}, removed)
+}
+
+// 采集到上游签发的 cookie 后，探针必须把它带上：真实客户端 123/123 都发 cookie，
+// 票由探针采、由业务回放，两边带不同的亲和状态就等于又造了两种会话形态。
+func TestCodexTurnStateProbeSendsCapturedCookies(t *testing.T) {
+	upstream := &httpUpstreamRecorder{
+		resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{
+				openAICodexTurnStateHeader: []string{"gAAAAA" + strings.Repeat("Q", 250)},
+				"Set-Cookie":               []string{"__oailb=fresh-lb; Max-Age=3600; Path=/"},
+			},
+			Body: io.NopCloser(strings.NewReader(
+				`data: {"type":"response.completed","response":{"model":"gpt-6-astra"}}` + "\n\n")),
+		},
+	}
+	cfg := &config.Config{}
+	cfg.Gateway.OpenAICodexTurnStateReuseEnabled = true
+	svc := &OpenAIGatewayService{cfg: cfg, httpUpstream: upstream, codexIdentity: newCodexIdentityFromConfig(cfg, nil)}
+	acc := &Account{
+		ID: 5152, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Concurrency: 1,
+		Extra:       map[string]any{},
+		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
+	}
+
+	// 第一轮：响应下发 cookie → 被采下来。
+	first := svc.probeOpenAICodexTurnState(context.Background(), acc, "oauth-token", "chatgpt-acc", "gpt-6-astra", nil)
+	require.True(t, first.completed)
+	require.Contains(t, codexTurnStateCookieHeaderValue(acc, time.Now()), "__oailb=fresh-lb")
+
+	// 第二轮：探针必须带上它。
+	svc.probeOpenAICodexTurnState(context.Background(), acc, "oauth-token", "chatgpt-acc", "gpt-6-astra", nil)
+	require.Equal(t, "__oailb=fresh-lb", upstream.lastReq.Header.Get("Cookie"))
 }
