@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+
+	"github.com/klauspost/compress/zstd"
 	"sync"
 	"testing"
 	"time"
@@ -27,7 +29,8 @@ func f64p(v float64) *float64 { return &v }
 
 type httpUpstreamRecorder struct {
 	lastReq      *http.Request
-	lastBody     []byte
+	lastBody     []byte // 解压后的载荷（recorder 代表上游）
+	lastBodyRaw  []byte // 线上实际发出的原始字节（可能是 zstd 帧）
 	lastProxyURL string
 	requests     []*http.Request
 	bodies       [][]byte
@@ -67,8 +70,21 @@ func (u *httpUpstreamRecorder) Do(req *http.Request, proxyURL string, accountID 
 	u.lastProxyURL = proxyURL
 	if req != nil && req.Body != nil {
 		b, _ := io.ReadAll(req.Body)
-		u.lastBody = b
-		u.bodies = append(u.bodies, append([]byte(nil), b...))
+		u.lastBodyRaw = b
+		// 本 recorder 代表上游：真上游收到 `content-encoding: zstd` 会先解压，
+		// 所以对外暴露的 lastBody/bodies 是**解压后的载荷**，与既有断言口径一致。
+		// 需要校验压缩帧本身的用例请用 lastBodyRaw。
+		decoded := b
+		if strings.EqualFold(strings.TrimSpace(req.Header.Get("Content-Encoding")), "zstd") {
+			if zr, err := zstd.NewReader(bytes.NewReader(b)); err == nil {
+				if plain, err := io.ReadAll(zr); err == nil {
+					decoded = plain
+				}
+				zr.Close()
+			}
+		}
+		u.lastBody = decoded
+		u.bodies = append(u.bodies, append([]byte(nil), decoded...))
 		_ = req.Body.Close()
 		req.Body = io.NopCloser(bytes.NewReader(b))
 	}
@@ -1803,4 +1819,24 @@ func TestOpenAIGatewayService_OAuthPassthrough_AllowTimeoutHeadersWhenConfigured
 	require.NotNil(t, upstream.lastReq)
 	require.Equal(t, "120000", upstream.lastReq.Header.Get("x-stainless-timeout"))
 	require.Empty(t, upstream.lastReq.Header.Get("X-Test"))
+}
+
+// readOutboundRequestBodyForTest 读取出站请求体；声明 zstd 时解压后返回。
+// 出站已启用请求体压缩（对齐官方客户端），直接 io.ReadAll(req.Body) 会拿到压缩帧。
+func readOutboundRequestBodyForTest(t *testing.T, req *http.Request) []byte {
+	t.Helper()
+	if req == nil || req.Body == nil {
+		return nil
+	}
+	raw, err := io.ReadAll(req.Body)
+	require.NoError(t, err)
+	if !strings.EqualFold(strings.TrimSpace(req.Header.Get("Content-Encoding")), "zstd") {
+		return raw
+	}
+	zr, err := zstd.NewReader(bytes.NewReader(raw))
+	require.NoError(t, err)
+	defer zr.Close()
+	plain, err := io.ReadAll(zr)
+	require.NoError(t, err)
+	return plain
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
+	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -455,4 +456,65 @@ func TestCodexIdentityCandidateUA_RejectsIncompleteOfficialUA(t *testing.T) {
 		require.Contains(t, got, "(", "回退 UA 必须带 OS 组")
 		require.Contains(t, got, ")", "回退 UA 必须带 OS 组")
 	}
+}
+
+// --- 请求体 zstd 压缩 ---
+
+func TestCompressOpenAIUpstreamBodyZstd(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.6-terra","input":"` + strings.Repeat("hello world ", 400) + `"}`)
+
+	compressed, enc := compressOpenAIUpstreamBodyZstd(body)
+	require.Equal(t, "zstd", enc, "应声明 zstd 压缩")
+	require.Less(t, len(compressed), len(body), "压缩后应更小")
+
+	// 必须能被标准 zstd 解出原始内容（防止写出损坏的帧）。
+	dec, err := zstd.NewReader(strings.NewReader(string(compressed)))
+	require.NoError(t, err)
+	defer dec.Close()
+	roundTrip, err := io.ReadAll(dec)
+	require.NoError(t, err)
+	require.Equal(t, body, roundTrip, "压缩必须可逆")
+}
+
+func TestCompressOpenAIUpstreamBodyZstd_EmptyBody(t *testing.T) {
+	compressed, enc := compressOpenAIUpstreamBodyZstd(nil)
+	require.Empty(t, enc, "空体不压缩")
+	require.Nil(t, compressed)
+}
+
+// 端到端：OAuth /responses 出站必须带 content-encoding: zstd，且请求体可解回原 JSON。
+func TestGatewayOutboundCompressesRequestBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	upstream := &httpUpstreamRecorder{
+		resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"id":"resp_zstd","model":"gpt-5.6-terra","usage":{"input_tokens":1,"output_tokens":1}}`)),
+		},
+	}
+	svc := newOpenAIImageGenerationControlTestService(upstream)
+	c, _ := newOpenAIImageGenerationControlTestContext(true, "codex_exec/0.155.1 (Mac OS 27.0.0; arm64) unknown (codex_exec; 0.155.1)")
+	c.Request.Header.Set("originator", "codex_exec")
+
+	account := newCapacityShedTestAccount(7004)
+	account.Credentials = map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"}
+
+	body := []byte(`{"model":"gpt-5.6-terra","input":"hi","stream":false}`)
+	_, err := svc.Forward(context.Background(), c, account, body)
+	require.NoError(t, err)
+	require.NotNil(t, upstream.lastReq)
+	require.Equal(t, "zstd", upstream.lastReq.Header.Get("Content-Encoding"),
+		"OAuth /responses 出站必须声明 zstd 压缩（官方客户端一律压缩）")
+
+	// recorder 抓到的就是线上发出的原始字节：断言它是可解回的 zstd 帧。
+	dec, err := zstd.NewReader(strings.NewReader(string(upstream.lastBodyRaw)))
+	require.NoError(t, err)
+	defer dec.Close()
+	plain, err := io.ReadAll(dec)
+	require.NoError(t, err)
+	// 出站体会被 Codex OAuth 变换改写（input → messages、注入 instructions），
+	// 所以这里断言的是「压缩帧解出的仍是合法 JSON，且模型正确」，而不是与入参逐字相等。
+	require.True(t, json.Valid(plain), "解压后必须是合法 JSON")
+	require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(plain, "model").String())
+	require.NotEmpty(t, gjson.GetBytes(plain, "instructions").String(), "Codex 变换应已生效")
 }

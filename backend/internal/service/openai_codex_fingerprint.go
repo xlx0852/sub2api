@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/klauspost/compress/zstd"
 )
 
 // codexFingerprintMode 控制 OAuth 账号出站请求的设备指纹收敛强度。
@@ -601,3 +602,40 @@ func alignCodexTurnMetadataWithIsolatedSession(h http.Header, isolatedSession, i
 // 网关只转发客户端自带值，绝不生成（需要客户端设备能力，见 app-server 的
 // request_attestation 通道）。
 const openaiAttestationHeader = "x-oai-attestation"
+
+// openAIRequestCompressionHeader 是请求体压缩声明头。
+const openAIRequestCompressionHeader = "Content-Encoding"
+
+// openAIUpstreamZstdEncoder 是进程级共享的 zstd 编码器。
+// klauspost/compress 的 Encoder 支持并发 EncodeAll，无需每次请求新建。
+// 级别取 SpeedDefault：与仓库其它 zstd 用法一致，也与官方客户端默认级别量级相当。
+var openAIUpstreamZstdEncoder = func() *zstd.Encoder {
+	enc, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedDefault))
+	if err != nil {
+		return nil
+	}
+	return enc
+}()
+
+// compressOpenAIUpstreamBodyZstd 压缩出站请求体并返回声明头值。
+//
+// 依据（2026-09-22 实测 + codex-rs 源码）：官方客户端只要走 Codex 后端就压缩请求体，
+// **没有尺寸阈值**：
+//
+//	if enable_request_compression && auth.uses_codex_backend() && provider.is_openai()
+//	{ Compression::Zstd }
+//
+// 三个入口（App / TUI / exec）的 /responses 请求都带 `content-encoding: zstd`，
+// 而网关此前从不压缩 —— 这是最后一个「客户端发了、网关没发」的头。
+//
+// 失败时返回原始体与空声明（宁可不压，也不要把压缩变成新的失败点）。
+func compressOpenAIUpstreamBodyZstd(body []byte) ([]byte, string) {
+	if len(body) == 0 || openAIUpstreamZstdEncoder == nil {
+		return body, ""
+	}
+	compressed := openAIUpstreamZstdEncoder.EncodeAll(body, make([]byte, 0, len(body)/2))
+	if len(compressed) == 0 {
+		return body, ""
+	}
+	return compressed, "zstd"
+}

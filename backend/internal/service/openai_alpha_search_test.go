@@ -154,8 +154,8 @@ func TestBuildOpenAIPassthroughResponsesStillInjectsFingerprintClientMetadata(t 
 	)
 	require.NoError(t, err)
 	require.NotNil(t, req)
-	forwardedBody, err := io.ReadAll(req.Body)
-	require.NoError(t, err)
+	// 出站请求体已做 zstd 压缩，用辅助函数解压后再断言。
+	forwardedBody := readOutboundRequestBodyForTest(t, req)
 	require.True(t, gjson.GetBytes(forwardedBody, "client_metadata").Exists(),
 		"ordinary Responses requests must keep body fingerprint convergence")
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -357,6 +358,20 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	// 用于网关未透传/改写 User-Agent 时，仍能命中 Codex 侧识别逻辑。
 	if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
 		req.Header.Set("user-agent", codexCLIUserAgent)
+	}
+
+	// 请求体压缩：官方客户端走 Codex 后端时一律对 /responses 请求体做 zstd 压缩
+	// （codex-rs：enable_request_compression && auth.uses_codex_backend() && provider.is_openai()，
+	// 无尺寸阈值）。compact 走 unary JSON 协议，不在此列。
+	if account.Type == AccountTypeOAuth && !isOpenAICompactUpstreamRequest(c) {
+		if compressed, enc := compressOpenAIUpstreamBodyZstd(body); enc != "" {
+			req.Body = io.NopCloser(bytes.NewReader(compressed))
+			req.ContentLength = int64(len(compressed))
+			req.GetBody = func() (io.ReadCloser, error) {
+				return io.NopCloser(bytes.NewReader(compressed)), nil
+			}
+			req.Header.Set(openAIRequestCompressionHeader, enc)
+		}
 	}
 
 	// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效，若最终 user-agent 仍为浏览器
