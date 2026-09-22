@@ -698,6 +698,13 @@ func TestGatewayForwardSendsCapturedCookiesWithTicket(t *testing.T) {
 	acc.Extra[openAICodexTurnStateCookieExtra] = encodeCodexTurnStateCookies([]codexTurnStateCookie{
 		{Name: "__oailb", Value: "replay-me", Expires: time.Now().Add(-time.Minute).Unix(), SetAt: time.Now().Add(-time.Hour).Unix()},
 	})
+	// 第二次请求需要新的响应体（上一条已被读完）。
+	upstream.resp = &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body: io.NopCloser(strings.NewReader(
+			`{"id":"resp_cookie2","model":"gpt-5.6-luna","usage":{"input_tokens":1,"output_tokens":1}}`)),
+	}
 	upstream.lastReq = nil
 	_, err = svc.Forward(context.Background(), c, acc, []byte(`{"model":"gpt-5.6-luna","input":"hi","stream":false}`))
 	require.NoError(t, err)
