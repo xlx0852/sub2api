@@ -275,9 +275,6 @@ func (s *OpenAIGatewayService) captureOpenAICodexTurnStateForPool(account *Accou
 		pool = openAICodexTurnStatePoolForRequest(respModel)
 	}
 	recordOpenAICodexRouteStat(pool, len(token))
-	if pool == "" {
-		pool = openAICodexTurnStatePoolForRequest(respModel)
-	}
 	s.storeOpenAICodexTurnStateForPool(account, pool, token, respModel)
 }
 
