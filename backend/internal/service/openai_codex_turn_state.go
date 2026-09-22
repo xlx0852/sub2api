@@ -901,6 +901,17 @@ func (s *OpenAIGatewayService) probeOpenAICodexTurnState(ctx context.Context, ac
 	}
 	applyCodexTurnStateProbeIdentity(req.Header, s, account, accessToken, chatgptAccountID, model)
 
+	// 与业务出站同形：OAuth 账号的 /responses 请求体会 zstd 压缩并声明 content-encoding。
+	// 探针此前发的是未压缩体，于是同一个账号又是两种形态。上游接受 zstd 已在生产实测。
+	if compressed, enc := compressOpenAIUpstreamBodyZstd(payload); enc != "" {
+		req.Body = io.NopCloser(bytes.NewReader(compressed))
+		req.ContentLength = int64(len(compressed))
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(compressed)), nil
+		}
+		req.Header.Set(openAIRequestCompressionHeader, enc)
+	}
+
 	var resp *http.Response
 	if client != nil {
 		resp, err = client.Do(req)

@@ -598,9 +598,12 @@ func TestCodexTurnStateProbeOutboundFingerprint(t *testing.T) {
 	sort.Strings(removed)
 	t.Logf("探针出站相对真实客户端的差异：[新增]=%v [丢失]=%v", added, removed)
 
-	// 允许的新增：鉴权头（必须替换）、以及请求体派生的 content-length。
-	require.Equal(t, []string{"authorization", "content-length"}, added)
-	// 允许的丢失：cookie（网关用账号 OAuth 鉴权，尚不注入上游 LB cookie）
-	// 与 x-oai-attestation（设备证明只能转发、无法生成——结构性天花板）。
+	// 新增必须为空：探针头集合是真实客户端头集合的子集，一条不多。
+	// （authorization 在 fixture 里也存在，只是值被替换；content-length 由 Go 在
+	//  真正写出时填充，不在 Header map 里。）
+	require.Empty(t, added, "探针不得引入真实客户端之外的任何头")
+	// 允许的丢失只有两项，且都是结构性原因：
+	//   cookie            —— 网关用账号 OAuth 鉴权，上游 LB cookie 注入是独立的一件事；
+	//   x-oai-attestation —— 设备证明只能转发、无法生成。
 	require.Equal(t, []string{"cookie", "x-oai-attestation"}, removed)
 }
