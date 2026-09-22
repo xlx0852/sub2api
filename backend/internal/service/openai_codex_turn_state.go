@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"sort"
@@ -472,6 +473,62 @@ func openAICodexTurnStateModelsNeedingRefresh(account *Account, now time.Time, t
 // 这里只作为恢复启发式，不代表 5xx 已证实是票失效。
 const openAICodexTurnStateUpstream5xxInvalidateThreshold = 3
 
+// openAICodexTurnStateAgeSummary 汇总账号当前可复用票的数量与年龄区间。
+//
+// 存在的理由：票龄是否会招致上游降载/撤销，只能靠“出事时被回放的票有多旧”
+// 来判定——上游对过期票的处置（忽略还是降级）在响应里不可观测。因此这里把
+// 票龄挂到已有的失效日志上，让降载信号与票龄可以事后关联。
+//
+// 只统计池槽位：它们才是真正被回放的票；兼容单值槽位仅在没有任何池票时兜底，
+// 否则会把同一张票重复计数。
+//
+// 纯诊断：不参与任何决策，不修改 state。
+func openAICodexTurnStateAgeSummary(account *Account, now time.Time) string {
+	if account == nil || account.Extra == nil {
+		return "tickets=none"
+	}
+	openAICodexTurnStateMu.Lock()
+	defer openAICodexTurnStateMu.Unlock()
+	count := 0
+	var minAge, maxAge time.Duration
+	record := func(tokenRaw, capturedRaw any) {
+		token, _ := tokenRaw.(string)
+		if strings.TrimSpace(token) == "" {
+			return
+		}
+		captured := parseOpenAICodexTurnStateTimeValue(capturedRaw)
+		if captured.IsZero() || captured.After(now) {
+			return
+		}
+		age := now.Sub(captured)
+		if count == 0 || age < minAge {
+			minAge = age
+		}
+		if count == 0 || age > maxAge {
+			maxAge = age
+		}
+		count++
+	}
+	for k, v := range account.Extra {
+		if !strings.HasPrefix(k, openAICodexTurnStateExtraPoolPrefix) {
+			continue
+		}
+		pool := strings.TrimPrefix(k, openAICodexTurnStateExtraPoolPrefix)
+		if pool == "" || strings.HasSuffix(k, "_model") || strings.HasSuffix(k, "_captured_at") {
+			continue
+		}
+		_, _, capturedKey := openAICodexTurnStatePoolKeys(pool)
+		record(v, account.Extra[capturedKey])
+	}
+	if count == 0 {
+		record(account.Extra[openAICodexTurnStateExtraToken], account.Extra[openAICodexTurnStateExtraCapturedAt])
+	}
+	if count == 0 {
+		return "tickets=none"
+	}
+	return fmt.Sprintf("tickets=%d age_min_s=%.1f age_max_s=%.1f", count, minAge.Seconds(), maxAge.Seconds())
+}
+
 // NoteOpenAICodexTurnStateUpstreamResult 记录该号一次上游结果：
 //   - status>=500：累计连续 5xx；达到阈值 → invalidate 所有池票 + 触发重抓，并清零计数。
 //   - status<500：成功/4xx，清零计数。
@@ -490,7 +547,8 @@ func (s *OpenAIGatewayService) NoteOpenAICodexTurnStateUpstreamResult(account *A
 	if !s.shouldInvalidateOpenAICodexTurnState(account.ID, upstreamStatus, time.Now()) {
 		return
 	}
-	logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] invalidate account=%d reason=consecutive_5xx threshold=%d", account.ID, openAICodexTurnStateUpstream5xxInvalidateThreshold)
+	logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] invalidate account=%d reason=consecutive_5xx threshold=%d %s",
+		account.ID, openAICodexTurnStateUpstream5xxInvalidateThreshold, openAICodexTurnStateAgeSummary(account, time.Now()))
 	s.invalidateOpenAICodexTurnState(account)
 	s.scheduleOpenAICodexTurnStateRefresh(account)
 }
@@ -524,8 +582,8 @@ func (s *OpenAIGatewayService) HandleOpenAICodexOverload(account *Account, overl
 	s.codexTurnStateUpstream5xx.Delete(account.ID)
 	s.codexTurnStateFailureMu.Unlock()
 	logger.LegacyPrintf("service.openai_codex_turn_state",
-		"[CodexTurnStateSeed] invalidate account=%d reason=server_overloaded path=%s burst_attempt=%d session_epoch=%d",
-		account.ID, overloadPath, burstAttempt, epoch)
+		"[CodexTurnStateSeed] invalidate account=%d reason=server_overloaded path=%s burst_attempt=%d session_epoch=%d %s",
+		account.ID, overloadPath, burstAttempt, epoch, openAICodexTurnStateAgeSummary(account, time.Now()))
 	s.invalidateOpenAICodexTurnState(account)
 	s.scheduleOpenAICodexTurnStateRefresh(account)
 }

@@ -2,6 +2,8 @@ package service
 
 import (
 	"net/http"
+	"regexp"
+	"strconv"
 	"testing"
 	"time"
 
@@ -261,4 +263,66 @@ func TestCaptureOpenAICodexTurnStateDoesNotRenewWithoutNewHeader(t *testing.T) {
 	got, _ := acc.Extra[openAICodexTurnStateExtraCapturedAt].(string)
 	require.Equal(t, old, got)
 	require.Equal(t, token, acc.Extra[openAICodexTurnStateExtraToken])
+}
+
+// parseTurnStateAgeSummary 从诊断串取出年龄区间（秒）。
+func parseTurnStateAgeSummary(t *testing.T, summary string) (float64, float64) {
+	t.Helper()
+	m := regexp.MustCompile(`age_min_s=([0-9.]+) age_max_s=([0-9.]+)`).FindStringSubmatch(summary)
+	require.Len(t, m, 3, "summary=%q", summary)
+	minAge, err := strconv.ParseFloat(m[1], 64)
+	require.NoError(t, err)
+	maxAge, err := strconv.ParseFloat(m[2], 64)
+	require.NoError(t, err)
+	return minAge, maxAge
+}
+
+// 票龄诊断必须回答"出事时被回放的票有多旧"，因此要覆盖：池票优先、
+// 单值兜底不重复计数、以及无法建立票龄的槽位不计入。
+func TestOpenAICodexTurnStateAgeSummary(t *testing.T) {
+	t.Parallel()
+	tok := func(c string) string {
+		return "gAAAAABqq_20UDF7Ymoy_iFdYwpAR8Uz" + stringsRepeat(c, 260)
+	}
+	now := time.Now()
+
+	require.Equal(t, "tickets=none", openAICodexTurnStateAgeSummary(nil, now))
+	require.Equal(t, "tickets=none", openAICodexTurnStateAgeSummary(&Account{Type: AccountTypeOAuth}, now))
+
+	acc := &Account{Type: AccountTypeOAuth, Extra: map[string]any{
+		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-luna":             tok("L"),
+		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-luna_model":       "gpt-5.6-luna",
+		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-luna_captured_at": now.Add(-10 * time.Minute).Format(time.RFC3339Nano),
+		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-sol":              tok("S"),
+		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-sol_model":        "gpt-5.6-sol",
+		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-sol_captured_at":  now.Add(-30 * time.Minute).Format(time.RFC3339Nano),
+		// 单值槽位持有最新票，但已被池槽位覆盖，不得重复计数。
+		openAICodexTurnStateExtraToken:      tok("L"),
+		openAICodexTurnStateExtraCapturedAt: now.Format(time.RFC3339Nano),
+	}}
+	summary := openAICodexTurnStateAgeSummary(acc, now)
+	require.Contains(t, summary, "tickets=2")
+	minAge, maxAge := parseTurnStateAgeSummary(t, summary)
+	require.InDelta(t, 600, minAge, 2)
+	require.InDelta(t, 1800, maxAge, 2)
+
+	// 没有任何池票时才回退兼容单值槽位。
+	legacy := &Account{Type: AccountTypeOAuth, Extra: map[string]any{
+		openAICodexTurnStateExtraToken:      tok("T"),
+		openAICodexTurnStateExtraCapturedAt: now.Add(-5 * time.Minute).Format(time.RFC3339Nano),
+	}}
+	summary = openAICodexTurnStateAgeSummary(legacy, now)
+	require.Contains(t, summary, "tickets=1")
+	minAge, maxAge = parseTurnStateAgeSummary(t, summary)
+	require.InDelta(t, 300, minAge, 2)
+	require.InDelta(t, 300, maxAge, 2)
+
+	// 空票、未来时间（时钟回拨）、缺失时间都建立不了票龄。
+	bad := &Account{Type: AccountTypeOAuth, Extra: map[string]any{
+		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-luna":             "",
+		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-luna_captured_at": now.Format(time.RFC3339Nano),
+		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-sol":              tok("S"),
+		openAICodexTurnStateExtraPoolPrefix + "gpt-5.6-sol_captured_at":  now.Add(time.Hour).Format(time.RFC3339Nano),
+	}}
+	require.Equal(t, "tickets=none", openAICodexTurnStateAgeSummary(bad, now))
 }
