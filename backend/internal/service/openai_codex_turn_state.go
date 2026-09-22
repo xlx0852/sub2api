@@ -884,6 +884,11 @@ func applyCodexTurnStateProbeIdentity(h http.Header, svc *OpenAIGatewayService, 
 	}
 }
 
+// codexTurnStateProbeTimeout 采票单次探测的超时。
+// 改走 httpUpstream 后默认响应头超时是 300s，且会占用账号并发额度；
+// 后台探针不能因此长时间挂钩，保持原先裸 client 的 45s 边界。
+const codexTurnStateProbeTimeout = 45 * time.Second
+
 // probeOpenAICodexTurnState 发出一次采票请求。
 //
 // 出口：默认走 s.httpUpstream + **账号代理**，与业务请求同一出口。
@@ -895,10 +900,15 @@ func (s *OpenAIGatewayService) probeOpenAICodexTurnState(ctx context.Context, ac
 	if payload == nil {
 		return codexTurnStateProbeResult{}
 	}
+	ctx, cancel := context.WithTimeout(ctx, codexTurnStateProbeTimeout)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chatgptCodexURL, bytes.NewReader(payload))
 	if err != nil {
 		return codexTurnStateProbeResult{}
 	}
+	// 与业务出站同一个传输 profile：否则两者虽然都经 httpUpstream，
+	// 实际走的却是不同传输策略，等于换一个维度重复同一个问题。
+	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
 	applyCodexTurnStateProbeIdentity(req.Header, s, account, accessToken, chatgptAccountID, model)
 
 	// 与业务出站同形：OAuth 账号的 /responses 请求体会 zstd 压缩并声明 content-encoding。

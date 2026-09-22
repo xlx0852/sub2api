@@ -576,6 +576,9 @@ func TestCodexTurnStateProbeOutboundFingerprint(t *testing.T) {
 	// ---- 出口：必须与业务请求相同（账号代理），而不是服务器直连 ----
 	require.Equal(t, acc.Proxy.URL(), upstream.lastProxyURL,
 		"采票出口必须与业务出口一致；此前探针用裸 http.Client 直连服务器 IP")
+	// 传输 profile 必须与业务相同：同一个 httpUpstream 下不同 profile 走不同传输策略。
+	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(upstream.lastReq.Context()),
+		"采票必须使用与业务出站相同的 openai 传输 profile")
 
 	// ---- 形态：与真实客户端逐头差异 ----
 	inbound := realCodexClientRequestHeaders(clientThread, clientInstall, clientTurnMetadata)
