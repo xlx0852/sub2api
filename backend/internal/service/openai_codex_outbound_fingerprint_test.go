@@ -620,14 +620,16 @@ func TestCodexTurnStateProbeOutboundFingerprint(t *testing.T) {
 // 走**真实 seeder 路径**（而不是直接调 probe），这样「探针→采集→下一次注入」的接线
 // 也被覆盖：同一次 seed 作业里，第一条探针没有 cookie，之后几条就带上了。
 func TestCodexTurnStateSeederCapturesAndReplaysCookies(t *testing.T) {
+	// 响应头必须用 Set 构造：map 字面量不会规范化键名，lookup 会 miss（真实上游由
+	// Go 的 HTTP 客户端写回，键名是规范化的）。
+	respHeader := http.Header{}
+	respHeader.Set(openAICodexTurnStateHeader, "gAAAAA"+strings.Repeat("Q", 250))
+	respHeader.Set("Content-Type", "text/event-stream")
+	respHeader.Add("Set-Cookie", "__oailb=fresh-lb; Max-Age=3600; Path=/")
 	upstream := &httpUpstreamRecorder{
 		resp: &http.Response{
 			StatusCode: http.StatusOK,
-			Header: http.Header{
-				openAICodexTurnStateHeader: []string{"gAAAAA" + strings.Repeat("Q", 250)},
-				"Set-Cookie":               []string{"__oailb=fresh-lb; Max-Age=3600; Path=/"},
-				"Content-Type":             []string{"text/event-stream"},
-			},
+			Header:     respHeader,
 			Body: io.NopCloser(strings.NewReader(
 				`data: {"type":"response.completed","response":{"model":"gpt-6-astra"}}` + "\n\n")),
 		},
