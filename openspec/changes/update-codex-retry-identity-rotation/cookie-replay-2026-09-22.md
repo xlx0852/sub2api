@@ -63,3 +63,62 @@
 `ageprobe-493602d0c` 已停止，当前保留 **2 个**：线上 `cookie-c5c049263` @18354
 + 上一版回滚目标 `ticketalign2-54a87a938` @18353（nginx 备份 `bak-cookie-*`）。
 仍存在"回滚容器同样在跑采票器"的竞争（同一 DB），只是从 9 个收敛到 2 个。
+
+# 十七、票形态/落池的可测量化与首个基线（2026-09-22）
+
+## 17.1 为什么需要它
+
+"探针长得像真实客户端、还带 cookie"到底有没有让路由变好，此前**无法回答**：
+`seeded` 日志只有 `requested_model` 与 `pool`，缺**形态**。而形态与池并非一一对应
+（实测 292 ↔ {gpt-5.5, gpt-6-astra}，312 ↔ {luna, terra}，332 也出现过在 luna），
+所以三个字段必须在同一行。
+
+已加：`seeded account=… requested_model=… pool=… len=… egress=… cookies=…`
+
+## 17.2 首个生产样本（19:55，探针已带 cookie）
+
+```
+requested_model=gpt-6-astra  pool=gpt-5.6-luna   len=312  cookies=3
+requested_model=gpt-5.5      pool=gpt-5.5        len=292  cookies=3
+requested_model=gpt-5.6-sol  pool=gpt-5.6-sol    len=312  cookies=3
+requested_model=gpt-5.6-terra pool=gpt-5.6-terra len=312  cookies=3
+```
+
+`cookies=3` 说明探针确实带着会话亲和；**astra 请求同样被降级到 luna**。
+
+## 17.3 基线：真实客户端（归档抓包 12 小时 / 123 条 /responses）
+
+```
+请求模型 → 实际落池                    票长分布
+gpt-6-astra → gpt-5.6-luna  101 (82.1%)   len=312  122 (99.2%)
+gpt-5.6-terra → gpt-5.6-terra 16 (13.0%)  len=292    1 ( 0.8%)
+(空)        → gpt-5.6-luna    3 ( 2.4%)
+gpt-5.6-luna → gpt-5.6-luna   2 ( 1.6%)
+gpt-6-astra → gpt-6-astra     1 ( 0.8%)
+
+**请求 astra 且真的落在 astra：1/102 (1.0%)**
+```
+
+### 这个基线的意义（推翻了流传的前提）
+
+**连带全套 cookie、真实 UA、合法 session 的官方客户端，请求 astra 102 次也只拿到 1 次。**
+82.1% 被降级到 luna。也就是说：
+
+- 社区疯抢的 292/astra **不是"钉住就能拿到"的资源**，它本身只有约 **1%** 自然到达率；
+- 那个 fork 宣称的目标"钉住 292/332"**在 1% 的自然概率下无法用少量样本验证**，
+  这也解释了它为何明确写"本分支尚未复现"；
+- 我方探针的表现（astra→luna）与真实客户端**一致**，即当前改动没有让路由变差，
+  但也没有魔法可让 astra 变得可得。
+
+## 17.4 可复现工具
+
+`scripts/codex_ticket_shape_report.py`（本机脚本，`scripts/` 已 gitignore）：
+
+```
+scripts/codex_ticket_shape_report.py                 # 探针(生产) vs 真实客户端(归档基线)
+scripts/codex_ticket_shape_report.py --since 2h      # 指定窗口
+scripts/codex_ticket_shape_report.py --baseline-only  # 只出基线
+```
+
+它把两侧归一成同一口径（请求模型 / 落池 / 票长）并直接给出
+**"请求 astra 且真的落在 astra"** 的命中率——这正是判定"像不像客户端值不值得"的那个数。
