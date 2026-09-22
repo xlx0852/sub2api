@@ -662,7 +662,8 @@ func TestGatewayForwardSendsCapturedCookiesWithTicket(t *testing.T) {
 		resp: &http.Response{
 			StatusCode: http.StatusOK,
 			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body:       io.NopCloser(strings.NewReader(`{"id":"resp","model":"gpt-5.6-luna"}`)),
+			Body: io.NopCloser(strings.NewReader(
+				`{"id":"resp_cookie","model":"gpt-5.6-luna","usage":{"input_tokens":1,"output_tokens":1}}`)),
 		},
 	}
 	cfg := &config.Config{}
