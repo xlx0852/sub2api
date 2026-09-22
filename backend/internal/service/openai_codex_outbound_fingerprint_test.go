@@ -653,3 +653,52 @@ func TestCodexTurnStateSeederCapturesAndReplaysCookies(t *testing.T) {
 	// 采下来的 cookie 确实进了账号状态（持久化形态可读）。
 	require.Contains(t, codexTurnStateCookieHeaderValue(acc, time.Now()), "__oailb=fresh-lb")
 }
+
+// 业务路径（Forward）必须同时带上票与上游签发的会话 cookie。
+// 探针路径已有线上线级断言；这里补业务路径，两者共用同一份 cookie 状态。
+func TestGatewayForwardSendsCapturedCookiesWithTicket(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	upstream := &httpUpstreamRecorder{
+		resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"id":"resp","model":"gpt-5.6-luna"}`)),
+		},
+	}
+	cfg := &config.Config{}
+	cfg.Gateway.OpenAICodexTurnStateReuseEnabled = true
+	svc := &OpenAIGatewayService{cfg: cfg, httpUpstream: upstream, codexIdentity: newCodexIdentityFromConfig(cfg, nil)}
+	acc := &Account{
+		ID: 5153, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Concurrency: 1,
+		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
+		Extra:       map[string]any{},
+	}
+	// 采到票 + cookie（同一个响应：票有效 = 该轮被接受）。
+	ticket := "gAAAAA" + strings.Repeat("W", 250)
+	respHeader := http.Header{}
+	respHeader.Set(openAICodexTurnStateHeader, ticket)
+	respHeader.Add("Set-Cookie", "__oailb=replay-me; Max-Age=3600; Path=/")
+	respHeader.Add("Set-Cookie", "__cf_bm=replay-cf; Max-Age=900; Path=/")
+	svc.captureOpenAICodexTurnStateForPool(acc, respHeader, "gpt-5.6-luna", "gpt-5.6-luna", true)
+	require.Equal(t, 2, codexTurnStateCookieCount(acc, time.Now()))
+
+	c, _ := newOpenAIImageGenerationControlTestContext(true, "codex_exec/0.155.1 (Mac OS 27.0.0; arm64) unknown (codex_exec; 0.155.1)")
+	c.Set("api_key", &APIKey{ID: 4242})
+	_, err := svc.Forward(context.Background(), c, acc, []byte(`{"model":"gpt-5.6-luna","input":"hi","stream":false}`))
+	require.NoError(t, err)
+	require.NotNil(t, upstream.lastReq)
+
+	require.Equal(t, ticket, upstream.lastReq.Header.Get(openAICodexTurnStateHeader), "票必须照旧注入")
+	cookie := upstream.lastReq.Header.Get("Cookie")
+	require.Contains(t, cookie, "__oailb=replay-me")
+	require.Contains(t, cookie, "__cf_bm=replay-cf")
+
+	// cookie 过期后不得继续回放（__oailb Max-Age=3600 / __cf_bm Max-Age=900）。
+	acc.Extra[openAICodexTurnStateCookieExtra] = encodeCodexTurnStateCookies([]codexTurnStateCookie{
+		{Name: "__oailb", Value: "replay-me", Expires: time.Now().Add(-time.Minute).Unix(), SetAt: time.Now().Add(-time.Hour).Unix()},
+	})
+	upstream.lastReq = nil
+	_, err = svc.Forward(context.Background(), c, acc, []byte(`{"model":"gpt-5.6-luna","input":"hi","stream":false}`))
+	require.NoError(t, err)
+	require.Empty(t, upstream.lastReq.Header.Get("Cookie"), "过期 cookie 不得回放")
+}
