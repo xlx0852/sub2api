@@ -389,7 +389,12 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			}
 		}
 		if responseModel == "" {
-			responseModel = extractOpenAIResponseModelFromJSONBytes(dataBytes)
+			if served := extractOpenAIResponseModelFromJSONBytes(dataBytes); served != "" {
+				responseModel = served
+				// 请求模型与上游真实落点在此同域，且 responseModel 的空值守卫保证
+				// 每个响应只记一次。这是 HTTP 流式主力路径上唯一能无歧义配对的点。
+				recordOpenAICodexRouteMapping(originalModel, responseModel)
+			}
 		}
 		forceFlushFailedEvent := false
 		if eventType == "response.failed" || eventType == "error" {
