@@ -518,3 +518,89 @@ func TestGatewayOutboundCompressesRequestBody(t *testing.T) {
 	require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(plain, "model").String())
 	require.NotEmpty(t, gjson.GetBytes(plain, "instructions").String(), "Codex 变换应已生效")
 }
+
+// --- 采票探针的出口与身份必须与业务出站同源 ---
+
+// 同一个账号不该存在两种请求形态：此前探针是「6 个头的极简 CLI 请求」，
+// 业务请求是「19 个头、镜像真实客户端」。于是同一张票由极简请求采到、
+// 由全副身份的请求回放。这里用**业务测试同一份真实客户端 fixture** 当尺子，
+// 直接量探针的出站差异；并断言探针确实走了账号代理（出口一致）。
+func TestCodexTurnStateProbeOutboundFingerprint(t *testing.T) {
+	const (
+		clientThread  = "01a0c48d-5710-7c03-9065-ced0ad8c374f"
+		clientInstall = "6b7282e1-b32c-4c3a-99ea-c2f025eeb2d7"
+		probeModel    = "gpt-6-astra"
+	)
+	clientTurnMetadata := `{"installation_id":"` + clientInstall + `","session_id":"` + clientThread + `",` +
+		`"thread_id":"` + clientThread + `","agent_name":"/root",` +
+		`"turn_id":"01a0c4af-90e0-7031-9d80-a5753e2a20df","window_id":"` + clientThread + `:0",` +
+		`"window_number":0,"context_window_id":"01a0c48d-5710-7c03-9065-ceee6bbbc9fb",` +
+		`"request_kind":"turn","root_turn_id":"01a0c4af-90e0-7031-9d80-a5753e2a20df",` +
+		`"thread_source":"user","turn_trigger":"composer","sandbox":"none",` +
+		`"sandbox_mode":"danger-full-access","auto_review_enabled":false,` +
+		`"node_repl_auto_review_required":false,"node_repl_disabled":false,` +
+		`"turn_started_at_unix_ms":1790006235372,"analytics_enabled":true,"model":"` + probeModel + `",` +
+		`"reasoning_effort":"high","workspace_kind":"project"}`
+
+	upstream := &httpUpstreamRecorder{
+		resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{
+				openAICodexTurnStateHeader: []string{"gAAAAA" + strings.Repeat("P", 250)},
+				"Content-Type":             []string{"text/event-stream"},
+			},
+			Body: io.NopCloser(strings.NewReader(
+				`data: {"type":"response.completed","response":{"model":"gpt-6-astra"}}` + "\n\n")),
+		},
+	}
+	cfg := &config.Config{}
+	svc := &OpenAIGatewayService{
+		cfg:           cfg,
+		httpUpstream:  upstream,
+		codexIdentity: newCodexIdentityFromConfig(cfg, nil),
+	}
+	acc := &Account{
+		ID:          5151,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Status:      StatusActive,
+		Concurrency: 1,
+		Proxy:       &Proxy{Protocol: "http", Host: "proxy.internal", Port: 8080},
+		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
+	}
+
+	result := svc.probeOpenAICodexTurnState(context.Background(), acc, "oauth-token", "chatgpt-acc", probeModel, nil)
+	require.True(t, result.completed)
+	require.NotNil(t, upstream.lastReq, "探针必须真的发出了上游请求")
+
+	// ---- 出口：必须与业务请求相同（账号代理），而不是服务器直连 ----
+	require.Equal(t, acc.Proxy.URL(), upstream.lastProxyURL,
+		"采票出口必须与业务出口一致；此前探针用裸 http.Client 直连服务器 IP")
+
+	// ---- 形态：与真实客户端逐头差异 ----
+	inbound := realCodexClientRequestHeaders(clientThread, clientInstall, clientTurnMetadata)
+	outbound := map[string]string{}
+	for k := range upstream.lastReq.Header {
+		outbound[strings.ToLower(k)] = upstream.lastReq.Header.Get(k)
+	}
+	var added, removed []string
+	for k := range outbound {
+		if _, had := inbound[k]; !had {
+			added = append(added, k)
+		}
+	}
+	for k := range inbound {
+		if _, ok := outbound[k]; !ok {
+			removed = append(removed, k)
+		}
+	}
+	sort.Strings(added)
+	sort.Strings(removed)
+	t.Logf("探针出站相对真实客户端的差异：[新增]=%v [丢失]=%v", added, removed)
+
+	// 允许的新增：鉴权头（必须替换）、以及请求体派生的 content-length。
+	require.Equal(t, []string{"authorization", "content-length"}, added)
+	// 允许的丢失：cookie（网关用账号 OAuth 鉴权，尚不注入上游 LB cookie）
+	// 与 x-oai-attestation（设备证明只能转发、无法生成——结构性天花板）。
+	require.Equal(t, []string{"cookie", "x-oai-attestation"}, removed)
+}
