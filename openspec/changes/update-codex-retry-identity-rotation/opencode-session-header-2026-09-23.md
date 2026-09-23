@@ -57,3 +57,36 @@ API returned 400: {"type":"error","error":{"type":"MissingSessionID",
 这次是**"范围判断"漏掉的一环**：我按 release 标题只移植了"用量窗口"，
 而同一个能力里还嵌着**协议强制项**（session 头）。判断一个上游能力能否"用现有平台接法接上"时，
 除了转发是否通，还要问**它的协议是否比 OpenAI 兼容多要求了什么**。
+
+## 24.6 第一次修复没生效：钩子挂错了代码路径
+
+用户复测仍报 `MissingSessionID`。
+
+**原因**：我把 `applyOpenCodeUpstreamHeaders` 挂到了 `ProbeOpenAIAPIKeyResponsesSupport`
+（一个后台能力探测），而**「测试账号」按钮走的是 `account_test_service.go` 的
+`testOpenAIAccountConnection`**。我误把上一次日志里出现的 `probe_done` 当成了按钮调用的路径——
+那条日志记的是**探测模型**（`selectResponsesProbeModel` 选的），不是用户填的测试模型。
+
+**改法**：在该文件**全部 4 处 OpenAI 测试路径**（`testOpenAIAccountConnection` /
+`testOpenAIChatCompletionsConnection` / `testOpenAICompactConnection` / `testOpenAIImageAPIKey`）
+统一挂钩，位置都在 `ApplyHeaderOverrides` **之前**——管理员显式配置的请求头仍拥有最终决定权。
+
+## 24.7 补上"本该先写"的测试
+
+这次错误的性质是**接线漏了**，而不是逻辑错。所以测试必须**走真实入口**，不能只测 `apply` 函数：
+
+`account_test_service_opencode_session_test.go`：
+
+| 断言 | 说明 |
+|---|---|
+| 走 `testOpenAIAccountConnection`（真实入口）后，出站请求带 `X-OpenCode-Session` 与 `opencode/1.0.0` | 这条断言**只有我的钩子能满足**——全仓 grep 确认该头**唯一写入点**在 `opencode_session.go`，因此它能真正锁住接线 |
+| 普通 OpenAI 账号（`api.openai.com`）**不带该头、UA 不被改写** | 防止污染其它上游的指纹 |
+
+**为什么自包含、不带 `unit` 构建标签**：带 `unit` 的那套 helper 当前在共享分支上**因其它测试文件
+签名不匹配而无法编译**（与本次改动无关），而这条断言恰恰是最需要能跑起来的。
+
+## 24.8 与上游的一致性核对
+
+逐条比对上游 `resolveOpenCodeSessionID`：优先级（入站头 → 其它会话头 → 体 `prompt_cache_key`
+→ `metadata.user_id.session_id` → 已存在的出站头 → **`uuid.NewString()`**）与 `sanitizeSessionID`
+的字符/长度约束**均一致**。测试路径没有客户端会话，因此落到 UUID 兜底——与上游同路径行为相同。
