@@ -229,3 +229,30 @@ messages、只留 CC 标识 → 再注入 `claudeCodeSystemPromptExpansion` 把 
 
 **后端与前端必须同批发布**：只发后端会让管理界面继续把「Claude OAuth System 注入」
 显示为开启（默认 true）而代码已无注入，属于比死开关更差的骗人界面。本次均未部署。
+
+### 26.8 补充：注入不止一处（第二处是文本替换）
+
+第一轮删除后全仓复扫，发现第二处同类注入：
+
+`sanitizeSystemText` 会把客户端自带的身份句
+`You are OpenCode, the best coding agent on the planet.` **静默替换成**
+`claudeCodeSystemPrompt` 横幅（注释自陈理由：Anthropic 可能把它当非 Claude Code 指纹）。
+它挂在 `normalizeClaudeOAuthSystemBody → normalizeClaudeOAuthRequestBody`，
+仍在 OAuth 伪装路径内执行。已删除该函数与两个调用点，
+`normalizeClaudeOAuthSystemBody` 只保留形态归一（按需剥离 `system.cache_control`），
+并把 `gateway_body_order_test` 的断言**反转**为「客户端身份句必须原样保留、
+`claudeCodeSystemPrompt` 不得出现」。
+
+至此 `gateway_claude_oauth_body.go` 对 `claudeCodeSystemPrompt` **零引用**。
+
+### 26.9 复扫后仍存在的三类\"Claude Code\"字样（均非注入，说明理由）
+
+1. `claude_code_validator.go` 的 `claudeCodeSystemPrompts`：**入站检测**用的模板表，
+   判断客户端是否 Claude Code（用于客户端门禁/旁路），不向任何出站请求写入内容。
+2. `migrations/129_seed_claude_code_template.sql`：历史迁移，把注入默认模板写进
+   `settings`。迁移已执行、不应改写（会破坏版本有序性）；对应的 settings 键已无用，
+   DB 里那几行现在是**惰性数据**。若要连数据一起清，只需删除
+   `enable_claude_oauth_system_prompt_injection` / `claude_oauth_system_prompt` /
+   `claude_oauth_system_prompt_blocks` 三个 key（无代码读取）。
+3. 账号测试对 `claude*` 模型的 CC 身份（见 26.5）：测试本身就以 Claude Code 形态发请求，
+   属一致的客户端身份，非对第三方模型伪造。
