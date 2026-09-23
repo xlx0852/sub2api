@@ -127,19 +127,6 @@ func TestNormalizeClaudeOAuthRequestBody_PreservesTopLevelFieldOrder(t *testing.
 	require.Contains(t, resultStr, `"metadata":{"user_id":"user-1"}`)
 	require.Contains(t, resultStr, `"max_tokens":128000`)
 }
-
-func TestInjectClaudeCodePrompt_PreservesFieldOrder(t *testing.T) {
-	body := []byte(`{"alpha":1,"system":[{"id":"block-1","type":"text","text":"Custom"}],"messages":[],"omega":2}`)
-
-	result := injectClaudeCodePrompt(body, []any{
-		map[string]any{"id": "block-1", "type": "text", "text": "Custom"},
-	})
-	resultStr := string(result)
-
-	assertJSONTokenOrder(t, resultStr, `"alpha"`, `"system"`, `"messages"`, `"omega"`)
-	require.Contains(t, resultStr, `{"id":"block-1","type":"text","text":"`+claudeCodeSystemPrompt+`\n\nCustom"}`)
-}
-
 func TestEnforceCacheControlLimit_PreservesTopLevelFieldOrder(t *testing.T) {
 	body := []byte(`{"alpha":1,"system":[{"type":"text","text":"s1","cache_control":{"type":"ephemeral"}},{"type":"text","text":"s2","cache_control":{"type":"ephemeral"}}],"messages":[{"role":"user","content":[{"type":"text","text":"m1","cache_control":{"type":"ephemeral"}},{"type":"text","text":"m2","cache_control":{"type":"ephemeral"}},{"type":"text","text":"m3","cache_control":{"type":"ephemeral"}}]}],"omega":2}`)
 

@@ -55,10 +55,24 @@ func (s *OpenAIGatewayService) runOpenCodeGoUsageRefresher() {
 	ticker := time.NewTicker(openCodeGoUsageScanInterval)
 	defer ticker.Stop()
 	// 启动后先扫一轮：进程重启不该让用量停更一个周期。
-	s.refreshOpenCodeGoUsageAccounts(context.Background())
+	s.safeRefreshOpenCodeGoUsage()
 	for range ticker.C {
-		s.refreshOpenCodeGoUsageAccounts(context.Background())
+		s.safeRefreshOpenCodeGoUsage()
 	}
+}
+
+// safeRefreshOpenCodeGoUsage 包住一次扫描，兜住 panic。
+//
+// 这是后台旁路任务（只是顺带刷新用量窗口），它身上的未捕获 panic 会**直接终止整个进程**，
+// 代价远远大于"本轮用量没刷到"。已实测：只要 accountRepo 是实现了部分方法的 stub
+// （内嵌 nil 接口），ListByPlatform 就会 nil 解引用 panic，把调用方整个测试包打崩。
+func (s *OpenAIGatewayService) safeRefreshOpenCodeGoUsage() {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.LegacyPrintf("service.opencode_go", "OpenCode Go usage refresh panic recovered: %v", r)
+		}
+	}()
+	s.refreshOpenCodeGoUsageAccounts(context.Background())
 }
 
 // refreshOpenCodeGoUsageAccounts 扫描一次并刷新到期的账号。

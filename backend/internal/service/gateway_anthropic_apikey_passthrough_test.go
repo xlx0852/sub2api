@@ -866,14 +866,14 @@ func TestGatewayService_AnthropicOAuth_ForwardDoesNotInjectClaudeCodeMimicry(t *
 
 			require.Contains(t, string(upstream.lastBody), "x-anthropic-billing-header keep")
 			require.NotContains(t, string(upstream.lastBody), "cc_version=")
-			require.NotContains(t, string(upstream.lastBody), claudeCodeSystemPromptExpansion)
 		})
 	}
 }
 
-func TestGatewayService_AnthropicOAuth_SystemPromptInjectionCanBeDisabled(t *testing.T) {
+// Anthropic 协议的 system 提示词注入已彻底移除：客户端 system 必须原样到上游，
+// 且任何路径都不允许再注入 Claude Code 身份。本测试锁死这一不变量。
+func TestGatewayService_AnthropicOAuth_SystemPromptIsNeverInjected(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	resetGatewayForwardingSettingsCacheForTest(t)
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
@@ -899,9 +899,7 @@ func TestGatewayService_AnthropicOAuth_SystemPromptInjectionCanBeDisabled(t *tes
 			MaxLineSize: defaultMaxLineSize,
 		},
 	}
-	settingService := NewSettingService(&gatewayTTLSettingRepo{data: map[string]string{
-		SettingKeyEnableClaudeOAuthSystemPromptInjection: "false",
-	}}, cfg)
+	settingService := NewSettingService(&gatewayTTLSettingRepo{data: map[string]string{}}, cfg)
 	svc := &GatewayService{
 		cfg:                  cfg,
 		responseHeaderFilter: compileResponseHeaderFilter(cfg),
@@ -933,6 +931,10 @@ func TestGatewayService_AnthropicOAuth_SystemPromptInjectionCanBeDisabled(t *tes
 	require.Equal(t, "Original system prompt", system.String())
 	require.NotContains(t, string(upstream.lastBody), "x-anthropic-billing-header:")
 	require.NotContains(t, string(upstream.lastBody), "[System Instructions]")
+	// 彻底移除提示词注入的守门断言：Claude Code 身份不得出现在出站 body 的任何位置。
+	require.NotContains(t, string(upstream.lastBody), claudeCodeSystemPrompt)
+	require.NotContains(t, string(upstream.lastBody), "Claude Code")
+	require.NotContains(t, string(upstream.lastBody), "interactive agent that helps users")
 }
 
 func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingStillCollectsUsageAfterClientDisconnect(t *testing.T) {

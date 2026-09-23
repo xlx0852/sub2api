@@ -42,16 +42,13 @@ const backendModeDBTimeout = 5 * time.Second
 
 // cachedGatewayForwardingSettings 缓存网关转发行为设置（进程内缓存，60s TTL）
 type cachedGatewayForwardingSettings struct {
-	fingerprintUnification           bool
-	metadataPassthrough              bool
-	cchSigning                       bool
-	claudeOAuthSystemPromptInjection bool
-	claudeOAuthSystemPrompt          string
-	claudeOAuthSystemPromptBlocks    string
-	anthropicCacheTTL1hInjection     bool
-	rewriteMessageCacheControl       bool
-	clientDatelineNormalization      bool
-	expiresAt                        int64 // unix nano
+	fingerprintUnification       bool
+	metadataPassthrough          bool
+	cchSigning                   bool
+	anthropicCacheTTL1hInjection bool
+	rewriteMessageCacheControl   bool
+	clientDatelineNormalization  bool
+	expiresAt                    int64 // unix nano
 }
 
 const gatewayForwardingCacheTTL = 60 * time.Second
@@ -674,24 +671,20 @@ func (s *SettingService) IsBackendModeEnabled(ctx context.Context) bool {
 }
 
 type gatewayForwardingSettingsResult struct {
-	fp, mp, cch, claudeOAuthSystemPromptInjection, cacheTTL1h, rewriteMessageCacheControl bool
-	clientDatelineNormalization                                                           bool
-	claudeOAuthSystemPrompt, claudeOAuthSystemPromptBlocks                                string
+	fp, mp, cch, cacheTTL1h, rewriteMessageCacheControl bool
+	clientDatelineNormalization                         bool
 }
 
 func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context) gatewayForwardingSettingsResult {
 	if cached, ok := s.gatewayForwardingCache.Load().(*cachedGatewayForwardingSettings); ok && cached != nil {
 		if time.Now().UnixNano() < cached.expiresAt {
 			return gatewayForwardingSettingsResult{
-				fp:                               cached.fingerprintUnification,
-				mp:                               cached.metadataPassthrough,
-				cch:                              cached.cchSigning,
-				claudeOAuthSystemPromptInjection: cached.claudeOAuthSystemPromptInjection,
-				claudeOAuthSystemPrompt:          cached.claudeOAuthSystemPrompt,
-				claudeOAuthSystemPromptBlocks:    cached.claudeOAuthSystemPromptBlocks,
-				cacheTTL1h:                       cached.anthropicCacheTTL1hInjection,
-				rewriteMessageCacheControl:       cached.rewriteMessageCacheControl,
-				clientDatelineNormalization:      cached.clientDatelineNormalization,
+				fp:                          cached.fingerprintUnification,
+				mp:                          cached.metadataPassthrough,
+				cch:                         cached.cchSigning,
+				cacheTTL1h:                  cached.anthropicCacheTTL1hInjection,
+				rewriteMessageCacheControl:  cached.rewriteMessageCacheControl,
+				clientDatelineNormalization: cached.clientDatelineNormalization,
 			}
 		}
 	}
@@ -699,15 +692,12 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 		if cached, ok := s.gatewayForwardingCache.Load().(*cachedGatewayForwardingSettings); ok && cached != nil {
 			if time.Now().UnixNano() < cached.expiresAt {
 				return gatewayForwardingSettingsResult{
-					fp:                               cached.fingerprintUnification,
-					mp:                               cached.metadataPassthrough,
-					cch:                              cached.cchSigning,
-					claudeOAuthSystemPromptInjection: cached.claudeOAuthSystemPromptInjection,
-					claudeOAuthSystemPrompt:          cached.claudeOAuthSystemPrompt,
-					claudeOAuthSystemPromptBlocks:    cached.claudeOAuthSystemPromptBlocks,
-					cacheTTL1h:                       cached.anthropicCacheTTL1hInjection,
-					rewriteMessageCacheControl:       cached.rewriteMessageCacheControl,
-					clientDatelineNormalization:      cached.clientDatelineNormalization,
+					fp:                          cached.fingerprintUnification,
+					mp:                          cached.metadataPassthrough,
+					cch:                         cached.cchSigning,
+					cacheTTL1h:                  cached.anthropicCacheTTL1hInjection,
+					rewriteMessageCacheControl:  cached.rewriteMessageCacheControl,
+					clientDatelineNormalization: cached.clientDatelineNormalization,
 				}, nil
 			}
 		}
@@ -717,9 +707,6 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 			SettingKeyEnableFingerprintUnification,
 			SettingKeyEnableMetadataPassthrough,
 			SettingKeyEnableCCHSigning,
-			SettingKeyEnableClaudeOAuthSystemPromptInjection,
-			SettingKeyClaudeOAuthSystemPrompt,
-			SettingKeyClaudeOAuthSystemPromptBlocks,
 			SettingKeyEnableAnthropicCacheTTL1hInjection,
 			SettingKeyRewriteMessageCacheControl,
 			SettingKeyEnableClientDatelineNormalization,
@@ -727,16 +714,15 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 		if err != nil {
 			slog.Warn("failed to get gateway forwarding settings", "error", err)
 			s.gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
-				fingerprintUnification:           true,
-				metadataPassthrough:              false,
-				cchSigning:                       false,
-				claudeOAuthSystemPromptInjection: true,
-				anthropicCacheTTL1hInjection:     false,
-				rewriteMessageCacheControl:       s.defaultRewriteMessageCacheControl(),
-				clientDatelineNormalization:      true,
-				expiresAt:                        time.Now().Add(gatewayForwardingErrorTTL).UnixNano(),
+				fingerprintUnification:       true,
+				metadataPassthrough:          false,
+				cchSigning:                   false,
+				anthropicCacheTTL1hInjection: false,
+				rewriteMessageCacheControl:   s.defaultRewriteMessageCacheControl(),
+				clientDatelineNormalization:  true,
+				expiresAt:                    time.Now().Add(gatewayForwardingErrorTTL).UnixNano(),
 			})
-			return gatewayForwardingSettingsResult{fp: true, claudeOAuthSystemPromptInjection: true, rewriteMessageCacheControl: s.defaultRewriteMessageCacheControl(), clientDatelineNormalization: true}, nil
+			return gatewayForwardingSettingsResult{fp: true, rewriteMessageCacheControl: s.defaultRewriteMessageCacheControl(), clientDatelineNormalization: true}, nil
 		}
 		fp := true
 		if v, ok := values[SettingKeyEnableFingerprintUnification]; ok && v != "" {
@@ -744,12 +730,6 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 		}
 		mp := values[SettingKeyEnableMetadataPassthrough] == "true"
 		cch := values[SettingKeyEnableCCHSigning] == "true"
-		systemPromptInjection := true
-		if v, ok := values[SettingKeyEnableClaudeOAuthSystemPromptInjection]; ok && v != "" {
-			systemPromptInjection = v == "true"
-		}
-		systemPrompt := values[SettingKeyClaudeOAuthSystemPrompt]
-		systemPromptBlocks := values[SettingKeyClaudeOAuthSystemPromptBlocks]
 		cacheTTL1h := values[SettingKeyEnableAnthropicCacheTTL1hInjection] == "true"
 		rewriteMessageCacheControl := s.defaultRewriteMessageCacheControl()
 		if v, ok := values[SettingKeyRewriteMessageCacheControl]; ok && v != "" {
@@ -760,33 +740,27 @@ func (s *SettingService) getGatewayForwardingSettingsCached(ctx context.Context)
 			clientDatelineNormalization = v == "true"
 		}
 		s.gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
-			fingerprintUnification:           fp,
-			metadataPassthrough:              mp,
-			cchSigning:                       cch,
-			claudeOAuthSystemPromptInjection: systemPromptInjection,
-			claudeOAuthSystemPrompt:          systemPrompt,
-			claudeOAuthSystemPromptBlocks:    systemPromptBlocks,
-			anthropicCacheTTL1hInjection:     cacheTTL1h,
-			rewriteMessageCacheControl:       rewriteMessageCacheControl,
-			clientDatelineNormalization:      clientDatelineNormalization,
-			expiresAt:                        time.Now().Add(gatewayForwardingCacheTTL).UnixNano(),
+			fingerprintUnification:       fp,
+			metadataPassthrough:          mp,
+			cchSigning:                   cch,
+			anthropicCacheTTL1hInjection: cacheTTL1h,
+			rewriteMessageCacheControl:   rewriteMessageCacheControl,
+			clientDatelineNormalization:  clientDatelineNormalization,
+			expiresAt:                    time.Now().Add(gatewayForwardingCacheTTL).UnixNano(),
 		})
 		return gatewayForwardingSettingsResult{
-			fp:                               fp,
-			mp:                               mp,
-			cch:                              cch,
-			claudeOAuthSystemPromptInjection: systemPromptInjection,
-			claudeOAuthSystemPrompt:          systemPrompt,
-			claudeOAuthSystemPromptBlocks:    systemPromptBlocks,
-			cacheTTL1h:                       cacheTTL1h,
-			rewriteMessageCacheControl:       rewriteMessageCacheControl,
-			clientDatelineNormalization:      clientDatelineNormalization,
+			fp:                          fp,
+			mp:                          mp,
+			cch:                         cch,
+			cacheTTL1h:                  cacheTTL1h,
+			rewriteMessageCacheControl:  rewriteMessageCacheControl,
+			clientDatelineNormalization: clientDatelineNormalization,
 		}, nil
 	})
 	if r, ok := val.(gatewayForwardingSettingsResult); ok {
 		return r
 	}
-	return gatewayForwardingSettingsResult{fp: true, claudeOAuthSystemPromptInjection: true, clientDatelineNormalization: true}
+	return gatewayForwardingSettingsResult{fp: true, clientDatelineNormalization: true}
 }
 
 // GetGatewayForwardingSettings returns cached gateway forwarding settings.
@@ -811,14 +785,6 @@ func (s *SettingService) IsRewriteMessageCacheControlEnabled(ctx context.Context
 // 的客户端 dateline 归一化。默认开启。
 func (s *SettingService) IsClientDatelineNormalizationEnabled(ctx context.Context) bool {
 	return s.getGatewayForwardingSettingsCached(ctx).clientDatelineNormalization
-}
-
-// GetClaudeOAuthSystemPromptInjectionSettings returns the Claude OAuth mimic
-// system block switch, legacy custom expansion prompt, and configurable blocks JSON.
-// Empty values mean use the built-in Claude Code default blocks.
-func (s *SettingService) GetClaudeOAuthSystemPromptInjectionSettings(ctx context.Context) (enabled bool, prompt string, blocks string) {
-	result := s.getGatewayForwardingSettingsCached(ctx)
-	return result.claudeOAuthSystemPromptInjection, result.claudeOAuthSystemPrompt, result.claudeOAuthSystemPromptBlocks
 }
 
 // GetClaudeCodeVersionBounds 获取 Claude Code 版本号上下限要求

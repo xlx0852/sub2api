@@ -38,6 +38,7 @@ GET /antigravity/v1beta/models/:model
 GET /api/v1/admin/accounts
 GET /api/v1/admin/accounts/:id
 GET /api/v1/admin/accounts/:id/models
+GET /api/v1/admin/accounts/:id/opencode-go-usage
 GET /api/v1/admin/accounts/:id/scheduled-test-plans
 GET /api/v1/admin/accounts/:id/stats
 GET /api/v1/admin/accounts/:id/temp-unschedulable
