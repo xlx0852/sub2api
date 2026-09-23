@@ -576,6 +576,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	// codex_cli_rs 造成的 originator 错配 404），详见 issue #3901。
 	if account.Type == AccountTypeOAuth {
 		s.codexIdentity.enforceHeadersWithUA(req.Header, s.codexIdentityCandidateUA(c, account))
+		applyOpenCodeUpstreamHeaders(req.Header, account, targetURL, openCodeSessionSeedForRequest(req.Header, body))
 		s.applyOpenAICodexTurnStateReuseForModel(req.Header, account, strings.TrimSpace(gjson.GetBytes(body, "model").String()))
 	}
 

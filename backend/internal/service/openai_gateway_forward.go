@@ -384,6 +384,10 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	// 终态收口：originator 必须与最终 User-Agent 首段配套且为官方身份，否则上游 404（issue #3901）。
 	if account.Type == AccountTypeOAuth {
 		s.codexIdentity.enforceHeadersWithUA(req.Header, s.codexIdentityCandidateUA(c, account))
+		// OpenCode 官方主机：UA 强制收敛为 opencode 客户端形态（CF 按 UA 拦，
+		// 403 会被计成凭据类故障），并带上官方要求的会话头。
+		// seed 取客户端会话标识，保证同一会话每轮同值（否则上游 prompt cache 持续 miss）。
+		applyOpenCodeUpstreamHeaders(req.Header, account, targetURL, openCodeSessionSeedForRequest(req.Header, body))
 		s.applyOpenAICodexTurnStateReuseForModel(req.Header, account, strings.TrimSpace(gjson.GetBytes(body, "model").String()))
 	}
 

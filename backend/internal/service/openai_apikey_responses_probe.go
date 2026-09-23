@@ -148,6 +148,9 @@ func (s *AccountTestService) ProbeOpenAIAPIKeyResponsesSupport(ctx context.Conte
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Accept", "application/json")
+	// 官方 OpenCode Go 自 2026-09-05 起要求每个推理请求带 x-opencode-session，
+	// 且 UA 必须是 opencode 客户端形态（否则被 Cloudflare 1010 拦成 403）。
+	applyOpenCodeUpstreamHeaders(req.Header, account, probeURL, "")
 
 	// 账号级请求头覆写：能力探测与真实转发保持一致的最终头
 	account.ApplyHeaderOverrides(req.Header)
