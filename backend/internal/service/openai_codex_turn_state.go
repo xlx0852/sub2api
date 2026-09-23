@@ -759,8 +759,13 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnStateWithClient(ctx context.Co
 		result := s.probeOpenAICodexTurnState(ctx, account, token, chatgptID, model, client)
 		probeTicket := strings.TrimSpace(result.headers.Get(openAICodexTurnStateHeader))
 		if !result.completed || !isReusableOpenAICodexTurnState(probeTicket) {
-			logger.LegacyPrintf("service.openai_codex_turn_state", "[CodexTurnStateSeed] probe_no_ticket account=%d model=%s status=%d completed=%v egress=%s",
-				account.ID, model, result.status, result.completed, codexTurnStateProbeEgressLabel(account, client))
+			// 必须区分两种失败：上游**没发**票头，还是发了但被我们的形态过滤拒掉。
+			// 此前只记 status/completed，于是「上游停发」与「我们误拒」在日志里长得一样，
+			// 排查时只能靠猜。这里只记头名与长度，不记任何值。
+			logger.LegacyPrintf("service.openai_codex_turn_state",
+				"[CodexTurnStateSeed] probe_no_ticket account=%d model=%s status=%d completed=%v egress=%s raw_ticket_len=%d codex_like_headers=[%s]",
+				account.ID, model, result.status, result.completed, codexTurnStateProbeEgressLabel(account, client),
+				len(probeTicket), strings.Join(codexTurnStateProbeCodexLikeHeaderNames(result.headers), ","))
 			continue
 		}
 		pool := result.model
@@ -779,6 +784,23 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnStateWithClient(ctx context.Co
 // codexTurnStateProbeEgressLabel 标明本次采票的出口类型，用于生产取证：
 // 采票出口必须与业务出口一致（account-proxy），不能是服务器直连。
 // **只输出标签，绝不输出代理地址本身**（代理 URL 可能含凭据）。
+// codexTurnStateProbeCodexLikeHeaderNames 列出响应里与 Codex 会话相关的头名（**只列名，不带值**）。
+// 用途：判定「上游没发票」与「票换了头名/形态」——这两种情况在只看 status 时无法区分。
+func codexTurnStateProbeCodexLikeHeaderNames(h http.Header) []string {
+	if h == nil {
+		return nil
+	}
+	names := make([]string, 0, 6)
+	for name := range h {
+		lower := strings.ToLower(name)
+		if strings.Contains(lower, "codex") || strings.Contains(lower, "turn") || strings.Contains(lower, "session") {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
 func codexTurnStateProbeEgressLabel(account *Account, testClient *http.Client) string {
 	if testClient != nil {
 		return "test-injected"
