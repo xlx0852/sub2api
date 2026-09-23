@@ -120,6 +120,13 @@ func probeTruncatedVerdict() string {
 	return "[降智检测] 上游在限定时间内未给完答案（已收到部分内容）→ 本样本未判定"
 }
 
+// probeNoAnswerVerdict marks a sample that produced no answer text at all. Such a sample must be
+// labelled explicitly: an empty response otherwise reads exactly like a passing test.
+// The most common cause is a reasoning model burning the whole max_tokens budget on thinking.
+func probeNoAnswerVerdict() string {
+	return "[降智检测] 未收到答案正文 → 本样本未判定（推理模型常见原因：max_tokens 预算被 thinking 耗尽）"
+}
+
 // formatProbeVerdict renders the one-line report appended to a diagnostic answer, so both the
 // diagnostics panel and the account usage drawer show the judgement without a schema change.
 func formatProbeVerdict(verdict probeVerdict) string {

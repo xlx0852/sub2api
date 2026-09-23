@@ -122,6 +122,14 @@ func generateSessionString() (string, error) {
 }
 
 // createTestPayload creates a Claude Code style test request payload
+// accountTestMaxTokens 是账号测试报文的输出预算。
+//
+// 推理模型会先把预算花在 thinking 上再产出答案正文，预算过小会得到
+// 「只有 thinking、答案正文为空」的响应（stop_reason=max_tokens）。
+// 这种响应**不是**协议或连通性故障，必须在测试输出里显式说明，
+// 否则空响应会被读成「测试通过」（见 finishClaudeTestStream）。
+const accountTestMaxTokens = 1024
+
 func createTestPayload(modelID string) (map[string]any, error) {
 	sessionID, err := generateSessionString()
 	if err != nil {
@@ -156,7 +164,7 @@ func createTestPayload(modelID string) (map[string]any, error) {
 		"metadata": map[string]string{
 			"user_id": sessionID,
 		},
-		"max_tokens":  1024,
+		"max_tokens":  accountTestMaxTokens,
 		"temperature": 1,
 		"stream":      true,
 	}, nil
@@ -200,7 +208,13 @@ func (w *sseTeeWriter) recorded() string { return w.buffer.String() }
 func (s *AccountTestService) emitReasoningProbeVerdict(c *gin.Context, body string) {
 	answer, errMsg := parseTestSSEOutput(body)
 	answer = strings.TrimSpace(answer)
-	if errMsg != "" || answer == "" {
+	if errMsg != "" {
+		return
+	}
+	if answer == "" {
+		// 不能静默返回：空答案与「已判定为正确」在界面上同形，会让人把
+		// 「没拿到答案」读成「测试通过」。这里明确说明本样本未判定。
+		s.sendEvent(c, TestEvent{Type: "content", Text: "\n" + probeNoAnswerVerdict()})
 		return
 	}
 	if looksLikeBinaryOrImageAnswer(answer) {
@@ -1454,15 +1468,20 @@ func createOpenAIChatCompletionsTestPayload(modelID string, prompt string) map[s
 	}
 }
 
-// processClaudeStream processes the SSE stream from Claude API
+// processClaudeStream processes the SSE stream from Claude API.
+//
+// 除转发答案正文外，这里还跟踪三件事实：是否真的产出过正文、是否出现过 thinking、
+// 以及上游给出的 stop_reason。原因是「上游没产出答案」与「测试通过」在旧实现里
+// 完全同形（都只发 test_complete），而推理模型在预算不足时恰好稳定产生前者。
 func (s *AccountTestService) processClaudeStream(c *gin.Context, body io.Reader) error {
 	reader := bufio.NewReader(body)
+	state := claudeTestStreamState{}
 
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
-				s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+				s.finishClaudeTestStream(c, state)
 				return nil
 			}
 			return s.sendErrorAndEnd(c, fmt.Sprintf("Stream read error: %s", err.Error()))
@@ -1475,7 +1494,7 @@ func (s *AccountTestService) processClaudeStream(c *gin.Context, body io.Reader)
 
 		jsonStr := sseDataPrefix.ReplaceAllString(line, "")
 		if jsonStr == "[DONE]" {
-			s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+			s.finishClaudeTestStream(c, state)
 			return nil
 		}
 
@@ -1489,12 +1508,28 @@ func (s *AccountTestService) processClaudeStream(c *gin.Context, body io.Reader)
 		switch eventType {
 		case "content_block_delta":
 			if delta, ok := data["delta"].(map[string]any); ok {
-				if text, ok := delta["text"].(string); ok {
+				if text, ok := delta["text"].(string); ok && text != "" {
+					state.sawText = true
 					s.sendEvent(c, TestEvent{Type: "content", Text: text})
+				}
+				// thinking 增量只用来报进度，绝不并入 content：判决函数只解析 content，
+				// 推理文本里出现的数字会污染「降智检测」的答案。
+				if thinking, ok := delta["thinking"].(string); ok && thinking != "" {
+					state.sawThinking = true
+					if !state.thinkingAnnounced {
+						state.thinkingAnnounced = true
+						s.sendEvent(c, TestEvent{Type: "status", Text: "模型正在推理（已收到 thinking 增量，答案正文尚未开始）…"})
+					}
+				}
+			}
+		case "message_delta":
+			if delta, ok := data["delta"].(map[string]any); ok {
+				if reason, ok := delta["stop_reason"].(string); ok && reason != "" {
+					state.stopReason = reason
 				}
 			}
 		case "message_stop":
-			s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+			s.finishClaudeTestStream(c, state)
 			return nil
 		case "error":
 			errorMsg := "Unknown error"
@@ -1506,6 +1541,39 @@ func (s *AccountTestService) processClaudeStream(c *gin.Context, body io.Reader)
 			return s.sendErrorAndEnd(c, errorMsg)
 		}
 	}
+}
+
+// claudeTestStreamState 记录一次 Claude 测试流的可判定事实。
+// stopReason 取上游 message_delta.delta.stop_reason；max_tokens 表示输出被预算截断。
+type claudeTestStreamState struct {
+	sawText           bool
+	sawThinking       bool
+	thinkingAnnounced bool
+	stopReason        string
+}
+
+// finishClaudeTestStream 收尾一次 Claude 测试流。
+//
+// 连通性成功与「答案正文被截断」必须可区分：截断时补一条显式说明，
+// 这样空响应不会被读成「测试完成 = 一切正常」。注意这里**不**发 error 事件，
+// 因为截断不是账号故障，发 error 会牵连账号健康判定。
+func (s *AccountTestService) finishClaudeTestStream(c *gin.Context, state claudeTestStreamState) {
+	if !state.sawText {
+		switch {
+		case state.stopReason == "max_tokens":
+			s.sendEvent(c, TestEvent{Type: "status", Text: fmt.Sprintf(
+				"上游在 max_tokens=%d 处截断：预算被推理(thinking)耗尽，未产出答案正文（非协议故障，账号连通性正常）。"+
+					"推理模型请换非推理模型复测，或提高测试预算。", accountTestMaxTokens)})
+		case state.sawThinking:
+			s.sendEvent(c, TestEvent{Type: "status", Text: "上游只返回了 thinking，未产出答案正文（本样本无法判定）"})
+		case state.stopReason != "":
+			s.sendEvent(c, TestEvent{Type: "status", Text: fmt.Sprintf(
+				"上游未返回任何内容块，stop_reason=%s（本样本无法判定）", state.stopReason)})
+		default:
+			s.sendEvent(c, TestEvent{Type: "status", Text: "上游未返回任何内容块（本样本无法判定）"})
+		}
+	}
+	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 }
 
 // processOpenAIChatCompletionsStream processes SSE chunks from the
