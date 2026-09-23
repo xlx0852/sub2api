@@ -480,6 +480,7 @@ type OpenAIGatewayService struct {
 	responseHeaderFilter                *responseheaders.CompiledHeaderFilter
 	codexSnapshotThrottle               *accountWriteThrottle
 	codexTurnStateSeedOnce              sync.Once
+	openCodeGoUsageRefreshOnce          sync.Once
 	codexTurnStateRefresh               chan int64
 	codexTurnStateWorkMu                sync.Mutex
 	codexTurnStateWork                  map[int64]codexTurnStateRefreshState
@@ -588,6 +589,7 @@ func NewOpenAIGatewayService(
 	svc.accountSelector = NewOpenAIAccountSelector(svc)
 	svc.logOpenAIWSModeBootstrap()
 	svc.startOpenAICodexTurnStateSeeder()
+	svc.startOpenCodeGoUsageRefresher()
 	return svc
 }
 

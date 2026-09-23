@@ -342,6 +342,18 @@
                   />
                 </section>
 
+                <section
+                  v-if="isColumnVisible('opencode_go')"
+                  class="rounded-md bg-black/[0.025] p-3 dark:bg-white/[0.04]"
+                >
+                  <div class="mb-2 flex items-center gap-2">
+                    <span class="text-[11px] font-medium text-gray-400 dark:text-dark-500">
+                      {{ t('admin.accounts.columns.openCodeGoUsage') }}
+                    </span>
+                  </div>
+                  <OpenCodeGoUsageCell :account="row" />
+                </section>
+
                 <div class="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-black/[0.07] pt-3 dark:border-white/[0.08]">
                   <div v-if="isColumnVisible('last_used_at')" class="min-w-0">
                     <p class="text-[11px] text-gray-400 dark:text-dark-500">{{ t('admin.accounts.columns.lastUsed') }}</p>
@@ -677,6 +689,7 @@ import AccountTestModal from '@/components/admin/account/AccountTestModal.vue'
 import AccountStatusIndicator from '@/components/account/AccountStatusIndicator.vue'
 import AccountUsageCell from '@/components/account/AccountUsageCell.vue'
 import AccountUsageDrawer from '@/components/account/AccountUsageDrawer.vue'
+import OpenCodeGoUsageCell from '@/components/account/OpenCodeGoUsageCell.vue'
 import AccountTodayStatsCell from '@/components/account/AccountTodayStatsCell.vue'
 import AccountGroupsCell from '@/components/account/AccountGroupsCell.vue'
 import AccountCapacityCell from '@/components/account/AccountCapacityCell.vue'
@@ -1483,6 +1496,7 @@ const allColumns = computed(() => {
 	c.push({ key: 'groups', label: t('admin.accounts.columns.groups'), sortable: false })
   c.push(
     { key: 'usage', label: t('admin.accounts.columns.usageWindows'), sortable: false },
+    { key: 'opencode_go', label: t('admin.accounts.columns.openCodeGoUsage'), sortable: false },
     { key: 'proxy', label: t('admin.accounts.columns.proxy'), sortable: false },
     { key: 'priority', label: t('admin.accounts.columns.priority'), sortable: true },
     { key: 'rate_multiplier', label: t('admin.accounts.columns.billingRateMultiplier'), sortable: true },
