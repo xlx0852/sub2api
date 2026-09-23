@@ -326,3 +326,29 @@ func TestOpenAICodexTurnStateAgeSummary(t *testing.T) {
 	}}
 	require.Equal(t, "tickets=none", openAICodexTurnStateAgeSummary(bad, now))
 }
+
+// 上游会改票的形态：2026-09-22 是 292/312/332/356，2026-09-23 起是 780。
+// 校验只做「像不像票」的兜底，不做形态白名单——否则上游一改长度，采票会**静默全灭**：
+// 表现为每次探测都 status=200 却拿不到票，账号长期停在已清理状态。
+func TestIsReusableOpenAICodexTurnStateAcceptsUpstreamShapeDrift(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		length int
+		want   bool
+		why    string
+	}{
+		{292, true, "历史形态（astra）"},
+		{312, true, "历史形态（luna/terra）"},
+		{356, true, "历史形态（sol）"},
+		{780, true, "2026-09-23 起的新形态"},
+		{199, false, "太短：不像票"},
+		{4097, false, "太长：兜底上限"},
+	}
+	for _, tc := range cases {
+		token := "gAAAAA" + strings.Repeat("A", tc.length-6)
+		require.Equal(t, tc.want, isReusableOpenAICodexTurnState(token), "%s (%d)", tc.why, tc.length)
+	}
+	// 前缀与空白仍然要挡。
+	require.False(t, isReusableOpenAICodexTurnState(strings.Repeat("A", 300)))
+	require.False(t, isReusableOpenAICodexTurnState("gAAAAA"+strings.Repeat("A", 200)+" "+strings.Repeat("A", 100)))
+}

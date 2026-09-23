@@ -26,7 +26,12 @@ const (
 	openAICodexTurnStateExtraCapturedAt = "openai_codex_turn_state_captured_at"
 	openAICodexTurnStateDefaultTTL      = 60 * time.Minute
 	openAICodexTurnStateMinLen          = 200
-	openAICodexTurnStateMaxLen          = 400
+	// 上限必须留足余量：上游会**改票的形态**。
+	// 实测 2026-09-22 收到的是 292/312/332/356；2026-09-23 起变成 780。
+	// 原上限 400 把这批票**全部静默拒掉**，表现为「每次探测都 status=200 但拿不到票」，
+	// 账号因此长期停在已清理状态（面板上看就是「很久都不打」）。
+	// 上限只作为「别把错误页/垃圾当票」的兜底，不承担形态白名单的职责。
+	openAICodexTurnStateMaxLen = 4096
 )
 
 // openAICodexTurnStateExtraPoolPrefix 是按供应池分票的 extra key 前缀：
@@ -762,10 +767,21 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnStateWithClient(ctx context.Co
 			// 必须区分两种失败：上游**没发**票头，还是发了但被我们的形态过滤拒掉。
 			// 此前只记 status/completed，于是「上游停发」与「我们误拒」在日志里长得一样，
 			// 排查时只能靠猜。这里只记头名与长度，不记任何值。
+			verdict := "incomplete_stream"
+			switch {
+			case !result.completed:
+				verdict = "incomplete_stream"
+			case len(probeTicket) == 0:
+				verdict = "upstream_sent_none"
+			default:
+				// 头部在、长度不合法：说明是**我们的形态过滤**在拒，而不是上游不发。
+				verdict = "rejected_shape"
+			}
 			logger.LegacyPrintf("service.openai_codex_turn_state",
-				"[CodexTurnStateSeed] probe_no_ticket account=%d model=%s status=%d completed=%v egress=%s raw_ticket_len=%d codex_like_headers=[%s]",
-				account.ID, model, result.status, result.completed, codexTurnStateProbeEgressLabel(account, client),
-				len(probeTicket), strings.Join(codexTurnStateProbeCodexLikeHeaderNames(result.headers), ","))
+				"[CodexTurnStateSeed] probe_no_ticket account=%d model=%s status=%d completed=%v verdict=%s raw_ticket_len=%d egress=%s codex_like_headers=[%s]",
+				account.ID, model, result.status, result.completed, verdict,
+				len(probeTicket), codexTurnStateProbeEgressLabel(account, client),
+				strings.Join(codexTurnStateProbeCodexLikeHeaderNames(result.headers), ","))
 			continue
 		}
 		pool := result.model
