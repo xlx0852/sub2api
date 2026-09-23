@@ -249,10 +249,28 @@ messages、只留 CC 标识 → 再注入 `claudeCodeSystemPromptExpansion` 把 
 
 1. `claude_code_validator.go` 的 `claudeCodeSystemPrompts`：**入站检测**用的模板表，
    判断客户端是否 Claude Code（用于客户端门禁/旁路），不向任何出站请求写入内容。
-2. `migrations/129_seed_claude_code_template.sql`：历史迁移，把注入默认模板写进
-   `settings`。迁移已执行、不应改写（会破坏版本有序性）；对应的 settings 键已无用，
-   DB 里那几行现在是**惰性数据**。若要连数据一起清，只需删除
+2. ~~`migrations/129_seed_claude_code_template.sql`~~ **（更正：此条原先的判断是错的）**
+   该迁移写的是 `channel_monitor_request_templates`（频道监控的探测模板，属另一特性），
+   与本次删除的三个 setting key **无关**。全量检索确认：**没有任何迁移 seed 过**
    `enable_claude_oauth_system_prompt_injection` / `claude_oauth_system_prompt` /
-   `claude_oauth_system_prompt_blocks` 三个 key（无代码读取）。
+   `claude_oauth_system_prompt_blocks`，这三行是运行期经设置 API 写入的。
 3. 账号测试对 `claude*` 模型的 CC 身份（见 26.5）：测试本身就以 Claude Code 形态发请求，
    属一致的客户端身份，非对第三方模型伪造。
+
+### 26.10 生产数据清理（2026-09-23 执行）
+
+删除前现状：
+
+| key | 值 |
+|---|---|
+| `enable_claude_oauth_system_prompt_injection` | `false`（len=5） |
+| `claude_oauth_system_prompt` | 空 |
+| `claude_oauth_system_prompt_blocks` | `[{"enabled": false, "type": "text", "text": ""}]`（len=68） |
+
+均写入于 2026-09-21 14:45，非迁移产物；`redis-cli --scan '*setting*'` 无缓存键。
+已用单事务删除三行（`DELETE 3`，复核剩余 0，再无 `%claude_oauth%` 键）。
+
+**⚠️ 顺序风险（必须记住）**：生产当时仍运行**旧二进制**，而旧代码在该 key 缺失时
+回落到默认 `true`——也就是说「先删数据、后发新二进制」会让旧进程的注入开关变成**开启**。
+本次实际影响为零（生产 4 个 anthropic 账号全是 apikey，OAuth 伪装路径不可达），
+但**在部署不再读取该 key 的新二进制之前，不要新增 anthropic OAuth 账号**。
