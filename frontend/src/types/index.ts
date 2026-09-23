@@ -861,6 +861,33 @@ export interface TempUnschedulableStatus {
   state?: TempUnschedulableState
 }
 
+/** 打票状态的派生摘要（票与 cookie 本体不下发前端，见后端 RedactCodexTicketExtra）。 */
+export interface CodexTicketPool {
+  pool: string
+  model?: string
+  /** 票的形态 = x-codex-turn-state 的字符长度（292 / 312 / 332 / 356）。 */
+  shape: number
+  age_seconds: number
+  fresh: boolean
+  captured_at?: string
+}
+
+export interface CodexTicketCookies {
+  /** 仍在有效期内的 cookie 数量。 */
+  count: number
+  fresh: boolean
+  age_seconds?: number
+  /** 采集时的出口指纹（哈希前缀），不含代理地址。 */
+  egress?: string
+}
+
+export interface CodexTicketSummary {
+  pools?: CodexTicketPool[]
+  cookies?: CodexTicketCookies
+  replay_ttl_seconds?: number
+  overload_rotation_enabled?: boolean
+}
+
 export interface Account {
   id: number
   name: string
@@ -878,6 +905,8 @@ export interface Account {
     model_rate_limits?: Record<string, { rate_limited_at: string; rate_limit_reset_at: string }>
     antigravity_credits_overages?: Record<string, { activated_at: string; active_until: string }>
   } & Record<string, unknown>)
+  /** 打票状态摘要（仅 OpenAI OAuth 账号会有）。 */
+  codex_ticket?: CodexTicketSummary
   proxy_id: number | null
   proxy_fallback_origin_id?: number | null
   proxy_fallback_origin_name?: string | null

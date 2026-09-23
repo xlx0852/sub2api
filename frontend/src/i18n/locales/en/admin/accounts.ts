@@ -1383,7 +1383,28 @@ export default {
           quota: 'Quota',
           statistics: 'Statistics',
           performance: 'Performance',
-          diagnostics: 'Diagnostics'
+          diagnostics: 'Diagnostics',
+          ticket: 'Tickets'
+        },
+        tickets: {
+          title: 'Ticket status',
+          hint: 'Collection and replay state of the upstream x-codex-turn-state ticket. Only the shape and age are shown, never the ticket itself.',
+          poolsTitle: 'Supply pool slots',
+          replayWindow: '{minutes} min replay window',
+          shapeHint: 'Shape is the ticket length in characters. Measured on one account in one period: astra landings carry 292, luna / sol / terra carry 312. It does not correspond across accounts.',
+          replayable: 'Replayable',
+          expired: 'Expired',
+          servedModel: 'Served by {model}',
+          servedModelUnknown: 'Served model unknown',
+          ageUnknown: 'Capture time unknown',
+          cookiesTitle: 'Session cookies',
+          cookieCount: '{count} valid',
+          cookieRefreshed: 'Refreshed {time}',
+          egress: 'Egress fingerprint {fingerprint}',
+          egressHint: 'Hash prefix of the egress at capture time (protocol, host, port). Contains no proxy address or credentials.',
+          cookiesLive: 'Live',
+          cookiesExpired: 'Expired',
+          empty: 'No ticket or cookie recorded for this account yet. Tickets are captured from upstream responses, and overloads or failures trigger a re-harvest.'
         }
       },
       openaiQuotaReset: {

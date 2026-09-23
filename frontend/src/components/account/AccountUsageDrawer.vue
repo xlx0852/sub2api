@@ -65,7 +65,7 @@
               </div>
             </header>
 
-            <nav class="grid shrink-0 grid-cols-4 gap-1 border-b border-gray-200 px-4 py-2 dark:border-dark-600" role="tablist">
+            <nav class="grid shrink-0 grid-cols-5 gap-1 border-b border-gray-200 px-4 py-2 dark:border-dark-600" role="tablist">
               <button
                 v-for="tab in tabs"
                 :key="tab.key"
@@ -146,6 +146,10 @@
                 <div v-else class="rounded-md border border-dashed border-gray-200 py-10 text-center text-sm text-gray-500 dark:border-dark-600 dark:text-gray-400">
                   {{ t('admin.accounts.usageDetails.noPerformanceData') }}
                 </div>
+              </section>
+
+              <section v-show="activeTab === 'ticket'" role="tabpanel" class="space-y-5">
+                <CodexTicketPanel :account="account" />
               </section>
 
               <section v-show="activeTab === 'diagnostics'" role="tabpanel" class="flex min-h-0 flex-1 flex-col space-y-3">
@@ -499,6 +503,7 @@ import { useExecutionCountdown } from '@/composables/useExecutionCountdown'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import AccountUsageCell from './AccountUsageCell.vue'
+import CodexTicketPanel from './CodexTicketPanel.vue'
 import MetricItem from './MetricItem.vue'
 import AccountStatsPanel from '@/components/admin/account/AccountStatsModal.vue'
 
@@ -507,7 +512,7 @@ type ScheduledTestEntry = {
   results: ScheduledTestResult[]
 }
 
-type UsageTab = 'quota' | 'statistics' | 'performance' | 'diagnostics'
+type UsageTab = 'quota' | 'statistics' | 'performance' | 'ticket' | 'diagnostics'
 type IconName = InstanceType<typeof Icon>['$props']['name']
 
 const props = withDefaults(defineProps<{
@@ -518,7 +523,7 @@ const props = withDefaults(defineProps<{
   performanceStats?: AccountPerformanceStats | null
   performanceLoading?: boolean
   manualRefreshToken?: number
-  initialTab?: 'quota' | 'statistics' | 'diagnostics' | 'performance'
+  initialTab?: UsageTab
 }>(), {
   todayStats: null,
   todayStatsLoading: false,
@@ -604,6 +609,7 @@ const tabs = computed<Array<{ key: UsageTab; label: string; icon: IconName }>>((
   { key: 'quota', label: t('admin.accounts.usageDetails.tabs.quota'), icon: 'chart' },
   { key: 'statistics', label: t('admin.accounts.usageDetails.tabs.statistics'), icon: 'bolt' },
   { key: 'performance', label: t('admin.accounts.usageDetails.tabs.performance'), icon: 'clock' },
+  { key: 'ticket', label: t('admin.accounts.usageDetails.tabs.ticket'), icon: 'key' },
   { key: 'diagnostics', label: t('admin.accounts.usageDetails.tabs.diagnostics'), icon: 'beaker' }
 ])
 

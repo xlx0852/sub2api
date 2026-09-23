@@ -33,7 +33,12 @@ const account = {
   type: 'oauth',
   status: 'active',
   extra: {},
-  credentials: {}
+  credentials: {},
+  codex_ticket: {
+    replay_ttl_seconds: 3600,
+    pools: [{ pool: 'gpt-5.6-luna', model: 'gpt-5.6-luna', shape: 312, age_seconds: 90, fresh: true }],
+    cookies: { count: 3, fresh: true, egress: '5ee7a937' }
+  }
 } as Account
 
 const secondAccount = {
@@ -63,26 +68,46 @@ describe('AccountUsageDrawer', () => {
     }
   })
 
-  it('按额度、统计、性能和诊断展示页签并默认打开额度', () => {
+  // 按 key 定位页签，避免新增页签时索引位移把无关测试点错。
+  // 本 spec 的 i18n mock 把 label 渲染成 key，所以用 tabs.<key> 匹配。
+  const openTab = async (wrapper: ReturnType<typeof mountDrawer>, key: string) => {
+    const tab = wrapper.findAll('[role="tab"]').find((node) => node.text().includes(`tabs.${key}`))
+    expect(tab, `tab ${key} not found`).toBeTruthy()
+    await tab?.trigger('click')
+    await flushPromises()
+  }
+
+  it('按额度、统计、性能、打票和诊断展示页签并默认打开额度', () => {
     const wrapper = mountDrawer()
     const tabs = wrapper.findAll('[role="tab"]')
-    expect(tabs).toHaveLength(4)
+    expect(tabs).toHaveLength(5)
     expect(tabs[0]?.attributes('aria-selected')).toBe('true')
     expect(wrapper.find('[data-testid="quota-content"]').exists()).toBe(true)
   })
 
+  it('切到打票页签展示票与 Cookie 状态', async () => {
+    const wrapper = mountDrawer()
+    await openTab(wrapper, 'ticket')
+
+    const text = wrapper.text()
+    expect(text).toContain('admin.accounts.usageDetails.tickets.title')
+    // 账号上的 codex_ticket 摘要要被渲染出来（形态与池位）。
+    expect(text).toContain('gpt-5.6-luna')
+    expect(text).toContain('312')
+    // 本测试的 i18n mock 不渲染插值参数，只断言 Cookie 区块确实出现。
+    expect(text).toContain('admin.accounts.usageDetails.tickets.cookieCount')
+  })
+
   it('在同一个抽屉中展示统计视图', async () => {
     const wrapper = mountDrawer()
-    await wrapper.findAll('[role="tab"]')[1]?.trigger('click')
-    await flushPromises()
+    await openTab(wrapper, 'statistics')
 
     expect(wrapper.find('[data-testid="statistics-content"]').exists()).toBe(true)
   })
 
   it('切换账号后更新头部并回到额度页签', async () => {
     const wrapper = mountDrawer()
-    await wrapper.findAll('[role="tab"]')[1]?.trigger('click')
-    await flushPromises()
+    await openTab(wrapper, 'statistics')
 
     await wrapper.setProps({ account: secondAccount })
     await flushPromises()
@@ -108,8 +133,7 @@ describe('AccountUsageDrawer', () => {
     ])
 
     const wrapper = mountDrawer()
-    await wrapper.findAll('[role="tab"]')[3]?.trigger('click')
-    await flushPromises()
+    await openTab(wrapper, 'diagnostics')
 
     const availability = wrapper.find('[role="list"]')
     expect(availability.exists()).toBe(true)
@@ -129,8 +153,7 @@ describe('AccountUsageDrawer', () => {
     })))
 
     const wrapper = mountDrawer()
-    await wrapper.findAll('[role="tab"]')[3]?.trigger('click')
-    await flushPromises()
+    await openTab(wrapper, 'diagnostics')
 
     expect(wrapper.find('[role="list"]').findAll('[role="listitem"]')).toHaveLength(200)
   })

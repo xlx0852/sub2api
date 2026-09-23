@@ -465,7 +465,28 @@ export default {
           quota: '额度',
           statistics: '统计',
           performance: '性能',
-          diagnostics: '诊断'
+          diagnostics: '诊断',
+          ticket: '打票'
+        },
+        tickets: {
+          title: '打票状态',
+          hint: '上游 x-codex-turn-state 票的采集与回放状态。票长即形态，只给形态与票龄，不下发票本身。',
+          poolsTitle: '供应池票位',
+          replayWindow: '回放窗口 {minutes} 分钟',
+          shapeHint: '形态 = 票的字符长度。实测同账号同期：astra 落点 292，luna / sol / terra 落点 312；跨账号并非一一对应。',
+          replayable: '可回放',
+          expired: '已过期',
+          servedModel: '落点模型 {model}',
+          servedModelUnknown: '落点模型未知',
+          ageUnknown: '采集时间未知',
+          cookiesTitle: '会话 Cookie',
+          cookieCount: '{count} 个有效',
+          cookieRefreshed: '最新刷新 {time}',
+          egress: '出口指纹 {fingerprint}',
+          egressHint: '采集时的出口指纹（协议/主机/端口的哈希前缀），不含代理地址与凭据。',
+          cookiesLive: '可用',
+          cookiesExpired: '已过期',
+          empty: '该账号尚无票与 Cookie 记录。票由网关在上游响应中采集，过载或失败会触发重采。'
         }
       },
       openaiQuotaReset: {
