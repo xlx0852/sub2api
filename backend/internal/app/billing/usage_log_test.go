@@ -50,3 +50,59 @@ func TestBuildUsageLogSnapshotsPricingCurrencyAndDefaultsLegacyCostToUSD(t *test
 	require.NotNil(t, legacy.PricingCurrency)
 	require.Equal(t, "USD", *legacy.PricingCurrency)
 }
+
+// 上游响应模型审计：记录上游声明的模型，并给出三态不一致结论。
+func TestBuildUsageLogAuditsUpstreamResponseModel(t *testing.T) {
+	base := func() RecordInput {
+		return RecordInput{
+			RequestID: "req-audit", Model: "gpt-6-astra", RequestedModel: "gpt-6-astra",
+			User: &domain.User{ID: 1}, APIKey: &domain.APIKey{ID: 2}, Account: &domain.Account{ID: 3},
+		}
+	}
+
+	t.Run("response declares a different model", func(t *testing.T) {
+		input := base()
+		input.UpstreamResponseModel = "gpt-5.6-sol"
+		log := BuildUsageLog(input, nil, 1)
+		require.NotNil(t, log.UpstreamResponseModel)
+		require.Equal(t, "gpt-5.6-sol", *log.UpstreamResponseModel)
+		require.NotNil(t, log.UpstreamModelMismatch)
+		require.True(t, *log.UpstreamModelMismatch)
+	})
+
+	t.Run("response matches the requested model", func(t *testing.T) {
+		input := base()
+		input.UpstreamResponseModel = "gpt-6-astra"
+		log := BuildUsageLog(input, nil, 1)
+		require.NotNil(t, log.UpstreamModelMismatch)
+		require.False(t, *log.UpstreamModelMismatch)
+	})
+
+	t.Run("comparison is case insensitive", func(t *testing.T) {
+		input := base()
+		input.UpstreamResponseModel = "GPT-6-Astra"
+		log := BuildUsageLog(input, nil, 1)
+		require.NotNil(t, log.UpstreamModelMismatch)
+		require.False(t, *log.UpstreamModelMismatch)
+	})
+
+	t.Run("compared against the mapped model when mapping applied", func(t *testing.T) {
+		input := base()
+		input.UpstreamModel = "gpt-5.6-sol" // 账号映射后的送上游模型
+		input.UpstreamResponseModel = "gpt-5.6-sol"
+		log := BuildUsageLog(input, nil, 1)
+		require.NotNil(t, log.UpstreamModelMismatch)
+		require.False(t, *log.UpstreamModelMismatch)
+
+		input.UpstreamResponseModel = "gpt-6-astra" // 与「送上游」不一致，而非与请求不一致
+		log = BuildUsageLog(input, nil, 1)
+		require.NotNil(t, log.UpstreamModelMismatch)
+		require.True(t, *log.UpstreamModelMismatch)
+	})
+
+	t.Run("no declaration stays tri-state nil", func(t *testing.T) {
+		log := BuildUsageLog(base(), nil, 1)
+		require.Nil(t, log.UpstreamResponseModel)
+		require.Nil(t, log.UpstreamModelMismatch)
+	})
+}

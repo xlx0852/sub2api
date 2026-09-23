@@ -279,6 +279,8 @@ type UsageLogSnapshot struct {
 	Model                 string             `json:"model"`
 	RequestedModel        string             `json:"requested_model,omitempty"`
 	UpstreamModel         *string            `json:"upstream_model,omitempty"`
+	UpstreamResponseModel *string            `json:"upstream_response_model,omitempty"`
+	UpstreamModelMismatch *bool              `json:"upstream_model_mismatch,omitempty"`
 	ChannelID             *int64             `json:"channel_id,omitempty"`
 	ModelMappingChain     *string            `json:"model_mapping_chain,omitempty"`
 	BillingTier           *string            `json:"billing_tier,omitempty"`
@@ -348,7 +350,9 @@ func NewUsageLogSnapshot(log *UsageLog) UsageLogSnapshot {
 	}
 	return UsageLogSnapshot{
 		UserID: log.UserID, APIKeyID: log.APIKeyID, AccountID: log.AccountID, RequestID: log.RequestID,
-		Model: log.Model, RequestedModel: log.RequestedModel, UpstreamModel: log.UpstreamModel, ChannelID: log.ChannelID,
+		Model: log.Model, RequestedModel: log.RequestedModel, UpstreamModel: log.UpstreamModel,
+		UpstreamResponseModel: log.UpstreamResponseModel, UpstreamModelMismatch: log.UpstreamModelMismatch,
+		ChannelID:         log.ChannelID,
 		ModelMappingChain: log.ModelMappingChain, BillingTier: log.BillingTier, BillingMode: log.BillingMode,
 		ServiceTier: log.ServiceTier, ReasoningEffort: log.ReasoningEffort, InboundEndpoint: log.InboundEndpoint,
 		UpstreamEndpoint: log.UpstreamEndpoint, GroupID: log.GroupID, SubscriptionID: log.SubscriptionID,
@@ -379,7 +383,9 @@ func (s UsageLogSnapshot) UsageLog() *UsageLog {
 	}
 	return &UsageLog{
 		UserID: s.UserID, APIKeyID: s.APIKeyID, AccountID: s.AccountID, RequestID: s.RequestID,
-		Model: s.Model, RequestedModel: s.RequestedModel, UpstreamModel: s.UpstreamModel, ChannelID: s.ChannelID,
+		Model: s.Model, RequestedModel: s.RequestedModel, UpstreamModel: s.UpstreamModel,
+		UpstreamResponseModel: s.UpstreamResponseModel, UpstreamModelMismatch: s.UpstreamModelMismatch,
+		ChannelID:       s.ChannelID,
 		PricingPolicyID: s.ChannelID, ModelMappingChain: s.ModelMappingChain, BillingTier: s.BillingTier,
 		BillingMode: s.BillingMode, ServiceTier: s.ServiceTier, ReasoningEffort: s.ReasoningEffort,
 		InboundEndpoint: s.InboundEndpoint, UpstreamEndpoint: s.UpstreamEndpoint, GroupID: s.GroupID,

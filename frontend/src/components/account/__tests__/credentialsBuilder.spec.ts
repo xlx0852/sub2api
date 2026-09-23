@@ -7,6 +7,7 @@ import {
   applyAnthropicExtra,
   applyCustomBaseURL,
   applyOpenAIPassthrough,
+  applyOpenAIExternalBridge,
   applyOpenAICompactMode,
   applyOpenAIWebSocketExtra,
   applyOpenAIEndpointCapabilities,
@@ -426,5 +427,28 @@ describe('validateHeaderOverrideRows session isolation headers', () => {
 
   it('rejects oversized names', () => {
     expect(validateHeaderOverrideRows([{ name: 'x'.repeat(201), value: 'v' }])).toBe('invalidName')
+  })
+})
+
+describe('applyOpenAIExternalBridge', () => {
+  it('enables the bridge flag and normalizes the kind', () => {
+    const extra: Record<string, unknown> = {}
+    applyOpenAIExternalBridge(extra, true, '  Devin ')
+    expect(extra.external_bridge).toBe(true)
+    expect(extra.external_bridge_kind).toBe('devin')
+  })
+
+  it('rejects empty kinds before mutating the existing extra', () => {
+    const extra: Record<string, unknown> = { external_bridge_kind: 'cursor' }
+    expect(() => applyOpenAIExternalBridge(extra, true, '   ')).toThrow('kind is required')
+    expect(extra).toEqual({ external_bridge_kind: 'cursor' })
+  })
+
+  it('clears both keys when disabled', () => {
+    const extra: Record<string, unknown> = { external_bridge: true, external_bridge_kind: 'devin', keep: 1 }
+    applyOpenAIExternalBridge(extra, false, 'devin')
+    expect(extra.external_bridge).toBeUndefined()
+    expect(extra.external_bridge_kind).toBeUndefined()
+    expect(extra.keep).toBe(1)
   })
 })

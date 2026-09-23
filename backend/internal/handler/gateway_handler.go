@@ -49,7 +49,6 @@ type GatewayHandler struct {
 	errorPassthroughService   *service.ErrorPassthroughService
 	contentModerationService  *service.ContentModerationService
 	concurrencyHelper         *ConcurrencyHelper
-	userMsgQueueHelper        *UserMsgQueueHelper
 	maxAccountSwitches        int
 	maxAccountSwitchesGemini  int
 	cfg                       *config.Config
@@ -68,7 +67,6 @@ func NewGatewayHandler(
 	usageRecordWorkerPool *service.UsageRecordWorkerPool,
 	errorPassthroughService *service.ErrorPassthroughService,
 	contentModerationService *service.ContentModerationService,
-	userMsgQueueService *service.UserMessageQueueService,
 	cfg *config.Config,
 	settingService *service.SettingService,
 ) *GatewayHandler {
@@ -85,12 +83,6 @@ func NewGatewayHandler(
 		}
 	}
 
-	// 初始化用户消息串行队列 helper
-	var umqHelper *UserMsgQueueHelper
-	if userMsgQueueService != nil && cfg != nil {
-		umqHelper = NewUserMsgQueueHelper(userMsgQueueService, SSEPingFormatClaude, pingInterval)
-	}
-
 	return &GatewayHandler{
 		gatewayService:            gatewayService,
 		accountSelector:           service.NewGatewayAccountSelector(gatewayService),
@@ -103,7 +95,6 @@ func NewGatewayHandler(
 		errorPassthroughService:   errorPassthroughService,
 		contentModerationService:  contentModerationService,
 		concurrencyHelper:         NewConcurrencyHelper(concurrencyService, SSEPingFormatClaude, pingInterval),
-		userMsgQueueHelper:        umqHelper,
 		maxAccountSwitches:        maxAccountSwitches,
 		maxAccountSwitchesGemini:  maxAccountSwitchesGemini,
 		cfg:                       cfg,
@@ -503,15 +494,6 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				return
 			}
 
-			// RPM 计数递增（Forward 成功后）
-			// 注意：TOCTOU 竞态是已知且可接受的设计权衡，与 WindowCost 一致的 soft-limit 模式。
-			// 在高并发下可能短暂超出 RPM 限制，但不会导致请求失败。
-			if account.IsAnthropicOAuthOrSetupToken() && account.GetBaseRPM() > 0 {
-				if err := h.gatewayService.IncrementAccountRPM(c.Request.Context(), account.ID); err != nil {
-					reqLog.Warn("gateway.rpm_increment_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-				}
-			}
-
 			// 捕获请求信息（用于异步记录，避免在 goroutine 中访问 gin.Context）
 			userAgent := c.GetHeader("User-Agent")
 			clientIP := ip.GetClientIP(c)
@@ -750,59 +732,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			// 账号槽位/等待计数需要在超时或断开时安全回收
 			accountReleaseFunc = wrapReleaseOnDone(c.Request.Context(), accountReleaseFunc)
 
-			// ===== 用户消息串行队列 START =====
-			var queueRelease func()
-			umqMode := h.getUserMsgQueueMode(account, attemptParsedReq)
-
-			switch umqMode {
-			case config.UMQModeSerialize:
-				// 串行模式：获取锁 + RPM 延迟 + 释放（当前行为不变）
-				baseRPM := account.GetBaseRPM()
-				release, qErr := h.userMsgQueueHelper.AcquireWithWait(
-					c, account.ID, baseRPM, reqStream, &streamStarted,
-					h.cfg.Gateway.UserMessageQueue.WaitTimeout(),
-					reqLog,
-				)
-				if qErr != nil {
-					// fail-open: 记录 warn，不阻止请求
-					reqLog.Warn("gateway.umq_acquire_failed",
-						zap.Int64("account_id", account.ID),
-						zap.Error(qErr),
-					)
-				} else {
-					queueRelease = release
-				}
-
-			case config.UMQModeThrottle:
-				// 软性限速：仅施加 RPM 自适应延迟，不阻塞并发
-				baseRPM := account.GetBaseRPM()
-				if tErr := h.userMsgQueueHelper.ThrottleWithPing(
-					c, account.ID, baseRPM, reqStream, &streamStarted,
-					h.cfg.Gateway.UserMessageQueue.WaitTimeout(),
-					reqLog,
-				); tErr != nil {
-					reqLog.Warn("gateway.umq_throttle_failed",
-						zap.Int64("account_id", account.ID),
-						zap.Error(tErr),
-					)
-				}
-
-			default:
-				if umqMode != "" {
-					reqLog.Warn("gateway.umq_unknown_mode",
-						zap.String("mode", umqMode),
-						zap.Int64("account_id", account.ID),
-					)
-				}
-			}
-
-			// 用 wrapReleaseOnDone 确保 context 取消时自动释放（仅 serialize 模式有 queueRelease）
-			queueRelease = wrapReleaseOnDone(c.Request.Context(), queueRelease)
 			// 注入回调到 ParsedRequest：使用外层 wrapper 以便提前清理 AfterFunc
 			attemptParsedReq.OnUpstreamAccepted = func() {
-				if queueRelease != nil {
-					queueRelease()
-				}
 				requestType := service.RequestTypeSync
 				if reqStream {
 					requestType = service.RequestTypeStream
@@ -875,10 +806,6 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				result, err = h.gatewayService.Forward(requestCtx, c, account, attemptParsedReq)
 			}
 
-			// 兜底释放串行锁（正常情况已通过回调提前释放）
-			if queueRelease != nil {
-				queueRelease()
-			}
 			// 清理回调引用，防止 failover 重试时旧回调被错误调用
 			attemptParsedReq.OnUpstreamAccepted = nil
 
@@ -986,15 +913,6 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				return
 			}
 			h.gatewayService.ReportGatewayAccountScheduleResult(account.ID, true, result.FirstTokenMs)
-
-			// RPM 计数递增（Forward 成功后）
-			// 注意：TOCTOU 竞态是已知且可接受的设计权衡，与 WindowCost 一致的 soft-limit 模式。
-			// 在高并发下可能短暂超出 RPM 限制，但不会导致请求失败。
-			if account.IsAnthropicOAuthOrSetupToken() && account.GetBaseRPM() > 0 {
-				if err := h.gatewayService.IncrementAccountRPM(c.Request.Context(), account.ID); err != nil {
-					reqLog.Warn("gateway.rpm_increment_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-				}
-			}
 
 			// 绑定粘性会话（成功转发后绑定/刷新）
 			// - 无现有绑定（首次请求）：创建绑定
@@ -2275,25 +2193,4 @@ func (h *GatewayHandler) maybeLogCompatibilityFallbackMetrics(reqLog *zap.Logger
 func (h *GatewayHandler) submitUsageRecordTask(parent context.Context, task service.UsageRecordTask) {
 	durable := h.gatewayService != nil && h.gatewayService.UsageSettlementEnabledFor(service.UsageSettlementGroupIDFromContext(parent))
 	submitUsageRecordTask(parent, task, durable, h.usageRecordWorkerPool, "handler.gateway.messages", "gateway")
-}
-
-// getUserMsgQueueMode 获取当前请求的 UMQ 模式
-// 返回 "serialize" | "throttle" | ""
-func (h *GatewayHandler) getUserMsgQueueMode(account *service.Account, parsed *service.ParsedRequest) string {
-	if h.userMsgQueueHelper == nil {
-		return ""
-	}
-	// 仅适用于 Anthropic OAuth/SetupToken 账号
-	if !account.IsAnthropicOAuthOrSetupToken() {
-		return ""
-	}
-	if !service.IsRealUserMessage(parsed) {
-		return ""
-	}
-	// 账号级模式优先，fallback 到全局配置
-	mode := account.GetUserMsgQueueMode()
-	if mode == "" {
-		mode = h.cfg.Gateway.UserMessageQueue.GetEffectiveMode()
-	}
-	return mode
 }

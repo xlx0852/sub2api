@@ -166,10 +166,6 @@ type GatewayConfig struct {
 	// ConcurrencySlotTTLMinutes: 并发槽位过期时间（分钟）
 	// 应大于最长 LLM 请求时间，防止请求完成前槽位过期
 	ConcurrencySlotTTLMinutes int `mapstructure:"concurrency_slot_ttl_minutes"`
-	// SessionIdleTimeoutMinutes: 会话空闲超时时间（分钟），默认 5 分钟
-	// 用于 Anthropic OAuth/SetupToken 账号的会话数量限制功能
-	// 空闲超过此时间的会话将被自动释放
-	SessionIdleTimeoutMinutes int `mapstructure:"session_idle_timeout_minutes"`
 
 	// StreamDataIntervalTimeout: 流数据间隔超时（秒），0表示禁用
 	StreamDataIntervalTimeout int `mapstructure:"stream_data_interval_timeout"`
@@ -222,10 +218,6 @@ type GatewayConfig struct {
 	UserGroupRateCacheTTLSeconds int `mapstructure:"user_group_rate_cache_ttl_seconds"`
 	// ModelsListCacheTTLSeconds: /v1/models 模型列表短缓存 TTL（秒）
 	ModelsListCacheTTLSeconds int `mapstructure:"models_list_cache_ttl_seconds"`
-
-	// UserMessageQueue: 用户消息串行队列配置
-	// 对 role:"user" 的真实用户消息实施账号级串行化 + RPM 自适应延迟
-	UserMessageQueue UserMessageQueueConfig `mapstructure:"user_message_queue"`
 }
 
 type GrokSameAccountRetryConfig struct {
@@ -249,48 +241,6 @@ type GatewayOpenAIHTTP2Config struct {
 	FallbackWindowSeconds int `mapstructure:"fallback_window_seconds"`
 	// FallbackTTLSeconds: 触发后回退 HTTP/1.1 的持续时间（秒）
 	FallbackTTLSeconds int `mapstructure:"fallback_ttl_seconds"`
-}
-
-// UserMessageQueueConfig 用户消息串行队列配置
-// 用于 Anthropic OAuth/SetupToken 账号的用户消息串行化发送
-type UserMessageQueueConfig struct {
-	// Mode: 模式选择
-	// "serialize" = 账号级串行锁 + RPM 自适应延迟
-	// "throttle" = 仅 RPM 自适应前置延迟，不阻塞并发
-	// "" = 禁用（默认）
-	Mode string `mapstructure:"mode"`
-	// Enabled: 已废弃，仅向后兼容（等同于 mode: "serialize"）
-	Enabled bool `mapstructure:"enabled"`
-	// LockTTLMs: 串行锁 TTL（毫秒），应大于最长请求时间
-	LockTTLMs int `mapstructure:"lock_ttl_ms"`
-	// WaitTimeoutMs: 等待获取锁的超时时间（毫秒）
-	WaitTimeoutMs int `mapstructure:"wait_timeout_ms"`
-	// MinDelayMs: RPM 自适应延迟下限（毫秒）
-	MinDelayMs int `mapstructure:"min_delay_ms"`
-	// MaxDelayMs: RPM 自适应延迟上限（毫秒）
-	MaxDelayMs int `mapstructure:"max_delay_ms"`
-	// CleanupIntervalSeconds: 孤儿锁清理间隔（秒），0 表示禁用
-	CleanupIntervalSeconds int `mapstructure:"cleanup_interval_seconds"`
-}
-
-// WaitTimeout 返回等待超时的 time.Duration
-func (c *UserMessageQueueConfig) WaitTimeout() time.Duration {
-	if c.WaitTimeoutMs <= 0 {
-		return 30 * time.Second
-	}
-	return time.Duration(c.WaitTimeoutMs) * time.Millisecond
-}
-
-// GetEffectiveMode 返回生效的模式
-// 注意：Mode 字段已在 load() 中做过白名单校验和规范化，此处无需重复验证
-func (c *UserMessageQueueConfig) GetEffectiveMode() string {
-	if c.Mode == UMQModeSerialize || c.Mode == UMQModeThrottle {
-		return c.Mode
-	}
-	if c.Enabled {
-		return UMQModeSerialize // 向后兼容
-	}
-	return ""
 }
 
 // DefaultOpenAIWSClientFirstMessageTimeoutSeconds preserves the legacy ingress deadline.

@@ -76,38 +76,12 @@ func (p gatewayQuotaPolicy) Allows(_ context.Context, account *Account, _ schedu
 	return p.service != nil && account != nil && p.service.accountPassesQuota(account)
 }
 
-type gatewayWindowCostPolicy struct {
-	service *GatewayService
-}
-
-func (p gatewayWindowCostPolicy) Name() string {
-	return "window_cost"
-}
-
-func (p gatewayWindowCostPolicy) Allows(ctx context.Context, account *Account, req scheduling.Request) bool {
-	return p.service != nil && account != nil && p.service.accountPassesWindowCost(ctx, account, req.Sticky)
-}
-
-type gatewayRPMPolicy struct {
-	service *GatewayService
-}
-
-func (p gatewayRPMPolicy) Name() string {
-	return "rpm"
-}
-
-func (p gatewayRPMPolicy) Allows(ctx context.Context, account *Account, req scheduling.Request) bool {
-	return p.service != nil && account != nil && p.service.accountPassesRPM(ctx, account, req.Sticky)
-}
-
 func (s *GatewayService) gatewayLimitDecision(ctx context.Context, account *Account, sticky bool) scheduling.PolicyDecision {
 	return scheduling.EvaluateCandidate(
 		ctx,
 		account,
 		scheduling.Request{Sticky: sticky},
 		gatewayQuotaPolicy{service: s},
-		gatewayWindowCostPolicy{service: s},
-		gatewayRPMPolicy{service: s},
 	)
 }
 
@@ -132,8 +106,6 @@ func (s *GatewayService) gatewayCandidatePoliciesFor(options gatewayCandidatePol
 		gatewayUpstreamChannelPolicy{service: s, enabled: options.checkUpstreamChannel},
 		scheduling.SchedulableForModelPolicy,
 		gatewayQuotaPolicy{service: s},
-		gatewayWindowCostPolicy{service: s},
-		gatewayRPMPolicy{service: s},
 	)
 }
 

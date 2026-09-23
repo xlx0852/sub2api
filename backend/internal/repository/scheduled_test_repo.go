@@ -143,6 +143,11 @@ func (r *scheduledTestResultRepository) Create(ctx context.Context, result *doma
 		RETURNING id, plan_id, status, response_text, error_message, latency_ms, started_at, finished_at, created_at
 	`, result.PlanID, result.Status, result.ResponseText, result.ErrorMessage, result.LatencyMs, result.StartedAt, result.FinishedAt)
 
+	return scanScheduledTestResult(row)
+}
+
+// scanScheduledTestResult reads one diagnostics result row.
+func scanScheduledTestResult(row scannable) (*domain.ScheduledTestResult, error) {
 	out := &domain.ScheduledTestResult{}
 	if err := row.Scan(
 		&out.ID, &out.PlanID, &out.Status, &out.ResponseText, &out.ErrorMessage,
@@ -168,14 +173,11 @@ func (r *scheduledTestResultRepository) ListByPlanID(ctx context.Context, planID
 
 	var results []*domain.ScheduledTestResult
 	for rows.Next() {
-		r := &domain.ScheduledTestResult{}
-		if err := rows.Scan(
-			&r.ID, &r.PlanID, &r.Status, &r.ResponseText, &r.ErrorMessage,
-			&r.LatencyMs, &r.StartedAt, &r.FinishedAt, &r.CreatedAt,
-		); err != nil {
+		result, err := scanScheduledTestResult(rows)
+		if err != nil {
 			return nil, err
 		}
-		results = append(results, r)
+		results = append(results, result)
 	}
 	return results, rows.Err()
 }

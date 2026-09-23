@@ -1051,6 +1051,13 @@ pricing:
 # First-party Model Catalog (Optional)
 # 第一方模型目录（可选）
 # =============================================================================
+# 诊断推理题（账号测试/定时诊断发送的题目）的判定键。
+# 默认 29 = 题面严格推导解（28 个糖果可避开要求，故最少 29）。
+# 如需按自有题库口径判定，可覆盖此值；注意覆盖后判定会随该键改变，报告里会同时标注严格解。
+# 环境变量等价写法：DIAGNOSTICS_REASONING_PROBE_EXPECTED_ANSWER
+diagnostics:
+  reasoning_probe_expected_answer: 29
+
 model_catalog:
   # Remote refresh never blocks startup; disable to use local/embedded catalog only.
   # 远端刷新不会阻塞启动；关闭后仅使用本地/内嵌目录。
@@ -1063,6 +1070,7 @@ model_catalog:
   hash_check_interval_minutes: 10
   request_timeout_seconds: 30
   max_body_bytes: 8388608
+
 
 # =============================================================================
 # Billing Configuration

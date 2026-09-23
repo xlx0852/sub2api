@@ -32,6 +32,8 @@ type openaiStreamingResult struct {
 	responseModel    string
 	imageCount       int
 	imageOutputSizes []string
+	// serviceTier 是上游在终止事件里报告的实际档位，用于覆盖请求体声明的档位。
+	serviceTier *string
 }
 
 type openaiNonStreamingResult struct {
@@ -41,6 +43,8 @@ type openaiNonStreamingResult struct {
 	responseModel    string
 	imageCount       int
 	imageOutputSizes []string
+	// serviceTier 是上游响应体报告的实际档位，用于覆盖请求体声明的档位。
+	serviceTier *string
 }
 
 func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel string) (*openaiStreamingResult, error) {
@@ -76,6 +80,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 	usage := &OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
 	var firstTokenMs *int
+	var upstreamServiceTier *string
 	responseID := ""
 	responseModel := ""
 	scanner := bufio.NewScanner(resp.Body)
@@ -170,6 +175,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			responseModel:    responseModel,
 			imageCount:       imageCounter.Count(),
 			imageOutputSizes: imageCounter.Sizes(),
+			serviceTier:      upstreamServiceTier,
 		}
 	}
 	finalizeStream := func() (*openaiStreamingResult, error) {
@@ -401,6 +407,9 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 		if eventType == "response.failed" || eventType == "error" {
 			failedMessage = extractOpenAISSEErrorMessage(dataBytes)
 			s.parseSSEUsageBytes(dataBytes, usage)
+			if tier := captureOpenAIUpstreamServiceTier(dataBytes); tier != nil {
+				upstreamServiceTier = tier
+			}
 			if hit, code, msg := detectOpenAICyberPolicy(dataBytes); hit {
 				MarkOpsCyberPolicy(c, CyberPolicyMark{
 					Code:           code,
@@ -521,6 +530,9 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			writeLines(outputLines, queueDrained, startsClientOutput)
 		}
 		s.parseSSEUsageBytes(dataBytes, usage)
+		if tier := captureOpenAIUpstreamServiceTier(dataBytes); tier != nil {
+			upstreamServiceTier = tier
+		}
 	}
 
 	var frameParser openAICompatSSEFrameParser
@@ -1067,6 +1079,37 @@ func extractOpenAIResponseModelFromJSONBytes(body []byte) string {
 	return strings.TrimSpace(gjson.GetBytes(body, "model").String())
 }
 
+// extractOpenAIUpstreamResponseModel 读取上游响应声明的模型，兼容 JSON body 与 SSE 帧体。
+//
+// SSE 形态取最后一个声明（终止帧在最后，且只有它反映本次实际服务的模型），与 service tier 的
+// 抽取语义保持一致；非 SSE body 直接按 JSON 解析。
+func extractOpenAIUpstreamResponseModel(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	if !bytes.Contains(body, []byte("data:")) {
+		return extractOpenAIResponseModelFromJSONBytes(body)
+	}
+	model := ""
+	for _, line := range bytes.Split(body, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, []byte("data:")) {
+			continue
+		}
+		payload := bytes.TrimSpace(line[len("data:"):])
+		if len(payload) == 0 || bytes.Equal(payload, []byte("[DONE]")) {
+			continue
+		}
+		if candidate := extractOpenAIResponseModelFromJSONBytes(payload); candidate != "" {
+			model = candidate
+		}
+	}
+	if model != "" {
+		return model
+	}
+	return extractOpenAIResponseModelFromJSONBytes(body)
+}
+
 func (s *OpenAIGatewayService) bindHTTPResponseAccount(ctx context.Context, c *gin.Context, account *Account, responseID string) {
 	if s == nil || account == nil || account.ID <= 0 {
 		return
@@ -1228,6 +1271,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 		responseModel:    responseModel,
 		imageCount:       countOpenAIResponseImageOutputsFromJSONBytes(body),
 		imageOutputSizes: collectOpenAIResponseImageOutputSizesFromJSONBytes(body),
+		serviceTier:      extractOpenAIUpstreamServiceTier(body),
 	}, nil
 }
 
@@ -1318,6 +1362,9 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		responseID:       extractOpenAIResponseIDFromJSONBytes(body),
 		imageCount:       countOpenAIImageOutputsFromSSEBody(bodyText),
 		imageOutputSizes: collectOpenAIImageOutputSizesFromSSEBody(bodyText),
+		serviceTier:      extractOpenAIUpstreamServiceTier(body),
+		// 上游以 SSE 回落时同样要记录响应声明的模型（终止帧优先）。
+		responseModel: extractOpenAIUpstreamResponseModel(body),
 	}, nil
 }
 

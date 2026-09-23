@@ -605,7 +605,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 						CacheReadInputTokens:     turn.Usage.CacheReadInputTokens,
 						ImageOutputTokens:        turn.Usage.ImageOutputTokens,
 					},
-					Model:           turn.RequestModel,
+					Model: turn.RequestModel,
+					// 上游响应声明的模型（终止帧优先），写入用量记录用于路由审计。
+					ResponseModel:   turn.ResponseModel,
 					ServiceTier:     usageMeta.serviceTier.Load(),
 					ReasoningEffort: usageMeta.reasoningEffort.Load(),
 					Stream:          true,

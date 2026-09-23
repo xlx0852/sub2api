@@ -30,14 +30,6 @@ const (
 // __CSP_NONCE__ will be replaced with actual nonce at request time by the SecurityHeaders middleware
 const DefaultCSPPolicy = "default-src 'self'; script-src 'self' __CSP_NONCE__ https://challenges.cloudflare.com https://static.cloudflareinsights.com https://*.stripe.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://static.airwallex.com https://checkout.airwallex.com https://static-demo.airwallex.com https://checkout-demo.airwallex.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https:; frame-src https://challenges.cloudflare.com https://*.stripe.com https://checkout.airwallex.com https://checkout-demo.airwallex.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 
-// UMQ（用户消息队列）模式常量
-const (
-	// UMQModeSerialize: 账号级串行锁 + RPM 自适应延迟
-	UMQModeSerialize = "serialize"
-	// UMQModeThrottle: 仅 RPM 自适应前置延迟，不阻塞并发
-	UMQModeThrottle = "throttle"
-)
-
 // 连接池隔离策略常量
 // 用于控制上游 HTTP 连接池的隔离粒度，影响连接复用和资源消耗
 const (
@@ -79,6 +71,7 @@ type Config struct {
 	RateLimit               RateLimitConfig               `mapstructure:"rate_limit"`
 	Pricing                 PricingConfig                 `mapstructure:"pricing"`
 	ModelCatalog            ModelCatalogConfig            `mapstructure:"model_catalog"`
+	Diagnostics             DiagnosticsConfig             `mapstructure:"diagnostics"`
 	Gateway                 GatewayConfig                 `mapstructure:"gateway"`
 	APIKeyAuth              APIKeyAuthCacheConfig         `mapstructure:"api_key_auth_cache"`
 	SubscriptionCache       SubscriptionCacheConfig       `mapstructure:"subscription_cache"`
@@ -246,14 +239,6 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	// 新键未配置（<=0）时回退旧键；新键优先。
 	if cfg.Gateway.OpenAIWS.StickyResponseIDTTLSeconds <= 0 && cfg.Gateway.OpenAIWS.StickyPreviousResponseTTLSeconds > 0 {
 		cfg.Gateway.OpenAIWS.StickyResponseIDTTLSeconds = cfg.Gateway.OpenAIWS.StickyPreviousResponseTTLSeconds
-	}
-
-	// Normalize UMQ mode: 白名单校验，非法值在加载时一次性 warn 并清空
-	if m := cfg.Gateway.UserMessageQueue.Mode; m != "" && m != UMQModeSerialize && m != UMQModeThrottle {
-		slog.Warn("invalid user_message_queue mode, disabling",
-			"mode", m,
-			"valid_modes", []string{UMQModeSerialize, UMQModeThrottle})
-		cfg.Gateway.UserMessageQueue.Mode = ""
 	}
 
 	// Auto-generate TOTP encryption key if not set (32 bytes = 64 hex chars for AES-256)
@@ -590,6 +575,9 @@ func setDefaults() {
 	viper.SetDefault("model_catalog.hash_check_interval_minutes", 10)
 	viper.SetDefault("model_catalog.request_timeout_seconds", 30)
 	viper.SetDefault("model_catalog.max_body_bytes", int64(8<<20))
+
+	// Diagnostics reasoning probe: the answer key lives here (env: DIAGNOSTICS_REASONING_PROBE_EXPECTED_ANSWER).
+	viper.SetDefault("diagnostics.reasoning_probe_expected_answer", 29)
 
 	// Timezone (default to Asia/Shanghai for Chinese users)
 	viper.SetDefault("timezone", "Asia/Shanghai")

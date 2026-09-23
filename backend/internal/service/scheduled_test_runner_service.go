@@ -19,8 +19,10 @@ const (
 	scheduledTestDefaultBatchSize    = 20
 	scheduledTestDefaultBatchTimeout = 4 * time.Minute
 	scheduledTestDefaultClaimLease   = 12 * time.Minute
-	scheduledTestDefaultPlanTimeout  = 90 * time.Second
-	scheduledTestTickDelay           = 5 * time.Second
+	// Raised from 90s: the reasoning probe needs time to answer, and 2 x 120s still fits the
+	// 4-minute batch budget that acts as the outer limit.
+	scheduledTestDefaultPlanTimeout = 120 * time.Second
+	scheduledTestTickDelay          = 5 * time.Second
 	// Keep demotion shorter than the 5-minute probe cadence can recover from.
 	scheduledDiagnosticsDemoteDuration = 12 * time.Minute
 	// 配额墙/余额墙类错误（grok spending-limit、kimi 周限、apikey 余额不足等）

@@ -162,3 +162,13 @@ type ModelCatalogConfig struct {
 	RequestTimeoutSeconds    int    `mapstructure:"request_timeout_seconds"`
 	MaxBodyBytes             int64  `mapstructure:"max_body_bytes"`
 }
+
+// DiagnosticsConfig controls the reasoning probe used by account tests and diagnostics.
+type DiagnosticsConfig struct {
+	// ReasoningProbeExpectedAnswer is the answer the probe's arithmetic problem must produce.
+	// Default 29 (verified: 28 sweets can avoid the required pairing, so 29 is the minimum).
+	// It is kept in configuration rather than only in code so an operator can set their own
+	// answer key without a rebuild — but note that a wrong key inverts the degradation signal,
+	// so change it only if your source for the problem disagrees, and re-run the probe tests.
+	ReasoningProbeExpectedAnswer int `mapstructure:"reasoning_probe_expected_answer"`
+}

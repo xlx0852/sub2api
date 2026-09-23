@@ -307,6 +307,9 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 	requestID := resp.Header.Get("x-request-id")
 	writeStreamHeaders := s.newStreamHeaderWriter(c, resp.Header)
 	scanner := s.newUpstreamSSEScanner(resp.Body)
+	// reportedTier 记录上游 chunk 里报告的实际档位；OpenAI 在 Fast mode 被 ramp rate
+	// 降级时会回 service_tier=default 并按标准价计费，计费需跟随它。
+	var reportedTier *string
 
 	var usage OpenAIUsage
 	var firstTokenMs *int
@@ -357,6 +360,12 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 				usageOnlyChunk := isOpenAIChatUsageOnlyStreamChunk(payload)
 				if u := extractCCStreamUsage(payload); u != nil {
 					usage = *u
+				}
+				// CC 每个 chunk 都可能带 service_tier；先用子串过滤再走 gjson 路径查找。
+				if strings.Contains(payload, "service_tier") {
+					if tier := openAIServiceTierFromPayload([]byte(payload)); tier != nil {
+						reportedTier = tier
+					}
 				}
 				if firstTokenMs == nil && !usageOnlyChunk {
 					elapsed := int(time.Since(startTime).Milliseconds())
@@ -424,7 +433,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 		BillingModel:    billingModel,
 		UpstreamModel:   upstreamModel,
 		ReasoningEffort: reasoningEffort,
-		ServiceTier:     serviceTier,
+		ServiceTier:     billedServiceTier(serviceTier, reportedTier),
 		Stream:          true,
 		Duration:        time.Since(startTime),
 		FirstTokenMs:    firstTokenMs,
@@ -492,6 +501,8 @@ func (s *OpenAIGatewayService) bufferRawChatCompletions(
 	if parsedUsage, ok := extractOpenAIUsageFromJSONBytes(respBody); ok {
 		usage = parsedUsage
 	}
+	// 上游报告的实际档位优先（Fast mode 降级时回 service_tier=default）。
+	reportedTier := extractOpenAIUpstreamServiceTier(respBody)
 
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
@@ -511,7 +522,7 @@ func (s *OpenAIGatewayService) bufferRawChatCompletions(
 		BillingModel:    billingModel,
 		UpstreamModel:   upstreamModel,
 		ReasoningEffort: reasoningEffort,
-		ServiceTier:     serviceTier,
+		ServiceTier:     billedServiceTier(serviceTier, reportedTier),
 		Stream:          false,
 		Duration:        time.Since(startTime),
 	}, nil

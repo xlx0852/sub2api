@@ -105,6 +105,8 @@ WORKDIR /app
 
 # Copy binary from builder
 COPY --from=backend-builder /app/sub2api /app/sub2api
+# Runtime pricing/catalog resources must travel with every backend image.
+COPY --from=backend-builder /app/backend/resources /app/resources
 
 # Create data directory
 RUN mkdir -p /app/data && chown -R sub2api:sub2api /app

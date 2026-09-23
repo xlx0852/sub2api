@@ -99,6 +99,14 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		}
 	}
 
+	if account != nil && account.IsExternalBridge() {
+		downgradedBody, downgradeErr := downgradeExternalBridgeResponsesTools(c, body, account.ExternalBridgeKind() == "devin")
+		if downgradeErr != nil {
+			return nil, fmt.Errorf("downgrade external bridge responses tools: %w", downgradeErr)
+		}
+		body = downgradedBody
+	}
+
 	if account != nil && account.Type == AccountTypeOAuth {
 		if rejectReason := detectOpenAIPassthroughInstructionsRejectReason(reqModel, body); rejectReason != "" {
 			rejectMsg := "OpenAI codex passthrough requires a non-empty instructions field"
@@ -300,6 +308,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 
 	var usage *OpenAIUsage
 	var firstTokenMs *int
+	var upstreamServiceTier *string
 	responseID := ""
 	imageCount := 0
 	var imageOutputSizes []string
@@ -313,6 +322,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		responseID = strings.TrimSpace(result.responseID)
 		imageCount = result.imageCount
 		imageOutputSizes = result.imageOutputSizes
+		upstreamServiceTier = result.serviceTier
 	} else {
 		result, err := s.handleNonStreamingResponsePassthrough(ctx, resp, c, account, reqModel, upstreamPassthroughModel)
 		if err != nil {
@@ -322,6 +332,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		responseID = strings.TrimSpace(result.responseID)
 		imageCount = result.imageCount
 		imageOutputSizes = result.imageOutputSizes
+		upstreamServiceTier = result.serviceTier
 	}
 	s.bindHTTPResponseAccount(ctx, c, account, responseID)
 
@@ -344,7 +355,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		Model:           originalReqModel,
 		BillingModel:    billingModel,
 		UpstreamModel:   upstreamPassthroughModel,
-		ServiceTier:     serviceTier,
+		ServiceTier:     billedServiceTier(serviceTier, upstreamServiceTier),
 		ReasoningEffort: reasoningEffort,
 		Stream:          reqStream,
 		OpenAIWSMode:    false,
@@ -813,6 +824,8 @@ type openaiStreamingResultPassthrough struct {
 	responseID       string
 	imageCount       int
 	imageOutputSizes []string
+	// serviceTier 是上游在终止事件里报告的实际档位（Fast mode 降级时为 default）。
+	serviceTier *string
 }
 
 type openaiNonStreamingResultPassthrough struct {
@@ -821,6 +834,8 @@ type openaiNonStreamingResultPassthrough struct {
 	responseID       string
 	imageCount       int
 	imageOutputSizes []string
+	// serviceTier 是上游响应体报告的实际档位（Fast mode 降级时为 default）。
+	serviceTier *string
 }
 
 func openAIStreamClientOutputStarted(c *gin.Context, localStarted bool) bool {
@@ -1194,6 +1209,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	usage := &OpenAIUsage{}
 	imageCounter := newOpenAIImageOutputCounter()
 	var firstTokenMs *int
+	var upstreamServiceTier *string
 	responseID := ""
 	clientDisconnected := false
 	sawDone := false
@@ -1234,6 +1250,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			responseID:       responseID,
 			imageCount:       imageCounter.Count(),
 			imageOutputSizes: imageCounter.Sizes(),
+			serviceTier:      upstreamServiceTier,
 		}
 	}
 
@@ -1350,6 +1367,9 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			// response.failed 可能自带上游已消耗的 usage（input token 通常已扣）；必须先解析
 			// 再打 cyber 标记，否则 mark 记到的是解析前的 0，导致流式 cyber 按 0 token 计费。
 			s.parseSSEUsageBytes(dataBytes, usage)
+			if tier := captureOpenAIUpstreamServiceTier(dataBytes); tier != nil {
+				upstreamServiceTier = tier
+			}
 			if hit, code, msg := detectOpenAICyberPolicy(dataBytes); hit {
 				MarkOpsCyberPolicy(c, CyberPolicyMark{
 					Code:           code,
@@ -1421,6 +1441,9 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			firstTokenMs = &ms
 		}
 		s.parseSSEUsageBytes(dataBytes, usage)
+		if tier := captureOpenAIUpstreamServiceTier(dataBytes); tier != nil {
+			upstreamServiceTier = tier
+		}
 		if dataChanged {
 			outputLines = replaceFrameDataLines(rawLines, string(dataBytes))
 		}
@@ -1597,6 +1620,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 		responseID:       extractOpenAIResponseIDFromJSONBytes(body),
 		imageCount:       countOpenAIResponseImageOutputsFromJSONBytes(body),
 		imageOutputSizes: collectOpenAIResponseImageOutputSizesFromJSONBytes(body),
+		serviceTier:      extractOpenAIUpstreamServiceTier(body),
 	}, nil
 }
 
@@ -1669,6 +1693,7 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		responseID:       extractOpenAIResponseIDFromJSONBytes(body),
 		imageCount:       countOpenAIImageOutputsFromSSEBody(bodyText),
 		imageOutputSizes: collectOpenAIImageOutputSizesFromSSEBody(bodyText),
+		serviceTier:      extractOpenAIUpstreamServiceTier(body),
 	}, nil
 }
 

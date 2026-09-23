@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -95,4 +96,78 @@ func TestValidateUsageSettlementPayloadJSONRejectsPromptResponseAndCredentials(t
 		})
 	}
 	require.NoError(t, ValidateUsageSettlementPayloadJSON([]byte(`{"usage_log":{"input_tokens":10,"output_tokens":2,"user_agent":"codex/test"}}`)))
+}
+
+// 结算 payload 快照是唯一真正落库 usage_logs 的路径：UsageLogSnapshot 少一个
+// 字段，该字段就会被静默丢弃（历史上 upstream_response_model 就踩过这个坑）。
+// 这个守卫用反射填充所有字段做往返，确保快照与实体保持同步。
+func TestUsageLogSnapshotRoundTripKeepsEveryField(t *testing.T) {
+	source := UsageLog{}
+	fillUsageLogForSnapshotTest(reflect.ValueOf(&source).Elem())
+
+	roundTripped := NewUsageLogSnapshot(&source).UsageLog()
+
+	// 有意不参与快照往返的字段：
+	//   ID              —— 由数据库生成
+	//   PricingPolicyID —— ChannelID 的历史别名，UsageLog() 用 ChannelID 回填
+	//   AccountStatsCost—— legacy overlay，新写入恒为 nil
+	//   其余关联实体（User/APIKey/Account/Group/Subscription）不是 usage_logs 列，
+	//   只用于计费事务内的副作用，快照按设计不承载它们。
+	omitted := map[string]bool{
+		"ID": true, "PricingPolicyID": true, "AccountStatsCost": true,
+		"User": true, "APIKey": true, "Account": true, "Group": true, "Subscription": true,
+	}
+
+	sourceValue := reflect.ValueOf(source)
+	roundTrippedValue := reflect.ValueOf(*roundTripped)
+	sourceType := sourceValue.Type()
+	for i := 0; i < sourceType.NumField(); i++ {
+		name := sourceType.Field(i).Name
+		if omitted[name] {
+			continue
+		}
+		if !reflect.DeepEqual(sourceValue.Field(i).Interface(), roundTrippedValue.Field(i).Interface()) {
+			t.Errorf("UsageLogSnapshot 往返丢失字段 %s: %#v -> %#v",
+				name, sourceValue.Field(i).Interface(), roundTrippedValue.Field(i).Interface())
+		}
+	}
+}
+
+func fillUsageLogForSnapshotTest(value reflect.Value) {
+	valueType := value.Type()
+	for i := 0; i < valueType.NumField(); i++ {
+		field := value.Field(i)
+		if !field.CanSet() {
+			continue
+		}
+		switch field.Kind() {
+		case reflect.String:
+			field.SetString("field-" + valueType.Field(i).Name)
+		case reflect.Bool:
+			field.SetBool(true)
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			field.SetInt(7)
+		case reflect.Float32, reflect.Float64:
+			field.SetFloat(1.5)
+		case reflect.Map:
+			populated := reflect.MakeMap(field.Type())
+			if field.Type().Key().Kind() == reflect.String && field.Type().Elem().Kind() == reflect.Int {
+				populated.SetMapIndex(reflect.ValueOf("size").Convert(field.Type().Key()), reflect.ValueOf(2).Convert(field.Type().Elem()))
+			}
+			field.Set(populated)
+		case reflect.Struct:
+			if field.Type() == reflect.TypeOf(time.Time{}) {
+				field.Set(reflect.ValueOf(time.Unix(1700000000, 0).UTC()))
+				continue
+			}
+			if field.CanAddr() {
+				fillUsageLogForSnapshotTest(field)
+			}
+		case reflect.Ptr:
+			field.Set(reflect.New(field.Type().Elem()))
+			if field.Type().Elem().Kind() == reflect.Struct {
+				fillUsageLogForSnapshotTest(field.Elem())
+			}
+		}
+	}
 }

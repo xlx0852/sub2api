@@ -23,7 +23,7 @@ func TestGatewayCandidateSnapshotsKeepMissingSignalsUnavailable(t *testing.T) {
 	require.False(t, snapshot.WindowHeadroom.Available)
 }
 
-func TestGatewayCandidateSnapshotsCaptureLoadWaitQuotaAndWindow(t *testing.T) {
+func TestGatewayCandidateSnapshotsCaptureLoadWaitAndQuota(t *testing.T) {
 	now := time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC)
 	service := &GatewayService{gatewayRuntimeStats: scheduling.NewRuntimeStatsStore(time.Hour, 10, 1, func() time.Time { return now })}
 	quotaAccount := &Account{
@@ -37,30 +37,16 @@ func TestGatewayCandidateSnapshotsCaptureLoadWaitQuotaAndWindow(t *testing.T) {
 			"quota_used":  25.0,
 		},
 	}
-	windowAccount := &Account{
-		ID:          3,
-		Platform:    PlatformAnthropic,
-		Type:        AccountTypeOAuth,
-		Status:      StatusActive,
-		Schedulable: true,
-		Extra: map[string]any{
-			"window_cost_limit": 20.0,
-		},
-	}
-	ctx := context.WithValue(context.Background(), windowCostPrefetchContextKey, map[int64]float64{3: 5})
-	service.reportGatewayCandidateSnapshots(ctx, []*Account{quotaAccount, windowAccount}, map[int64]*AccountLoadInfo{
+
+	service.reportGatewayCandidateSnapshots(context.Background(), []*Account{quotaAccount}, map[int64]*AccountLoadInfo{
 		2: {AccountID: 2, LoadRate: 40, WaitingCount: 3},
-		3: {AccountID: 3, LoadRate: 20, WaitingCount: 1},
 	})
 	quotaSnapshot := service.gatewayRuntimeStatsSnapshot(quotaAccount.ID, now)
-	windowSnapshot := service.gatewayRuntimeStatsSnapshot(windowAccount.ID, now)
 
 	require.Equal(t, 40.0, quotaSnapshot.LoadRate.Value)
 	require.Equal(t, 3.0, quotaSnapshot.QueueDepth.Value)
 	require.Equal(t, 0.75, quotaSnapshot.QuotaHeadroom.Value)
 	require.False(t, quotaSnapshot.WindowHeadroom.Available)
-	require.Equal(t, 0.75, windowSnapshot.WindowHeadroom.Value)
-	require.False(t, windowSnapshot.QuotaHeadroom.Available)
 }
 
 func TestReportGatewayAccountScheduleResultCapturesErrorAndTTFT(t *testing.T) {

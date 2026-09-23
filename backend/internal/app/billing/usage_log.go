@@ -24,6 +24,8 @@ func BuildUsageLog(input RecordInput, cost *CostBreakdown, effectiveRateMultipli
 		Model:                 input.Model,
 		RequestedModel:        input.RequestedModel,
 		UpstreamModel:         optionalNonEqualString(input.UpstreamModel, input.Model),
+		UpstreamResponseModel: optionalString(input.UpstreamResponseModel),
+		UpstreamModelMismatch: upstreamModelMismatch(input.UpstreamModel, input.Model, input.UpstreamResponseModel),
 		ServiceTier:           input.ServiceTier,
 		ReasoningEffort:       input.ReasoningEffort,
 		InboundEndpoint:       optionalString(input.InboundEndpoint),
@@ -118,6 +120,24 @@ func optionalNonEqualString(value, compare string) *string {
 		return nil
 	}
 	return &value
+}
+
+// upstreamModelMismatch reports whether the model the upstream response declared differs from the
+// model actually sent upstream (the mapped model, falling back to the requested one).
+//
+// Tri-state on purpose: nil means the response declared no model, so no claim is made. The
+// comparison is case-insensitive because providers echo model IDs with their own casing.
+func upstreamModelMismatch(upstreamModel, model, upstreamResponseModel string) *bool {
+	responseModel := strings.TrimSpace(upstreamResponseModel)
+	if responseModel == "" {
+		return nil
+	}
+	sentModel := strings.TrimSpace(upstreamModel)
+	if sentModel == "" {
+		sentModel = strings.TrimSpace(model)
+	}
+	mismatch := sentModel == "" || !strings.EqualFold(sentModel, responseModel)
+	return &mismatch
 }
 
 func optionalInt64(value int64) *int64 {

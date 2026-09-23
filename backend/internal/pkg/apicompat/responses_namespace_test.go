@@ -141,7 +141,7 @@ func TestRestoreResponsesNamespaceCalls_RewritesOnlyFunctionCalls(t *testing.T) 
 		"collaboration__spawn_agent": {Namespace: "collaboration", Name: "spawn_agent"},
 	}
 
-	got, changed, err := RestoreResponsesNamespaceCalls(payload, names)
+	got, changed, err := RestoreResponsesNamespaceCalls(payload, names, nil)
 	require.NoError(t, err)
 	require.True(t, changed)
 	require.JSONEq(t, `{"type":"response.completed","response":{"output":[{"type":"function_call","name":"spawn_agent","namespace":"collaboration","call_id":"call_1","arguments":"{}","extra":"keep"},{"type":"function_call","name":"plain","arguments":"{}"},{"type":"message","name":"collaboration__spawn_agent","content":"<tag>&value</tag>"}]}}`, string(got))
@@ -155,7 +155,7 @@ func TestRestoreResponsesNamespaceCalls_RewritesLifecycleItems(t *testing.T) {
 			payload := []byte(`{"type":"` + eventType + `","item":{"type":"function_call","name":"collaboration__spawn_agent","arguments":"{}"}}`)
 			got, changed, err := RestoreResponsesNamespaceCalls(payload, map[string]ResponsesNamespaceName{
 				"collaboration__spawn_agent": {Namespace: "collaboration", Name: "spawn_agent"},
-			})
+			}, nil)
 			require.NoError(t, err)
 			require.True(t, changed)
 			require.JSONEq(t, `{"type":"`+eventType+`","item":{"type":"function_call","name":"spawn_agent","namespace":"collaboration","arguments":"{}"}}`, string(got))
@@ -244,8 +244,67 @@ func TestFlattenResponsesNamespaces_RoundTripsCustomCalls(t *testing.T) {
 	require.NotContains(t, choice, "namespace")
 
 	payload := []byte(`{"type":"response.completed","response":{"output":[{"type":"custom_tool_call","name":"mcp_box__exec","input":"pwd"}]}}`)
-	restored, restoredChanged, err := RestoreResponsesNamespaceCalls(payload, names)
+	restored, restoredChanged, err := RestoreResponsesNamespaceCalls(payload, names, nil)
 	require.NoError(t, err)
 	require.True(t, restoredChanged)
 	require.JSONEq(t, `{"type":"response.completed","response":{"output":[{"type":"custom_tool_call","name":"exec","namespace":"mcp_box","input":"pwd"}]}}`, string(restored))
+}
+
+func TestDowngradeResponsesCustomTools(t *testing.T) {
+	req := map[string]any{
+		"model": "gpt-6-astra",
+		"tools": []any{
+			map[string]any{"type": "custom", "name": "functions__exec", "description": "run", "format": map[string]any{"type": "grammar"}},
+			map[string]any{"type": "function", "name": "functions__wait", "parameters": map[string]any{}},
+		},
+		"input": []any{
+			map[string]any{"type": "custom_tool_call", "name": "functions__exec", "call_id": "ctc_1", "input": "ls -la"},
+			map[string]any{"type": "function_call", "name": "functions__wait", "call_id": "fc_1", "arguments": "{}"},
+		},
+	}
+
+	names, changed, err := DowngradeResponsesCustomTools(req)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Equal(t, map[string]bool{"functions__exec": true}, names)
+
+	tools := req["tools"].([]any)
+	execTool := tools[0].(map[string]any)
+	require.Equal(t, "function", execTool["type"])
+	require.NotNil(t, execTool["parameters"])
+	require.NotContains(t, execTool, "format")
+	require.Equal(t, "function", tools[1].(map[string]any)["type"])
+
+	input := req["input"].([]any)
+	historyCall := input[0].(map[string]any)
+	require.Equal(t, "function_call", historyCall["type"])
+	require.NotContains(t, historyCall, "input")
+	require.JSONEq(t, `{"input":"ls -la"}`, historyCall["arguments"].(string))
+	require.Equal(t, "function_call", input[1].(map[string]any)["type"])
+}
+
+func TestDowngradeResponsesCustomTools_NoCustomTools(t *testing.T) {
+	req := map[string]any{"tools": []any{map[string]any{"type": "function", "name": "shell"}}}
+	names, changed, err := DowngradeResponsesCustomTools(req)
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.Empty(t, names)
+}
+
+func TestRestoreResponsesNamespaceCalls_RestoresDowngradedCustomCalls(t *testing.T) {
+	payload := []byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"functions__exec","call_id":"ctc_1","arguments":"{\"input\":\"ls -la\"}"}}`)
+	got, changed, err := RestoreResponsesNamespaceCalls(payload, map[string]ResponsesNamespaceName{
+		"functions__exec": {Namespace: "functions", Name: "exec"},
+	}, map[string]bool{"functions__exec": true})
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.JSONEq(t, `{"type":"response.output_item.done","item":{"type":"custom_tool_call","name":"exec","namespace":"functions","call_id":"ctc_1","input":"ls -la"}}`, string(got))
+}
+
+func TestRestoreResponsesNamespaceCalls_KeepsPlainFunctionCallsForCustomNames(t *testing.T) {
+	payload := []byte(`{"item":{"type":"function_call","name":"shell","call_id":"fc_2","arguments":"{\"cmd\":\"ls\"}"}}`)
+	got, changed, err := RestoreResponsesNamespaceCalls(payload, nil, map[string]bool{"functions__exec": true})
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.JSONEq(t, `{"item":{"type":"function_call","name":"shell","call_id":"fc_2","arguments":"{\"cmd\":\"ls\"}"}}`, string(got))
 }

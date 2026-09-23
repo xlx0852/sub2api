@@ -247,16 +247,17 @@ func collectNamespaceQualifiedCallNames(value any, preserved map[string]bool, re
 }
 
 // RestoreResponsesNamespaceCalls restores flattened function calls in a JSON
-// Responses payload to the namespace/name identity expected by Codex.
-func RestoreResponsesNamespaceCalls(payload []byte, names map[string]ResponsesNamespaceName) ([]byte, bool, error) {
-	if len(payload) == 0 || len(names) == 0 {
+// Responses payload to the namespace/name identity expected by Codex, and turns
+// calls to downgraded custom tools back into custom_tool_call items.
+func RestoreResponsesNamespaceCalls(payload []byte, names map[string]ResponsesNamespaceName, customNames map[string]bool) ([]byte, bool, error) {
+	if len(payload) == 0 || (len(names) == 0 && len(customNames) == 0) {
 		return payload, false, nil
 	}
 	var value any
 	if err := json.Unmarshal(payload, &value); err != nil {
 		return payload, false, err
 	}
-	changed := restoreResponsesNamespaceValue(value, names)
+	changed := restoreResponsesNamespaceValue(value, names, customNames)
 	if !changed {
 		return payload, false, nil
 	}
@@ -318,16 +319,26 @@ func rewriteNamespaceQualifiedCall(item map[string]any, names map[string]Respons
 	return true
 }
 
-func restoreResponsesNamespaceValue(value any, names map[string]ResponsesNamespaceName) bool {
+func restoreResponsesNamespaceValue(value any, names map[string]ResponsesNamespaceName, customNames map[string]bool) bool {
 	changed := false
 	switch typed := value.(type) {
 	case []any:
 		for _, item := range typed {
-			changed = restoreResponsesNamespaceValue(item, names) || changed
+			changed = restoreResponsesNamespaceValue(item, names, customNames) || changed
 		}
 	case map[string]any:
 		itemType := strings.TrimSpace(stringValue(typed["type"]))
 		if itemType == "function_call" || itemType == "custom_tool_call" {
+			// 降级过的 custom 工具：上游只会回 function_call，必须还原成
+			// custom_tool_call（codex 只按该类型路由），并把 input 字符串从
+			// arguments.input 里取回。
+			if itemType == "function_call" && customNames[strings.TrimSpace(stringValue(typed["name"]))] {
+				arguments := stringValue(typed["arguments"])
+				typed["type"] = "custom_tool_call"
+				typed["input"] = extractCustomToolCallInput(arguments)
+				delete(typed, "arguments")
+				changed = true
+			}
 			if entry, ok := names[strings.TrimSpace(stringValue(typed["name"]))]; ok {
 				typed["name"] = entry.Name
 				typed["namespace"] = entry.Namespace
@@ -335,7 +346,7 @@ func restoreResponsesNamespaceValue(value any, names map[string]ResponsesNamespa
 			}
 		}
 		for _, child := range typed {
-			changed = restoreResponsesNamespaceValue(child, names) || changed
+			changed = restoreResponsesNamespaceValue(child, names, customNames) || changed
 		}
 	}
 	return changed
@@ -344,4 +355,67 @@ func restoreResponsesNamespaceValue(value any, names map[string]ResponsesNamespa
 func stringValue(value any) string {
 	text, _ := value.(string)
 	return text
+}
+
+// ResponsesCustomToolInputSchema 是 custom/freeform 工具降级为 function 工具时的参数
+// schema：chat/custom 上游无法表达自由文本与 grammar 约束，退化为单一 input 字符串，
+// 回程再由 extractCustomToolCallInput 还原。
+const ResponsesCustomToolInputSchema = `{"type":"object","properties":{"input":{"type":"string","description":"The raw input for this tool, passed through verbatim."}},"required":["input"]}`
+
+// DowngradeResponsesCustomTools 把顶层 custom 工具声明降级为 function 工具，并把入参历史
+// 里对这些工具的 custom_tool_call 项改写为等价的 function_call。
+//
+// 背景：codex 的核心执行工具 exec 以 type=custom（自由格式 + lark grammar）声明，部分上游
+// （例如 Devin 的 exa.api_server_pb.ApiServerService/GetChatMessage）会直接以
+// permission_denied「MCP configuration issue」拒绝整个请求。降级后模型改回 function 调用，
+// 回程由 RestoreResponsesNamespaceCalls 还原为 custom_tool_call，对客户端透明。
+func DowngradeResponsesCustomTools(req map[string]any) (map[string]bool, bool, error) {
+	if req == nil {
+		return nil, false, nil
+	}
+	tools, _ := req["tools"].([]any)
+	if len(tools) == 0 {
+		return nil, false, nil
+	}
+
+	names := make(map[string]bool)
+	changed := false
+	for _, raw := range tools {
+		tool, ok := raw.(map[string]any)
+		if !ok || strings.TrimSpace(stringValue(tool["type"])) != "custom" {
+			continue
+		}
+		name := strings.TrimSpace(stringValue(tool["name"]))
+		if name == "" {
+			continue
+		}
+		tool["type"] = "function"
+		tool["parameters"] = json.RawMessage(ResponsesCustomToolInputSchema)
+		delete(tool, "format")
+		names[name] = true
+		changed = true
+	}
+	if !changed {
+		return nil, false, nil
+	}
+
+	if input, ok := req["input"].([]any); ok {
+		for _, raw := range input {
+			item, ok := raw.(map[string]any)
+			if !ok || strings.TrimSpace(stringValue(item["type"])) != "custom_tool_call" {
+				continue
+			}
+			if !names[strings.TrimSpace(stringValue(item["name"]))] {
+				continue
+			}
+			arguments, err := json.Marshal(map[string]string{"input": stringValue(item["input"])})
+			if err != nil {
+				return nil, false, err
+			}
+			item["type"] = "function_call"
+			item["arguments"] = string(arguments)
+			delete(item, "input")
+		}
+	}
+	return names, true, nil
 }

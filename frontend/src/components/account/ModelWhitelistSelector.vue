@@ -216,8 +216,18 @@ const availableOptions = computed(() => {
 
 const filteredModels = computed(() => {
   const query = searchQuery.value.toLowerCase().trim()
-  if (!query) return availableOptions.value
-  return availableOptions.value.filter(
+  // Keep configured custom IDs searchable/removable even if the catalog no
+  // longer advertises them. Loading a catalog never changes modelValue.
+  const options = [...availableOptions.value]
+  const known = new Set(options.map(option => option.value))
+  for (const model of props.modelValue) {
+    if (!known.has(model)) {
+      options.push({ value: model, label: model })
+      known.add(model)
+    }
+  }
+  if (!query) return options
+  return options.filter(
     m => m.value.toLowerCase().includes(query) || m.label.toLowerCase().includes(query)
   )
 })

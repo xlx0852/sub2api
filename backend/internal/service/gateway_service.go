@@ -87,12 +87,6 @@ type accountWithLoad struct {
 var ForceCacheBillingContextKey = forceCacheBillingKeyType{}
 
 var (
-	windowCostPrefetchCacheHitTotal  atomic.Int64
-	windowCostPrefetchCacheMissTotal atomic.Int64
-	windowCostPrefetchBatchSQLTotal  atomic.Int64
-	windowCostPrefetchFallbackTotal  atomic.Int64
-	windowCostPrefetchErrorTotal     atomic.Int64
-
 	userGroupRateCacheHitTotal      atomic.Int64
 	userGroupRateCacheMissTotal     atomic.Int64
 	userGroupRateCacheLoadTotal     atomic.Int64
@@ -118,14 +112,6 @@ var (
 	// 在 DB 无行时回填 sentinel cache entry 写 Redis 失败的次数（phase A）。
 	userPlatformQuotaSentinelSetCacheErrorTotal atomic.Int64
 )
-
-func GatewayWindowCostPrefetchStats() (cacheHit, cacheMiss, batchSQL, fallback, errCount int64) {
-	return windowCostPrefetchCacheHitTotal.Load(),
-		windowCostPrefetchCacheMissTotal.Load(),
-		windowCostPrefetchBatchSQLTotal.Load(),
-		windowCostPrefetchFallbackTotal.Load(),
-		windowCostPrefetchErrorTotal.Load()
-}
 
 func GatewayUserGroupRateCacheStats() (cacheHit, cacheMiss, load, singleflightShared, fallback int64) {
 	return userGroupRateCacheHitTotal.Load(),
@@ -734,8 +720,6 @@ type GatewayService struct {
 	deferredService       *DeferredService
 	concurrencyService    *ConcurrencyService
 	claudeTokenProvider   *ClaudeTokenProvider
-	sessionLimitCache     SessionLimitCache // 会话数量限制缓存（仅 Anthropic OAuth/SetupToken）
-	rpmCache              RPMCache          // RPM 计数缓存（仅 Anthropic OAuth/SetupToken）
 	userGroupRateResolver *userGroupRateResolver
 	userGroupRateCache    *gocache.Cache
 	userGroupRateSF       singleflight.Group
@@ -781,8 +765,6 @@ func NewGatewayService(
 	httpUpstream HTTPUpstream,
 	deferredService *DeferredService,
 	claudeTokenProvider *ClaudeTokenProvider,
-	sessionLimitCache SessionLimitCache,
-	rpmCache RPMCache,
 	digestStore *DigestSessionStore,
 	settingService *SettingService,
 	tlsFPProfileService *TLSFingerprintProfileService,
@@ -814,8 +796,6 @@ func NewGatewayService(
 		httpUpstream:          withUsageSettlementHTTPUpstream(httpUpstream),
 		deferredService:       deferredService,
 		claudeTokenProvider:   claudeTokenProvider,
-		sessionLimitCache:     sessionLimitCache,
-		rpmCache:              rpmCache,
 		userGroupRateCache:    sharedUserGroupRateCacheInstance(userGroupRateTTL),
 		settingService:        settingService,
 		modelsListCache:       gocache.New(modelsListTTL, time.Minute),

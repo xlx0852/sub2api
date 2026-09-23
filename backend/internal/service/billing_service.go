@@ -57,10 +57,15 @@ func usePriorityServiceTierPricing(serviceTier string, pricing *ModelPricing) bo
 		pricing.CacheCreationPricePerTokenPriority > 0 || pricing.CacheReadPricePerTokenPriority > 0
 }
 
+// serviceTierCostMultiplier 返回与单价表无关的档位整体倍率。
+//
+// 只有 Flex 是“全模型统一 0.5x”的官方规则。Fast mode（priority/fast）不是统一倍率：
+// 官方 Fast 表按模型分别定价（GPT-6 与 5.6 为 2x、5.5 为 2.5x），且 cyber、*-pro 等
+// 模型根本没有 Fast 档。这些差异由 ModelPricing 的 *_Priority 单价表达（见
+// usePriorityServiceTierPricing）。若此处再对 priority 施加统一兜底倍率，会给
+// “没有 Fast 档”的模型多收，因此 priority 不再兜底放大，仅按标准价计费。
 func serviceTierCostMultiplier(serviceTier string) float64 {
 	switch normalizeBillingServiceTier(serviceTier) {
-	case "priority":
-		return 2.0
 	case "flex":
 		return 0.5
 	default:
@@ -188,19 +193,20 @@ func (s *BillingService) initFallbackPricing() {
 
 func priceEntryToModelPricing(e modelcatalog.PriceEntry) *ModelPricing {
 	return &ModelPricing{
-		Currency:                       domain.NormalizePricingCurrency(e.Currency),
-		InputPricePerToken:             e.InputCostPerToken,
-		InputPricePerTokenPriority:     e.InputCostPerTokenPriority,
-		ImageInputPricePerToken:        e.ImageInputCostPerToken,
-		OutputPricePerToken:            e.OutputCostPerToken,
-		OutputPricePerTokenPriority:    e.OutputCostPerTokenPriority,
-		CacheCreationPricePerToken:     e.CacheCreationInputTokenCost,
-		CacheReadPricePerToken:         e.CacheReadInputTokenCost,
-		CacheReadPricePerTokenPriority: e.CacheReadInputTokenCostPriority,
-		SupportsCacheBreakdown:         e.SupportsCacheBreakdown,
-		LongContextInputThreshold:      e.LongContextInputTokenThreshold,
-		LongContextInputMultiplier:     e.LongContextInputCostMultiplier,
-		LongContextOutputMultiplier:    e.LongContextOutputCostMultiplier,
+		Currency:                           domain.NormalizePricingCurrency(e.Currency),
+		InputPricePerToken:                 e.InputCostPerToken,
+		InputPricePerTokenPriority:         e.InputCostPerTokenPriority,
+		ImageInputPricePerToken:            e.ImageInputCostPerToken,
+		OutputPricePerToken:                e.OutputCostPerToken,
+		OutputPricePerTokenPriority:        e.OutputCostPerTokenPriority,
+		CacheCreationPricePerToken:         e.CacheCreationInputTokenCost,
+		CacheCreationPricePerTokenPriority: e.CacheCreationInputTokenCostPriority,
+		CacheReadPricePerToken:             e.CacheReadInputTokenCost,
+		CacheReadPricePerTokenPriority:     e.CacheReadInputTokenCostPriority,
+		SupportsCacheBreakdown:             e.SupportsCacheBreakdown,
+		LongContextInputThreshold:          e.LongContextInputTokenThreshold,
+		LongContextInputMultiplier:         e.LongContextInputCostMultiplier,
+		LongContextOutputMultiplier:        e.LongContextOutputCostMultiplier,
 	}
 }
 
@@ -1077,10 +1083,16 @@ type VideoPriceConfig struct {
 const (
 	defaultImageGenerationPrice = 0.134
 
+	// xAI Imagine 图片单价（USD/张）。1K/2K/4K 为本仓库的计费档位：
+	// xAI 另按 low/medium 质量分档，本仓库尚无质量维度，故取模型的默认
+	// （auto/medium）档，宁可偏高也不低于官方价。
+	// grok-imagine-image-2.0 官方：1K low 0.04 / med 0.06，2K low 0.06 / med 0.08。
 	defaultGrokImagineImagePrice1K        = 0.02
 	defaultGrokImagineImagePrice2K        = 0.02
 	defaultGrokImagineImageQualityPrice1K = 0.05
 	defaultGrokImagineImageQualityPrice2K = 0.07
+	defaultGrokImagineImage20Price1K      = 0.06
+	defaultGrokImagineImage20Price2K      = 0.08
 
 	// 视频默认价为 xAI 官方**每秒**输出价格（USD/s），总价 = 每秒价 × 时长（秒）。
 	defaultGrokImagineVideoPrice480P    = 0.05
@@ -1244,6 +1256,12 @@ func (s *BillingService) getDefaultVideoPrice(model string, resolution string) f
 func getDefaultGrokImagineImagePrice(model string, imageSize string) (float64, bool) {
 	model = strings.ToLower(strings.TrimSpace(model))
 	switch model {
+	case "grok-imagine-image-2.0", "grok-imagine-image-2-0":
+		return getGrokImagineImageTierPrice(
+			imageSize,
+			defaultGrokImagineImage20Price1K,
+			defaultGrokImagineImage20Price2K,
+		), true
 	case "grok-imagine-image-quality":
 		return getGrokImagineImageTierPrice(
 			imageSize,

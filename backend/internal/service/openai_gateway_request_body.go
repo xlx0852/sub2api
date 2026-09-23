@@ -771,6 +771,84 @@ func extractOpenAIServiceTierFromBody(body []byte) *string {
 	return normalizeOpenAIServiceTier(gjson.GetBytes(body, "service_tier").String())
 }
 
+// openAIServiceTierFromPayload 从单个响应载荷（JSON body 或 SSE data 行）读取 service_tier。
+func openAIServiceTierFromPayload(payload []byte) *string {
+	if len(payload) == 0 {
+		return nil
+	}
+	for _, path := range []string{"service_tier", "response.service_tier", "data.service_tier"} {
+		raw := gjson.GetBytes(payload, path)
+		if !raw.Exists() {
+			continue
+		}
+		if tier := normalizeOpenAIServiceTier(raw.String()); tier != nil {
+			return tier
+		}
+	}
+	return nil
+}
+
+// extractOpenAIUpstreamServiceTier 读取上游响应报告的实际 service tier，支持 JSON body
+// 与 SSE 帧体两种形态。
+//
+// 为什么计费需要它：OpenAI Fast mode 在 ramp rate 限流下会把请求降级为标准速度并按标准价
+// 计费，此时响应携带 service_tier: "default"（见 Fast mode 指南的 Ramp rate limit 一节）。
+// 只依据请求体档位计费会把这部分降级请求按 Fast 价多收。
+//
+// SSE 形态下取「最后」一个帧的取值：response.created 也会带 service_tier，而只有终止帧
+// （response.completed/done 等）才反映本次请求实际被服务的档位。
+func extractOpenAIUpstreamServiceTier(body []byte) *string {
+	if len(body) == 0 {
+		return nil
+	}
+	if !bytes.Contains(body, []byte("data:")) {
+		return openAIServiceTierFromPayload(body)
+	}
+	var tier *string
+	for _, line := range bytes.Split(body, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, []byte("data:")) {
+			continue
+		}
+		payload := bytes.TrimSpace(line[len("data:"):])
+		if len(payload) == 0 || bytes.Equal(payload, []byte("[DONE]")) {
+			continue
+		}
+		if t := openAIServiceTierFromPayload(payload); t != nil {
+			tier = t
+		}
+	}
+	if tier != nil {
+		return tier
+	}
+	return openAIServiceTierFromPayload(body)
+}
+
+// captureOpenAIUpstreamServiceTier 只在终止事件上抽取档位。
+//
+// 流式热路径每帧都做 gjson 路径查找代价偏高，而 service_tier 只出现在带完整 response 对象
+// 的终止事件里（response.completed/done/failed/incomplete/cancelled 等）。
+func captureOpenAIUpstreamServiceTier(data []byte) *string {
+	if len(data) < 32 {
+		return nil
+	}
+	switch gjson.GetBytes(data, "type").String() {
+	case "response.completed", "response.done", "response.failed",
+		"response.incomplete", "response.cancelled", "response.canceled":
+		return openAIServiceTierFromPayload(data)
+	default:
+		return nil
+	}
+}
+
+// billedServiceTier 决定计费使用的档位：上游报告的实际档位优先，缺失时回退到请求档位。
+func billedServiceTier(requested, reported *string) *string {
+	if reported != nil {
+		return reported
+	}
+	return requested
+}
+
 func normalizeOpenAIServiceTier(raw string) *string {
 	value := strings.ToLower(strings.TrimSpace(raw))
 	if value == "" {

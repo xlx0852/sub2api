@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -76,6 +77,10 @@ func (h *ScheduledTestHandler) Create(c *gin.Context) {
 
 	created, err := h.scheduledTestSvc.CreatePlan(c.Request.Context(), plan)
 	if err != nil {
+		if errors.Is(err, service.ErrScheduledPlanExists) {
+			response.Error(c, http.StatusConflict, err.Error())
+			return
+		}
 		response.BadRequest(c, err.Error())
 		return
 	}

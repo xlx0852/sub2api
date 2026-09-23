@@ -53,6 +53,18 @@ func (UsageLog) Fields() []ent.Field {
 			MaxLen(100).
 			Optional().
 			Nillable(),
+		// UpstreamResponseModel stores the model name declared by the upstream response
+		// before any protocol conversion or client-facing rewrite. NULL means the response
+		// declared no model (or the row predates this field).
+		field.String("upstream_response_model").
+			MaxLen(200).
+			Optional().
+			Nillable(),
+		// UpstreamModelMismatch is tri-state: NULL means the upstream response declared no
+		// model, false/true means the comparison against the sent model was observed.
+		field.Bool("upstream_model_mismatch").
+			Optional().
+			Nillable(),
 		field.Int64("channel_id").Optional().Nillable().Comment("渠道 ID"),
 		field.String("model_mapping_chain").MaxLen(500).Optional().Nillable().Comment("模型映射链"),
 		field.String("billing_tier").MaxLen(50).Optional().Nillable().Comment("计费层级标签"),

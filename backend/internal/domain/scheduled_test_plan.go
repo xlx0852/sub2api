@@ -7,17 +7,24 @@ import (
 
 // ScheduledTestPlan represents a scheduled test plan domain model.
 type ScheduledTestPlan struct {
-	ID             int64      `json:"id"`
-	AccountID      int64      `json:"account_id"`
-	ModelID        string     `json:"model_id"`
-	CronExpression string     `json:"cron_expression"`
-	Enabled        bool       `json:"enabled"`
-	MaxResults     int        `json:"max_results"`
-	AutoRecover    bool       `json:"auto_recover"`
-	LastRunAt      *time.Time `json:"last_run_at"`
-	NextRunAt      *time.Time `json:"next_run_at"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID             int64  `json:"id"`
+	AccountID      int64  `json:"account_id"`
+	ModelID        string `json:"model_id"`
+	CronExpression string `json:"cron_expression"`
+	Enabled        bool   `json:"enabled"`
+	MaxResults     int    `json:"max_results"`
+	AutoRecover    bool   `json:"auto_recover"`
+	// AutoPurity runs an active model-purity attribution after the connectivity chain.
+	AutoPurity bool `json:"auto_purity"`
+	// PurityIntervalMinutes throttles AutoPurity (0 = every run). Defaults to daily so a
+	// frequent diagnostics cron cannot repeatedly spend upstream tokens.
+	PurityIntervalMinutes int `json:"purity_interval_minutes"`
+	// PurityAnswers is how many challenge answers the probe requests (1..6).
+	PurityAnswers int        `json:"purity_answers"`
+	LastRunAt     *time.Time `json:"last_run_at"`
+	NextRunAt     *time.Time `json:"next_run_at"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 // ScheduledTestResult represents a single test execution result.

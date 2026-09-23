@@ -16,6 +16,7 @@
           </p>
         </div>
         <button
+          v-if="!hasPlan"
           type="button"
           @click="showAddForm = !showAddForm"
           :class="embedded
@@ -26,6 +27,10 @@
           {{ t('admin.scheduledTests.addPlan') }}
         </button>
       </div>
+
+      <p v-if="hasPlan" class="text-[11px] leading-4 text-gray-400 dark:text-gray-500">
+        {{ t('admin.scheduledTests.singlePlanHint') }}
+      </p>
 
       <!-- Add Plan Form -->
       <div
@@ -194,7 +199,12 @@
                   </span>
                   <span v-if="plan.next_run_at">
                     {{ t('admin.scheduledTests.nextRun') }}
-                    <span class="text-gray-500 dark:text-gray-400">{{ formatRelativeTime(plan.next_run_at) }}</span>
+                    <span
+                      class="font-mono tabular-nums"
+                      :class="countdownSeconds(plan.next_run_at) <= 0 ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'"
+                    >
+                      {{ formatCountdown(plan.next_run_at) }}
+                    </span>
                   </span>
                 </div>
               </div>
@@ -220,7 +230,12 @@
 
               <div v-if="!embedded && plan.next_run_at" class="hidden text-right text-xs text-gray-500 dark:text-gray-400 sm:block">
                 <div>{{ t('admin.scheduledTests.nextRun') }}</div>
-                <div>{{ formatRelativeTime(plan.next_run_at) }}</div>
+                <div
+                  class="font-mono tabular-nums"
+                  :class="countdownSeconds(plan.next_run_at) <= 0 ? 'text-primary-600 dark:text-primary-400' : ''"
+                >
+                  {{ formatCountdown(plan.next_run_at) }}
+                </div>
               </div>
 
               <!-- Actions -->
@@ -490,7 +505,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/ui/BaseDialog.vue'
 import ConfirmDialog from '@/ui/ConfirmDialog.vue'
@@ -502,6 +517,7 @@ import { Icon } from '@/components/icons'
 import { adminAPI } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
 import { formatRelativeTime } from '@/utils/format'
+import { useExecutionCountdown } from '@/composables/useExecutionCountdown'
 import type { ScheduledTestPlan, ScheduledTestResult } from '@/types'
 
 const { t } = useI18n()
@@ -525,6 +541,8 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'changed'): void
+  // Embedded panels are parent-owned: ask the parent to reload plans when a run comes due.
+  (e: 'refresh'): void
 }>()
 
 const localModelOptions = ref<SelectOption[]>([])
@@ -579,6 +597,27 @@ const displayLoading = computed(() => {
   if (props.embedded && props.loading) return true
   return internalLoading.value
 })
+// Shared 1s clock: "next run" counts down instead of showing frozen relative time, and a
+// deadline that passes triggers one reload so the new result appears by itself.
+const {
+  formatCountdown,
+  countdownSeconds,
+  notifyWhenDue,
+  start: startCountdownClock,
+  stop: stopCountdownClock,
+  resetDueMarker: resetCountdownDueMarker
+} = useExecutionCountdown({
+  getTargets: () => displayPlans.value.map((plan) => plan.next_run_at),
+  onDue: () => {
+    void refreshAll()
+  }
+})
+
+onBeforeUnmount(() => stopCountdownClock())
+
+// Each account owns exactly one diagnostics plan, so the create entry disappears once it exists.
+const hasPlan = computed(() => displayPlans.value.length > 0)
+
 const results = ref<ScheduledTestResult[]>([])
 const expandedPlanId = ref<number | null>(null)
 const expandedResultIds = reactive(new Set<number>())
@@ -622,9 +661,19 @@ watch(
         tasks.unshift(loadPlans())
       }
       await Promise.all(tasks)
+      // The panel may have been closed while the loads were in flight; starting the clock
+      // then would leave a countdown ticking in the background forever.
+      if (!props.show || !props.accountId) {
+        stopCountdownClock()
+        return
+      }
+      startCountdownClock()
+      notifyWhenDue(displayPlans.value.map((plan) => plan.next_run_at))
       return
     }
     if (!visible) {
+      stopCountdownClock()
+      resetCountdownDueMarker()
       if (!props.embedded) {
         internalPlans.value = []
         localModelOptions.value = []
@@ -753,6 +802,31 @@ const handleDelete = async () => {
   }
 }
 
+const loadResults = async (planId: number) => {
+  loadingResults.value = true
+  try {
+    results.value = await adminAPI.scheduledTests.listResults(planId, 20)
+  } catch (error: any) {
+    appStore.showError(error?.message || 'Failed to load results')
+    results.value = []
+  } finally {
+    loadingResults.value = false
+  }
+}
+
+// reloads plans (and the expanded results) — used by the countdown's due trigger
+const refreshAll = async () => {
+  if (props.embedded) {
+    // Embedded panels do not own their plan list; ask the parent to reload it.
+    emit('refresh')
+  } else if (!props.embedded) {
+    await loadPlans()
+  }
+  if (expandedPlanId.value) {
+    await loadResults(expandedPlanId.value)
+  }
+}
+
 const toggleExpand = async (planId: number) => {
   if (expandedPlanId.value === planId) {
     expandedPlanId.value = null
@@ -763,15 +837,7 @@ const toggleExpand = async (planId: number) => {
 
   expandedPlanId.value = planId
   expandedResultIds.clear()
-  loadingResults.value = true
-  try {
-    results.value = await adminAPI.scheduledTests.listResults(planId, 20)
-  } catch (error: any) {
-    appStore.showError(error?.message || 'Failed to load results')
-    results.value = []
-  } finally {
-    loadingResults.value = false
-  }
+  await loadResults(planId)
 }
 
 const toggleResultDetail = (resultId: number) => {

@@ -255,31 +255,8 @@ func AccountFromServiceShallow(a *service.Account) *Account {
 		SubscriptionBanned:      a.SubscriptionBanned,
 	}
 
-	// 提取 5h 窗口费用控制和会话数量控制配置（仅 Anthropic OAuth/SetupToken 账号有效）
+	// 提取 OAuth/SetupToken 专有调度配置（仅 Anthropic 账号有效）
 	if a.IsAnthropicOAuthOrSetupToken() {
-		if limit := a.GetWindowCostLimit(); limit > 0 {
-			out.WindowCostLimit = &limit
-		}
-		if reserve := a.GetWindowCostStickyReserve(); reserve > 0 {
-			out.WindowCostStickyReserve = &reserve
-		}
-		if maxSessions := a.GetMaxSessions(); maxSessions > 0 {
-			out.MaxSessions = &maxSessions
-		}
-		if idleTimeout := a.GetSessionIdleTimeoutMinutes(); idleTimeout > 0 {
-			out.SessionIdleTimeoutMin = &idleTimeout
-		}
-		if rpm := a.GetBaseRPM(); rpm > 0 {
-			out.BaseRPM = &rpm
-			strategy := a.GetRPMStrategy()
-			out.RPMStrategy = &strategy
-			buffer := a.GetRPMStickyBuffer()
-			out.RPMStickyBuffer = &buffer
-		}
-		// 用户消息队列模式
-		if mode := a.GetUserMsgQueueMode(); mode != "" {
-			out.UserMsgQueueMode = &mode
-		}
 		// TLS指纹伪装开关
 		if a.IsTLSFingerprintEnabled() {
 			enabled := true
@@ -711,6 +688,8 @@ func UsageLogFromServiceAdmin(l *service.UsageLog) *AdminUsageLog {
 	return &AdminUsageLog{
 		UsageLog:              usageLog,
 		UpstreamModel:         l.UpstreamModel,
+		UpstreamResponseModel: l.UpstreamResponseModel,
+		UpstreamModelMismatch: l.UpstreamModelMismatch,
 		ChannelID:             l.ChannelID,
 		PricingPolicyID:       firstNonNilInt64(l.PricingPolicyID, l.ChannelID),
 		ModelMappingChain:     l.ModelMappingChain,

@@ -46,11 +46,6 @@ internal/service: var userGroupRateCacheSFSharedTotal
 internal/service: var userPlatformQuotaDBIncrErrorTotal
 internal/service: var userPlatformQuotaDBIncrLegacyErrorTotal
 internal/service: var userPlatformQuotaSentinelSetCacheErrorTotal
-internal/service: var windowCostPrefetchBatchSQLTotal
-internal/service: var windowCostPrefetchCacheHitTotal
-internal/service: var windowCostPrefetchCacheMissTotal
-internal/service: var windowCostPrefetchErrorTotal
-internal/service: var windowCostPrefetchFallbackTotal
 
 # ---- service 包级可变状态：测试注入缝隙（函数值）与只读数据指针 ----
 internal/service: var createPaymentProviderFromInstance
@@ -61,3 +56,6 @@ internal/service: var openAIGPT54NanoFallbackPricing
 internal/service: var openAIGPT56LunaFallbackPricing
 internal/service: var openAIGPT56SolFallbackPricing
 internal/service: var openAIGPT56TerraFallbackPricing
+internal/service: var openAIGPT6LunaFallbackPricing
+internal/service: var openAIGPT6SolFallbackPricing
+internal/service: var openAIUpstreamZstdEncoder

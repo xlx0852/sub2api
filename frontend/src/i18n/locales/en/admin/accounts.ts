@@ -232,27 +232,6 @@ export default {
       subscriptionExpires: 'Expires',
       // Capacity status tooltips
       capacity: {
-        windowCost: {
-          blocked: '5h window cost exceeded, account scheduling paused',
-          stickyOnly: '5h window cost at threshold, only sticky sessions allowed',
-          normal: '5h window cost normal'
-        },
-        sessions: {
-          full: 'Active sessions full, new sessions must wait (idle timeout: {idle} min)',
-          normal: 'Active sessions normal (idle timeout: {idle} min)'
-        },
-        rpm: {
-          full: 'RPM limit reached',
-          warning: 'RPM approaching limit',
-          normal: 'RPM normal',
-          tieredNormal: 'RPM limit (Tiered) - Normal',
-          tieredWarning: 'RPM limit (Tiered) - Approaching limit',
-          tieredStickyOnly: 'RPM limit (Tiered) - Sticky only | Buffer: {buffer}',
-          tieredBlocked: 'RPM limit (Tiered) - Blocked | Buffer: {buffer}',
-          stickyExemptNormal: 'RPM limit (Sticky Exempt) - Normal',
-          stickyExemptWarning: 'RPM limit (Sticky Exempt) - Approaching limit',
-          stickyExemptOver: 'RPM limit (Sticky Exempt) - Over limit, sticky only'
-        },
         quota: {
           exceeded: 'Quota exceeded, account paused',
           normal: 'Quota normal'
@@ -432,6 +411,13 @@ export default {
         responsesWebsocketsV2Desc:
           'Disabled by default. Enable to allow responses_websockets_v2 capability (still gated by global and account-type switches).',
         wsMode: 'WS mode',
+        externalBridge: 'External bridge',
+        externalBridgeDesc: 'For OpenAI API-key bridge accounts only. Changes private URL validation, protocol compatibility and usage queries; Devin gets additional tool compatibility handling. Disabling may make a private bridge unreachable; it does not switch the upstream URL or credentials.',
+        externalBridgeKind: 'Bridge kind',
+        externalBridgeKindRequired: 'Enter a bridge kind before enabling an external bridge.',
+        modelMappingConflict: 'Model mappings changed elsewhere. Reopen the account and resolve: {models}',
+        externalBridgeKindHint: 'Required. Enter devin, cursor or the actual bridge kind. Devin-specific tool conversion does not apply to Cursor.',
+        externalBridgeKindPlaceholder: 'e.g. devin / cursor',
         wsModeDesc: 'Only applies to the current OpenAI account type.',
         wsModeOff: 'Off (off)',
         wsModeCtxPool: 'Context Pool (ctx_pool)',
@@ -626,49 +612,8 @@ export default {
       autoPauseOnExpiredDesc: 'When enabled, the account will auto pause scheduling after it expires',
       // Quota control (Anthropic OAuth/SetupToken only)
       quotaControl: {
-        title: 'Quota Control',
-        hint: 'Configure cost window, session limits, client affinity and other scheduling controls.',
-        windowCost: {
-          label: '5h Window Cost Limit',
-          hint: 'Limit account cost usage within the 5-hour window',
-          limit: 'Cost Threshold',
-          limitPlaceholder: '50',
-          limitHint: 'Account will not participate in new scheduling after reaching threshold',
-          stickyReserve: 'Sticky Reserve',
-          stickyReservePlaceholder: '10',
-          stickyReserveHint: 'Additional reserve for sticky sessions'
-        },
-        sessionLimit: {
-          label: 'Session Count Limit',
-          hint: 'Limit the number of active concurrent sessions',
-          maxSessions: 'Max Sessions',
-          maxSessionsPlaceholder: '3',
-          maxSessionsHint: 'Maximum number of active concurrent sessions',
-          idleTimeout: 'Idle Timeout',
-          idleTimeoutPlaceholder: '5',
-          idleTimeoutHint: 'Sessions will be released after idle timeout'
-        },
-        rpmLimit: {
-          label: 'RPM Limit',
-          hint: 'Limit requests per minute to protect upstream accounts',
-          baseRpm: 'Base RPM',
-          baseRpmPlaceholder: '15',
-          baseRpmHint: 'Max requests per minute, 0 or empty means no limit',
-          strategy: 'RPM Strategy',
-          strategyTiered: 'Tiered Model',
-          strategyStickyExempt: 'Sticky Exempt',
-          strategyTieredHint: 'Green → Yellow → Sticky only → Blocked, progressive throttling',
-          strategyStickyExemptHint: 'Only sticky sessions allowed when over limit',
-          strategyHint: 'Tiered: gradually restrict when exceeded; Sticky Exempt: existing sessions unrestricted',
-          stickyBuffer: 'Sticky Buffer',
-          stickyBufferPlaceholder: 'Default: 20% of base RPM',
-          stickyBufferHint: 'Extra requests allowed for sticky sessions after exceeding base RPM. Leave empty to use default (20% of base RPM, min 1)',
-          userMsgQueue: 'User Message Rate Control',
-          userMsgQueueHint: 'Rate-limit user messages to avoid triggering upstream RPM limits',
-          umqModeOff: 'Off',
-          umqModeThrottle: 'Throttle',
-          umqModeSerialize: 'Serialize',
-        },
+        title: 'Quota control',
+        hint: 'Configure client affinity, fingerprint, cache and relay scheduling controls.',
         tlsFingerprint: {
           label: 'TLS Fingerprint Simulation',
           hint: 'Simulate Node.js/Claude Code client TLS fingerprint',

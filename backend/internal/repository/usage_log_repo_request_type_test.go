@@ -48,6 +48,8 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			log.Model,
 			log.RequestedModel,
 			sqlmock.AnyArg(), // upstream_model
+			sqlmock.AnyArg(), // upstream_response_model
+			sqlmock.AnyArg(), // upstream_model_mismatch
 			sqlmock.AnyArg(), // group_id
 			sqlmock.AnyArg(), // subscription_id
 			log.InputTokens,
@@ -144,9 +146,11 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			log.RequestID,
 			log.Model,
 			log.RequestedModel,
-			sqlmock.AnyArg(),
-			sqlmock.AnyArg(),
-			sqlmock.AnyArg(),
+			sqlmock.AnyArg(), // upstream_model
+			sqlmock.AnyArg(), // upstream_response_model
+			sqlmock.AnyArg(), // upstream_model_mismatch
+			sqlmock.AnyArg(), // group_id
+			sqlmock.AnyArg(), // subscription_id
 			log.InputTokens,
 			log.OutputTokens,
 			log.CacheCreationTokens,
@@ -287,13 +291,14 @@ func TestPrepareUsageLogInsert_PersistsImageSizeMetadata(t *testing.T) {
 		CreatedAt:          time.Date(2025, 1, 6, 12, 0, 0, 0, time.UTC),
 	})
 
-	// Indices track usageLogInsertArgTypes: compact_* occupy 37-39, then
-	// user_agent/ip/image_count, then image size metadata at 43-47.
-	require.Equal(t, sql.NullString{String: imageSize, Valid: true}, prepared.args[43])
-	require.Equal(t, sql.NullString{String: inputSize, Valid: true}, prepared.args[44])
-	require.Equal(t, sql.NullString{String: outputSize, Valid: true}, prepared.args[45])
-	require.Equal(t, sql.NullString{String: source, Valid: true}, prepared.args[46])
-	breakdownJSON, ok := prepared.args[47].(string)
+	// Indices track usageLogInsertArgTypes: compact_* occupy 39-41 (two upstream_response_model /
+	// upstream_model_mismatch args sit at 7-8), then user_agent/ip/image_count, then image size
+	// metadata at 45-49.
+	require.Equal(t, sql.NullString{String: imageSize, Valid: true}, prepared.args[45])
+	require.Equal(t, sql.NullString{String: inputSize, Valid: true}, prepared.args[46])
+	require.Equal(t, sql.NullString{String: outputSize, Valid: true}, prepared.args[47])
+	require.Equal(t, sql.NullString{String: source, Valid: true}, prepared.args[48])
+	breakdownJSON, ok := prepared.args[49].(string)
 	require.True(t, ok)
 	require.JSONEq(t, `{"1K":1,"4K":1}`, breakdownJSON)
 }
@@ -848,7 +853,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{Valid: true, String: "req-image-metadata"},
 			"gpt-image-2",
 			sql.NullString{Valid: true, String: "gpt-image-2"},
-			sql.NullString{},
+			sql.NullString{}, // upstream_model
+			sql.NullString{}, // upstream_response_model
+			sql.NullBool{},   // upstream_model_mismatch
 			sql.NullInt64{},
 			sql.NullInt64{},
 			0, 0, 0, 0, 0, 0,
@@ -895,6 +902,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			"gpt-5", // model
 			sql.NullString{Valid: true, String: "gpt-5"}, // requested_model
 			sql.NullString{},  // upstream_model
+			sql.NullString{},  // upstream_response_model
+			sql.NullBool{},    // upstream_model_mismatch
 			sql.NullInt64{},   // group_id
 			sql.NullInt64{},   // subscription_id
 			1,                 // input_tokens
@@ -946,7 +955,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{Valid: true, String: "req-2"},
 			"gpt-5",
 			sql.NullString{Valid: true, String: "gpt-5"},
-			sql.NullString{},
+			sql.NullString{}, // upstream_model
+			sql.NullString{}, // upstream_response_model
+			sql.NullBool{},   // upstream_model_mismatch
 			sql.NullInt64{},
 			sql.NullInt64{},
 			1, 2, 3, 4, 5, 6,
@@ -987,7 +998,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{Valid: true, String: "req-3"},
 			"gpt-5.4",
 			sql.NullString{Valid: true, String: "gpt-5.4"},
-			sql.NullString{},
+			sql.NullString{}, // upstream_model
+			sql.NullString{}, // upstream_response_model
+			sql.NullBool{},   // upstream_model_mismatch
 			sql.NullInt64{},
 			sql.NullInt64{},
 			1, 2, 3, 4, 5, 6,

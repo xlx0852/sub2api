@@ -196,6 +196,13 @@ func (sess *openAIWSIngressSession) parseClientPayload(raw []byte) (openAIWSClie
 			forceStandardLite,
 		)
 	}
+	if account != nil && account.IsExternalBridge() {
+		downgradedBody, downgradeErr := downgradeExternalBridgeResponsesTools(c, normalized, account.ExternalBridgeKind() == "devin")
+		if downgradeErr != nil {
+			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", downgradeErr)
+		}
+		normalized = downgradedBody
+	}
 	if isCodexCLI && codexImageGenerationExplicitToolPolicy == codexImageGenerationExplicitToolPolicyStrip {
 		if stripped, changed, stripErr := stripOpenAIImageGenerationToolsFromRawPayload(normalized); stripErr != nil {
 			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", stripErr)

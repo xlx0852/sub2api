@@ -260,6 +260,8 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
 		Model:         originalModel,
 		BillingModel:  billingModel,
 		UpstreamModel: upstreamModel,
+		// 上游终止事件声明的模型（未改写前），用于用量记录的模型一致性审计。
+		ResponseModel: strings.TrimSpace(finalResponse.Model),
 		Stream:        false,
 		Duration:      time.Since(startTime),
 	}, nil
@@ -288,6 +290,10 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 
 	var usage OpenAIUsage
 	var firstTokenMs *int
+	// upstreamResponseModel / terminalUpstreamResponseModel 记录上游响应声明的模型：
+	// 终止帧的声明优先（非终止帧可能只是回显请求模型），用于用量记录的模型一致性审计。
+	var upstreamResponseModel string
+	var terminalUpstreamResponseModel string
 	firstOutputPending := false
 	firstChunk := true
 	clientDisconnected := false
@@ -320,6 +326,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 			Model:         originalModel,
 			BillingModel:  billingModel,
 			UpstreamModel: upstreamModel,
+			ResponseModel: firstNonEmptyString(terminalUpstreamResponseModel, upstreamResponseModel),
 			Stream:        true,
 			Duration:      time.Since(startTime),
 			FirstTokenMs:  firstTokenMs,
@@ -344,6 +351,16 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		refusalDetector.ObservePayload([]byte(payload))
 
 		isTerminalEvent := isOpenAICompatResponsesTerminalEvent(event.Type)
+		// 并非每帧都带 response 对象（delta 帧就没有），必须先判空。
+		if event.Response != nil {
+			if model := strings.TrimSpace(event.Response.Model); model != "" {
+				if isTerminalEvent {
+					terminalUpstreamResponseModel = model
+				} else if upstreamResponseModel == "" {
+					upstreamResponseModel = model
+				}
+			}
+		}
 		if isTerminalEvent {
 			if event.Usage != nil {
 				usage = copyOpenAIUsageFromResponsesUsage(event.Usage)

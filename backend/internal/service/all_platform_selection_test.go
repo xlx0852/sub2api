@@ -75,16 +75,6 @@ func TestAllPlatformsGatewayBusyStickyYields(t *testing.T) {
 	sel.ReleaseFunc()
 }
 
-type allPlatformSessionLimit struct {
-	SessionLimitCache
-	calls []int64
-}
-
-func (c *allPlatformSessionLimit) RegisterSession(_ context.Context, id int64, _ string, _ int, _ time.Duration) (bool, error) {
-	c.calls = append(c.calls, id)
-	return id != 1, nil
-}
-
 type allPlatformMutableRepo struct {
 	*legacyReplayAccountRepository
 	current map[int64]*Account
@@ -95,59 +85,6 @@ func (r *allPlatformMutableRepo) GetByID(ctx context.Context, id int64) (*Accoun
 		return a, nil
 	}
 	return r.legacyReplayAccountRepository.GetByID(ctx, id)
-}
-
-func TestAllPlatformsGatewaySessionLimitReleasesRejectedSlot(t *testing.T) {
-	a, b := simpleTestAccount(1, AccountTypeOAuth), simpleTestAccount(2, AccountTypeOAuth)
-	for _, acc := range []*Account{&a, &b} {
-		acc.Platform = PlatformAnthropic
-		acc.GroupIDs = nil
-		acc.Credentials = nil
-		acc.Extra = map[string]any{"max_sessions": 1}
-	}
-	a.Priority = 0
-	b.Priority = 1
-	limit := &allPlatformSessionLimit{}
-	slots := &legacyReplayConcurrencyCache{acquired: map[int64]bool{1: true, 2: true}}
-	svc := &GatewayService{accountRepo: &legacyReplayAccountRepository{accounts: []Account{a, b}}, sessionLimitCache: limit, concurrencyService: NewConcurrencyService(slots), cfg: &config.Config{}}
-	sel, err := svc.SelectAccountWithLoadAwareness(context.Background(), nil, "new", "claude-sonnet-4-6", nil, "", 0)
-	require.NoError(t, err)
-	require.Equal(t, int64(2), sel.Account.ID)
-	require.Equal(t, []int64{1, 2}, slots.acquireOrder)
-	require.Equal(t, 1, slots.releaseCalls)
-	sel.ReleaseFunc()
-	require.Equal(t, 2, slots.releaseCalls)
-	require.Equal(t, []int64{1, 2}, limit.calls)
-}
-
-func TestAllPlatformsGatewayWindowAndRPMLimitsRemainHardGates(t *testing.T) {
-	for _, kind := range []string{"window", "rpm"} {
-		t.Run(kind, func(t *testing.T) {
-			a, b := simpleTestAccount(1, AccountTypeOAuth), simpleTestAccount(2, AccountTypeOAuth)
-			for _, acc := range []*Account{&a, &b} {
-				acc.Platform = PlatformAnthropic
-				acc.GroupIDs = nil
-				acc.Credentials = nil
-			}
-			a.Priority = 0
-			b.Priority = 1
-			ctx := context.Background()
-			if kind == "window" {
-				a.Extra = map[string]any{"window_cost_limit": 10.0}
-				ctx = context.WithValue(ctx, windowCostPrefetchContextKey, map[int64]float64{1: 100})
-			} else {
-				a.Extra = map[string]any{"base_rpm": 1}
-				ctx = context.WithValue(ctx, rpmPrefetchContextKey, map[int64]int{1: 100})
-			}
-			slots := &legacyReplayConcurrencyCache{acquired: map[int64]bool{1: true, 2: true}}
-			svc := &GatewayService{accountRepo: &legacyReplayAccountRepository{accounts: []Account{a, b}}, concurrencyService: NewConcurrencyService(slots), cfg: &config.Config{}}
-			sel, err := svc.SelectAccountWithLoadAwareness(ctx, nil, "new", "claude-sonnet-4-6", nil, "", 0)
-			require.NoError(t, err)
-			require.Equal(t, int64(2), sel.Account.ID)
-			require.Equal(t, []int64{2}, slots.acquireOrder)
-			sel.ReleaseFunc()
-		})
-	}
 }
 
 func TestAllPlatformsGatewayRechecksGroupAfterList(t *testing.T) {

@@ -226,23 +226,6 @@ type Account struct {
 	SessionWindowEnd    *time.Time `json:"session_window_end"`
 	SessionWindowStatus string     `json:"session_window_status"`
 
-	// 5h窗口费用控制（仅 Anthropic OAuth/SetupToken 账号有效）
-	// 从 extra 字段提取，方便前端显示和编辑
-	WindowCostLimit         *float64 `json:"window_cost_limit,omitempty"`
-	WindowCostStickyReserve *float64 `json:"window_cost_sticky_reserve,omitempty"`
-
-	// 会话数量控制（仅 Anthropic OAuth/SetupToken 账号有效）
-	// 从 extra 字段提取，方便前端显示和编辑
-	MaxSessions           *int `json:"max_sessions,omitempty"`
-	SessionIdleTimeoutMin *int `json:"session_idle_timeout_minutes,omitempty"`
-
-	// RPM 限制（仅 Anthropic OAuth/SetupToken 账号有效）
-	// 从 extra 字段提取，方便前端显示和编辑
-	BaseRPM          *int    `json:"base_rpm,omitempty"`
-	RPMStrategy      *string `json:"rpm_strategy,omitempty"`
-	RPMStickyBuffer  *int    `json:"rpm_sticky_buffer,omitempty"`
-	UserMsgQueueMode *string `json:"user_msg_queue_mode,omitempty"`
-
 	// TLS指纹伪装（仅 Anthropic OAuth/SetupToken 账号有效）
 	// 从 extra 字段提取，方便前端显示和编辑
 	EnableTLSFingerprint    *bool  `json:"enable_tls_fingerprint,omitempty"`
@@ -563,6 +546,13 @@ type AdminUsageLog struct {
 	// UpstreamModel is the actual model sent to the upstream provider after mapping.
 	// Omitted when no mapping was applied (requested model was used as-is).
 	UpstreamModel *string `json:"upstream_model,omitempty"`
+
+	// UpstreamResponseModel is the model declared by the upstream response before any
+	// protocol conversion or client-facing rewrite. Omitted when the response declared none.
+	UpstreamResponseModel *string `json:"upstream_response_model,omitempty"`
+	// UpstreamModelMismatch is tri-state: omitted (nil) when the upstream response declared no
+	// model, otherwise whether the declared model differs from the model sent upstream.
+	UpstreamModelMismatch *bool `json:"upstream_model_mismatch,omitempty"`
 
 	// ChannelID 渠道/售价策略 ID（历史字段名）
 	ChannelID *int64 `json:"channel_id,omitempty"`

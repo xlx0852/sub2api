@@ -736,8 +736,10 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		Model:          result.Model,
 		RequestedModel: requestedModel,
 		UpstreamModel:  result.UpstreamModel,
-		BillingModels:  []string{billingModel},
-		QuotaPlatform:  quotaPlatform,
+		// 上游响应声明的模型（网关改写前）；该路径未抽取时为空，不会产生噪音记录。
+		UpstreamResponseModel: result.ResponseModel,
+		BillingModels:         []string{billingModel},
+		QuotaPlatform:         quotaPlatform,
 		Usage: appbilling.Usage{
 			InputTokens:           result.Usage.InputTokens,
 			OutputTokens:          result.Usage.OutputTokens,

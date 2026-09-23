@@ -1354,13 +1354,9 @@ func (r *accountRepository) ListSchedulableCapacityByGroupIDs(ctx context.Contex
 			for i := range accounts {
 				acc := &accounts[i]
 				rows = append(rows, domain.GroupAccountCapacityRow{
-					GroupID:             groupID,
-					AccountID:           acc.ID,
-					Concurrency:         acc.Concurrency,
-					Extra:               copyJSONMap(acc.Extra),
-					SessionWindowStart:  acc.SessionWindowStart,
-					SessionWindowEnd:    acc.SessionWindowEnd,
-					SessionWindowStatus: acc.SessionWindowStatus,
+					GroupID:     groupID,
+					AccountID:   acc.ID,
+					Concurrency: acc.Concurrency,
 				})
 			}
 		}
@@ -1371,11 +1367,7 @@ func (r *accountRepository) ListSchedulableCapacityByGroupIDs(ctx context.Contex
 		SELECT
 			ag.group_id,
 			a.id AS account_id,
-			a.concurrency,
-			COALESCE(a.extra, '{}'::jsonb)::text AS extra,
-			a.session_window_start,
-			a.session_window_end,
-			COALESCE(a.session_window_status, '') AS session_window_status
+			a.concurrency
 		FROM account_groups ag
 		JOIN accounts a ON a.id = ag.account_id
 		WHERE ag.group_id = ANY($1)
@@ -1395,24 +1387,12 @@ func (r *accountRepository) ListSchedulableCapacityByGroupIDs(ctx context.Contex
 	out := make([]domain.GroupAccountCapacityRow, 0)
 	for rows.Next() {
 		var row domain.GroupAccountCapacityRow
-		var extraRaw string
 		if err := rows.Scan(
 			&row.GroupID,
 			&row.AccountID,
 			&row.Concurrency,
-			&extraRaw,
-			&row.SessionWindowStart,
-			&row.SessionWindowEnd,
-			&row.SessionWindowStatus,
 		); err != nil {
 			return nil, err
-		}
-		if extraRaw != "" && extraRaw != "null" {
-			var extra map[string]any
-			if err := json.Unmarshal([]byte(extraRaw), &extra); err != nil {
-				return nil, err
-			}
-			row.Extra = extra
 		}
 		out = append(out, row)
 	}

@@ -588,6 +588,13 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			forceStandardLite,
 		)
 	}
+	if account != nil && account.IsExternalBridge() {
+		downgradedBody, downgradeErr := downgradeExternalBridgeResponsesTools(c, body, account.ExternalBridgeKind() == "devin")
+		if downgradeErr != nil {
+			return nil, fmt.Errorf("downgrade http bridge responses tools: %w", downgradeErr)
+		}
+		body = downgradedBody
+	}
 	// 构建 codex call_id ↔ 上游 call_id 映射（本 turn 内）。客户端 payload 保持
 	// 原样（prepare 不做归一化），但 codex 的 custom_tool_call 等私有类型在
 	// 重放路径会被归一化为 function_call；无论哪种形态，上游执行工具后都会
@@ -710,6 +717,8 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	clientDisconnected := false
 	mappedModel := ""
 	needModelReplace := false
+	// upstreamResponseModel 记录上游响应声明的模型（终止帧优先），写入用量记录用于路由审计。
+	upstreamResponseModel := ""
 	var mappedModelBytes []byte
 	if originalModel != "" {
 		mappedModel = normalizeOpenAIModelForUpstream(account, account.GetMappedModel(originalModel))
@@ -728,6 +737,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			Usage:             usage,
 			Model:             originalModel,
 			UpstreamModel:     mappedModel,
+			ResponseModel:     upstreamResponseModel,
 			ServiceTier:       extractOpenAIServiceTierFromBody(body),
 			ReasoningEffort:   ApplyThinkingEnabledFallback(extractOpenAIReasoningEffortFromBody(body, firstNonEmpty(mappedModel, originalModel)), body, mappedModel),
 			Stream:            reqStream,
@@ -959,6 +969,13 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			parseOpenAIWSResponseUsageFromCompletedEvent(upstreamMessage, &usage)
 		}
 		imageCounter.AddSSEData(upstreamMessage)
+
+		// 在改写回客户端模型之前先捕获上游声明的模型。
+		if model := extractOpenAIResponseModelFromJSONBytes(upstreamMessage); model != "" {
+			if isOpenAIWSTerminalEvent(eventType) || upstreamResponseModel == "" {
+				upstreamResponseModel = model
+			}
+		}
 
 		if needModelReplace && len(mappedModelBytes) > 0 && openAIWSEventMayContainModel(eventType) && strings.Contains(trimmedData, mappedModel) {
 			upstreamMessage = replaceOpenAIWSMessageModel(upstreamMessage, mappedModel, originalModel)

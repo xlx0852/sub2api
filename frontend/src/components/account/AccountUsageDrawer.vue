@@ -172,6 +172,7 @@
                     :loading="scheduledTestsLoading"
                     embedded
                     @changed="loadScheduledTests(true)"
+                    @refresh="loadScheduledTests(true)"
                   />
                 </div>
 
@@ -295,7 +296,12 @@
                             </span>
                             <span>
                               {{ t('admin.accounts.usageDetails.scheduledTestsNextRun') }}
-                              <span class="font-medium text-gray-700 dark:text-gray-200">{{ formatScheduledTime(entry.plan.next_run_at) }}</span>
+                              <span
+                                class="font-mono font-medium tabular-nums"
+                                :class="isCountdownDue(entry.plan.next_run_at) ? 'text-primary-600 dark:text-primary-400' : 'text-gray-700 dark:text-gray-200'"
+                              >
+                                {{ formatCountdown(entry.plan.next_run_at) }}
+                              </span>
                             </span>
                             <span v-if="entry.results[0]">
                               {{ t('admin.accounts.usageDetails.scheduledTestsLatency') }}
@@ -489,6 +495,7 @@ import ScheduledTestsPanel from '@/components/admin/account/ScheduledTestsPanel.
 import type { AccountUsagePresentation } from '@/utils/accountUsagePresentation'
 import { buildAccountUsagePresentation } from '@/utils/accountUsagePresentation'
 import { formatRelativeTime } from '@/utils/format'
+import { useExecutionCountdown } from '@/composables/useExecutionCountdown'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import AccountUsageCell from './AccountUsageCell.vue'
@@ -551,6 +558,23 @@ const scheduledAvailability = computed(() => {
     rateLabel: completed > 0 ? `${Math.round(success * 1000 / completed) / 10}%` : '-'
   }
 })
+// Next diagnostics execution counts down live in this drawer too.
+const {
+  formatCountdown,
+  isDue: isCountdownDue,
+  notifyWhenDue,
+  start: startCountdownClock,
+  stop: stopCountdownClock,
+  resetDueMarker: resetCountdownDueMarker
+} = useExecutionCountdown({
+  getTargets: () => scheduledTestEntries.value.map((entry) => entry.plan.next_run_at),
+  onDue: () => {
+    void loadScheduledTests(true)
+  }
+})
+
+onBeforeUnmount(() => stopCountdownClock())
+
 const scheduledTestsLoading = ref(false)
 const scheduledTestsEnabling = ref(false)
 const scheduledTestsError = ref<string | null>(null)
@@ -780,6 +804,9 @@ const loadScheduledTests = async (force = false) => {
     if (seq !== scheduledTestsRequestSeq) return
     scheduledTestEntries.value = entries
     scheduledTestsLoadedFor.value = accountId
+    resetCountdownDueMarker()
+    startCountdownClock()
+    notifyWhenDue(entries.map((entry) => entry.plan.next_run_at))
   } catch (error) {
     if (seq !== scheduledTestsRequestSeq) return
     scheduledTestEntries.value = []

@@ -217,6 +217,8 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 	needModelReplace := false
 	clientDisconnected := false
 	mappedModel := ""
+	// upstreamResponseModel 记录上游响应声明的模型（终止帧优先），写入用量记录用于路由审计。
+	upstreamResponseModel := ""
 	var mappedModelBytes []byte
 	if originalModel != "" {
 		mappedModel = normalizeOpenAIModelForUpstream(account, account.GetMappedModel(originalModel))
@@ -373,6 +375,13 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 		}
 		imageCounter.AddSSEData(upstreamMessage)
 
+		// 在改写回客户端模型之前先捕获上游声明的模型。
+		if model := extractOpenAIResponseModelFromJSONBytes(upstreamMessage); model != "" {
+			if isTerminalEvent || upstreamResponseModel == "" {
+				upstreamResponseModel = model
+			}
+		}
+
 		if eventType == "response.failed" {
 			if hit, code, msg := detectOpenAICyberPolicy(upstreamMessage); hit {
 				MarkOpsCyberPolicy(c, CyberPolicyMark{
@@ -466,6 +475,7 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 				Usage:             usage,
 				Model:             originalModel,
 				UpstreamModel:     mappedModel,
+				ResponseModel:     upstreamResponseModel,
 				ServiceTier:       extractOpenAIServiceTierFromBody(payload),
 				ReasoningEffort:   ApplyThinkingEnabledFallback(extractOpenAIReasoningEffortFromBody(payload, firstNonEmpty(mappedModel, originalModel)), payload, mappedModel),
 				Stream:            reqStream,

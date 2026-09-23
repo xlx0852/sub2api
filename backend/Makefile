@@ -1,4 +1,4 @@
-.PHONY: build generate test test-unit test-unit-race test-integration test-settlement test-e2e
+.PHONY: release-bundle build generate test test-unit test-unit-race test-integration test-settlement test-e2e
 
 VERSION ?= $(shell ./scripts/resolve-version.sh)
 MIN_FRONTEND_VERSION ?= $(shell tr -d '\r\n' < cmd/server/MIN_FRONTEND_VERSION)
@@ -36,3 +36,10 @@ test-e2e:
 
 test-e2e-local:
 	go test -tags=e2e -v -timeout=300s ./internal/integration/...
+
+# For hand-run/systemd/bind-mounted backend deployments, ship resources beside
+# the binary. Never export catalog.fallback_pricing as a LiteLLM pricing file:
+# alias_of entries must not silently disappear during parsing.
+RELEASE_ARCHIVE ?= bin/sub2api-$(VERSION).tar.gz
+release-bundle: build
+	python3 scripts/package-release.py --binary bin/server --output "$(RELEASE_ARCHIVE)"

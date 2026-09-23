@@ -78,12 +78,15 @@ type CostBreakdown struct {
 
 // RecordInput is the provider-neutral input consumed by the single settlement core.
 type RecordInput struct {
-	Policy                RecordPolicy
-	RequestID             string
-	BillingRequestID      string
-	Model                 string
-	RequestedModel        string
-	UpstreamModel         string
+	Policy           RecordPolicy
+	RequestID        string
+	BillingRequestID string
+	Model            string
+	RequestedModel   string
+	UpstreamModel    string
+	// UpstreamResponseModel is the model declared by the upstream response before any
+	// protocol conversion or client-facing rewrite; empty when the response declared none.
+	UpstreamResponseModel string
 	BillingModels         []string
 	QuotaPlatform         string
 	Usage                 Usage

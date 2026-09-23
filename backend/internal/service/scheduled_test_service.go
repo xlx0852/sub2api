@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,6 +10,11 @@ import (
 )
 
 var scheduledTestCronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+
+// ErrScheduledPlanExists reports that the account already owns its single diagnostics plan.
+// Each account is allowed exactly one plan so the diagnostics settings (schedule, model,
+// auto-recover) have a single source of truth; callers must update the existing one.
+var ErrScheduledPlanExists = errors.New("该账号已存在定时测试计划，每个账号仅允许一个（请编辑现有计划）")
 
 // ScheduledTestService provides CRUD operations for scheduled test plans and results.
 type ScheduledTestService struct {
@@ -31,7 +37,22 @@ func NewScheduledTestService(
 }
 
 // CreatePlan validates the cron expression, computes next_run_at, and persists the plan.
+//
+// The account may own at most one plan; a second create is rejected instead of silently
+// producing competing schedules.
 func (s *ScheduledTestService) CreatePlan(ctx context.Context, plan *ScheduledTestPlan) (*ScheduledTestPlan, error) {
+	if plan == nil {
+		return nil, fmt.Errorf("plan is required")
+	}
+	if plan.AccountID > 0 {
+		existing, err := s.planRepo.ListByAccountID(ctx, plan.AccountID)
+		if err != nil {
+			return nil, err
+		}
+		if len(existing) > 0 {
+			return nil, ErrScheduledPlanExists
+		}
+	}
 	nextRun, err := computeNextRun(plan.CronExpression, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("invalid cron expression: %w", err)
@@ -82,8 +103,12 @@ func (s *ScheduledTestService) ListResults(ctx context.Context, planID int64, li
 // SaveResult inserts a result and prunes old entries beyond maxResults.
 func (s *ScheduledTestService) SaveResult(ctx context.Context, planID int64, maxResults int, result *ScheduledTestResult) error {
 	result.PlanID = planID
-	if _, err := s.resultRepo.Create(ctx, result); err != nil {
+	created, err := s.resultRepo.Create(ctx, result)
+	if err != nil {
 		return err
+	}
+	if created != nil {
+		result.ID = created.ID
 	}
 	return s.resultRepo.PruneOldResults(ctx, planID, maxResults)
 }

@@ -585,10 +585,6 @@ func filterSchedulerExtra(extra map[string]any) map[string]any {
 	}
 	keys := []string{
 		"mixed_scheduling",
-		"window_cost_limit",
-		"window_cost_sticky_reserve",
-		"max_sessions",
-		"session_idle_timeout_minutes",
 		"openai_oauth_responses_websockets_v2_enabled",
 		"openai_oauth_responses_websockets_v2_mode",
 		"openai_apikey_responses_websockets_v2_enabled",

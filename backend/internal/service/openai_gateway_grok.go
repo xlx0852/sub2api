@@ -409,9 +409,7 @@ func normalizeGrokResponsesInputItems(input []any, translation *grokCodexTransla
 			}
 			continue
 		case "custom_tool_call_output":
-			if converted := convertGrokFunctionCallOutputItem(item); converted != nil {
-				normalized = append(normalized, converted)
-			}
+			normalized = append(normalized, grokItemsToAny(convertGrokFunctionCallOutputItem(item))...)
 			continue
 		case "function_call":
 			if converted := convertGrokFunctionCallItem(item); converted != nil {
@@ -419,9 +417,7 @@ func normalizeGrokResponsesInputItems(input []any, translation *grokCodexTransla
 			}
 			continue
 		case "function_call_output":
-			if converted := convertGrokFunctionCallOutputItem(item); converted != nil {
-				normalized = append(normalized, converted)
-			}
+			normalized = append(normalized, grokItemsToAny(convertGrokFunctionCallOutputItem(item))...)
 			continue
 		case "local_shell_call":
 			// Codex shell history uses local_shell_call; xAI ModelInput does not accept it.
@@ -432,9 +428,7 @@ func normalizeGrokResponsesInputItems(input []any, translation *grokCodexTransla
 			continue
 		case "local_shell_call_output":
 			callID := firstNonEmptyAny(localShellCallIDs[strings.TrimSpace(fmt.Sprint(item["id"]))], item["call_id"], item["id"], "call_unknown")
-			if converted := convertGrokFunctionCallOutputItemWithCallID(item, callID); converted != nil {
-				normalized = append(normalized, converted)
-			}
+			normalized = append(normalized, grokItemsToAny(convertGrokFunctionCallOutputItemWithCallID(item, callID))...)
 			continue
 		case "image_generation_call":
 			path := firstNonEmptyStringField(item, "path", "result", "output", "revised_prompt")
@@ -639,18 +633,27 @@ func convertGrokLocalShellCallItem(item map[string]any) map[string]any {
 	}
 }
 
-func convertGrokFunctionCallOutputItem(item map[string]any) map[string]any {
+func convertGrokFunctionCallOutputItem(item map[string]any) []map[string]any {
 	callID := firstNonEmptyAny(item["call_id"], item["id"], "call_unknown")
 	return convertGrokFunctionCallOutputItemWithCallID(item, callID)
 }
 
-func convertGrokFunctionCallOutputItemWithCallID(item map[string]any, callID any) map[string]any {
-	output := stringifyGrokToolOutput(item["output"])
-	return map[string]any{
+// convertGrokFunctionCallOutputItemWithCallID returns the tool result plus, when the tool
+// returned images, an extra user message carrying those images.
+func convertGrokFunctionCallOutputItemWithCallID(item map[string]any, callID any) []map[string]any {
+	output, images := grokToolOutputSplit(item["output"])
+	if output == "" && len(images) > 0 {
+		output = "[image]"
+	}
+	items := []map[string]any{{
 		"type":    "function_call_output",
 		"call_id": callID,
 		"output":  output,
+	}}
+	if len(images) > 0 {
+		items = append(items, grokToolImageCarrierItem(images))
 	}
+	return items
 }
 
 func normalizeGrokFunctionArguments(raw any) string {
@@ -674,6 +677,69 @@ func normalizeGrokFunctionArguments(raw any) string {
 		return "{}"
 	default:
 		return encodeGrokCustomToolInput(typed)
+	}
+}
+
+// grokItemsToAny widens typed items for the []any history slice.
+func grokItemsToAny(items []map[string]any) []any {
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		out = append(out, item)
+	}
+	return out
+}
+
+// grokToolOutputSplit separates a tool result into the text part (which xAI accepts as the
+// function_call_output string) and any image parts. xAI's ModelInput has no way to attach an
+// image to a tool result, so dropping them — which this code used to do, leaving only "[image]"
+// — makes the model answer about an image it never received. The images are re-sent as a
+// follow-up user message instead, which is the shape the model does read.
+func grokToolOutputSplit(raw any) (text string, images []any) {
+	items, ok := raw.([]any)
+	if !ok {
+		return stringifyGrokToolOutput(raw), nil
+	}
+	parts := make([]string, 0, len(items))
+	for _, rawPart := range items {
+		part, ok := rawPart.(map[string]any)
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(fmt.Sprint(part["type"])) {
+		case "input_text", "output_text", "text":
+			if value, ok := part["text"].(string); ok && strings.TrimSpace(value) != "" {
+				parts = append(parts, value)
+			}
+		case "input_image", "output_image":
+			image := map[string]any{"type": "input_image"}
+			switch value := part["image_url"].(type) {
+			case string:
+				image["image_url"] = value
+			case map[string]any:
+				if url, _ := value["url"].(string); strings.TrimSpace(url) != "" {
+					image["image_url"] = url
+				} else {
+					image["image_url"] = value
+				}
+			}
+			if url, _ := image["image_url"].(string); strings.TrimSpace(url) == "" {
+				// Nothing usable to forward: keep the marker so tool continuity is obvious.
+				parts = append(parts, "[image]")
+				continue
+			}
+			images = append(images, image)
+		}
+	}
+	return strings.Join(parts, "\n"), images
+}
+
+// grokToolImageCarrierItem renders the collected tool images as a user message.
+func grokToolImageCarrierItem(images []any) map[string]any {
+	return map[string]any{
+		"role": "user",
+		"content": append([]any{
+			map[string]any{"type": "input_text", "text": "[tool result image(s) attached]"},
+		}, images...),
 	}
 }
 

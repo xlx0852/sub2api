@@ -31,16 +31,6 @@ func ProvidePricingRemoteClient(cfg *config.Config) ports.PricingRemoteClient {
 	return NewPricingRemoteClient(cfg.Update.ProxyURL, cfg.Security.ProxyFallback.AllowDirectOnError)
 }
 
-// ProvideSessionLimitCache 创建会话限制缓存
-// 用于 Anthropic OAuth/SetupToken 账号的并发会话数量控制
-func ProvideSessionLimitCache(rdb *redis.Client, cfg *config.Config) ports.SessionLimitCache {
-	defaultIdleTimeoutMinutes := 5 // 默认 5 分钟空闲超时
-	if cfg != nil && cfg.Gateway.SessionIdleTimeoutMinutes > 0 {
-		defaultIdleTimeoutMinutes = cfg.Gateway.SessionIdleTimeoutMinutes
-	}
-	return NewSessionLimitCache(rdb, defaultIdleTimeoutMinutes)
-}
-
 // ProvideSchedulerCache 创建调度快照缓存，并注入快照分块参数。
 func ProvideSchedulerCache(rdb *redis.Client, cfg *config.Config) ports.SchedulerCache {
 	mgetChunkSize := defaultSchedulerSnapshotMGetChunkSize
@@ -102,10 +92,7 @@ var ProviderSet = wire.NewSet(
 	NewOpenAI403CounterCache,
 	NewInternal500CounterCache,
 	ProvideConcurrencyCache,
-	ProvideSessionLimitCache,
-	NewRPMCache,
 	NewUserRPMCache,
-	NewUserMsgQueueCache,
 	NewDashboardCache,
 	NewEmailCache,
 	NewIdentityCache,

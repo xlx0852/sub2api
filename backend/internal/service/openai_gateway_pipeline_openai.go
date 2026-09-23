@@ -833,6 +833,9 @@ func (s *OpenAIGatewayService) forwardOpenAITransport(ex *pipeline.Exchange) err
 
 		// Handle normal response
 		var usage *OpenAIUsage
+		// upstreamServiceTier 是上游报告的实际档位；Fast mode 被 ramp rate 降级时
+		// 上游会回 service_tier=default 并按标准价计费，计费需跟随它而非请求档位。
+		var upstreamServiceTier *string
 		st.firstTokenMs = nil
 		st.responseID = ""
 		st.responseModel = ""
@@ -889,6 +892,7 @@ func (s *OpenAIGatewayService) forwardOpenAITransport(ex *pipeline.Exchange) err
 				return err
 			}
 			usage = streamResult.usage
+			upstreamServiceTier = streamResult.serviceTier
 			st.firstTokenMs = streamResult.firstTokenMs
 			st.responseID = strings.TrimSpace(streamResult.responseID)
 			st.responseModel = streamResult.responseModel
@@ -900,6 +904,7 @@ func (s *OpenAIGatewayService) forwardOpenAITransport(ex *pipeline.Exchange) err
 				return err
 			}
 			usage = nonStreamResult.usage
+			upstreamServiceTier = nonStreamResult.serviceTier
 			st.responseID = strings.TrimSpace(nonStreamResult.responseID)
 			st.responseModel = nonStreamResult.responseModel
 			st.imageCount = nonStreamResult.imageCount
@@ -908,6 +913,7 @@ func (s *OpenAIGatewayService) forwardOpenAITransport(ex *pipeline.Exchange) err
 				MarkOpenAICompactTerminalCommitted(st.c)
 			}
 		}
+		st.serviceTier = billedServiceTier(st.serviceTier, upstreamServiceTier)
 		s.bindHTTPResponseAccount(ex.Ctx, st.c, account, st.responseID)
 
 		// Extract and save Codex usage snapshot from response headers (for OAuth accounts).

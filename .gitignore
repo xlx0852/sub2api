@@ -160,3 +160,7 @@ output/
 .zcode/
 __pycache__/
 tools/sicts-image-gen/target/
+tools/hakimi-restock-agent/.venv/
+tools/hakimi-restock-agent/src/*.egg-info/
+tools/hakimi-restock-agent/config.yaml
+tools/hakimi-restock-agent/data/

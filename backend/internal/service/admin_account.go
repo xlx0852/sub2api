@@ -328,6 +328,9 @@ func (s *adminServiceImpl) CleanupOAuthEmailDuplicates(ctx context.Context) (kep
 
 func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccountInput) (*Account, error) {
 	if input != nil {
+		if err := validateExternalBridgeConfiguration(input.Platform, input.Type, input.Extra); err != nil {
+			return nil, err
+		}
 		if err := rejectDeprecatedGeminiPlatform(input.Platform); err != nil {
 			return nil, err
 		}
@@ -541,6 +544,18 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 				"cannot change account type while it has a spark shadow; delete the shadow first")
 		}
 	}
+	// Validate the effective state before mutating the fetched account. A type-only
+	// edit must not leave an enabled bridge using OAuth credentials.
+	effectiveType, effectiveExtra := account.Type, account.Extra
+	if input.Type != "" {
+		effectiveType = input.Type
+	}
+	if input.Extra != nil {
+		effectiveExtra = input.Extra
+	}
+	if err := validateExternalBridgeConfiguration(account.Platform, effectiveType, effectiveExtra); err != nil {
+		return nil, err
+	}
 	wasOveragesEnabled := account.IsOveragesEnabled()
 
 	if input.Name != "" {
@@ -736,6 +751,26 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	for _, account := range cachedTargets {
 		if err := rejectRetiredSupplyAccount(account); err != nil {
 			return nil, err
+		}
+	}
+
+	// Bulk extra writes are key merges; validate the merged view for every target
+	// before issuing any writes, including targets resolved through filters.
+	if input.Extra != nil {
+		for _, account := range cachedTargets {
+			if account == nil {
+				continue
+			}
+			extra := make(map[string]any, len(account.Extra)+len(input.Extra))
+			for key, value := range account.Extra {
+				extra[key] = value
+			}
+			for key, value := range input.Extra {
+				extra[key] = value
+			}
+			if err := validateExternalBridgeConfiguration(account.Platform, account.Type, extra); err != nil {
+				return nil, err
+			}
 		}
 	}
 

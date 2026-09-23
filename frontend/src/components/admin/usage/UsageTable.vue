@@ -74,6 +74,20 @@
                 >
                   {{ row.model_mapping_chain }}
                 </p>
+                <p
+                  v-if="row.upstream_response_model &&
+                  (row.upstream_model_mismatch ||
+                    row.upstream_response_model !== (row.upstream_model || row.model))"
+                  class="mt-1 flex flex-wrap items-center gap-1 break-all text-xs text-amber-600 dark:text-amber-400"
+                >
+                  <span class="mr-0.5">↳</span>
+                  <span>{{ t('usage.upstreamResponseModel') }}: {{ row.upstream_response_model }}</span>
+                  <span
+                    class="inline-flex shrink-0 items-center rounded border border-amber-300 bg-amber-50 px-1 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-300"
+                  >
+                    {{ t('usage.modelMismatch') }}
+                  </span>
+                </p>
                 <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-dark-400">
                   <span v-if="isColumnVisible('created_at')">{{ formatDateTime(row.created_at) }}</span>
                   <span v-if="isColumnVisible('group') && row.group" class="inline-flex items-center rounded bg-indigo-100 px-1.5 py-0.5 text-[11px] font-medium text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200">
@@ -248,6 +262,20 @@
           <span class="block max-w-40 truncate text-sm font-medium text-gray-900 dark:text-white" :title="row.api_key?.name || '-'">
             {{ row.api_key?.name || '-' }}
           </span>
+          <p
+            v-if="row.upstream_response_model &&
+            (row.upstream_model_mismatch ||
+              row.upstream_response_model !== (row.upstream_model || row.model))"
+            class="mt-1 flex flex-wrap items-center gap-1 break-all text-xs text-amber-600 dark:text-amber-400"
+          >
+            <span class="mr-0.5">↳</span>
+            <span>{{ t('usage.upstreamResponseModel') }}: {{ row.upstream_response_model }}</span>
+            <span
+              class="inline-flex shrink-0 items-center rounded border border-amber-300 bg-amber-50 px-1 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-300"
+            >
+              {{ t('usage.modelMismatch') }}
+            </span>
+          </p>
         </template>
 
         <template #cell-account="{ row }">

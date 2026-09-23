@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 
-const { updateAccountMock, checkMixedChannelRiskMock } = vi.hoisted(() => ({
+const { updateAccountMock, checkMixedChannelRiskMock, getAccountMock } = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
+  getAccountMock: vi.fn(),
   checkMixedChannelRiskMock: vi.fn()
 }))
 
@@ -19,6 +20,7 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       update: updateAccountMock,
+      getById: getAccountMock,
       checkMixedChannelRisk: checkMixedChannelRiskMock
     },
     settings: {
@@ -251,6 +253,7 @@ function buildOpenAISetupTokenAccount() {
 }
 
 function mountModal(account = buildAccount()) {
+  getAccountMock.mockResolvedValue(account)
   return mount(EditAccountModal, {
     props: {
       show: true,
@@ -310,6 +313,7 @@ describe('EditAccountModal', () => {
 
     await input.setValue('7.25')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.rate_multiplier).toBe(7.25)
@@ -336,6 +340,7 @@ describe('EditAccountModal', () => {
     expect(wrapper.get('[data-testid="model-whitelist-value"]').text()).toBe('gpt-5.2')
 
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.model_mapping).toEqual({
@@ -360,6 +365,7 @@ describe('EditAccountModal', () => {
 
     await wrapper.get('[data-testid="rewrite-to-snapshot"]').trigger('click')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.model_mapping).toEqual({
@@ -387,6 +393,7 @@ describe('EditAccountModal', () => {
     const wrapper = mountModal(account)
 
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.openai_compact_mode).toBe('force_on')
@@ -417,6 +424,7 @@ describe('EditAccountModal', () => {
     await inputWithValue('grok-latest').setValue('grok')
     await inputWithValue('grok-4.5').setValue('grok-build-0.1')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.model_mapping).toEqual({
@@ -435,6 +443,7 @@ describe('EditAccountModal', () => {
 
     await wrapper.get('[data-testid="set-shadow-group"]').trigger('click')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     const payload = updateAccountMock.mock.calls[0]?.[1]
@@ -464,6 +473,7 @@ describe('EditAccountModal', () => {
 
     await wrapper.get('[data-testid="openai-responses-mode-select"]').setValue('force_responses')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.openai_responses_mode).toBe('force_responses')
@@ -485,6 +495,7 @@ describe('EditAccountModal', () => {
 
     await wrapper.get('[data-testid="openai-responses-mode-select"]').setValue('auto')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('openai_responses_mode')
@@ -504,6 +515,7 @@ describe('EditAccountModal', () => {
     expect(wrapper.findAll('input[type="checkbox"]').some((input) => (input.element as HTMLInputElement).checked)).toBe(true)
 
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.openai_capabilities).toEqual([
@@ -541,6 +553,7 @@ describe('EditAccountModal', () => {
     expect(embeddingsCheckbox.element.checked).toBe(false)
 
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.openai_capabilities).toEqual([
@@ -570,6 +583,7 @@ describe('EditAccountModal', () => {
     expect(wrapper.find('[data-testid="openai-responses-mode-not-applicable"]').exists()).toBe(true)
 
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.openai_capabilities).toEqual([
@@ -594,6 +608,7 @@ describe('EditAccountModal', () => {
 
     await wrapper.get('button[data-testid="codex-image-tool-enabled"]').trigger('click')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_image_generation_bridge).toBe(true)
@@ -612,6 +627,7 @@ describe('EditAccountModal', () => {
 
     await wrapper.get('button[data-testid="codex-image-tool-disabled"]').trigger('click')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_image_generation_bridge).toBe(false)
@@ -632,6 +648,7 @@ describe('EditAccountModal', () => {
 
     await wrapper.get('button[data-testid="codex-image-tool-block"]').trigger('click')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_image_generation_explicit_tool_policy).toBe('strip')
@@ -652,6 +669,7 @@ describe('EditAccountModal', () => {
 
     await wrapper.get('button[data-testid="codex-image-tool-inherit"]').trigger('click')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('codex_image_generation_explicit_tool_policy')
@@ -669,6 +687,7 @@ describe('EditAccountModal', () => {
 
     await wrapper.get('[data-testid="edit-openai-ws-mode-select"]').setValue('http_bridge')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.openai_oauth_responses_websockets_v2_mode).toBe('http_bridge')
@@ -691,6 +710,7 @@ describe('EditAccountModal', () => {
     const wrapper = mountModal(account)
 
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     // 用户未输入新 key 时，payload 不应带 api_key，由后端合并保留旧值
@@ -710,6 +730,7 @@ describe('EditAccountModal', () => {
     const wrapper = mountModal(account)
 
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     // 旧后端响应未脱敏，原 api_key 会随 currentCredentials 一起传回去（旧行为，等价于无操作）
@@ -729,6 +750,7 @@ describe('EditAccountModal', () => {
     const wrapper = mountModal(account)
 
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).not.toHaveBeenCalled()
   })
@@ -746,6 +768,7 @@ describe('EditAccountModal', () => {
 
     await input.setValue('  updated-project  ')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.antigravity_project_id).toBe(
@@ -765,10 +788,102 @@ describe('EditAccountModal', () => {
 
     await input.setValue('')
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).not.toHaveProperty(
       'antigravity_project_id'
     )
+  })
+})
+
+  it('persists the external bridge switch and kind into account extra', async () => {
+    const account = buildAccount()
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="edit-account-tab-advanced"]').trigger('click')
+
+    expect(wrapper.find('[data-testid="external-bridge-kind"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="external-bridge-toggle"]').trigger('click')
+    await wrapper.get<HTMLInputElement>('[data-testid="external-bridge-kind"]').setValue(' Devin ')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    const extra = updateAccountMock.mock.calls[0]?.[1]?.extra as Record<string, unknown>
+    expect(extra.external_bridge).toBe(true)
+    expect(extra.external_bridge_kind).toBe('devin')
+  })
+
+  it('clears the external bridge keys when the switch is turned off', async () => {
+    const account = buildAccount()
+    account.extra = { external_bridge: true, external_bridge_kind: 'devin', keep_me: 1 }
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="edit-account-tab-advanced"]').trigger('click')
+    expect(wrapper.get<HTMLInputElement>('[data-testid="external-bridge-kind"]').element.value).toBe('devin')
+
+    await wrapper.get('[data-testid="external-bridge-toggle"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    const extra = updateAccountMock.mock.calls[0]?.[1]?.extra as Record<string, unknown>
+    expect(extra.external_bridge).toBeUndefined()
+    expect(extra.external_bridge_kind).toBeUndefined()
+    expect(extra.keep_me).toBe(1)
+  })
+
+describe('external bridge review regressions', () => {
+  it.each(['oauth', 'setup-token', 'upstream'])('does not expose the switch on %s accounts', (type) => {
+    const account = buildAccount()
+    account.type = type
+    const wrapper = mountModal(account)
+    expect(wrapper.find('[data-testid="external-bridge-toggle"]').exists()).toBe(false)
+  })
+
+  it('rejects blank bridge kinds before calling the update API', async () => {
+    updateAccountMock.mockReset()
+    const wrapper = mountModal()
+    await wrapper.get('[data-testid="edit-account-tab-advanced"]').trigger('click')
+    await wrapper.get('[data-testid="external-bridge-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="external-bridge-kind"]').setValue('  ')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccountMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps unknown and concurrently added mappings when saving an unrelated field', async () => {
+    const account = buildAccount()
+    account.credentials.model_mapping = { 'future-model': 'devin/future', 'gpt-5.2': 'gpt-5.2' }
+    updateAccountMock.mockReset()
+    updateAccountMock.mockResolvedValue(account)
+    const wrapper = mountModal(account)
+    getAccountMock.mockResolvedValue({ ...account, credentials: { ...account.credentials,
+      model_mapping: { ...account.credentials.model_mapping, 'claude-new': 'claude-new' } } })
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials.model_mapping).toEqual({
+      'future-model': 'devin/future', 'gpt-5.2': 'gpt-5.2', 'claude-new': 'claude-new'
+    })
+  })
+
+  it('does not overwrite a concurrently changed mapping edited in this drawer', async () => {
+    updateAccountMock.mockReset()
+    const account = buildAccount()
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="rewrite-to-snapshot"]').trigger('click')
+    getAccountMock.mockResolvedValue({ ...account, credentials: { ...account.credentials,
+      model_mapping: { 'gpt-5.2': 'new-upstream' } } })
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateAccountMock).not.toHaveBeenCalled()
   })
 })

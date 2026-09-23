@@ -28,7 +28,7 @@ func TestVertexServiceAccountBatchCreationFailsClosed(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	adminSvc := newStubAdminService()
 	adminSvc.createAccountErr = service.ErrRetiredVertexServiceAccount
-	handler := NewAccountHandler(adminSvc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAccountHandler(adminSvc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	router := gin.New()
 	router.POST("/api/v1/admin/accounts/batch", handler.BatchCreate)
 

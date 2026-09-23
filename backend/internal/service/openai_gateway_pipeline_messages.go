@@ -376,8 +376,10 @@ func (s *OpenAIGatewayService) forwardOpenAIMessagesRelay(ex *pipeline.Exchange)
 		if st.promptCacheKey != "" && st.anthropicDigestChain != "" {
 			s.bindOpenAICompatAnthropicDigestPromptCacheKey(account, st.apiKeyID, st.anthropicDigestChain, st.promptCacheKey, st.anthropicMatchedDigestChain)
 		}
+		// 请求体声明的档位只作为回退：转发层可能已按上游报告的实际档位覆盖
+		// （Fast mode 被降级时上游回 service_tier=default）。
 		if tier := extractOpenAIServiceTierFromBody(st.responsesBody); tier != nil {
-			result.ServiceTier = tier
+			result.ServiceTier = billedServiceTier(tier, result.ServiceTier)
 		}
 		if st.responsesReq != nil && st.responsesReq.Reasoning != nil && st.responsesReq.Reasoning.Effort != "" {
 			re := st.responsesReq.Reasoning.Effort

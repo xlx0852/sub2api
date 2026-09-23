@@ -1219,3 +1219,26 @@ func (c *concurrencyCache) cleanupStaleProcessSlotsForIndex(
 	c.removeActiveIndexMembers(ctx, spec.indexKey, staleMembers)
 	return nil
 }
+
+// redisScriptInt64At 兼容 go-redis 对 Lua 数组元素的不同返回类型。
+func redisScriptInt64At(result any, index int) (int64, error) {
+	values, ok := result.([]any)
+	if !ok {
+		return 0, fmt.Errorf("expected redis script array, got %T", result)
+	}
+	if index < 0 || index >= len(values) {
+		return 0, fmt.Errorf("redis script array missing index %d", index)
+	}
+	switch v := values[index].(type) {
+	case int64:
+		return v, nil
+	case int:
+		return int64(v), nil
+	case string:
+		return strconv.ParseInt(v, 10, 64)
+	case []byte:
+		return strconv.ParseInt(string(v), 10, 64)
+	default:
+		return 0, fmt.Errorf("unexpected redis script value %T", v)
+	}
+}

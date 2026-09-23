@@ -58,21 +58,25 @@ type ModelEntry struct {
 
 // PriceEntry is LiteLLM-compatible fallback pricing. Currency defaults to USD.
 type PriceEntry struct {
-	AliasOf                         string  `json:"alias_of,omitempty"`
-	Currency                        string  `json:"currency,omitempty"`
-	InputCostPerToken               float64 `json:"input_cost_per_token,omitempty"`
-	InputCostPerTokenPriority       float64 `json:"input_cost_per_token_priority,omitempty"`
-	ImageInputCostPerToken          float64 `json:"image_input_cost_per_token,omitempty"`
-	OutputCostPerToken              float64 `json:"output_cost_per_token,omitempty"`
-	OutputCostPerTokenPriority      float64 `json:"output_cost_per_token_priority,omitempty"`
-	CacheCreationInputTokenCost     float64 `json:"cache_creation_input_token_cost,omitempty"`
-	CacheReadInputTokenCost         float64 `json:"cache_read_input_token_cost,omitempty"`
-	CacheReadInputTokenCostPriority float64 `json:"cache_read_input_token_cost_priority,omitempty"`
-	SupportsCacheBreakdown          bool    `json:"supports_cache_breakdown,omitempty"`
-	LongContextInputTokenThreshold  int     `json:"long_context_input_token_threshold,omitempty"`
-	LongContextInputCostMultiplier  float64 `json:"long_context_input_cost_multiplier,omitempty"`
-	LongContextOutputCostMultiplier float64 `json:"long_context_output_cost_multiplier,omitempty"`
-	OutputCostPerImage              float64 `json:"output_cost_per_image,omitempty"`
+	AliasOf                     string  `json:"alias_of,omitempty"`
+	Currency                    string  `json:"currency,omitempty"`
+	InputCostPerToken           float64 `json:"input_cost_per_token,omitempty"`
+	InputCostPerTokenPriority   float64 `json:"input_cost_per_token_priority,omitempty"`
+	ImageInputCostPerToken      float64 `json:"image_input_cost_per_token,omitempty"`
+	OutputCostPerToken          float64 `json:"output_cost_per_token,omitempty"`
+	OutputCostPerTokenPriority  float64 `json:"output_cost_per_token_priority,omitempty"`
+	CacheCreationInputTokenCost float64 `json:"cache_creation_input_token_cost,omitempty"`
+	// CacheCreationInputTokenCostPriority 是 Fast mode（service_tier=priority/fast）下的
+	// 缓存写入单价。官方 Fast 档对 cache writes 与 input 同倍率，缺此字段时
+	// priceEntryToModelPricing 无法表达快速档 cache-write 价，会按标准价少收。
+	CacheCreationInputTokenCostPriority float64 `json:"cache_creation_input_token_cost_priority,omitempty"`
+	CacheReadInputTokenCost             float64 `json:"cache_read_input_token_cost,omitempty"`
+	CacheReadInputTokenCostPriority     float64 `json:"cache_read_input_token_cost_priority,omitempty"`
+	SupportsCacheBreakdown              bool    `json:"supports_cache_breakdown,omitempty"`
+	LongContextInputTokenThreshold      int     `json:"long_context_input_token_threshold,omitempty"`
+	LongContextInputCostMultiplier      float64 `json:"long_context_input_cost_multiplier,omitempty"`
+	LongContextOutputCostMultiplier     float64 `json:"long_context_output_cost_multiplier,omitempty"`
+	OutputCostPerImage                  float64 `json:"output_cost_per_image,omitempty"`
 }
 
 // ImageDefaults holds default image unit pricing.

@@ -79,6 +79,30 @@ export function applyOpenAIPassthrough(
   }
 }
 
+/**
+ * 「外部桥」标记：账号由独立部署的 OpenAI 兼容桥服务（Devin / Cursor…）承载。
+ *
+ * 该标记是 opt-in 的显式开关：打开后网关按外部桥语义处理（命名空间工具摊平、
+ * Devin 专属工具转换/描述裁剪、用量投影走桥的状态端点），关闭则回到
+ * 普通 OpenAI 兼容上游行为。kind 用于区分具体桥（影响用量端点与模型特例）；
+ * 关闭时一并清除，避免留下会被其它逻辑读到的旧 kind。
+ */
+export function applyOpenAIExternalBridge(
+  extra: Record<string, unknown>,
+  enabled: boolean,
+  kind: string
+): void {
+  if (!enabled) {
+    delete extra.external_bridge
+    delete extra.external_bridge_kind
+    return
+  }
+  const normalizedKind = kind.trim().toLowerCase()
+  if (!normalizedKind) throw new Error('external bridge kind is required')
+  extra.external_bridge = true
+  extra.external_bridge_kind = normalizedKind
+}
+
 export function applyOpenAIWebSocketExtra<T extends string>(
   extra: Record<string, unknown>,
   accountType: string,

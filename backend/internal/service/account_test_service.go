@@ -136,7 +136,7 @@ func createTestPayload(modelID string) (map[string]any, error) {
 				"content": []map[string]any{
 					{
 						"type": "text",
-						"text": "hi",
+						"text": reasoningProbePrompt,
 						"cache_control": map[string]string{
 							"type": "ephemeral",
 						},
@@ -166,7 +166,62 @@ func createTestPayload(modelID string) (map[string]any, error) {
 // All account types use full Claude Code client characteristics, only auth header differs
 // modelID is optional - if empty, defaults to claude.CurrentDefaultTestModel()
 // mode is optional - "compact" routes OpenAI accounts to the /responses/compact probe path
+// TestAccountConnection streams a connectivity test and, for text answers, appends the
+// reasoning-probe verdict so an operator immediately sees whether the upstream still reasons
+// like the model it claims to be.
 func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int64, modelID string, prompt string, mode string) error {
+	tee := newSSETeeWriter(c)
+	err := s.streamAccountConnection(c, accountID, modelID, prompt, mode)
+	s.emitReasoningProbeVerdict(c, tee.recorded())
+	return err
+}
+
+// sseTeeWriter forwards every SSE byte to the client while keeping a copy for judging.
+type sseTeeWriter struct {
+	gin.ResponseWriter
+	buffer *bytes.Buffer
+}
+
+func newSSETeeWriter(c *gin.Context) *sseTeeWriter {
+	tee := &sseTeeWriter{ResponseWriter: c.Writer, buffer: &bytes.Buffer{}}
+	c.Writer = tee
+	return tee
+}
+
+func (w *sseTeeWriter) Write(data []byte) (int, error) {
+	_, _ = w.buffer.Write(data)
+	return w.ResponseWriter.Write(data)
+}
+
+func (w *sseTeeWriter) recorded() string { return w.buffer.String() }
+
+// emitReasoningProbeVerdict appends the probe judgement to the stream. Image tests and
+// non-text payloads are skipped: their "answer" is a URL or base64 blob, not a number.
+func (s *AccountTestService) emitReasoningProbeVerdict(c *gin.Context, body string) {
+	answer, errMsg := parseTestSSEOutput(body)
+	answer = strings.TrimSpace(answer)
+	if errMsg != "" || answer == "" {
+		return
+	}
+	if looksLikeBinaryOrImageAnswer(answer) {
+		return
+	}
+	expected := s.expectedProbeAnswer()
+	s.sendEvent(c, TestEvent{Type: "content", Text: "\n" + formatProbeVerdictWith(judgeReasoningProbeWith(answer, expected), expected)})
+}
+
+// looksLikeBinaryOrImageAnswer guards the judge against payloads that are not a text answer.
+func looksLikeBinaryOrImageAnswer(answer string) bool {
+	lowered := strings.ToLower(answer)
+	for _, marker := range []string{"data:image", "base64,", "http://", "https://"} {
+		if strings.Contains(lowered, marker) {
+			return true
+		}
+	}
+	return len(answer) > 8192
+}
+
+func (s *AccountTestService) streamAccountConnection(c *gin.Context, accountID int64, modelID string, prompt string, mode string) error {
 	ctx := c.Request.Context()
 
 	// Get account
@@ -464,7 +519,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	c.Writer.Flush()
 
 	// Create OpenAI Responses API payload
-	payload := createOpenAITestPayload(testModelID, isOAuth)
+	payload := createOpenAIDiagnosticPayload(testModelID, isOAuth)
 	payloadBytes, _ := json.Marshal(payload)
 
 	// Send test_start event once. A task-invalid Agent Identity response may
@@ -1219,7 +1274,7 @@ func createGeminiTestPayload(modelID string, prompt string) []byte {
 
 	textPrompt := strings.TrimSpace(prompt)
 	if textPrompt == "" {
-		textPrompt = defaultGeminiTextTestPrompt
+		textPrompt = reasoningProbePrompt
 	}
 
 	payload := map[string]any{
@@ -1323,7 +1378,19 @@ func (s *AccountTestService) processGeminiStream(c *gin.Context, body io.Reader)
 }
 
 // createOpenAITestPayload creates a test payload for OpenAI Responses API
+// createOpenAITestPayload keeps the trivial "hi" probe: the usage/quota probe relies on it
+// being cheap and answering inside its 15s budget.
 func createOpenAITestPayload(modelID string, isOAuth bool) map[string]any {
+	return createOpenAIResponsesPayload(modelID, isOAuth, "hi")
+}
+
+// createOpenAIDiagnosticPayload uses the reasoning probe so an account test also reveals
+// whether the upstream still reasons like the model it claims to be.
+func createOpenAIDiagnosticPayload(modelID string, isOAuth bool) map[string]any {
+	return createOpenAIResponsesPayload(modelID, isOAuth, reasoningProbePrompt)
+}
+
+func createOpenAIResponsesPayload(modelID string, isOAuth bool, prompt string) map[string]any {
 	payload := map[string]any{
 		"model": modelID,
 		"input": []map[string]any{
@@ -1332,7 +1399,7 @@ func createOpenAITestPayload(modelID string, isOAuth bool) map[string]any {
 				"content": []map[string]any{
 					{
 						"type": "input_text",
-						"text": "hi",
+						"text": prompt,
 					},
 				},
 			},
@@ -1354,7 +1421,7 @@ func createOpenAITestPayload(modelID string, isOAuth bool) map[string]any {
 func createOpenAIChatCompletionsTestPayload(modelID string, prompt string) map[string]any {
 	testPrompt := strings.TrimSpace(prompt)
 	if testPrompt == "" {
-		testPrompt = "hi"
+		testPrompt = reasoningProbePrompt
 	}
 
 	return map[string]any{
@@ -1827,6 +1894,15 @@ func (s *AccountTestService) RunTestBackground(ctx context.Context, accountID in
 		status = "failed"
 		if errMsg == "" && testErr != nil {
 			errMsg = testErr.Error()
+		}
+		// The reasoning probe is much slower than the old greeting. If the upstream already
+		// delivered content and only ran out of budget, the account is connected: report the
+		// truncation in the answer instead of failing the connectivity verdict (and leaving
+		// the demote/quota-wall path to interpret a timeout as an upstream problem).
+		if strings.TrimSpace(responseText) != "" && isProbeStreamTimeout(errMsg) {
+			status = "success"
+			errMsg = ""
+			responseText = strings.TrimSpace(responseText) + "\n" + probeTruncatedVerdict()
 		}
 	}
 

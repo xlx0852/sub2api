@@ -29,7 +29,9 @@ type Usage struct {
 }
 
 type RelayResult struct {
-	RequestModel            string
+	RequestModel string
+	// ResponseModel 是上游响应声明的模型（终止帧优先），用于用量记录的模型一致性审计。
+	ResponseModel           string
 	Usage                   Usage
 	RequestID               string
 	TerminalEventType       string
@@ -41,9 +43,11 @@ type RelayResult struct {
 }
 
 type RelayTurnResult struct {
-	Turn              int
-	BillingRequestID  string
-	RequestModel      string
+	Turn             int
+	BillingRequestID string
+	RequestModel     string
+	// ResponseModel 是上游响应声明的模型（终止帧优先）。
+	ResponseModel     string
 	Usage             Usage
 	RequestID         string
 	TerminalEventType string
@@ -85,17 +89,19 @@ type RelayTraceEvent struct {
 }
 
 type relayState struct {
-	usage             Usage
-	requestModel      string
-	lastResponseID    string
-	terminalEventType string
-	firstTokenMs      *int
-	turnTimingByID    map[string]*relayTurnTiming
-	activeTurn        *relayTurnTiming
-	completedTurns    int
-	turnBillingIDs    map[int]string
-	newBillingID      func() string
-	onUpstreamEvent   func(turn int, eventType, responseID, billingRequestID string)
+	usage        Usage
+	requestModel string
+	// upstreamResponseModel 累积当前 turn 上游声明的模型：终止帧优先，否则保留首个声明。
+	upstreamResponseModel string
+	lastResponseID        string
+	terminalEventType     string
+	firstTokenMs          *int
+	turnTimingByID        map[string]*relayTurnTiming
+	activeTurn            *relayTurnTiming
+	completedTurns        int
+	turnBillingIDs        map[int]string
+	newBillingID          func() string
+	onUpstreamEvent       func(turn int, eventType, responseID, billingRequestID string)
 }
 
 type relayExitSignal struct {
@@ -106,12 +112,13 @@ type relayExitSignal struct {
 }
 
 type observedUpstreamEvent struct {
-	terminal   bool
-	eventType  string
-	responseID string
-	usage      Usage
-	duration   time.Duration
-	firstToken *int
+	terminal      bool
+	eventType     string
+	responseID    string
+	responseModel string
+	usage         Usage
+	duration      time.Duration
+	firstToken    *int
 }
 
 type relayTurnTiming struct {
@@ -487,6 +494,11 @@ func runUpstreamToClient(
 		case coderws.MessageBinary:
 			// binary frame 直接透传，不进入 JSON 观测路径（避免无效解析开销）。
 		}
+		if state != nil && observedEvent.responseModel != "" {
+			if observedEvent.terminal || state.upstreamResponseModel == "" {
+				state.upstreamResponseModel = observedEvent.responseModel
+			}
+		}
 		if state != nil && state.onUpstreamEvent != nil && observedEvent.eventType != "" {
 			turn := state.completedTurns + 1
 			state.onUpstreamEvent(turn, observedEvent.eventType, observedEvent.responseID, state.billingRequestID(turn))
@@ -636,6 +648,14 @@ func observeUpstreamMessage(
 	if responseID == "" && isTerminalEvent(eventType) {
 		responseID = strings.TrimSpace(values[3].String())
 	}
+	// 上游声明的模型：Responses 帧放在 response.model，chat 形态放在顶层 model。
+	responseModel := ""
+	if modelValue := gjson.GetBytes(message, "response.model"); modelValue.Exists() {
+		responseModel = strings.TrimSpace(modelValue.String())
+	}
+	if responseModel == "" {
+		responseModel = strings.TrimSpace(gjson.GetBytes(message, "model").String())
+	}
 	now := nowFn()
 
 	if state.firstTokenMs == nil && isTokenEvent(eventType) {
@@ -652,9 +672,10 @@ func observeUpstreamMessage(
 	}
 	parsedUsage := parseUsageAndAccumulate(state, message, eventType, onUsageParseFailure)
 	observed := observedUpstreamEvent{
-		eventType:  eventType,
-		responseID: responseID,
-		usage:      parsedUsage,
+		eventType:     eventType,
+		responseID:    responseID,
+		responseModel: responseModel,
+		usage:         parsedUsage,
 	}
 	if responseID != "" {
 		turnTiming := openAIWSRelayGetOrInitTurnTiming(state, responseID, now)
@@ -697,9 +718,11 @@ func emitTurnComplete(
 		return
 	}
 	requestModel := ""
+	responseModel := ""
 	turn := 1
 	if state != nil {
 		requestModel = state.requestModel
+		responseModel = state.upstreamResponseModel
 		turn = state.completedTurns + 1
 	}
 	billingRequestID := ""
@@ -711,6 +734,7 @@ func emitTurnComplete(
 			Turn:              turn,
 			BillingRequestID:  billingRequestID,
 			RequestModel:      requestModel,
+			ResponseModel:     responseModel,
 			Usage:             observed.usage,
 			RequestID:         responseID,
 			TerminalEventType: observed.eventType,
@@ -720,6 +744,8 @@ func emitTurnComplete(
 	}
 	if state != nil {
 		state.completedTurns++
+		// 每个 turn 独立审计：下个 turn 重新累积。
+		state.upstreamResponseModel = ""
 	}
 }
 
@@ -897,6 +923,7 @@ func enrichResult(result *RelayResult, state *relayState, duration time.Duration
 		return
 	}
 	result.RequestModel = state.requestModel
+	result.ResponseModel = state.upstreamResponseModel
 	result.Usage = state.usage
 	result.RequestID = state.lastResponseID
 	result.TerminalEventType = state.terminalEventType

@@ -173,27 +173,6 @@ export default {
       subscriptionExpires: '到期',
       // 容量状态提示
       capacity: {
-        windowCost: {
-          blocked: '5h窗口费用超限，账号暂停调度',
-          stickyOnly: '5h窗口费用达阈值，仅允许粘性会话',
-          normal: '5h窗口费用正常'
-        },
-        sessions: {
-          full: '活跃会话已满，新会话需等待（空闲超时：{idle}分钟）',
-          normal: '活跃会话正常（空闲超时：{idle}分钟）'
-        },
-        rpm: {
-          full: '已达 RPM 上限',
-          warning: 'RPM 接近上限',
-          normal: 'RPM 正常',
-          tieredNormal: 'RPM 限制 (三区模型) - 正常',
-          tieredWarning: 'RPM 限制 (三区模型) - 接近阈值',
-          tieredStickyOnly: 'RPM 限制 (三区模型) - 仅粘性会话 | 缓冲区: {buffer}',
-          tieredBlocked: 'RPM 限制 (三区模型) - 已阻塞 | 缓冲区: {buffer}',
-          stickyExemptNormal: 'RPM 限制 (粘性豁免) - 正常',
-          stickyExemptWarning: 'RPM 限制 (粘性豁免) - 接近阈值',
-          stickyExemptOver: 'RPM 限制 (粘性豁免) - 超限，仅粘性会话'
-        },
         quota: {
           exceeded: '配额已用完，账号暂停调度',
           normal: '配额正常'
@@ -650,6 +629,13 @@ export default {
         responsesWebsocketsV2Desc:
           '默认关闭。开启后可启用 responses_websockets_v2 协议能力（受网关全局开关与账号类型开关约束）。',
         wsMode: 'WS mode',
+        externalBridge: '外部桥',
+        externalBridgeDesc: '仅用于 OpenAI API Key 类型的独立桥服务。启用可能改变私网地址校验、协议转换与用量查询行为；Devin 会额外处理工具兼容性。关闭可能使私网桥不可用，不会自动切换上游地址或密钥。',
+        externalBridgeKind: '桥类型',
+        externalBridgeKindRequired: '启用外部桥时，请填写桥类型。',
+        modelMappingConflict: '模型映射已被其他操作修改，请重新打开后确认：{models}',
+        externalBridgeKindHint: '必填。填写 devin、cursor 或实际桥类型；Devin 专属工具兼容处理不会应用于 Cursor。',
+        externalBridgeKindPlaceholder: '例如 devin / cursor',
         wsModeDesc: '仅对当前 OpenAI 账号类型生效。',
         wsModeOff: '关闭（off）',
         wsModeCtxPool: '上下文池（ctx_pool）',
@@ -835,48 +821,7 @@ export default {
       // Quota control (Anthropic OAuth/SetupToken only)
       quotaControl: {
         title: '配额控制',
-        hint: '配置费用窗口、会话限制、客户端亲和等调度控制。',
-        windowCost: {
-          label: '5h窗口费用控制',
-          hint: '限制账号在5小时窗口内的费用使用',
-          limit: '费用阈值',
-          limitPlaceholder: '50',
-          limitHint: '达到阈值后不参与新请求调度',
-          stickyReserve: '粘性预留额度',
-          stickyReservePlaceholder: '10',
-          stickyReserveHint: '为粘性会话预留的额外额度'
-        },
-        sessionLimit: {
-          label: '会话数量控制',
-          hint: '限制同时活跃的会话数量',
-          maxSessions: '最大会话数',
-          maxSessionsPlaceholder: '3',
-          maxSessionsHint: '同时活跃的最大会话数量',
-          idleTimeout: '空闲超时',
-          idleTimeoutPlaceholder: '5',
-          idleTimeoutHint: '会话空闲超时后自动释放'
-        },
-        rpmLimit: {
-          label: 'RPM 限制',
-          hint: '限制每分钟请求数量，保护上游账号',
-          baseRpm: '基础 RPM',
-          baseRpmPlaceholder: '15',
-          baseRpmHint: '每分钟最大请求数，0 或留空表示不限制',
-          strategy: 'RPM 策略',
-          strategyTiered: '三区模型',
-          strategyStickyExempt: '粘性豁免',
-          strategyTieredHint: '绿区→黄区→仅粘性→阻塞，逐步限流',
-          strategyStickyExemptHint: '超限后仅允许粘性会话',
-          strategyHint: '三区模型: 超限后逐步限制; 粘性豁免: 已有会话不受限',
-          stickyBuffer: '粘性缓冲区',
-          stickyBufferPlaceholder: '默认: base RPM 的 20%',
-          stickyBufferHint: '超过 base RPM 后，粘性会话额外允许的请求数。为空则使用默认值（base RPM 的 20%，最小为 1）',
-          userMsgQueue: '用户消息限速',
-          userMsgQueueHint: '对用户消息施加发送限制，避免触发上游 RPM 限制',
-          umqModeOff: '关闭',
-          umqModeThrottle: '软性限速',
-          umqModeSerialize: '串行队列',
-        },
+        hint: '配置客户端亲和、指纹、缓存与中继等调度控制。',
         tlsFingerprint: {
           label: 'TLS 指纹模拟',
           hint: '模拟 Node.js/Claude Code 客户端的 TLS 指纹',

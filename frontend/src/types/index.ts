@@ -924,20 +924,6 @@ export interface Account {
   session_window_end: string | null
   session_window_status: 'allowed' | 'allowed_warning' | 'rejected' | null
 
-  // 5h窗口费用控制（仅 Anthropic OAuth/SetupToken 账号有效）
-  window_cost_limit?: number | null
-  window_cost_sticky_reserve?: number | null
-
-  // 会话数量控制（仅 Anthropic OAuth/SetupToken 账号有效）
-  max_sessions?: number | null
-  session_idle_timeout_minutes?: number | null
-
-  // RPM 限制（仅 Anthropic OAuth/SetupToken 账号有效）
-  base_rpm?: number | null
-  rpm_strategy?: string | null
-  rpm_sticky_buffer?: number | null
-  user_msg_queue_mode?: string | null  // "serialize" | "throttle" | null
-
   // TLS指纹伪装（仅 Anthropic OAuth/SetupToken 账号有效）
   enable_tls_fingerprint?: boolean | null
   tls_fingerprint_profile_id?: number | null
@@ -971,11 +957,6 @@ export interface Account {
   quota_reset_timezone?: string | null
   quota_daily_reset_at?: string | null
   quota_weekly_reset_at?: string | null
-
-  // 运行时状态（仅当启用对应限制时返回）
-  current_window_cost?: number | null // 当前窗口费用
-  active_sessions?: number | null // 当前活跃会话数
-  current_rpm?: number | null // 当前分钟 RPM 计数
 
   // 影子账号关系（spark 维度影子）
   parent_account_id?: number | null
@@ -1477,6 +1458,10 @@ export interface UsageLogAccountSummary {
 
 export interface AdminUsageLog extends UsageLog {
   upstream_model?: string | null
+  /** 上游响应声明的模型（网关改写回客户端模型之前）；上游未声明时为 null */
+  upstream_response_model?: string | null
+  /** 三态：null=上游未声明模型；true/false=与「送上游模型」的比较结果 */
+  upstream_model_mismatch?: boolean | null
   model_mapping_chain?: string | null
 
   // 账号计费倍率（仅管理员可见）

@@ -5,7 +5,6 @@ import "github.com/Wei-Shaw/sub2api/internal/domain"
 type Account = domain.Account
 type OpenAIEndpointCapability = domain.OpenAIEndpointCapability
 type TempUnschedulableRule = domain.TempUnschedulableRule
-type WindowCostSchedulability = domain.WindowCostSchedulability
 
 const (
 	OpenAIEndpointCapabilityChatCompletions = domain.OpenAIEndpointCapabilityChatCompletions
@@ -15,9 +14,6 @@ const (
 	WebSearchModeDefault                    = domain.WebSearchModeDefault
 	WebSearchModeEnabled                    = domain.WebSearchModeEnabled
 	WebSearchModeDisabled                   = domain.WebSearchModeDisabled
-	WindowCostSchedulable                   = domain.WindowCostSchedulable
-	WindowCostStickyOnly                    = domain.WindowCostStickyOnly
-	WindowCostNotSchedulable                = domain.WindowCostNotSchedulable
 )
 
 func IsGroupContextValid(group *Group) bool {

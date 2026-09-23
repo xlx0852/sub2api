@@ -37,7 +37,11 @@ export default {
       maxResultsTooltipExample: '例如填写 100，表示最多保存最近 100 次测试结果；第 101 次结果写入后，最早的一条会被清理。',
       maxResultsTooltipRange: '推荐填写范围：一般可填 20 到 200。只关注近期可用性时可填 20-50；需要回看较长时间的波动趋势时可填 100-200。',
       autoRecover: '自动恢复',
-      autoRecoverHelp: '测试成功后自动恢复异常状态的账号'
+      autoRecoverHelp: '测试成功后自动恢复异常状态的账号',
+      countdownDue: '正在执行…',
+      countdownMinutes: '{minutes}分{seconds}秒后',
+      countdownHours: '{hours}小时{minutes}分{seconds}秒后',
+      singlePlanHint: '每个账号仅保留一份定时测试计划。需要调整调度、模型或自动恢复设置时，直接编辑现有计划即可。',
     },
 
     // Proxies Management

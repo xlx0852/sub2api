@@ -30,9 +30,6 @@ func (s *GatewayService) reportGatewayCandidateSnapshots(
 		if headroom, ok := gatewayQuotaHeadroom(account); ok {
 			feedback.QuotaHeadroom = &headroom
 		}
-		if headroom, ok := gatewayWindowHeadroom(ctx, account); ok {
-			feedback.WindowHeadroom = &headroom
-		}
 		s.gatewayRuntimeStats.Report(feedback)
 	}
 }
@@ -91,19 +88,4 @@ func gatewayQuotaHeadroom(account *Account) (float64, bool) {
 		return 0, false
 	}
 	return math.Max(0, math.Min(1, headroom)), true
-}
-
-func gatewayWindowHeadroom(ctx context.Context, account *Account) (float64, bool) {
-	if account == nil || !account.IsAnthropicOAuthOrSetupToken() {
-		return 0, false
-	}
-	limit := account.GetWindowCostLimit()
-	if limit <= 0 {
-		return 0, false
-	}
-	cost, ok := windowCostFromPrefetchContext(ctx, account.ID)
-	if !ok {
-		return 0, false
-	}
-	return math.Max(0, math.Min(1, 1-cost/limit)), true
 }
