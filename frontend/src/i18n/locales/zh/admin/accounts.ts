@@ -476,6 +476,8 @@ export default {
           shapeHint: '形态 = 票的字符长度。实测同账号同期：astra 落点 292，luna / sol / terra 落点 312；跨账号并非一一对应。',
           replayable: '可回放',
           expired: '已过期',
+          cleared: '已清理',
+          clearedHint: '该池槽位当前没有有效票：票已被失效清理（过载 / 连续 5xx / 上游撤销），等待重采。',
           servedModel: '落点模型 {model}',
           servedModelUnknown: '落点模型未知',
           ageUnknown: '采集时间未知',
@@ -486,7 +488,7 @@ export default {
           egressHint: '采集时的出口指纹（协议/主机/端口的哈希前缀），不含代理地址与凭据。',
           cookiesLive: '可用',
           cookiesExpired: '已过期',
-          empty: '该账号尚无票与 Cookie 记录。票由网关在上游响应中采集，过载或失败会触发重采。',
+          empty: '该账号尚无票与 Cookie 记录（从未采到，也没有已清理的池槽位）。',
           loadFailed: '未能读取该账号的票状态（详情请求失败）。'
         }
       },

@@ -1394,6 +1394,8 @@ export default {
           shapeHint: 'Shape is the ticket length in characters. Measured on one account in one period: astra landings carry 292, luna / sol / terra carry 312. It does not correspond across accounts.',
           replayable: 'Replayable',
           expired: 'Expired',
+          cleared: 'Cleared',
+          clearedHint: 'This pool slot holds no valid ticket right now: it was cleared by invalidation (overload, repeated 5xx, or upstream revocation) and a re-harvest is pending.',
           servedModel: 'Served by {model}',
           servedModelUnknown: 'Served model unknown',
           ageUnknown: 'Capture time unknown',
@@ -1404,7 +1406,7 @@ export default {
           egressHint: 'Hash prefix of the egress at capture time (protocol, host, port). Contains no proxy address or credentials.',
           cookiesLive: 'Live',
           cookiesExpired: 'Expired',
-          empty: 'No ticket or cookie recorded for this account yet. Tickets are captured from upstream responses, and overloads or failures trigger a re-harvest.',
+          empty: 'No ticket or cookie recorded for this account, and no cleared pool slots either.',
           loadFailed: 'Could not read this account\'s ticket state (detail request failed).'
         }
       },

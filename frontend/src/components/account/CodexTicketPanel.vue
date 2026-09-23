@@ -44,16 +44,16 @@
                 <span
                   class="shrink-0 rounded px-1.5 py-0.5 font-mono text-[11px] font-medium tabular-nums"
                   :class="shapeClass(pool.shape)"
-                  :title="t('admin.accounts.usageDetails.tickets.shapeHint')"
+                  :title="pool.shape ? t('admin.accounts.usageDetails.tickets.shapeHint') : t('admin.accounts.usageDetails.tickets.clearedHint')"
                 >
-                  {{ pool.shape }}
+                  {{ pool.shape || '—' }}
                 </span>
               </div>
               <span
                 class="shrink-0 rounded px-2 py-0.5 text-[11px] font-medium"
                 :class="pool.fresh ? freshClass : staleClass"
               >
-                {{ pool.fresh ? t('admin.accounts.usageDetails.tickets.replayable') : t('admin.accounts.usageDetails.tickets.expired') }}
+                {{ poolStateLabel(pool) }}
               </span>
             </div>
             <div class="mt-2 flex items-center justify-between gap-3 text-[11px] text-gray-500 dark:text-gray-400">
@@ -62,8 +62,8 @@
               </span>
               <span class="shrink-0 tabular-nums" :title="pool.captured_at || ''">{{ ageLabel(pool) }}</span>
             </div>
-            <!-- 票龄进度：越靠右越接近不再回放 -->
-            <div class="mt-2 h-1 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
+            <!-- 票龄进度：越靠右越接近不再回放；无票时没有可展示的进度 -->
+            <div v-if="pool.shape" class="mt-2 h-1 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
               <div class="h-full rounded-full" :class="ageBarClass(pool)" :style="{ width: agePercent(pool) + '%' }" />
             </div>
           </li>
@@ -159,9 +159,20 @@ watch(
 // 形态高亮：292 是当前账号族里被当作目标的形态（实测 astra 落点发 292）。
 // 其余形态保持中性——形态与池并非一一对应，不该用颜色暗示不存在的对应关系。
 const shapeClass = (shape: number) =>
-  shape === 292
-    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-    : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+  shape === 0
+    ? 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
+    : shape === 292
+      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+      : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+
+// 三态：可回放 / 已过期 / 已清理（值被失效清理写成 null，键仍在，等待重采）。
+// 第三态必须单独说，否则"刚被清理"会被读成"从没打过票"。
+const poolStateLabel = (pool: CodexTicketPool) => {
+  if (!pool.shape) return t('admin.accounts.usageDetails.tickets.cleared')
+  return pool.fresh
+    ? t('admin.accounts.usageDetails.tickets.replayable')
+    : t('admin.accounts.usageDetails.tickets.expired')
+}
 
 const freshClass = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
 const staleClass = 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'

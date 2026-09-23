@@ -121,3 +121,22 @@ const wrapper = mount(CodexTicketPanel, {
     expect(text).not.toContain('SECRET-COOKIE-VALUE')
   })
 })
+
+// 失效清理后的槽位（形态 0）必须显示为「已清理」，不能显示成「已过期」，
+// 更不能因为形态 0 就不渲染该行。
+describe('cleared pool slots', () => {
+  it('renders a cleared slot with its own label and no age bar', async () => {
+    accountsMocks.getById.mockResolvedValue(detailAccount({
+      replay_ttl_seconds: 3600,
+      pools: [{ pool: 'gpt-5.6-luna', model: 'gpt-5.6-luna', shape: 0, age_seconds: 0, fresh: false }]
+    }))
+    const wrapper = mount(CodexTicketPanel, { props: { account: listAccount, active: true } })
+    await flushPromises()
+    const text = wrapper.text()
+    expect(text).toContain('gpt-5.6-luna')
+    expect(text).toContain('admin.accounts.usageDetails.tickets.cleared')
+    expect(text).not.toContain('admin.accounts.usageDetails.tickets.expired')
+    // 形态 0 显示为占位符，不是 0
+    expect(text).toContain('—')
+  })
+})
