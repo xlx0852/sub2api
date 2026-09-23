@@ -120,3 +120,48 @@ Redis 无 `sched:acc:139*` 残留 ⇒ **零流量影响**。138 未被改动（�
 2. **必须轮换**：OpenCode Go API key（轮换后更新 139 与 138）、OpenCode Console cookie、Admin API Key。
 3. 若要 139 承接流量：先轮换 key，再绑独立分组并置 `schedulable=true`，先观察质量。
 4. 未做：Anthropic 路径下的 OpenCode Go **一等平台化**（含 `minimax/qwen` 协议分流与按模型自动选协议）。
+
+## 25.9 账号测试的两处修正（2026-09-23 追加）
+
+### (1) 截断的推理流不再被报成「测试完成」
+
+`processClaudeStream` 旧实现只转发 `delta.text`（忽略 `thinking_delta`），
+收到 `message_stop` 就无条件发 `test_complete success=true`；
+`emitReasoningProbeVerdict` 在 `answer == ""` 时静默 return。
+⇒ 推理模型在预算不足时稳定产生「只有 thinking、答案为空、stop_reason=max_tokens」，
+界面上与「测试通过」完全同形，看到的只是「测试完成！」+ 空白。
+
+修正：跟踪 `sawText/sawThinking/stop_reason`；首个 thinking 增量用 `status` 事件
+播报进度（判决只解析 `content`，不会被推理文本里的数字污染）；无正文时显式说明
+（区分 max_tokens 截断 / 仅 thinking / 无内容块）；空答案改输出 `probeNoAnswerVerdict()`。
+截断**不报 error**（不是账号故障，报 error 会牵连账号健康判定）。
+
+### (2) 非 Claude 模型不再被注入 Claude Code 身份提示词
+
+`createTestPayload` 原先无条件把 `claudeCodeSystemPrompt`
+（`You are Claude Code, Anthropic's official CLI for Claude.`）放进 system 块。
+Anthropic 协议账号指向非 Claude 上游时（OpenCode Go 上的 `deepseek-v4.1-flash`），
+等于向第三方模型伪造身份，测到的不是真实模型行为。
+
+修正：`testPayloadSystemPrompt(modelID)` 按模型区分，仅 `claude*`（含 `vendor/claude-*`）
+保留 Claude Code 身份（真实 Claude 上游与 `claude_code_validator` 依赖它），
+其余改用 `accountTestNeutralSystemPrompt`，system 块数保持 1。
+
+**测量诚实性（防止后人误读）**：
+单样本曾显示「cc 变体 thinking 13,038 字符截断、neutral 变体 3,407 字符答对」，
+看起来像该提示词导致过度推理；但用 `max_tokens=2048`、每组 5 次复测：
+
+| system | 结果 | thinking 中位 |
+|---|---|---|
+| `cc`（原状） | 5/5 截断 | 3,233 |
+| `neutral` | 4/5 截断 + 1/5 答对 | 6,756 |
+| 无 system | 5/5 截断 | 6,584 |
+
+⇒ **该提示词不是截断主因**，主因是这题把推理预算吃光（15 次里 14 次截断）。
+所以本节改动只按「身份是否分对」取舍，**不声称**性能收益。
+`neutral` 提示词文本与测量时一致，改字会作废该测量。
+
+**同源待办**：测试报文还会带 Claude Code 客户端头（`claude.DefaultHeaders`）与
+`anthropic-beta`。OpenCode Go 对此容忍（经网关实测 200），但语义上同属对外伪造身份，
+若要一并规整需另开改动。转发链路不受本节影响：Anthropic passthrough 原样转发客户端 body，
+不做 system 注入。
