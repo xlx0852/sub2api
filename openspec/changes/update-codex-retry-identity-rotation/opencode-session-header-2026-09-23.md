@@ -90,3 +90,34 @@ API returned 400: {"type":"error","error":{"type":"MissingSessionID",
 逐条比对上游 `resolveOpenCodeSessionID`：优先级（入站头 → 其它会话头 → 体 `prompt_cache_key`
 → `metadata.user_id.session_id` → 已存在的出站头 → **`uuid.NewString()`**）与 `sanitizeSessionID`
 的字符/长度约束**均一致**。测试路径没有客户端会话，因此落到 UUID 兜底——与上游同路径行为相同。
+
+## 24.9 第二个问题：DeepSeek Go 不能走 Responses
+
+session 头修好后，用户复测 `deepseek-v4.1-flash` 的错误从 `MissingSessionID` 变成了：
+
+```
+API returned 400: {"type":"server_error","message":"Upstream request failed: This Go model requires Global regions..."}
+```
+
+配置 Global 后，错误进一步变成了**HTTP 200 但响应内容为空**；日志显示测试请求耗时从几百毫秒到 48 秒，
+Scheduled Diagnostics 还因此把账号临时降级。
+
+对照上游 v0.2.8 的 `DefaultOpenCodeGoProtocolRules` 后定位：
+
+- `gpt-*` / `grok-*` / `muse-spark-*` → Responses；
+- `minimax-*` / `qwen*` → Anthropic Messages（本仓最小接入暂未实现）；
+- **其它 Go 模型（包括 `deepseek-*`）→ Chat Completions**。
+
+本仓原来把所有 OpenAI API-key 账号默认当 Responses，DeepSeek 因此打错协议，返回空响应。
+
+修复：
+
+- 账号测试路径：OpenCode Go 的 DeepSeek 等默认模型改走 `/v1/chat/completions`；
+- 正式转发路径：复用现有 `forwardResponsesViaRawChatCompletions`；
+- `gpt/grok/muse` 仍走 Responses；
+- session 头与 `opencode/1.0.0` UA 保持在两条路径上。
+
+测试用例直接驱动真正的 `testOpenAIAccountConnection` 入口，断言
+`deepseek-v4.1-flash → https://opencode.ai/zen/go/v1/chat/completions`，不是只测辅助函数。
+
+上线后请再次点击账号测试；这次预期不会再是 MissingSessionID、Global region 或空响应。
