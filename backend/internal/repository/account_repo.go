@@ -157,7 +157,9 @@ func (r *accountRepository) Create(ctx context.Context, account *domain.Account)
 }
 
 func (r *accountRepository) GetByID(ctx context.Context, id int64) (*domain.Account, error) {
-	m, err := r.client.Account.Query().Where(dbaccount.IDEQ(id)).Only(ctx)
+	// WithProxy 是必需的：转发与账号测试路径都判断 `account.ProxyID != nil && account.Proxy != nil`，
+	// 缺少该边会让已绑定的代理被静默忽略（请求直连，代理形同未绑定）。GetByIDs 一直带有此边。
+	m, err := r.client.Account.Query().Where(dbaccount.IDEQ(id)).WithProxy().Only(ctx)
 	if err != nil {
 		return nil, translatePersistenceError(err, domain.ErrAccountNotFound, nil)
 	}
@@ -288,6 +290,7 @@ func (r *accountRepository) GetByCRSAccountID(ctx context.Context, crsAccountID 
 		Where(func(s *entsql.Selector) {
 			s.Where(sqljson.ValueEQ(dbaccount.FieldExtra, crsAccountID, sqljson.Path("crs_account_id")))
 		}).
+		WithProxy().
 		Only(ctx)
 	if err != nil {
 		if dbent.IsNotFound(err) {
