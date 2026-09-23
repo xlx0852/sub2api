@@ -461,6 +461,19 @@ export default {
         statusRefreshFailed: '刷新失败',
         statusNoData: '暂无数据',
         requestTypeStream: '流式',
+        openCodeGo: {
+          title: 'OpenCode Go 用量',
+          hint: 'OpenCode Go 官方用量窗口（余额/用量百分比）。仅在账号上游地址指向 opencode.ai/zen/go/v1 时可查。',
+          query: '查询',
+          querying: '查询中…',
+          failed: '查询失败：{reason}',
+          requestFailed: '请求失败',
+          rolling: '滚动窗口',
+          weekly: '近 7 天',
+          monthly: '近 1 个月',
+          resetsAt: '重置 {time}',
+          fetchedAt: '数据获取于 {time}'
+        },
         tabs: {
           quota: '额度',
           statistics: '统计',

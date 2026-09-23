@@ -1379,6 +1379,19 @@ export default {
         statusRefreshFailed: 'Refresh failed',
         statusNoData: 'No data',
         requestTypeStream: 'Streaming',
+        openCodeGo: {
+          title: 'OpenCode Go usage',
+          hint: 'Official OpenCode Go usage windows. Available when the account upstream points at opencode.ai/zen/go/v1.',
+          query: 'Query',
+          querying: 'Querying…',
+          failed: 'Query failed: {reason}',
+          requestFailed: 'Request failed',
+          rolling: 'Rolling window',
+          weekly: 'Last 7 days',
+          monthly: 'Last month',
+          resetsAt: 'resets {time}',
+          fetchedAt: 'Fetched {time}'
+        },
         tabs: {
           quota: 'Quota',
           statistics: 'Statistics',

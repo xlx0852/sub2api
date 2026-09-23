@@ -1781,6 +1781,38 @@ func (h *AccountHandler) ResetQuota(c *gin.Context) {
 	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), account))
 }
 
+// GetOpenCodeGoUsage 查询 OpenCode Go 官方用量窗口（管理端按需触发）。
+//
+// 语义说明：**不是 OpenCode Go 账号返回 applicable=false**（前端据此隐藏面板）；
+// 是 OpenCode Go 但查询失败时仍返回 200 并带上快照里的 error 字段——
+// 面板需要区分"没查过"与"查了但失败"，用 HTTP 错误码会把后者变成不可见。
+// GET /api/v1/admin/accounts/:id/opencode-go-usage
+func (h *AccountHandler) GetOpenCodeGoUsage(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	if h.accountTestService == nil {
+		response.BadRequest(c, "account test service is not enabled")
+		return
+	}
+	usage, queryErr := h.accountTestService.QueryOpenCodeGoUsage(c.Request.Context(), accountID)
+	if errors.Is(queryErr, service.ErrOpenCodeGoUsageNotApplicable) {
+		response.Success(c, gin.H{"applicable": false})
+		return
+	}
+	if queryErr != nil && usage == nil {
+		response.ErrorFrom(c, queryErr)
+		return
+	}
+	payload := gin.H{"applicable": true, "usage": usage}
+	if queryErr != nil {
+		payload["error"] = queryErr.Error()
+	}
+	response.Success(c, payload)
+}
+
 // GetTempUnschedulable handles getting temporary unschedulable status
 // GET /api/v1/admin/accounts/:id/temp-unschedulable
 func (h *AccountHandler) GetTempUnschedulable(c *gin.Context) {

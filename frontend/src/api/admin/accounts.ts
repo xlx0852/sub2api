@@ -251,6 +251,40 @@ export async function getStats(id: number, days: number = 30): Promise<AccountUs
   return data
 }
 
+/** OpenCode Go 官方用量窗口（rolling / weekly / monthly）。 */
+export interface OpenCodeGoUsageWindow {
+  status?: string
+  percent: number
+  resets_at?: string
+}
+
+export interface OpenCodeGoUsage {
+  rolling?: OpenCodeGoUsageWindow
+  weekly?: OpenCodeGoUsageWindow
+  monthly?: OpenCodeGoUsageWindow
+  fetched_at?: string
+  /** 失败时的短原因（不含任何凭据）。 */
+  error?: string
+  http_status?: number
+}
+
+export interface OpenCodeGoUsageResult {
+  /** 是否属于 OpenCode Go 账号；false 时前端不应展示该面板。 */
+  applicable: boolean
+  usage?: OpenCodeGoUsage
+  /** 查询失败时的原因（200 也会带回，便于面板显示"查了但失败"）。 */
+  error?: string
+}
+
+/**
+ * 查询 OpenCode Go 官方用量窗口（按需触发，服务端会落库）。
+ * @param id - Account ID
+ */
+export async function getOpenCodeGoUsage(id: number): Promise<OpenCodeGoUsageResult> {
+  const { data } = await apiClient.get<OpenCodeGoUsageResult>(`/admin/accounts/${id}/opencode-go-usage`)
+  return data
+}
+
 /**
  * Clear account error
  * @param id - Account ID
@@ -864,6 +898,7 @@ export const accountsAPI = {
   list,
   listWithEtag,
   getById,
+  getOpenCodeGoUsage,
   create,
   update,
   checkMixedChannelRisk,

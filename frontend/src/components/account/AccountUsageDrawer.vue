@@ -108,6 +108,8 @@
                     @state-change="handleUsageState"
                   />
                 </div>
+                <!-- OpenCode Go 官方用量窗口：非该类账号时组件自身不渲染 -->
+                <OpenCodeGoUsagePanel :account="account" :active="activeTab === 'quota'" />
               </section>
 
               <section v-if="activeTab === 'statistics'" role="tabpanel">
@@ -504,6 +506,7 @@ import Icon from '@/components/icons/Icon.vue'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import AccountUsageCell from './AccountUsageCell.vue'
 import CodexTicketPanel from './CodexTicketPanel.vue'
+import OpenCodeGoUsagePanel from './OpenCodeGoUsagePanel.vue'
 import MetricItem from './MetricItem.vue'
 import AccountStatsPanel from '@/components/admin/account/AccountStatsModal.vue'
 
