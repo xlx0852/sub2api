@@ -486,7 +486,8 @@ export default {
           egressHint: '采集时的出口指纹（协议/主机/端口的哈希前缀），不含代理地址与凭据。',
           cookiesLive: '可用',
           cookiesExpired: '已过期',
-          empty: '该账号尚无票与 Cookie 记录。票由网关在上游响应中采集，过载或失败会触发重采。'
+          empty: '该账号尚无票与 Cookie 记录。票由网关在上游响应中采集，过载或失败会触发重采。',
+          loadFailed: '未能读取该账号的票状态（详情请求失败）。'
         }
       },
       openaiQuotaReset: {

@@ -1404,7 +1404,8 @@ export default {
           egressHint: 'Hash prefix of the egress at capture time (protocol, host, port). Contains no proxy address or credentials.',
           cookiesLive: 'Live',
           cookiesExpired: 'Expired',
-          empty: 'No ticket or cookie recorded for this account yet. Tickets are captured from upstream responses, and overloads or failures trigger a re-harvest.'
+          empty: 'No ticket or cookie recorded for this account yet. Tickets are captured from upstream responses, and overloads or failures trigger a re-harvest.',
+          loadFailed: 'Could not read this account\'s ticket state (detail request failed).'
         }
       },
       openaiQuotaReset: {

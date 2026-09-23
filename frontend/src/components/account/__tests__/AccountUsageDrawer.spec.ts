@@ -14,6 +14,14 @@ vi.mock('@/api/admin/scheduledTests', () => ({
   default: scheduledTestsMocks
 }))
 
+// 打票面板打开时会按 id 取账号详情（列表接口不含 extra）。这里只替换 getById，
+// 其余导出保持真实实现，避免影响抽屉里其他依赖。
+const accountsMocks = vi.hoisted(() => ({ getById: vi.fn() }))
+vi.mock('@/api/admin/accounts', async () => {
+  const actual = await vi.importActual<typeof import('@/api/admin/accounts')>('@/api/admin/accounts')
+  return { ...actual, accountsAPI: { ...actual.accountsAPI, getById: accountsMocks.getById } }
+})
+
 vi.mock('@/components/admin/account/AccountStatsModal.vue', () => ({
   default: { props: ['account'], template: '<div data-testid="statistics-content">statistics</div>' }
 }))
@@ -86,6 +94,14 @@ describe('AccountUsageDrawer', () => {
   })
 
   it('切到打票页签展示票与 Cookie 状态', async () => {
+    accountsMocks.getById.mockResolvedValue({
+      ...account,
+      codex_ticket: {
+        replay_ttl_seconds: 3600,
+        pools: [{ pool: 'gpt-5.6-luna', model: 'gpt-5.6-luna', shape: 312, age_seconds: 90, fresh: true }],
+        cookies: { count: 3, fresh: true, egress: '5ee7a937' }
+      }
+    } as Account)
     const wrapper = mountDrawer()
     await openTab(wrapper, 'ticket')
 

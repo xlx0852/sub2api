@@ -9,7 +9,19 @@
       </p>
     </div>
 
-    <template v-if="summary">
+    <div v-if="loading && !summary" class="grid gap-2" aria-busy="true">
+      <div class="h-14 animate-pulse rounded-md bg-gray-100 dark:bg-dark-700" />
+      <div class="h-14 animate-pulse rounded-md bg-gray-100 dark:bg-dark-700" />
+    </div>
+
+    <div
+      v-else-if="loadFailed && !summary"
+      class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300"
+    >
+      {{ t('admin.accounts.usageDetails.tickets.loadFailed') }}
+    </div>
+
+    <template v-else-if="summary">
       <!-- 池位 -->
       <div v-if="pools.length">
         <div class="mb-3 flex items-center justify-between gap-3 border-b border-gray-200 pb-2 dark:border-dark-600">
@@ -96,19 +108,53 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Account, CodexTicketPool } from '@/types'
+import { accountsAPI } from '@/api/admin/accounts'
 import { formatRelativeTime } from '@/utils/format'
 import Icon from '@/components/icons/Icon.vue'
 
-const props = defineProps<{ account: Account }>()
+const props = defineProps<{ account: Account; active?: boolean }>()
 const { t } = useI18n()
 
-const summary = computed(() => props.account.codex_ticket ?? null)
+// 账号**列表**查询只 select 了部分字段（有意不含 extra 这个重 JSONB 列），
+// 所以列表里的 account 没有 codex_ticket。打开本页签时再按 id 取一次详情
+// （GET /admin/accounts/:id 会带 extra），既拿到摘要又不给列表加负担。
+const detail = ref<Account | null>(null)
+const loading = ref(false)
+const loadFailed = ref(false)
+
+const summary = computed(() => detail.value?.codex_ticket ?? props.account.codex_ticket ?? null)
 const pools = computed(() => summary.value?.pools ?? [])
 const cookies = computed(() => summary.value?.cookies ?? null)
 const replayMinutes = computed(() => Math.round((summary.value?.replay_ttl_seconds ?? 3600) / 60))
+
+const load = async (id: number) => {
+  loading.value = true
+  loadFailed.value = false
+  try {
+    detail.value = await accountsAPI.getById(id)
+  } catch {
+    // 详情取不到不该把整个面板变成错误页：回退到列表里的 account（可能没有摘要）。
+    loadFailed.value = true
+    detail.value = null
+  } finally {
+    loading.value = false
+  }
+}
+
+watch(
+  () => [props.active, props.account?.id] as const,
+  ([active, id]) => {
+    if (!active || !id) return
+    // 换账号必须重取，否则会显示上一个账号的票状态。
+    if (detail.value && detail.value.id !== id) detail.value = null
+    if (detail.value?.id === id) return
+    void load(id)
+  },
+  { immediate: true }
+)
 
 // 形态高亮：292 是当前账号族里被当作目标的形态（实测 astra 落点发 292）。
 // 其余形态保持中性——形态与池并非一一对应，不该用颜色暗示不存在的对应关系。

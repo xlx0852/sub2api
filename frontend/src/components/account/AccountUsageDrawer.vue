@@ -149,7 +149,7 @@
               </section>
 
               <section v-show="activeTab === 'ticket'" role="tabpanel" class="space-y-5">
-                <CodexTicketPanel :account="account" />
+                <CodexTicketPanel :account="account" :active="activeTab === 'ticket'" />
               </section>
 
               <section v-show="activeTab === 'diagnostics'" role="tabpanel" class="flex min-h-0 flex-1 flex-col space-y-3">
