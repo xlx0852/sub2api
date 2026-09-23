@@ -122,7 +122,9 @@ func TestNormalizeClaudeOAuthRequestBody_PreservesTopLevelFieldOrder(t *testing.
 	assertJSONTokenOrder(t, resultStr, `"alpha"`, `"model"`, `"temperature"`, `"system"`, `"messages"`, `"omega"`, `"tools"`, `"metadata"`, `"max_tokens"`)
 	require.Contains(t, resultStr, `"temperature":0.2`)
 	require.NotContains(t, resultStr, `"tool_choice"`)
-	require.Contains(t, resultStr, `"system":"`+claudeCodeSystemPrompt+`"`)
+	// 不变量：客户端 system 文本原样保留，不得被改写成 Claude Code 身份。
+	require.Contains(t, resultStr, `"system":"You are OpenCode, the best coding agent on the planet."`)
+	require.NotContains(t, resultStr, claudeCodeSystemPrompt)
 	require.Contains(t, resultStr, `"tools":[]`)
 	require.Contains(t, resultStr, `"metadata":{"user_id":"user-1"}`)
 	require.Contains(t, resultStr, `"max_tokens":128000`)

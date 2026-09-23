@@ -45,24 +45,6 @@ type claudeOAuthNormalizeOptions struct {
 	stripSystemCacheControl bool
 }
 
-// sanitizeSystemText rewrites only the fixed OpenCode identity sentence (if present).
-// We intentionally avoid broad keyword replacement in system prompts to prevent
-// accidentally changing user-provided instructions.
-func sanitizeSystemText(text string) string {
-	if text == "" {
-		return text
-	}
-	// Some clients include a fixed OpenCode identity sentence. Anthropic may treat
-	// this as a non-Claude-Code fingerprint, so rewrite it to the canonical
-	// Claude Code banner before generic "OpenCode"/"opencode" replacements.
-	text = strings.ReplaceAll(
-		text,
-		"You are OpenCode, the best coding agent on the planet.",
-		strings.TrimSpace(claudeCodeSystemPrompt),
-	)
-	return text
-}
-
 func marshalAnthropicSystemTextBlock(text string, includeCacheControl bool) ([]byte, error) {
 	block := anthropicSystemTextBlockPayload{
 		Type: "text",
@@ -145,46 +127,27 @@ func normalizeClaudeOAuthSystemBody(body []byte, opts claudeOAuthNormalizeOption
 		return body, false
 	}
 
+	// system **文本**一律不再改写：客户端身份必须原样到上游
+	// （Anthropic 提示词注入已彻底移除，见 openspec 第 26 节）。
+	// 这里只做形态归一：按需剥离 system 块上的 cache_control。
+	if !sys.IsArray() {
+		return body, false
+	}
+
 	out := body
 	modified := false
-
-	switch {
-	case sys.Type == gjson.String:
-		sanitized := sanitizeSystemText(sys.String())
-		if sanitized != sys.String() {
-			if next, ok := setJSONValueBytes(out, "system", sanitized); ok {
+	index := 0
+	sys.ForEach(func(_, item gjson.Result) bool {
+		if opts.stripSystemCacheControl && item.Get("cache_control").Exists() {
+			if next, ok := deleteJSONPathBytes(out, fmt.Sprintf("system.%d.cache_control", index)); ok {
 				out = next
 				modified = true
 			}
 		}
-	case sys.IsArray():
-		index := 0
-		sys.ForEach(func(_, item gjson.Result) bool {
-			if item.Get("type").String() == "text" {
-				textResult := item.Get("text")
-				if textResult.Exists() && textResult.Type == gjson.String {
-					text := textResult.String()
-					sanitized := sanitizeSystemText(text)
-					if sanitized != text {
-						if next, ok := setJSONValueBytes(out, fmt.Sprintf("system.%d.text", index), sanitized); ok {
-							out = next
-							modified = true
-						}
-					}
-				}
-			}
 
-			if opts.stripSystemCacheControl && item.Get("cache_control").Exists() {
-				if next, ok := deleteJSONPathBytes(out, fmt.Sprintf("system.%d.cache_control", index)); ok {
-					out = next
-					modified = true
-				}
-			}
-
-			index++
-			return true
-		})
-	}
+		index++
+		return true
+	})
 
 	return out, modified
 }
