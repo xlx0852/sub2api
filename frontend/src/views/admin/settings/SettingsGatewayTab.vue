@@ -2,7 +2,6 @@
 import { useI18n } from 'vue-i18n'
 import Toggle from '@/ui/Toggle.vue'
 import Select from '@/ui/Select.vue'
-import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import type { WebSearchEmulationConfig, WebSearchProviderConfig } from '@/api/admin/settings'
 import type { Proxy } from '@/types'
@@ -27,10 +26,6 @@ defineProps<{
   openaiFastPolicyScopeOptions: { value: string; label: string }[]
   openaiFastPolicyTierOptions: { value: string; label: string }[]
   commonModelPatterns: string[]
-  claudeOAuthSystemPromptBlocks: any[]
-  claudeOAuthSystemPromptPresetOptions: { value: string; label: string }[]
-  claudeOAuthSystemPromptBlockTypeOptions: { value: string; label: string }[]
-  claudeOAuthSystemPromptCacheTTLOptions: { value: string; label: string }[]
   webSearchProxies: Proxy[]
   expandedProviders: Record<number, boolean>
   wsTestLoading: boolean
@@ -51,14 +46,6 @@ defineProps<{
   removeOpenAIFastPolicyRule: (index: number) => void
   addOpenAIFastPolicyModelPattern: (rule: any) => void
   removeOpenAIFastPolicyModelPattern: (...args: any[]) => void
-  getClaudeOAuthPresetLabel: (...args: any[]) => string
-  addClaudeOAuthSystemPromptBlock: () => void
-  toggleClaudeOAuthSystemPromptBlock: (index: number) => void
-  removeClaudeOAuthSystemPromptBlock: (index: number) => void
-  moveClaudeOAuthSystemPromptBlock: (...args: any[]) => void
-  applyClaudeOAuthSystemPromptPreset: (...args: any[]) => void
-  markClaudeOAuthSystemPromptBlockCustom: (...args: any[]) => void
-  resetClaudeOAuthSystemPromptBlocks: () => void
   openTestDialog: () => void
   toggleProviderExpand: (idx: number) => void
   removeWebSearchProvider: (idx: number) => void
@@ -1651,237 +1638,6 @@ function quotaPercentage(provider: WebSearchProviderConfig): number {
                   </p>
                 </div>
                 <Toggle v-model="form.enable_cch_signing" />
-              </div>
-
-              <!-- Claude OAuth System Prompt Injection -->
-              <div class="flex items-center justify-between">
-                <div>
-                  <label
-                    class="text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    {{
-                      t(
-                        "admin.settings.gatewayForwarding.claudeOAuthSystemPromptInjection",
-                      )
-                    }}
-                  </label>
-                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                    {{
-                      t(
-                        "admin.settings.gatewayForwarding.claudeOAuthSystemPromptInjectionHint",
-                      )
-                    }}
-                  </p>
-                </div>
-                <Toggle
-                  v-model="form.enable_claude_oauth_system_prompt_injection"
-                />
-              </div>
-
-              <div>
-                <label
-                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  {{
-                    t(
-                      "admin.settings.gatewayForwarding.claudeOAuthSystemPromptBlocks",
-                    )
-                  }}
-                </label>
-                <div class="space-y-3">
-                  <div
-                    v-for="(block, index) in claudeOAuthSystemPromptBlocks"
-                    :key="block.id"
-                    class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/60"
-                  >
-                    <div
-                      :class="[
-                        'flex flex-wrap items-center justify-between gap-3',
-                        block.expanded && 'mb-3',
-                      ]"
-                    >
-                      <div class="min-w-0">
-                        <div
-                          class="text-sm font-medium text-gray-900 dark:text-white"
-                        >
-                          {{
-                            t(
-                              "admin.settings.gatewayForwarding.systemBlockTitle",
-                              { index: index + 1 },
-                            )
-                          }}
-                        </div>
-                        <div
-                          class="mt-0.5 text-xs text-gray-500 dark:text-gray-400"
-                        >
-                          {{ getClaudeOAuthPresetLabel(block.preset) }}
-                        </div>
-                      </div>
-                      <div class="flex items-center gap-2">
-                        <button
-                          type="button"
-                          class="btn btn-secondary btn-sm px-2"
-                          :title="
-                            block.expanded
-                              ? t(
-                                  'admin.settings.gatewayForwarding.systemBlockHide',
-                                )
-                              : t(
-                                  'admin.settings.gatewayForwarding.systemBlockShow',
-                                )
-                          "
-                          :aria-label="
-                            block.expanded
-                              ? t(
-                                  'admin.settings.gatewayForwarding.systemBlockHide',
-                                )
-                              : t(
-                                  'admin.settings.gatewayForwarding.systemBlockShow',
-                                )
-                          "
-                          @click="toggleClaudeOAuthSystemPromptBlock(index)"
-                        >
-                          <Icon
-                            :name="block.expanded ? 'eyeOff' : 'eye'"
-                            size="xs"
-                          />
-                        </button>
-                        <button
-                          type="button"
-                          class="btn btn-secondary btn-sm px-2"
-                          :disabled="index === 0"
-                          @click="moveClaudeOAuthSystemPromptBlock(index, -1)"
-                        >
-                          <Icon name="arrowUp" size="xs" />
-                        </button>
-                        <button
-                          type="button"
-                          class="btn btn-secondary btn-sm px-2"
-                          :disabled="
-                            index === claudeOAuthSystemPromptBlocks.length - 1
-                          "
-                          @click="moveClaudeOAuthSystemPromptBlock(index, 1)"
-                        >
-                          <Icon name="arrowDown" size="xs" />
-                        </button>
-                        <Toggle v-model="block.enabled" />
-                        <button
-                          type="button"
-                          class="btn btn-secondary btn-sm px-2 text-red-600 hover:text-red-700 dark:text-red-400"
-                          @click="removeClaudeOAuthSystemPromptBlock(index)"
-                        >
-                          <Icon name="trash" size="xs" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div v-show="block.expanded">
-                      <div class="grid gap-3 md:grid-cols-2">
-                        <div>
-                          <label
-                            class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300"
-                          >
-                            {{
-                              t(
-                                "admin.settings.gatewayForwarding.systemBlockPreset",
-                              )
-                            }}
-                          </label>
-                          <Select
-                            v-model="block.preset"
-                            :options="claudeOAuthSystemPromptPresetOptions"
-                            @change="
-                              (value) =>
-                                applyClaudeOAuthSystemPromptPreset(index, value)
-                            "
-                          />
-                        </div>
-                        <div>
-                          <label
-                            class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300"
-                          >
-                            {{
-                              t(
-                                "admin.settings.gatewayForwarding.systemBlockType",
-                              )
-                            }}
-                          </label>
-                          <Select
-                            v-model="block.type"
-                            :options="claudeOAuthSystemPromptBlockTypeOptions"
-                          />
-                        </div>
-                      </div>
-
-                      <div class="mt-3">
-                        <label
-                          class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300"
-                        >
-                          {{ t("admin.settings.gatewayForwarding.systemBlockText") }}
-                        </label>
-                        <textarea
-                          v-model="block.text"
-                          rows="6"
-                          class="input w-full resize-y font-mono text-xs leading-5"
-                          @input="markClaudeOAuthSystemPromptBlockCustom(block)"
-                        />
-                      </div>
-
-                      <div
-                        class="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_160px]"
-                      >
-                        <div class="flex items-center justify-between gap-4">
-                          <div>
-                            <label
-                              class="text-xs font-medium text-gray-600 dark:text-gray-300"
-                            >
-                              {{
-                                t(
-                                  "admin.settings.gatewayForwarding.systemBlockCacheControl",
-                                )
-                              }}
-                            </label>
-                          </div>
-                          <Toggle v-model="block.cacheControlEnabled" />
-                        </div>
-                        <div v-if="block.cacheControlEnabled">
-                          <Select
-                            v-model="block.cacheControlTTL"
-                            :options="claudeOAuthSystemPromptCacheTTLOptions"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    class="btn btn-secondary btn-sm"
-                    @click="addClaudeOAuthSystemPromptBlock"
-                  >
-                    <Icon name="plus" size="xs" />
-                    {{ t("admin.settings.gatewayForwarding.addSystemBlock") }}
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-secondary btn-sm"
-                    @click="resetClaudeOAuthSystemPromptBlocks"
-                  >
-                    <Icon name="refresh" size="xs" />
-                    {{
-                      t("admin.settings.gatewayForwarding.resetSystemBlocks")
-                    }}
-                  </button>
-                </div>
-                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                  {{
-                    t(
-                      "admin.settings.gatewayForwarding.claudeOAuthSystemPromptBlocksHint",
-                    )
-                  }}
-                </p>
               </div>
 
               <!-- Anthropic Cache TTL 1h Injection -->
