@@ -121,7 +121,6 @@ func generateSessionString() (string, error) {
 	return FormatMetadataUserID(hex64, "", sessionUUID, uaVersion), nil
 }
 
-// createTestPayload creates a Claude Code style test request payload
 // accountTestMaxTokens 是账号测试报文的输出预算。
 //
 // 推理模型会先把预算花在 thinking 上再产出答案正文，预算过小会得到
@@ -130,6 +129,16 @@ func generateSessionString() (string, error) {
 // 否则空响应会被读成「测试通过」（见 finishClaudeTestStream）。
 const accountTestMaxTokens = 1024
 
+// accountTestNeutralSystemPrompt 是发给**非 Claude 模型**的 system 提示词。
+// 实测样本（deepseek-v4.1-flash，max_tokens=2048，每组 5 次）用的是这句原文，
+// 改字会作废该测量，故保留原样。
+const accountTestNeutralSystemPrompt = "You are a helpful assistant. Answer the user's question directly."
+
+// createTestPayload creates a test request payload.
+//
+// 请求体形态对齐 Claude Code（因为 Anthropic 协议账号的主体就是 Claude 上游），
+// 但 **system 身份按模型区分**：给非 Claude 模型发 "You are Claude Code" 是在测试里
+// 伪造身份，会让「连通性 / 降智」判定测到的不是真实模型行为（见 testPayloadSystemPrompt）。
 func createTestPayload(modelID string) (map[string]any, error) {
 	sessionID, err := generateSessionString()
 	if err != nil {
@@ -155,7 +164,7 @@ func createTestPayload(modelID string) (map[string]any, error) {
 		"system": []map[string]any{
 			{
 				"type": "text",
-				"text": claudeCodeSystemPrompt,
+				"text": testPayloadSystemPrompt(modelID),
 				"cache_control": map[string]string{
 					"type": "ephemeral",
 				},
@@ -168,6 +177,33 @@ func createTestPayload(modelID string) (map[string]any, error) {
 		"temperature": 1,
 		"stream":      true,
 	}, nil
+}
+
+// testPayloadSystemPrompt 返回测试请求体里的 system 提示词。
+//
+// 只有 Claude 模型才注入 Claude Code 身份。理由：账号测试的用途是判断
+// 「上游是否真的在服务它声称的模型 / 是否降智」，把一个不属于该模型的
+// 身份提示词塞进去，测到的就不是真实模型行为。
+//
+// 已实测（deepseek-v4.1-flash，max_tokens=2048，每组 5 次）：
+// cc 5/5 截断、neutral 4/5 截断 +1/5 答对、无 system 5/5 截断。
+// 即该提示词**不是**截断的主因（预算被推理吃光才是，见 accountTestMaxTokens），
+// 所以这里只按"身份是否分对"来区分，不把它当性能开关。
+func testPayloadSystemPrompt(modelID string) string {
+	if isClaudeTestModel(modelID) {
+		return claudeCodeSystemPrompt
+	}
+	return accountTestNeutralSystemPrompt
+}
+
+// isClaudeTestModel 判断测试模型是否是 Claude 家族。
+// 兼容 "anthropic/claude-sonnet-4" 这类带 vendor 前缀的写法。
+func isClaudeTestModel(modelID string) bool {
+	name := strings.ToLower(strings.TrimSpace(modelID))
+	if idx := strings.LastIndex(name, "/"); idx >= 0 {
+		name = name[idx+1:]
+	}
+	return strings.HasPrefix(name, "claude")
 }
 
 // TestAccountConnection tests an account's connection by sending a test request
