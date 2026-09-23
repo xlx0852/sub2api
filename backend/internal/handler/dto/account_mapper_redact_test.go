@@ -2,7 +2,9 @@ package dto
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -64,4 +66,42 @@ func TestAccountFromServiceShallow_NilCredentialsOmitsStatus(t *testing.T) {
 	require.NotNil(t, got)
 	require.Nil(t, got.Credentials)
 	require.Nil(t, got.CredentialsStatus)
+}
+
+// 票与 cookie 是上游签发的会话凭据，出线到浏览器前必须被摘掉，
+// 改由 codex_ticket 提供派生摘要。这里断言的是**序列化后的字节**，
+// 因为那才是真正离开进程的东西。
+func TestAccountFromService_RedactsCodexTicketAndExposesSummary(t *testing.T) {
+	const (
+		ticket = "gAAAAABqq_20UDF7SECRETTICKET"
+		cookie = `[{"n":"__oailb","v":"SECRETCOOKIEVALUE","t":1758550000}]`
+	)
+	now := time.Now()
+	src := &service.Account{
+		ID: 42, Name: "codex", Platform: "openai", Type: "oauth",
+		Extra: map[string]any{
+			// 键名写成字面量：这里同时钉住存储格式。
+			"openai_codex_turn_state_pool_gpt-5.6-luna":             ticket,
+			"openai_codex_turn_state_pool_gpt-5.6-luna_model":       "gpt-5.6-luna",
+			"openai_codex_turn_state_pool_gpt-5.6-luna_captured_at": now.Add(-5 * time.Minute).Format(time.RFC3339Nano),
+			"openai_codex_turn_state":                               ticket,
+			"openai_codex_turn_state_cookies":                       cookie,
+			"openai_codex_turn_state_cookie_egress":                 "5ee7a93798f061c8",
+			"codex_fingerprint_mode":                                "session",
+		},
+	}
+
+	raw, err := json.Marshal(AccountFromService(src))
+	require.NoError(t, err)
+	body := string(raw)
+
+	require.NotContains(t, body, ticket, "票本体不得出线")
+	require.NotContains(t, body, "SECRETCOOKIEVALUE", "cookie 值不得出线")
+	require.NotContains(t, body, "gAAAAA")
+	// 摘要必须在，且带形态与 cookie 数量。
+	require.Contains(t, body, `"codex_ticket"`)
+	require.Contains(t, body, `"shape":`)
+	require.Contains(t, body, fmt.Sprintf(`"shape":%d`, len(ticket)))
+	// 其它 extra 键照旧下发（前端设置项从这里读）。
+	require.Contains(t, body, `"codex_fingerprint_mode":"session"`)
 }
