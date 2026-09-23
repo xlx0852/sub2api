@@ -570,6 +570,11 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	}
 
 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
+	// OpenCode 官方主机：必须带 x-opencode-session（缺则 400 MissingSessionID），
+	// 且 UA 必须是 opencode 客户端形态（Cloudflare 1010 会把编程库 UA 拦成 403，
+	// 该 403 在本仓会被计成凭据类故障，可能把健康账号停掉）。
+	// 放在 ApplyHeaderOverrides 之前：管理员显式配置的请求头仍拥有最终决定权。
+	applyOpenCodeUpstreamHeaders(req.Header, credentialAccount, apiURL, "")
 	credentialAccount.ApplyHeaderOverrides(req.Header)
 
 	// Get proxy URL
@@ -755,6 +760,11 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 	}
 
 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
+	// OpenCode 官方主机：必须带 x-opencode-session（缺则 400 MissingSessionID），
+	// 且 UA 必须是 opencode 客户端形态（Cloudflare 1010 会把编程库 UA 拦成 403，
+	// 该 403 在本仓会被计成凭据类故障，可能把健康账号停掉）。
+	// 放在 ApplyHeaderOverrides 之前：管理员显式配置的请求头仍拥有最终决定权。
+	applyOpenCodeUpstreamHeaders(req.Header, account, apiURL, "")
 	account.ApplyHeaderOverrides(req.Header)
 
 	proxyURL := ""
@@ -878,6 +888,11 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	}
 
 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
+	// OpenCode 官方主机：必须带 x-opencode-session（缺则 400 MissingSessionID），
+	// 且 UA 必须是 opencode 客户端形态（Cloudflare 1010 会把编程库 UA 拦成 403，
+	// 该 403 在本仓会被计成凭据类故障，可能把健康账号停掉）。
+	// 放在 ApplyHeaderOverrides 之前：管理员显式配置的请求头仍拥有最终决定权。
+	applyOpenCodeUpstreamHeaders(req.Header, account, apiURL, "")
 	account.ApplyHeaderOverrides(req.Header)
 
 	proxyURL := ""
@@ -1679,6 +1694,11 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
 	req.Header.Set("Authorization", "Bearer "+authToken)
 
 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
+	// OpenCode 官方主机：必须带 x-opencode-session（缺则 400 MissingSessionID），
+	// 且 UA 必须是 opencode 客户端形态（Cloudflare 1010 会把编程库 UA 拦成 403，
+	// 该 403 在本仓会被计成凭据类故障，可能把健康账号停掉）。
+	// 放在 ApplyHeaderOverrides 之前：管理员显式配置的请求头仍拥有最终决定权。
+	applyOpenCodeUpstreamHeaders(req.Header, account, apiURL, "")
 	account.ApplyHeaderOverrides(req.Header)
 
 	proxyURL := ""
