@@ -128,3 +128,24 @@ func TestBuildCodexTicketSummarySkipsNonOAuth(t *testing.T) {
 	require.Nil(t, BuildCodexTicketSummary(&Account{ID: 1, Type: AccountTypeAPIKey, Extra: map[string]any{openAICodexTurnStateExtraToken: testTicketValue}}, time.Now()))
 	require.Nil(t, BuildCodexTicketSummary(nil, time.Now()))
 }
+
+// 失效清理会把票值写成 null 但保留键。那种状态必须与"该池从未采到票"区分开，
+// 否则面板会把"刚被清理、正在等待重采"报成"从未打过票"。
+func TestBuildCodexTicketSummaryReportsClearedSlots(t *testing.T) {
+	now := time.Now()
+	clearedKey, modelKey, capturedKey := openAICodexTurnStatePoolKeys("gpt-5.6-luna")
+	acc := &Account{
+		ID: 9, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Extra: map[string]any{
+			clearedKey:  nil, // 被清理：键在、值为 null
+			modelKey:    "gpt-5.6-luna",
+			capturedKey: nil,
+		},
+	}
+	sum := BuildCodexTicketSummary(acc, now)
+	require.NotNil(t, sum, "有槽位就要出摘要，否则面板无法区分'已清理'与'从没有过'")
+	require.Len(t, sum.Pools, 1)
+	require.Equal(t, "gpt-5.6-luna", sum.Pools[0].Pool)
+	require.Zero(t, sum.Pools[0].Shape, "已清理的槽位形态为 0")
+	require.False(t, sum.Pools[0].Fresh)
+}

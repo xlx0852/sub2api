@@ -33,24 +33,29 @@ func BuildCodexTicketSummary(account *Account, now time.Time) *domain.CodexTicke
 		if !strings.HasPrefix(k, openAICodexTurnStateExtraPoolPrefix) {
 			continue
 		}
-		token, _ := raw.(string)
-		token = strings.TrimSpace(token)
-		if token == "" {
-			continue
-		}
 		pool := strings.TrimPrefix(k, openAICodexTurnStateExtraPoolPrefix)
 		if pool == "" || strings.HasSuffix(pool, "_model") || strings.HasSuffix(pool, "_captured_at") {
 			continue
 		}
+		// 空值不是"没有这个槽位"，而是"票被清理了、等待重采"：
+		// 失效清理（过载/连续 5xx/312）把值写成 null 但**保留键**。
+		// 两者必须区分，否则面板会把"刚被清理"误报成"从未打过票"。
+		token, _ := raw.(string)
+		token = strings.TrimSpace(token)
 		_, modelKey, capturedKey := openAICodexTurnStatePoolKeys(pool)
 		model, _ := account.Extra[modelKey].(string)
 		captured := parseOpenAICodexTurnStateTimeValue(account.Extra[capturedKey])
 		entry := domain.CodexTicketPool{
-			Pool:       pool,
-			Model:      strings.TrimSpace(model),
+			Pool:  pool,
+			Model: strings.TrimSpace(model),
+			// Shape=0 表示该槽位当前没有有效票（已被清理/尚未采到）。
 			Shape:      len(token),
 			AgeSeconds: 0,
 			Fresh:      false,
+		}
+		if token == "" {
+			pools = append(pools, entry)
+			continue
 		}
 		if !captured.IsZero() && !captured.After(now) {
 			age := now.Sub(captured)
