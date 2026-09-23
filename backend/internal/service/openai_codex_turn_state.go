@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
+	"go.uber.org/zap"
 )
 
 const (
@@ -782,6 +783,16 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnStateWithClient(ctx context.Co
 				account.ID, model, result.status, result.completed, verdict,
 				len(probeTicket), codexTurnStateProbeEgressLabel(account, client),
 				strings.Join(codexTurnStateProbeCodexLikeHeaderNames(result.headers), ","))
+			// 连续同种异常 → 升级为 ERROR。上游改票的形态时，这一条能在**一两分钟内**把
+			// 「我们静默拒票」和「上游不发」分开（后者此前会一起沉寂 19 小时）。
+			if fire, streak, lengths := observeCodexTurnStateProbeOutcome(verdict, len(probeTicket)); fire {
+				logger.L().With(
+					zap.String("component", "service.openai_codex_turn_state"),
+					zap.String("verdict", verdict),
+					zap.Int("streak", streak),
+					zap.Ints("raw_ticket_lengths", lengths),
+				).Error("[CodexTurnStateSeed] ticket harvesting is stalled: consecutive probe anomalies of the same kind (see verdict) - if verdict=rejected_shape the upstream changed the ticket shape and the local length window needs widening")
+			}
 			continue
 		}
 		pool := result.model
@@ -789,6 +800,8 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnStateWithClient(ctx context.Co
 			pool = model
 		}
 		s.captureOpenAICodexTurnStateForPool(account, result.headers, pool, pool, true)
+		// 成功即清零连续异常计数（下一次漂移从 0 开始重新计数）。
+		observeCodexTurnStateProbeOutcome("", 0)
 		// len 记录票的**形态**。形态与落池并不一一对应（实测 292↔astra、312↔luna/terra、
 		// 332 也出现过在 luna），所以两个都记：requested_model 看请求、pool 看真实落点、
 		// len 看形态。三者放在同一行才能回答「请求 astra 到底有没有拿到 astra」。
