@@ -101,3 +101,13 @@ func TestOpenCodeSessionSeedPrefersStableClientIdentifiers(t *testing.T) {
 	require.Equal(t, "pc-key-1", openCodeSessionSeedForRequest(http.Header{}, body))
 	require.Empty(t, openCodeSessionSeedForRequest(http.Header{}, []byte(`{"model":"x"}`)))
 }
+
+func TestOpenCodeGoProtocolDefaults(t *testing.T) {
+	t.Parallel()
+	for _, model := range []string{"deepseek-v4.1-flash", "deepseek-v4-flash", "kimi-k3", "qwen3.8-max", "minimax-m3", "opencode/deepseek-v4.1-flash"} {
+		require.True(t, openCodeGoUsesChatCompletions(model), model)
+	}
+	for _, model := range []string{"gpt-5.6-luna", "grok-4.7", "muse-spark-1.3-contributor"} {
+		require.False(t, openCodeGoUsesChatCompletions(model), model)
+	}
+}

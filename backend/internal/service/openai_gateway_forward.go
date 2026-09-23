@@ -80,6 +80,11 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if account.Platform == PlatformKimi {
 		return s.forwardResponsesViaRawChatCompletions(ctx, c, account, body)
 	}
+	// OpenCode Go 的 DeepSeek 等默认模型是原生 Chat Completions；
+	// 不能把 Responses 体直接打到 /responses，否则可能返回空响应或协议错误。
+	if IsOpenCodeGoAccount(account) && openCodeGoUsesChatCompletions(reqModel) {
+		return s.forwardResponsesViaRawChatCompletions(ctx, c, account, body)
+	}
 	// External bridge：仅在 extra 明确 force_responses / 探测支持=true 时走原生 Responses。
 	// Unknown 不能默认透传：Cursor 等 sidecar 往往只有 /v1/chat/completions，
 	// 误走 /v1/responses 会 404；Devin 需显式 force_responses。

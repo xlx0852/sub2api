@@ -89,6 +89,25 @@ func openCodeSessionSeedForRequest(headers http.Header, body []byte) string {
 	return ""
 }
 
+// openCodeGoUsesChatCompletions 返回 OpenCode Go 模型是否应走 Chat Completions。
+//
+// 对齐上游 v0.2.8 的 DefaultOpenCodeGoProtocolRules：gpt/grok/muse-spark 明确走
+// Responses，其余未命中规则的 Go 模型默认走 Chat Completions——包括 DeepSeek。
+// 当前本仓的最小 OpenCode Go 接入不引入 Anthropic Messages 多协议层，
+// 因此 minimax/qwen 也会走 Chat；这些模型若需要原生 Anthropic 协议，属于后续扩展。
+func openCodeGoUsesChatCompletions(model string) bool {
+	model = strings.ToLower(strings.TrimSpace(model))
+	for _, prefix := range []string{"opencode-go/", "opencode_go/", "opencode/"} {
+		model = strings.TrimPrefix(model, prefix)
+	}
+	for _, prefix := range []string{"gpt-", "grok-", "muse-spark-"} {
+		if strings.HasPrefix(model, prefix) {
+			return false
+		}
+	}
+	return true
+}
+
 // openCodeSessionValue 决定 session 值。
 //
 // **合法值原样使用，不做哈希派生**（与上游一致）：session 值是客户端会话的名称，

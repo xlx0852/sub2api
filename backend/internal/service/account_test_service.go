@@ -503,6 +503,9 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		if err != nil {
 			return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
 		}
+		if IsOpenCodeGoAccount(credentialAccount) && openCodeGoUsesChatCompletions(testModelID) {
+			return s.testOpenAIChatCompletionsConnection(c, credentialAccount, testModelID, prompt, normalizedBaseURL, authToken)
+		}
 		if !openai_compat.ShouldUseResponsesAPI(account.Extra) {
 			return s.testOpenAIChatCompletionsConnection(c, account, testModelID, prompt, normalizedBaseURL, authToken)
 		}

@@ -78,7 +78,8 @@ func TestAccountTestService_OpenCodeGoSendsSessionHeader(t *testing.T) {
 
 	require.NotEmpty(t, upstream.requests, "应发出测试请求")
 	req := upstream.requests[0]
-	require.Contains(t, req.URL.String(), "opencode.ai")
+	require.Equal(t, "https://opencode.ai/zen/go/v1/chat/completions", req.URL.String(),
+		"DeepSeek Go 模型必须走 Chat Completions，而不是 Responses")
 	require.NotEmpty(t, req.Header.Get(openCodeSessionHeader),
 		"官方 OpenCode 主机缺 x-opencode-session 会被上游 400 MissingSessionID")
 	require.Equal(t, openCodeUpstreamUserAgent, req.Header.Get("User-Agent"),
