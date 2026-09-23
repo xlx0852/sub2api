@@ -165,3 +165,67 @@ Anthropic 协议账号指向非 Claude 上游时（OpenCode Go 上的 `deepseek-
 `anthropic-beta`。OpenCode Go 对此容忍（经网关实测 200），但语义上同属对外伪造身份，
 若要一并规整需另开改动。转发链路不受本节影响：Anthropic passthrough 原样转发客户端 body，
 不做 system 注入。
+
+## 26. 彻底移除 Anthropic 协议的 system 提示词注入（2026-09-23）
+
+### 26.1 注入为什么存在
+
+`gateway_claude_oauth_body.go` 的原注释自陈：**为了规避「Anthropic 基于 system 参数内容
+检测第三方应用」**。手段是三步加码：前置追加 → 把非 Claude Code 的 system 迁到
+messages、只留 CC 标识 → 再注入 `claudeCodeSystemPromptExpansion` 把 system 块数做到 3。
+这是一整套伪装，不是顺手加的字段。
+
+### 26.2 为什么可以安全删掉（先查证据再动手）
+
+| 事实 | 证据 |
+|---|---|
+| 只对 **OAuth** 账号生效 | `applyClaudeCodeOAuthMimicryToBody` 开头 `!account.IsOAuth() → return` |
+| 生产**已关闭** | `settings.enable_claude_oauth_system_prompt_injection = false`，`claude_oauth_system_prompt_blocks` 亦为 `enabled:false` 空文本 |
+| 生产**无适用账号** | `platform=anthropic` 共 4 个账号，**全部是 apikey**，无一 OAuth |
+| 其它注入函数无生产调用者 | `injectClaudeCodePrompt` / `rewriteSystemForNonClaudeCode*` 仅测试引用 |
+
+⇒ 删除属于**零行为变化**：等价于长期生效的「注入关闭」取值。
+
+### 26.3 删了什么
+
+- `gateway_claude_oauth_body.go`：16 个声明、约 480 行注入机器（注入/重写/blocks 解析/
+  默认块/模板展开/校验），以及 `applyClaudeCodeOAuthMimicryToBody` 里的注入步骤。
+  保留的只是非提示词部分：`metadata.user_id`、`session_id`、指纹与缓存控制归一。
+  `normalizeOpts.stripSystemCacheControl` 固定为 `true`，与历史关闭态一致。
+- `claudeCodeSystemPromptExpansion` 常量（真实 CC 提示词段落，已无引用）。
+- settings 三件套 `enable_claude_oauth_system_prompt_injection` /
+  `claude_oauth_system_prompt` / `claude_oauth_system_prompt_blocks`：常量、解析、
+  更新、审计、视图、DTO、admin 更新与回显，以及前端控制面（SettingsGatewayTab 的
+  整块 block 编辑器 + SettingsView 约 370 行逻辑 + i18n + api 类型）。
+- 后端 19 文件 `+143/-1126`，前端 6 文件 `-743`。
+
+### 26.4 锁住不变量的测试
+
+原「注入可被关闭」测试改名为
+`TestGatewayService_AnthropicOAuth_SystemPromptIsNeverInjected`，并加强断言：
+客户端 system 必须原样到上游，且出站 body 内不得出现 `claudeCodeSystemPrompt`、
+`Claude Code`、`interactive agent that helps users` 任一字符串。
+
+### 26.5 唯一保留的注入：账号测试对 Claude 模型
+
+`createTestPayload` 仍对 `claude*` 模型注入 `claudeCodeSystemPrompt`。理由：该测试
+发出的确实是 Claude Code 形态的请求（同一套 CC 客户端头），对真实 Claude 上游而言
+这是**一致的客户端身份**、且可能是 OAuth 令牌被接受的前提；对非 Claude 模型
+（`deepseek-v4.1-flash` / `minimax-m3` / `kimi-k3` …）已改为中性提示词。
+若要求「连 Claude 模型也不注入」，是把 `testPayloadSystemPrompt` 改成恒定返回中性
+提示词的一行改动，但会让 Claude OAuth 账号的测试不再代表真实客户端。
+
+### 26.6 顺带修掉的既有问题（均可在更早提交上复现，非本节引入）
+
+1. `opencode_go_usage_refresh`：后台刷新 goroutine 无 panic 保护。撞到只实现部分方法的
+   repo stub 时 `ListByPlatform` nil 解引用 panic，**把整个进程/测试包打崩** →
+   加 `recover` 兜底（旁路任务不该有能力杀进程）。
+2. `backend/internal/server/testdata/routes.golden`：补上此前遗漏的
+   `GET /api/v1/admin/accounts/:id/opencode-go-usage`。
+3. 前端既有失败 3 项（`UserPlatformQuotaModal` 平台数 7→6、`AccountsView` Grok 徽章）
+   已用 `git stash` 对照确认与本改动无关。
+
+### 26.7 发布要求
+
+**后端与前端必须同批发布**：只发后端会让管理界面继续把「Claude OAuth System 注入」
+显示为开启（默认 true）而代码已无注入，属于比死开关更差的骗人界面。本次均未部署。
