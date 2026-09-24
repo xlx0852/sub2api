@@ -397,7 +397,9 @@ systemctl start nginx
 | 上游出口 | 容器内 `https://auth.mirasim.ai/auth/oauth/providers` 可达（exit 0），不依赖宿主机网络 |
 | 业务回归 | `GET /api/v1/settings/public` → 200；`POST /api/v1/auth/login`（空体）→ 400；网关 `account_simple_selection` / sticky 正常出流量；日志中 `mirasim` 相关错误 0 条 |
 
-本轮两个方法论教训（下次发布直接复用）：
+| 已部署二进制内核证据 | `sha256(线上 sub2api)` **完全等于**本机构建产物；长字面量命中 `mirasim_refresh_token`×3、`/admin/mirasim`×2、`/v1/device/session`×1、`mirasim_relay_persist_failed`×1、`mrs-seal-v1`×1；**旧基线上这些串均 0 命中**（对照有效） |
+
+本轮三条方法论教训（下次发布直接复用）：
 
 1. **macOS 打包必须禁资源叉**：默认 `tar` 会把 `._*` 一并打入（172 文件 → 347 条目）。
    部署脚本内的「文件数 + `._` 残留 + `index.html` md5」三重守卫在本轮**成功拦下一次脏包**（未产生任何线上改动）。
@@ -405,6 +407,11 @@ systemctl start nginx
    `api-*.js` 由 2255 B 拆为 1061 B），「逐文件哈希归一化」与「正则抓字符串 diff」两种口径都已验证失效。
    权威口径是：①`git diff <live>..HEAD -- frontend/src`；②全站字符串字面量并集（`/api/v1/...` 路径集、
    `admin.*` key 集、CSS 规则集）＋正向对照（新端点只在新的里面）；③部署后用整树 md5 证「线上 = 本地构建」。
+3. **短字符串字面量不能当存在性判据**：Go 在 amd64 上会把 ≤8 字节的常量编码进指令立即数
+   （`grep -c 'mrs1:'` 在正确产物与线上二进制里都是 **0**，而该常量在 `mirasim_protocol.go:42` 确实在用）。
+   存在性校验要用**长字面量**（事件名、URL 路径），并在旧基线二进制上做 0 命中对照。
+   另：`AGENTS.md` 里的 `go version -m <binary>` → `vcs.revision` 在本仓**不适用**（`-trimpath` 且无 vcs stamp），
+   版本判定只能用「二进制 sha256 ＋ 串比对」。
 
 ### 9.5 巡检
 
@@ -426,6 +433,28 @@ systemctl start nginx
   `data`/`result` 包裹）。OAuth 的 providers 列表与授权链接生成已只读实测（见 §10）。
 - 新 Mirasim 账号是否有 relay 权益（与订阅绑定关系）。
 - 多实例双活的具体表现未实测（按 §9.2 推断为互相踢）。
+
+### 9.7 上线后待办（需管理员在后台操作，代码侧无未完成项）
+
+任务 `tasks.md` 的 8.6（上线后回归）/ 8.7（回滚演练）**只能在实际存在一个 mirasim 账号后才能跑**，
+而生产 DB 当前 mirasim 账号数 = 0（已实测）。步骤：
+
+1. 后台 → 账号 → 新建，平台 **Anthropic**，类型 **API Key**（Key 可留空）。
+2. 在该账号表单里找到 **Mirasim 授权登录** 面板（`MirasimOAuthOnboarding.vue`）：
+   选登录方式 → 「生成授权链接」→ 在浏览器完成授权 → **从地址栏复制完整回调 URL**
+   （跳到 `http://127.0.0.1:9/callback?...` 打不开是正常的）→ 粘回表单 → refresh token 自动回填，
+   relay 开关自动打开；也可走邮箱验证码两条接口（**真发邮件 / 真消耗 OTP**）。
+3. 填 `base_url` = `https://relay.mirasim.ai`，配模型映射（如 `claude-sonnet-4-5 → kimi-k3`）。
+4. 保存（走 `POST /admin/accounts`；device key 由 relay client 首次调用时自动生成并落库，无需手填）。
+5. 验证清单（即 8.6）：管理端「测试账号」应返回 200（内部打 `relay.../v1/messages`，不带 beta query）→
+   真实请求一条 → 日志应出现 `mirasim_relay_credential_updated`（轮换已落库）→
+   `docker restart` 容器后再发一条，确认冷启动自愈（空缓存先换 ticket）。
+6. 回滚演练（即 8.7）：删掉该账号 `credentials.mirasim_refresh_token` → 该账号应退化为普通 Anthropic apikey；
+   再把 `current` 指回 `0.1.391-ocgremove-7e1ee1c92` / 用 `sub2api.bak-20260924-mirasim` 回退后端，
+   确认服务仍正常（无数据修补）。
+
+> ⚠️ **不要**把你自己电脑上 mirasim 桌面客户端正在用的 refresh token 直接抄进去：§9.2 单持有者约束下会互踢，
+> 你的客户端会掉登录。请用第 2 步的授权登录另取一份属于服务端的凭据。
 
 ## 10. 管理端授权登录（取 refresh token，2026-09-24）
 

@@ -152,12 +152,17 @@
       `AccountsView-DEtjWFwt.js` 不在）。**最终产物：**
       `924e4c5e165c9ad904130b5dab0dc1acb63a9ad73a3090ee1ef4a7e82737c6d0`（123715746 B，
       本机 `/tmp/sub2api-0.1.391-mirasim-924e4c5e1-linux-amd64`）；前端 dist 包
-      `/tmp/dist-0.1.391-mirasim.tgz`（17397514 B，md5 `0fbf8558a853ae04db107429c36ccb86`，172 个文件）。
+      **`/tmp/dist-0.1.391-mirasim-clean.tgz`（17373708 B，md5 `2acaf14e492652c06a78ed9c2bc71126`，
+      172 文件 + 3 目录，`._` 残留 0，`index.html` md5 `67ae44d28f5fe219d8bbadab01b1fa8e`）**。
+      ⚠️ 更正：早期记录的 `/tmp/dist-0.1.391-mirasim.tgz`（17397514 B，md5 `0fbf8558a853ae04db107429c36ccb86`）
+      是 macOS `tar` 带上了 AppleDouble `._*` 资源叉的**脏包（172 文件 → 347 条目）**，**从未部署**，已废弃。
       线上后端为 `1d78d046…`（123547810 B，源码 `a33b47ef9`），后端源码差只有 `fd5e71536`（mirasim）。
-- [x] 8.3b **前端增量已证明受控**：相对线上 `0.1.391-ocgremove-7e1ee1c92`，逻辑变更仅
-      `AccountsView-*.js` / `AccountsView-*.css` / `index-*.css`(+`.bg-sky-600`) / zh-en i18n chunk
-      / `index.html`，其余 159 个文件的差异全是 chunk 哈希级联（剥哈希后逐文件 md5 相同）；
-      线上 AccountsView 中 `mirasim` 命中数 0，新 chunk 中为 1。
+- [x] 8.3b **前端增量受控（分块无关口径，最终采用；早期口径已作废）**：
+      最终口径：①`/api/v1` 路径字面量 live=102 / new=102（丢失 0、新增 0）；②`admin.*` i18n key
+      live=3730 → new=3789（丢失 0、新增 59，全是 `admin.accounts.mirasimOAuth.*`）；③CSS 仅 +4 条 sky-* 工具类，
+      0 删除；④正向对照 `/admin/mirasim/oauth/`：live 0 命中、new 5 命中；⑤`sub2api-build.json` 两侧完全一致。
+      ⚠️ 作废口径：“剥 chunk 哈希后逐文件 md5 相同”——本轮相对 live 发生了 **chunk 重划分**
+      （`UsageView-*.js` 40951→29346 B、`api-*.js` 2255→1061 B），该口径与“正则抓字符串 diff”均不可信。
 - [x] 8.4 前置事实：三个线上 api 容器里 `mirasim` 字符串命中数为 **0**、
       `/opt/sub2api/frontend/current` 下无 `mirasim` 命中、DB 中 mirasim 账号数 **0**
       ⇒ 能力尚未上线，本次发布是一次全新的功能上线（而不是修复）
@@ -178,7 +183,7 @@
       **为何未执行**：生产 DB 中 mirasim 账号数仍为 0，且**不能用现有桌面客户端的 refresh token 去建账号**——
       §9.2 的单持有者约束下，同一 token 被两个持有者使用会互踢（会打断用户本地客户端登录）。
       正确路径是管理员在后台用新的授权登录入口取一份**属于服务端自己的**凭据（§10），随后按 runbook 录入账号 +
-      模型映射；该步完成后本条与 8.7 可一次性验证。
+      模型映射（**逐步操作清单见 docs §9.7**）；该步完成后本条与 8.7 可一次性验证。
 - [ ] 8.7 回滚演练确认（前置同上：需要先有 mirasim 账号）。已静态确认的两点：①删
       `credentials.mirasim_refresh_token` 后 `isMirasimRelayAccount` 返回 false，账号退化为普通 Anthropic apikey；
       ②二进制回滚只需换文件，无数据修补。**实际演练待账号存在后执行**。
