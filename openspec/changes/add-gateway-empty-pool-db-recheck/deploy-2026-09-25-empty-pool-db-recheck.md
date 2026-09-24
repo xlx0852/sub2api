@@ -93,7 +93,7 @@
 
 | 视角 | 证据 |
 | --- | --- |
-| 门禁（代码级） | 复核仅在「本次选号已失败（`errors.Is(err, ErrNoAvailableAccounts)`）**且**池/候选为空 **且** `len(excludedIDs)==0`」时触发；成功路径 `err == nil` 立即返回（`gateway_empty_pool_recheck.go:88-97`）→ 正常请求不产生额外 DB 读、不新增锁、不写日志 |
+| 门禁（代码级） | 复核仅在「本次选号已失败（`errors.Is(err, ErrNoAvailableAccounts)`）**且**池/候选为空 **且** `len(excludedIDs)==0`」时触发；成功路径 `err == nil` 立即返回（`gateway_empty_pool_recheck.go:84-91`：`err == nil` 提前返回 + 排除账号/忙池短路）→ 正常请求不产生额外 DB 读、不新增锁、不写日志 |
 | 观测比例 | 窗口内网关选号 138 次（`account_simple_selection`）、`sticky.account_selected` 135 次，仅 **1** 次复核；`gateway.forward_failed` = 0 |
 | 单次开销 | 唯一一次复核 + 重试的额外耗时 = 日志时间戳差 **2ms**（`03:47:29.085` → `03:47:29.087`） |
 | 限流沿用 | 复核走既有 `SchedulerSnapshotService.RefreshSchedulableAccounts`（per-bucket 节流 `schedulerForcedRefreshGap` + DB fallback 限流器），窗口内重复调用返回 `ErrSchedulerFallbackLimited` 时静默放弃；未新增开关/节流参数 |
