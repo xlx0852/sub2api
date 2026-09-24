@@ -64,10 +64,10 @@
   确认无回归；`vue-tsc --noEmit` 通过。
 - [x] 6.3 文档：更新 mirasim relay 文档中「模型清单来源」一节，写明 `/v1/models`（账号维度）
   与 `/v1/model-roster`（全局目录，已不再用于白名单）的区别与实测证据。
-- [ ] 6.4 生产发布（后端热替换 + 回滚点）：
+- [x] 6.4 生产发布（后端热替换 + 回滚点）：
   `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags embed -ldflags='-s -w -X main.Version=0.1.391 -X main.MinFrontendVersion=0.1.380' -trimpath`，
   `docker stop` → 备份并替换 bind-mount 二进制 → `docker start`，记录 sha256 与备份路径。
-- [ ] 6.5 生产核验：`POST /api/v1/admin/accounts/140/models/sync-upstream` 返回该账号的
+- [x] 6.5 生产核验：`POST /api/v1/admin/accounts/140/models/sync-upstream` 返回该账号的
   `/v1/models` 集合（预期不再包含那批 404 的 claude/gpt 模型），并记录实际返回的 id 列表。
-- [ ] 6.6 生产日志核验：发布后 `docker logs` 落盘统计，确认无凭据/JWT/上游正文泄漏，
+- [x] 6.6 生产日志核验：发布后 `docker logs` 落盘统计，确认无凭据/JWT/上游正文泄漏，
   mirasim 事件只含 `account_id` + `category`。
