@@ -24,3 +24,10 @@
 - [x] 4.1 `go build ./...` 通过；`go test ./internal/server/ -run 'Route|Inventory|Golden'`、`./internal/service/ -run Profit`、`./internal/handler/admin/` 全部 ok
 - [x] 4.2 `npx vue-tsc --noEmit` 通过；`pnpm build` 通过；`ProfitView.spec.ts` 通过
 - [x] 4.3 `npx vitest run` = `2 failed | 173 passed (175)`、`3 failed | 1111 passed (1114)`，失败集与基线（`UserPlatformQuotaModal` ×2、`AccountsView.sparkShadow` ×1）完全一致，用例数因删除组件测试减少 18
+
+## 5. 发布
+
+- [x] 5.1 前端 release `0.1.391-756ee2ecc`（聚合 `02c771e3…`）；`current` 已切换、`rollback` → `0.1.391-0c48b9f6b`
+- [x] 5.2 后端二进制 `sha256=5339fd48…`（`vcs.revision=756ee2ecc`）热替换；备份 `sub2api.bak-20260925-profitqwin`
+- [x] 5.3 核验：两个下线接口 404、`/health` 200、5 分钟 5xx=0、容器 healthy 且无重启
+- [x] 5.4 发布记录 `deploy-2026-09-25-profit-quota-window-panel.md`
