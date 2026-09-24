@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
@@ -19,6 +20,7 @@ import (
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/requesttiming"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/google/uuid"
@@ -280,12 +282,16 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 	}
 
 	for {
+		timingSelectStarted := time.Now()
 		selection, err := service.AccountSelectionFromScheduling(h.accountSelector.Select(c.Request.Context(), scheduling.Request{
 			GroupID:        apiKey.GroupID,
 			StickyKey:      sessionKey,
 			RequestedModel: modelName,
 			ExcludedIDs:    fs.FailedAccountIDs,
 		})) // Gemini 不使用会话限制
+		if collector := requesttiming.FromContext(c.Request.Context()); collector != nil {
+			collector.SetAccountSelectMs(time.Since(timingSelectStarted))
+		}
 		if err != nil {
 			if len(fs.FailedAccountIDs) == 0 {
 				cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, modelName, modelName, service.PlatformGemini)

@@ -165,12 +165,16 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 	}
 
 	for {
+		timingSelectStarted := time.Now()
 		selection, err := service.AccountSelectionFromScheduling(h.accountSelector.Select(c.Request.Context(), scheduling.Request{
 			GroupID:        apiKey.GroupID,
 			StickyKey:      selectionSessionHash,
 			RequestedModel: reqModel,
 			ExcludedIDs:    fs.FailedAccountIDs,
 		}))
+		if collector := requesttiming.FromContext(c.Request.Context()); collector != nil {
+			collector.SetAccountSelectMs(time.Since(timingSelectStarted))
+		}
 		if err != nil {
 			if len(fs.FailedAccountIDs) == 0 {
 				cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, reqModel, reqModel, groupPlatform)

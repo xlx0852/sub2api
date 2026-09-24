@@ -294,12 +294,16 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 		}
 
 		for {
+			timingSelectStarted := time.Now()
 			selection, err := service.AccountSelectionFromScheduling(h.accountSelector.Select(c.Request.Context(), scheduling.Request{
 				GroupID:        apiKey.GroupID,
 				StickyKey:      sessionKey,
 				RequestedModel: reqModel,
 				ExcludedIDs:    fs.FailedAccountIDs,
 			})) // Gemini 不使用会话限制
+			if collector := requesttiming.FromContext(c.Request.Context()); collector != nil {
+				collector.SetAccountSelectMs(time.Since(timingSelectStarted))
+			}
 			if err != nil {
 				if len(fs.FailedAccountIDs) == 0 {
 					cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, reqModel, reqModel, service.PlatformGemini)
@@ -591,6 +595,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				zap.Bool("has_bound_session", hasBoundSession),
 				zap.Int("failed_account_count", len(fs.FailedAccountIDs)),
 			)
+			timingSelectStarted := time.Now()
 			selection, err := service.AccountSelectionFromScheduling(h.accountSelector.Select(c.Request.Context(), scheduling.Request{
 				GroupID:        currentAPIKey.GroupID,
 				StickyKey:      sessionKey,
@@ -599,6 +604,9 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				MetadataUserID: parsedReq.MetadataUserID,
 				Sub2APIUserID:  subject.UserID,
 			}))
+			if collector := requesttiming.FromContext(c.Request.Context()); collector != nil {
+				collector.SetAccountSelectMs(time.Since(timingSelectStarted))
+			}
 			if err != nil {
 				if len(fs.FailedAccountIDs) == 0 {
 					cls := classifyNoAccountErrorFromGin(c, h.gatewayService, currentAPIKey, reqModel, reqModel, platform)

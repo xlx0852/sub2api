@@ -186,12 +186,16 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 	fs := NewFailoverState(h.maxAccountSwitches, false)
 
 	for {
+		timingSelectStarted := time.Now()
 		selection, err := service.AccountSelectionFromScheduling(h.accountSelector.Select(requestCtx, scheduling.Request{
 			GroupID:        apiKey.GroupID,
 			StickyKey:      sessionHash,
 			RequestedModel: reqModel,
 			ExcludedIDs:    fs.FailedAccountIDs,
 		}))
+		if collector := requesttiming.FromContext(requestCtx); collector != nil {
+			collector.SetAccountSelectMs(time.Since(timingSelectStarted))
+		}
 		if err != nil {
 			if len(fs.FailedAccountIDs) == 0 {
 				platform := service.PlatformAnthropic
