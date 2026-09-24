@@ -71,7 +71,8 @@ describe('account form registry', () => {
 
   it('requires every selected platform to share a field', () => {
     expect(platformsShareField(['anthropic', 'openai'], 'headerOverride')).toBe(true)
-    expect(isFieldVisible('oauthModelRestriction', { platform: 'anthropic' })).toBe(false)
+    // anthropic APIKey 账号（含 Mirasim 中转）仍依赖该开关展示 models 页的模型限制面板
+    expect(isFieldVisible('oauthModelRestriction', { platform: 'anthropic' })).toBe(true)
     expect(platformsShareField(['anthropic', 'gemini'], 'headerOverride')).toBe(false)
     expect(platformsShareField(['antigravity'], 'antigravityProjectId')).toBe(true)
     expect(platformsShareField([], 'headerOverride')).toBe(false)

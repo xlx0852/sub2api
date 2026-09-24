@@ -63,9 +63,9 @@ export const ACCOUNT_PLATFORM_REGISTRY: readonly PlatformDefinition[] = [
       upstreamCredentials: false,
       vertexServiceAccount: false,
       mixedScheduling: false,
-      // Anthropic oauth/setup-token sign-in was retired; the OAuth-only
-      // model restriction panel is no longer reachable.
-      oauthModelRestriction: false,
+      // Never touch: this flag also gates the models-tab restriction panel for
+      // Anthropic APIKey accounts (e.g. Mirasim relay identity mappings).
+      oauthModelRestriction: true,
       interceptWarmup: true,
       openAIAdvanced: false,
       anthropicAdvanced: true,
