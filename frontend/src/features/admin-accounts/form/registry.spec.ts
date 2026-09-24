@@ -35,6 +35,10 @@ describe('account form registry', () => {
 
   it('exposes platform types and header-override eligibility for all three modals', () => {
     expect(platformCategories('anthropic')).not.toContain('bedrock')
+    expect(platformCategories('anthropic')).toEqual(['apikey'])
+    expect(platformSupportsType('anthropic', 'oauth')).toBe(false)
+    expect(platformSupportsType('anthropic', 'setup-token')).toBe(false)
+    expect(platformSupportsType('anthropic', 'apikey')).toBe(true)
     expect(platformSupportsType('anthropic', 'bedrock')).toBe(false)
     expect(platformSupportsType('openai', 'apikey')).toBe(true)
     expect(platformSupportsType('kimi', 'apikey')).toBe(false)
@@ -47,7 +51,6 @@ describe('account form registry', () => {
 
   it('drives every platform subtype block from registry without exposing Gemini in the create picker', () => {
     expect(platformCategoryPicker('anthropic')?.options.map((item) => item.id)).toEqual([
-      'oauth-based',
       'apikey'
     ])
     expect(platformCategoryPicker('openai')?.model).toBe('accountCategory')
@@ -61,13 +64,14 @@ describe('account form registry', () => {
     expect(platformCategoryPicker('gemini')?.helpKey).toBe('admin.accounts.gemini.helpButton')
     expect(platformCategoryPicker('anthropic')?.options.some((item) => item.id === 'service_account')).toBe(false)
     expect(platformCategoryPicker('gemini')?.options.some((item) => item.id === 'service_account')).toBe(false)
-    expect(platformCategoryPicker('anthropic')?.layoutClass).toBe('grid-cols-2')
+    expect(platformCategoryPicker('anthropic')?.layoutClass).toBe('grid-cols-1')
     expect(platformCategoryPicker('gemini')?.layoutClass).toBe('grid-cols-2')
     expect(createPickerPlatforms().some((item) => item.id === 'gemini')).toBe(false)
   })
 
   it('requires every selected platform to share a field', () => {
     expect(platformsShareField(['anthropic', 'openai'], 'headerOverride')).toBe(true)
+    expect(isFieldVisible('oauthModelRestriction', { platform: 'anthropic' })).toBe(false)
     expect(platformsShareField(['anthropic', 'gemini'], 'headerOverride')).toBe(false)
     expect(platformsShareField(['antigravity'], 'antigravityProjectId')).toBe(true)
     expect(platformsShareField([], 'headerOverride')).toBe(false)

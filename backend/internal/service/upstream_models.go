@@ -229,20 +229,8 @@ func (s *AccountTestService) buildAnthropicUpstreamModelsRequest(ctx context.Con
 	betaHeader := ""
 
 	if account.IsOAuth() {
-		accessToken := strings.TrimSpace(account.GetCredential("access_token"))
-		if accessToken == "" && s.claudeTokenProvider != nil {
-			token, tokenErr := s.claudeTokenProvider.GetAccessToken(ctx, account)
-			if tokenErr != nil {
-				return nil, newUpstreamModelSyncUpstreamError("Failed to get Anthropic access token", tokenErr)
-			}
-			accessToken = strings.TrimSpace(token)
-		}
-		if accessToken == "" {
-			return nil, newUpstreamModelSyncConfigError("No Anthropic access token is available", nil)
-		}
-		authHeaderName = "Authorization"
-		authHeaderValue = "Bearer " + accessToken
-		betaHeader = claude.DefaultBetaHeader
+		// Anthropic 的 oauth/setup-token 供给已退役，不再提供上游模型同步路径。
+		return nil, newUpstreamModelSyncConfigError("anthropic oauth/setup-token sign-in has been retired; use anthropic api-key instead", nil)
 	} else if account.Type == AccountTypeAPIKey {
 		apiKey := strings.TrimSpace(account.GetCredential("api_key"))
 		if apiKey == "" {

@@ -131,6 +131,48 @@ func TestRouteInventoryDoesNotExposeGitHubUpdateEndpoints(t *testing.T) {
 	}
 }
 
+// TestRouteInventoryDoesNotExposeClaudeOAuthEndpoints 是 Claude OAuth 登录能力下线
+// （OpenSpec change: remove-claude-oauth-login）的路由级回归护栏：这 6 条 Anthropic
+// OAuth / setup-token 授权接入端点必须彻底消失，且不得被任何后续改动重新注册。
+//
+// 注意区分：/api/v1/admin/openai/*、/api/v1/admin/antigravity/oauth/*、
+// /api/v1/admin/grok/oauth/* 等非 Anthropic 平台的 OAuth 端点必须继续保留。
+func TestRouteInventoryDoesNotExposeClaudeOAuthEndpoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	routes := make(map[string]bool)
+	for _, line := range enumerateRoutes(t) {
+		routes[line] = true
+	}
+
+	requireAbsent := []string{
+		"POST /api/v1/admin/accounts/generate-auth-url",
+		"POST /api/v1/admin/accounts/generate-setup-token-url",
+		"POST /api/v1/admin/accounts/exchange-code",
+		"POST /api/v1/admin/accounts/exchange-setup-token-code",
+		"POST /api/v1/admin/accounts/cookie-auth",
+		"POST /api/v1/admin/accounts/setup-token-cookie-auth",
+	}
+	for _, path := range requireAbsent {
+		if routes[path] {
+			t.Errorf("已下线的 Claude OAuth 入口仍被注册: %s", path)
+		}
+	}
+
+	// 逆向护栏：非 Anthropic 平台的 OAuth 入口必须健在，避免“误删一片”。
+	requirePresent := []string{
+		"POST /api/v1/admin/openai/generate-auth-url",
+		"POST /api/v1/admin/openai/exchange-code",
+		"POST /api/v1/admin/antigravity/oauth/exchange-code",
+		"POST /api/v1/admin/grok/oauth/exchange-code",
+	}
+	for _, path := range requirePresent {
+		if !routes[path] {
+			t.Errorf("非 Anthropic 平台的 OAuth 入口被误删: %s", path)
+		}
+	}
+}
+
 // enumerateRoutes 以最小打桩实例化全部路由注册，返回排序后的 "METHOD PATH" 清单。
 func enumerateRoutes(t *testing.T) []string {
 	t.Helper()

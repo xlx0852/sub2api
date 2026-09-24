@@ -3,8 +3,8 @@
     <div class="space-y-5">
       <div v-if="loading" class="flex items-center justify-center py-12"><LoadingSpinner /></div>
       <template v-else-if="stats">
-        <!-- 核心统计 + 按平台拆分 -->
-        <UserDashboardStats :stats="stats" :balance="user?.balance || 0" :platform-quotas="platformQuotas" />
+        <!-- 核心统计 -->
+        <UserDashboardStats :stats="stats" :balance="user?.balance || 0" />
 
         <!-- 趋势图（主视觉） + 快捷操作 -->
         <div class="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
@@ -39,8 +39,7 @@ import UserDashboardAvailability from '@/components/user/dashboard/UserDashboard
 import UserGroupAvailability from '@/components/user/dashboard/UserGroupAvailability.vue'
 import UserDashboardModelDistribution from '@/components/user/dashboard/UserDashboardModelDistribution.vue'
 import type { TrafficAvailability } from '@/api/usage'
-import type { UsageLog, TrendDataPoint, ModelStat, PlatformQuotaItem } from '@/types'
-import { getMyPlatformQuotas } from '@/api/user'
+import type { UsageLog, TrendDataPoint, ModelStat } from '@/types'
 import { formatDateLocalInput } from '@/utils/format'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 
@@ -48,7 +47,6 @@ const authStore = useAuthStore(); const user = computed(() => authStore.user)
 const affiliateEnabled = computed(() => isFeatureFlagEnabled(FeatureFlags.affiliate))
 const stats = ref<UserStatsType | null>(null); const loading = ref(false); const loadingUsage = ref(false); const loadingCharts = ref(false)
 const trendData = ref<TrendDataPoint[]>([]); const modelStats = ref<ModelStat[]>([]); const recentUsage = ref<UsageLog[]>([])
-const platformQuotas = ref<PlatformQuotaItem[] | null>(null)
 const availability = ref<TrafficAvailability | null>(null); const availabilityLoading = ref(false)
 const availabilityPlatform = ref('')
 
@@ -57,10 +55,9 @@ const startDate = ref(formatDateLocalInput(new Date(Date.now() - 6 * 86400000)))
 const loadStats = async () => { loading.value = true; try { await authStore.refreshUser(); stats.value = await usageAPI.getDashboardStats() } catch (error) { console.error('Failed to load dashboard stats:', error) } finally { loading.value = false } }
 const loadCharts = async () => { loadingCharts.value = true; try { const res = await Promise.all([usageAPI.getDashboardTrend({ start_date: startDate.value, end_date: endDate.value, granularity: granularity.value as any }), usageAPI.getDashboardModels({ start_date: startDate.value, end_date: endDate.value })]); trendData.value = res[0].trend || []; modelStats.value = res[1].models || [] } catch (error) { console.error('Failed to load charts:', error) } finally { loadingCharts.value = false } }
 const loadRecent = async () => { loadingUsage.value = true; try { const res = await usageAPI.getByDateRange(startDate.value, endDate.value); recentUsage.value = res.items.slice(0, 5) } catch (error) { console.error('Failed to load recent usage:', error) } finally { loadingUsage.value = false } }
-const loadPlatformQuotas = async () => { try { const data = await getMyPlatformQuotas(); platformQuotas.value = data.platform_quotas ?? [] } catch (error) { console.warn('Failed to load platform quotas:', error); platformQuotas.value = [] } }
 const loadAvailability = async () => { availabilityLoading.value = true; try { availability.value = await usageAPI.getDashboardAvailability(availabilityPlatform.value) } catch (error) { console.warn('Failed to load traffic availability:', error); availability.value = null } finally { availabilityLoading.value = false } }
 const changeAvailabilityPlatform = (platform: string) => { availabilityPlatform.value = platform; void loadAvailability() }
-const refreshAll = () => { loadStats(); loadCharts(); loadRecent(); loadPlatformQuotas(); loadAvailability() }
+const refreshAll = () => { loadStats(); loadCharts(); loadRecent(); loadAvailability() }
 
 onMounted(() => { refreshAll() })
 </script>

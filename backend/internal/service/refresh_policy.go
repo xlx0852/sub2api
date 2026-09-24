@@ -29,14 +29,6 @@ type ProviderRefreshPolicy struct {
 	FailureTTL     time.Duration
 }
 
-func ClaudeProviderRefreshPolicy() ProviderRefreshPolicy {
-	return ProviderRefreshPolicy{
-		OnRefreshError: ProviderRefreshErrorUseExistingToken,
-		OnLockHeld:     ProviderLockHeldWaitForCache,
-		FailureTTL:     time.Minute,
-	}
-}
-
 func OpenAIProviderRefreshPolicy() ProviderRefreshPolicy {
 	return ProviderRefreshPolicy{
 		OnRefreshError: ProviderRefreshErrorUseExistingToken,

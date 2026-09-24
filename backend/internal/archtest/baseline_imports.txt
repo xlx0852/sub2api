@@ -16,7 +16,6 @@ internal/domain -> internal/pkg/errors
 internal/domain -> internal/pkg/ip
 internal/domain -> internal/pkg/kimi
 internal/domain -> internal/pkg/modelcatalog
-internal/domain -> internal/pkg/oauth
 internal/domain -> internal/pkg/openai
 internal/domain -> internal/pkg/pagination
 internal/domain -> internal/pkg/timezone

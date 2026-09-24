@@ -344,7 +344,7 @@ func (r *accountRepository) Update(ctx context.Context, account *domain.Account)
 	if account == nil {
 		return nil
 	}
-	if err := retiredSupplyWriteError(account.Type); err != nil && (account.Status == domain.StatusActive || account.Schedulable) {
+	if err := retiredSupplyWriteError(account.Platform, account.Type); err != nil && (account.Status == domain.StatusActive || account.Schedulable) {
 		return err
 	}
 	schedulable := account.Schedulable
@@ -1131,14 +1131,11 @@ func (r *accountRepository) ClearError(ctx context.Context, id int64) error {
 // 若账号仅是封禁/错误态（未软删除），则等同于 ClearError。
 func (r *accountRepository) Restore(ctx context.Context, id int64) error {
 	queryCtx := mixins.SkipSoftDelete(ctx)
-	accountType, err := r.client.Account.Query().Where(dbaccount.IDEQ(id)).Select(dbaccount.FieldType).String(queryCtx)
+	accountType, platform, err := r.retiredSupplyGuardFields(ctx, id, queryCtx)
 	if err != nil {
-		if dbent.IsNotFound(err) {
-			return domain.ErrAccountNotFound
-		}
 		return err
 	}
-	if err := retiredSupplyWriteError(accountType); err != nil {
+	if err := retiredSupplyWriteError(platform, accountType); err != nil {
 		return err
 	}
 
@@ -1773,29 +1770,44 @@ func (r *accountRepository) SetSchedulable(ctx context.Context, id int64, schedu
 	return nil
 }
 
-func retiredSupplyWriteError(accountType string) error {
+// retiredSupplyWriteError 封锁已退役供给类型的“复活”写入。
+//
+// Claude OAuth 的判定必须同时看 platform 与 type：Antigravity 也使用
+// setup-token 类型，只看 type 会误伤。
+func retiredSupplyWriteError(platform, accountType string) error {
 	switch strings.ToLower(strings.TrimSpace(accountType)) {
 	case domain.RetiredAccountTypeBedrock:
 		return domain.ErrRetiredBedrockAccount
 	case domain.AccountTypeServiceAccount:
 		return domain.ErrRetiredVertexServiceAccount
-	default:
-		return nil
+	case domain.AccountTypeOAuth, domain.AccountTypeSetupToken:
+		if strings.EqualFold(strings.TrimSpace(platform), domain.PlatformAnthropic) {
+			return domain.ErrRetiredClaudeOAuthAccount
+		}
 	}
+	return nil
+}
+
+func (r *accountRepository) retiredSupplyGuardFields(ctx context.Context, id int64, queryCtx context.Context) (string, string, error) {
+	row, err := r.client.Account.Query().
+		Where(dbaccount.IDEQ(id)).
+		Select(dbaccount.FieldType, dbaccount.FieldPlatform).
+		Only(queryCtx)
+	if err != nil {
+		if dbent.IsNotFound(err) {
+			return "", "", domain.ErrAccountNotFound
+		}
+		return "", "", err
+	}
+	return row.Type, row.Platform, nil
 }
 
 func (r *accountRepository) rejectRetiredSupplyAccountID(ctx context.Context, id int64) error {
-	accountType, err := r.client.Account.Query().
-		Where(dbaccount.IDEQ(id)).
-		Select(dbaccount.FieldType).
-		String(ctx)
+	accountType, platform, err := r.retiredSupplyGuardFields(ctx, id, ctx)
 	if err != nil {
-		if dbent.IsNotFound(err) {
-			return domain.ErrAccountNotFound
-		}
 		return err
 	}
-	return retiredSupplyWriteError(accountType)
+	return retiredSupplyWriteError(platform, accountType)
 }
 
 func (r *accountRepository) SetExpiresAt(ctx context.Context, id int64, expiresAt *time.Time) error {

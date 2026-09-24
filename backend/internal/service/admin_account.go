@@ -340,6 +340,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 		if err := rejectDeprecatedVertexServiceAccountType(input.Type); err != nil {
 			return nil, err
 		}
+		if err := rejectDeprecatedClaudeOAuthAccount(input.Platform, input.Type); err != nil {
+			return nil, err
+		}
 	}
 	// OAuth/setup-token：同平台同邮箱合并到最后登录账号，避免重复建号。
 	if input != nil && (input.Type == AccountTypeOAuth || input.Type == AccountTypeSetupToken) {
@@ -516,6 +519,12 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	}
 	if err := rejectRetiredSupplyAccount(account); err != nil {
 		return nil, err
+	}
+	// 类型变更同样 fail-closed：Anthropic 账号不得切换到 oauth / setup-token。
+	if input != nil && input.Type != "" {
+		if err := rejectDeprecatedClaudeOAuthAccount(account.Platform, input.Type); err != nil {
+			return nil, err
+		}
 	}
 	// 安全/身份不变量(影子账号):通用更新路径被 edit/re-auth/refresh/batch 共用,
 	// 必须在此守住,否则仅在创建时的保证可被这些路径绕过。

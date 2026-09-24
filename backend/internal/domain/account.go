@@ -13,6 +13,9 @@ var (
 	ErrAccountNotInFallback        = infraerrors.BadRequest("ACCOUNT_NOT_IN_FALLBACK", "account is not in proxy fallback state")
 	ErrRetiredBedrockAccount       = infraerrors.BadRequest("BEDROCK_ACCOUNT_RETIRED", "aws bedrock account type has been retired; use anthropic api-key or other providers")
 	ErrRetiredVertexServiceAccount = infraerrors.BadRequest("VERTEX_SERVICE_ACCOUNT_RETIRED", "vertex service account has been retired; use anthropic/gemini api-key, oauth, or other providers")
+	// ErrRetiredClaudeOAuthAccount 表示 Anthropic 上游账号的 OAuth / setup-token
+	// 授权接入能力已下线，控制面拒绝新增、转换为该系统类型，运行时拒绝刷新与调用。
+	ErrRetiredClaudeOAuthAccount = infraerrors.BadRequest("CLAUDE_OAUTH_ACCOUNT_RETIRED", "anthropic claude oauth/setup-token sign-in has been retired; use anthropic api-key instead")
 	// ErrAccountNotSchedulable 表示账号处于 error/disabled 等不可打开调度的状态。
 	ErrAccountNotSchedulable = errors.New("account cannot be enabled for scheduling in current status")
 )

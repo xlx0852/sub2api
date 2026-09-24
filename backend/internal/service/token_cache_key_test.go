@@ -237,61 +237,17 @@ func TestGrokTokenCacheKeySeparatesAccountsWithSameEmail(t *testing.T) {
 	require.NotEqual(t, GrokTokenCacheKey(first), GrokTokenCacheKey(second))
 }
 
-func TestClaudeTokenCacheKey(t *testing.T) {
-	tests := []struct {
-		name     string
-		account  *Account
-		expected string
-	}{
-		{
-			name: "basic_account",
-			account: &Account{
-				ID: 400,
-			},
-			expected: "claude:account:400",
-		},
-		{
-			name: "account_with_credentials",
-			account: &Account{
-				ID: 401,
-				Credentials: map[string]any{
-					"access_token": "claude-token",
-				},
-			},
-			expected: "claude:account:401",
-		},
-		{
-			name: "account_id_zero",
-			account: &Account{
-				ID: 0,
-			},
-			expected: "claude:account:0",
-		},
-		{
-			name: "large_account_id",
-			account: &Account{
-				ID: 9999999999,
-			},
-			expected: "claude:account:9999999999",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := ClaudeTokenCacheKey(tt.account)
-			require.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestCacheKeyUniqueness(t *testing.T) {
 	// 确保不同平台的缓存键不会冲突
 	account := &Account{ID: 123}
 
 	openaiKey := OpenAITokenCacheKey(account)
-	claudeKey := ClaudeTokenCacheKey(account)
+	geminiKey := GeminiTokenCacheKey(account)
+	grokKey := GrokTokenCacheKey(account)
 
-	require.NotEqual(t, openaiKey, claudeKey, "OpenAI and Claude cache keys should be different")
+	require.NotEqual(t, openaiKey, geminiKey, "OpenAI and Gemini cache keys should be different")
+	require.NotEqual(t, openaiKey, grokKey, "OpenAI and Grok cache keys should be different")
 	require.Contains(t, openaiKey, "openai:")
-	require.Contains(t, claudeKey, "claude:")
+	require.Contains(t, geminiKey, "gemini:")
+	require.Contains(t, grokKey, "grok:")
 }

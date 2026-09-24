@@ -301,16 +301,10 @@ POST /api/v1/admin/accounts/batch-update-credentials
 POST /api/v1/admin/accounts/bulk-update
 POST /api/v1/admin/accounts/check-mixed-channel
 POST /api/v1/admin/accounts/cleanup-oauth-email-duplicates
-POST /api/v1/admin/accounts/cookie-auth
 POST /api/v1/admin/accounts/data
-POST /api/v1/admin/accounts/exchange-code
-POST /api/v1/admin/accounts/exchange-setup-token-code
-POST /api/v1/admin/accounts/generate-auth-url
-POST /api/v1/admin/accounts/generate-setup-token-url
 POST /api/v1/admin/accounts/import/codex-session
 POST /api/v1/admin/accounts/models/sync-upstream-preview
 POST /api/v1/admin/accounts/performance-stats/batch
-POST /api/v1/admin/accounts/setup-token-cookie-auth
 POST /api/v1/admin/accounts/sync/crs
 POST /api/v1/admin/accounts/sync/crs/preview
 POST /api/v1/admin/accounts/today-stats/batch

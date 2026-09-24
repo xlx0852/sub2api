@@ -703,7 +703,6 @@ type GatewayService struct {
 	httpUpstream          HTTPUpstream
 	deferredService       *DeferredService
 	concurrencyService    *ConcurrencyService
-	claudeTokenProvider   *ClaudeTokenProvider
 	userGroupRateResolver *userGroupRateResolver
 	userGroupRateCache    *gocache.Cache
 	userGroupRateSF       singleflight.Group
@@ -748,7 +747,6 @@ func NewGatewayService(
 	identityService *IdentityService,
 	httpUpstream HTTPUpstream,
 	deferredService *DeferredService,
-	claudeTokenProvider *ClaudeTokenProvider,
 	digestStore *DigestSessionStore,
 	settingService *SettingService,
 	tlsFPProfileService *TLSFingerprintProfileService,
@@ -779,7 +777,6 @@ func NewGatewayService(
 		identityService:       identityService,
 		httpUpstream:          withUsageSettlementHTTPUpstream(httpUpstream),
 		deferredService:       deferredService,
-		claudeTokenProvider:   claudeTokenProvider,
 		userGroupRateCache:    sharedUserGroupRateCacheInstance(userGroupRateTTL),
 		settingService:        settingService,
 		modelsListCache:       gocache.New(modelsListTTL, time.Minute),
@@ -1153,16 +1150,12 @@ func (s *GatewayService) GetAccessToken(ctx context.Context, account *Account) (
 }
 
 func (s *GatewayService) getOAuthToken(ctx context.Context, account *Account) (string, string, error) {
-	// 对于 Anthropic OAuth 账号，使用 ClaudeTokenProvider 获取缓存的 token
-	if account.Platform == PlatformAnthropic && account.Type == AccountTypeOAuth && s.claudeTokenProvider != nil {
-		accessToken, err := s.claudeTokenProvider.GetAccessToken(ctx, account)
-		if err != nil {
-			return "", "", err
-		}
-		return accessToken, "oauth", nil
+	// Anthropic 的 oauth/setup-token 供给已退役，直接 fail-closed，避免存量行继续取 token。
+	if err := rejectRetiredClaudeOAuthAccount(account); err != nil {
+		return "", "", err
 	}
 
-	// 其他情况（Gemini 有自己的 TokenProvider，setup-token 类型等）直接从账号读取
+	// 其它平台（Gemini 有自己的 TokenProvider，Antigravity 的 setup-token 等）直接从账号读取
 	accessToken := account.GetCredential("access_token")
 	if accessToken == "" {
 		return "", "", errors.New("access_token not found in credentials")

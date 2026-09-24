@@ -2,7 +2,6 @@ package domain
 
 import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/kimi"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/oauth"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
@@ -18,8 +17,6 @@ type OpenAIDeviceAuthorizationResponse = openai.DeviceAuthorizationResponse
 type GrokTokenResponse = xai.TokenResponse
 type GrokDeviceCodeResponse = xai.DeviceCodeResponse
 type GrokDeviceTokenResponse = xai.DeviceTokenResponse
-
-type ClaudeOAuthTokenResponse = oauth.TokenResponse
 
 type KimiDeviceCodeResponse = kimi.DeviceCodeResponse
 type KimiOAuthClientTokenResponse = kimi.TokenResponse

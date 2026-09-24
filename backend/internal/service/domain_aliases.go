@@ -76,6 +76,7 @@ var ErrAccountNotInFallback = domain.ErrAccountNotInFallback
 var ErrAccountNotSchedulable = domain.ErrAccountNotSchedulable
 var ErrRetiredBedrockAccount = domain.ErrRetiredBedrockAccount
 var ErrRetiredVertexServiceAccount = domain.ErrRetiredVertexServiceAccount
+var ErrRetiredClaudeOAuthAccount = domain.ErrRetiredClaudeOAuthAccount
 
 // ErrVertexServiceAccountOnboardingDisabled is retained as an alias for existing tests and call sites.
 var ErrVertexServiceAccountOnboardingDisabled = domain.ErrRetiredVertexServiceAccount

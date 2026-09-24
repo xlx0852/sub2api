@@ -73,7 +73,7 @@ func (s *stubUpstreamModels) FetchUpstreamSupportedModels(_ context.Context, _ *
 func setupApplyMirasimModelMappingRouter(adminSvc service.AdminService, fetcher upstreamModelsFetcher) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	handler := NewAccountHandler(adminSvc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAccountHandler(adminSvc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	handler.upstreamModels = fetcher
 	router.POST("/api/v1/admin/accounts/:id/models/apply-mapping", handler.ApplyMirasimModelMapping)
 	return router

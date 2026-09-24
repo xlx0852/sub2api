@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -203,22 +202,4 @@ func MergeCredentials(oldCreds, newCreds map[string]any) map[string]any {
 		}
 	}
 	return newCreds
-}
-
-// BuildClaudeAccountCredentials 为 Claude 平台构建 OAuth credentials map
-// 消除 Claude 平台没有 BuildAccountCredentials 方法的问题
-func BuildClaudeAccountCredentials(tokenInfo *TokenInfo) map[string]any {
-	creds := map[string]any{
-		"access_token": tokenInfo.AccessToken,
-		"token_type":   tokenInfo.TokenType,
-		"expires_in":   strconv.FormatInt(tokenInfo.ExpiresIn, 10),
-		"expires_at":   strconv.FormatInt(tokenInfo.ExpiresAt, 10),
-	}
-	if tokenInfo.RefreshToken != "" {
-		creds["refresh_token"] = tokenInfo.RefreshToken
-	}
-	if tokenInfo.Scope != "" {
-		creds["scope"] = tokenInfo.Scope
-	}
-	return creds
 }

@@ -21,7 +21,6 @@ import (
 type CRSSyncService struct {
 	accountRepo        AccountRepository
 	proxyRepo          ProxyRepository
-	oauthService       *OAuthService
 	openaiOAuthService *OpenAIOAuthService
 	geminiOAuthService *GeminiOAuthService
 	cfg                *config.Config
@@ -30,7 +29,6 @@ type CRSSyncService struct {
 func NewCRSSyncService(
 	accountRepo AccountRepository,
 	proxyRepo ProxyRepository,
-	oauthService *OAuthService,
 	openaiOAuthService *OpenAIOAuthService,
 	geminiOAuthService *GeminiOAuthService,
 	cfg *config.Config,
@@ -38,7 +36,6 @@ func NewCRSSyncService(
 	return &CRSSyncService{
 		accountRepo:        accountRepo,
 		proxyRepo:          proxyRepo,
-		oauthService:       oauthService,
 		openaiOAuthService: openaiOAuthService,
 		geminiOAuthService: geminiOAuthService,
 		cfg:                cfg,
@@ -49,7 +46,7 @@ func NewCRSSyncService(
 // 影子读透母账号凭据,母账号必须**始终是 OpenAI OAuth**。CRS 同步按全局 crs_account_id 匹配既有账号
 // (GetByCRSAccountID 已排除影子、但能命中母账号),各平台分支会重写 Platform/Type;若 CRS ID 跨 kind/平台
 // 碰撞,非 OpenAI 分支会把母账号改成 Anthropic/Gemini 或 api_key→影子 resolveCredentialAccount 必崩(外审第9轮,
-// 收紧第8轮仅查 Type 的版本:Claude OAuth 把 Type 保持 OAuth 但 Platform 改成 Anthropic 能绕过旧守卫)。
+// 收紧第8轮仅查 Type 的版本:把 Type 保持 OAuth 但 Platform 改成 Anthropic 即能绕过旧守卫)。
 // 故任何会把母账号目标结果改离 OpenAI OAuth 的 CRS 更新,在其有影子时一律拒绝(须先删影子);返回非 nil
 // 表示该账号更新应被跳过(调用方标记 failed)。
 func guardCRSShadowParentInvariant(ctx context.Context, repo AccountRepository, existing *Account, newPlatform, newType string) error {
@@ -108,7 +105,6 @@ type crsExportResponse struct {
 	Message string `json:"message"`
 	Data    struct {
 		ExportedAt              string                      `json:"exportedAt"`
-		ClaudeAccounts          []crsClaudeAccount          `json:"claudeAccounts"`
 		ClaudeConsoleAccounts   []crsConsoleAccount         `json:"claudeConsoleAccounts"`
 		OpenAIOAuthAccounts     []crsOpenAIOAuthAccount     `json:"openaiOAuthAccounts"`
 		OpenAIResponsesAccounts []crsOpenAIResponsesAccount `json:"openaiResponsesAccounts"`
@@ -123,22 +119,6 @@ type crsProxy struct {
 	Port     int    `json:"port"`
 	Username string `json:"username"`
 	Password string `json:"password"`
-}
-
-type crsClaudeAccount struct {
-	Kind        string         `json:"kind"`
-	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Platform    string         `json:"platform"`
-	AuthType    string         `json:"authType"` // oauth/setup-token
-	IsActive    bool           `json:"isActive"`
-	Schedulable bool           `json:"schedulable"`
-	Priority    int            `json:"priority"`
-	Status      string         `json:"status"`
-	Proxy       *crsProxy      `json:"proxy"`
-	Credentials map[string]any `json:"credentials"`
-	Extra       map[string]any `json:"extra"`
 }
 
 type crsConsoleAccount struct {
@@ -270,7 +250,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		Items: make(
 			[]SyncFromCRSItemResult,
 			0,
-			len(exported.Data.ClaudeAccounts)+len(exported.Data.ClaudeConsoleAccounts)+len(exported.Data.OpenAIOAuthAccounts)+len(exported.Data.OpenAIResponsesAccounts)+len(exported.Data.GeminiOAuthAccounts)+len(exported.Data.GeminiAPIKeyAccounts),
+			len(exported.Data.ClaudeConsoleAccounts)+len(exported.Data.OpenAIOAuthAccounts)+len(exported.Data.OpenAIResponsesAccounts)+len(exported.Data.GeminiOAuthAccounts)+len(exported.Data.GeminiAPIKeyAccounts),
 		),
 	}
 
@@ -279,170 +259,6 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 	var proxies []Proxy
 	if input.SyncProxies {
 		proxies, _ = s.proxyRepo.ListActive(ctx)
-	}
-
-	// Claude OAuth / Setup Token -> sub2api anthropic oauth/setup-token
-	for _, src := range exported.Data.ClaudeAccounts {
-		item := SyncFromCRSItemResult{
-			CRSAccountID: src.ID,
-			Kind:         src.Kind,
-			Name:         src.Name,
-		}
-
-		targetType := strings.TrimSpace(src.AuthType)
-		if targetType == "" {
-			targetType = "oauth"
-		}
-		if targetType != AccountTypeOAuth && targetType != AccountTypeSetupToken {
-			item.Action = "skipped"
-			item.Error = "unsupported authType: " + targetType
-			result.Skipped++
-			result.Items = append(result.Items, item)
-			continue
-		}
-
-		accessToken, _ := src.Credentials["access_token"].(string)
-		if strings.TrimSpace(accessToken) == "" {
-			item.Action = "failed"
-			item.Error = "missing access_token"
-			result.Failed++
-			result.Items = append(result.Items, item)
-			continue
-		}
-
-		proxyID, err := s.mapOrCreateProxy(ctx, input.SyncProxies, &proxies, src.Proxy, fmt.Sprintf("crs-%s", src.Name))
-		if err != nil {
-			item.Action = "failed"
-			item.Error = "proxy sync failed: " + err.Error()
-			result.Failed++
-			result.Items = append(result.Items, item)
-			continue
-		}
-
-		credentials := sanitizeCredentialsMap(src.Credentials)
-		// 🔧 Remove /v1 suffix from base_url for Claude accounts
-		cleanBaseURL(credentials, "/v1")
-		// 🔧 Convert expires_at from ISO string to Unix timestamp
-		if expiresAtStr, ok := credentials["expires_at"].(string); ok && expiresAtStr != "" {
-			if t, err := time.Parse(time.RFC3339, expiresAtStr); err == nil {
-				credentials["expires_at"] = t.Unix()
-			}
-		}
-		// 🔧 Add intercept_warmup_requests if not present (defaults to false)
-		if _, exists := credentials["intercept_warmup_requests"]; !exists {
-			credentials["intercept_warmup_requests"] = false
-		}
-		priority := clampPriority(src.Priority)
-		concurrency := 3
-		status := mapCRSStatus(src.IsActive, src.Status)
-
-		// 🔧 Preserve all CRS extra fields and add sync metadata
-		extra := make(map[string]any)
-		if src.Extra != nil {
-			for k, v := range src.Extra {
-				extra[k] = v
-			}
-		}
-		extra["crs_account_id"] = src.ID
-		extra["crs_kind"] = src.Kind
-		extra["crs_synced_at"] = now
-		// Extract org_uuid and account_uuid from CRS credentials to extra
-		if orgUUID, ok := src.Credentials["org_uuid"]; ok {
-			extra["org_uuid"] = orgUUID
-		}
-		if accountUUID, ok := src.Credentials["account_uuid"]; ok {
-			extra["account_uuid"] = accountUUID
-		}
-
-		existing, err := s.accountRepo.GetByCRSAccountID(ctx, src.ID)
-		if err != nil {
-			item.Action = "failed"
-			item.Error = "db lookup failed: " + err.Error()
-			result.Failed++
-			result.Items = append(result.Items, item)
-			continue
-		}
-
-		if existing == nil {
-			if !shouldCreateAccount(src.ID, selectedSet) {
-				item.Action = "skipped"
-				item.Error = "not selected"
-				result.Skipped++
-				result.Items = append(result.Items, item)
-				continue
-			}
-			account := &Account{
-				Name:        defaultName(src.Name, src.ID),
-				Platform:    PlatformAnthropic,
-				Type:        targetType,
-				Credentials: credentials,
-				Extra:       extra,
-				ProxyID:     proxyID,
-				Concurrency: concurrency,
-				Priority:    priority,
-				Status:      status,
-				Schedulable: src.Schedulable,
-			}
-			if err := s.accountRepo.Create(ctx, account); err != nil {
-				item.Action = "failed"
-				item.Error = "create failed: " + err.Error()
-				result.Failed++
-				result.Items = append(result.Items, item)
-				continue
-			}
-			// 🔄 Refresh OAuth token after creation
-			if targetType == AccountTypeOAuth {
-				if refreshedCreds := s.refreshOAuthToken(ctx, account); refreshedCreds != nil {
-					_ = persistAccountCredentials(ctx, s.accountRepo, account, refreshedCreds)
-				}
-			}
-			item.Action = "created"
-			result.Created++
-			result.Items = append(result.Items, item)
-			continue
-		}
-
-		// 母账号守卫(外审第9轮):CRS ID 跨平台碰撞时,本(Anthropic OAuth)分支不得改坏有 spark 影子的 OpenAI 母账号。
-		if gerr := guardCRSShadowParentInvariant(ctx, s.accountRepo, existing, PlatformAnthropic, targetType); gerr != nil {
-			item.Action = "failed"
-			item.Error = gerr.Error()
-			result.Failed++
-			result.Items = append(result.Items, item)
-			continue
-		}
-
-		// Update existing
-		existing.Extra = mergeMap(existing.Extra, extra)
-		existing.Name = defaultName(src.Name, src.ID)
-		existing.Platform = PlatformAnthropic
-		existing.Type = targetType
-		existing.Credentials = mergeMap(existing.Credentials, credentials)
-		if proxyID != nil {
-			existing.ProxyID = proxyID
-		}
-		existing.Concurrency = concurrency
-		existing.Priority = priority
-		existing.Status = status
-		existing.Schedulable = src.Schedulable
-
-		if err := s.accountRepo.Update(ctx, existing); err != nil {
-			item.Action = "failed"
-			item.Error = "update failed: " + err.Error()
-			result.Failed++
-			result.Items = append(result.Items, item)
-			continue
-		}
-
-		// 🔄 Refresh OAuth token after update
-		if targetType == AccountTypeOAuth {
-			if refreshedCreds := s.refreshOAuthToken(ctx, existing); refreshedCreds != nil {
-				_ = persistAccountCredentials(ctx, s.accountRepo, existing, refreshedCreds)
-			}
-		}
-
-		item.Action = "updated"
-		result.Updated++
-		result.Items = append(result.Items, item)
 	}
 
 	// Claude Console API Key -> sub2api anthropic apikey
@@ -1310,31 +1126,6 @@ func (s *CRSSyncService) refreshOAuthToken(ctx context.Context, account *Account
 	var err error
 
 	switch account.Platform {
-	case PlatformAnthropic:
-		if s.oauthService == nil {
-			return nil
-		}
-		tokenInfo, refreshErr := s.oauthService.RefreshAccountToken(ctx, account)
-		if refreshErr != nil {
-			err = refreshErr
-		} else {
-			// Preserve existing credentials
-			newCredentials = make(map[string]any)
-			for k, v := range account.Credentials {
-				newCredentials[k] = v
-			}
-			// Update token fields
-			newCredentials["access_token"] = tokenInfo.AccessToken
-			newCredentials["token_type"] = tokenInfo.TokenType
-			newCredentials["expires_in"] = tokenInfo.ExpiresIn
-			newCredentials["expires_at"] = tokenInfo.ExpiresAt
-			if tokenInfo.RefreshToken != "" {
-				newCredentials["refresh_token"] = tokenInfo.RefreshToken
-			}
-			if tokenInfo.Scope != "" {
-				newCredentials["scope"] = tokenInfo.Scope
-			}
-		}
 	case PlatformOpenAI:
 		if s.openaiOAuthService == nil {
 			return nil
@@ -1452,13 +1243,6 @@ func (s *CRSSyncService) PreviewFromCRS(ctx context.Context, input SyncFromCRSIn
 		}
 	}
 
-	for _, src := range exported.Data.ClaudeAccounts {
-		authType := strings.TrimSpace(src.AuthType)
-		if authType == "" {
-			authType = AccountTypeOAuth
-		}
-		classify(src.ID, src.Kind, src.Name, PlatformAnthropic, authType)
-	}
 	for _, src := range exported.Data.ClaudeConsoleAccounts {
 		classify(src.ID, src.Kind, src.Name, PlatformAnthropic, AccountTypeAPIKey)
 	}

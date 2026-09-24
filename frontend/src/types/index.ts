@@ -737,6 +737,15 @@ export interface UpdateGroupRequest {
 export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kimi'
 export type AccountType = 'oauth' | 'setup-token' | 'apikey' | 'upstream' | 'service_account'
 export type OAuthAddMethod = 'oauth' | 'setup-token'
+// Input method selector for OAuth authorization flows (non-Anthropic providers).
+export type OAuthInputMethod =
+  | 'manual'
+  | 'refresh_token'
+  | 'mobile_refresh_token'
+  | 'session_token'
+  | 'access_token'
+  | 'codex_session'
+  | 'codex_pat'
 export type ProxyProtocol = 'http' | 'https' | 'socks5' | 'socks5h'
 
 // Claude Model type (returned by /v1/models and account models API)

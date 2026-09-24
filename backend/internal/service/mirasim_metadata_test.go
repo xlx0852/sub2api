@@ -862,7 +862,7 @@ func TestFetchUpstreamSupportedModelsUsesMirasimAvailableModels(t *testing.T) {
 	fake := &mirasimMetaFake{}
 	metadata := NewMirasimMetadataService(nil, fake)
 
-	testService := NewAccountTestService(nil, nil, nil, nil, nil, nil, fake, nil, nil)
+	testService := NewAccountTestService(nil, nil, nil, nil, nil, fake, nil, nil)
 	testService.SetMirasimMetadataService(metadata)
 
 	models, err := testService.FetchUpstreamSupportedModels(context.Background(), account)
@@ -889,7 +889,7 @@ func TestFetchUpstreamSupportedModelsMirasimErrorMapping(t *testing.T) {
 	t.Run("metadata client 未配置 → configuration", func(t *testing.T) {
 		const accountID = int64(942010)
 		account := mirasimMetaTestAccount(t, accountID, nil)
-		testService := NewAccountTestService(nil, nil, nil, nil, nil, nil, &mirasimMetaFake{}, nil, nil)
+		testService := NewAccountTestService(nil, nil, nil, nil, nil, &mirasimMetaFake{}, nil, nil)
 
 		var syncErr *UpstreamModelSyncError
 		_, err := testService.FetchUpstreamSupportedModels(context.Background(), account)
@@ -911,7 +911,7 @@ func TestFetchUpstreamSupportedModelsMirasimErrorMapping(t *testing.T) {
 			Extra:       map[string]any{mirasimExtraRelayEnabled: true},
 		}
 		fake := &mirasimMetaFake{}
-		testService := NewAccountTestService(nil, nil, nil, nil, nil, nil, fake, nil, nil)
+		testService := NewAccountTestService(nil, nil, nil, nil, nil, fake, nil, nil)
 		testService.SetMirasimMetadataService(NewMirasimMetadataService(nil, fake))
 
 		var syncErr *UpstreamModelSyncError
@@ -930,7 +930,7 @@ func TestFetchUpstreamSupportedModelsMirasimErrorMapping(t *testing.T) {
 				return http.StatusInternalServerError, `{"error":"boom"}`
 			},
 		}
-		testService := NewAccountTestService(nil, nil, nil, nil, nil, nil, fake, nil, nil)
+		testService := NewAccountTestService(nil, nil, nil, nil, nil, fake, nil, nil)
 		testService.SetMirasimMetadataService(NewMirasimMetadataService(nil, fake))
 
 		var syncErr *UpstreamModelSyncError
@@ -949,7 +949,7 @@ func TestFetchUpstreamSupportedModelsMirasimErrorMapping(t *testing.T) {
 				return http.StatusOK, `{"object":"list","data":[]}`
 			},
 		}
-		testService := NewAccountTestService(nil, nil, nil, nil, nil, nil, fake, nil, nil)
+		testService := NewAccountTestService(nil, nil, nil, nil, nil, fake, nil, nil)
 		testService.SetMirasimMetadataService(NewMirasimMetadataService(nil, fake))
 
 		var syncErr *UpstreamModelSyncError
@@ -963,7 +963,7 @@ func TestFetchUpstreamSupportedModelsMirasimErrorMapping(t *testing.T) {
 		const accountID = int64(942014)
 		account := mirasimMetaTestAccount(t, accountID, nil)
 		stub := &mirasimMetaQuerierStub{}
-		testService := NewAccountTestService(nil, nil, nil, nil, nil, nil, &mirasimMetaFake{}, nil, nil)
+		testService := NewAccountTestService(nil, nil, nil, nil, nil, &mirasimMetaFake{}, nil, nil)
 		testService.SetMirasimMetadataService(stub)
 
 		var syncErr *UpstreamModelSyncError

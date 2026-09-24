@@ -34,7 +34,6 @@ func provideCleanup(
 	usageRecordWorkerPool *service.UsageRecordWorkerPool,
 	usageSettlementBindings *usageSettlementBindings,
 	subscriptionService *service.SubscriptionService,
-	oauth *service.OAuthService,
 	openaiOAuth *service.OpenAIOAuthService,
 	geminiOAuth *service.GeminiOAuthService,
 	antigravityOAuth *service.AntigravityOAuthService,
@@ -175,10 +174,6 @@ func provideCleanup(
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
 				return usageSettlementBindings.worker.StopAndWait(ctx)
-			}},
-			{"OAuthService", func() error {
-				oauth.Stop()
-				return nil
 			}},
 			{"OpenAIOAuthService", func() error {
 				openaiOAuth.Stop()

@@ -580,5 +580,39 @@ func rejectRetiredSupplyAccount(account *Account) error {
 	if err := rejectRetiredBedrockAccount(account); err != nil {
 		return err
 	}
-	return rejectRetiredVertexServiceAccount(account)
+	if err := rejectRetiredVertexServiceAccount(account); err != nil {
+		return err
+	}
+	return rejectRetiredClaudeOAuthAccount(account)
+}
+
+// rejectDeprecatedClaudeOAuthAccount 阻止为 Anthropic 上游账号新增 OAuth /
+// setup-token 授权接入（Claude OAuth 登录能力已下线）。
+//
+// 判定必须同时限定 platform == anthropic：Antigravity 也使用 setup-token 类型，
+// 按类型维度单独判定会误伤。
+func rejectDeprecatedClaudeOAuthAccount(platform, accountType string) error {
+	if !strings.EqualFold(strings.TrimSpace(platform), PlatformAnthropic) {
+		return nil
+	}
+	switch strings.TrimSpace(accountType) {
+	case AccountTypeOAuth, AccountTypeSetupToken:
+		return ErrRetiredClaudeOAuthAccount
+	}
+	return nil
+}
+
+// rejectRetiredClaudeOAuthAccount 对已落库的 Anthropic OAuth / setup-token 账号做
+// fail-closed：存量行仍可识别、可删除，但不再有可执行的上游调用路径。
+func rejectRetiredClaudeOAuthAccount(account *Account) error {
+	if account == nil {
+		return nil
+	}
+	return rejectDeprecatedClaudeOAuthAccount(account.Platform, account.Type)
+}
+
+// RejectRetiredClaudeOAuthAccount 是 rejectRetiredClaudeOAuthAccount 的导出包装，
+// 供 handler 层在触达上游前对 Anthropic OAuth / setup-token 账号做 fail-closed 拒绝。
+func RejectRetiredClaudeOAuthAccount(account *Account) error {
+	return rejectRetiredClaudeOAuthAccount(account)
 }

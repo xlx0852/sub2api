@@ -344,48 +344,6 @@ func TestMergeCredentials_NewOverridesOld(t *testing.T) {
 	require.Equal(t, "old-refresh", result["refresh_token"]) // preserved
 }
 
-// ========== BuildClaudeAccountCredentials tests ==========
-
-func TestBuildClaudeAccountCredentials_Full(t *testing.T) {
-	tokenInfo := &TokenInfo{
-		AccessToken:  "at-123",
-		TokenType:    "Bearer",
-		ExpiresIn:    3600,
-		ExpiresAt:    1700000000,
-		RefreshToken: "rt-456",
-		Scope:        "openid",
-	}
-
-	creds := BuildClaudeAccountCredentials(tokenInfo)
-
-	require.Equal(t, "at-123", creds["access_token"])
-	require.Equal(t, "Bearer", creds["token_type"])
-	require.Equal(t, "3600", creds["expires_in"])
-	require.Equal(t, "1700000000", creds["expires_at"])
-	require.Equal(t, "rt-456", creds["refresh_token"])
-	require.Equal(t, "openid", creds["scope"])
-}
-
-func TestBuildClaudeAccountCredentials_Minimal(t *testing.T) {
-	tokenInfo := &TokenInfo{
-		AccessToken: "at-789",
-		TokenType:   "Bearer",
-		ExpiresIn:   7200,
-		ExpiresAt:   1700003600,
-	}
-
-	creds := BuildClaudeAccountCredentials(tokenInfo)
-
-	require.Equal(t, "at-789", creds["access_token"])
-	require.Equal(t, "Bearer", creds["token_type"])
-	require.Equal(t, "7200", creds["expires_in"])
-	require.Equal(t, "1700003600", creds["expires_at"])
-	_, hasRefresh := creds["refresh_token"]
-	_, hasScope := creds["scope"]
-	require.False(t, hasRefresh, "refresh_token should not be set when empty")
-	require.False(t, hasScope, "scope should not be set when empty")
-}
-
 // refreshAPIAccountRepoWithRace supports returning a different account on subsequent GetByID calls
 // to simulate race conditions where another worker has refreshed the token.
 type refreshAPIAccountRepoWithRace struct {
@@ -624,13 +582,6 @@ func TestBackgroundRefreshPolicy_SuccessOverride(t *testing.T) {
 }
 
 // ========== ProviderRefreshPolicy tests ==========
-
-func TestClaudeProviderRefreshPolicy(t *testing.T) {
-	p := ClaudeProviderRefreshPolicy()
-	require.Equal(t, ProviderRefreshErrorUseExistingToken, p.OnRefreshError)
-	require.Equal(t, ProviderLockHeldWaitForCache, p.OnLockHeld)
-	require.Equal(t, time.Minute, p.FailureTTL)
-}
 
 func TestOpenAIProviderRefreshPolicy(t *testing.T) {
 	p := OpenAIProviderRefreshPolicy()

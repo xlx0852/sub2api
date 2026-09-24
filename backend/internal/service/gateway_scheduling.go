@@ -52,26 +52,43 @@ func (s *GatewayService) SelectAccountForModelWithExclusions(ctx context.Context
 // SelectAccountWithLoadAwareness selects account with load-awareness and wait plan.
 // metadataUserID: 用于客户端亲和调度，从中提取客户端 ID
 // sub2apiUserID: 系统用户 ID，用于二维亲和调度
+//
+// selectAccountWithLoadAwarenessStrategy 是网关选号编排入口：
+// 单次尝试 + 空池时的强制 DB 复核重试（见 gateway_empty_pool_recheck.go）。
 func (s *GatewayService) selectAccountWithLoadAwarenessStrategy(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, metadataUserID string, sub2apiUserID int64) (*AccountSelectionResult, error) {
+	return s.selectGatewayAccountWithEmptyPoolRecheck(ctx, groupID, requestedModel, excludedIDs,
+		func() (*AccountSelectionResult, gatewaySelectionPoolStats, error) {
+			return s.selectGatewayAccountOnce(ctx, groupID, sessionHash, requestedModel, excludedIDs, metadataUserID, sub2apiUserID)
+		})
+}
+
+// selectGatewayAccountOnce 执行一次完整的网关选号，并回传本次尝试的池规模。
+// 仅当返回 ErrNoAvailableAccounts 且 stats.EmptyPool 为 true 时，调用方才会做 DB 复核重试。
+func (s *GatewayService) selectGatewayAccountOnce(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, metadataUserID string, sub2apiUserID int64) (*AccountSelectionResult, gatewaySelectionPoolStats, error) {
+	stats := gatewaySelectionPoolStats{}
 	cfg := s.schedulingConfig()
 	group, groupID, err := s.checkClaudeCodeRestriction(ctx, groupID)
 	if err != nil {
-		return nil, err
+		return nil, stats, err
 	}
 	ctx = s.withGroupContext(ctx, group)
 	if s.checkChannelPricingRestriction(ctx, groupID, requestedModel) {
-		return nil, fmt.Errorf("%w supporting model: %s (channel pricing restriction)", ErrNoAvailableAccounts, requestedModel)
+		return nil, stats, fmt.Errorf("%w supporting model: %s (channel pricing restriction)", ErrNoAvailableAccounts, requestedModel)
 	}
 	platform, force, err := s.resolvePlatform(ctx, groupID, group)
 	if err != nil {
-		return nil, err
+		return nil, stats, err
 	}
+	stats.Platform = platform
+	stats.HasForcePlatform = force
 	accounts, mixed, err := s.listSchedulableAccounts(ctx, groupID, platform, force)
 	if err != nil {
-		return nil, err
+		return nil, stats, err
 	}
+	stats.PoolSize = len(accounts)
 	if len(accounts) == 0 {
-		return nil, ErrNoAvailableAccounts
+		stats.EmptyPool = true
+		return nil, stats, ErrNoAvailableAccounts
 	}
 	stickyID := prefetchedStickyAccountIDFromContext(ctx, groupID)
 	if stickyID <= 0 && sessionHash != "" && s.cache != nil {
@@ -111,9 +128,12 @@ func (s *GatewayService) selectAccountWithLoadAwarenessStrategy(ctx context.Cont
 		stickyID = 0
 	}
 	if len(candidates) == 0 {
+		stats.CandidateCount = 0
+		stats.EmptyPool = true
 		slog.Warn("gateway_scheduler_no_candidates_reject_trace", "platform", platform, "group_id", derefGroupID(groupID), "model", requestedModel, "reject_trace", trace)
-		return nil, ErrNoAvailableAccounts
+		return nil, stats, ErrNoAvailableAccounts
 	}
+	stats.CandidateCount = len(candidates)
 	loads := make([]AccountWithConcurrency, 0, len(candidates))
 	for _, a := range candidates {
 		loads = append(loads, AccountWithConcurrency{ID: a.ID, MaxConcurrency: a.Concurrency})
@@ -169,10 +189,10 @@ func (s *GatewayService) selectAccountWithLoadAwarenessStrategy(ctx context.Cont
 		}
 		result, acquireErr := s.tryAcquireAccountSlot(ctx, requestedModel, a.ID, a.Concurrency)
 		if acquireErr != nil {
-			return nil, acquireErr
+			return nil, stats, acquireErr
 		}
 		if result != nil && result.ModelLimited {
-			return &AccountSelectionResult{Account: a, ModelLimited: true}, nil
+			return &AccountSelectionResult{Account: a, ModelLimited: true}, stats, nil
 		}
 		if result == nil || !result.Acquired {
 			continue
@@ -181,16 +201,17 @@ func (s *GatewayService) selectAccountWithLoadAwarenessStrategy(ctx context.Cont
 			_ = s.cache.SetSessionAccountID(ctx, derefGroupID(groupID), sessionHash, a.ID, stickySessionTTL)
 		}
 		slog.Info("account_simple_selection", "platform", platform, "group_id", derefGroupID(groupID), "model", requestedModel, "selected_account_id", a.ID, "candidate_count", len(candidates))
-		return &AccountSelectionResult{Account: a, Acquired: true, ReleaseFunc: result.ReleaseFunc}, nil
+		return &AccountSelectionResult{Account: a, Acquired: true, ReleaseFunc: result.ReleaseFunc}, stats, nil
 	}
 	for _, candidate := range order {
 		a := recheck(candidate)
 		if a == nil {
 			continue
 		}
-		return &AccountSelectionResult{Account: a, WaitPlan: newFallbackWaitPlan(a.ID, a.Concurrency, cfg)}, nil
+		return &AccountSelectionResult{Account: a, WaitPlan: newFallbackWaitPlan(a.ID, a.Concurrency, cfg)}, stats, nil
 	}
-	return nil, ErrNoAvailableAccounts
+	// 候选存在但拿不到槽位/无等待计划：属于"忙池"，调用方不做 DB 复核。
+	return nil, stats, ErrNoAvailableAccounts
 }
 
 func (s *GatewayService) schedulingConfig() config.GatewaySchedulingConfig {

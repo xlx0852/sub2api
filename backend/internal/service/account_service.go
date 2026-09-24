@@ -71,6 +71,9 @@ func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (
 	if err := rejectDeprecatedBedrockType(req.Type); err != nil {
 		return nil, err
 	}
+	if err := rejectDeprecatedClaudeOAuthAccount(req.Platform, req.Type); err != nil {
+		return nil, err
+	}
 	// 验证分组是否存在（如果指定了分组）
 	if len(req.GroupIDs) > 0 {
 		if err := s.validateGroupIDsExist(ctx, req.GroupIDs); err != nil {

@@ -54,8 +54,8 @@ export const ACCOUNT_PLATFORM_REGISTRY: readonly PlatformDefinition[] = [
     icon: 'sparkles',
     activeClass: 'bg-white text-orange-600  dark:bg-dark-600 dark:text-orange-400',
     showInCreatePicker: true,
-    categories: ['oauth-based', 'apikey'],
-    types: ['oauth', 'setup-token', 'apikey'],
+    categories: ['apikey'],
+    types: ['apikey'],
     fields: {
       headerOverride: true,
       modelRestriction: true,
@@ -63,7 +63,9 @@ export const ACCOUNT_PLATFORM_REGISTRY: readonly PlatformDefinition[] = [
       upstreamCredentials: false,
       vertexServiceAccount: false,
       mixedScheduling: false,
-      oauthModelRestriction: true,
+      // Anthropic oauth/setup-token sign-in was retired; the OAuth-only
+      // model restriction panel is no longer reachable.
+      oauthModelRestriction: false,
       interceptWarmup: true,
       openAIAdvanced: false,
       anthropicAdvanced: true,
@@ -300,12 +302,6 @@ export interface CategoryPickerConfig {
   options: CategoryPickerOption[]
 }
 
-const orange = {
-  selectedBorder: 'border-orange-500 bg-orange-50 dark:bg-orange-900/20',
-  selectedBg: 'bg-orange-500 text-white',
-  selectedIconBg: 'bg-orange-500 text-white',
-  hoverBorder: 'border-gray-200 hover:border-orange-300 dark:border-dark-600 dark:hover:border-orange-700'
-}
 const purple = {
   selectedBorder: 'border-purple-500 bg-purple-50 dark:bg-purple-900/20',
   selectedBg: 'bg-purple-500 text-white',
@@ -327,15 +323,8 @@ const zinc = {
 export const ACCOUNT_CATEGORY_PICKERS: Record<string, CategoryPickerConfig> = {
   anthropic: {
     model: 'accountCategory',
-    layoutClass: 'grid-cols-2',
+    layoutClass: 'grid-cols-1',
     options: [
-      {
-        id: 'oauth-based',
-        titleKey: 'admin.accounts.claudeCode',
-        subtitleKey: 'admin.accounts.oauthSetupToken',
-        icon: 'sparkles',
-        ...orange
-      },
       {
         id: 'apikey',
         titleKey: 'admin.accounts.claudeConsole',

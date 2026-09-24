@@ -25,13 +25,6 @@ type GrokOAuthClient interface {
 	PollDeviceToken(ctx context.Context, deviceCode, tokenEndpoint, proxyURL, clientID string) (*domain.GrokDeviceTokenResponse, error)
 }
 
-type ClaudeOAuthClient interface {
-	GetOrganizationUUID(ctx context.Context, sessionKey, proxyURL string) (string, error)
-	GetAuthorizationCode(ctx context.Context, sessionKey, orgUUID, scope, codeChallenge, state, proxyURL string) (string, error)
-	ExchangeCodeForToken(ctx context.Context, code, codeVerifier, state, proxyURL string, isSetupToken bool) (*domain.ClaudeOAuthTokenResponse, error)
-	RefreshToken(ctx context.Context, refreshToken, proxyURL string) (*domain.ClaudeOAuthTokenResponse, error)
-}
-
 type KimiOAuthClient interface {
 	StartDeviceFlow(ctx context.Context, proxyURL string, headers domain.KimiDeviceHeaders) (*domain.KimiDeviceCodeResponse, error)
 	PollDeviceToken(ctx context.Context, deviceCode, proxyURL string, headers domain.KimiDeviceHeaders) (*domain.KimiOAuthClientTokenResponse, error)

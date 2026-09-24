@@ -163,8 +163,6 @@ func newTestGatewayHandler(t *testing.T, group *service.Group, accounts []*servi
 		nil, // billingCacheService
 		nil, // identityService
 		nil, // httpUpstream
-		nil, // deferredService
-		nil, // claudeTokenProvider
 		nil, // digestStore
 		nil, // settingService
 		nil, // tlsFPProfileService

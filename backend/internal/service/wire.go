@@ -55,7 +55,6 @@ func ProvideOpenAIOAuthService(
 // ProvideTokenRefreshService creates and starts TokenRefreshService
 func ProvideTokenRefreshService(
 	accountRepo AccountRepository,
-	oauthService *OAuthService,
 	openaiOAuthService *OpenAIOAuthService,
 	geminiOAuthService *GeminiOAuthService,
 	antigravityOAuthService *AntigravityOAuthService,
@@ -70,7 +69,7 @@ func ProvideTokenRefreshService(
 	refreshAPI *OAuthRefreshAPI,
 	runtimeBlocker AccountRuntimeBlocker,
 ) *TokenRefreshService {
-	svc := NewTokenRefreshService(accountRepo, oauthService, openaiOAuthService, geminiOAuthService, antigravityOAuthService, cacheInvalidator, schedulerCache, cfg, tempUnschedCache, grokOAuthService)
+	svc := NewTokenRefreshService(accountRepo, openaiOAuthService, geminiOAuthService, antigravityOAuthService, cacheInvalidator, schedulerCache, cfg, tempUnschedCache, grokOAuthService)
 	// 注入 OpenAI privacy opt-out 依赖
 	svc.SetPrivacyDeps(privacyClientFactory, proxyRepo)
 	// 注入统一 OAuth 刷新 API（消除 TokenRefreshService 与 TokenProvider 之间的竞争条件）
@@ -81,20 +80,6 @@ func ProvideTokenRefreshService(
 	svc.SetAccountRuntimeBlocker(runtimeBlocker)
 	svc.Start()
 	return svc
-}
-
-// ProvideClaudeTokenProvider creates ClaudeTokenProvider with OAuthRefreshAPI injection
-func ProvideClaudeTokenProvider(
-	accountRepo AccountRepository,
-	tokenCache GeminiTokenCache,
-	oauthService *OAuthService,
-	refreshAPI *OAuthRefreshAPI,
-) *ClaudeTokenProvider {
-	p := NewClaudeTokenProvider(accountRepo, tokenCache, oauthService)
-	executor := NewClaudeTokenRefresher(oauthService)
-	p.SetRefreshAPI(refreshAPI, executor)
-	p.SetRefreshPolicy(ClaudeProviderRefreshPolicy())
-	return p
 }
 
 // ProvideOpenAITokenProvider creates OpenAITokenProvider with OAuthRefreshAPI injection
@@ -209,7 +194,6 @@ func ProvideAccountUsageService(
 func ProvideAccountTestService(
 	accountRepo AccountRepository,
 	geminiTokenProvider *GeminiTokenProvider,
-	claudeTokenProvider *ClaudeTokenProvider,
 	grokTokenProvider *GrokTokenProvider,
 	kimiTokenProvider *KimiTokenProvider,
 	antigravityGatewayService *AntigravityGatewayService,
@@ -222,7 +206,6 @@ func ProvideAccountTestService(
 	service := NewAccountTestService(
 		accountRepo,
 		geminiTokenProvider,
-		claudeTokenProvider,
 		grokTokenProvider,
 		kimiTokenProvider,
 		antigravityGatewayService,
@@ -729,7 +712,6 @@ var ProviderSet = wire.NewSet(
 	NewUsageSettlementPostCommit,
 	NewUsageSettlementRecovery,
 	wire.Bind(new(AccountRuntimeBlocker), new(*OpenAIGatewayService)),
-	NewOAuthService,
 	ProvideOpenAIOAuthService,
 	ProvideGrokOAuthService,
 	NewKimiOAuthService,
@@ -750,7 +732,6 @@ var ProviderSet = wire.NewSet(
 	wire.Bind(new(KimiQuotaQuerier), new(*KimiQuotaService)),
 	ProvideGrokQuotaService,
 	wire.Bind(new(GrokQuotaProber), new(*GrokQuotaService)),
-	ProvideClaudeTokenProvider,
 	NewAntigravityGatewayService,
 	ProvideRateLimitService,
 	ProvideAccountUsageService,
