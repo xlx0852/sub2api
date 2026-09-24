@@ -32,3 +32,27 @@
 - 之后的新请求按账号当前倍率（0）记录，口径持续一致。
 - 若后续为 140 设定更贴近 mirasim 实付价的倍率（例如 0.1），可用同一条「对齐」SQL 重跑；备份表 `usage_logs_ratemult_backup_20260925` 保留原值。
 - 倍率 0 表示该账号的 token 成本不计入经营成本；账号用量页仍显示标价成本（`total_standard_cost`）供参考。
+
+## 追加修复：经营汇总用 UTC 日期取区间，漏掉当天用量（前端，2026-09-25 06:13）
+
+**现象**：倍率快照修正后，用量详情弹窗「经营汇总」仍显示 收入 $0.0000 / 成本 $0.0000 / 利润 +$0.0000 / 请求数 0，而同页「30 天总请求」是 397、「今日概览」用户扣费 $1.52。
+
+**原因**：`AccountStatsModal` 用 `start/end.toISOString().slice(0, 10)` 生成区间字符串（**UTC 日期**），而接口按请求携带的 `timezone`（浏览器时区）解释 `end_date`。东八区 0:00–8:00 期间本地日期比 UTC 晚一天，`end_date` 落在昨天，当天（09-25 01:40–05:39 +08，共 397 行）被整段排除。
+
+实测（`timezone=Asia/Shanghai`，`start_date=2026-08-26`）：
+
+| end_date | requests | revenue | cost | profit |
+| --- | --- | --- | --- | --- |
+| 2026-09-24 | 0 | 0 | 0 | 0 |
+| 2026-09-25 | 397 | 1.5238 | 0 | 1.5238 |
+
+**修复**（提交 `01a904fb3`）：改用 `utils/format.formatDateLocalInput`（本地日期）——
+
+- `AccountStatsModal.vue`：经营汇总区间
+- `ProfitView.vue`：默认区间与 today/7d/30d/month 预设（同类问题：0:00–8:00 期间区间整体少一天）
+- `AccountCostConfigPanel.vue`：订阅周期起始日推算（`setUTCDate` → `setDate`）
+- 新增回归测试：UTC 与本地不在同一天时必须使用本地日期；已验证把实现改回 `toISOString()` 时该用例失败
+
+**发布**：前端 release `/opt/sub2api/frontend/releases/0.1.391-01a904fb3`（聚合 `b74333bdfaf1aff80d5b88eab03ec2fb762926ab6f2c09fdee7ee8b8ff7fcaa6`，171 文件，AppleDouble 0；`index.html` = `2604ac8dc987a072ee22637513dcc1aaa4816d2666b66cfafca3bfde13ca8f25`，入口 `/assets/index-4EXEkrs9.js`）。`current` → `0.1.391-01a904fb3`，`rollback` → `0.1.391-756ee2ecc`。后端二进制未变更。
+
+**核验**：`GET /admin/profit/summary?start_date=2026-08-26&end_date=2026-09-25&timezone=Asia/Shanghai&account_id=140` → requests 397 / revenue 1.5238 / **cost 0** / **profit +1.5238** / margin 100%。同一提交后，`vue-tsc --noEmit`、`pnpm build` 通过，vitest 失败集与基线一致（`UserPlatformQuotaModal` ×2、`AccountsView.sparkShadow` ×1）。
