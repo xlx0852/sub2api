@@ -397,6 +397,7 @@ systemctl start nginx
 | 上游出口 | 容器内 `https://auth.mirasim.ai/auth/oauth/providers` 可达（exit 0），不依赖宿主机网络 |
 | 业务回归 | `GET /api/v1/settings/public` → 200；`POST /api/v1/auth/login`（空体）→ 400；网关 `account_simple_selection` / sticky 正常出流量；日志中 `mirasim` 相关错误 0 条 |
 
+| 前端 UI 接线 | 实时服务的 `assets/AccountsView-C9yrXbGB.js`（md5 `629180038d328ddac5c33a530781b447`，与本地构建一致）内含 5 个新端点路径各 1 次、`mirasimOAuth` 44 次；HTTP 取回字节与磁盘 md5 一致 |
 | 已部署二进制内核证据 | `sha256(线上 sub2api)` **完全等于**本机构建产物；长字面量命中 `mirasim_refresh_token`×3、`/admin/mirasim`×2、`/v1/device/session`×1、`mirasim_relay_persist_failed`×1、`mrs-seal-v1`×1；**旧基线上这些串均 0 命中**（对照有效） |
 
 本轮三条方法论教训（下次发布直接复用）：
