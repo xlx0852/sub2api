@@ -28,3 +28,11 @@
 
 - [x] 5.1 提交 + 前端 release `0.1.391-61e5f051f` + 后端热替换（最终 `7260ed5c…`，备份 `sub2api.bak-20260925-timing2`）
 - [x] 5.2 线上真实流式请求核验：新分段全部落库（见 `deploy-2026-09-25-request-timing-detail.md`）
+
+## 6. 后续补齐
+
+- [x] 6.1 安全审核分段（`security_audit_ms`，`runContentModeration` 埋点）
+- [x] 6.2 Anthropic/Gemini：`recordUsageCore` 合并 + 入队前同步合并（异步任务用 Background context）+ 结果标记 + 账号选择埋点
+- [x] 6.3 WebSocket 两条路径（ingress / http bridge）与 chat completions 快照合并
+- [x] 6.4 线上核验两条路径（Responses / messages），容器 healthy、5xx=0
+- [ ] 6.5 大请求排队仍为「未采集」（本仓库无该队列；如需展示需先引入队列组件）
