@@ -170,6 +170,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
+import { formatDateLocalInput } from '@/utils/format'
 import { adminAPI } from '@/api/admin'
 import type { AccountSubscriptionCycle, AccountSubscriptionLossSummary, SubscriptionCycleListResponse } from '@/api/admin/profit'
 import ConfirmDialog from '@/ui/ConfirmDialog.vue'
@@ -259,8 +260,8 @@ function inferStartDate() {
   const expiry = hints.value?.subscription_expires_at || hints.value?.oauth_token_expires_at
   if (!expiry) { inferenceNote.value = t('admin.profit.inferUnavailable'); inferenceRisky.value = true; return }
   const end = new Date(expiry)
-  end.setUTCDate(end.getUTCDate() - form.value.period_days)
-  form.value.starts_at = end.toISOString().slice(0, 10)
+  end.setDate(end.getDate() - form.value.period_days)
+  form.value.starts_at = formatDateLocalInput(end)
   inferenceRisky.value = !hints.value?.subscription_expires_at
   inferenceNote.value = inferenceRisky.value ? t('admin.profit.inferFromTokenWarning') : t('admin.profit.inferFromSubscriptionExpiry')
 }

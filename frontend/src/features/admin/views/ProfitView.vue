@@ -116,6 +116,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
+import { formatDateLocalInput } from '@/utils/format'
 import { adminAPI } from '@/api/admin'
 import type { ProfitSummaryResponse, ProfitTrendPoint } from '@/api/admin/profit'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -148,7 +149,8 @@ const snapshotGeneratedAt = ref('')
 const currentUserBalance = ref(0)
 const trendMetric = ref<TrendMetric>('revenue')
 const today = new Date()
-const fmtDate = (date: Date) => date.toISOString().slice(0, 10)
+// 区间参数按「本地日期」发送：toISOString() 是 UTC，东八区 0:00-8:00 会把当天数据排除。
+const fmtDate = (date: Date) => formatDateLocalInput(date)
 const startDate = ref(fmtDate(new Date(today.getTime() - 6 * 86_400_000)))
 const endDate = ref(fmtDate(today))
 const activePreset = ref('7d')

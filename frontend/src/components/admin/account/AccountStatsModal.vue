@@ -310,6 +310,7 @@ import {
 } from 'chart.js'
 import { Line } from 'vue-chartjs'
 import LoadingSpinner from '@/ui/LoadingSpinner.vue'
+import { formatDateLocalInput } from '@/utils/format'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -603,8 +604,8 @@ const loadProfitSummary = async () => {
   profitLoading.value = true
   try {
     const response = await adminAPI.profit.summary(
-      start.toISOString().slice(0, 10),
-      end.toISOString().slice(0, 10),
+      formatDateLocalInput(start),
+      formatDateLocalInput(end),
       accountID
     )
     if (sequence === profitLoadSequence && props.account?.id === accountID) {

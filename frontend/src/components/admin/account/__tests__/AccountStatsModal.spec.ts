@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import AccountStatsModal from '../AccountStatsModal.vue'
+import { formatDateLocalInput } from '@/utils/format'
 import type { Account, AccountUsageStatsResponse } from '@/types'
 
 const { getStats, profitSummary } = vi.hoisted(() => ({ getStats: vi.fn(), profitSummary: vi.fn() }))
@@ -201,5 +202,29 @@ describe('AccountStatsModal', () => {
     expect(wrapper.text()).toContain('57.8%')
     expect(wrapper.text()).toContain('$365.00')
     expect(wrapper.text()).toContain('admin.profit.netPurchaseCost')
+  })
+
+  it('经营汇总按本地日期取区间（不能用 UTC 日期，否则东八区 0:00-8:00 当天数据被排除）', async () => {
+    getStats.mockResolvedValue(stats)
+    profitSummary.mockResolvedValue({ accounts: [] })
+
+    vi.useFakeTimers()
+    try {
+      // UTC 还停在 09-24，本地（东八区）已经是 09-25：旧实现会传 end_date=2026-09-24
+      vi.setSystemTime(new Date('2026-09-24T23:30:00Z'))
+      const expectedEnd = formatDateLocalInput(new Date())
+      const expectedStart = formatDateLocalInput(new Date(Date.now() - 29 * 86_400_000))
+
+      const wrapper = mount(AccountStatsModal, {
+        props: { account },
+        global: { stubs: { LoadingSpinner: true, ModelDistributionChart: true, EndpointDistributionChart: true, Line: true, Icon: true } }
+      })
+      await flushPromises()
+
+      expect(profitSummary).toHaveBeenCalledWith(expectedStart, expectedEnd, 72)
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
