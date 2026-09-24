@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/requesttiming"
 )
 
 type gatewaySchedulingStrategy struct{ service *GatewayService }
@@ -129,6 +131,13 @@ func (s *OpenAIGatewayService) selectAccountThroughEngine(
 	platform string,
 	previousResponseCanMove bool,
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+	// 请求耗时详情：账号选择（含槽位探测）。
+	selectStarted := time.Now()
+	defer func() {
+		if collector := requesttiming.FromContext(ctx); collector != nil {
+			collector.SetAccountSelectMs(time.Since(selectStarted))
+		}
+	}()
 	engine := s.accountSelector
 	if engine == nil {
 		engine = NewOpenAIAccountSelector(s)

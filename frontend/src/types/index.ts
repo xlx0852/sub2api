@@ -1439,6 +1439,33 @@ export interface FirstOutputStages {
   retry_failover_ms?: number | null
   gateway_first_output_write_ms?: number | null
   gateway_first_output_total_ms?: number | null
+
+  /** 客户端 → Sub2API：入站请求体 */
+  body_first_wait_ms?: number | null
+  body_receive_ms?: number | null
+  body_read_ms?: number | null
+  body_bytes?: number | null
+  body_complete?: boolean | null
+
+  /** Sub2API 内部 */
+  api_key_auth_ms?: number | null
+  user_queue_ms?: number | null
+  account_select_ms?: number | null
+  account_queue_ms?: number | null
+  handler_body_read_ms?: number | null
+  handler_total_ms?: number | null
+
+  /** Sub2API → 上游 */
+  upstream_attempts?: number | null
+  connection_reused?: boolean | null
+  upstream_write_ms?: number | null
+  upstream_first_byte_ms?: number | null
+  upstream_response_headers_ms?: number | null
+  upstream_stream_transfer_ms?: number | null
+
+  /** 请求结果 */
+  response_stream_complete?: boolean | null
+  outcome?: string | null
 }
 
 export interface UsageLog {

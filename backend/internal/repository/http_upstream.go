@@ -198,7 +198,11 @@ func (s *httpUpstreamService) Do(req *http.Request, proxyURL string, accountID i
 
 	// 执行请求；Grok CLI 403 兼容拒绝时回退到官方 api.x.ai
 	client := httpClientWithGrokAccessDeniedFallback(entry.client)
+	req = withUpstreamTiming(req)
 	resp, err := client.Do(req)
+	if err == nil {
+		trackUpstreamResponseBody(resp)
+	}
 	if err != nil && profile == domain.HTTPUpstreamProfileGrok {
 		if retryReq, ok := cloneGrokRequestForHTTP1Retry(req); ok {
 			fallbackClient, buildErr := s.newGrokHTTP1FallbackClient(proxyURL, accountConcurrency)

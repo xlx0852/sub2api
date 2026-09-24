@@ -34,33 +34,48 @@
 
           <section class="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <TimingSection :title="t('usage.timingDetail.clientToGateway')">
+              <TimingRow :label="t('usage.timingDetail.bodyFirstWait')" :value="msValue(stages?.body_first_wait_ms)" />
+              <TimingRow :label="t('usage.timingDetail.bodyReceive')" :value="msValue(stages?.body_receive_ms)" />
+              <TimingRow :label="t('usage.timingDetail.bodySize')" :value="bodySize" />
+              <TimingRow :label="t('usage.timingDetail.bodyRate')" :value="bodyRate" />
               <TimingRow :label="t('usage.timingDetail.inboundPath')" :value="log.inbound_endpoint || '-'" />
               <TimingRow :label="t('usage.timingDetail.requestType')" :value="requestTypeLabel" />
-              <TimingRow :label="t('usage.timingDetail.bodySize')" :value="'-'" />
             </TimingSection>
 
             <TimingSection :title="t('usage.timingDetail.gatewayInternal')">
-              <TimingRow :label="t('usage.timingDetail.preUpstream')" :value="formatDuration(stages?.gateway_pre_upstream_ms)" />
-              <TimingRow :label="t('usage.timingDetail.retryFailover')" :value="formatDuration(stages?.retry_failover_ms)" />
-              <TimingRow :label="t('usage.timingDetail.gatewayFirstWrite')" :value="formatDuration(stages?.gateway_first_output_write_ms)" />
+              <TimingRow :label="t('usage.timingDetail.handlerBodyRead')" :value="msValue(stages?.handler_body_read_ms)" />
+              <TimingRow :label="t('usage.timingDetail.preprocessAuth')" :value="msValue(stages?.api_key_auth_ms)" />
+              <TimingRow :label="t('usage.timingDetail.securityAudit')" :value="notCollected" />
+              <TimingRow :label="t('usage.timingDetail.routing')" :value="msValue(stages?.account_select_ms)" />
+              <TimingRow :label="t('usage.timingDetail.userQueue')" :value="msValue(stages?.user_queue_ms)" />
+              <TimingRow :label="t('usage.timingDetail.accountQueue')" :value="msValue(stages?.account_queue_ms)" />
+              <TimingRow :label="t('usage.timingDetail.largeBodyQueue')" :value="notCollected" />
+              <TimingRow :label="t('usage.timingDetail.handlerTotal')" :value="msValue(stages?.handler_total_ms)" />
             </TimingSection>
 
             <TimingSection :title="t('usage.timingDetail.gatewayToUpstream')">
+              <TimingRow :label="t('usage.timingDetail.connectionAcquire')" :value="msValue(stages?.upstream_connect_ms)" />
+              <TimingRow :label="t('usage.timingDetail.upstreamWrite')" :value="msValue(stages?.upstream_write_ms)" />
+              <TimingRow :label="t('usage.timingDetail.upstreamFirstByte')" :value="msValue(stages?.upstream_first_byte_ms)" />
+              <TimingRow :label="t('usage.timingDetail.upstreamResponseHeaders')" :value="msValue(stages?.upstream_response_headers_ms)" />
+              <TimingRow :label="t('usage.timingDetail.firstToken')" :value="msValue(log.first_token_ms)" />
+              <TimingRow :label="t('usage.timingDetail.streamTransfer')" :value="msValue(stages?.upstream_stream_transfer_ms)" />
               <TimingRow :label="t('usage.timingDetail.upstreamPath')" :value="log.upstream_endpoint || '-'" />
-              <TimingRow :label="t('usage.timingDetail.connectionAcquire')" :value="formatDuration(stages?.upstream_connect_ms)" />
-              <TimingRow :label="t('usage.timingDetail.waitFirstOutput')" :value="formatDuration(stages?.upstream_first_output_ms)" />
             </TimingSection>
           </section>
 
           <section class="rounded-xl border border-gray-200 p-5 dark:border-dark-600">
             <h3 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">{{ t('usage.timingDetail.result') }}</h3>
             <div class="grid grid-cols-1 gap-x-8 gap-y-3 text-sm md:grid-cols-2">
-              <TimingRow :label="t('usage.timingDetail.status')" :value="t('usage.timingDetail.success')" />
+              <TimingRow :label="t('usage.timingDetail.status')" :value="outcomeLabel" />
+              <TimingRow :label="t('usage.timingDetail.attempts')" :value="countValue(stages?.upstream_attempts)" />
+              <TimingRow :label="t('usage.timingDetail.connectionReused')" :value="boolValue(stages?.connection_reused)" />
+              <TimingRow :label="t('usage.timingDetail.bodyComplete')" :value="boolValue(stages?.body_complete)" />
+              <TimingRow :label="t('usage.timingDetail.responseComplete')" :value="boolValue(stages?.response_stream_complete)" />
               <TimingRow :label="t('usage.timingDetail.outputRate')" :value="outputRate" />
               <TimingRow :label="t('usage.tokens')" :value="`${log.input_tokens || 0} / ${log.output_tokens || 0}`" />
               <TimingRow :label="t('usage.cacheHit')" :value="cacheHit" />
               <TimingRow :label="t('usage.timingDetail.mapping')" :value="mapping" />
-              <TimingRow :label="t('usage.timingDetail.responseComplete')" :value="log.duration_ms != null ? t('usage.timingDetail.yes') : t('usage.timingDetail.unknown')" />
             </div>
           </section>
         </div>
@@ -142,6 +157,50 @@ function formatDuration(ms: number | null | undefined): string {
   if (ms < 1000) return `${ms}ms`
   if (ms >= 60_000) return `${Math.floor(ms / 60_000)}m ${Math.floor((ms % 60_000) / 1000)}s`
   return `${(ms / 1000).toFixed(2)}s`
+}
+const notCollected = computed(() => t('usage.timingDetail.notCollected'))
+function msValue(ms: number | null | undefined): string {
+  if (ms == null) return t('usage.timingDetail.notCollected')
+  return formatDuration(ms)
+}
+function countValue(value: number | null | undefined): string {
+  if (value == null) return t('usage.timingDetail.notCollected')
+  return String(value)
+}
+function boolValue(value: boolean | null | undefined): string {
+  if (value == null) return t('usage.timingDetail.notCollected')
+  return value ? t('usage.timingDetail.yes') : t('usage.timingDetail.no')
+}
+const outcomeLabel = computed(() => {
+  const outcome = stages.value?.outcome
+  if (!outcome) return t('usage.timingDetail.notCollected')
+  const map: Record<string, string> = {
+    success: 'usage.timingDetail.outcomeSuccess',
+    failed: 'usage.timingDetail.outcomeFailed',
+    canceled: 'usage.timingDetail.outcomeCanceled',
+    timeout: 'usage.timingDetail.outcomeTimeout',
+    transport_error: 'usage.timingDetail.outcomeTransportError',
+    incomplete: 'usage.timingDetail.outcomeIncomplete'
+  }
+  const key = map[outcome]
+  return key ? t(key) : outcome
+})
+const bodySize = computed(() => {
+  const bytes = stages.value?.body_bytes
+  if (bytes == null) return t('usage.timingDetail.notCollected')
+  return formatBytes(bytes)
+})
+const bodyRate = computed(() => {
+  const bytes = stages.value?.body_bytes
+  const receive = stages.value?.body_receive_ms
+  if (bytes == null || receive == null) return t('usage.timingDetail.notCollected')
+  if (receive < 1) return t('usage.timingDetail.notCollected')
+  return `${(bytes / 1024 / 1024 / (receive / 1000)).toFixed(2)} MiB/s`
+})
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`
+  return `${(bytes / 1024 / 1024).toFixed(2)} MiB`
 }
 function formatTokens(value: number): string {
   return value.toLocaleString()

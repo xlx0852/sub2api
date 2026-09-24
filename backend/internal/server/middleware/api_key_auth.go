@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/requesttiming"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -29,6 +31,13 @@ func NewAPIKeyAuthMiddleware(apiKeyService *service.APIKeyService, cfg *config.C
 // /v1/usage 端点只需鉴权，不需要计费执行（允许过期/配额耗尽的 Key 查询自身用量）。
 func apiKeyAuthWithBalance(apiKeyService *service.APIKeyService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 请求耗时详情：API Key 鉴权与准入耗时。
+		authStarted := time.Now()
+		defer func() {
+			if collector := requesttiming.FromContext(c.Request.Context()); collector != nil {
+				collector.SetAPIKeyAuthMs(time.Since(authStarted))
+			}
+		}()
 		// ── 1. 提取 API Key ──────────────────────────────────────────
 
 		queryKey := strings.TrimSpace(c.Query("key"))

@@ -52,4 +52,48 @@ describe('UsageRequestTimingModal', () => {
 
     expect(wrapper.text()).toContain('-')
   })
+
+  it('renders the new inbound/gateway/upstream segments and the result flags', () => {
+    const wrapper = mount(UsageRequestTimingModal, {
+      props: {
+        modelValue: true,
+        log: {
+          ...usageLog,
+          first_output_stages: {
+            ...usageLog.first_output_stages,
+            body_first_wait_ms: 5,
+            body_receive_ms: 27,
+            body_bytes: 67_790_000,
+            body_complete: true,
+            api_key_auth_ms: 1_980,
+            account_select_ms: 12,
+            user_queue_ms: 40,
+            account_queue_ms: 60,
+            handler_body_read_ms: 285,
+            handler_total_ms: 52_900,
+            upstream_attempts: 1,
+            connection_reused: true,
+            upstream_write_ms: 13_360,
+            upstream_first_byte_ms: 26_510,
+            upstream_response_headers_ms: 39_870,
+            upstream_stream_transfer_ms: 10_990,
+            response_stream_complete: true,
+            outcome: 'success',
+          },
+        },
+      },
+      global: { stubs: { Icon: true, Teleport: true } },
+    })
+
+    const text = wrapper.text()
+    expect(text).toContain('usage.timingDetail.bodyFirstWait')
+    expect(text).toContain('usage.timingDetail.bodyRate')
+    expect(text).toContain('64.65 MiB')
+    expect(text).toContain('usage.timingDetail.preprocessAuth')
+    expect(text).toContain('usage.timingDetail.handlerTotal')
+    expect(text).toContain('usage.timingDetail.outcomeSuccess')
+    expect(text).toContain('usage.timingDetail.yes')
+    // 未采集的行仍然渲染（安全审核、大请求排队）
+    expect(text).toContain('usage.timingDetail.notCollected')
+  })
 })

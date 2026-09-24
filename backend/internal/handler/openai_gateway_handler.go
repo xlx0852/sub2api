@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/requesttiming"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -741,7 +742,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			}
 		}
 		if result != nil {
-			result.FirstOutputStages = firstOutputTracker.Snapshot()
+			markRequestTimingOutcome(c, "success")
+			result.FirstOutputStages = mergeRequestTiming(firstOutputTracker.Snapshot(), c)
 			grokRetry.finishSuccessfulAttempt()
 			if requireCompact {
 				result.CompactRetryCount = compactRetryCount
@@ -1215,7 +1217,12 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			firstOutputTracker.MarkAttemptFailed()
 		}
 		if result != nil {
-			result.FirstOutputStages = firstOutputTracker.Snapshot()
+			if err != nil {
+				markRequestTimingOutcome(c, "failed")
+			} else {
+				markRequestTimingOutcome(c, "success")
+			}
+			result.FirstOutputStages = mergeRequestTiming(firstOutputTracker.Snapshot(), c)
 		}
 		cyberBlockKeyMsg := ""
 		if service.GetOpsCyberPolicy(c) != nil {
@@ -1500,6 +1507,13 @@ func (h *OpenAIGatewayHandler) acquireResponsesAccountSlot(
 	streamStarted *bool,
 	reqLog *zap.Logger,
 ) (func(), bool) {
+	// 请求耗时详情：账号并发准入与等待。
+	slotStarted := time.Now()
+	defer func() {
+		if collector := requesttiming.FromContext(c.Request.Context()); collector != nil {
+			collector.SetAccountQueueMs(time.Since(slotStarted))
+		}
+	}()
 	if selection == nil || selection.Account == nil {
 		markOpsRoutingCapacityLimited(c)
 		h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No available accounts", *streamStarted)
@@ -3182,4 +3196,20 @@ func summarizeWSCloseErrorForLog(err error) (string, string) {
 		}
 	}
 	return closeStatus, closeReason
+}
+
+// markRequestTimingOutcome 记录请求结果（success|failed|canceled|timeout|transport_error|incomplete）。
+func markRequestTimingOutcome(c *gin.Context, outcome string) {
+	if collector := requesttiming.FromContext(c.Request.Context()); collector != nil {
+		collector.SetOutcome(outcome)
+	}
+}
+
+// mergeRequestTiming 把请求耗时采集器的新分段合并进旧分段快照。
+func mergeRequestTiming(base *domain.FirstOutputStages, c *gin.Context) *domain.FirstOutputStages {
+	collector := requesttiming.FromContext(c.Request.Context())
+	if collector == nil {
+		return base
+	}
+	return service.MergeFirstOutputStages(base, collector.Snapshot(time.Now()))
 }
