@@ -137,3 +137,41 @@
 - **制品可复现性**：以相同设置重建未剥离二进制 158,449,214 B，`x86_64-linux-gnu-strip -s` 后 123,680,552 B（与线上 123,682,978 B 同量级但**非字节一致**）；以线上 sha256 `6e017abd…` 为准。
 - **用户登录 OAuth 的 404**：线上为「设置未启用」状态，非本次回归；如需启用属运营配置操作。
 - 前端 `pnpm build` 需 `--dangerously-allow-all-builds`（pnpm 11 的 esbuild / vue-demi postinstall 限制）。
+
+## 6. 后续修正：单一账号类型不再渲染选择器（前端，2026-09-25 05:03 JST）
+
+**动机**：Claude OAuth / setup-token 退役后，Anthropic 的「账号类型」只剩 `Claude Console / API Key` 一个选项，弹窗里仍渲染成可点击的选择器，属于退役遗留的无效交互。
+
+**代码**（`0c48b9f6b fix(frontend): 单一账号类型的平台不再渲染可点击的账号类型选择器`，4 文件）：
+
+| 文件 | 改动 |
+| --- | --- |
+| `frontend/src/features/admin-accounts/form/registry.ts` | `ACCOUNT_CATEGORY_PICKERS.anthropic.model`：`'accountCategory'` → `'none'`（`options` 仍为 `['apikey']`，`layoutClass` 保留 `grid-cols-1`） |
+| `frontend/src/features/admin-accounts/form/AccountCategoryPicker.vue` | 新增 `isSingleOption` / `isStatic`：`options.length <= 1`（或 `model === 'none'`）时走静态卡片分支（`cursor-default`，无 hover / 无选中交互），静态卡片同样带 `data-tour="account-form-type"` 以保住引导步骤锚点；静态分支沿用 `option.icon`（Anthropic 仍显示 key 图标） |
+| `frontend/src/features/admin-accounts/form/registry.spec.ts` | 增加 `platformCategoryPicker('anthropic')?.model === 'none'` 断言 |
+| `frontend/src/features/admin-accounts/form/__tests__/AccountCategoryPicker.spec.ts` | 新增：anthropic / kimi 无 `<button>` 且带 `data-tour` 锚点、`cursor-default`；openai（2 个类别）仍渲染按钮并照常 `emit('update:modelValue')` |
+
+**范围**：前端单文件逻辑，无后端、无 schema、无环境变量变更；`kimi` 等其它单一类别平台顺带收敛为同一静态分支，多类别平台（openai / gemini / grok / antigravity）行为不变。Anthropic 的 `accountCategory` 仍由平台 watcher 固定为 `apikey`（`CreateAccountModal.vue:3117`），不依赖选择器事件，故不再触发 `update:modelValue` 不影响建号。
+
+**产物与部署（前端-only，热替换 release 目录）**：
+
+| 项 | 值 |
+| --- | --- |
+| 变更前 `current` | `releases/0.1.391-9535ad651` |
+| 新 release | `/opt/sub2api/frontend/releases/0.1.391-0c48b9f6b` |
+| 制品 | `frontend-0.1.391-0c48b9f6b.tgz`（17,393,946 B，`sha256=652665ff214bbd4144430bda78b7b5d6aa729e91b2c4adcd9fb2ad87f25f9fcf`），本地 ↔ `/tmp` 双向一致 |
+| 部署后 `current` / `rollback` | `releases/0.1.391-0c48b9f6b` / `releases/0.1.391-9535ad651`（`Sep 25 05:03` JST） |
+| 后端二进制 | **未重新发布**（本改动不影响后端；nginx 从 `/opt/sub2api/frontend/current` 直供 SPA，二进制内嵌 dist 仅为兜底路径） |
+
+**发布后核验（只读）**：
+
+| 校验 | 结果 |
+| --- | --- |
+| 文件数 / AppleDouble | `find -L current -type f` = **172**；`._*` / `.DS_Store` = **0** |
+| 全量聚合校验 | `cd <release> && find . -type f \| LC_ALL=C sort \| xargs sha256sum \| sha256sum` = `7d8aa2609c4c8ea8e827e234be8aa5543aa7a413416876a3ac3e60d11b84d035` == 本地 `backend/internal/web/dist` 聚合值 |
+| 入口文件 | `index.html` `sha256=c542596b46eee3db23d9177651388259da812d719e959b2310401c055d6e1eac`，引用 `/assets/index-BLa5x04W.js` + `/assets/index-BMxnFjyh.css`（CSS 未变） |
+| 字节一致性 | 经 nginx（生产机 `--resolve code.sicts.shop:443:127.0.0.1`）与公网 `https://code.sicts.shop` 取回：`index.html` = `c542596b…`、`index-BLa5x04W.js` = `70e1583e83dcb63e4748515cc94602eb6a80b586226f62b7b9953d6b737493fe`（200，147,409 B）、`index-BMxnFjyh.css` = `61840a65…`（200）、`AccountsView-BoBP6HCR.js` = `756c4417c120bf2d3c2b01920477aae213b44e384eaf8cf14f594f17f15f58d2`（200，631,804 B）——全部与本地构建逐字节相同 |
+| 行为标记 | 本地 `assets/AccountsView-BoBP6HCR.js` 含静态分支类名 `mt-2 cursor-default rounded-lg border-2 p-3`（1 处）；组件级行为由新增 spec 断言 |
+| 门禁 | `pnpm vue-tsc --noEmit` 通过；`pnpm build` 通过；`registry.spec.ts` 6/6、`AccountCategoryPicker.spec.ts` 3/3 通过；`pnpm test:run` 仍为 `3 failed \| 1129 passed`（3 个失败与基线 worktree 同名同数量，属预存失败） |
+
+**回滚**：`ln -sfn /opt/sub2api/frontend/releases/0.1.391-9535ad651 /opt/sub2api/frontend/current`（回到 9535ad651 版本的前端；后端无需动作）。
