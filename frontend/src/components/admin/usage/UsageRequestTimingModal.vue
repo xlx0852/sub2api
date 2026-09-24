@@ -45,7 +45,7 @@
             <TimingSection :title="t('usage.timingDetail.gatewayInternal')">
               <TimingRow :label="t('usage.timingDetail.handlerBodyRead')" :value="msValue(stages?.handler_body_read_ms)" />
               <TimingRow :label="t('usage.timingDetail.preprocessAuth')" :value="msValue(stages?.api_key_auth_ms)" />
-              <TimingRow :label="t('usage.timingDetail.securityAudit')" :value="notCollected" />
+              <TimingRow :label="t('usage.timingDetail.securityAudit')" :value="msValue(stages?.security_audit_ms)" />
               <TimingRow :label="t('usage.timingDetail.routing')" :value="msValue(stages?.account_select_ms)" />
               <TimingRow :label="t('usage.timingDetail.userQueue')" :value="msValue(stages?.user_queue_ms)" />
               <TimingRow :label="t('usage.timingDetail.accountQueue')" :value="msValue(stages?.account_queue_ms)" />

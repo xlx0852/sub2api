@@ -1,6 +1,12 @@
 package service
 
-import "github.com/Wei-Shaw/sub2api/internal/domain"
+import (
+	"context"
+	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/requesttiming"
+)
 
 // MergeFirstOutputStages 把请求耗时采集器产出的新分段合并进旧 6 段快照。
 //
@@ -30,6 +36,9 @@ func MergeFirstOutputStages(base, detail *domain.FirstOutputStages) *domain.Firs
 	}
 	if base.APIKeyAuthMs == nil {
 		base.APIKeyAuthMs = detail.APIKeyAuthMs
+	}
+	if base.SecurityAuditMs == nil {
+		base.SecurityAuditMs = detail.SecurityAuditMs
 	}
 	if base.UserQueueMs == nil {
 		base.UserQueueMs = detail.UserQueueMs
@@ -71,4 +80,14 @@ func MergeFirstOutputStages(base, detail *domain.FirstOutputStages) *domain.Firs
 		base.Outcome = detail.Outcome
 	}
 	return base
+}
+
+// mergeRequestTimingStages 把请求级采集器（中间件 + httptrace）的分段合并进网关侧快照。
+// 采集器缺失时原样返回 base，旧路径行为不变。
+func mergeRequestTimingStages(ctx context.Context, base *domain.FirstOutputStages) *domain.FirstOutputStages {
+	collector := requesttiming.FromContext(ctx)
+	if collector == nil {
+		return base
+	}
+	return MergeFirstOutputStages(base, collector.Snapshot(time.Now()))
 }

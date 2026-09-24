@@ -20,6 +20,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
@@ -537,6 +538,9 @@ type ForwardResult struct {
 	FirstTokenMs     *int // 首字时间（流式请求）
 	ClientDisconnect bool // 客户端是否在流式传输过程中断开
 	ReasoningEffort  *string
+	// FirstOutputStages 请求耗时分段快照；网关侧不产出时为 nil，
+	// 由 service.mergeRequestTimingStages 用请求级采集器补齐。
+	FirstOutputStages *domain.FirstOutputStages
 
 	// 图片生成计费字段（图片生成模型使用）
 	ImageCount         int    // 生成的图片数量

@@ -745,7 +745,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			ResponseHeaders:   cloneHeader(resp.Header),
 			Duration:          time.Since(turnStart),
 			FirstTokenMs:      firstTokenMs,
-			FirstOutputStages: firstOutputTracker.Snapshot(),
+			FirstOutputStages: mergeRequestTimingStages(ctx, firstOutputTracker.Snapshot()),
 			WSPayloadBytes:    &payloadBytesValue,
 			WSEventCount:      &eventCountValue,
 		}

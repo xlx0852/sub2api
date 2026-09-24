@@ -26,6 +26,7 @@ type FirstOutputStages struct {
 
 	// Sub2API 内部
 	APIKeyAuthMs      *int `json:"api_key_auth_ms,omitempty"`
+	SecurityAuditMs   *int `json:"security_audit_ms,omitempty"`
 	UserQueueMs       *int `json:"user_queue_ms,omitempty"`
 	AccountSelectMs   *int `json:"account_select_ms,omitempty"`
 	AccountQueueMs    *int `json:"account_queue_ms,omitempty"`

@@ -483,7 +483,7 @@ func (sess *openAIWSIngressSession) sendAndRelay(turn int, lease *openAIWSConnLe
 				ResponseHeaders:   lease.HandshakeHeaders(),
 				Duration:          time.Since(turnStart),
 				FirstTokenMs:      firstTokenMs,
-				FirstOutputStages: firstOutputTracker.Snapshot(),
+				FirstOutputStages: mergeRequestTimingStages(ctx, firstOutputTracker.Snapshot()),
 				WSPayloadBytes:    &payloadBytesValue,
 				WSEventCount:      &eventCountValue,
 				WSConnReused:      &reused,

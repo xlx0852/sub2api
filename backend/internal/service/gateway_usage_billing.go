@@ -765,6 +765,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		Stream:                result.Stream,
 		Duration:              result.Duration,
 		FirstTokenMs:          result.FirstTokenMs,
+		FirstOutputStages:     mergeRequestTimingStages(ctx, result.FirstOutputStages),
 		ImageCount:            result.ImageCount,
 		ImageSize:             result.ImageSize,
 		ImageInputSize:        result.ImageInputSize,

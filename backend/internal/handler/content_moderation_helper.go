@@ -4,8 +4,10 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/requesttiming"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -57,7 +59,12 @@ func runContentModeration(c *gin.Context, reqLog *zap.Logger, svc *service.Conte
 			zap.Int("body_bytes", len(body)),
 		)
 	}
+	// 请求耗时详情：安全审核耗时。
+	auditStarted := time.Now()
 	decision, err := svc.Check(c.Request.Context(), input)
+	if collector := requesttiming.FromContext(c.Request.Context()); collector != nil {
+		collector.SetSecurityAuditMs(time.Since(auditStarted))
+	}
 	if err != nil {
 		if reqLog != nil {
 			reqLog.Warn("content_moderation.check_failed", zap.Error(err))

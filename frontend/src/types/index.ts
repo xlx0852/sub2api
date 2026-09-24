@@ -1449,6 +1449,7 @@ export interface FirstOutputStages {
 
   /** Sub2API 内部 */
   api_key_auth_ms?: number | null
+  security_audit_ms?: number | null
   user_queue_ms?: number | null
   account_select_ms?: number | null
   account_queue_ms?: number | null

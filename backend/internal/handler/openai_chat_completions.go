@@ -249,7 +249,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			firstOutputTracker.MarkAttemptFailed()
 		}
 		if result != nil {
-			result.FirstOutputStages = firstOutputTracker.Snapshot()
+			result.FirstOutputStages = mergeRequestTiming(firstOutputTracker.Snapshot(), c)
 		}
 		cyberBlockKeyChat := ""
 		if service.GetOpsCyberPolicy(c) != nil {

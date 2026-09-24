@@ -34,6 +34,7 @@ type Collector struct {
 
 	// 网关内部
 	apiKeyAuthMs    *int
+	securityAuditMs *int
 	userQueueMs     *int
 	accountSelectMs *int
 	accountQueueMs  *int
@@ -254,6 +255,7 @@ func (c *Collector) Snapshot(now time.Time) *domain.FirstOutputStages {
 		out.BodyComplete = &complete
 	}
 	out.APIKeyAuthMs = c.apiKeyAuthMs
+	out.SecurityAuditMs = c.securityAuditMs
 	out.UserQueueMs = c.userQueueMs
 	out.AccountSelectMs = c.accountSelectMs
 	out.AccountQueueMs = c.accountQueueMs
@@ -290,6 +292,7 @@ func (c *Collector) Snapshot(now time.Time) *domain.FirstOutputStages {
 
 // Setters for the gateway-internal spans (they are timed by callers).
 func (c *Collector) SetAPIKeyAuthMs(d time.Duration)    { c.store(&c.apiKeyAuthMs, d) }
+func (c *Collector) SetSecurityAuditMs(d time.Duration) { c.store(&c.securityAuditMs, d) }
 func (c *Collector) SetUserQueueMs(d time.Duration)     { c.store(&c.userQueueMs, d) }
 func (c *Collector) SetAccountSelectMs(d time.Duration) { c.store(&c.accountSelectMs, d) }
 func (c *Collector) SetAccountQueueMs(d time.Duration)  { c.store(&c.accountQueueMs, d) }
