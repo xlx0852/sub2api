@@ -524,6 +524,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			// ForceCacheBilling 提前拍成标量，避免 worker 闭包保活 failover 状态里的响应体。
 			forceCacheBilling := fs.ForceCacheBilling
 			quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
+			// 请求耗时详情：异步落库用的是 Background context，采集器必须在入队前同步合并。
+			result.FirstOutputStages = mergeRequestTiming(result.FirstOutputStages, c)
 			h.submitUsageRecordTask(usageSettlementTaskContext(c), func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 					Result:             result,
@@ -954,6 +956,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			// ForceCacheBilling 提前拍成标量，避免 worker 闭包保活 failover 状态里的响应体。
 			forceCacheBilling := fs.ForceCacheBilling
 			quotaPlatform := service.QuotaPlatform(c.Request.Context(), currentAPIKey)
+			// 请求耗时详情：异步落库用的是 Background context，采集器必须在入队前同步合并。
+			result.FirstOutputStages = mergeRequestTiming(result.FirstOutputStages, c)
 			h.submitUsageRecordTask(usageSettlementTaskContext(c), func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 					Result:             result,
