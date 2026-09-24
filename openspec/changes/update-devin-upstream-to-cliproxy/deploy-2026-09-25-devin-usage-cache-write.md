@@ -55,3 +55,18 @@ docker start sub2api-devin-cliproxy
 ## 未改变的部分
 
 Devin 自己把已缓存的历史报成 field 5（cache read）时，网关仍会把输入列显示成未缓存余量。相同长提示再发一次实测为 `input_tokens=2193, cached_tokens=2190`，扣完缓存后输入仍是 3、命中率约 100%，并按 $1/1M 计缓存。这是上游的缓存拆分，不是这次丢掉的 cache write。若希望这类命中也按全价输入计费，需要另改网关。
+
+## 端到端验证（2026-09-25 04:32 +08，经真实网关 `https://code.sicts.shop/v1/responses`）
+
+同一段约 10500 字节的全新提示，`gpt-5.6-terra`（group 4 里只有账号 126 提供该模型，路由确定）：
+
+| usage_logs id | 时间 | 场景 | input_tokens | cache_read_tokens | total_cost |
+| --- | --- | --- | --- | --- | --- |
+| 3034022 | 03:39（修复前） | 全新提示 | **3** | 0 | 0.003230 |
+| 3034346 | 04:32（修复后） | 全新提示 | **2953** | 0 | 0.005966 |
+| 3034347 | 04:32（修复后） | 原样重发（上游缓存命中） | 3 | 2950 | 0.000656 |
+
+- 侧车直连同尺寸提示：补丁前 `input_tokens 3 / cached 0`，补丁后 `2923 / 0`；新增文字会留在输入里（`1959 → 3167`）。
+- 原样重发仍是上游的缓存语义（未缓存余量 + cache read），按 $1/1M 计 0.000656；首次出现按 $10/1M 计 0.005966。
+- 运行中的侧车：容器创建 `2026-09-24T20:23:03Z`，`/app/release` 挂载到 `.../releases/v7.3.13-cachewrite`，二进制 `sha256=63fb4d2d8b6a7bc5003fe265841946a200d99823f74286cda5d5f5d5856e35eb`；回滚目录二进制 `8d3a465e5a8b8653ab35ca2eac6dc64e173653ec6243909e62b5deea00d971a0`，旧容器 `sub2api-devin-cliproxy.bak-20260925` 已停止但保留挂载。
+- 可复跑脚本 `verify-devin-cache-write.sh`（生产机执行，断言首次出现的提示 `input_tokens >= 500`）。实测输出：`input_tokens 2953 cached_tokens 0` → `PASS`。
