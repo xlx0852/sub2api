@@ -15,8 +15,70 @@
 
   <div ref="rootRef" v-else-if="showUsageWindows" class="account-usage-detail min-w-0 w-full max-w-full">
     <!-- Anthropic OAuth and Setup Token accounts: fetch real usage data -->
+    <!-- Mirasim relay API-key accounts: unlike ordinary API keys, usage comes from /v1/limits. -->
+    <template v-if="isMirasimRelayAccount">
+      <div v-if="loading" class="space-y-1.5">
+        <div class="flex items-center gap-1">
+          <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-1.5 w-8 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+        </div>
+      </div>
+      <div v-else-if="error || usageInfo?.error" class="space-y-1">
+        <span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+          {{ error || usageInfo?.error }}
+        </span>
+        <QuotaActionButton
+          :loading="activeQueryLoading"
+          :title="t('admin.accounts.usageWindow.activeQuery')"
+          @click="loadActiveUsage"
+        >
+          {{ t('admin.accounts.usageWindow.activeQuery') }}
+        </QuotaActionButton>
+      </div>
+      <div v-else-if="usageInfo" class="space-y-0.5">
+        <div v-if="usageInfo.mirasim_paid != null || usageInfo.mirasim_degraded" class="mb-1 flex items-center gap-1.5">
+          <span v-if="usageInfo.mirasim_paid != null" class="rounded bg-cyan-50 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300">
+            {{ usageInfo.mirasim_paid ? t('admin.accounts.usageWindow.mirasimPaid') : t('admin.accounts.usageWindow.mirasimFree') }}
+          </span>
+          <span v-if="usageInfo.mirasim_degraded" class="text-[9px] text-amber-600 dark:text-amber-400">
+            {{ t('admin.accounts.usageWindow.mirasimDegradedHint') }}
+          </span>
+        </div>
+        <UsageProgressBar
+          v-for="(window, index) in mirasimUsageWindows"
+          :key="`mirasim-${index}-${window.window_key || window.name}`"
+          :label="mirasimWindowLabel(window)"
+          :utilization="window.unlimited ? 0 : (window.utilization ?? 0)"
+          :display-percent="window.unlimited ? t('admin.accounts.usageWindow.mirasimUnlimited') : null"
+          :resets-at="window.reset_at || null"
+          :extra-stats="mirasimWindowExtraStats(window)"
+          :color="mirasimWindowColor(window)"
+        />
+        <div v-if="mirasimUsageWindows.length === 0" class="text-xs text-gray-400">-</div>
+        <QuotaActionButton
+          :loading="activeQueryLoading"
+          :title="t('admin.accounts.usageWindow.activeQuery')"
+          @click="loadActiveUsage"
+        >
+          {{ t('admin.accounts.usageWindow.activeQuery') }}
+        </QuotaActionButton>
+      </div>
+      <div v-else class="space-y-1">
+        <div class="text-xs text-gray-400">-</div>
+        <QuotaActionButton
+          :loading="activeQueryLoading"
+          :title="t('admin.accounts.usageWindow.activeQuery')"
+          @click="loadActiveUsage"
+        >
+          {{ t('admin.accounts.usageWindow.activeQuery') }}
+        </QuotaActionButton>
+      </div>
+    </template>
+
+    <!-- Anthropic OAuth and Setup Token accounts: fetch real usage data -->
     <template
-      v-if="
+      v-else-if="
         account.platform === 'anthropic' &&
         (account.type === 'oauth' || account.type === 'setup-token')
       "
@@ -659,7 +721,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
-import type { Account, AccountUsageInfo, GeminiCredentials, WindowStats } from '@/types'
+import type { Account, AccountUsageInfo, GeminiCredentials, MirasimQuotaWindow, WindowStats } from '@/types'
 import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { enqueueUsageRequest } from '@/utils/usageLoadQueue'
 import { formatCompactNumber } from '@/utils/format'
@@ -780,14 +842,55 @@ let desktopViewportMediaQuery: MediaQueryList | null = null
 let desktopViewportListener: ((event: MediaQueryListEvent) => void) | null = null
 let visibilityObserver: IntersectionObserver | null = null
 
-// Show usage windows for OAuth and Setup Token accounts
+// Mirasim relay accounts keep platform=anthropic and type=apikey, but have a real
+// upstream quota endpoint. Do not classify them as ordinary API keys (which only
+// show local statistics and never call the usage endpoint).
+const isMirasimRelayAccount = computed(() => {
+  if (props.account.platform !== 'anthropic' || props.account.type !== 'apikey') return false
+  const extra = props.account.extra as Record<string, unknown> | undefined
+  if (extra && Object.prototype.hasOwnProperty.call(extra, 'mirasim_relay_enabled')) {
+    if (extra.mirasim_relay_enabled !== true) return false
+  }
+  return extra?.mirasim_relay_enabled === true || props.account.credentials_status?.has_mirasim_refresh_token === true
+})
+
+const mirasimUsageWindows = computed(() => usageInfo.value?.mirasim_windows || [])
+
+const mirasimWindowLabel = (window: MirasimQuotaWindow): string => {
+  if (window.window_key === 'five_hour') return '5h'
+  if (window.window_key === 'seven_day') return '7d'
+  return window.name || window.label || 'quota'
+}
+
+const mirasimWindowColor = (window: MirasimQuotaWindow): 'indigo' | 'emerald' | 'purple' | 'amber' | 'cyan' => {
+  if (window.window_key === 'five_hour') return 'indigo'
+  if (window.window_key === 'seven_day') return 'emerald'
+  if (window.model_scoped) return 'cyan'
+  return 'purple'
+}
+
+const mirasimWindowExtraStats = (window: MirasimQuotaWindow) => {
+  const stats = [{
+    label: window.unlimited
+      ? t('admin.accounts.usageWindow.mirasimUnlimited')
+      : `${formatCompactNumber(window.used)} / ${formatCompactNumber(window.budget)}`
+  }]
+  if (window.model_scoped) {
+    stats.push({ label: t('admin.accounts.usageWindow.mirasimModelScoped') })
+  }
+  return stats
+}
+
+// Show usage windows for OAuth, Setup Token, and Mirasim relay API-key accounts.
 const showUsageWindows = computed(() => {
   // Gemini: we can always compute local usage windows from DB logs (simulated quotas).
   if (props.account.platform === 'gemini') return true
+  if (isMirasimRelayAccount.value) return true
   return props.account.type === 'oauth' || props.account.type === 'setup-token'
 })
 
 const shouldFetchUsage = computed(() => {
+  if (isMirasimRelayAccount.value) return true
   if (isExternalBridgeAccount.value) return true
   if (props.account.platform === 'anthropic') {
     return props.account.type === 'oauth' || props.account.type === 'setup-token'

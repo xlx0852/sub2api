@@ -992,12 +992,12 @@ func TestFetchUpstreamSupportedModelsUsesMirasimRoster(t *testing.T) {
 	require.Equal(t, 1, fake.count(mirasimModelRosterPath))
 	require.Equal(t, 0, fake.count("/v1/models"), "mirasim relay 不得走 /v1/models")
 
-	// 账号级 agent 覆盖在缓存命中时同样生效（选择发生在每次调用，而不是拉取时）。
+	// 显式同步必须绕过 roster 缓存；账号级 agent 选择仍发生在每次调用。
 	account.Extra[mirasimExtraRosterAgent] = "codex"
 	models, err = testService.FetchUpstreamSupportedModels(context.Background(), account)
 	require.NoError(t, err)
 	require.Equal(t, []string{"gpt-5"}, models)
-	require.Equal(t, 1, fake.count(mirasimModelRosterPath), "ropster 缓存应继续命中")
+	require.Equal(t, 2, fake.count(mirasimModelRosterPath), "显式同步不得复用旧 roster 缓存")
 }
 
 func TestFetchUpstreamSupportedModelsMirasimErrorMapping(t *testing.T) {
@@ -1090,7 +1090,7 @@ func TestFetchUpstreamSupportedModelsMirasimErrorMapping(t *testing.T) {
 		require.Equal(t, UpstreamModelSyncErrorUpstream, syncErr.Kind)
 		require.Contains(t, syncErr.SafeMessage(), "Mirasim model roster contains no usable models")
 		require.Equal(t, 1, stub.rosterCalls)
-		require.Equal(t, []bool{false}, stub.forceFlags, "模型同步必须走缓存优先路径")
+		require.Equal(t, []bool{true}, stub.forceFlags, "显式模型同步必须绕过 roster 缓存")
 	})
 }
 

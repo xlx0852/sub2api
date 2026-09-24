@@ -157,7 +157,9 @@ func (s *AccountTestService) fetchMirasimUpstreamModels(ctx context.Context, acc
 	if s.mirasimMetadata == nil {
 		return nil, newUpstreamModelSyncConfigError("Mirasim metadata client is not configured", nil)
 	}
-	roster, err := s.mirasimMetadata.ModelRoster(ctx, account, false)
+	// 管理端按钮语义是“同步上游”，必须绕过 10 分钟 roster 缓存；缓存仍由
+	// 额度查询等非显式刷新路径复用。否则上游刚变更模型时，按钮会返回旧清单。
+	roster, err := s.mirasimMetadata.ModelRoster(ctx, account, true)
 	if err != nil {
 		// 错误映射：凭据/配置缺失 → configuration；上游、网络、超时、解析失败 → upstream。
 		// 两条路径的 Message 都是固定文案，**不含**上游响应正文与凭据。

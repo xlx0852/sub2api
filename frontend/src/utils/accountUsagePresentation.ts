@@ -244,12 +244,12 @@ export const buildAccountUsagePresentation = ({
 }: BuildOptions): AccountUsagePresentation => {
   const windows: AccountUsageWindowPresentation[] = []
   const diagnostics: AccountUsageDiagnostic[] = []
+  const mirasimWindows = account.platform === 'anthropic' ? usageInfo?.mirasim_windows || [] : []
 
   if (account.platform === 'openai' || account.platform === 'anthropic' || account.platform === 'kimi') {
     // Mirasim relay 账号（platform 仍是 anthropic）后端会把 /v1/limits 的**全部**窗口
     // 归一化到 mirasim_windows（5h/7d 同时映射到 five_hour/seven_day 以兼容其它视图）。
     // 这里优先渲染上游真实窗口，避免与 five_hour/seven_day 重复展示。
-    const mirasimWindows = account.platform === 'anthropic' ? usageInfo?.mirasim_windows || [] : []
     if (mirasimWindows.length > 0) {
       addMirasimWindows(windows, mirasimWindows, t)
     } else {
@@ -386,7 +386,16 @@ export const buildAccountUsagePresentation = ({
     }
   }
 
-  const maxUsage = windows.length > 0 ? Math.max(...windows.map(window => window.utilization)) : null
+  // Mirasim model-scoped windows are useful rows but MUST NOT make the account
+  // look exhausted when the account-level window is healthy. This mirrors the
+  // backend top-level status rule: prefer non-model-scoped windows and only
+  // fall back to all windows when the upstream returned scoped windows only.
+  let statusWindows = windows
+  if (account.platform === 'anthropic' && mirasimWindows.length > 0) {
+    const accountWindows = windows.filter((_, index) => !mirasimWindows[index]?.model_scoped)
+    if (accountWindows.length > 0) statusWindows = accountWindows
+  }
+  const maxUsage = statusWindows.length > 0 ? Math.max(...statusWindows.map(window => window.utilization)) : null
   let statusTone: AccountUsageTone = 'success'
   let statusLabel = t('admin.accounts.usageDetails.statusNormal')
   if (usageInfo?.needs_reauth) {
@@ -431,7 +440,6 @@ export const buildAccountUsagePresentation = ({
     diagnostics.push({ label: t('admin.accounts.usageDetails.lastError'), value: usageInfo.error, tone: 'warning' })
   }
   // Mirasim 只读元数据：paid/degraded 由上游显式给出时透出，缺失就不猜。
-  const mirasimWindows = usageInfo?.mirasim_windows || []
   if (mirasimWindows.length > 0 || usageInfo?.mirasim_paid != null || usageInfo?.mirasim_degraded) {
     if (usageInfo?.mirasim_paid != null) {
       diagnostics.push({
