@@ -322,7 +322,8 @@ const zinc = {
 }
 export const ACCOUNT_CATEGORY_PICKERS: Record<string, CategoryPickerConfig> = {
   anthropic: {
-    model: 'accountCategory',
+    // Claude OAuth / setup-token 已退役，仅剩 API Key 一种类别：静态展示，不提供无意义的选择。
+    model: 'none',
     layoutClass: 'grid-cols-1',
     options: [
       {

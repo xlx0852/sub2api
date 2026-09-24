@@ -21,6 +21,9 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const config = computed(() => platformCategoryPicker(props.platform))
+// 只有一个类别时没有可选项：渲染成静态卡片（不给 hover / 选中交互）。
+const isSingleOption = computed(() => (config.value?.options.length ?? 0) <= 1)
+const isStatic = computed(() => config.value?.model === 'none' || isSingleOption.value)
 
 function titleOf(option: CategoryPickerOption): string {
   return option.titleKey ? t(option.titleKey) : option.title ?? ''
@@ -55,16 +58,18 @@ function select(option: CategoryPickerOption) {
       </button>
     </div>
     <div
-      v-if="config.model === 'none'"
-      class="mt-2 rounded-lg border-2 p-3"
+      v-if="isStatic"
+      class="mt-2 cursor-default rounded-lg border-2 p-3"
       :class="config.options[0]?.selectedBorder"
+      data-tour="account-form-type"
     >
       <div class="flex items-center gap-3">
         <div
-          class="flex h-8 w-8 items-center justify-center rounded-lg"
+          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
           :class="config.options[0]?.selectedIconBg"
         >
-          <PlatformIcon :platform="platform" size="sm" />
+          <Icon v-if="config.options[0]?.icon !== 'platform'" :name="config.options[0]!.icon" size="sm" />
+          <PlatformIcon v-else :platform="platform" size="sm" />
         </div>
         <div>
           <span class="block text-sm font-medium text-gray-900 dark:text-white">{{

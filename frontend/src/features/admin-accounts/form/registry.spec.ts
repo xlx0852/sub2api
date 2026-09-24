@@ -53,6 +53,8 @@ describe('account form registry', () => {
     expect(platformCategoryPicker('anthropic')?.options.map((item) => item.id)).toEqual([
       'apikey'
     ])
+    // 只剩单一类别时不应再出现可点击的选择器
+    expect(platformCategoryPicker('anthropic')?.model).toBe('none')
     expect(platformCategoryPicker('openai')?.model).toBe('accountCategory')
     expect(platformCategoryPicker('grok')?.hintKey).toBe('admin.accounts.grok.accountTypeHint')
     expect(platformCategoryPicker('kimi')?.model).toBe('none')
