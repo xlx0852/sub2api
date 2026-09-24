@@ -207,7 +207,6 @@ export default {
         todayStats: 'Today Stats',
         groups: 'Groups',
         usageWindows: 'Usage Windows',
-        openCodeGoUsage: 'OpenCode Go usage',
         proxy: 'Proxy',
         lastUsed: 'Last Used',
         createdAt: 'Created',
@@ -1289,15 +1288,6 @@ export default {
         cursorExhausted: 'Exhausted',
         passiveSampled: 'Passive',
         activeQuery: 'Refresh quota'
-      },
-      openCodeGo: {
-        weeklyShort: '7d',
-        monthlyShort: '1m',
-        failedShort: 'Usage query failed',
-        failedTooltip: 'OpenCode Go usage query failed: {reason}',
-        notFetched: 'Not queried',
-        notFetchedTooltip: 'The OpenCode Go usage windows have not been queried yet (auto refresh runs every 15 minutes).',
-        tooltip: 'OpenCode Go official usage windows (weekly / monthly)'
       },
       usageDetails: {
         title: 'Usage details',

@@ -148,7 +148,6 @@ export default {
         todayStats: '今日统计',
         groups: '分组',
         usageWindows: '用量窗口',
-        openCodeGoUsage: 'OpenCode Go 用量',
         proxy: '代理',
         lastUsed: '最近使用',
         createdAt: '创建时间',
@@ -371,15 +370,6 @@ export default {
         cursorExhausted: '已耗尽',
         passiveSampled: '被动采样',
         activeQuery: '刷新额度'
-      },
-      openCodeGo: {
-        weeklyShort: '7d',
-        monthlyShort: '1m',
-        failedShort: '用量查询失败',
-        failedTooltip: 'OpenCode Go 用量查询失败：{reason}',
-        notFetched: '未查询',
-        notFetchedTooltip: '尚未查询 OpenCode Go 用量窗口（自动刷新每 15 分钟一次）。',
-        tooltip: 'OpenCode Go 官方用量窗口（周/月）'
       },
       usageDetails: {
         title: '用量详情',
