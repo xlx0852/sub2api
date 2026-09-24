@@ -13,6 +13,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/requesttiming"
 )
 
 type gatewayPlatformHintContextKey struct{}
@@ -29,6 +30,13 @@ func (s *GatewayService) SelectAccountForModel(ctx context.Context, groupID *int
 
 // SelectAccountForModelWithExclusions selects an account supporting the requested model while excluding specified accounts.
 func (s *GatewayService) SelectAccountForModelWithExclusions(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}) (*Account, error) {
+	// 请求耗时详情：账号选择（Anthropic/Gemini 网关路径）。
+	selectStarted := time.Now()
+	defer func() {
+		if collector := requesttiming.FromContext(ctx); collector != nil {
+			collector.SetAccountSelectMs(time.Since(selectStarted))
+		}
+	}()
 	selection, err := AccountSelectionFromScheduling(NewGatewayAccountSelector(s).Select(ctx, scheduling.Request{
 		Platform:       PlatformAnthropic,
 		GroupID:        groupID,
