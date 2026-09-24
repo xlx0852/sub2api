@@ -105,6 +105,13 @@ func NewUnifiedAccountSelector(gateway *GatewayService, openAI *OpenAIGatewaySer
 
 // SelectAccountWithLoadAwareness 保留原有公开入口，内部反向调用统一编排器。
 func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, metadataUserID string, sub2apiUserID int64) (*AccountSelectionResult, error) {
+	// 请求耗时详情：账号选择（网关侧 Anthropic/Gemini 路径）。
+	selectStarted := time.Now()
+	defer func() {
+		if collector := requesttiming.FromContext(ctx); collector != nil {
+			collector.SetAccountSelectMs(time.Since(selectStarted))
+		}
+	}()
 	selector := NewGatewayAccountSelector(s)
 	return AccountSelectionFromScheduling(selector.Select(ctx, scheduling.Request{
 		Platform:       PlatformAnthropic,

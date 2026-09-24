@@ -316,6 +316,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
 
 		quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
+		markRequestTimingOutcome(c, "success")
 		// 请求耗时详情：异步落库用的是 Background context，采集器必须在入队前同步合并。
 		result.FirstOutputStages = mergeRequestTiming(result.FirstOutputStages, c)
 		h.submitUsageRecordTask(usageSettlementTaskContext(c), func(ctx context.Context) {
