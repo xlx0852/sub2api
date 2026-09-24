@@ -105,3 +105,52 @@ credentials.api_key  = <OpenCode Go 的 key>
 
 **上线**：`0.1.391-ocgcell-71fe371a8` @18369；端点未鉴权 401；公网 `/health` 200；
 `/responses` 正常；无误报 ERROR。自动刷新循环**无日志即无工作**（当前库里还没有 OpenCode Go 账号）。
+
+## 23.7 回退 23.5 的前端一半：移除账号列表独立用量窗口（2026-09-24）
+
+用户要求「移除掉单独的 opencode go 用量窗口展示」。这里有两处展示，裁定移除的是**账号列表卡片内**
+那一处——它与通用「用量窗口」section 并列、标题近乎重复，属「单独的展示」；**用量抽屉面板保留**（按需
+实时查询，功能不丢）。提交 `7e1ee1c92`。
+
+**删除**：
+
+| 对象 | 文件 |
+|---|---|
+| 列表 cell 组件 + 单测 | `frontend/src/components/account/OpenCodeGoUsageCell.vue`、`__tests__/OpenCodeGoUsageCell.spec.ts`（`git rm`） |
+| 卡片 section | `frontend/src/features/admin/views/AccountsView.vue`（`<section v-if="isColumnVisible('opencode_go')">`、import、`allColumns` 里的 `opencode_go` 列） |
+| 列文案 | `frontend/src/i18n/locales/{zh,en}/admin/accounts.ts` 的 `columns.openCodeGo` / `columns.openCodeGoUsage` 对象 |
+
+**保留**（避免误删）：`OpenCodeGoUsagePanel.vue` 及其单测、`AccountUsageDrawer`（用量 tab）、
+`api/admin/accounts.ts` 的 `getOpenCodeGoUsage` 与三个类型、i18n `usageDetails.openCodeGo`。
+
+**为何不连带动后端**：快照键 `extra.opencode_go_usage` 的消费方只剩自动刷新自身——列表徽章下线后没有
+读它的人（抽屉面板走 `AccountTestService.QueryOpenCodeGoUsage` 现场查询，不读快照）；
+`observePlatformQuotaWindowUpdates` 只读扁平键 `codex_5h_*`/`codex_7d_*`，嵌套 JSON 字符串不进配额窗口
+ledger、不影响调度。故停用自动刷新是**独立决定**，本轮不动。
+
+**验证**：
+
+| 项 | 结果 |
+|---|---|
+| `pnpm typecheck`（`vue-tsc --noEmit`） | 通过 |
+| `pnpm test:run` | 174 文件中 3 例失败，均为**既存失败**（用 `git stash push -- frontend/src` 在净树复现：`AccountsView.sparkShadow.spec.ts` 的 SuperGrok 大小写、`UserPlatformQuotaModal.spec.ts` 的 7 平台假设） |
+| `pnpm build` | 成功，新 chunk `assets/AccountsView-DEtjWFwt.js` |
+| 产物残留 | `OpenCodeGoUsageCell` / `opencodeGoUsage` / `weeklyShort` / `opencode_go_usage` 计数 **0**；`OpenCodeGoUsagePanel`、`getOpenCodeGoUsage` 仍在 |
+| `localStorage` 僵尸键 | 无害：`loadSavedColumns()` 把 `HIDDEN_COLUMNS_KEY` 逐项塞进 `hiddenColumns` 且无校验，残留的 `opencode_go` 键不再被任何列引用 |
+
+**上线前基线核对**：本地净树 HEAD 构建（`a33b47ef9` 源码等价，差异仅文档）与线上 `current` 目录
+**逐文件 md5 完全一致**（172 文件），故本次产物是「相对线上现状仅含目标改动」的可控增量。
+
+**上线**：新 release `0.1.391-ocgremove-7e1ee1c92`（172 文件、排除 macOS `._*`、root:root 644/755），
+`rollback` → `0.1.391-noinject-a33b47ef9`，`current` → 新目录。
+
+| 线上断言 | 结果 |
+|---|---|
+| 打包 md5 | `7e6cb7ecbc69c7426f3d606acb112caa`（本地/上传一致） |
+| `GET /`（含公网 DNS） | 200，引用 `/assets/index-B5qfLrym.js` |
+| 新入口 / AccountsView chunk | 200 / 200 |
+| 被替换的旧 chunk | 404（预期，哈希文件名已废） |
+| 线上返回的 `AccountsView-DEtjWFwt.js` 字节 | `OpenCodeGoUsageCell` **0**、`opencodeGoUsage` **0**、`OpenCodeGoUsagePanel` 1、`getOpenCodeGoUsage` 1 |
+| `GET /api/v1/settings/public` | 200（后端未受影响） |
+| 缓存语义 | `index.html` `cache-control: no-cache`（用户立即拿到新页面）；`assets/*` `immutable` 1 年 |
+
