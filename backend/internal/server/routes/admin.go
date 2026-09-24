@@ -119,7 +119,6 @@ func registerProfitRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	profit.GET("/overview", h.Admin.Profit.GetOverview)
 	profit.GET("/summary", h.Admin.Profit.GetSummary)
 	profit.GET("/trend", h.Admin.Profit.GetTrend)
-	profit.POST("/accounts/:account_id/window-economics", h.Admin.Profit.GetAccountWindowEconomics)
 	profit.GET("/configs", h.Admin.Profit.ListCostConfigs)
 	profit.GET("/configs/:account_id/cycles", h.Admin.Profit.ListSubscriptionCycles)
 	profit.POST("/configs/:account_id/cycles", h.Admin.Profit.CreateSubscriptionCycle)
@@ -258,7 +257,6 @@ func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		ops.GET("/dashboard/error-trend", h.Admin.Ops.GetDashboardErrorTrend)
 		ops.GET("/dashboard/error-distribution", h.Admin.Ops.GetDashboardErrorDistribution)
 		ops.GET("/dashboard/performance", h.Admin.Ops.GetDashboardPerformance)
-		ops.GET("/dashboard/openai-token-stats", h.Admin.Ops.GetDashboardOpenAITokenStats)
 	}
 }
 

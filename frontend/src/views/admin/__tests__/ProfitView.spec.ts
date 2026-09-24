@@ -2,15 +2,14 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProfitView from '@/features/admin/views/ProfitView.vue'
 
-const { overview, summary, windowEconomics, showError } = vi.hoisted(() => ({
+const { overview, summary, showError } = vi.hoisted(() => ({
   overview: vi.fn(),
   summary: vi.fn(),
-  windowEconomics: vi.fn(),
   showError: vi.fn()
 }))
 
 vi.mock('@/api/admin', () => ({
-  adminAPI: { profit: { overview, summary, windowEconomics } }
+  adminAPI: { profit: { overview, summary } }
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -42,9 +41,7 @@ describe('ProfitView', () => {
   beforeEach(() => {
     overview.mockReset()
     summary.mockReset()
-    windowEconomics.mockReset()
     showError.mockReset()
-    windowEconomics.mockResolvedValue({ account_id: 1, account_name: 'x', cost_type: 'subscription', windows: [] })
     summary.mockResolvedValue({ accounts: [] })
   })
 
@@ -72,16 +69,7 @@ describe('ProfitView', () => {
           profit: 70,
           margin: 58.3,
           currency: 'USD',
-          seven_day_utilization: 46,
-          quota_windows: [{
-            id: '7d',
-            label: '7d',
-            kind: '7d',
-            used_percent: 46,
-            start_at: '2026-07-30T10:33:00Z',
-            end_at: '2026-08-06T10:33:00Z',
-            window_minutes: 10080
-          }]
+          seven_day_utilization: 46
         },
         {
           account_id: 90,
@@ -134,9 +122,7 @@ describe('ProfitView', () => {
             template: '<div :data-transparent="String(transparent)"><slot name="filters" /><slot name="table" /></div>'
           },
           LoadingSpinner: true,
-          Icon: true,
-          QuotaWindowPanel: { template: '<div data-testid="profit-quota-window-panel" />' },
-          AccountProfitDrawer: { template: '<div data-testid="profit-account-drawer" />' }
+          Icon: true
         }
       }
     })
@@ -146,9 +132,9 @@ describe('ProfitView', () => {
     expect(overview).toHaveBeenCalledWith(expect.any(String), expect.any(String), false)
     expect(wrapper.find('[data-testid="profit-snapshot-time"]').exists()).toBe(true)
     expect(wrapper.find('[data-transparent="true"]').exists()).toBe(true)
-    // 账号明细已改为点配额窗口条 → 抽屉展示；不再内联渲染。
+    // 账号明细与配额窗口面板均已移除：只保留汇总卡片与趋势图。
     expect(wrapper.text()).not.toContain('admin.profit.accountDetails')
-    expect(wrapper.find('[data-testid="profit-quota-window-panel"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="profit-quota-window-panel"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="profit-trend-chart"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="profit-chart"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="profit-current-user-balance"]').text()).toContain('$4321.09')

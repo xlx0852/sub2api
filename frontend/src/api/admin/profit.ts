@@ -87,22 +87,6 @@ export interface SubscriptionCycleListResponse {
   account_expires_at?: string | null
 }
 
-export interface ProfitQuotaWindow {
-  id: string
-  label: string
-  kind: '5h' | '7d' | '24h' | 'session' | 'other' | string
-  used_percent?: number
-  start_at?: string
-  end_at?: string
-  window_minutes?: number
-  recurring_until_at?: string
-  recurring_from_at?: string
-  is_open?: boolean
-  source?: string
-  closed_reason?: string
-  status?: 'waiting_activation' | string
-}
-
 export interface ProfitQuotaAvailabilitySpan {
   start_at: string
   end_at: string
@@ -123,7 +107,6 @@ export interface AccountProfitSummary {
   margin: number
   five_hour_utilization?: number
   seven_day_utilization?: number
-  quota_windows?: ProfitQuotaWindow[]
   quota_availability_spans?: ProfitQuotaAvailabilitySpan[]
   window_efficiency?: number
   window_baseline_source?: string
@@ -143,15 +126,6 @@ export interface AccountProfitSummary {
   billing_window_recovered_amount?: number
   billing_window_recovery_progress?: number
   billing_window_loss?: number
-  /** Drawer-only live quota window economics (never overwrites cycle billing window). */
-  drawer_quota_start?: string
-  drawer_quota_end?: string
-  drawer_quota_kind?: string
-  drawer_quota_revenue?: number
-  drawer_quota_cost?: number
-  drawer_quota_profit?: number
-  drawer_quota_requests?: number
-  drawer_quota_progress?: number
   requires_cycle_start?: boolean
   // 订阅 OAuth 账号：最低保本售卖倍率（按当前额度窗外推满负荷）
   break_even_rate?: number
@@ -326,46 +300,6 @@ export interface BatchSubscriptionConfigResult {
 
 /** POST /api/v1/admin/profit/configs/batch 批量为未配置的订阅类（OAuth）账号绑定订阅费用 */
 
-export interface ProfitWindowEconomicsQuery {
-  start_at: string
-  end_at: string
-  kind?: string
-  label?: string
-}
-
-export interface ProfitWindowEconomicsItem {
-  start_at: string
-  end_at: string
-  kind?: string
-  label?: string
-  status: 'ended' | 'current' | 'upcoming' | string
-  requests: number
-  revenue: number
-  cost: number
-  profit: number
-  cost_start?: string
-  cost_end?: string
-}
-
-export interface ProfitWindowEconomicsResponse {
-  account_id: number
-  account_name: string
-  cost_type: string
-  windows: ProfitWindowEconomicsItem[]
-}
-
-/** POST /api/v1/admin/profit/accounts/:account_id/window-economics */
-export async function windowEconomics(
-  accountID: number,
-  windows: ProfitWindowEconomicsQuery[]
-): Promise<ProfitWindowEconomicsResponse> {
-  const { data } = await apiClient.post<ProfitWindowEconomicsResponse>(
-    `/admin/profit/accounts/${accountID}/window-economics`,
-    { windows }
-  )
-  return data
-}
-
 export async function batchConfigureSubscription(req: BatchSubscriptionConfigRequest): Promise<BatchSubscriptionConfigResult> {
   const { data } = await apiClient.post<BatchSubscriptionConfigResult>('/admin/profit/configs/batch', req)
   return data
@@ -375,5 +309,5 @@ export default {
   overview, summary, trend, listConfigs, upsertConfig, setSubscriptionAutoRenew, deleteConfig,
   listSubscriptionCycles, createSubscriptionCycle, deleteSubscriptionCycle,
   previewSubscriptionTermination, terminateSubscriptionCycle, addSubscriptionRefund, voidSubscriptionRefund,
-  reverseSubscriptionTermination, batchConfigureSubscription, windowEconomics
+  reverseSubscriptionTermination, batchConfigureSubscription
 }

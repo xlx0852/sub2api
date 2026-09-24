@@ -113,7 +113,6 @@ GET /api/v1/admin/ops/concurrency
 GET /api/v1/admin/ops/dashboard/error-distribution
 GET /api/v1/admin/ops/dashboard/error-trend
 GET /api/v1/admin/ops/dashboard/latency-histogram
-GET /api/v1/admin/ops/dashboard/openai-token-stats
 GET /api/v1/admin/ops/dashboard/overview
 GET /api/v1/admin/ops/dashboard/performance
 GET /api/v1/admin/ops/dashboard/snapshot-v2
@@ -367,7 +366,6 @@ POST /api/v1/admin/payment/orders/:id/refund
 POST /api/v1/admin/payment/orders/:id/refund/query
 POST /api/v1/admin/payment/orders/:id/retry
 POST /api/v1/admin/payment/providers
-POST /api/v1/admin/profit/accounts/:account_id/window-economics
 POST /api/v1/admin/profit/configs/:account_id/cycles
 POST /api/v1/admin/profit/configs/batch
 POST /api/v1/admin/profit/cycles/:id/termination
