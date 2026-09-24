@@ -70,3 +70,22 @@ Devin 自己把已缓存的历史报成 field 5（cache read）时，网关仍�
 - 原样重发仍是上游的缓存语义（未缓存余量 + cache read），按 $1/1M 计 0.000656；首次出现按 $10/1M 计 0.005966。
 - 运行中的侧车：容器创建 `2026-09-24T20:23:03Z`，`/app/release` 挂载到 `.../releases/v7.3.13-cachewrite`，二进制 `sha256=63fb4d2d8b6a7bc5003fe265841946a200d99823f74286cda5d5f5d5856e35eb`；回滚目录二进制 `8d3a465e5a8b8653ab35ca2eac6dc64e173653ec6243909e62b5deea00d971a0`，旧容器 `sub2api-devin-cliproxy.bak-20260925` 已停止但保留挂载。
 - 可复跑脚本 `verify-devin-cache-write.sh`（生产机执行，断言首次出现的提示 `input_tokens >= 500`）。实测输出：`input_tokens 2953 cached_tokens 0` → `PASS`。
+
+## 其它模型与多轮对话（2026-09-25 04:34–04:52 +08）
+
+4 轮同一会话（网关请求带固定 `Session-Id` + `prompt_cache_key`）：
+
+| 轮次 | 上游 input | 上游 cached | 落库 input | 落库 cache_read | 命中率 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1608 | 0 | 1608 | 0 | 0% |
+| 2 | 2840 | 1605 | 1235 | 1605 | 56.5% |
+| 3 | 4072 | 2837 | 1235 | 2837 | 69.7% |
+| 4 | 5304 | 4069 | 1235 | 4069 | 76.7% |
+
+每轮 cached 等于上一轮整段 prompt，落库 input 是本轮新增内容（1235），不再是 3。若客户端不带会话标识，缓存不会命中（早先只写 body `conversation_id` 的两轮测试 cached 恒为 0）。
+
+模型抽样（侧车直连，全新长提示，`cached` 均为 0）：swe-2 2562、gpt-5.6-terra 3130、gpt-5.6-luna 2997、gpt-6-astra 2870、gpt-5.6-sol 3000、claude-sonnet-5 4348、gemini-3.6-flash 4704、grok-4.6 3063（cached 128）、kimi-k3 2562；短提示 419/420。网关侧再抽 `gpt-5.6-luna`：`input_tokens=402`（usage_logs 3034364）。
+
+全库对照（近 24h）：`input_tokens=3` 只有账号 89 出现 1 次（Devin 补丁前 69 次）；近 14 天「有输出但三类 token 全 0」= **0 行**。
+
+已知且与本次修复无关的上游抖动：偶发**空响应**（无内容、usage 全 0，计费 0），补丁前后都有，例如 2026-09-16 28/135、09-13 4/177、09-23 9/243。
