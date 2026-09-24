@@ -137,3 +137,24 @@ cd backend && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags embed \
 - 管理端授权登录的端到端人工验证（需管理员在浏览器完成授权，作为发布后回归第 1 步）。
 - 新账号的 relay 权益与订阅绑定关系。
 - 双实例同时服务同一账号的具体表现（按 §2 单持有者约束推断为互相踢）。
+
+---
+
+## 7. 真机落号结果（**2026-09-24 13:40–13:45 UTC 已执行**）
+
+本节是上面第 4 节「发布后回归」清单的实际结果，也是第 5 节两个待决策项的收口。
+
+- **决策落地**：走的是「服务端自有会话族」——管理员在生产后台用授权登录入口（Google）取了
+  一份**同账号、不同 `sid`** 的凭据。既不是生产独占现有账号（那会踢掉桌面客户端），
+  也没有另开账号（relay 权益是否随订阅绑账号仍未验证，故不去赌）。
+- **回归结果**：`oauth/complete` → 200；`POST /admin/accounts` → 200，**账号 `id=140`
+  （`mirasim-relay`，`anthropic`/`apikey`，`active`，未挂分组）**；管理端「测试账号」真实打到
+  上游并返回内容（`kimi-k3` 15s、`deepseek-flash` 9s 有 `content` + `test_complete`）。
+- **持久化在线验证**：refresh token 被上游轮换（哈希前缀 `6b201126`→`0e738a9c`，长度仍 539）并
+  由进程回调写回 `credentials`；`credentials.mirasim_device_key` 由服务端自生成（118 字节 PKCS8
+  Ed25519 PEM）后落库；`base_url` 自动补齐为 `https://relay.mirasim.ai`。
+- **仍在第 6 节「未验证」里的项**：旧 refresh token 是否立即失效（未测）；`/auth/code`、
+  `/auth/verify` 形状（未触发）；双实例同账号表现（未测）。新增一条：上游**模型可用性随时间窗变化**
+  （同一批探测中 `kimi-code/k3`、`grok-4.6` 稳定 422，而 `kimi-k3`、`deepseek-flash` 正常）
+  ⇒ 接流前必须实测，不能固化默认模型。
+- 详表见 `docs/MIRASIM_RELAY_UPSTREAM.md` §11。

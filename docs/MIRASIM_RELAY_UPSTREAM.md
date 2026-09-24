@@ -528,3 +528,68 @@ relay 开关；新建账号时还会用 JWT 里的 `name`/`email` 预填空的�
 ⇒ 发布后第一次真机登录请当作验证步骤：管理端账号表单 → 生成授权链接 → 浏览器授权 →
 复制回调 → 回填 → 保存 → 账号测试通过。若失败，先用「粘贴 Token」路径对照，
 以区分是登录链路问题还是凭据本身问题。
+
+⇒ **该验证已于 2026-09-24 在生产完成（真机 Google 授权 + 落号 + 上游真实调用），
+下面两节的原「未验证」项现已转正，记录见 §11。**
+
+## 11. 生产真机落号记录（**已执行**，2026-09-24 13:40–13:45 UTC）
+
+环境：生产机（`root@74.82.195.84`）上运行的 sub2api，管理端 API `127.0.0.1:18373`，
+`settings.admin_api_key` 鉴权。落号结果：**账号 `id=140`，`name=mirasim-relay`，
+`platform=anthropic`，`type=apikey`，`status=active`，未挂任何分组。**
+
+### 11.1 实际走的步骤
+
+```text
+① POST /api/v1/admin/mirasim/oauth/auth-url  {"provider":"google"}   -> 200（含 auth_url/state/redirect_uri/expires_at）
+   管理员在浏览器授权 → 页面打不开（loopback 占位）→ 从地址栏整条复制回调 URL
+② POST /api/v1/admin/mirasim/oauth/complete {"callback_url":"<整条回调>"} -> 200
+   返回 {refresh_token, identity{email,name,plan,plan_exp,expires_at,provider}}
+③ POST /api/v1/admin/accounts {"name":"mirasim-relay","platform":"anthropic","type":"apikey",
+     "credentials":{"mirasim_refresh_token":"<②的 refresh_token>"},"extra":{"mirasim_relay_enabled":true}} -> 200 id=140
+④ POST /api/v1/admin/accounts/140/test {"model_id":"kimi-k3"} -> SSE: test_start → content → test_complete
+```
+
+`redirect_uri` 必须是 loopback 占位 `http://127.0.0.1:9/callback`（上游 allowlist 只收 loopback
+与 `*.mirofish.ai`）；授权后页面打不开是预期行为，从地址栏复制即可（§10.2）。
+
+### 11.2 已验证（可复现事实）
+
+| 观察点 | 证据 |
+| --- | --- |
+| 登录凭据可用、且**与桌面客户端同账号** | `sub` 与客户端一致；`plan=go`，`plan_exp=2026-10-07T15:59:59Z` |
+| **未占用客户端会话族** | 新 `sid` 与客户端 `sid` 不同（同账号不同会话）。第 ①② 步只做本地 JWT 解析、**不调 `/auth/refresh`**，所以整个登录环节不可能把客户端踢下线 |
+| 凭据链全通 | ④ 的第一次调用就返回**上游模型级 422 + 上游 `request_id`** 而非 401 ⇒ 票据换取、`/v1/device/session`、`mrs-sig-v2`/`mrs-seal-v1` 全部被上游受理 |
+| **refresh token 轮换被在线持久化** | ③ 落库时 token 哈希前缀 `6b201126` → ④ 之后变为 `0e738a9c`（长度仍 539），`updated_at` 同步前移，日志出现 `mirasim_relay_credential_updated`（×2：token + device key） |
+| **device key 自生成并持久化** | `credentials.mirasim_device_key` = 118 字节 PKCS8 PEM（头 `-----BEGIN PRIVATE KEY-----`，DER 前缀 `MC4CAQAw` = Ed25519），落库前该键不存在 |
+| 运行时补默认地址 | `credentials.base_url` 被自动写为 `https://relay.mirasim.ai` |
+| 无凭据泄漏 | 容器日志 15 分钟窗口内 `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9` / `mrs1:` / `BEGIN PRIVATE KEY` 命中 **0**；管理端读回时凭据体被掩码，只暴露 `credentials_status.has_*` 布尔 |
+
+### 11.3 模型可用性是**时间窗相关**的（接流前必测）
+
+同一批探测（2026-09-24 13:45 UTC 前后数分钟，账号 140，`POST /admin/accounts/140/test`）：
+
+| 模型 | 结果 |
+| --- | --- |
+| `kimi-k3` | OK，15s，SSE 有 `content` + `test_complete` |
+| `deepseek-flash` | OK，9s，同上 |
+| `kimi-code/k3` | **422** `model "kimi-code/k3" is not supported at this time`（同一批内复现 3 次，稳定） |
+| `grok-4.6` | **422** 同上 |
+
+`kimi-code/k3` / `grok-4.6` 是桌面客户端本地记录里真实用过的模型，此刻却被拒 ⇒ 上游模型可用性
+随时间窗/通道变化（报文措辞就是 “at this time”），**relay 也没有 `/v1/models`**（§4 模型命名空间、
+`upstream_models.go` 的 mirasim 分支直接报“无模型清单端点”）。因此：
+
+- 不要把任何一个模型名固化成“本账号默认可用”。接流前用账号测试实测一次。
+- 网关侧模型名由账号 `model_mapping` 决定；映射到此刻不可用的模型会得到上游 422（会计入
+  账号错误，但不属于凭据问题——排障时先看 HTTP 状态码再下结论）。
+
+### 11.4 本次**未做**的事
+
+- **未挂分组**（`groups=0`）：账号已可调度但没有任何分组引用它 ⇒ 对线上真实流量零影响。
+  要接流需另外两步：加入目标分组（`国模集合` id=34，已确认 `require_oauth_only=false`
+  可容纳 apikey 账号）+ 配置 `model_mapping` 指向实测可用模型。
+- 未修改 `priority` / `concurrency`，未设置 `expires_at`。
+- 未实测 `/auth/refresh` 旧 token 是否立即失效（§9.6 的结论保持不变），也未去动桌面客户端
+  （客户端是否会因这次轮换掉线：理论上不会，因为会话族不同；不去实测以免真的踢人）。
+
