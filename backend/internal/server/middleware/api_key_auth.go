@@ -33,11 +33,6 @@ func apiKeyAuthWithBalance(apiKeyService *service.APIKeyService, cfg *config.Con
 	return func(c *gin.Context) {
 		// 请求耗时详情：API Key 鉴权与准入耗时。
 		authStarted := time.Now()
-		defer func() {
-			if collector := requesttiming.FromContext(c.Request.Context()); collector != nil {
-				collector.SetAPIKeyAuthMs(time.Since(authStarted))
-			}
-		}()
 		// ── 1. 提取 API Key ──────────────────────────────────────────
 
 		queryKey := strings.TrimSpace(c.Query("key"))
@@ -184,6 +179,10 @@ func apiKeyAuthWithBalance(apiKeyService *service.APIKeyService, cfg *config.Con
 		setGroupContext(c, apiKey.Group)
 		_ = apiKeyService.TouchLastUsed(c.Request.Context(), apiKey.ID)
 
+		// 请求耗时详情：在进入 Handler 前落库，避免快照早于本中间件返回。
+		if collector := requesttiming.FromContext(c.Request.Context()); collector != nil {
+			collector.SetAPIKeyAuthMs(time.Since(authStarted))
+		}
 		c.Next()
 	}
 }
