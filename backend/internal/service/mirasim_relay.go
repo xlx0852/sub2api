@@ -53,29 +53,28 @@ const (
 	mirasimExtraAuthURL       = "mirasim_auth_url"
 	mirasimExtraClientVersion = "mirasim_client_version"
 	mirasimExtraSealPubkey    = "mirasim_seal_pubkey"
-	// mirasimExtraRosterAgent 指定上游模型同步与 roster 展示使用哪个 agent
-	// （如 claude / codex / kimi / dsh）；见 mirasim_roster.go 的选择顺序。
-	mirasimExtraRosterAgent = "mirasim_roster_agent"
-
 	// 端点路径。
 	mirasimAccessRefreshPath = "/auth/refresh"
 	mirasimDeviceSessionPath = "/v1/device/session"
 
-	// 只读元数据端点头（客户端取证 server.cjs：O1n='/v1/model-roster'、
-	// ePn='/v1/limits'、ngo='x-mirasim-probe'）。
-	mirasimModelRosterPath = "/v1/model-roster"
-	mirasimLimitsPath      = "/v1/limits"
-	mirasimHeaderProbe     = "x-mirasim-probe"
-	mirasimProbeUsage      = "usage"
+	// 只读元数据端点头（客户端取证 server.cjs：ePn='/v1/limits'、ngo='x-mirasim-probe'）。
+	//
+	// 可用模型走**账号维度**的 /v1/models（只返回本账号当前可用的模型）；
+	// 全局目录 /v1/model-roster 不描述「本账号能用什么」，已不再用于白名单。
+	mirasimAvailableModelsPath = "/v1/models"
+	mirasimLimitsPath          = "/v1/limits"
+	mirasimHeaderProbe         = "x-mirasim-probe"
+	mirasimProbeUsage          = "usage"
 
-	// 元数据调用超时（客户端取证 server.cjs：roster 8000ms=ddo、limits 10000ms=tor）。
+	// 元数据调用超时（客户端取证 server.cjs：limits 10000ms=tor）。
 	// 刻意不复用 mirasimHTTPTimeout（模型转发 60s）。
-	mirasimRosterTimeout = 8 * time.Second
+	mirasimModelsTimeout = 8 * time.Second
 	mirasimLimitsTimeout = 10 * time.Second
 
-	// 元数据缓存 TTL：roster 对齐客户端 10 分钟（ldo=600000）；limits 取 30s，
+	// 元数据缓存 TTL：可用模型对齐客户端 10 分钟（ldo=600000）；limits 取 30s，
 	// 保证管理员刷新用量时既不打爆上游、又能看到较新的窗口。
-	mirasimRosterCacheTTL = 10 * time.Minute
+	// 显式「同步上游模型」会传 force=true 绕过可用模型缓存。
+	mirasimModelsCacheTTL = 10 * time.Minute
 	mirasimLimitsCacheTTL = 30 * time.Second
 
 	mirasimAccessTokenEarlyRefresh = 120 * time.Second
@@ -572,9 +571,9 @@ func (c *mirasimRelayClient) metadataFetch(
 	return nil, err
 }
 
-// fetchModelRoster 拉取模型清单原始 JSON（GET /v1/model-roster，空 body + 明文签名头）。
-func (c *mirasimRelayClient) fetchModelRoster(ctx context.Context) ([]byte, error) {
-	return c.metadataFetch(ctx, "拉取 model roster", mirasimModelRosterPath, mirasimRosterTimeout, nil)
+// fetchAvailableModels 拉取账号维度可用模型原始 JSON（GET /v1/models，空 body + 明文签名头）。
+func (c *mirasimRelayClient) fetchAvailableModels(ctx context.Context) ([]byte, error) {
+	return c.metadataFetch(ctx, "拉取 available models", mirasimAvailableModelsPath, mirasimModelsTimeout, nil)
 }
 
 // fetchLimits 拉取额度窗口原始 JSON（GET /v1/limits，必须带 x-mirasim-probe: usage）。

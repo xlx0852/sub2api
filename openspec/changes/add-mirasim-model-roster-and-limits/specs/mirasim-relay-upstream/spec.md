@@ -60,6 +60,12 @@ refresh token 轮换。
 
 ### Requirement: Mirasim Upstream Model Sync
 
+> **已被取代（2026-09-25）**：本 requirement 改用账号维度的 `GET /v1/models`，见
+> `openspec/changes/restrict-mirasim-whitelist-to-available-models` 的「Mirasim Available
+> Model Sync」。原因：roster 是全局目录，其默认 `claude` agent 的 6 个模型在该账号上真实调用
+> 全部返回 404，且 roster 不包含 `deepseek-v4-flash` / `deepseek-v4-flash-vision-exp`。
+> 下方内容仅作历史记录，**不再作为实现依据**。
+
 `FetchUpstreamSupportedModels` 对 mirasim relay 账号 SHALL 通过 `/v1/model-roster` 获取模型
 清单，返回该账号 agent 的模型 id 集合（去重、稳定排序、转小写），并 MUST NOT 再返回
 `unsupported` 错误。

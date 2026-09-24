@@ -3,6 +3,12 @@
 > 状态：**全部完成**（1.x–6.x 与 7.1–7.7，2026-09-24/25）。生产发布已上线：后端热替换 binary
 > `0.1.391-noinject-a33b47ef9/sub2api`（sha256 前缀 `34c3e9f2b8072233`），前端 release
 > `0.1.391-mirasimmeta-199d284ac`（rollback → `0.1.391-mirasim-0608a3402`）。发布细节见文末「生产发布」。
+>
+> **已被取代（sync 部分）**：本变更中「上游模型同步走 `/v1/model-roster` + agent 选择」这条设计
+> 经实机验证不成立——默认选中的 `claude` agent 6 个模型在该账号上真实调用全部 404，且 roster
+> 缺少 `deepseek-v4-flash` / `deepseek-v4-flash-vision-exp` 两个可用 id。白名单来源已改由
+> `openspec/changes/restrict-mirasim-whitelist-to-available-models` 接管（账号维度 `GET /v1/models`）。
+> **`/v1/limits` 用量链路与前端展示不受影响**，仍以本变更为准。
 
 ## 1. 只读元数据客户端（`mirasim_relay.go`）
 

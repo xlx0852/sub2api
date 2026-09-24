@@ -127,9 +127,10 @@ credentials.model_mapping = {"claude-sonnet-4-5": "kimi-k3", "claude-opus-4-1": 
 
 ## 5. 已排除的能力
 
-- **上游模型同步**：relay 不提供 `/v1/models`（实测返回 404 `not_found_error`），
-  `buildAnthropicUpstreamModelsRequest` 直接返回 `newUpstreamModelSyncUnsupportedError`，
-  模型请在账号上手动配置。
+- **上游模型同步**（本节为历史结论，**已被 §12/§13 取代**）：早期实测以为 relay 没有模型清单端点，
+  `buildAnthropicUpstreamModelsRequest` 曾对 mirasim 直接返回
+  `newUpstreamModelSyncUnsupportedError`。现在「同步上游模型」走账号维度的 `GET /v1/models`
+  （`mirasim_available_models.go`），不再返回 `unsupported`。
 - **上游计费探针**：`/v1/sub2api/billing` 是 sub2api 私有约定，relay 上不存在；
   `isUpstreamBillingProbeAccount` 对 Mirasim 账号返回 false，避免用错误的鉴权方式打扰上游。
 
@@ -577,8 +578,9 @@ relay 开关；新建账号时还会用 JWT 里的 `name`/`email` 预填空的�
 | `grok-4.6` | **422** 同上 |
 
 `kimi-code/k3` / `grok-4.6` 是桌面客户端本地记录里真实用过的模型，此刻却被拒 ⇒ 上游模型可用性
-随时间窗/通道变化（报文措辞就是 “at this time”），**relay 也没有 `/v1/models`**（§4 模型命名空间、
-`upstream_models.go` 的 mirasim 分支直接报“无模型清单端点”）。因此：
+随时间窗/通道变化（报文措辞就是 “at this time”）。**修正**：本节原文写“relay 也没有 `/v1/models`”，
+该结论已被 §13 推翻——账号维度的 `GET /v1/models` 是存在的，且它列出的模型逐个实测都能调通。
+「同一时刻哪些模型可用」应当直接读这个端点，而不是猜。因此：
 
 - 不要把任何一个模型名固化成“本账号默认可用”。接流前用账号测试实测一次。
 - 网关侧模型名由账号 `model_mapping` 决定；映射到此刻不可用的模型会得到上游 422（会计入
@@ -598,13 +600,15 @@ relay 开关；新建账号时还会用 JWT 里的 `name`/`email` 预填空的�
 
 relay 除推理端点外还有两条**只读**元数据端点，本轮已接进 sub2api：
 
-| 端点 | 用途 | 超时 | 缓存 |
-| --- | --- | --- | --- |
-| `GET /v1/model-roster` | 模型清单 → 「同步上游模型」的数据源 | 8s（`mirasimRosterTimeout`，客户端 `ddo=8000`） | 10 分钟（`mirasimRosterCacheTTL`） |
-| `GET /v1/limits` | 额度窗口 → 用量抽屉的数据源 | 10s（`mirasimLimitsTimeout`，客户端 `tor=10000`） | 30 秒（`mirasimLimitsCacheTTL`） |
+| 端点 | 维度 | 用途 | 超时 | 缓存 |
+| --- | --- | --- | --- | --- |
+| `GET /v1/models` | **账号** | 本账号可用模型 → 「同步上游模型」的数据源 | 8s（`mirasimModelsTimeout`） | 10 分钟（`mirasimModelsCacheTTL`） |
+| `GET /v1/limits` | 账号 | 额度窗口 → 用量抽屉的数据源 | 10s（`mirasimLimitsTimeout`，客户端 `tor=10000`） | 30 秒（`mirasimLimitsCacheTTL`） |
+| ~~`GET /v1/model-roster`~~ | 全局 | **已弃用于白名单**（见 §13） | — | — |
 
-实现落在 `backend/internal/service/`：`mirasim_relay.go`（客户端与签名）、`mirasim_roster.go`
-（解析/选择）、`mirasim_limits.go`（归一化/映射）、`mirasim_metadata.go`（服务门面 + 按账号缓存），
+实现落在 `backend/internal/service/`：`mirasim_relay.go`（客户端与签名）、
+`mirasim_available_models.go`（可用模型解析）、`mirasim_limits.go`（归一化/映射）、
+`mirasim_json.go`（共用 JSON 取值）、`mirasim_metadata.go`（服务门面 + 按账号缓存），
 `upstream_models.go`（同步接线）、`account_usage_service.go`（用量接线）、`wire.go`（依赖注入）。
 
 ### 12.1 请求形状
@@ -636,19 +640,23 @@ relay 除推理端点外还有两条**只读**元数据端点，本轮已接进 
 | 其他非 2xx | 报错并带状态码，**不回显上游正文** |
 
 **MUST NOT** 打印 / 记录 credential、ticket、device key 明文；metadata 路径的日志只打
-`category` + `account_id`（事件名如 `mirasim_roster_fetch_failed` / `mirasim_limits_parse_failed`）。
+`category` + `account_id`（事件名如 `mirasim_models_fetch_failed` / `mirasim_limits_parse_failed`）。
 
-### 12.3 模型清单（roster）解析与选择
+### 12.3 可用模型（`GET /v1/models`，账号维度）
 
-- 顶层 `agents` 是**对象**，键为 agent 名，值的顺序即文档顺序（`roster.Order` 保留原始顺序）。
-- agent 条目校验：`id` 必须是非空字符串、`contextWindow` 必须是 **> 0 的有限数**；
-  `label` 缺失时回退成 `id`；字符串做 trim + lowercase；**解析阶段不去重**（去重只在产出
-  「模型 id 列表」时按稳定顺序做）；某个 agent 内无有效条目 → 该 agent 丢弃；整体无有效
-  agent → 报错（不返回空清单）。
-- 默认 agent：**第一个** `default: true` 的 agent 胜出。
-- agent 选择顺序：`account.extra.mirasim_roster_agent` → 首个 `default: true` → `claude` →
-  字典序首个。
-- 产出即「同步上游模型」的模型 id 白名单。
+响应是 OpenAI 风格：
+
+```json
+{"object":"list","data":[{"id":"kimi-k3","object":"model","owned_by":"mirasim-router"}]}
+```
+
+解析口径：根必须是 JSON 对象、`data` 必须是数组；每个条目取 `id`，`id` 必须是 **JSON 字符串**
+且 trim 后非空，否则丢弃该条；重复 id 只留一个；输出 `sort.Strings` 升序。
+**没有任何有效 id → 报错**（不返回空列表，避免把白名单静默清空）。
+
+产出即「同步上游模型」的模型 id 白名单；显式同步传 `force=true` 绕过 10 分钟缓存。
+
+> 历史：本来源是全局目录 `GET /v1/model-roster`（按 agent 选择），已因实测不可用而弃用，见 §13。
 
 ### 12.4 额度窗口（limits）归一化
 
@@ -725,3 +733,46 @@ MIRASIM_E2E_ACCESS_TOKEN_FILE=<0600 的 access token 文件路径> \
 ```
 
 凭据文件必须是 0600，且**不得**把内容贴进对话/工单/日志；没有凭据时该用例 `t.Skip`。
+
+## 13. 为什么白名单只集成账号维度的 `/v1/models`（2026-09-24 实测）
+
+`add-mirasim-model-roster-and-limits` 曾把「同步上游模型」接到全局目录 `/v1/model-roster`
+（按 agent 选择）。实机逐个真发推理请求后发现这条路不成立。
+
+### 13.1 实测证据（同一份桌面客户端凭据，逐个 `POST /v1/messages`，`max_tokens=16`）
+
+| 结果 | 模型 | 上游原话 |
+| --- | --- | --- |
+| 200 + 内容 | `kimi-k3`、`deepseek-flash`、`glm-5.3-flash` | — |
+| 404 | `claude-opus-5-5` / `claude-fable-5-1` / `claude-opus-5` / `claude-sonnet-5` / `claude-fable-5` / `claude-opus-4-8` / `claude-haiku-4-5` / `gpt-6-sol` / `gpt-6-astra` / `gpt-6-luna` / `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-5.6-luna` | `model "X" is currently unavailable for this account; it has not been removed, and other models are unaffected` |
+| 422 | `kimi-code/k3` | `model "kimi-code/k3" is not supported at this time` |
+
+- 补 `x-mirasim-client: 0.0.354`（桌面端真实身份头）后，13 个 404 一个不变 → **不是客户端身份问题**。
+- `/chat/completions` 对全部抽样模型（含可用的 `kimi-k3`）返回 **404 且空 body** → 通用 device ticket
+  只在 `/v1/messages` 上可用，**不是路径问题**。
+- 而 `GET /v1/models` 列出的 5 个 id，逐个真实调用 **5/5 全 200 + 有内容**：
+  `deepseek-flash`、`deepseek-v4-flash`、`deepseek-v4-flash-vision-exp`、`glm-5.3-flash`、`kimi-k3`。
+
+### 13.2 结论
+
+- roster 是**全局目录**：默认选中的 `claude` 组 6 个模型在本账号上**全部 404**；
+  且它**缺少** `deepseek-v4-flash` 与 `deepseek-v4-flash-vision-exp` 这两个可用 id。
+  在 roster 上做任何过滤都补不出后者，所以只能**换源**。
+- `/v1/models` 是**账号维度**且不需要 `x-mirasim-probe`（带与不带结果一致），
+  是唯一精确信号 → 白名单唯一来源。
+- 不做「同步时逐个探测裁剪」：每次点击都会真发 N 次推理（计费 + 抖动，`kimi-k3` 曾出现一次
+  120s 挂起），探测只留在 **E2E**（`assertMirasimModelsCallable`）里当回归断言。
+
+### 13.3 账号 140 的可用集合**必须实测**（不要套用本节结论）
+
+§13.1 用的是桌面客户端那套凭据；生产账号 140 是**另一套会话族**，授权可能不同。
+发布后用 `POST /api/v1/admin/accounts/140/models/sync-upstream` 核对 140 的真实返回集合。
+
+### 13.4 复现方式
+
+```bash
+# 只读凭据（缓存 access token），不触发 /auth/refresh
+cd backend
+MIRASIM_E2E_DEVICE_KEY_FILE=<0600 pem> MIRASIM_E2E_ACCESS_TOKEN_FILE=<0600 jwt> \
+  go test -tags e2e -count=1 -run 'TestMirasimRealRelayMetadataEndToEnd' ./internal/service/ -v
+```

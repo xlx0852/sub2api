@@ -2782,8 +2782,8 @@ const apiKeyValue = ref('')
 
 const syncPreviewCredentials = computed(() => {
   if (!apiKeyValue.value) return undefined
-  // Mirasim relay 账号的模型清单来自 /v1/model-roster（需要已保存的 refresh token +
-  // device key），创建阶段没有账号 ID 也走不了 anthropic 的 /v1/models，因此不提供预览同步。
+  // Mirasim relay 账号的可用模型来自账号维度的 GET /v1/models（需要已保存的 refresh token +
+  // device key），创建阶段还没有账号 ID，无法调这个端点，因此不提供预览同步。
   if (mirasimRelayActive.value) return undefined
   return {
     platform: form.platform,

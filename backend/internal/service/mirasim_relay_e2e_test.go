@@ -374,9 +374,9 @@ func TestMirasimBuildersRewriteToRelay(t *testing.T) {
 	t.Logf("buildCountTokensRequest -> %s encLen=%d", ctReq.URL.String(), len(ctReq.Header.Get(mirasimHeaderEnc)))
 }
 
-// TestMirasimRealRelayMetadataEndToEnd 覆盖只读元数据通道（`GET /v1/model-roster`、
+// TestMirasimRealRelayMetadataEndToEnd 覆盖只读元数据通道（`GET /v1/models`、
 // `GET /v1/limits`）：用真实 device key + 调用方缓存的 access token 直连 relay，
-// 断言 roster 可解析、limits 可归一化、服务门面（MirasimMetadataService）拿到同一份缓存，
+// 断言账号维度可用模型可解析、limits 可归一化、服务门面（MirasimMetadataService）拿到同一份缓存，
 // 且**全程不触发 /auth/refresh**（refresh token 是占位值；一旦被换掉就会失败）。
 //
 // 环境变量：MIRASIM_E2E_DEVICE_KEY_FILE / MIRASIM_E2E_ACCESS_TOKEN_FILE（缺一即 skip）。
@@ -408,40 +408,23 @@ func TestMirasimRealRelayMetadataEndToEnd(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	// 1) 模型清单：拉取 → 解析 → 选 agent → 产出模型 id 白名单。
-	rosterRaw, err := client.fetchModelRoster(ctx)
+	// 1) 账号维度可用模型：拉取 → 解析 → 白名单。
+	modelsRaw, err := client.fetchAvailableModels(ctx)
 	if err != nil {
 		// 错误消息里只有操作名与状态码，不会泄漏上游正文。
-		t.Fatalf("真实 relay 拉取 model roster 失败: %v", err)
+		t.Fatalf("真实 relay 拉取 available models 失败: %v", err)
 	}
-	roster, err := parseMirasimModelRoster(rosterRaw)
+	availableModels, err := parseMirasimAvailableModels(modelsRaw)
 	if err != nil {
-		t.Fatalf("解析 model roster 失败: %v", err)
+		t.Fatalf("解析 available models 失败: %v", err)
 	}
-	if len(roster.Agents) == 0 {
-		t.Fatal("roster 里没有任何有效 agent")
+	if len(availableModels) == 0 {
+		t.Fatal("available models 为空")
 	}
-	agent, err := roster.selectAgent("")
-	if err != nil {
-		t.Fatalf("选择默认 agent 失败: %v", err)
-	}
-	if len(agent.Models) == 0 {
-		t.Fatalf("agent %q 没有有效模型", agent.Name)
-	}
-	modelIDs, err := mirasimRosterModelIDsForAccount(roster, account)
-	if err != nil {
-		t.Fatalf("产出模型 id 失败: %v", err)
-	}
-	if len(modelIDs) == 0 {
-		t.Fatal("模型 id 白名单为空")
-	}
-	for _, model := range agent.Models {
-		if strings.TrimSpace(model.ID) == "" || model.ContextWindow <= 0 {
-			t.Fatalf("模型条目未通过校验: id=%q contextWindow=%v", model.ID, model.ContextWindow)
-		}
-	}
-	t.Logf("roster: agents=%d order=%v default=%q models=%d cliKeys=%d",
-		len(roster.Agents), roster.Order, agent.Name, len(modelIDs), len(roster.CLI))
+	// 账号维度接口的返回值必须是账号可用的：逐个真发一次极小推理请求验证
+	// 「声明可用 == 实际可调用」。这是本变更的核心契约，只在这里（E2E）做，
+	// 不进运行时路径。
+	assertMirasimModelsCallable(t, svcForProbe(upstream), account, availableModels)
 
 	// 2) 额度窗口：拉取 → 解析 → 映射到 five_hour / seven_day。
 	limitsRaw, err := client.fetchLimits(ctx)
@@ -488,12 +471,12 @@ func TestMirasimRealRelayMetadataEndToEnd(t *testing.T) {
 
 	// 3) 服务门面走同一份缓存：MirasimMetadataService 必须复用 client（同一个 runtime 条目）。
 	svc := NewMirasimMetadataService(nil, upstream)
-	svcRoster, err := svc.ModelRoster(ctx, account, false)
+	svcModels, err := svc.AvailableModels(ctx, account, false)
 	if err != nil {
-		t.Fatalf("MirasimMetadataService.ModelRoster 失败: %v", err)
+		t.Fatalf("MirasimMetadataService.AvailableModels 失败: %v", err)
 	}
-	if len(svcRoster.Agents) != len(roster.Agents) {
-		t.Fatalf("服务门面 roster 与直连结果不一致: %d vs %d", len(svcRoster.Agents), len(roster.Agents))
+	if len(svcModels) != len(availableModels) {
+		t.Fatalf("服务门面 available models 与直连结果不一致: %d vs %d", len(svcModels), len(availableModels))
 	}
 	svcLimits, err := svc.Limits(ctx, account, false)
 	if err != nil {
@@ -522,4 +505,44 @@ func mirasimE2EBoolPtr(v *bool) string {
 		return "nil"
 	}
 	return fmt.Sprintf("%v", *v)
+}
+
+// svcForProbe 返回一个可给 buildUpstreamRequestAnthropicAPIKeyPassthrough 用的最小网关。
+func svcForProbe(upstream HTTPUpstream) *GatewayService {
+	return mirasimE2EGatewayService(upstream)
+}
+
+// assertMirasimModelsCallable 断言 /v1/models 列出的每个 id 都能真实调用（2xx + 有内容）。
+//
+// 关键约束（改动前请先读）：这是唯一会真发推理请求的地方，只在 e2e tag 下运行；
+// 每个模型只发一次 max_tokens=16 的请求，日志只打印模型 id 与状态码。
+func assertMirasimModelsCallable(t *testing.T, svc *GatewayService, account *Account, models []string) {
+	t.Helper()
+	ctx := context.Background()
+	ticket, tokenType, err := svc.mirasimRelayTicketToken(ctx, account)
+	if err != nil {
+		t.Fatalf("获取 ticket 失败: %v", err)
+	}
+	if tokenType != AccountTypeAPIKey {
+		t.Fatalf("tokenType 必须为 %q，实际 %q", AccountTypeAPIKey, tokenType)
+	}
+	for _, model := range models {
+		body := []byte(fmt.Sprintf(
+			`{"model":%q,"max_tokens":16,"messages":[{"role":"user","content":"reply ok"}]}`, model))
+		req, _, buildErr := svc.buildUpstreamRequestAnthropicAPIKeyPassthrough(ctx, nil, account, body, ticket)
+		if buildErr != nil {
+			t.Fatalf("构造请求失败 model=%s: %v", model, buildErr)
+		}
+		resp, doErr := svc.httpUpstream.Do(req, "", account.ID, 1)
+		if doErr != nil {
+			t.Fatalf("调用失败 model=%s: %v", model, doErr)
+		}
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
+		_ = resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			t.Fatalf("/v1/models 声明可用但调用失败: model=%s HTTP %d", model, resp.StatusCode)
+		}
+		t.Logf("callable: model=%s status=%d bytes=%d", model, resp.StatusCode, len(raw))
+	}
+	t.Logf("/v1/models 的 %d 个模型全部真实可调用", len(models))
 }

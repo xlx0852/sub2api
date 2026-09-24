@@ -2,9 +2,10 @@
 
 package service
 
-// Mirasim 只读元数据（模型清单 roster + 额度窗口 limits）单测。
+// Mirasim 只读元数据（账号维度可用模型 /v1/models + 额度窗口 limits）单测。
 //
-// 覆盖 openspec/changes/add-mirasim-model-roster-and-limits/tasks.md 的 1.8 / 2.5 /
+// 覆盖 openspec/changes/restrict-mirasim-whitelist-to-available-models/tasks.md 与
+// add-mirasim-model-roster-and-limits/tasks.md 的 1.8 / 2.5 /
 // 3.4 / 4.7。测试全部是白盒：直接断言真实发出的 HTTP 形状（方法/路径/查询串/头/
 // 签名/超时），而不是断言"函数被调用过"。
 //
@@ -59,7 +60,7 @@ type mirasimMetaFake struct {
 	calls  []mirasimMetaCall
 	counts map[string]int
 
-	roster  func(call int) (int, string)
+	models  func(call int) (int, string)
 	limits  func(call int) (int, string)
 	session func(call int) (int, string)
 	refresh func(call int) (int, string)
@@ -124,11 +125,11 @@ func (f *mirasimMetaFake) responderForLocked(path string) func(int) (int, string
 			return f.session
 		}
 		return mirasimMetaSessionResponse
-	case mirasimModelRosterPath:
-		if f.roster != nil {
-			return f.roster
+	case mirasimAvailableModelsPath:
+		if f.models != nil {
+			return f.models
 		}
-		return mirasimMetaRosterResponse
+		return mirasimMetaModelsResponse
 	case mirasimLimitsPath:
 		if f.limits != nil {
 			return f.limits
@@ -176,8 +177,8 @@ func mirasimMetaSessionResponse(int) (int, string) {
 	return http.StatusOK, fmt.Sprintf(`{"ticket":%q,"expires_in":900}`, mirasimMetaTicket)
 }
 
-func mirasimMetaRosterResponse(int) (int, string) {
-	return http.StatusOK, mirasimRosterFixture
+func mirasimMetaModelsResponse(int) (int, string) {
+	return http.StatusOK, mirasimModelsFixture
 }
 
 func mirasimMetaLimitsResponse(int) (int, string) {
@@ -190,37 +191,23 @@ func mirasimMetaLimitsResponse(int) (int, string) {
 
 const mirasimMetaTicket = "meta-device-ticket"
 
-// mirasimRosterFixture 覆盖：id/label 的 trim+lowercase、contextWindow 校验、
-// 重复 id 去重、多 default 只保留首个、非数组 agent 丢弃、无有效条目 agent 丢弃、
-// 顶层 models/cli 元数据（含非法项）。
-const mirasimRosterFixture = `{
-  "version": "1.2.3",
-  "agents": {
-    "claude": [
-      {"id": " claude-sonnet-4-5 ", "label": " Sonnet 4.5 ", "contextWindow": 200000, "default": true},
-      {"id": "claude-haiku-4-5-20251001", "contextWindow": 200000},
-      {"id": "dup-id", "contextWindow": 1000},
-      {"id": "DUP-ID", "contextWindow": 1000},
-      {"id": "", "contextWindow": 1000},
-      {"id": "zero-window", "contextWindow": 0},
-      {"id": "string-window", "contextWindow": "200000"},
-      {"id": 42, "contextWindow": 1000}
-    ],
-    "codex": [
-      {"id": "gpt-5", "label": " GPT-5 ", "contextWindow": 400000}
-    ],
-    "empty-list": [],
-    "not-an-array": {"id": "nope", "contextWindow": 100},
-    "no-valid-entry": [{"id": "  ", "contextWindow": 10}, {"id": "x", "contextWindow": 0}]
-  },
-  "models": {
-    "claude-sonnet-4-5": {"label": " Sonnet ", "contextWindow": 200000},
-    "BROKEN": {"label": ""},
-    "": {"contextWindow": 10}
-  },
-  "cli": {
-    "claude": {"minVersion": "0.0.322", "platforms": {"darwin": "0.0.322", "windows": "nope"}}
-  }
+// mirasimModelsFixture 覆盖：id 的 trim、trim 后重复去重、非字符串 / 空 id 丢弃、
+// 非对象条目（字符串/null/缺 id）丢弃、大小写不同视为不同 id（不做 lowercase）。
+const mirasimModelsFixture = `{
+  "object": "list",
+  "data": [
+    {"id": " glm-5.3-flash ", "object": "model", "owned_by": "mirasim-router"},
+    {"id": "kimi-k3", "object": "model", "owned_by": "mirasim-router"},
+    {"id": "kimi-k3", "object": "model", "owned_by": "mirasim-router"},
+    {"id": "KIMI-K3", "object": "model", "owned_by": "mirasim-router"},
+    {"id": "deepseek-flash", "object": "model", "owned_by": "mirasim-router"},
+    {"id": "", "object": "model"},
+    {"id": 42, "object": "model"},
+    {"id": "   ", "object": "model"},
+    "not-an-object",
+    null,
+    {"object": "model"}
+  ]
 }`
 
 // mirasimLimitsFixture 覆盖：budget==0 不限量、负数 budget 丢弃、used 非法丢弃、
@@ -259,9 +246,9 @@ func TestMirasimMetadataReadOnlyRequestShape(t *testing.T) {
 	service := NewMirasimMetadataService(nil, fake)
 
 	ctx := context.Background()
-	roster, err := service.ModelRoster(ctx, account, false)
+	models, err := service.AvailableModels(ctx, account, false)
 	require.NoError(t, err)
-	require.NotNil(t, roster)
+	require.NotEmpty(t, models)
 
 	snapshot, err := service.Limits(ctx, account, false)
 	require.NoError(t, err)
@@ -270,50 +257,50 @@ func TestMirasimMetadataReadOnlyRequestShape(t *testing.T) {
 	// 冷启动：1 次 refresh + 1 次 session 换出 ticket，随后两次只读请求复用同一 ticket。
 	require.Equal(t, 1, fake.count(mirasimAccessRefreshPath), "只读链路首次换票只应 refresh 一次")
 	require.Equal(t, 1, fake.count(mirasimDeviceSessionPath))
-	require.Equal(t, 1, fake.count(mirasimModelRosterPath))
+	require.Equal(t, 1, fake.count(mirasimAvailableModelsPath))
 	require.Equal(t, 1, fake.count(mirasimLimitsPath))
 	require.Equal(t, []string{
 		mirasimAccessRefreshPath,
 		mirasimDeviceSessionPath,
-		mirasimModelRosterPath,
+		mirasimAvailableModelsPath,
 		mirasimLimitsPath,
 	}, fake.paths())
 
-	rosterCalls := fake.callsFor(mirasimModelRosterPath)
-	require.Len(t, rosterCalls, 1)
-	rosterCall := rosterCalls[0]
+	modelsCalls := fake.callsFor(mirasimAvailableModelsPath)
+	require.Len(t, modelsCalls, 1)
+	modelsCall := modelsCalls[0]
 
 	// 空 body + 无查询串：只读契约的一部分（有 query 会让上游签名校验失败）。
-	require.Equal(t, http.MethodGet, rosterCall.Method)
-	require.Empty(t, rosterCall.RawQuery)
-	require.Empty(t, rosterCall.Body)
-	require.Equal(t, mirasimDefaultRelayURL+mirasimModelRosterPath, rosterCall.URL)
-	require.Equal(t, "Bearer "+mirasimMetaTicket, rosterCall.Auth)
+	require.Equal(t, http.MethodGet, modelsCall.Method)
+	require.Empty(t, modelsCall.RawQuery)
+	require.Empty(t, modelsCall.Body)
+	require.Equal(t, mirasimDefaultRelayURL+mirasimAvailableModelsPath, modelsCall.URL)
+	require.Equal(t, "Bearer "+mirasimMetaTicket, modelsCall.Auth)
 
 	// 明文签名头；不得出现密封头，也不得出现 probe 之外的自定义头。
-	require.Empty(t, rosterCall.Header.Get(mirasimHeaderEnc), "只读请求不得密封")
-	require.Empty(t, rosterCall.Header.Get(mirasimHeaderProbe))
-	require.Equal(t, mirasimDefaultClientVersion, rosterCall.Header.Get(mirasimHeaderClient))
-	require.Equal(t, accountID, rosterCall.AccountID)
+	require.Empty(t, modelsCall.Header.Get(mirasimHeaderEnc), "只读请求不得密封")
+	require.Empty(t, modelsCall.Header.Get(mirasimHeaderProbe))
+	require.Equal(t, mirasimDefaultClientVersion, modelsCall.Header.Get(mirasimHeaderClient))
+	require.Equal(t, accountID, modelsCall.AccountID)
 
-	// 独立超时：8s（roster）/ 10s（limits），且不得复用模型转发的超时。
-	require.True(t, rosterCall.HasDeadline)
-	require.LessOrEqual(t, rosterCall.Deadline.Sub(rosterCall.At), mirasimRosterTimeout)
-	require.Greater(t, rosterCall.Deadline.Sub(rosterCall.At), mirasimRosterTimeout-time.Second)
+	// 独立超时：8s（available models）/ 10s（limits），且不得复用模型转发的超时。
+	require.True(t, modelsCall.HasDeadline)
+	require.LessOrEqual(t, modelsCall.Deadline.Sub(modelsCall.At), mirasimModelsTimeout)
+	require.Greater(t, modelsCall.Deadline.Sub(modelsCall.At), mirasimModelsTimeout-time.Second)
 
 	// 签名可用账号自己的设备公钥验证：canonical string 必须用"实际发出的 path +
 	// 实际使用的 credential（ticket）"重建。
 	priv, err := mirasimParsePrivateKeyPEM(account.GetCredential(mirasimCredentialDeviceKey))
 	require.NoError(t, err)
 	deviceID, _ := mirasimDeviceIdentity(priv)
-	require.Equal(t, deviceID, rosterCall.Header.Get(mirasimHeaderDevice))
-	ts, err := strconv.ParseInt(rosterCall.Header.Get(mirasimHeaderTS), 10, 64)
+	require.Equal(t, deviceID, modelsCall.Header.Get(mirasimHeaderDevice))
+	ts, err := strconv.ParseInt(modelsCall.Header.Get(mirasimHeaderTS), 10, 64)
 	require.NoError(t, err)
-	signature, err := base64.RawURLEncoding.DecodeString(rosterCall.Header.Get(mirasimHeaderSig))
+	signature, err := base64.RawURLEncoding.DecodeString(modelsCall.Header.Get(mirasimHeaderSig))
 	require.NoError(t, err)
 	canonical := mirasimCanonicalString(
-		http.MethodGet, mirasimModelRosterPath, ts,
-		rosterCall.Header.Get(mirasimHeaderNonce), deviceID, mirasimDefaultClientVersion,
+		http.MethodGet, mirasimAvailableModelsPath, ts,
+		modelsCall.Header.Get(mirasimHeaderNonce), deviceID, mirasimDefaultClientVersion,
 		mirasimMetaTicket, nil, nil,
 	)
 	require.True(t, ed25519.Verify(priv.Public().(ed25519.PublicKey), []byte(canonical), signature),
@@ -342,11 +329,11 @@ func TestMirasimMetadataRetriesOnceAfterUnauthorizedWithFreshCredential(t *testi
 	account := mirasimMetaTestAccount(t, accountID, nil)
 
 	fake := &mirasimMetaFake{
-		roster: func(call int) (int, string) {
+		models: func(call int) (int, string) {
 			if call == 1 {
 				return http.StatusUnauthorized, `{"error":"ticket expired"}`
 			}
-			return http.StatusOK, mirasimRosterFixture
+			return http.StatusOK, mirasimModelsFixture
 		},
 		session: func(call int) (int, string) {
 			return http.StatusOK, fmt.Sprintf(`{"ticket":"meta-ticket-%d","expires_in":900}`, call)
@@ -362,15 +349,15 @@ func TestMirasimMetadataRetriesOnceAfterUnauthorizedWithFreshCredential(t *testi
 	client.ticketExp = time.Now().Add(time.Hour)
 	client.mu.Unlock()
 
-	roster, err := service.ModelRoster(context.Background(), account, false)
+	models, err := service.AvailableModels(context.Background(), account, false)
 	require.NoError(t, err)
-	require.NotNil(t, roster)
+	require.NotEmpty(t, models)
 
-	require.Equal(t, 2, fake.count(mirasimModelRosterPath), "401 后必须重试一次")
+	require.Equal(t, 2, fake.count(mirasimAvailableModelsPath), "401 后必须重试一次")
 	require.Equal(t, 1, fake.count(mirasimDeviceSessionPath), "失效后只换一次凭据")
 	require.Equal(t, 1, fake.count(mirasimAccessRefreshPath))
 
-	calls := fake.callsFor(mirasimModelRosterPath)
+	calls := fake.callsFor(mirasimAvailableModelsPath)
 	require.Equal(t, "Bearer warm-ticket", calls[0].Auth)
 	require.NotEqual(t, calls[0].Auth, calls[1].Auth, "重试必须换用另一份凭据")
 	require.Equal(t, "Bearer meta-ticket-1", calls[1].Auth)
@@ -381,7 +368,7 @@ func TestMirasimMetadataDoesNotInvalidateCredentialOnServerError(t *testing.T) {
 	account := mirasimMetaTestAccount(t, accountID, nil)
 
 	fake := &mirasimMetaFake{
-		roster: func(int) (int, string) {
+		models: func(int) (int, string) {
 			return http.StatusInternalServerError, `{"error":"upstream exploded with secret body"}`
 		},
 	}
@@ -394,11 +381,11 @@ func TestMirasimMetadataDoesNotInvalidateCredentialOnServerError(t *testing.T) {
 	client.ticketExp = time.Now().Add(time.Hour)
 	client.mu.Unlock()
 
-	_, err = service.ModelRoster(context.Background(), account, false)
+	_, err = service.AvailableModels(context.Background(), account, false)
 	require.Error(t, err)
 
 	// 500 不是凭据问题：不重试、不动缓存凭据、不触发 refresh。
-	require.Equal(t, 1, fake.count(mirasimModelRosterPath))
+	require.Equal(t, 1, fake.count(mirasimAvailableModelsPath))
 	require.Zero(t, fake.count(mirasimDeviceSessionPath))
 	require.Zero(t, fake.count(mirasimAccessRefreshPath))
 
@@ -415,9 +402,9 @@ func TestMirasimMetadataDoesNotInvalidateCredentialOnServerError(t *testing.T) {
 	require.Equal(t, mirasimMetadataErrorCategory(err), "upstream_http_500")
 
 	// 失败不写负缓存：下一次调用应当重新请求上游。
-	_, err = service.ModelRoster(context.Background(), account, false)
+	_, err = service.AvailableModels(context.Background(), account, false)
 	require.Error(t, err)
-	require.Equal(t, 2, fake.count(mirasimModelRosterPath))
+	require.Equal(t, 2, fake.count(mirasimAvailableModelsPath))
 }
 
 func TestMirasimMetadataRetriesAtMostOnce(t *testing.T) {
@@ -425,18 +412,18 @@ func TestMirasimMetadataRetriesAtMostOnce(t *testing.T) {
 	account := mirasimMetaTestAccount(t, accountID, nil)
 
 	fake := &mirasimMetaFake{
-		roster: func(int) (int, string) {
+		models: func(int) (int, string) {
 			return http.StatusForbidden, `{"error":"forbidden"}`
 		},
 	}
 	service := NewMirasimMetadataService(nil, fake)
 
-	_, err := service.ModelRoster(context.Background(), account, false)
+	_, err := service.AvailableModels(context.Background(), account, false)
 	require.Error(t, err)
 	// spec：401/403 后失效 ticket/access 缓存，用**新领的**凭据重试一次。
 	// 重试路径会重新走 换取 access token → 申领 device ticket → 再发一次只读请求，
-	// 因此 refresh / session / roster 各为 2（首次 + 重试一次，绝不多于一次）。
-	require.Equal(t, 2, fake.count(mirasimModelRosterPath), "最多重试一次")
+	// 因此 refresh / session / available-models 各为 2（首次 + 重试一次，绝不多于一次）。
+	require.Equal(t, 2, fake.count(mirasimAvailableModelsPath), "最多重试一次")
 	require.Equal(t, 2, fake.count(mirasimDeviceSessionPath), "重试必须换一份新 ticket")
 	require.Equal(t, 2, fake.count(mirasimAccessRefreshPath))
 	require.Equal(t, 0, fake.count(mirasimLimitsPath))
@@ -457,26 +444,26 @@ func TestMirasimMetadataCacheTTLForceAndFingerprint(t *testing.T) {
 	service.now = func() time.Time { return now }
 
 	ctx := context.Background()
-	first, err := service.ModelRoster(ctx, account, false)
+	first, err := service.AvailableModels(ctx, account, false)
 	require.NoError(t, err)
-	second, err := service.ModelRoster(ctx, account, false)
+	require.NotEmpty(t, first)
+	second, err := service.AvailableModels(ctx, account, false)
 	require.NoError(t, err)
-	require.Same(t, first, second, "TTL 内必须命中缓存")
-	require.Equal(t, 1, fake.count(mirasimModelRosterPath))
+	require.Equal(t, first, second, "TTL 内必须命中缓存")
+	require.Equal(t, 1, fake.count(mirasimAvailableModelsPath), "缓存命中不得再打上游")
 
-	// roster TTL 10 分钟：到点即失效（>= TTL）。
-	now = now.Add(mirasimRosterCacheTTL)
-	third, err := service.ModelRoster(ctx, account, false)
+	// available models TTL 10 分钟：到点即失效（>= TTL）。
+	now = now.Add(mirasimModelsCacheTTL)
+	_, err = service.AvailableModels(ctx, account, false)
 	require.NoError(t, err)
-	require.NotSame(t, first, third)
-	require.Equal(t, 2, fake.count(mirasimModelRosterPath))
+	require.Equal(t, 2, fake.count(mirasimAvailableModelsPath), "TTL 到点必须重新拉取")
 
 	// force 绕过缓存。
-	_, err = service.ModelRoster(ctx, account, true)
+	_, err = service.AvailableModels(ctx, account, true)
 	require.NoError(t, err)
-	require.Equal(t, 3, fake.count(mirasimModelRosterPath))
+	require.Equal(t, 3, fake.count(mirasimAvailableModelsPath))
 
-	// limits TTL 30 秒，与 roster TTL 相互独立。
+	// limits TTL 30 秒，与 available models TTL 相互独立。
 	require.NoError(t, err)
 	_, err = service.Limits(ctx, account, false)
 	require.NoError(t, err)
@@ -487,25 +474,25 @@ func TestMirasimMetadataCacheTTLForceAndFingerprint(t *testing.T) {
 	_, err = service.Limits(ctx, account, false)
 	require.NoError(t, err)
 	require.Equal(t, 2, fake.count(mirasimLimitsPath))
-	require.Equal(t, 3, fake.count(mirasimModelRosterPath), "limits 拉取不得影响 roster 缓存")
+	require.Equal(t, 3, fake.count(mirasimAvailableModelsPath), "limits 拉取不得影响 available models 缓存")
 
 	// 显式失效后重新拉取。
 	service.InvalidateMirasimMetadata(accountID)
-	_, err = service.ModelRoster(ctx, account, false)
+	_, err = service.AvailableModels(ctx, account, false)
 	require.NoError(t, err)
-	require.Equal(t, 4, fake.count(mirasimModelRosterPath))
+	require.Equal(t, 4, fake.count(mirasimAvailableModelsPath))
 
 	// 配置指纹变化（client version）让旧缓存失效。
 	account.Extra[mirasimExtraClientVersion] = "9.9.9"
-	_, err = service.ModelRoster(ctx, account, false)
+	_, err = service.AvailableModels(ctx, account, false)
 	require.NoError(t, err)
-	require.Equal(t, 5, fake.count(mirasimModelRosterPath))
+	require.Equal(t, 5, fake.count(mirasimAvailableModelsPath))
 
 	// 另一个账号不共享缓存。
 	otherAccount := mirasimMetaTestAccount(t, accountID+1, nil)
-	_, err = service.ModelRoster(ctx, otherAccount, false)
+	_, err = service.AvailableModels(ctx, otherAccount, false)
 	require.NoError(t, err)
-	require.Equal(t, 6, fake.count(mirasimModelRosterPath))
+	require.Equal(t, 6, fake.count(mirasimAvailableModelsPath))
 }
 
 func TestMirasimMetadataConfigErrorSkipsUpstream(t *testing.T) {
@@ -523,7 +510,7 @@ func TestMirasimMetadataConfigErrorSkipsUpstream(t *testing.T) {
 	fake := &mirasimMetaFake{}
 	service := NewMirasimMetadataService(nil, fake)
 
-	_, err := service.ModelRoster(context.Background(), account, false)
+	_, err := service.AvailableModels(context.Background(), account, false)
 	require.Error(t, err)
 	require.True(t, mirasimMetadataIsConfigError(err), "凭据缺失必须归类为配置错误")
 	require.Empty(t, fake.paths(), "凭据缺失时不得发起任何上游请求")
@@ -543,143 +530,39 @@ func mustMirasimMetaConfig(t *testing.T, account *Account) mirasimRelayConfig {
 }
 
 // ---------------------------------------------------------------------------
-// 2.5 roster 解析与 agent 选择
+// 2.5 可用模型解析（GET /v1/models，账号维度）
 // ---------------------------------------------------------------------------
 
-func TestMirasimRosterParseNormalizesEntries(t *testing.T) {
-	roster, err := parseMirasimModelRoster([]byte(mirasimRosterFixture))
+func TestMirasimAvailableModelsParseNormalizesEntries(t *testing.T) {
+	models, err := parseMirasimAvailableModels([]byte(mirasimModelsFixture))
 	require.NoError(t, err)
-
-	require.Equal(t, "1.2.3", roster.Version)
-	require.Equal(t, []string{"claude", "codex"}, roster.Order, "非数组 agent 与无有效条目的 agent 必须被丢弃")
-	require.NotContains(t, roster.Agents, "empty-list")
-	require.NotContains(t, roster.Agents, "not-an-array")
-	require.NotContains(t, roster.Agents, "no-valid-entry")
-
-	claude := roster.Agents["claude"]
-	require.NotNil(t, claude)
-	require.True(t, claude.Default, "含 default 条目的 agent 应标记为默认")
-	// 逐条校验：sonnet（合法）、haiku（合法）、dup-id / DUP-ID（合法且**不去重**，
-	// 去重发生在 mirasimRosterModelIDs 阶段）、其余 4 条（空 id / 非字符串 id /
-	// contextWindow=0 / contextWindow 为字符串）被丢弃。
-	require.Len(t, claude.Models, 4, "非法 contextWindow / 空 id / 非字符串 id 必须被丢弃")
-
-	require.Equal(t, "claude-sonnet-4-5", claude.Models[0].ID, "id 必须 trim + lowercase")
-	require.Equal(t, "sonnet 4.5", claude.Models[0].Label, "label 缺失时回退 id，存在时同样 trim + lowercase")
-	require.Equal(t, float64(200000), claude.Models[0].ContextWindow)
-	require.True(t, claude.Models[0].Default)
-
-	require.Equal(t, "claude-haiku-4-5-20251001", claude.Models[1].ID)
-	require.Equal(t, "claude-haiku-4-5-20251001", claude.Models[1].Label, "label 缺失时回退 id")
-	require.False(t, claude.Models[1].Default)
-
-	require.Equal(t, "dup-id", claude.Models[2].ID)
-	require.Equal(t, "dup-id", claude.Models[3].ID, "大小写不同但归一化后相同的 id 在解析阶段不去重")
-
-	// 顶层 models / cli 元数据：结构可识别时提取，不可识别时忽略且不影响 agent 解析。
-	require.Contains(t, roster.Models, "claude-sonnet-4-5")
-	require.NotContains(t, roster.Models, "broken", "label 与 contextWindow 都不可用的条目应被丢弃")
-	require.Equal(t, "0.0.322", roster.CLI["claude"].MinVersion)
-	require.Equal(t, "0.0.322", roster.CLI["claude"].Platforms["darwin"])
-	require.NotContains(t, roster.CLI["claude"].Platforms, "windows", "非法版本号的平台条目应被丢弃")
+	require.Equal(t, []string{"KIMI-K3", "deepseek-flash", "glm-5.3-flash", "kimi-k3"}, models,
+		"trim + 去重 + 升序；刻意不做 lowercase（模型 id 区分大小写）")
 }
 
-func TestMirasimRosterParseRejectsInvalidDocuments(t *testing.T) {
+func TestMirasimAvailableModelsParseTrimsAndDedupes(t *testing.T) {
+	models, err := parseMirasimAvailableModels([]byte(`{"data":[{"id":"  a  "},{"id":"a"},{"id":"b"}]}`))
+	require.NoError(t, err)
+	require.Equal(t, []string{"a", "b"}, models)
+}
+
+func TestMirasimAvailableModelsParseRejectsInvalidDocuments(t *testing.T) {
 	cases := map[string]string{
-		"根不是对象":      `[]`,
-		"根不是 JSON":   `not-json`,
-		"agents 缺失":  `{"version":"1.0.0"}`,
-		"agents 非对象": `{"agents":[]}`,
-		"agent 值非数组": `{"agents":{"claude":{"id":"x","contextWindow":1}}}`,
-		"无有效条目":      `{"agents":{"claude":[]}}`,
-		"全非法条目":      `{"agents":{"claude":[{"id":"","contextWindow":1},{"id":"x","contextWindow":0}]}}`,
+		"根不是 JSON":  `not-json`,
+		"根是数组":      `[]`,
+		"根是 null":   `null`,
+		"缺少 data":   `{"object":"list"}`,
+		"data 不是数组": `{"object":"list","data":{"id":"x"}}`,
+		"data 为空数组": `{"object":"list","data":[]}`,
+		"全部条目非法":    `{"data":[{"id":""},{"id":42},"x",null]}`,
 	}
 	for name, payload := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, err := parseMirasimModelRoster([]byte(payload))
+			models, err := parseMirasimAvailableModels([]byte(payload))
 			require.Error(t, err)
+			require.Empty(t, models, "失败时不得返回部分结果")
 		})
 	}
-}
-
-func TestMirasimRosterDedupesAndKeepsFirstDefault(t *testing.T) {
-	roster, err := parseMirasimModelRoster([]byte(mirasimRosterFixture))
-	require.NoError(t, err)
-	require.Equal(t, []string{
-		"claude-haiku-4-5-20251001",
-		"claude-sonnet-4-5",
-		"dup-id",
-	}, mirasimRosterModelIDs(roster.Agents["claude"].Models), "模型 id 必须去重并升序")
-
-	// 组内多个 default：只有首个保留标记。
-	multi, err := parseMirasimModelRoster([]byte(`{"agents":{"claude":[
-		{"id":"a","contextWindow":1,"default":true},
-		{"id":"b","contextWindow":1,"default":true}
-	]}}`))
-	require.NoError(t, err)
-	require.True(t, multi.Agents["claude"].Models[0].Default)
-	require.False(t, multi.Agents["claude"].Models[1].Default)
-}
-
-func TestMirasimRosterSelectAgentOrder(t *testing.T) {
-	defaultRoster, err := parseMirasimModelRoster([]byte(mirasimRosterFixture))
-	require.NoError(t, err)
-
-	// 1) 显式配置优先（trim + 大小写不敏感）。
-	agent, err := defaultRoster.selectAgent("  CoDeX ")
-	require.NoError(t, err)
-	require.Equal(t, "codex", agent.Name)
-
-	// 2) default: true 首个；夹具里 claude 是首个默认 agent。
-	agent, err = defaultRoster.selectAgent("")
-	require.NoError(t, err)
-	require.Equal(t, "claude", agent.Name)
-
-	// 3) 显式配置不匹配时静默回退到 default。
-	agent, err = defaultRoster.selectAgent("does-not-exist")
-	require.NoError(t, err)
-	require.Equal(t, "claude", agent.Name)
-
-	// 4) 无 default 时回退到「名字为 claude」。
-	noDefault, err := parseMirasimModelRoster([]byte(`{"agents":{
-		"zeta":[{"id":"z","contextWindow":1}],
-		"claude":[{"id":"c","contextWindow":1}]
-	}}`))
-	require.NoError(t, err)
-	agent, err = noDefault.selectAgent("")
-	require.NoError(t, err)
-	require.Equal(t, "claude", agent.Name)
-
-	// 5) 无 default 且无 claude 时取字典序首个。
-	fallback, err := parseMirasimModelRoster([]byte(`{"agents":{
-		"zeta":[{"id":"z","contextWindow":1}],
-		"alpha":[{"id":"a","contextWindow":1}]
-	}}`))
-	require.NoError(t, err)
-	agent, err = fallback.selectAgent("")
-	require.NoError(t, err)
-	require.Equal(t, "alpha", agent.Name)
-
-	// 6) 账号级覆盖：extra.mirasim_roster_agent 生效，且不改写账号配置。
-	account := &Account{Extra: map[string]any{mirasimExtraRosterAgent: " CODEX "}}
-	ids, err := mirasimRosterModelIDsForAccount(defaultRoster, account)
-	require.NoError(t, err)
-	require.Equal(t, []string{"gpt-5"}, ids)
-	require.Equal(t, " CODEX ", account.Extra[mirasimExtraRosterAgent], "同步必须是只读的")
-}
-
-func TestMirasimRosterModelIDsForAccountErrors(t *testing.T) {
-	_, err := mirasimRosterModelIDsForAccount(nil, nil)
-	require.Error(t, err)
-
-	// 所选 agent 有 0 个模型（解析期会丢弃空 agent，因此直接构造结构体）。
-	roster := &mirasimModelRoster{
-		Agents: map[string]*mirasimRosterAgent{"claude": {Name: "claude"}},
-		Order:  []string{"claude"},
-	}
-	_, err = mirasimRosterModelIDsForAccount(roster, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "没有可用模型")
 }
 
 // ---------------------------------------------------------------------------
@@ -861,28 +744,28 @@ func TestMirasimApplyLimitsSnapshotMapsFiveHourAndSevenDay(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 type mirasimMetaQuerierStub struct {
-	roster *mirasimModelRoster
+	models []string
 	limits *mirasimLimitsSnapshot
 	err    error
 
-	rosterErr   error
+	modelsErr   error
 	limitsErr   error
-	rosterCalls int
+	modelsCalls int
 	limitsCalls int
 	forceFlags  []bool
 	invalidated []int64
 }
 
-func (s *mirasimMetaQuerierStub) ModelRoster(_ context.Context, _ *Account, force bool) (*mirasimModelRoster, error) {
-	s.rosterCalls++
+func (s *mirasimMetaQuerierStub) AvailableModels(_ context.Context, _ *Account, force bool) ([]string, error) {
+	s.modelsCalls++
 	s.forceFlags = append(s.forceFlags, force)
-	if s.rosterErr != nil {
-		return nil, s.rosterErr
+	if s.modelsErr != nil {
+		return nil, s.modelsErr
 	}
 	if s.err != nil {
 		return nil, s.err
 	}
-	return s.roster, nil
+	return s.models, nil
 }
 
 func (s *mirasimMetaQuerierStub) Limits(_ context.Context, _ *Account, force bool) (*mirasimLimitsSnapshot, error) {
@@ -931,7 +814,7 @@ func TestGetMirasimUsageDegradesWithoutTouchingScheduling(t *testing.T) {
 	// 强制刷新的语义必须透传给查询器（管理端手动刷新依赖它）。
 	require.Equal(t, []bool{true}, stub.forceFlags)
 	require.Equal(t, 1, stub.limitsCalls)
-	require.Zero(t, stub.rosterCalls)
+	require.Zero(t, stub.modelsCalls)
 
 	// 不得改动账号调度状态。
 	require.True(t, account.Schedulable)
@@ -969,10 +852,10 @@ func TestGetMirasimUsageWithoutQuerierAndWithSnapshot(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 3.4 模型同步：mirasim 走 roster 而不是 /v1/models
+// 4.2 模型同步：mirasim 走账号维度 /v1/models（不再用全局 roster）
 // ---------------------------------------------------------------------------
 
-func TestFetchUpstreamSupportedModelsUsesMirasimRoster(t *testing.T) {
+func TestFetchUpstreamSupportedModelsUsesMirasimAvailableModels(t *testing.T) {
 	const accountID = int64(942009)
 	account := mirasimMetaTestAccount(t, accountID, nil)
 
@@ -985,19 +868,21 @@ func TestFetchUpstreamSupportedModelsUsesMirasimRoster(t *testing.T) {
 	models, err := testService.FetchUpstreamSupportedModels(context.Background(), account)
 	require.NoError(t, err)
 	require.Equal(t, []string{
-		"claude-haiku-4-5-20251001",
-		"claude-sonnet-4-5",
-		"dup-id",
+		"KIMI-K3",
+		"deepseek-flash",
+		"glm-5.3-flash",
+		"kimi-k3",
 	}, models)
-	require.Equal(t, 1, fake.count(mirasimModelRosterPath))
-	require.Equal(t, 0, fake.count("/v1/models"), "mirasim relay 不得走 /v1/models")
+	require.Equal(t, 1, fake.count(mirasimAvailableModelsPath))
+	require.Equal(t, 0, fake.count("/v1/model-roster"), "白名单不得再走全局 roster")
 
-	// 显式同步必须绕过 roster 缓存；账号级 agent 选择仍发生在每次调用。
-	account.Extra[mirasimExtraRosterAgent] = "codex"
+	// 显式同步必须绕过缓存；账号级 roster agent 覆盖对新来源不再有任何影响。
+	account.Extra["mirasim_roster_agent"] = "codex" // 遗留键：现已不参与白名单
 	models, err = testService.FetchUpstreamSupportedModels(context.Background(), account)
 	require.NoError(t, err)
-	require.Equal(t, []string{"gpt-5"}, models)
-	require.Equal(t, 2, fake.count(mirasimModelRosterPath), "显式同步不得复用旧 roster 缓存")
+	require.Equal(t, []string{"KIMI-K3", "deepseek-flash", "glm-5.3-flash", "kimi-k3"}, models,
+		"遗留的 extra.mirasim_roster_agent 不得影响账号维度可用模型")
+	require.Equal(t, 2, fake.count(mirasimAvailableModelsPath), "显式同步不得复用旧缓存")
 }
 
 func TestFetchUpstreamSupportedModelsMirasimErrorMapping(t *testing.T) {
@@ -1041,7 +926,7 @@ func TestFetchUpstreamSupportedModelsMirasimErrorMapping(t *testing.T) {
 		const accountID = int64(942012)
 		account := mirasimMetaTestAccount(t, accountID, nil)
 		fake := &mirasimMetaFake{
-			roster: func(int) (int, string) {
+			models: func(int) (int, string) {
 				return http.StatusInternalServerError, `{"error":"boom"}`
 			},
 		}
@@ -1056,12 +941,12 @@ func TestFetchUpstreamSupportedModelsMirasimErrorMapping(t *testing.T) {
 		require.NotContains(t, syncErr.Error(), "boom")
 	})
 
-	t.Run("roster 解析失败 → upstream", func(t *testing.T) {
+	t.Run("响应解析失败 → upstream", func(t *testing.T) {
 		const accountID = int64(942013)
 		account := mirasimMetaTestAccount(t, accountID, nil)
 		fake := &mirasimMetaFake{
-			roster: func(int) (int, string) {
-				return http.StatusOK, `{"agents":{"claude":[]}}`
+			models: func(int) (int, string) {
+				return http.StatusOK, `{"object":"list","data":[]}`
 			},
 		}
 		testService := NewAccountTestService(nil, nil, nil, nil, nil, nil, fake, nil, nil)
@@ -1074,13 +959,10 @@ func TestFetchUpstreamSupportedModelsMirasimErrorMapping(t *testing.T) {
 		require.Contains(t, syncErr.SafeMessage(), "upstream")
 	})
 
-	t.Run("所选 agent 无模型 → upstream", func(t *testing.T) {
+	t.Run("可用模型为空 → upstream（防御性）", func(t *testing.T) {
 		const accountID = int64(942014)
 		account := mirasimMetaTestAccount(t, accountID, nil)
-		stub := &mirasimMetaQuerierStub{roster: &mirasimModelRoster{
-			Agents: map[string]*mirasimRosterAgent{"claude": {Name: "claude"}},
-			Order:  []string{"claude"},
-		}}
+		stub := &mirasimMetaQuerierStub{}
 		testService := NewAccountTestService(nil, nil, nil, nil, nil, nil, &mirasimMetaFake{}, nil, nil)
 		testService.SetMirasimMetadataService(stub)
 
@@ -1088,9 +970,9 @@ func TestFetchUpstreamSupportedModelsMirasimErrorMapping(t *testing.T) {
 		_, err := testService.FetchUpstreamSupportedModels(context.Background(), account)
 		require.ErrorAs(t, err, &syncErr)
 		require.Equal(t, UpstreamModelSyncErrorUpstream, syncErr.Kind)
-		require.Contains(t, syncErr.SafeMessage(), "Mirasim model roster contains no usable models")
-		require.Equal(t, 1, stub.rosterCalls)
-		require.Equal(t, []bool{true}, stub.forceFlags, "显式模型同步必须绕过 roster 缓存")
+		require.Contains(t, syncErr.SafeMessage(), "Mirasim returned no available models")
+		require.Equal(t, 1, stub.modelsCalls)
+		require.Equal(t, []bool{true}, stub.forceFlags, "显式模型同步必须绕过缓存")
 	})
 }
 
@@ -1127,32 +1009,32 @@ func TestMirasimMetadataFailureLogsStaySanitized(t *testing.T) {
 		name      string
 		event     string
 		category  string
-		roster    func(int) (int, string)
+		models    func(int) (int, string)
 		limits    func(int) (int, string)
 		useLimits bool
 	}{
 		{
-			name:     "roster 上游 500",
-			event:    "mirasim_roster_fetch_failed",
+			name:     "available models 上游 500",
+			event:    "mirasim_models_fetch_failed",
 			category: "upstream_http_500",
-			roster: func(int) (int, string) {
+			models: func(int) (int, string) {
 				return http.StatusInternalServerError, `{"error":"` + upstreamBodySentinel + `"}`
 			},
 		},
 		{
-			name:     "roster 401 重试一次后仍失败",
-			event:    "mirasim_roster_fetch_failed",
+			name:     "available models 401 重试一次后仍失败",
+			event:    "mirasim_models_fetch_failed",
 			category: "upstream_http_401",
-			roster: func(int) (int, string) {
+			models: func(int) (int, string) {
 				return http.StatusUnauthorized, `{"error":"` + upstreamBodySentinel + `"}`
 			},
 		},
 		{
-			name:     "roster 解析失败",
-			event:    "mirasim_roster_parse_failed",
+			name:     "available models 解析失败",
+			event:    "mirasim_models_parse_failed",
 			category: "upstream",
-			roster: func(int) (int, string) {
-				return http.StatusOK, `{"version":"` + upstreamBodySentinel + `"}`
+			models: func(int) (int, string) {
+				return http.StatusOK, `{"object":"list","data":[],"note":"` + upstreamBodySentinel + `"}`
 			},
 		},
 		{
@@ -1180,7 +1062,7 @@ func TestMirasimMetadataFailureLogsStaySanitized(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			accountID := int64(942100 + i)
 			account := mirasimMetaTestAccount(t, accountID, nil)
-			fake := &mirasimMetaFake{roster: tc.roster, limits: tc.limits}
+			fake := &mirasimMetaFake{models: tc.models, limits: tc.limits}
 			metadataService := NewMirasimMetadataService(nil, fake)
 
 			capture := &mirasimMetaLogCapture{}
@@ -1193,7 +1075,7 @@ func TestMirasimMetadataFailureLogsStaySanitized(t *testing.T) {
 			if tc.useLimits {
 				_, err = metadataService.Limits(ctx, account, true)
 			} else {
-				_, err = metadataService.ModelRoster(ctx, account, true)
+				_, err = metadataService.AvailableModels(ctx, account, true)
 			}
 			slog.SetDefault(previous)
 
@@ -1250,7 +1132,7 @@ func TestMirasimMetadataConfigFailureLogsNothing(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(capture, nil)))
 	defer slog.SetDefault(previous)
 
-	_, err := metadataService.ModelRoster(context.Background(), account, true)
+	_, err := metadataService.AvailableModels(context.Background(), account, true)
 	slog.SetDefault(previous)
 
 	require.Error(t, err)

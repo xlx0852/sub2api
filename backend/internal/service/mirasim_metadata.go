@@ -1,14 +1,16 @@
 package service
 
-// Mirasim 只读元数据门面：模型清单（roster）与额度窗口（limits）的拉取 + 缓存。
+// Mirasim 只读元数据门面：账号维度可用模型（/v1/models）与额度窗口（limits）的拉取 + 缓存。
 //
 // 本文件把 mirasim_relay.go 的只读通道（凭据选择 / 签名头 / 超时 / 401 兜底）、
-// mirasim_roster.go 的清单解析、mirasim_limits.go 的窗口归一化串成一个可注入的
+// mirasim_available_models.go 的可用模型解析、mirasim_limits.go 的窗口归一化串成一个可注入的
 // 服务，供两条消费路径复用同一份缓存：
 //   - 管理端「同步上游模型」→ AccountTestService.FetchUpstreamSupportedModels；
 //   - 管理端用量抽屉 → AccountUsageService.GetUsage（降级为 200 + error 字段）。
 //
 // 关键约束（改动前请先读）：
+//   - 模型清单的来源是**账号维度**的 `GET /v1/models`（只返回本账号当前可用的模型）。
+//     全局目录 `/v1/model-roster` 不描述「本账号能用什么」，不再用于白名单；
 //   - 缓存按 account id，并用 mirasimRelayConfig.fingerprint 做失效判定：relay/auth
 //     URL、client version、seal 公钥、设备私钥、代理任一变化都会让旧缓存失效，
 //     避免把 A 账号（或 A 端点）的清单/额度喂给 B；
@@ -34,11 +36,11 @@ import (
 // 形态对标 KimiQuotaQuerier：只暴露两个读取入口与一个缓存失效钩子，便于测试注入
 // 假实现，也避免把 HTTP 细节泄漏到调用方。
 type MirasimMetadataQuerier interface {
-	// ModelRoster 返回归一化后的模型清单；force 为 true 时绕过缓存。
-	ModelRoster(ctx context.Context, account *Account, force bool) (*mirasimModelRoster, error)
+	// AvailableModels 返回账号维度的可用模型 id 列表（去重、升序）；force 为 true 时绕过缓存。
+	AvailableModels(ctx context.Context, account *Account, force bool) ([]string, error)
 	// Limits 返回归一化后的额度窗口快照；force 为 true 时绕过缓存。
 	Limits(ctx context.Context, account *Account, force bool) (*mirasimLimitsSnapshot, error)
-	// InvalidateMirasimMetadata 清空该账号的 roster/limits 缓存（账号配置变更后调用）。
+	// InvalidateMirasimMetadata 清空该账号的 available-models/limits 缓存（账号配置变更后调用）。
 	InvalidateMirasimMetadata(accountID int64)
 }
 
@@ -98,10 +100,10 @@ func mirasimMetadataErrorCategory(err error) string {
 	return "upstream"
 }
 
-// mirasimRosterCacheEntry / mirasimLimitsCacheEntry 按 account id 缓存，附带配置指纹。
-type mirasimRosterCacheEntry struct {
+// mirasimModelsCacheEntry / mirasimLimitsCacheEntry 按 account id 缓存，附带配置指纹。
+type mirasimModelsCacheEntry struct {
 	fingerprint string
-	roster      *mirasimModelRoster
+	models      []string
 	capturedAt  time.Time
 }
 
@@ -120,7 +122,7 @@ type MirasimMetadataService struct {
 	now func() time.Time
 
 	mu     sync.Mutex
-	roster map[int64]mirasimRosterCacheEntry
+	models map[int64]mirasimModelsCacheEntry
 	limits map[int64]mirasimLimitsCacheEntry
 }
 
@@ -133,8 +135,8 @@ func NewMirasimMetadataService(accountRepo AccountRepository, httpUpstream HTTPU
 	}
 }
 
-// ModelRoster 拉取（或读缓存）模型清单。
-func (s *MirasimMetadataService) ModelRoster(ctx context.Context, account *Account, force bool) (*mirasimModelRoster, error) {
+// AvailableModels 拉取（或读缓存）账号维度的可用模型列表。
+func (s *MirasimMetadataService) AvailableModels(ctx context.Context, account *Account, force bool) ([]string, error) {
 	if s == nil {
 		return nil, &MirasimMetadataConfigError{Err: errors.New("mirasim metadata: 服务未初始化")}
 	}
@@ -143,7 +145,7 @@ func (s *MirasimMetadataService) ModelRoster(ctx context.Context, account *Accou
 		return nil, err
 	}
 	if !force {
-		if cached, ok := s.cachedRoster(cfg); ok {
+		if cached, ok := s.cachedAvailableModels(cfg); ok {
 			return cached, nil
 		}
 	}
@@ -151,18 +153,18 @@ func (s *MirasimMetadataService) ModelRoster(ctx context.Context, account *Accou
 	if err != nil {
 		return nil, err
 	}
-	body, err := client.fetchModelRoster(ctx)
+	body, err := client.fetchAvailableModels(ctx)
 	if err != nil {
-		slog.Warn("mirasim_roster_fetch_failed", "account_id", cfg.AccountID, "category", mirasimMetadataErrorCategory(err))
+		slog.Warn("mirasim_models_fetch_failed", "account_id", cfg.AccountID, "category", mirasimMetadataErrorCategory(err))
 		return nil, err
 	}
-	roster, err := parseMirasimModelRoster(body)
+	models, err := parseMirasimAvailableModels(body)
 	if err != nil {
-		slog.Warn("mirasim_roster_parse_failed", "account_id", cfg.AccountID, "category", mirasimMetadataErrorCategory(err))
+		slog.Warn("mirasim_models_parse_failed", "account_id", cfg.AccountID, "category", mirasimMetadataErrorCategory(err))
 		return nil, err
 	}
-	s.storeRoster(cfg, roster)
-	return roster, nil
+	s.storeAvailableModels(cfg, models)
+	return models, nil
 }
 
 // Limits 拉取（或读缓存）额度窗口快照。
@@ -197,13 +199,13 @@ func (s *MirasimMetadataService) Limits(ctx context.Context, account *Account, f
 	return snapshot, nil
 }
 
-// InvalidateMirasimMetadata 清空账号的 roster/limits 缓存。
+// InvalidateMirasimMetadata 清空账号的 available-models / limits 缓存。
 func (s *MirasimMetadataService) InvalidateMirasimMetadata(accountID int64) {
 	if s == nil || accountID <= 0 {
 		return
 	}
 	s.mu.Lock()
-	delete(s.roster, accountID)
+	delete(s.models, accountID)
 	delete(s.limits, accountID)
 	s.mu.Unlock()
 }
@@ -228,19 +230,19 @@ func (s *MirasimMetadataService) client(cfg mirasimRelayConfig) (*mirasimRelayCl
 	return mirasimRelayRuntimeAcquire(cfg, s.httpUpstream, persistRefresh, persistDeviceKey)
 }
 
-func (s *MirasimMetadataService) cachedRoster(cfg mirasimRelayConfig) (*mirasimModelRoster, bool) {
+func (s *MirasimMetadataService) cachedAvailableModels(cfg mirasimRelayConfig) ([]string, bool) {
 	fingerprint := cfg.fingerprint()
 	now := s.clock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	entry, ok := s.roster[cfg.AccountID]
-	if !ok || entry.roster == nil || entry.fingerprint != fingerprint {
+	entry, ok := s.models[cfg.AccountID]
+	if !ok || len(entry.models) == 0 || entry.fingerprint != fingerprint {
 		return nil, false
 	}
-	if now.Sub(entry.capturedAt) >= mirasimRosterCacheTTL {
+	if now.Sub(entry.capturedAt) >= mirasimModelsCacheTTL {
 		return nil, false
 	}
-	return entry.roster, true
+	return entry.models, true
 }
 
 func (s *MirasimMetadataService) cachedLimits(cfg mirasimRelayConfig) (*mirasimLimitsSnapshot, bool) {
@@ -258,18 +260,18 @@ func (s *MirasimMetadataService) cachedLimits(cfg mirasimRelayConfig) (*mirasimL
 	return entry.snapshot, true
 }
 
-func (s *MirasimMetadataService) storeRoster(cfg mirasimRelayConfig, roster *mirasimModelRoster) {
-	if roster == nil {
+func (s *MirasimMetadataService) storeAvailableModels(cfg mirasimRelayConfig, models []string) {
+	if len(models) == 0 {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.roster == nil {
-		s.roster = make(map[int64]mirasimRosterCacheEntry)
+	if s.models == nil {
+		s.models = make(map[int64]mirasimModelsCacheEntry)
 	}
-	s.roster[cfg.AccountID] = mirasimRosterCacheEntry{
+	s.models[cfg.AccountID] = mirasimModelsCacheEntry{
 		fingerprint: cfg.fingerprint(),
-		roster:      roster,
+		models:      models,
 		capturedAt:  s.clock(),
 	}
 }
