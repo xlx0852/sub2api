@@ -62,3 +62,30 @@ change：`add-request-timing-detail`
 **仍未采集**：`account_queue_ms`（Anthropic 路径无账号槽等待）、`security_audit_ms` 之外的大请求排队（本仓库无该队列）。
 
 **运行中的后端二进制**：`sha256=0fe66ec1869d4aadb5e8b68cc32c8fa303f2c972c0c3b4a986cefc844252b8fc`（由 `0fe66ec18` 构建）。中间态备份：`sub2api.bak-20260925-timing2`（`a49fb479…`）、`sub2api.bak-20260925-timing3`（`e8298eea…`）。
+
+## 6. 瀑布时间线（07:15 JST，提交 `6576d0200`）
+
+按运营要求把展示从「数值列表」升级为**横向时间线**：左端请求开始、右端请求结束，内部按阶段着色，悬停显示区间与耗时，并标注请求体体积与首 Token 位置。
+
+- **后端**：采集器新增 `segments`（`key` / `lane` / `start_ms` / `end_ms` / `attempt`）。入站体（首读等待 + 接收区间）、鉴权、安全审核、账号选择、用户/账号并发、上游（连接获取 / 写入 / 首字节 / 响应头 / 流传输）都带起止偏移；上游按尝试编号分泳道；`httptrace` 回调内直接落区间。
+- **前端**：新增 `RequestTimingWaterfall.vue`（泳道 = 客户端→网关 / 网关内部 / 上游；色块按阶段；图例汇总各阶段总耗时；首 Token 红色竖线；体积 chip）。数值分组折叠进「分段数值」details。
+- **发布**：前端 release `0.1.391-6576d0200`（聚合 `2bcf0f0b9e45dd92e88c937af3917a7f1965d5f0e87833b6081545527424c5f5`，`index.html` = `82fa1151c6dc514c55bb0e612e1de04279010ab94b9463df2e67c0c488899a26`）；后端 `sha256=ee5ff59b4cadede53cc4c499bc6d26fa421af0e449fab5f65665d7c9e8055f8d`，备份 `sub2api.bak-20260925-waterfall`。容器 healthy、5xx=0。
+
+**线上实测 segments（`/v1/responses`，总耗时 2.63s）**：
+
+```json
+[{"key":"body_wait","lane":"client","start_ms":0,"end_ms":13},
+ {"key":"body_receive","lane":"client","start_ms":13,"end_ms":13},
+ {"key":"api_key_auth","lane":"gateway","start_ms":0,"end_ms":13},
+ {"key":"security_audit","lane":"gateway","start_ms":13,"end_ms":1426},
+ {"key":"user_queue","lane":"gateway","start_ms":1435,"end_ms":1436},
+ {"key":"account_select","lane":"gateway","start_ms":1443,"end_ms":1454},
+ {"key":"account_queue","lane":"gateway","start_ms":1454,"end_ms":1454},
+ {"key":"upstream_connect","lane":"upstream","start_ms":1454,"end_ms":1455,"attempt":1},
+ {"key":"upstream_write","lane":"upstream","start_ms":1455,"end_ms":1455,"attempt":1},
+ {"key":"upstream_first_byte","lane":"upstream","start_ms":1455,"end_ms":2352,"attempt":1},
+ {"key":"upstream_response_headers","lane":"upstream","start_ms":1454,"end_ms":2352,"attempt":1},
+ {"key":"upstream_stream","lane":"upstream","start_ms":2352,"end_ms":2631,"attempt":1}]
+```
+
+**由此发现的性能事实**：生产 `content_moderation_config` 为 `enabled=true`、`mode=pre_block`，走 `https://api.openai.com/omni-moderation-latest` 同步调用，占该请求 2.63s 中的 **1.41s**（54%），是网关侧最大单项耗时。是否需要优化（缓存 / 并行 / 改后置）由运营决定，本 change 只负责让该耗时可见。

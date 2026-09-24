@@ -36,3 +36,10 @@
 - [x] 6.3 WebSocket 两条路径（ingress / http bridge）与 chat completions 快照合并
 - [x] 6.4 线上核验两条路径（Responses / messages），容器 healthy、5xx=0
 - [ ] 6.5 大请求排队仍为「未采集」（本仓库无该队列；如需展示需先引入队列组件）
+
+## 7. 瀑布时间线
+
+- [x] 7.1 采集器输出 `segments`（lane + 起止偏移 + 尝试序号），上游 httptrace 分阶段落区间
+- [x] 7.2 `RequestTimingWaterfall.vue`：时间轴、阶段着色、悬停明细、首 Token 标记、体积标注、图例
+- [x] 7.3 数值分组折叠为「分段数值」details；zh/en i18n 补齐
+- [x] 7.4 测试：瀑布组件 3 例、采集器 segments 断言；线上核验 segments 落库
