@@ -26,5 +26,5 @@
 
 ## 5. 发布
 
-- [ ] 5.1 提交 + 前端 release + 后端热替换
-- [ ] 5.2 线上真实流式请求核验 `first_output_stages` 新字段落库
+- [x] 5.1 提交 + 前端 release `0.1.391-61e5f051f` + 后端热替换（最终 `7260ed5c…`，备份 `sub2api.bak-20260925-timing2`）
+- [x] 5.2 线上真实流式请求核验：新分段全部落库（见 `deploy-2026-09-25-request-timing-detail.md`）
