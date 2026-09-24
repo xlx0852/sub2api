@@ -1488,7 +1488,12 @@ func (h *OpenAIGatewayHandler) acquireResponsesUserSlot(
 	reqLog *zap.Logger,
 ) (func(), bool) {
 	ctx := c.Request.Context()
+	// 请求耗时详情：用户并发等待。
+	userQueueStarted := time.Now()
 	userReleaseFunc, err := h.concurrencyHelper.AcquireUserSlotWithWait(c, userID, userConcurrency, reqStream, streamStarted)
+	if collector := requesttiming.FromContext(ctx); collector != nil {
+		collector.SetUserQueueMs(time.Since(userQueueStarted))
+	}
 	if err != nil {
 		reqLog.Warn("openai.user_slot_acquire_failed", zap.Error(err))
 		h.handleConcurrencyError(c, err, "user", *streamStarted)
