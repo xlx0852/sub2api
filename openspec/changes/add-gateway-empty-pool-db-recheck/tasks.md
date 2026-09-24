@@ -14,8 +14,8 @@
 - [x] 2.4 `gofmt -l` 新增/修改文件干净
 - [x] 2.5 `openspec validate add-gateway-empty-pool-db-recheck --strict`（valid）
 
-## 3. 发布（待批准后执行）
+## 3. 发布（已执行，见 `deploy-2026-09-25-empty-pool-db-recheck.md`）
 
-- [ ] 3.1 构建后端二进制（`-tags embed`）并热替换到生产容器，记录回滚点
-- [ ] 3.2 线上核验：空池路径日志出现 `gateway_scheduler_empty_pool_db_recheck`；正常请求无新增延迟
-- [ ] 3.3 补「生产发布记录」markdown 到本 change 目录
+- [x] 3.1 构建后端二进制（`-tags embed`）并热替换到生产容器，记录回滚点：`sha256=6e017abd…`（123,682,978 B，`vcs.revision=9535ad651`），容器 `sub2api-api-candidate-0.1.391-noinject-a33b47ef9` 热替换 `StartedAt=2026-09-24T19:37:21Z`、`healthy`；回滚点 `sub2api.bak-20260925-claudeoauthretire`（`19d1d927c`）/ `…retire2`（`378f920ca`）
+- [x] 3.2 线上核验：窗口 03:37:22–03:56:21+08 内 `gateway_scheduler_empty_pool_db_recheck` = **1**（group 34 / anthropic / deepseek-v4-pro，`snapshot_candidate_count=0` → `db_candidate_count=2`）+ `…_unrecovered` = 1、`…_failed` = 0、`openai_scheduler_empty_pool_db_recheck` = 0、`gateway.forward_failed` = 0；正常请求无新增延迟：非失败路径不可达该分支（成功即 `err == nil` 直接返回），138 次选号仅 1 次复核、单次额外耗时 2ms，`…_unrecovered` 归因为 group 34 无任何账号映射 `deepseek-v4-pro`
+- [x] 3.3 补「生产发布记录」markdown 到本 change 目录：`deploy-2026-09-25-empty-pool-db-recheck.md`
