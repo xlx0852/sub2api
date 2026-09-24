@@ -32,6 +32,18 @@
             <MetricCard :label="t('usage.timingDetail.firstOutputTotal')" :value="formatDuration(stages?.gateway_first_output_total_ms)" />
           </section>
 
+          <RequestTimingWaterfall
+            :segments="stages?.segments"
+            :total-ms="log.duration_ms ?? stages?.handler_total_ms"
+            :first-token-ms="log.first_token_ms"
+            :body-bytes="stages?.body_bytes"
+          />
+
+          <details class="rounded-xl border border-gray-200 dark:border-dark-600" open>
+            <summary class="cursor-pointer px-5 py-3 text-sm font-medium text-gray-700 dark:text-dark-100">
+              {{ t('usage.timingDetail.details') }}
+            </summary>
+            <div class="px-5 pb-5">
           <section class="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <TimingSection :title="t('usage.timingDetail.clientToGateway')">
               <TimingRow :label="t('usage.timingDetail.bodyFirstWait')" :value="msValue(stages?.body_first_wait_ms)" />
@@ -78,6 +90,8 @@
               <TimingRow :label="t('usage.timingDetail.mapping')" :value="mapping" />
             </div>
           </section>
+            </div>
+          </details>
         </div>
       </div>
     </div>
@@ -88,6 +102,7 @@
 import { computed, defineComponent, h } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
+import RequestTimingWaterfall from '@/components/admin/usage/RequestTimingWaterfall.vue'
 import type { UsageLog } from '@/types'
 
 defineOptions({ name: 'UsageRequestTimingModal' })

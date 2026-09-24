@@ -44,4 +44,18 @@ type FirstOutputStages struct {
 	// 请求结果
 	ResponseStreamComplete *bool  `json:"response_stream_complete,omitempty"`
 	Outcome                string `json:"outcome,omitempty"`
+
+	// Segments 是瀑布图用的阶段区间（相对请求开始的毫秒偏移）。
+	// 与上面的标量字段并存：标量给人读，segments 给时间轴渲染。
+	Segments []TimingSegment `json:"segments,omitempty"`
+}
+
+// TimingSegment 是一次请求里的一个时间区间。
+type TimingSegment struct {
+	Key   string `json:"key"`
+	Lane  string `json:"lane"` // client | gateway | upstream
+	Start int    `json:"start_ms"`
+	End   int    `json:"end_ms"`
+	// Attempt 仅上游泳道使用，从 1 开始。
+	Attempt int `json:"attempt,omitempty"`
 }

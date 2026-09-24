@@ -52,7 +52,11 @@ type Collector struct {
 	streamComplete  bool
 	streamDoneSet   bool
 
-	outcome string
+	outcome  string
+	segments []domain.TimingSegment
+
+	attemptStarts    map[int]time.Time
+	lastAttemptStart time.Time
 }
 
 // New 创建一个以 start 为零点的采集器。
@@ -110,6 +114,38 @@ func (c *Collector) store(slot **int, d time.Duration) {
 	c.mu.Unlock()
 }
 
+// AddSegment 记录一个阶段区间（相对请求开始的偏移），供瀑布图渲染。
+func (c *Collector) AddSegment(key, lane string, start, end time.Time) {
+	if c == nil || key == "" || end.Before(start) {
+		return
+	}
+	seg := domain.TimingSegment{
+		Key:   key,
+		Lane:  lane,
+		Start: ms(start.Sub(c.start)),
+		End:   ms(end.Sub(c.start)),
+	}
+	if seg.End < seg.Start {
+		seg.End = seg.Start
+	}
+	c.mu.Lock()
+	c.segments = append(c.segments, seg)
+	c.mu.Unlock()
+}
+
+// AddAttemptSegment 记录一次上游尝试内的区间（带尝试序号）。
+func (c *Collector) AddAttemptSegment(key string, attempt int, start, end time.Time) {
+	c.AddSegment(key, "upstream", start, end)
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	if n := len(c.segments); n > 0 {
+		c.segments[n-1].Attempt = attempt
+	}
+	c.mu.Unlock()
+}
+
 // Span 记录一个命名区间（返回结束函数，可安全重复调用）。
 func (c *Collector) Span(slot **int) func() {
 	if c == nil {
@@ -162,7 +198,38 @@ func (c *Collector) Attempt() {
 	}
 	c.mu.Lock()
 	c.attempts++
+	if c.attemptStarts == nil {
+		c.attemptStarts = make(map[int]time.Time)
+	}
+	c.attemptStarts[c.attempts] = time.Now()
+	c.lastAttemptStart = c.attemptStarts[c.attempts]
 	c.mu.Unlock()
+}
+
+// AttemptCount 返回已记录的出口尝试次数。
+func (c *Collector) AttemptCount() int {
+	if c == nil {
+		return 0
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.attempts
+}
+
+// UpstreamAttemptStart 返回第 attempt 次尝试的开始时刻（缺省用请求开始）。
+func (c *Collector) UpstreamAttemptStart(attempt int) time.Time {
+	if c == nil {
+		return time.Now()
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if started, ok := c.attemptStarts[attempt]; ok {
+		return started
+	}
+	if !c.lastAttemptStart.IsZero() {
+		return c.lastAttemptStart
+	}
+	return c.start
 }
 
 // SetConnectionReused 记录连接是否复用。
@@ -287,12 +354,39 @@ func (c *Collector) Snapshot(now time.Time) *domain.FirstOutputStages {
 	if c.outcome != "" {
 		out.Outcome = c.outcome
 	}
+	segments := make([]domain.TimingSegment, 0, len(c.segments)+2)
+	if c.bodyReadStarted {
+		waitEnd := ms(c.bodyFirstReadAt.Sub(c.start))
+		segments = append(segments,
+			domain.TimingSegment{Key: "body_wait", Lane: "client", Start: 0, End: waitEnd},
+			domain.TimingSegment{Key: "body_receive", Lane: "client", Start: waitEnd, End: ms(c.bodyLastReadAt.Sub(c.start))},
+		)
+	}
+	segments = append(segments, c.segments...)
+	if len(segments) > 0 {
+		out.Segments = segments
+	}
 	return out
 }
 
 // Setters for the gateway-internal spans (they are timed by callers).
-func (c *Collector) SetAPIKeyAuthMs(d time.Duration)    { c.store(&c.apiKeyAuthMs, d) }
-func (c *Collector) SetSecurityAuditMs(d time.Duration) { c.store(&c.securityAuditMs, d) }
-func (c *Collector) SetUserQueueMs(d time.Duration)     { c.store(&c.userQueueMs, d) }
-func (c *Collector) SetAccountSelectMs(d time.Duration) { c.store(&c.accountSelectMs, d) }
-func (c *Collector) SetAccountQueueMs(d time.Duration)  { c.store(&c.accountQueueMs, d) }
+func (c *Collector) SetAPIKeyAuthMs(d time.Duration) {
+	c.store(&c.apiKeyAuthMs, d)
+	c.AddSegment("api_key_auth", "gateway", time.Now().Add(-d), time.Now())
+}
+func (c *Collector) SetSecurityAuditMs(d time.Duration) {
+	c.store(&c.securityAuditMs, d)
+	c.AddSegment("security_audit", "gateway", time.Now().Add(-d), time.Now())
+}
+func (c *Collector) SetUserQueueMs(d time.Duration) {
+	c.store(&c.userQueueMs, d)
+	c.AddSegment("user_queue", "gateway", time.Now().Add(-d), time.Now())
+}
+func (c *Collector) SetAccountSelectMs(d time.Duration) {
+	c.store(&c.accountSelectMs, d)
+	c.AddSegment("account_select", "gateway", time.Now().Add(-d), time.Now())
+}
+func (c *Collector) SetAccountQueueMs(d time.Duration) {
+	c.store(&c.accountQueueMs, d)
+	c.AddSegment("account_queue", "gateway", time.Now().Add(-d), time.Now())
+}

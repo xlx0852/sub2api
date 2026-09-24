@@ -1467,6 +1467,17 @@ export interface FirstOutputStages {
   /** 请求结果 */
   response_stream_complete?: boolean | null
   outcome?: string | null
+
+  /** 瀑布图阶段区间（相对请求开始的毫秒偏移） */
+  segments?: TimingSegment[] | null
+}
+
+export interface TimingSegment {
+  key: string
+  lane: 'client' | 'gateway' | 'upstream' | string
+  start_ms: number
+  end_ms: number
+  attempt?: number | null
 }
 
 export interface UsageLog {

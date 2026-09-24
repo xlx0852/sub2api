@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 )
 
 func TestCollectorSnapshotKeepsUncollectedFieldsNil(t *testing.T) {
@@ -93,5 +95,51 @@ func TestCollectorContextRoundTripAndNilSafety(t *testing.T) {
 	ctx := WithCollector(context.Background(), c)
 	if FromContext(ctx) != c {
 		t.Fatal("collector must round-trip through context")
+	}
+}
+
+func TestCollectorEmitsWaterfallSegments(t *testing.T) {
+	start := time.Now()
+	c := New(start)
+	c.BodyRead(2*time.Millisecond, 10, false)
+	c.BodyRead(time.Millisecond, 20, true)
+	c.SetAPIKeyAuthMs(5 * time.Millisecond)
+	c.SetSecurityAuditMs(3 * time.Millisecond)
+	c.SetAccountSelectMs(4 * time.Millisecond)
+	c.Attempt()
+	attempt := c.AttemptCount()
+	if attempt != 1 {
+		t.Fatalf("attempt = %d", attempt)
+	}
+	c.AddAttemptSegment("upstream_connect", attempt, c.UpstreamAttemptStart(attempt), start.Add(30*time.Millisecond))
+	c.SetOutcome("success")
+
+	out := c.Snapshot(time.Now())
+	if out == nil || len(out.Segments) == 0 {
+		t.Fatal("segments must be recorded")
+	}
+	keys := map[string]domain.TimingSegment{}
+	for _, segment := range out.Segments {
+		keys[segment.Key] = segment
+	}
+	for _, want := range []string{"body_wait", "body_receive", "api_key_auth", "security_audit", "account_select", "upstream_connect"} {
+		if _, ok := keys[want]; !ok {
+			t.Fatalf("missing segment %q in %+v", want, out.Segments)
+		}
+	}
+	if keys["body_wait"].Lane != "client" || keys["api_key_auth"].Lane != "gateway" || keys["upstream_connect"].Lane != "upstream" {
+		t.Fatalf("unexpected lanes: %+v", keys)
+	}
+	if keys["upstream_connect"].Attempt != 1 {
+		t.Fatalf("attempt index missing: %+v", keys["upstream_connect"])
+	}
+	if keys["body_wait"].Start != 0 || keys["body_wait"].End < 0 {
+		t.Fatalf("body_wait must start at 0: %+v", keys["body_wait"])
+	}
+	// 区间不得倒挂
+	for _, segment := range out.Segments {
+		if segment.End < segment.Start {
+			t.Fatalf("segment %q end < start: %+v", segment.Key, segment)
+		}
 	}
 }
