@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   ANTIGRAVITY_PROJECT_ID_CREDENTIAL_KEY,
+  MIRASIM_DEFAULT_RELAY_URL,
+  MIRASIM_DEFAULT_SEAL_PUBKEY,
+  applyMirasimRelay,
+  mirasimRelayInputFromAccount,
+  validateMirasimRelayInput,
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
   applyAntigravityExtra,
@@ -450,5 +455,176 @@ describe('applyOpenAIExternalBridge', () => {
     expect(extra.external_bridge).toBeUndefined()
     expect(extra.external_bridge_kind).toBeUndefined()
     expect(extra.keep).toBe(1)
+  })
+})
+
+const mirasimInput = (overrides: Partial<Record<string, unknown>> = {}) => ({
+  enabled: true,
+  refreshToken: '',
+  deviceKey: '',
+  relayUrl: '',
+  authUrl: '',
+  clientVersion: '',
+  sealPubkey: '',
+  ...overrides
+}) as Parameters<typeof applyMirasimRelay>[2]
+
+describe('applyMirasimRelay', () => {
+  it('writes credentials and extra on enable, defaulting base_url to the relay', () => {
+    const credentials: Record<string, unknown> = { base_url: 'https://api.anthropic.com' }
+    const extra: Record<string, unknown> = {}
+
+    applyMirasimRelay(
+      credentials,
+      extra,
+      mirasimInput({ refreshToken: ' rt-1 ' }),
+      'create',
+      { currentBaseUrl: 'https://api.anthropic.com' }
+    )
+
+    expect(credentials.mirasim_refresh_token).toBe('rt-1')
+    expect(credentials.base_url).toBe(MIRASIM_DEFAULT_RELAY_URL)
+    expect(extra.mirasim_relay_enabled).toBe(true)
+    expect(extra.mirasim_relay_url).toBeUndefined()
+  })
+
+  it('honours relay/auth overrides and drops an empty api_key', () => {
+    const credentials: Record<string, unknown> = { base_url: 'https://api.anthropic.com', api_key: '' }
+    const extra: Record<string, unknown> = { keep: 1 }
+
+    applyMirasimRelay(
+      credentials,
+      extra,
+      mirasimInput({
+        refreshToken: 'rt',
+        relayUrl: 'https://relay.internal.example/',
+        authUrl: 'https://auth.internal.example',
+        clientVersion: '9.9.9',
+        sealPubkey: MIRASIM_DEFAULT_SEAL_PUBKEY
+      }),
+      'create',
+      { currentBaseUrl: 'https://api.anthropic.com' }
+    )
+
+    expect(credentials.base_url).toBe('https://relay.internal.example')
+    expect('api_key' in credentials).toBe(false)
+    expect(extra).toEqual({
+      keep: 1,
+      mirasim_relay_enabled: true,
+      mirasim_relay_url: 'https://relay.internal.example',
+      mirasim_auth_url: 'https://auth.internal.example',
+      mirasim_client_version: '9.9.9',
+      mirasim_seal_pubkey: MIRASIM_DEFAULT_SEAL_PUBKEY
+    })
+  })
+
+  it('keeps a real api_key and an explicit base_url untouched', () => {
+    const credentials: Record<string, unknown> = { base_url: 'https://custom.example', api_key: 'sk-x' }
+    applyMirasimRelay(credentials, {}, mirasimInput({ refreshToken: 'rt' }), 'edit', {
+      currentBaseUrl: 'https://custom.example'
+    })
+    expect(credentials.api_key).toBe('sk-x')
+    expect(credentials.base_url).toBe('https://custom.example')
+  })
+
+  it('treats an empty refresh token in edit mode as "keep existing" instead of writing an empty string', () => {
+    const credentials: Record<string, unknown> = {
+      base_url: MIRASIM_DEFAULT_RELAY_URL,
+      mirasim_refresh_token: 'stale-from-redacted-spread'
+    }
+    applyMirasimRelay(credentials, {}, mirasimInput({ deviceKey: 'pem' }), 'edit', {
+      previousEnabled: true
+    })
+    expect('mirasim_refresh_token' in credentials).toBe(false)
+    expect(credentials.mirasim_device_key).toBe('pem')
+  })
+
+  it('disables explicitly and restores the official base URL', () => {
+    const credentials: Record<string, unknown> = { base_url: MIRASIM_DEFAULT_RELAY_URL }
+    const extra: Record<string, unknown> = {
+      mirasim_relay_enabled: true,
+      mirasim_auth_url: 'https://auth.internal.example',
+      keep: 'v'
+    }
+
+    applyMirasimRelay(credentials, extra, mirasimInput({ enabled: false, refreshToken: 'rt' }), 'edit', {
+      currentBaseUrl: MIRASIM_DEFAULT_RELAY_URL,
+      previousEnabled: true
+    })
+
+    expect(credentials.base_url).toBe('https://api.anthropic.com')
+    expect(extra).toEqual({ keep: 'v', mirasim_relay_enabled: false })
+    // 凭据保留：再次开启无需重新粘贴 refresh token。写入由调用方负责，这里只断言未新增敏感键。
+    expect('mirasim_refresh_token' in credentials).toBe(false)
+  })
+
+  it('writes no flag on create-disable but clears an auto-filled relay base URL', () => {
+    const credentials: Record<string, unknown> = { base_url: MIRASIM_DEFAULT_RELAY_URL }
+    const extra: Record<string, unknown> = {}
+    applyMirasimRelay(credentials, extra, mirasimInput({ enabled: false }), 'create', {
+      currentBaseUrl: MIRASIM_DEFAULT_RELAY_URL
+    })
+    expect('mirasim_relay_enabled' in extra).toBe(false)
+    expect(credentials.base_url).toBe('https://api.anthropic.com')
+  })
+
+  it('leaves an unrelated custom base URL alone when disabled', () => {
+    const credentials: Record<string, unknown> = { base_url: 'https://custom.example' }
+    applyMirasimRelay(credentials, {}, mirasimInput({ enabled: false }), 'create', {
+      currentBaseUrl: 'https://custom.example'
+    })
+    expect(credentials.base_url).toBe('https://custom.example')
+  })
+})
+
+describe('validateMirasimRelayInput', () => {
+  it('requires a refresh token only when none is stored yet', () => {
+    expect(validateMirasimRelayInput(mirasimInput(), false)).toBe('refreshTokenRequired')
+    expect(validateMirasimRelayInput(mirasimInput(), true)).toBeNull()
+    expect(validateMirasimRelayInput(mirasimInput({ enabled: false }), false)).toBeNull()
+  })
+
+  it('rejects malformed endpoints and seal keys', () => {
+    expect(validateMirasimRelayInput(mirasimInput({ refreshToken: 'rt', relayUrl: 'relay.ai' }), false)).toBe(
+      'invalidRelayUrl'
+    )
+    expect(validateMirasimRelayInput(mirasimInput({ refreshToken: 'rt', authUrl: 'ftp://a' }), false)).toBe(
+      'invalidAuthUrl'
+    )
+    expect(validateMirasimRelayInput(mirasimInput({ refreshToken: 'rt', sealPubkey: 'short' }), false)).toBe(
+      'invalidSealPubkey'
+    )
+    expect(
+      validateMirasimRelayInput(mirasimInput({ refreshToken: 'rt', sealPubkey: MIRASIM_DEFAULT_SEAL_PUBKEY }), false)
+    ).toBeNull()
+    expect(MIRASIM_DEFAULT_SEAL_PUBKEY).toMatch(/^[A-Za-z0-9+/]{43}=$/)
+  })
+})
+
+describe('mirasimRelayInputFromAccount', () => {
+  it('derives enabled state from the flag or a stored refresh token', () => {
+    expect(mirasimRelayInputFromAccount({ mirasim_relay_enabled: true }, false).enabled).toBe(true)
+    expect(mirasimRelayInputFromAccount({}, true).enabled).toBe(true)
+    expect(mirasimRelayInputFromAccount({}, false).enabled).toBe(false)
+    expect(mirasimRelayInputFromAccount({ mirasim_relay_enabled: false }, true).enabled).toBe(false)
+  })
+
+  it('restores override fields and never echoes sensitive values', () => {
+    const input = mirasimRelayInputFromAccount(
+      {
+        mirasim_relay_url: 'https://relay.internal.example',
+        mirasim_client_version: '1.2.3'
+      },
+      true
+    )
+    expect(input).toEqual({
+      enabled: true,
+      refreshToken: '',
+      deviceKey: '',
+      relayUrl: 'https://relay.internal.example',
+      authUrl: '',
+      clientVersion: '1.2.3',
+      sealPubkey: ''
+    })
   })
 })

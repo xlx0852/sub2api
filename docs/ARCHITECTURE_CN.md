@@ -27,7 +27,7 @@ Sub2API 是**模块化单体**：一个 Go 二进制、一份 Vue 控制台、Po
 
 Parse → Admission → Select → Rewrite → Transport → Relay → Settle
 
-协议差异留在各平台显式适配器（Claude、OpenAI/Codex、Gemini、Antigravity、Grok、Kimi）。共享阶段负责调度、准入、中继与结算。入口短路径（透传、Grok/Kimi raw CC、Codex CLI-only 等）仍在管道外。AWS Bedrock 账号供应已经退役；迁移 198 保留历史账号行，但会将其置为 inactive 且不可调度。
+协议差异留在各平台显式适配器（Claude、OpenAI/Codex、Gemini、Antigravity、Grok、Kimi）。共享阶段负责调度、准入、中继与结算。入口短路径（透传、Grok/Kimi raw CC、Codex CLI-only 等）仍在管道外。AWS Bedrock 账号供应已经退役；迁移 198 保留历史账号行，但会将其置为 inactive 且不可调度。第三方 relay（Mirasim）不新增适配器，而是作为 Anthropic API Key 账号的一种鉴权模式接在同一适配器内（见 `MIRASIM_RELAY_UPSTREAM.md`）。
 
 生产选号入口是 `AccountSelector`（`app/scheduling`）。两套调度器仍在适配器后；等待计划 / 槽位 / lookup 已共享。
 

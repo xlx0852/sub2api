@@ -371,3 +371,181 @@ export function applyOpenAICompactMode(
     extra.openai_compact_mode = value
   }
 }
+
+// ===== Mirasim relay（Anthropic API Key 账号的第三方中继上游） =====
+//
+// 关键约束（改动前请先读）：
+//   - 后端识别规则（backend/internal/service/mirasim_relay.go isMirasimRelayAccount）是
+//     "platform=anthropic && type=apikey && credentials.mirasim_refresh_token 非空，
+//      且 extra.mirasim_relay_enabled 未显式置 false"；前端的写入必须与此一致。
+//   - relay 地址放在 credentials.base_url（复用既有自定义 base URL 机制与 URL 白名单），
+//     不新增凭据键；extra.mirasim_relay_url 只是可选覆盖。
+//   - mirasim 账号没有 api_key：留空串会让凭据面板出现误导性空值，且后端
+//     GetAccessToken 的 mirasim 分支不读 api_key，因此空值时直接不写该键。
+//   - 敏感键（mirasim_refresh_token / mirasim_device_key）后端不回显；编辑时留空
+//     表示"保留原值"（后端 MergePreservingSensitiveCreds），不能写成空串。
+
+/** 凭据键（与后端 mirasimCredentialRefreshToken / mirasimCredentialDeviceKey 一致） */
+export const MIRASIM_CREDENTIAL_REFRESH_TOKEN = 'mirasim_refresh_token'
+export const MIRASIM_CREDENTIAL_DEVICE_KEY = 'mirasim_device_key'
+
+/** extra 键（与后端 mirasimExtra* 常量一致） */
+export const MIRASIM_EXTRA_ENABLED = 'mirasim_relay_enabled'
+export const MIRASIM_EXTRA_RELAY_URL = 'mirasim_relay_url'
+export const MIRASIM_EXTRA_AUTH_URL = 'mirasim_auth_url'
+export const MIRASIM_EXTRA_CLIENT_VERSION = 'mirasim_client_version'
+export const MIRASIM_EXTRA_SEAL_PUBKEY = 'mirasim_seal_pubkey'
+
+/** 默认端点与协议参数（与后端 mirasimDefault* 常量一致） */
+export const MIRASIM_DEFAULT_RELAY_URL = 'https://relay.mirasim.ai'
+export const MIRASIM_DEFAULT_AUTH_URL = 'https://auth.mirasim.ai'
+export const MIRASIM_DEFAULT_CLIENT_VERSION = '0.0.322'
+export const MIRASIM_DEFAULT_SEAL_PUBKEY = 'HlyNMMeGXryasYLJuYQ/9ksCD4AYVVy1zXKAtJdpJn4='
+export const ANTHROPIC_OFFICIAL_BASE_URL = 'https://api.anthropic.com'
+
+export interface MirasimRelayInput {
+  enabled: boolean
+  refreshToken: string
+  deviceKey: string
+  relayUrl: string
+  authUrl: string
+  clientVersion: string
+  sealPubkey: string
+}
+
+export type MirasimRelayValidationError =
+  | 'refreshTokenRequired'
+  | 'invalidRelayUrl'
+  | 'invalidAuthUrl'
+  | 'invalidSealPubkey'
+
+/** 空值表示"用默认"，只校验非空值的可解析性。 */
+function isMirasimEndpointValid(value: string): boolean {
+  const trimmed = value.trim()
+  if (!trimmed) return true
+  try {
+    const parsed = new URL(trimmed)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 校验 Mirasim relay 表单。
+ * hasExistingRefreshToken：编辑场景下账号已有 refresh token（后端不回显），此时留空合法。
+ */
+export function validateMirasimRelayInput(
+  input: MirasimRelayInput,
+  hasExistingRefreshToken: boolean
+): MirasimRelayValidationError | null {
+  if (!input.enabled) return null
+  if (!input.refreshToken.trim() && !hasExistingRefreshToken) return 'refreshTokenRequired'
+  if (!isMirasimEndpointValid(input.relayUrl)) return 'invalidRelayUrl'
+  if (!isMirasimEndpointValid(input.authUrl)) return 'invalidAuthUrl'
+  // seal 公钥是 relay 静态 X25519 公钥的 base64，长度固定 32 字节 → 44 字符含 '='。
+  const sealPubkey = input.sealPubkey.trim()
+  if (sealPubkey && !/^[A-Za-z0-9+/]{43}=$/.test(sealPubkey)) return 'invalidSealPubkey'
+  return null
+}
+
+/** 账号 extra/凭据状态 → 表单初始值（只读，不改动入参）。 */
+export function mirasimRelayInputFromAccount(
+  extra: Record<string, unknown> | undefined,
+  hasRefreshToken: boolean
+): MirasimRelayInput {
+  const flag = extra?.[MIRASIM_EXTRA_ENABLED]
+  const explicitlyDisabled = flag !== undefined && flag !== true
+  return {
+    enabled: !explicitlyDisabled && (flag === true || hasRefreshToken),
+    refreshToken: '',
+    deviceKey: '',
+    relayUrl: String(extra?.[MIRASIM_EXTRA_RELAY_URL] ?? ''),
+    authUrl: String(extra?.[MIRASIM_EXTRA_AUTH_URL] ?? ''),
+    clientVersion: String(extra?.[MIRASIM_EXTRA_CLIENT_VERSION] ?? ''),
+    sealPubkey: String(extra?.[MIRASIM_EXTRA_SEAL_PUBKEY] ?? '')
+  }
+}
+
+function writeOptionalMirasimExtra(
+  extra: Record<string, unknown>,
+  key: string,
+  value: string
+): void {
+  const trimmed = value.trim()
+  if (trimmed) {
+    extra[key] = trimmed
+  } else {
+    delete extra[key]
+  }
+}
+
+/**
+ * 把 Mirasim relay 表单写入 credentials 与 extra（原地修改）。
+ *
+ * options.currentBaseUrl：表单当前的 base URL，用于判断是否由本功能自动填写；
+ * options.previousEnabled：编辑场景下账号原本是否已启用（关闭时写显式 false 以生效）。
+ */
+export function applyMirasimRelay(
+  credentials: Record<string, unknown>,
+  extra: Record<string, unknown>,
+  input: MirasimRelayInput,
+  mode: 'create' | 'edit',
+  options: { currentBaseUrl?: string; previousEnabled?: boolean } = {}
+): void {
+  const currentBaseUrl = (options.currentBaseUrl ?? '').trim().replace(/\/+$/, '')
+  const relayOverride = input.relayUrl.trim().replace(/\/+$/, '')
+
+  if (!input.enabled) {
+    if (options.previousEnabled || mode === 'edit') {
+      // 显式 false 才能让后端停止按 mirasim 处理；凭据保留，便于再次开启。
+      extra[MIRASIM_EXTRA_ENABLED] = false
+    } else {
+      delete extra[MIRASIM_EXTRA_ENABLED]
+    }
+    delete extra[MIRASIM_EXTRA_RELAY_URL]
+    delete extra[MIRASIM_EXTRA_AUTH_URL]
+    delete extra[MIRASIM_EXTRA_CLIENT_VERSION]
+    delete extra[MIRASIM_EXTRA_SEAL_PUBKEY]
+
+    // 关闭后若 base_url 仍指向 relay（本功能自动填入或用户填的 relay 覆盖值），
+    // 请求会打到 relay 却不带 mirasim 签名头，表现为持续 401 → 换回官方地址。
+    const relayEndpoints = [MIRASIM_DEFAULT_RELAY_URL, relayOverride].filter(Boolean)
+    if (!currentBaseUrl || relayEndpoints.includes(currentBaseUrl)) {
+      credentials.base_url = ANTHROPIC_OFFICIAL_BASE_URL
+    }
+    return
+  }
+
+  extra[MIRASIM_EXTRA_ENABLED] = true
+  writeOptionalMirasimExtra(extra, MIRASIM_EXTRA_RELAY_URL, relayOverride)
+  writeOptionalMirasimExtra(extra, MIRASIM_EXTRA_AUTH_URL, input.authUrl)
+  writeOptionalMirasimExtra(extra, MIRASIM_EXTRA_CLIENT_VERSION, input.clientVersion)
+  writeOptionalMirasimExtra(extra, MIRASIM_EXTRA_SEAL_PUBKEY, input.sealPubkey)
+
+  const refreshToken = input.refreshToken.trim()
+  if (refreshToken) {
+    credentials[MIRASIM_CREDENTIAL_REFRESH_TOKEN] = refreshToken
+  } else {
+    // 编辑留空 = 保留后端已有值；删除键避免把空串写入凭据。
+    delete credentials[MIRASIM_CREDENTIAL_REFRESH_TOKEN]
+  }
+  const deviceKey = input.deviceKey.trim()
+  if (deviceKey) {
+    credentials[MIRASIM_CREDENTIAL_DEVICE_KEY] = deviceKey
+  } else {
+    delete credentials[MIRASIM_CREDENTIAL_DEVICE_KEY]
+  }
+
+  // relay 账号不需要 api_key（后端 GetAccessToken 的 mirasim 分支直接取 ticket）。
+  if (!String(credentials.api_key ?? '').trim()) {
+    delete credentials.api_key
+  }
+
+  // base_url 是 relay 地址的首选来源；仅在用户未填/仍是官方地址时用默认值补齐。
+  if (relayOverride) {
+    credentials.base_url = relayOverride
+  } else if (!currentBaseUrl || currentBaseUrl === ANTHROPIC_OFFICIAL_BASE_URL) {
+    credentials.base_url = MIRASIM_DEFAULT_RELAY_URL
+  }
+}

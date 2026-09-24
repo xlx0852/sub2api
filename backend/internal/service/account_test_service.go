@@ -363,12 +363,26 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
 	var authToken string
 	var apiURL string
 
+	// Mirasim relay 账号没有 api_key：URL 与鉴权都由 relay 与签名头决定。
+	isMirasimRelay := isMirasimRelayAccount(account)
+
 	if account.IsOAuth() {
 		apiURL = testClaudeAPIURL
 		authToken = account.GetCredential("access_token")
 		if authToken == "" {
 			return s.sendErrorAndEnd(c, "No access token available")
 		}
+	} else if isMirasimRelay {
+		relayCfg, cfgErr := mirasimRelayConfigForAccount(account)
+		if cfgErr != nil {
+			return s.sendErrorAndEnd(c, cfgErr.Error())
+		}
+		normalizedBaseURL, err := s.validateUpstreamBaseURL(relayCfg.RelayURL)
+		if err != nil {
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
+		}
+		// relay 的模型端点不带 beta query：签名与密封的 AAD 只覆盖 path，带 query 会判无效。
+		apiURL = strings.TrimSuffix(normalizedBaseURL, "/") + "/v1/messages"
 	} else if account.Type == "apikey" {
 		authToken = account.GetCredential("api_key")
 		if authToken == "" {
@@ -423,13 +437,21 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
 	if account.IsOAuth() {
 		req.Header.Set("anthropic-beta", claude.DefaultBetaHeader)
 		req.Header.Set("Authorization", "Bearer "+authToken)
-	} else {
+	} else if !isMirasimRelay {
 		req.Header.Set("anthropic-beta", claude.APIKeyBetaHeader)
 		setAnthropicAPIKeyAuthHeader(req.Header, account, authToken)
 	}
 
 	// 账号级请求头覆写：测试请求与真实转发保持一致的最终头
 	account.ApplyHeaderOverrides(req.Header)
+
+	// Mirasim relay：换成 ticket + 签名密封头（与网关路径同一注入函数，
+	// 保证测试请求与真实转发完全同构）。
+	if isMirasimRelay {
+		if err := applyMirasimRelayAuthToRequest(ctx, s.httpUpstream, s.accountRepo, account, req, payloadBytes); err != nil {
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Request failed: %s", err.Error()))
+		}
+	}
 
 	// Get proxy URL
 	proxyURL := ""
@@ -448,7 +470,8 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
 		errMsg := fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body))
 
 		// 403 表示账号被上游封禁，标记为 error 状态
-		if resp.StatusCode == http.StatusForbidden {
+		// Mirasim relay 例外：relay 的 403 多为风控/设备身份问题，永久禁用会误杀。
+		if resp.StatusCode == http.StatusForbidden && !isMirasimRelay {
 			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
 		}
 

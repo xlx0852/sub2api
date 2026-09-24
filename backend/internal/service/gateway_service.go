@@ -1135,6 +1135,11 @@ func (s *GatewayService) GetAccessToken(ctx context.Context, account *Account) (
 		// Both oauth and setup-token use OAuth token flow
 		return s.getOAuthToken(ctx, account)
 	case AccountTypeAPIKey:
+		// Mirasim relay 账号没有 api_key：先用 device ticket 占位（见下），真正的鉴权
+		// 头由 applyMirasimRelayAuth 在构造器末尾写入。
+		if isMirasimRelayAccount(account) {
+			return s.mirasimRelayTicketToken(ctx, account)
+		}
 		apiKey := account.GetCredential("api_key")
 		if apiKey == "" {
 			return "", "", errors.New("api_key not found in credentials")

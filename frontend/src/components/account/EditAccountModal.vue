@@ -77,7 +77,10 @@
             data-bwignore="true"
             :placeholder="platformAPIKeyConfig(account.platform).placeholder"
           />
-          <p class="input-hint">{{ t('admin.accounts.leaveEmptyToKeep') }}</p>
+          <p v-if="mirasimRelayActive" class="input-hint text-amber-600 dark:text-amber-400">
+            {{ t('admin.accounts.mirasimRelay.apiKeyOptionalHint') }}
+          </p>
+          <p v-else class="input-hint">{{ t('admin.accounts.leaveEmptyToKeep') }}</p>
         </div>
 
         </div><!-- /apikey basic fields -->
@@ -1321,6 +1324,153 @@
         </div>
       </div>
 
+      <!-- Anthropic API Key: Mirasim Relay（第三方中继上游，走 mirasim 签名协议） -->
+      <div v-show="activeEditTab === 'advanced'"
+        v-if="account && isFieldVisible('anthropicAdvanced', { platform: account.platform }) && account.type === 'apikey'"
+        class="pt-4"
+        data-testid="edit-mirasim-relay-section"
+      >
+        <div class="flex items-center justify-between">
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.mirasimRelay.enabled') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.mirasimRelay.enabledDesc') }}
+            </p>
+          </div>
+          <button
+            type="button"
+            data-testid="edit-mirasim-relay-toggle"
+            @click="mirasimRelayEnabled = !mirasimRelayEnabled"
+            :class="[
+              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+              mirasimRelayEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+            ]"
+          >
+            <span
+              :class="[
+                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                mirasimRelayEnabled ? 'translate-x-5' : 'translate-x-0'
+              ]"
+            />
+          </button>
+        </div>
+
+        <div
+          v-if="mirasimRelayEnabled"
+          class="mt-4 space-y-4 border-l-2 border-gray-200 pl-4 dark:border-dark-600"
+        >
+          <p class="text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.mirasimRelay.enabledHint') }}
+          </p>
+
+          <MirasimOAuthOnboarding
+            testid-prefix="edit-mirasim-oauth"
+            :auth-url="mirasimAuthUrl"
+            :proxy-id="form.proxy_id"
+            @apply="handleMirasimOAuthCredential"
+          />
+
+          <div>
+            <label class="input-label">{{ t('admin.accounts.mirasimRelay.refreshToken') }}</label>
+            <input
+              v-model="mirasimRefreshToken"
+              type="password"
+              class="input font-mono"
+              data-testid="edit-mirasim-refresh-token"
+              autocomplete="new-password"
+              data-1p-ignore
+              data-lpignore="true"
+              data-bwignore="true"
+              :placeholder="t('admin.accounts.mirasimRelay.refreshTokenPlaceholder')"
+            />
+            <p class="input-hint">{{ t('admin.accounts.mirasimRelay.refreshTokenHint') }}</p>
+          </div>
+
+          <div>
+            <label class="input-label">{{ t('admin.accounts.mirasimRelay.deviceKey') }}</label>
+            <textarea
+              v-model="mirasimDeviceKey"
+              rows="3"
+              class="input font-mono text-xs"
+              data-testid="edit-mirasim-device-key"
+              :placeholder="t('admin.accounts.mirasimRelay.deviceKeyPlaceholder')"
+            />
+            <p class="input-hint">{{ t('admin.accounts.mirasimRelay.deviceKeyHint') }}</p>
+          </div>
+
+          <!-- 可选覆盖：留空即使用内置默认值 -->
+          <div>
+            <button
+              type="button"
+              data-testid="edit-mirasim-overrides-toggle"
+              @click="showMirasimOverrides = !showMirasimOverrides"
+              class="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              <svg
+                :class="['h-4 w-4 transition-transform', showMirasimOverrides ? 'rotate-90' : '']"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              <span>
+                {{
+                  showMirasimOverrides
+                    ? t('admin.accounts.mirasimRelay.hideOverrides')
+                    : t('admin.accounts.mirasimRelay.showOverrides')
+                }}
+              </span>
+            </button>
+          </div>
+
+          <div v-if="showMirasimOverrides" class="space-y-4">
+            <div>
+              <label class="input-label">{{ t('admin.accounts.mirasimRelay.relayUrl') }}</label>
+              <input
+                v-model="mirasimRelayUrl"
+                type="text"
+                class="input font-mono"
+                data-testid="edit-mirasim-relay-url"
+                :placeholder="MIRASIM_DEFAULT_RELAY_URL"
+              />
+              <p class="input-hint">{{ t('admin.accounts.mirasimRelay.relayUrlHint') }}</p>
+            </div>
+            <div>
+              <label class="input-label">{{ t('admin.accounts.mirasimRelay.authUrl') }}</label>
+              <input
+                v-model="mirasimAuthUrl"
+                type="text"
+                class="input font-mono"
+                :placeholder="MIRASIM_DEFAULT_AUTH_URL"
+              />
+              <p class="input-hint">{{ t('admin.accounts.mirasimRelay.authUrlHint') }}</p>
+            </div>
+            <div>
+              <label class="input-label">{{ t('admin.accounts.mirasimRelay.clientVersion') }}</label>
+              <input
+                v-model="mirasimClientVersion"
+                type="text"
+                class="input font-mono"
+                :placeholder="MIRASIM_DEFAULT_CLIENT_VERSION"
+              />
+              <p class="input-hint">{{ t('admin.accounts.mirasimRelay.clientVersionHint') }}</p>
+            </div>
+            <div>
+              <label class="input-label">{{ t('admin.accounts.mirasimRelay.sealPubkey') }}</label>
+              <input
+                v-model="mirasimSealPubkey"
+                type="text"
+                class="input font-mono text-xs"
+                :placeholder="MIRASIM_DEFAULT_SEAL_PUBKEY"
+              />
+              <p class="input-hint">{{ t('admin.accounts.mirasimRelay.sealPubkeyHint') }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Anthropic API Key: Web Search Emulation (hidden when global disabled) -->
       <div v-show="activeEditTab === 'advanced'"
         v-if="account && isFieldVisible('anthropicAdvanced', { platform: account.platform }) && account.type === 'apikey' && webSearchGlobalEnabled"
@@ -1935,6 +2085,8 @@ import ConfirmDialog from '@/ui/ConfirmDialog.vue'
 import Select from '@/ui/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
+import MirasimOAuthOnboarding from './MirasimOAuthOnboarding.vue'
+import type { MirasimOAuthIdentity } from '@/api/admin/mirasim'
 import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
@@ -1950,6 +2102,9 @@ import {
   normalizeOpenAIEndpointCapabilities,
   applyCustomBaseURL,
   applyAnthropicExtra,
+  applyMirasimRelay,
+  validateMirasimRelayInput,
+  mirasimRelayInputFromAccount,
   applyGrokAPIKeyRouting,
   applyHeaderOverride,
   applyInterceptWarmup,
@@ -1959,7 +2114,12 @@ import {
   validateHeaderOverrideRows,
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
-  type HeaderOverrideRow
+  MIRASIM_DEFAULT_AUTH_URL,
+  MIRASIM_DEFAULT_CLIENT_VERSION,
+  MIRASIM_DEFAULT_RELAY_URL,
+  MIRASIM_DEFAULT_SEAL_PUBKEY,
+  type HeaderOverrideRow,
+  type MirasimRelayInput
 } from '@/features/admin-accounts/form/credentialsBuilder'
 import { platformAPIKeyConfig } from '@/features/admin-accounts/form/registry'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
@@ -2198,6 +2358,62 @@ type AnthropicAPIKeyAuthScheme = 'x_api_key' | 'authorization_bearer'
 const anthropicPassthroughEnabled = ref(false)
 const anthropicAPIKeyAuthScheme = ref<AnthropicAPIKeyAuthScheme>('x_api_key')
 const webSearchEmulationMode = ref('default')
+
+// Mirasim relay：Anthropic API Key 账号的第三方中继上游（走 mirasim 签名协议）。
+// 关键约束（改动前请先读）：
+//   - 后端识别规则（isMirasimRelayAccount）是 platform=anthropic && type=apikey &&
+//     credentials.mirasim_refresh_token 非空，且 extra.mirasim_relay_enabled 未显式置 false。
+//   - refresh token / device key 是敏感键，后端不回显；本表单留空 = 保留原值，
+//     靠 credentials_status.has_mirasim_refresh_token 判断是否已有值。
+//   - 写入统一交给 applyMirasimRelay，它同时负责 base_url 回退与 api_key 清理。
+//   - 关闭时必须写显式 false（edit 模式），否则凭据仍在会被后端重新识别为 mirasim。
+const mirasimRelayEnabled = ref(false)
+const mirasimRefreshToken = ref('')
+const mirasimDeviceKey = ref('')
+const mirasimRelayUrl = ref('')
+const mirasimAuthUrl = ref('')
+const mirasimClientVersion = ref('')
+const mirasimSealPubkey = ref('')
+const showMirasimOverrides = ref(false)
+const mirasimRelayInitiallyEnabled = ref(false)
+// Mirasim 授权登录回填：覆写 refresh token 输入框（留空即保留原值的语义由用户可见的输入决定）。
+function handleMirasimOAuthCredential(payload: {
+  refresh_token: string
+  identity?: MirasimOAuthIdentity
+}) {
+  mirasimRefreshToken.value = payload.refresh_token
+  if (!mirasimRelayEnabled.value) mirasimRelayEnabled.value = true
+}
+
+const mirasimRelayInput = computed<MirasimRelayInput>(() => ({
+  enabled: mirasimRelayEnabled.value,
+  refreshToken: mirasimRefreshToken.value,
+  deviceKey: mirasimDeviceKey.value,
+  relayUrl: mirasimRelayUrl.value,
+  authUrl: mirasimAuthUrl.value,
+  clientVersion: mirasimClientVersion.value,
+  sealPubkey: mirasimSealPubkey.value
+}))
+const mirasimRelayActive = computed(
+  () =>
+    props.account?.platform === 'anthropic' &&
+    props.account?.type === 'apikey' &&
+    mirasimRelayEnabled.value
+)
+const hasExistingMirasimRefreshToken = computed(
+  () => props.account?.credentials_status?.has_mirasim_refresh_token === true
+)
+const resetMirasimRelayForm = () => {
+  mirasimRelayEnabled.value = false
+  mirasimRefreshToken.value = ''
+  mirasimDeviceKey.value = ''
+  mirasimRelayUrl.value = ''
+  mirasimAuthUrl.value = ''
+  mirasimClientVersion.value = ''
+  mirasimSealPubkey.value = ''
+  showMirasimOverrides.value = false
+  mirasimRelayInitiallyEnabled.value = false
+}
 const webSearchGlobalEnabled = ref(false)
 const {
   globalEnabled: quotaNotifyGlobalEnabled,
@@ -2632,6 +2848,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   anthropicPassthroughEnabled.value = false
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
   webSearchEmulationMode.value = 'default'
+  resetMirasimRelayForm()
   if (newAccount.platform === 'openai' && (newAccount.type === 'oauth' || newAccount.type === 'setup-token' || newAccount.type === 'apikey')) {
     openaiPassthroughEnabled.value = extra?.openai_passthrough === true || extra?.openai_oauth_passthrough === true
     externalBridgeEnabled.value = extra?.external_bridge === true || extra?.external_bridge === 'true'
@@ -2699,6 +2916,22 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     } else {
       webSearchEmulationMode.value = 'default'
     }
+    // Mirasim relay：enabled 判定与后端 isMirasimRelayAccount 对齐（凭据存在且未显式关闭）
+    const mirasimLoaded = mirasimRelayInputFromAccount(
+      extra,
+      newAccount.credentials_status?.has_mirasim_refresh_token === true
+    )
+    mirasimRelayEnabled.value = mirasimLoaded.enabled
+    mirasimRelayInitiallyEnabled.value = mirasimLoaded.enabled
+    mirasimRefreshToken.value = mirasimLoaded.refreshToken
+    mirasimDeviceKey.value = mirasimLoaded.deviceKey
+    mirasimRelayUrl.value = mirasimLoaded.relayUrl
+    mirasimAuthUrl.value = mirasimLoaded.authUrl
+    mirasimClientVersion.value = mirasimLoaded.clientVersion
+    mirasimSealPubkey.value = mirasimLoaded.sealPubkey
+    showMirasimOverrides.value = Boolean(
+      mirasimLoaded.relayUrl || mirasimLoaded.authUrl || mirasimLoaded.clientVersion || mirasimLoaded.sealPubkey
+    )
   }
 
   // Load quota limit for API-key accounts.
@@ -3355,9 +3588,22 @@ const handleSubmit = async () => {
         props.account.credentials_status?.has_api_key ?? Boolean(currentCredentials.api_key)
       if (editApiKey.value.trim()) {
         newCredentials.api_key = editApiKey.value.trim()
-      } else if (!hasExistingApiKey) {
+      } else if (!hasExistingApiKey && !mirasimRelayActive.value) {
         appStore.showError(t('admin.accounts.apiKeyIsRequired'))
         return
+      }
+
+      // Mirasim relay 账号没有 api_key：运行时凭据链会用 refresh token 换取 ticket。
+      // 敏感值后端不回显，因此已有 refresh token 时允许留空。
+      if (mirasimRelayActive.value) {
+        const mirasimError = validateMirasimRelayInput(
+          mirasimRelayInput.value,
+          hasExistingMirasimRefreshToken.value
+        )
+        if (mirasimError) {
+          appStore.showError(t(`admin.accounts.mirasimRelay.${mirasimError}`))
+          return
+        }
       }
 
       // Add model mapping if configured（OpenAI 开启自动透传时保留现有映射，不再编辑）
@@ -3558,6 +3804,15 @@ const handleSubmit = async () => {
       const currentExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
       const newExtra: Record<string, unknown> = { ...currentExtra }
       applyAnthropicExtra(newExtra, anthropicPassthroughEnabled.value, anthropicAPIKeyAuthScheme.value, webSearchEmulationMode.value)
+      // Mirasim relay：同时改写 credentials（base_url / refresh token / api_key），
+      // 所以必须传入前面已构建好的 updatePayload.credentials。
+      applyMirasimRelay(
+        (updatePayload.credentials as Record<string, unknown>) || {},
+        newExtra,
+        mirasimRelayInput.value,
+        'edit',
+        { currentBaseUrl: editBaseUrl.value, previousEnabled: mirasimRelayInitiallyEnabled.value }
+      )
       updatePayload.extra = newExtra
     }
 

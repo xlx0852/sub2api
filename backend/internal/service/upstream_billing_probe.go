@@ -858,6 +858,11 @@ func IsUpstreamBillingProbeIdentity(platform, accountType string) bool {
 }
 
 func isUpstreamBillingProbeAccount(account *Account) bool {
+	// Mirasim relay 账号不是 sub2api 中转，/v1/sub2api/billing 不存在；且其鉴权是
+	// ticket + 密封头，探针的 api-key 鉴权反而会被 relay 当成无效请求。
+	if isMirasimRelayAccount(account) {
+		return false
+	}
 	return account != nil && IsUpstreamBillingProbeIdentity(account.Platform, account.Type)
 }
 

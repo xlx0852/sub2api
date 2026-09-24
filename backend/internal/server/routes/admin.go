@@ -54,6 +54,9 @@ func RegisterAdminRoutes(
 		// Kimi OAuth device authorization
 		registerKimiOAuthRoutes(admin, h)
 
+		// Mirasim OAuth onboarding（取 refresh token）
+		registerMirasimOAuthRoutes(admin, h)
+
 		// 代理管理
 		registerProxyRoutes(admin, h)
 
@@ -469,6 +472,17 @@ func registerKimiOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		kimi.POST("/oauth/create-from-device", h.Admin.KimiOAuth.CreateAccountFromDevice)
 		kimi.POST("/accounts/:id/reauth-from-device", h.Admin.KimiOAuth.ReauthorizeAccountFromDevice)
 		kimi.POST("/accounts/:id/refresh", h.Admin.KimiOAuth.RefreshAccountToken)
+	}
+}
+
+func registerMirasimOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	mirasim := admin.Group("/mirasim")
+	{
+		mirasim.GET("/oauth/providers", h.Admin.MirasimOAuth.ListProviders)
+		mirasim.POST("/oauth/auth-url", h.Admin.MirasimOAuth.GenerateAuthURL)
+		mirasim.POST("/oauth/complete", h.Admin.MirasimOAuth.Complete)
+		mirasim.POST("/oauth/email/code", h.Admin.MirasimOAuth.StartEmailCode)
+		mirasim.POST("/oauth/email/verify", h.Admin.MirasimOAuth.CompleteEmailCode)
 	}
 }
 

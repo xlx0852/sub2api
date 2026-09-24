@@ -181,6 +181,12 @@ func (s *AccountTestService) buildAnthropicUpstreamModelsRequest(ctx context.Con
 			fmt.Sprintf("Unsupported Anthropic account type for upstream model sync: %s", account.Type), nil,
 		)
 	}
+	// Mirasim relay 没有 /v1/models：模型由账号显式配置，不参与上游模型同步。
+	if isMirasimRelayAccount(account) {
+		return nil, newUpstreamModelSyncUnsupportedError(
+			"Mirasim relay upstream has no model list endpoint; select models manually", nil,
+		)
+	}
 
 	baseURL := "https://api.anthropic.com"
 	authHeaderName := ""

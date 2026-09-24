@@ -309,6 +309,28 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			shouldDisable = true
 			break
 		}
+		// Mirasim relay 账号：凭据链（refresh token → access token → device ticket）由
+		// 网关侧自愈，401 通常只是 ticket 被拒或 access token 过期失效，重试一次就能
+		// 恢复。走临时不可调度（保留 status=active），绝不能落到下面的非 OAuth 分支
+		// 被 handleAuthError 永久禁用。
+		if isMirasimRelayAccount(authAccount) {
+			invalidateMirasimRelayClientTokens(authAccount.ID)
+			msg := "Authentication failed (401): mirasim relay credentials rejected"
+			if upstreamMsg != "" {
+				msg = "Mirasim relay 401: " + upstreamMsg
+			}
+			cooldownMinutes := s.cfg.RateLimit.OAuth401CooldownMinutes
+			if cooldownMinutes <= 0 {
+				cooldownMinutes = 10
+			}
+			until := time.Now().Add(time.Duration(cooldownMinutes) * time.Minute)
+			s.notifyAccountSchedulingBlocked(authAccount, until, "mirasim_401")
+			if err := s.accountRepo.SetTempUnschedulable(ctx, authAccount.ID, until, msg); err != nil {
+				slog.Warn("mirasim_401_set_temp_unschedulable_failed", "account_id", authAccount.ID, "error", err)
+			}
+			shouldDisable = true
+			break
+		}
 		// OAuth 账号在 401 错误时临时不可调度（给 token 刷新窗口）；非 OAuth 账号保持原有 SetError 行为。
 		if authAccount.Type == AccountTypeOAuth {
 			// 1. 失效缓存
@@ -835,6 +857,27 @@ func buildForbiddenErrorMessage(prefix string, upstreamMsg string, responseBody 
 // Antigravity 平台区分 validation/violation/generic 三种类型，均 SetError 永久禁用；
 // 其他平台保持原有 SetError 行为。
 func (s *RateLimitService) handle403(ctx context.Context, account *Account, upstreamMsg string, responseBody []byte) (shouldDisable bool) {
+	// Mirasim relay：403 多为 relay 侧 Cloudflare/风控或设备身份被拒，与账号凭据
+	// 本身无关。永久禁用会误杀一个只需重建 ticket 的账号，因此只临时不可调度。
+	if isMirasimRelayAccount(account) {
+		invalidateMirasimRelayClientTokens(account.ID)
+		msg := buildForbiddenErrorMessage(
+			"Mirasim relay 403:",
+			upstreamMsg,
+			responseBody,
+			"relay rejected the request (device identity or "+mirasimHeaderEnc+")",
+		)
+		cooldownMinutes := s.cfg.RateLimit.OAuth401CooldownMinutes
+		if cooldownMinutes <= 0 {
+			cooldownMinutes = 10
+		}
+		until := time.Now().Add(time.Duration(cooldownMinutes) * time.Minute)
+		s.notifyAccountSchedulingBlocked(account, until, "mirasim_403")
+		if err := s.accountRepo.SetTempUnschedulable(ctx, account.ID, until, msg); err != nil {
+			slog.Warn("mirasim_403_set_temp_unschedulable_failed", "account_id", account.ID, "error", err)
+		}
+		return true
+	}
 	if account.Platform == PlatformAntigravity {
 		return s.handleAntigravity403(ctx, account, upstreamMsg, responseBody)
 	}

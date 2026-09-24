@@ -887,3 +887,113 @@ describe('external bridge review regressions', () => {
     expect(updateAccountMock).not.toHaveBeenCalled()
   })
 })
+
+describe('EditAccountModal Mirasim relay wiring', () => {
+  function buildMirasimAccount() {
+    return {
+      id: 9,
+      name: 'Mirasim Relay',
+      notes: '',
+      platform: 'anthropic',
+      type: 'apikey',
+      credentials: {
+        base_url: 'https://relay.mirasim.ai',
+        model_mapping: {}
+      },
+      credentials_status: { has_mirasim_refresh_token: true },
+      extra: { mirasim_relay_enabled: true, mirasim_auth_url: 'https://auth.example.com' },
+      proxy_id: null,
+      concurrency: 1,
+      priority: 1,
+      rate_multiplier: 1,
+      status: 'active',
+      group_ids: [],
+      expires_at: null,
+      auto_pause_on_expired: false
+    } as any
+  }
+
+  function mountWith(account: any) {
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+    return mountModal(account)
+  }
+
+  it('loads an existing relay account into the advanced tab form', async () => {
+    const wrapper = mountWith(buildMirasimAccount())
+    await wrapper.get('[data-testid="edit-account-tab-advanced"]').trigger('click')
+
+    expect(wrapper.find('[data-testid="edit-mirasim-relay-section"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="edit-mirasim-refresh-token"]').exists()).toBe(true)
+
+    // extra.mirasim_auth_url 有值 → 覆盖面板自动展开
+    const relayUrl = wrapper.get<HTMLInputElement>('[data-testid="edit-mirasim-relay-url"]')
+    expect(relayUrl.element.value).toBe('')
+  })
+
+  it('submits refresh token and relay base url for a newly enabled account without api_key', async () => {
+    const account = { ...buildMirasimAccount(), credentials_status: {}, extra: {} }
+    account.credentials = { base_url: 'https://api.anthropic.com', model_mapping: {} }
+    const wrapper = mountWith(account)
+    await wrapper.get('[data-testid="edit-account-tab-advanced"]').trigger('click')
+
+    await wrapper.get('[data-testid="edit-mirasim-relay-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="edit-mirasim-refresh-token"]').setValue('rt-new')
+    await wrapper.get('[data-testid="edit-mirasim-device-key"]').setValue('  device-pem  ')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    const payload = updateAccountMock.mock.calls[0]?.[1]
+    expect(payload.credentials.mirasim_refresh_token).toBe('rt-new')
+    expect(payload.credentials.mirasim_device_key).toBe('device-pem')
+    expect(payload.credentials.base_url).toBe('https://relay.mirasim.ai')
+    expect(payload.credentials).not.toHaveProperty('api_key')
+    expect(payload.extra.mirasim_relay_enabled).toBe(true)
+  })
+
+  it('validates that a refresh token is required before enabling', async () => {
+    const account = { ...buildMirasimAccount(), credentials_status: {}, extra: {} }
+    account.credentials = { base_url: 'https://api.anthropic.com', model_mapping: {} }
+    const wrapper = mountWith(account)
+    await wrapper.get('[data-testid="edit-account-tab-advanced"]').trigger('click')
+
+    await wrapper.get('[data-testid="edit-mirasim-relay-toggle"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(updateAccountMock).not.toHaveBeenCalled()
+  })
+
+  it('writes an explicit false and restores the official base url when relay is disabled', async () => {
+    // 关闭 relay 后不再有 refresh token 换 ticket 的能力，必须仍有 api_key 才能提交
+    // （否则后端 GetAccessToken 无凭据可用），所以这里模拟一个同时存有 api_key 的账号。
+    const account = buildMirasimAccount()
+    account.credentials_status = { has_mirasim_refresh_token: true, has_api_key: true }
+    const wrapper = mountWith(account)
+    await wrapper.get('[data-testid="edit-account-tab-advanced"]').trigger('click')
+
+    await wrapper.get('[data-testid="edit-mirasim-relay-toggle"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    const payload = updateAccountMock.mock.calls[0]?.[1]
+    expect(payload.extra.mirasim_relay_enabled).toBe(false)
+    expect(payload.extra).not.toHaveProperty('mirasim_auth_url')
+    expect(payload.credentials.base_url).toBe('https://api.anthropic.com')
+  })
+
+  it('still requires an api_key when disabling relay on an account without one', async () => {
+    const wrapper = mountWith(buildMirasimAccount())
+    await wrapper.get('[data-testid="edit-account-tab-advanced"]').trigger('click')
+
+    await wrapper.get('[data-testid="edit-mirasim-relay-toggle"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(updateAccountMock).not.toHaveBeenCalled()
+  })
+})

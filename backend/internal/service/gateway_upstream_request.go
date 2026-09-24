@@ -187,6 +187,12 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	// 放在所有 header 逻辑之后，确保配置值对同名头拥有最终决定权。
 	account.ApplyHeaderOverrides(req.Header)
 
+	// Mirasim relay 账号：改成 relay 鉴权（ticket + 签名密封头）。非 mirasim 账号 no-op。
+	// 必须在此处调用：用最终 body、且在 ApplyHeaderOverrides 之后。
+	if err := s.applyMirasimRelayAuth(ctx, account, req, body); err != nil {
+		return nil, nil, err
+	}
+
 	// === DEBUG: 打印上游转发请求（headers + body 摘要），与 CLIENT_ORIGINAL 对比 ===
 	s.debugLogGatewaySnapshot("UPSTREAM_FORWARD", req.Header, body, map[string]string{
 		"url":                 req.URL.String(),

@@ -363,6 +363,11 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
 	// 账号级请求头覆写（最终生效，覆盖上面所有来源的同名头）
 	account.ApplyHeaderOverrides(req.Header)
 
+	// Mirasim relay 账号：改成 relay 鉴权（ticket + 签名密封头）。
+	if err := s.applyMirasimRelayAuth(ctx, account, req, body); err != nil {
+		return nil, nil, err
+	}
+
 	return req, body, nil
 }
 
