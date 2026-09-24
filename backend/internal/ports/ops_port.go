@@ -33,7 +33,6 @@ type OpsRepository interface {
 	GetLatencyHistogram(ctx context.Context, filter *domain.OpsDashboardFilter) (*domain.OpsLatencyHistogramResponse, error)
 	GetErrorTrend(ctx context.Context, filter *domain.OpsDashboardFilter, bucketSeconds int) (*domain.OpsErrorTrendResponse, error)
 	GetErrorDistribution(ctx context.Context, filter *domain.OpsDashboardFilter) (*domain.OpsErrorDistributionResponse, error)
-	GetOpenAITokenStats(ctx context.Context, filter *domain.OpsOpenAITokenStatsFilter) (*domain.OpsOpenAITokenStatsResponse, error)
 	GetPerformanceWindow(ctx context.Context, filter *domain.OpsPerformanceFilter) (*domain.OpsPerformanceWindow, error)
 
 	InsertSystemMetrics(ctx context.Context, input *domain.OpsInsertSystemMetricsInput) error

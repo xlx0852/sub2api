@@ -55,13 +55,7 @@ export default {
     viewUsage: '查看使用记录',
     checkDetailedLogs: '查看详细的使用日志',
     redeemCode: '兑换码',
-    addBalanceWithCode: '使用兑换码充值',
-    affiliateCta: {
-      title: '邀请好友赚返利',
-      badge: '充值有提成',
-      description: '分享专属邀请链接，好友注册并充值后，你可按比例获得返利并转入账户余额。',
-      action: '立即邀请'
-    }
+    addBalanceWithCode: '使用兑换码充值'
   },
 
   // Groups (shared)

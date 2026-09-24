@@ -6,16 +6,13 @@ import (
 	"testing"
 )
 
-func TestGetOpsAdvancedSettings_DefaultHidesOpenAITokenStats(t *testing.T) {
+func TestGetOpsAdvancedSettings_DefaultShowsAlertEvents(t *testing.T) {
 	repo := newRuntimeSettingRepoStub()
 	svc := &OpsService{settingRepo: repo}
 
 	cfg, err := svc.GetOpsAdvancedSettings(context.Background())
 	if err != nil {
 		t.Fatalf("GetOpsAdvancedSettings() error = %v", err)
-	}
-	if cfg.DisplayOpenAITokenStats {
-		t.Fatalf("DisplayOpenAITokenStats = true, want false by default")
 	}
 	if !cfg.DisplayAlertEvents {
 		t.Fatalf("DisplayAlertEvents = false, want true by default")
@@ -25,20 +22,16 @@ func TestGetOpsAdvancedSettings_DefaultHidesOpenAITokenStats(t *testing.T) {
 	}
 }
 
-func TestUpdateOpsAdvancedSettings_PersistsOpenAITokenStatsVisibility(t *testing.T) {
+func TestUpdateOpsAdvancedSettings_PersistsAlertEventsVisibility(t *testing.T) {
 	repo := newRuntimeSettingRepoStub()
 	svc := &OpsService{settingRepo: repo}
 
 	cfg := defaultOpsAdvancedSettings()
-	cfg.DisplayOpenAITokenStats = true
 	cfg.DisplayAlertEvents = false
 
 	updated, err := svc.UpdateOpsAdvancedSettings(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("UpdateOpsAdvancedSettings() error = %v", err)
-	}
-	if !updated.DisplayOpenAITokenStats {
-		t.Fatalf("DisplayOpenAITokenStats = false, want true")
 	}
 	if updated.DisplayAlertEvents {
 		t.Fatalf("DisplayAlertEvents = true, want false")
@@ -48,15 +41,12 @@ func TestUpdateOpsAdvancedSettings_PersistsOpenAITokenStatsVisibility(t *testing
 	if err != nil {
 		t.Fatalf("GetOpsAdvancedSettings() after update error = %v", err)
 	}
-	if !reloaded.DisplayOpenAITokenStats {
-		t.Fatalf("reloaded DisplayOpenAITokenStats = false, want true")
-	}
 	if reloaded.DisplayAlertEvents {
 		t.Fatalf("reloaded DisplayAlertEvents = true, want false")
 	}
 }
 
-func TestGetOpsAdvancedSettings_BackfillsNewDisplayFlagsFromDefaults(t *testing.T) {
+func TestGetOpsAdvancedSettings_BackfillsDisplayAlertEventsFromDefaults(t *testing.T) {
 	repo := newRuntimeSettingRepoStub()
 	svc := &OpsService{settingRepo: repo}
 
@@ -87,9 +77,6 @@ func TestGetOpsAdvancedSettings_BackfillsNewDisplayFlagsFromDefaults(t *testing.
 	cfg, err := svc.GetOpsAdvancedSettings(context.Background())
 	if err != nil {
 		t.Fatalf("GetOpsAdvancedSettings() error = %v", err)
-	}
-	if cfg.DisplayOpenAITokenStats {
-		t.Fatalf("DisplayOpenAITokenStats = true, want false default backfill")
 	}
 	if !cfg.DisplayAlertEvents {
 		t.Fatalf("DisplayAlertEvents = false, want true default backfill")

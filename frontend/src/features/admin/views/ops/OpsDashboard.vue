@@ -126,15 +126,6 @@
         />
       </div>
 
-      <!-- Row: OpenAI Token Stats -->
-      <div v-if="opsEnabled && showOpenAITokenStats && !(loading && !hasLoadedOnce) && (isFullscreen || activeSection === 'overview')" class="grid grid-cols-1 gap-6">
-        <OpsOpenAITokenStatsCard
-          :platform-filter="platform"
-          :group-id-filter="groupId"
-          :refresh-token="dashboardRefreshToken"
-        />
-      </div>
-
       <OpsPerformanceAnalytics
         v-if="opsEnabled && !(loading && !hasLoadedOnce) && !isFullscreen && activeSection === 'performance'"
         :time-range="timeRange"
@@ -223,7 +214,6 @@ import OpsLatencyChart from '@/views/admin/ops/components/OpsLatencyChart.vue'
 import OpsThroughputTrendChart from '@/views/admin/ops/components/OpsThroughputTrendChart.vue'
 import OpsSwitchRateTrendChart from '@/views/admin/ops/components/OpsSwitchRateTrendChart.vue'
 import OpsAlertEventsCard from '@/views/admin/ops/components/OpsAlertEventsCard.vue'
-import OpsOpenAITokenStatsCard from '@/views/admin/ops/components/OpsOpenAITokenStatsCard.vue'
 import OpsSystemLogTable from '@/views/admin/ops/components/OpsSystemLogTable.vue'
 import OpsRequestDetailsModal, { type OpsRequestDetailsPreset } from '@/views/admin/ops/components/OpsRequestDetailsModal.vue'
 import OpsProviderStatusCard from '@/views/admin/ops/components/OpsProviderStatusCard.vue'
@@ -467,7 +457,6 @@ applyRouteQueryToState()
 
 // Auto refresh settings
 const showAlertEvents = ref(true)
-const showOpenAITokenStats = ref(false)
 const autoRefreshEnabled = ref(false)
 const autoRefreshIntervalMs = ref(30000) // default 30 seconds
 const autoRefreshCountdown = ref(0)
@@ -500,14 +489,12 @@ async function loadDashboardAdvancedSettings() {
   try {
     const settings = await opsAPI.getAdvancedSettings()
     showAlertEvents.value = settings.display_alert_events
-    showOpenAITokenStats.value = settings.display_openai_token_stats
     autoRefreshEnabled.value = settings.auto_refresh_enabled
     autoRefreshIntervalMs.value = settings.auto_refresh_interval_seconds * 1000
     autoRefreshCountdown.value = settings.auto_refresh_interval_seconds
   } catch (err) {
     console.error('[OpsDashboard] Failed to load dashboard advanced settings', err)
     showAlertEvents.value = true
-    showOpenAITokenStats.value = false
     autoRefreshEnabled.value = false
     autoRefreshIntervalMs.value = 30000
     autoRefreshCountdown.value = 0

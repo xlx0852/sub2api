@@ -373,7 +373,6 @@ func defaultOpsAdvancedSettings() *OpsAdvancedSettings {
 		IgnoreContextCanceled:           true,  // Default to true - client disconnects are not errors
 		IgnoreNoAvailableAccounts:       false, // Default to false - this is a real routing issue
 		IgnoreInsufficientBalanceErrors: false, // 默认不忽略，余额不足可能需要关注
-		DisplayOpenAITokenStats:         false,
 		DisplayAlertEvents:              true,
 		AutoRefreshEnabled:              false,
 		AutoRefreshIntervalSec:          30,

@@ -202,26 +202,6 @@ export default {
         '30d': 'Last 30 days',
         custom: 'Custom'
       },
-      openaiTokenStats: {
-        title: 'All-platform Model Request Performance',
-        viewModeTopN: 'TopN',
-        viewModePagination: 'Pagination',
-        prevPage: 'Previous',
-        nextPage: 'Next',
-        pageInfo: 'Page {page}/{total}',
-        totalModels: 'Total models: {total}',
-        failedToLoad: 'Failed to load model request performance stats',
-        empty: 'No model request performance data for the current filters',
-        table: {
-          model: 'Model',
-          requestCount: 'Requests',
-          avgTokensPerSec: 'Avg Tokens/sec',
-          avgFirstTokenMs: 'Avg First Token Latency (ms)',
-          totalOutputTokens: 'Total Output Tokens',
-          avgDurationMs: 'Avg Duration (ms)',
-          requestsWithFirstToken: 'Requests With First Token'
-        }
-      },
       customTimeRange: {
         startTime: 'Start time',
         endTime: 'End time'
@@ -794,8 +774,6 @@ export default {
         dashboardCards: 'Dashboard Cards',
         displayAlertEvents: 'Display alert events',
         displayAlertEventsHint: 'Show or hide the recent alert events card on the ops dashboard. Enabled by default.',
-        displayOpenAITokenStats: 'Display all-platform model request performance',
-        displayOpenAITokenStatsHint: 'Show or hide the all-platform model request performance card on the ops dashboard. Hidden by default.',
         autoRefreshCountdown: 'Auto refresh: {seconds}s',
         validation: {
           title: 'Please fix the following issues',

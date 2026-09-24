@@ -108,10 +108,6 @@ func (m *opsRepoMock) GetErrorDistribution(ctx context.Context, filter *OpsDashb
 	return &OpsErrorDistributionResponse{}, nil
 }
 
-func (m *opsRepoMock) GetOpenAITokenStats(ctx context.Context, filter *OpsOpenAITokenStatsFilter) (*OpsOpenAITokenStatsResponse, error) {
-	return &OpsOpenAITokenStatsResponse{}, nil
-}
-
 func (m *opsRepoMock) GetPerformanceWindow(ctx context.Context, filter *OpsPerformanceFilter) (*OpsPerformanceWindow, error) {
 	return &OpsPerformanceWindow{}, nil
 }

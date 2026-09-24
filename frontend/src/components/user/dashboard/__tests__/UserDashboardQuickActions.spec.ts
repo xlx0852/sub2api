@@ -13,20 +13,18 @@ vi.mock('vue-i18n', () => ({
 }))
 
 describe('UserDashboardQuickActions', () => {
-  it('shows the affiliate prompt and opens the real affiliate page when enabled', async () => {
-    const wrapper = mount(UserDashboardQuickActions, {
-      props: { showAffiliate: true },
-    })
-
-    expect(wrapper.text()).toContain('dashboard.affiliateCta.title')
-
-    await wrapper.get('button').trigger('click')
-    expect(push).toHaveBeenCalledWith('/affiliate')
-  })
-
-  it('hides the affiliate prompt when the feature is disabled', () => {
+  it('renders quick action entries for keys, usage, and redeem', () => {
     const wrapper = mount(UserDashboardQuickActions)
 
-    expect(wrapper.text()).not.toContain('dashboard.affiliateCta.title')
+    expect(wrapper.text()).toContain('dashboard.createApiKey')
+    expect(wrapper.text()).toContain('dashboard.viewUsage')
+    expect(wrapper.text()).toContain('dashboard.redeemCode')
+  })
+
+  it('navigates to /keys when the create-key action is clicked', async () => {
+    const wrapper = mount(UserDashboardQuickActions)
+
+    await wrapper.get('button').trigger('click')
+    expect(push).toHaveBeenCalledWith('/keys')
   })
 })

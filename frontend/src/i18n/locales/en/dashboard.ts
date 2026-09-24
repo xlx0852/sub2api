@@ -56,12 +56,6 @@ export default {
     checkDetailedLogs: 'Check detailed usage logs',
     redeemCode: 'Redeem Code',
     addBalanceWithCode: 'Add balance with a code',
-    affiliateCta: {
-      title: 'Invite friends, earn rebates',
-      badge: 'Earn on recharges',
-      description: 'Share your invite link and earn a rebate when your friends sign up and recharge.',
-      action: 'Invite now'
-    }
   },
 
   // Groups (shared)

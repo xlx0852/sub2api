@@ -12,7 +12,7 @@
             <UserDashboardCharts v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" @dateRangeChange="loadCharts" @granularityChange="loadCharts" @refresh="refreshAll" />
           </div>
           <div class="lg:col-span-1">
-            <UserDashboardQuickActions :show-affiliate="affiliateEnabled" />
+            <UserDashboardQuickActions />
           </div>
         </div>
 
@@ -42,10 +42,7 @@ import type { TrafficAvailability } from '@/api/usage'
 import type { UsageLog, TrendDataPoint, ModelStat, PlatformQuotaItem } from '@/types'
 import { getMyPlatformQuotas } from '@/api/user'
 import { formatDateLocalInput } from '@/utils/format'
-import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
-
 const authStore = useAuthStore(); const user = computed(() => authStore.user)
-const affiliateEnabled = computed(() => isFeatureFlagEnabled(FeatureFlags.affiliate))
 const stats = ref<UserStatsType | null>(null); const loading = ref(false); const loadingUsage = ref(false); const loadingCharts = ref(false)
 const trendData = ref<TrendDataPoint[]>([]); const modelStats = ref<ModelStat[]>([]); const recentUsage = ref<UsageLog[]>([])
 const platformQuotas = ref<PlatformQuotaItem[] | null>(null)
