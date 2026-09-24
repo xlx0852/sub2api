@@ -390,6 +390,13 @@ func (a *Account) IsSchedulableForModelWithContext(ctx context.Context, requeste
 	if a == nil {
 		return false
 	}
+	// 关键约束（改动前请先读）：Anthropic OAuth / Setup Token 已退役。
+	// 历史账号行保留用于审计、删除与数据读取，但不得进入任何调度候选池；
+	// 其它平台的 OAuth / Setup Token 仍保持原有供给能力。
+	if strings.EqualFold(a.Platform, PlatformAnthropic) &&
+		(strings.EqualFold(a.Type, AccountTypeOAuth) || strings.EqualFold(a.Type, AccountTypeSetupToken)) {
+		return false
+	}
 	if !a.IsSchedulable() {
 		return false
 	}
