@@ -276,7 +276,7 @@ DefaultAuthURL`）。截至 2026-09-24，`/auth/oauth/providers` 与
 提供的真实 access token 请求 `/v1/messages` 与 `/v1/messages/count_tokens` → **均 200**。
 所以 `mirasim_device_key` 留空、由服务端首请求生成并落库即可，不需要搬运客户端状态。
 
-### 9.4 发布步骤（构建与增量取证已完成，2026-09-24；执行待批准）
+### 9.4 发布步骤（构建与增量取证已完成；**2026-09-24 已执行，记录见 9.4.5**）
 
 #### 9.4.1 基线事实（2026-09-24 实测，非推测）
 
@@ -316,12 +316,21 @@ grep -c AccountsView-DEtjWFwt.js bin/server                                     
 ```bash
 # 产物固定到本机稳定路径（sha256 前 9 位命名，便于与线上 sub2api.bak-* 对照）
 cp /tmp/s2a-deploy-mirasim/backend/bin/server /tmp/sub2api-0.1.391-mirasim-924e4c5e1-linux-amd64
-shasum -a 256 /tmp/sub2api-0.1.391-mirasim-924e4c5e1-linux-amd64 /tmp/dist-0.1.391-mirasim.tgz
+shasum -a 256 /tmp/sub2api-0.1.391-mirasim-924e4c5e1-linux-amd64
+
+# --- 打包前端（macOS 必须禁资源叉，否则 172 文件会打成 347 条目）---
+cd /tmp/s2a-deploy-mirasim/backend/internal/web/dist
+COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs -czf /tmp/dist-0.1.391-mirasim-clean.tgz .
+tar tzf /tmp/dist-0.1.391-mirasim-clean.tgz | grep -c '/\._'        # 必须 0
+md5 -r /tmp/dist-0.1.391-mirasim-clean.tgz                          # 2acaf14e492652c06a78ed9c2bc71126
+md5 -r index.html                                                   # 67ae44d28f5fe219d8bbadab01b1fa8e
 
 # --- 前端（无停机；nginx root 是 symlink，逐请求解析，不需要 reload）---
 R=/opt/sub2api/frontend/releases/0.1.391-mirasim-0608a3402
-install -d "$R" && tar xzf /tmp/dist-0.1.391-mirasim.tgz -C "$R"
-find "$R" -type f | wc -l                       # 与本地一致
+install -d "$R" && tar xzf /tmp/dist-0.1.391-mirasim-clean.tgz -C "$R"
+find "$R" -type f | wc -l                       # 必须 172
+find "$R" -name '._*' | wc -l                   # 必须 0
+md5sum "$R/index.html"                         # 必须 67ae44d2…（守卫：任一不符即 ABORT）
 ln -sfn "$R"                 /opt/sub2api/frontend/.current.new
 ln -sfn /opt/sub2api/frontend/releases/0.1.391-ocgremove-7e1ee1c92 /opt/sub2api/frontend/.rollback.new
 mv -T /opt/sub2api/frontend/.current.new  /opt/sub2api/frontend/current    # 原子替换
@@ -370,6 +379,32 @@ systemctl start nginx
 - §9.2 单持有者：发布**不引入第二个进程**，所以不触发互踢；但发布后若管理员把同一个 refresh
   token 同时用于桌面客户端，会互踢。
 - 三个候选容器共用同一 Postgres/Redis，**不要**在这轮顺手切换 nginx upstream。
+
+### 9.4.5 发布记录（**已执行**，2026-09-24 22:21–22:22 JST / 13:21–13:22 UTC）
+
+执行顺序：先前端（无停机）→ 后后端（`docker stop` → `cp` → `docker start`）。nginx **未停**；实测停机窗口内
+没有产生可观察到的 502（替换到 `health=healthy` 间隔约 20 秒，期间站点仍由旧进程服务至 stop）。
+
+| 项 | 发布后实测值 |
+| --- | --- |
+| 后端二进制 | `/opt/sub2api/api/releases/0.1.391-noinject-a33b47ef9/sub2api`，123715746 B，sha256 `924e4c5e165c9ad904130b5dab0dc1acb63a9ad73a3090ee1ef4a7e82737c6d0`（= 本地产物，逐字节） |
+| 备份件 | 同目录 `sub2api.bak-20260924-mirasim`（123547810 B = 旧基线 `1d78d046…`）；另有中转文件 `sub2api.new`（与现役同哈希，可直接删） |
+| 容器 | `sub2api-api-candidate-0.1.391-noinject-a33b47ef9`，`StartedAt=2026-09-24T13:22:04Z`，`Restarts=0`，`healthy`，唯一接流（nginx upstream → `127.0.0.1:18373`） |
+| 前端 | `current → releases/0.1.391-mirasim-0608a3402`（172 文件），`rollback → releases/0.1.391-ocgremove-7e1ee1c92` |
+| 前端一致性 | 线上 release 与本地 dist **逐文件 md5 全等（172/172）**；`index.html` md5 `67ae44d28f5fe219d8bbadab01b1fa8e` |
+| 差分探针 | `GET /api/v1/admin/mirasim/oauth/providers`：发布前 **404** → 发布后 **401**（路由存在、待鉴权）；对照不存在路径仍为 404 |
+| 5 个管理端点 | `/oauth/providers`(GET)、`/oauth/auth-url`、`/oauth/complete`、`/oauth/email/code`、`/oauth/email/verify` 全部 **401**（未带凭据）→ 路由均已注册生效 |
+| 上游出口 | 容器内 `https://auth.mirasim.ai/auth/oauth/providers` 可达（exit 0），不依赖宿主机网络 |
+| 业务回归 | `GET /api/v1/settings/public` → 200；`POST /api/v1/auth/login`（空体）→ 400；网关 `account_simple_selection` / sticky 正常出流量；日志中 `mirasim` 相关错误 0 条 |
+
+本轮两个方法论教训（下次发布直接复用）：
+
+1. **macOS 打包必须禁资源叉**：默认 `tar` 会把 `._*` 一并打入（172 文件 → 347 条目）。
+   部署脚本内的「文件数 + `._` 残留 + `index.html` md5」三重守卫在本轮**成功拦下一次脏包**（未产生任何线上改动）。
+2. **minified bundle 不能按逻辑名比对**：本轮相对 live 发生了 chunk 重划分（`UsageView-*.js` 40951 B → 29346 B，
+   `api-*.js` 由 2255 B 拆为 1061 B），「逐文件哈希归一化」与「正则抓字符串 diff」两种口径都已验证失效。
+   权威口径是：①`git diff <live>..HEAD -- frontend/src`；②全站字符串字面量并集（`/api/v1/...` 路径集、
+   `admin.*` key 集、CSS 规则集）＋正向对照（新端点只在新的里面）；③部署后用整树 md5 证「线上 = 本地构建」。
 
 ### 9.5 巡检
 

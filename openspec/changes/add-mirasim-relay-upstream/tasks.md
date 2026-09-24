@@ -161,13 +161,27 @@
 - [x] 8.4 前置事实：三个线上 api 容器里 `mirasim` 字符串命中数为 **0**、
       `/opt/sub2api/frontend/current` 下无 `mirasim` 命中、DB 中 mirasim 账号数 **0**
       ⇒ 能力尚未上线，本次发布是一次全新的功能上线（而不是修复）
-- [ ] 8.5 **执行发布**（runbook 已固定：`docs/MIRASIM_RELAY_UPSTREAM.md` §9.4；二进制热替换 +
-      前端 release 目录 + 管理端录入账号与模型映射）。前置探针：未认证
-      `GET /api/v1/admin/mirasim/oauth/providers` 现为 404，发布后应为 401（无需凭据的差分校验）
-- [ ] 8.6 上线后回归：管理端"测试账号"通过 → 真实请求 200 → 观察
-      `mirasim_relay_credential_updated` 落库事件 → 重启容器再发一次请求确认冷启动可自愈
-- [ ] 8.7 回滚演练确认：删 `credentials.mirasim_refresh_token` 即退化回普通 Anthropic apikey 账号，
-      二进制回滚无需数据修补
+- [x] 8.5 **执行发布（已完成 2026-09-24 22:21–22:22 JST）**。runbook：`docs/MIRASIM_RELAY_UPSTREAM.md`
+      §9.4；发布记录与实测证据：§9.4.5。结果：
+      - **后端**已热替换为 `924e4c5e165c9ad904130b5dab0dc1acb63a9ad73a3090ee1ef4a7e82737c6d0`（123715746 B，
+        与本地产物逐字节相同），备份 `sub2api.bak-20260924-mirasim` 保留在同目录；
+        容器 `sub2api-api-candidate-0.1.391-noinject-a33b47ef9` `Restarts=0` / `healthy`，仍为唯一接流实例。
+      - **前端**已切到 `releases/0.1.391-mirasim-0608a3402`，`rollback → 0.1.391-ocgremove-7e1ee1c92`；
+        线上 release 与本地 dist 整树 md5 **172/172 全等**。
+      - **前置差分探针达成**：未认证 `GET /api/v1/admin/mirasim/oauth/providers` **404 → 401**；
+        对照不存在路径仍 404；另外 4 个端点（auth-url/complete/email/code/email/verify）均 401。
+      - 回归：`/api/v1/settings/public` 200、`/api/v1/auth/login`(空体) 400、网关正常出流量、日志无 mirasim 报错；
+        容器出口可达 `auth.mirasim.ai`。
+      - 回滚件齐备：前端 `rollback` 符号链接 + 后端 `sub2api.bak-*`；无表/无列/无迁移 ⇒ 数据层无需修补。
+- [ ] 8.6 上线后回归（**卡在用户操作，非代码问题**）：管理端「测试账号」通过 → 真实请求 200 →
+      观察 `mirasim_relay_credential_updated` 落库事件 → 重启容器再发一次请求确认冷启动可自愈。
+      **为何未执行**：生产 DB 中 mirasim 账号数仍为 0，且**不能用现有桌面客户端的 refresh token 去建账号**——
+      §9.2 的单持有者约束下，同一 token 被两个持有者使用会互踢（会打断用户本地客户端登录）。
+      正确路径是管理员在后台用新的授权登录入口取一份**属于服务端自己的**凭据（§10），随后按 runbook 录入账号 +
+      模型映射；该步完成后本条与 8.7 可一次性验证。
+- [ ] 8.7 回滚演练确认（前置同上：需要先有 mirasim 账号）。已静态确认的两点：①删
+      `credentials.mirasim_refresh_token` 后 `isMirasimRelayAccount` 返回 false，账号退化为普通 Anthropic apikey；
+      ②二进制回滚只需换文件，无数据修补。**实际演练待账号存在后执行**。
 
 ## 9. 授权登录（取 refresh token，2026-09-24）
 
