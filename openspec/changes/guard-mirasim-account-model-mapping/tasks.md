@@ -110,26 +110,40 @@
       `internal/archtest`、`internal/service` 失败，两者失败用例与 HEAD worktree 完全一致
       （6 条 pre-existing 失败），本变更未引入新失败；且本变更修好了 HEAD 上
       失败中的 `internal/server`（路由 golden）。
-- [ ] 4.8 生产只读核验（发布后执行）：对账号 `140` 调
-      `POST /api/v1/admin/accounts/140/models/apply-mapping` —— 该端点幂等：
-      期望 `changed=false`，响应模型数 = 5，账号 `model_mapping` 与调用前逐键相同。
-      注意：线上该账号的空映射此前已被外部操作补齐，故本次核验的是「幂等 + 不破坏现有映射」，
+- [x] 4.8 生产只读核验：`GET /api/v1/admin/accounts/140` → `mirasim_model_mapping_missing=false`；
+      列表端点 12 个账号各含该键、无 `true`；
+      `POST /api/v1/admin/accounts/140/models/apply-mapping` → 200 / `changed=false` / 5 个模型，
+      与库内逐键相同且 `updated_at` 未变（幂等、未写库）；响应与日志均无凭据模式（`eyJ`/`mrs1:`/`sk-` 计数 0）。
+      —— 见 `deploy-2026-09-25-mapping-guard.md` 第 2 节。
+      注意：线上该账号的空映射此前已被外部操作补齐，故核验的是「幂等 + 不破坏现有映射」，
       而不是「从空填满」。
 
 ## 5. 生产发布
 
-- [ ] 5.1 前端先构建（`pnpm` + `vite build`）并落位发布目录，记录文件数与 sha。
-- [ ] 5.2 后端 `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags embed ...`，
+- [x] 5.1 前端先构建（`vite build`）并落位发布目录，记录文件数与 sha。
+      —— `0.1.391-mappingguard-19d1d927c`（172 文件，tgz `af6398606354b86d…`），
+      `current` 已重指、`rollback` → `0.1.391-mirasimfix-6a273dc65`，
+      `index.html` sha 与线上返回一致（200）；bundle 内含新按钮标记。
+- [x] 5.2 后端 `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags embed ...`，
       记录 sha256 前缀与备份路径 `sub2api.bak-<日期>-<tag>`。
-- [ ] 5.3 发布后核验：账号列表响应含 `mirasim_model_mapping_missing`（账号 140 为
+      —— `sha256=8797e9694c5c9aa3d…`，备份 `sub2api.bak-20260925-mappingguard`
+      （`d9130d3a19a0ce88…`，revision `fc42ac50c`）；热替换后 `vcs.revision=19d1d927c`，
+      健康检查 2s 内 200。
+- [x] 5.3 发布后核验：账号列表响应含 `mirasim_model_mapping_missing`（账号 140 为
       `false`，即已修好）；日志无新增 502；无凭据泄漏。
-- [ ] 5.4 写发布记录 `deploy-<日期>-mirasim-mapping-guard.md`（放在本 change 目录）。
+      —— 见 4.8；发布后 4 分钟窗口 `gateway.forward_failed=0`，唯一 ERROR 为既有
+      `SubscriptionAutoRenew ACCOUNT_NOT_FOUND`。
+- [x] 5.4 写发布记录 `deploy-2026-09-25-mapping-guard.md`（放在本 change 目录）。
 
-## 生产发布记录（<待填>）
+## 生产发布记录（2026-09-25）
 
-- 代码提交：`<见 git log>`（`feat(mirasim): guard empty account model mapping`）。
-- 前端：`frontend/releases/<ver>-<hash>/`，`current` 已重指，回滚点指向前一版本。
-- 后端：`backend sha256=<前缀>`，备份 `sub2api.bak-<日期>-<tag>`。
+- 代码提交：`19d1d927c`（`feat(mirasim): guard empty account model mapping`，未 push，沿用该分支既有节奏）。
+- 前端：`frontend/releases/0.1.391-mappingguard-19d1d927c/`（172 文件，tgz `af6398606354b86d…`），
+  `current` 已重指，回滚点 `0.1.391-mirasimfix-6a273dc65`。
+- 后端：`sha256=8797e9694c5c9aa3d248e8d37baab10f97f2b173149f2e1742a660b1a960e907`，
+  容器 `sub2api-api-candidate-0.1.391-noinject-a33b47ef9`（bind-mount 热替换），
+  备份 `sub2api.bak-20260925-mappingguard`（`d9130d3a19a0ce88…`，revision `fc42ac50c`）。
 - 核验：账号 140 `mirasim_model_mapping_missing=false`；`apply-mapping` 幂等返回
-  `changed=false`、5 个模型；发布后日志无 `account_id=140` 的 `forward_failed`。
-- 详见 `deploy-<日期>-mirasim-mapping-guard.md`。
+  `changed=false`、5 个模型且 `updated_at` 未变；发布后 `account_id=140` 的
+  `forward_failed` = 0；无凭据泄漏。
+- 详见 `deploy-2026-09-25-mapping-guard.md`。
