@@ -56,3 +56,22 @@
 **发布**：前端 release `/opt/sub2api/frontend/releases/0.1.391-01a904fb3`（聚合 `b74333bdfaf1aff80d5b88eab03ec2fb762926ab6f2c09fdee7ee8b8ff7fcaa6`，171 文件，AppleDouble 0；`index.html` = `2604ac8dc987a072ee22637513dcc1aaa4816d2666b66cfafca3bfde13ca8f25`，入口 `/assets/index-4EXEkrs9.js`）。`current` → `0.1.391-01a904fb3`，`rollback` → `0.1.391-756ee2ecc`。后端二进制未变更。
 
 **核验**：`GET /admin/profit/summary?start_date=2026-08-26&end_date=2026-09-25&timezone=Asia/Shanghai&account_id=140` → requests 397 / revenue 1.5238 / **cost 0** / **profit +1.5238** / margin 100%。同一提交后，`vue-tsc --noEmit`、`pnpm build` 通过，vitest 失败集与基线一致（`UserPlatformQuotaModal` ×2、`AccountsView.sparkShadow` ×1）。
+
+## 后端补发：把 06:12 的 use? 提交一并上线（2026-09-25 06:15）
+
+**背景**：提交 `3c0292efe feat(usage): add request timing detail view` 完成于 06:12 +08，晚于 05:42 部署的后端二进制。前端（`0.1.391-01a904fb3`）已包含「请求耗时详情」弹窗，而运行中的后端仍在 `756ee2ecc`，`usage_logs` DTO 缺 `first_output_stages`，弹窗只能显示占位。
+
+**处置**：按当前 HEAD `9579dc923` 重建后端并热替换。
+
+| 项 | 值 |
+| --- | --- |
+| 构建 | `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -buildvcs=true -tags embed ./cmd/server`（前端 dist 为 06:13 构建，与前端 release 一致） |
+| 制品 | 123,696,936 B，`sha256=7b646b3cf272c4e83e4987d148902dd558a1c3d3ca6cc5e327579727778ec9a1`，`vcs.revision=9579dc9234d397e563cfe577b62b9aa77bc92ba0` |
+| 备份 | `sub2api.bak-20260925-timing`（替换前 `sha256=5339fd48…`） |
+| 容器 | `sub2api-api-candidate-0.1.391-noinject-a33b47ef9`，`Up (healthy)`、`RestartCount=0` |
+
+**核验**：
+
+- `GET /api/v1/admin/usage?account_id=126&page_size=3` → 每行含 `first_output_stages`（例：`{"gateway_pre_upstream_ms":31,"upstream_connect_ms":0,"upstream_first_output_ms":2078,...}`）；无数据的行因 `omitempty` 不返回该字段。
+- 利润分析配额窗口接口与 ops token 统计接口仍为 **404**（保持本次移除）；`/health` = 200；替换后 5 分钟 5xx = 0。
+- `profit/summary?...&account_id=140&timezone=Asia/Shanghai` → requests 397 / revenue 1.5238 / **cost 0** / **profit +1.5238** / margin 100%。
