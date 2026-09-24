@@ -147,13 +147,23 @@
       ⇒ 今天安全，**蓝绿/切流/加副本前必须先确认 relay 账号只有一个活跃持有者**
 - [x] 8.3 **构建已本机验证**：`CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags embed
       -ldflags "-s -w -X main.Version=0.1.391 -X main.MinFrontendVersion=0.1.380" -trimpath`
-      → 10.6s、118 MiB 静态 ELF；产物内 `mirasim_refresh_token` / `mrs-seal-v1` /
-      `mirasim_relay_persist_failed` 均可检出，且已 embed 本次前端 dist（`AccountsView-E83-4CKV.js`）
+      → 静态 ELF；产物内 `mirasim_refresh_token` / `mrs-seal-v1` / `mirasim_relay_persist_failed`
+      均可检出，且已 embed 本轮前端 dist（新 chunk `AccountsView-C9yrXbGB.js` 在、旧
+      `AccountsView-DEtjWFwt.js` 不在）。**最终产物：**
+      `924e4c5e165c9ad904130b5dab0dc1acb63a9ad73a3090ee1ef4a7e82737c6d0`（123715746 B，
+      本机 `/tmp/sub2api-0.1.391-mirasim-924e4c5e1-linux-amd64`）；前端 dist 包
+      `/tmp/dist-0.1.391-mirasim.tgz`（17397514 B，md5 `0fbf8558a853ae04db107429c36ccb86`，172 个文件）。
+      线上后端为 `1d78d046…`（123547810 B，源码 `a33b47ef9`），后端源码差只有 `fd5e71536`（mirasim）。
+- [x] 8.3b **前端增量已证明受控**：相对线上 `0.1.391-ocgremove-7e1ee1c92`，逻辑变更仅
+      `AccountsView-*.js` / `AccountsView-*.css` / `index-*.css`(+`.bg-sky-600`) / zh-en i18n chunk
+      / `index.html`，其余 159 个文件的差异全是 chunk 哈希级联（剥哈希后逐文件 md5 相同）；
+      线上 AccountsView 中 `mirasim` 命中数 0，新 chunk 中为 1。
 - [x] 8.4 前置事实：三个线上 api 容器里 `mirasim` 字符串命中数为 **0**、
       `/opt/sub2api/frontend/current` 下无 `mirasim` 命中、DB 中 mirasim 账号数 **0**
       ⇒ 能力尚未上线，本次发布是一次全新的功能上线（而不是修复）
-- [ ] 8.5 **执行发布**（待用户批准后按 `docs/MIRASIM_RELAY_UPSTREAM.md` §9.4 步骤做；
-      二进制热替换 + 前端 release 目录 + 管理端录入账号与模型映射）
+- [ ] 8.5 **执行发布**（runbook 已固定：`docs/MIRASIM_RELAY_UPSTREAM.md` §9.4；二进制热替换 +
+      前端 release 目录 + 管理端录入账号与模型映射）。前置探针：未认证
+      `GET /api/v1/admin/mirasim/oauth/providers` 现为 404，发布后应为 401（无需凭据的差分校验）
 - [ ] 8.6 上线后回归：管理端"测试账号"通过 → 真实请求 200 → 观察
       `mirasim_relay_credential_updated` 落库事件 → 重启容器再发一次请求确认冷启动可自愈
 - [ ] 8.7 回滚演练确认：删 `credentials.mirasim_refresh_token` 即退化回普通 Anthropic apikey 账号，
