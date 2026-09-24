@@ -567,6 +567,37 @@ export interface SyncUpstreamModelsResult {
 }
 
 /**
+ * Result of `applyMirasimModelMapping`.
+ *
+ * 关键约束：`changed=false` 表示服务端逐键比较后认为无需写入（幂等），
+ * 调用方不要把它当失败。`models` 是服务端实际写入的 identity 映射键（已排序）。
+ */
+export interface ApplyMirasimModelMappingResult {
+  models: string[]
+  changed: boolean
+}
+
+/**
+ * Write the account's upstream available models as an identity model mapping.
+ *
+ * 仅对 mirasim relay 账号有效（后端校验）。默认不覆盖已有映射（409），
+ * 需要替换时显式传 `overwrite = true`。
+ * @param id - Account ID
+ * @param overwrite - Replace an existing (possibly hand-maintained) mapping
+ * @returns Applied model IDs and whether the server actually wrote anything
+ */
+export async function applyMirasimModelMapping(
+  id: number,
+  overwrite = false
+): Promise<ApplyMirasimModelMappingResult> {
+  const { data } = await apiClient.post<ApplyMirasimModelMappingResult>(
+    `/admin/accounts/${id}/models/apply-mapping`,
+    { overwrite }
+  )
+  return data
+}
+
+/**
  * Sync live supported models from the account's upstream model-list endpoint
  * @param id - Account ID
  * @returns List of model IDs returned by the upstream
@@ -923,6 +954,7 @@ export const accountsAPI = {
   getAvailableModels,
   syncUpstreamModels,
   syncUpstreamModelsPreview,
+  applyMirasimModelMapping,
   generateAuthUrl,
   exchangeCode,
   refreshOpenAIToken,

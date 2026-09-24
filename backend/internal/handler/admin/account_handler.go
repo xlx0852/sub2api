@@ -55,12 +55,15 @@ type AccountHandler struct {
 	rateLimitService        *service.RateLimitService
 	accountUsageService     *service.AccountUsageService
 	accountTestService      *service.AccountTestService
-	scheduledTestService    *service.ScheduledTestService
-	concurrencyService      *service.ConcurrencyService
-	crsSyncService          *service.CRSSyncService
-	tokenCacheInvalidator   service.TokenCacheInvalidator
-	upstreamBillingProbe    *service.UpstreamBillingProbeService
-	idempotency             *service.IdempotencyCoordinator
+	// upstreamModels 只暴露「取上游可用模型清单」一个方法，便于单测注入桩；
+	// 生产值就是 accountTestService（nil 时保持 nil interface，语义同旧字段）。
+	upstreamModels        upstreamModelsFetcher
+	scheduledTestService  *service.ScheduledTestService
+	concurrencyService    *service.ConcurrencyService
+	crsSyncService        *service.CRSSyncService
+	tokenCacheInvalidator service.TokenCacheInvalidator
+	upstreamBillingProbe  *service.UpstreamBillingProbeService
+	idempotency           *service.IdempotencyCoordinator
 }
 
 // NewAccountHandler creates a new admin account handler
@@ -78,6 +81,12 @@ func NewAccountHandler(
 	crsSyncService *service.CRSSyncService,
 	tokenCacheInvalidator service.TokenCacheInvalidator,
 ) *AccountHandler {
+	// 注意：不能直接把 nil *service.AccountTestService 赋给接口字段，那会产生
+	// 「非 nil 接口装 nil 指针」，让调用方的 nil 守卫失效。
+	var upstreamModels upstreamModelsFetcher
+	if accountTestService != nil {
+		upstreamModels = accountTestService
+	}
 	return &AccountHandler{
 		adminService:            adminService,
 		oauthService:            oauthService,
@@ -87,6 +96,7 @@ func NewAccountHandler(
 		rateLimitService:        rateLimitService,
 		accountUsageService:     accountUsageService,
 		accountTestService:      accountTestService,
+		upstreamModels:          upstreamModels,
 		scheduledTestService:    scheduledTestService,
 		concurrencyService:      concurrencyService,
 		crsSyncService:          crsSyncService,

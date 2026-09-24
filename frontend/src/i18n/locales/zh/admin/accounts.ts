@@ -821,6 +821,16 @@ export default {
         invalidRelayUrl: 'Mirasim Relay 地址无效，需为 http(s) URL',
         invalidAuthUrl: 'Mirasim Auth 地址无效，需为 http(s) URL',
         invalidSealPubkey: 'Mirasim 密封公钥格式无效（应为 32 字节 base64，44 字符）',
+        mappingMissingTitle: '该账号缺少模型映射，可能导致网关 502',
+        mappingMissingDesc:
+          '模型映射为空时，调度侧会认为本账号支持所有模型，把上游并不支持的模型（例如 deepseek-v4.1-flash）也派给它；上游返回 422，客户端看到的是 502。点击右侧按钮，改用 Mirasim 当前返回的可用模型生成「原样转发」映射（立即写入，无需保存本表单）。',
+        applyMapping: '以可用模型填充映射',
+        applyMappingLoading: '填充中...',
+        applyMappingSuccess: '已写入 {count} 个模型的映射',
+        applyMappingNoChanges: '映射已是最新（{count} 个模型），无需修改',
+        applyMappingEmpty: '上游未返回任何可用模型，未写入映射（已保持原状）',
+        applyMappingFailed: '填充模型映射失败',
+        applyMappingFailedWithMessage: '填充模型映射失败：{message}',
       },
       mirasimOAuth: {
         title: '授权登录获取凭据',

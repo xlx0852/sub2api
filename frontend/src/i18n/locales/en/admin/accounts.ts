@@ -564,6 +564,16 @@ export default {
         invalidRelayUrl: 'Invalid Mirasim relay URL, expected an http(s) URL',
         invalidAuthUrl: 'Invalid Mirasim auth URL, expected an http(s) URL',
         invalidSealPubkey: 'Invalid Mirasim seal public key (expected 32-byte base64, 44 chars)',
+        mappingMissingTitle: 'Missing model mapping can cause gateway 502s',
+        mappingMissingDesc:
+          'An empty model mapping makes the scheduler treat this account as supporting every model, so requests for models the upstream does not serve (e.g. deepseek-v4.1-flash) are routed here; the upstream answers 422 and clients see a 502. Click the button to build a passthrough mapping from the models Mirasim currently reports (written immediately, no need to save this form).',
+        applyMapping: 'Fill mapping from available models',
+        applyMappingLoading: 'Applying...',
+        applyMappingSuccess: 'Mapping written for {count} models',
+        applyMappingNoChanges: 'Mapping already up to date ({count} models), nothing changed',
+        applyMappingEmpty: 'Upstream returned no available models, nothing was written',
+        applyMappingFailed: 'Failed to apply the model mapping',
+        applyMappingFailedWithMessage: 'Failed to apply the model mapping: {message}',
       },
       mirasimOAuth: {
         title: 'Authorize to fetch credentials',

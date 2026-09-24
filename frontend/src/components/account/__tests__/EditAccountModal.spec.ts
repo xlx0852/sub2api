@@ -2,17 +2,29 @@ import { describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 
-const { updateAccountMock, checkMixedChannelRiskMock, getAccountMock } = vi.hoisted(() => ({
+const {
+  updateAccountMock,
+  checkMixedChannelRiskMock,
+  getAccountMock,
+  applyMirasimMappingMock,
+  showErrorMock,
+  showSuccessMock,
+  showInfoMock
+} = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
   getAccountMock: vi.fn(),
-  checkMixedChannelRiskMock: vi.fn()
+  checkMixedChannelRiskMock: vi.fn(),
+  applyMirasimMappingMock: vi.fn(),
+  showErrorMock: vi.fn(),
+  showSuccessMock: vi.fn(),
+  showInfoMock: vi.fn()
 }))
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
-    showError: vi.fn(),
-    showSuccess: vi.fn(),
-    showInfo: vi.fn()
+    showError: showErrorMock,
+    showSuccess: showSuccessMock,
+    showInfo: showInfoMock
   })
 }))
 
@@ -21,7 +33,8 @@ vi.mock('@/api/admin', () => ({
     accounts: {
       update: updateAccountMock,
       getById: getAccountMock,
-      checkMixedChannelRisk: checkMixedChannelRiskMock
+      checkMixedChannelRisk: checkMixedChannelRiskMock,
+      applyMirasimModelMapping: applyMirasimMappingMock
     },
     settings: {
       getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
@@ -889,7 +902,7 @@ describe('external bridge review regressions', () => {
 })
 
 describe('EditAccountModal Mirasim relay wiring', () => {
-  function buildMirasimAccount() {
+  function buildMirasimAccount(overrides: Record<string, unknown> = {}) {
     return {
       id: 9,
       name: 'Mirasim Relay',
@@ -909,13 +922,19 @@ describe('EditAccountModal Mirasim relay wiring', () => {
       status: 'active',
       group_ids: [],
       expires_at: null,
-      auto_pause_on_expired: false
+      auto_pause_on_expired: false,
+      // 后端派生只读字段，默认缺失（旧版本后端）——需要时用 overrides 显式传入
+      ...overrides
     } as any
   }
 
   function mountWith(account: any) {
     updateAccountMock.mockReset()
     checkMixedChannelRiskMock.mockReset()
+    applyMirasimMappingMock.mockReset()
+    showErrorMock.mockClear()
+    showSuccessMock.mockClear()
+    showInfoMock.mockClear()
     checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
     updateAccountMock.mockResolvedValue(account)
     return mountModal(account)
@@ -995,5 +1014,97 @@ describe('EditAccountModal Mirasim relay wiring', () => {
     await flushPromises()
 
     expect(updateAccountMock).not.toHaveBeenCalled()
+  })
+
+  // ==== 空映射风险提示 + 一键填充（mirasim_model_mapping_missing） ====
+  // 关键约束（改动前请先读）：该提示是只读派生字段驱动的，
+  // 非 relay / 已配置映射的账号绝不能出现提示，否则会诱导用户误覆盖手工映射。
+  it('hides the missing-mapping warning for a relay account that already has a mapping', async () => {
+    const account = buildMirasimAccount()
+    account.credentials = {
+      base_url: 'https://relay.mirasim.ai',
+      model_mapping: { 'kimi-k3': 'kimi-k3' }
+    }
+    const wrapper = mountWith(account)
+    await wrapper.get('[data-testid="edit-account-tab-advanced"]').trigger('click')
+
+    expect(wrapper.find('[data-testid="edit-mirasim-mapping-missing"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="edit-mirasim-apply-mapping"]').exists()).toBe(false)
+  })
+
+  it('warns and one-click fills the identity mapping when the backend flags a missing mapping', async () => {
+    const wrapper = mountWith(buildMirasimAccount({ mirasim_model_mapping_missing: true }))
+    await wrapper.get('[data-testid="edit-account-tab-advanced"]').trigger('click')
+
+    expect(wrapper.find('[data-testid="edit-mirasim-mapping-missing"]').exists()).toBe(true)
+
+    // 注意：mountWith 会 reset mock，所以返回值必须在挂载之后再设置。
+    applyMirasimMappingMock.mockResolvedValue({
+      models: ['kimi-k3', 'deepseek-v4-flash'],
+      changed: true
+    })
+    await wrapper.get('[data-testid="edit-mirasim-apply-mapping"]').trigger('click')
+    await flushPromises()
+
+    // 本地白名单为空 → 不请求覆盖（overwrite=false），避免抢掉服务端已有映射
+    expect(applyMirasimMappingMock).toHaveBeenCalledTimes(1)
+    expect(applyMirasimMappingMock.mock.calls[0]?.[0]).toBe(9)
+    expect(applyMirasimMappingMock.mock.calls[0]?.[1]).toBe(false)
+
+    // 表单状态同步为白名单模式（服务端写入的就是 identity 映射），并提示成功条数
+    await wrapper.get('[data-testid="edit-account-tab-models"]').trigger('click')
+    expect(wrapper.get('[data-testid="model-whitelist-value"]').text()).toBe(
+      'kimi-k3,deepseek-v4-flash'
+    )
+    expect(showSuccessMock).toHaveBeenCalledTimes(1)
+    expect(showErrorMock).not.toHaveBeenCalled()
+  })
+
+  it('requests an overwrite when the form already holds a mapping', async () => {
+    const account = buildMirasimAccount({ mirasim_model_mapping_missing: true })
+    account.credentials = {
+      base_url: 'https://relay.mirasim.ai',
+      model_mapping: { 'deepseek-v4.1-flash': 'kimi-k3' }
+    }
+    const wrapper = mountWith(account)
+    await wrapper.get('[data-testid="edit-account-tab-advanced"]').trigger('click')
+
+    applyMirasimMappingMock.mockResolvedValue({ models: ['kimi-k3'], changed: true })
+    await wrapper.get('[data-testid="edit-mirasim-apply-mapping"]').trigger('click')
+    await flushPromises()
+
+    expect(applyMirasimMappingMock.mock.calls[0]?.[1]).toBe(true)
+  })
+
+  it('reports an idempotent no-op as info instead of success', async () => {
+    const wrapper = mountWith(buildMirasimAccount({ mirasim_model_mapping_missing: true }))
+    await wrapper.get('[data-testid="edit-account-tab-advanced"]').trigger('click')
+
+    applyMirasimMappingMock.mockResolvedValue({ models: ['kimi-k3'], changed: false })
+    await wrapper.get('[data-testid="edit-mirasim-apply-mapping"]').trigger('click')
+    await flushPromises()
+
+    expect(showInfoMock).toHaveBeenCalledTimes(1)
+    expect(showSuccessMock).not.toHaveBeenCalled()
+    expect(showErrorMock).not.toHaveBeenCalled()
+  })
+
+  it('shows the upstream error message and keeps the form editable when applying fails', async () => {
+    const wrapper = mountWith(buildMirasimAccount({ mirasim_model_mapping_missing: true }))
+    await wrapper.get('[data-testid="edit-account-tab-advanced"]').trigger('click')
+
+    applyMirasimMappingMock.mockRejectedValue(new Error('Account is not a mirasim relay account'))
+    await wrapper.get('[data-testid="edit-mirasim-apply-mapping"]').trigger('click')
+    await flushPromises()
+
+    expect(showErrorMock).toHaveBeenCalledTimes(1)
+    expect(showSuccessMock).not.toHaveBeenCalled()
+    // 失败不破坏编辑态：提示仍在，按钮可重试，模型选择器内容不变
+    await wrapper.get('[data-testid="edit-account-tab-models"]').trigger('click')
+    expect(wrapper.get('[data-testid="model-whitelist-value"]').text()).toBe('')
+    expect(wrapper.find('[data-testid="edit-mirasim-apply-mapping"]').exists()).toBe(true)
+    expect(
+      wrapper.get('[data-testid="edit-mirasim-apply-mapping"]').attributes('disabled')
+    ).toBeUndefined()
   })
 })

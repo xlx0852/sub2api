@@ -1363,6 +1363,40 @@
             {{ t('admin.accounts.mirasimRelay.enabledHint') }}
           </p>
 
+          <!--
+            空映射风险提示 + 一键填充。
+            关键约束（改动前请先读）：mirasimModelMappingMissing 是后端派生只读字段，
+            为 true 表示该账号 model_mapping 为空，调度侧等价「认领所有模型」——
+            上游不支持的模型也会派给本账号，上游 422 → 网关 502。
+            修复必须走专用端点（服务端会保全凭据并对非空映射要求 overwrite），
+            不要用本表单的普通保存绕过。
+          -->
+          <div
+            v-if="mirasimModelMappingMissing"
+            class="rounded-lg bg-amber-50 p-3 dark:bg-amber-900/20"
+            data-testid="edit-mirasim-mapping-missing"
+          >
+            <p class="text-xs font-medium text-amber-700 dark:text-amber-400">
+              {{ t('admin.accounts.mirasimRelay.mappingMissingTitle') }}
+            </p>
+            <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">
+              {{ t('admin.accounts.mirasimRelay.mappingMissingDesc') }}
+            </p>
+            <button
+              type="button"
+              class="mt-2 inline-flex items-center rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+              data-testid="edit-mirasim-apply-mapping"
+              :disabled="isApplyingMirasimMapping || !account?.id"
+              @click="applyMirasimModelMappingFromUpstream"
+            >
+              {{
+                isApplyingMirasimMapping
+                  ? t('admin.accounts.mirasimRelay.applyMappingLoading')
+                  : t('admin.accounts.mirasimRelay.applyMapping')
+              }}
+            </button>
+          </div>
+
           <MirasimOAuthOnboarding
             testid-prefix="edit-mirasim-oauth"
             :auth-url="mirasimAuthUrl"
@@ -2413,6 +2447,63 @@ const resetMirasimRelayForm = () => {
   mirasimSealPubkey.value = ''
   showMirasimOverrides.value = false
   mirasimRelayInitiallyEnabled.value = false
+}
+
+// 后端派生只读字段：mirasim relay 账号的 model_mapping 为空。
+// 只有该标记为 true 时才提示风险——非 relay 账号的空映射是正常配置。
+const mirasimModelMappingMissing = computed(
+  () => props.account?.mirasim_model_mapping_missing === true
+)
+const isApplyingMirasimMapping = ref(false)
+
+// 一键以「上游可用模型清单」填充 identity 映射。
+//
+// 关键约束（改动前请先读）：
+//   - 服务端直接落库，本操作**不需要**再点保存；回填表单白名单只是保持表单与线上一致，
+//     避免用户随后保存时把手工别名映射又写回去。
+//   - overwrite 由本地是否已有映射决定：本地非空（用户已手工填了别名/白名单）时
+//     才请求覆盖；服务端已有映射但本地为空时服务端会返回 409，透传错误提示即可。
+//   - changed=false 是幂等成功（服务端逐键相同），不是失败，用 info 提示。
+async function applyMirasimModelMappingFromUpstream() {
+  const accountId = props.account?.id
+  if (!accountId || isApplyingMirasimMapping.value) return
+
+  isApplyingMirasimMapping.value = true
+  try {
+    const hasLocalMapping = allowedModels.value.length > 0 || modelMappings.value.length > 0
+    const result = await adminAPI.accounts.applyMirasimModelMapping(accountId, hasLocalMapping)
+    const models = (result.models || []).map((model) => model.trim()).filter(Boolean)
+    if (models.length === 0) {
+      appStore.showInfo(t('admin.accounts.mirasimRelay.applyMappingEmpty'))
+      return
+    }
+
+    // 服务端写入的是 identity 映射（from === to），表单状态同步为白名单模式最贴近语义。
+    modelRestrictionMode.value = 'whitelist'
+    allowedModels.value = models
+    modelMappings.value = []
+
+    if (result.changed) {
+      appStore.showSuccess(
+        t('admin.accounts.mirasimRelay.applyMappingSuccess', { count: models.length })
+      )
+    } else {
+      appStore.showInfo(
+        t('admin.accounts.mirasimRelay.applyMappingNoChanges', { count: models.length })
+      )
+    }
+  } catch (error) {
+    // 失败只提示，不破坏当前编辑态（用户已填内容保持原样，可重试）。
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : t('admin.accounts.mirasimRelay.applyMappingFailed')
+    appStore.showError(
+      t('admin.accounts.mirasimRelay.applyMappingFailedWithMessage', { message })
+    )
+  } finally {
+    isApplyingMirasimMapping.value = false
+  }
 }
 const webSearchGlobalEnabled = ref(false)
 const {

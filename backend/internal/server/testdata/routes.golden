@@ -100,6 +100,7 @@ GET /api/v1/admin/groups/all
 GET /api/v1/admin/groups/capacity-summary
 GET /api/v1/admin/groups/usage-summary
 GET /api/v1/admin/kimi/oauth/device/status
+GET /api/v1/admin/mirasim/oauth/providers
 GET /api/v1/admin/model-catalog
 GET /api/v1/admin/openai/accounts/:id/quota
 GET /api/v1/admin/openai/oauth/device/status
@@ -278,6 +279,7 @@ POST /api/v1/admin/accounts
 POST /api/v1/admin/accounts/:id/apply-oauth-credentials
 POST /api/v1/admin/accounts/:id/clear-error
 POST /api/v1/admin/accounts/:id/clear-rate-limit
+POST /api/v1/admin/accounts/:id/models/apply-mapping
 POST /api/v1/admin/accounts/:id/models/sync-upstream
 POST /api/v1/admin/accounts/:id/recover-state
 POST /api/v1/admin/accounts/:id/refresh
@@ -348,6 +350,10 @@ POST /api/v1/admin/kimi/accounts/:id/reauth-from-device
 POST /api/v1/admin/kimi/accounts/:id/refresh
 POST /api/v1/admin/kimi/oauth/create-from-device
 POST /api/v1/admin/kimi/oauth/device/start
+POST /api/v1/admin/mirasim/oauth/auth-url
+POST /api/v1/admin/mirasim/oauth/complete
+POST /api/v1/admin/mirasim/oauth/email/code
+POST /api/v1/admin/mirasim/oauth/email/verify
 POST /api/v1/admin/openai/accounts/:id/reauth-from-device
 POST /api/v1/admin/openai/accounts/:id/refresh
 POST /api/v1/admin/openai/accounts/:id/reset-quota

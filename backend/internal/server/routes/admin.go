@@ -378,6 +378,9 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		accounts.POST("/models/sync-upstream-preview", h.Admin.Account.SyncUpstreamModelsPreview)
 		accounts.GET("/:id/models", h.Admin.Account.GetAvailableModels)
 		accounts.POST("/:id/models/sync-upstream", h.Admin.Account.SyncUpstreamModels)
+		// 以账号维度可用模型（GET /v1/models）生成 identity model_mapping，用于修复
+		// mirasim relay 账号的空映射（空映射＝认领所有模型 → 上游 422 → 网关 502）。
+		accounts.POST("/:id/models/apply-mapping", h.Admin.Account.ApplyMirasimModelMapping)
 		accounts.POST("/batch", h.Admin.Account.BatchCreate)
 		accounts.GET("/data", h.Admin.Account.ExportData)
 		accounts.POST("/data", h.Admin.Account.ImportData)

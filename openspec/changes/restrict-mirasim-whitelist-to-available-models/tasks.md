@@ -71,3 +71,36 @@
   `/v1/models` 集合（预期不再包含那批 404 的 claude/gpt 模型），并记录实际返回的 id 列表。
 - [x] 6.6 生产日志核验：发布后 `docker logs` 落盘统计，确认无凭据/JWT/上游正文泄漏，
   mirasim 事件只含 `account_id` + `category`。
+
+## 7. 上线后跟进：账号 140 空映射引发网关 502（2026-09-25）
+
+- [x] 7.1 定位根因：账号 `140`（mirasim-relay）`priority=0` 且 `credentials.model_mapping`
+      为空 → `IsModelSupported` 判定「空映射＝允许所有」→ 组 34 内优先级最高被选中认领
+      `deepseek-v4.1-flash`（mirasim 侧真实 id 为 `deepseek-flash`，`v4.1-flash` 只是 label）
+      → 上游 `422 model "deepseek-v4.1-flash" is not supported at this time` → 网关 502。
+      （不是 pi 的 bug，也不是网关 bug；`deepseek-v4.1-flash` 主路径本就该落在 `139`。）
+- [x] 7.2 生产账号 `140` 的 `credentials.model_mapping` 已收窄为 5 条 identity 映射
+      （`deepseek-flash` / `deepseek-v4-flash` / `deepseek-v4-flash-vision-exp` /
+      `glm-5.3-flash` / `kimi-k3`）；`priority=0`、`status=active`、
+      `extra=['mirasim_relay_enabled']`、`group_ids=[34]` 未变。该写入**并非**本 change 的代码
+      路径所执行（外部操作），本轮仅复核。
+- [x] 7.3 修复后复核（日志证据）：`docker logs --since 8h sub2api-api-candidate-0.1.391-noinject-a33b47ef9`
+      落盘 62862 行后解析 `gateway.forward_failed` 共 7 条，其中 `account_id=140` **6 条全部**集中在
+      `2026-09-25T01:14:07`–`01:14:34`（均早于映射修复时刻 `01:15:59`），错误均为上述 422；
+      结论：**修复后（`>= 2026-09-25T01:16`）`account_id=140` 的 `forward_failed` 为 0**，
+      同期 `deepseek-v4.1-flash` 流量回落到 `account_id=139`。
+- [ ] 7.4 代码守卫（空映射告警 + 一键写入）不在本 change 范围内，转入
+      `guard-mirasim-account-model-mapping`。
+
+## 生产配置修复记录（7.2 / 7.3，2026-09-25 01:15:59 +0800）
+
+| 项 | 值 |
+| --- | --- |
+| 账号 | `id=140 name=mirasim-relay platform=anthropic type=apikey priority=0 status=active group_ids=[34]` |
+| 修复前 | `credentials.model_mapping` = `null`（len 0），等价于「认领所有模型」 |
+| 修复后 | 5 条 identity 映射（见 7.2），`updated_at=2026-09-25T01:15:59.090902+08:00` |
+| 写入方式 | `PUT /api/v1/admin/accounts/140`（`credentials` 为 merge 语义，仅传 `model_mapping` 不会清空 `mirasim_refresh_token` / `mirasim_device_key`）；**由外部操作执行，非本 change 代码** |
+| 修复前证据 | 近 8h `account_id=140` `gateway.forward_failed` = 6 条（`422 … "deepseek-v4.1-flash" is not supported at this time`，`01:14:07`–`01:14:34`） |
+| 修复后证据 | 窗口 `>= 2026-09-25T01:16` 内 `account_id=140` `gateway.forward_failed` = 0；同期 `/v1/messages` 事件 315 条 |
+| 已知副作用 | `140` 优先级最高，配好这 5 个映射后会优先承接其中包含的模型（例如 `glm-5.3-flash` 原由 `81` 服务）；线上实测未见失败 |
+| 派生需求 | 「空映射＝允许所有」语义本身未改（改它会让调度依赖动态缓存、失败模式不确定）；改为在管理端做**可见性守卫**，见 `guard-mirasim-account-model-mapping` |

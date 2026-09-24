@@ -199,22 +199,29 @@ type Account struct {
 	Extra             map[string]any  `json:"extra"`
 	// CodexTicket 是打票状态的**派生摘要**（票长/票龄/池位/cookie 数量）。
 	// 票与 cookie 本体不下发前端，见 dto 层对 extra 的剥离。
-	CodexTicket             *domain.CodexTicketSummary `json:"codex_ticket,omitempty"`
-	ProxyID                 *int64                     `json:"proxy_id"`
-	ProxyFallbackOriginID   *int64                     `json:"proxy_fallback_origin_id"`
-	ProxyFallbackOriginName *string                    `json:"proxy_fallback_origin_name,omitempty"`
-	Concurrency             int                        `json:"concurrency"`
-	LoadFactor              *int                       `json:"load_factor,omitempty"`
-	Priority                int                        `json:"priority"`
-	RateMultiplier          float64                    `json:"rate_multiplier"`
-	Status                  string                     `json:"status"`
-	ErrorMessage            string                     `json:"error_message"`
-	LastUsedAt              *time.Time                 `json:"last_used_at"`
-	ExpiresAt               *int64                     `json:"expires_at"`
-	AutoPauseOnExpired      bool                       `json:"auto_pause_on_expired"`
-	CreatedAt               time.Time                  `json:"created_at"`
-	UpdatedAt               time.Time                  `json:"updated_at"`
-	DeletedAt               *time.Time                 `json:"deleted_at,omitempty"`
+	CodexTicket *domain.CodexTicketSummary `json:"codex_ticket,omitempty"`
+	// MirasimModelMappingMissing 是**派生只读**告警位：mirasim relay 账号的
+	// model_mapping 为空时为 true。空映射等价于「认领所有模型」，会把上游
+	// 不支持的模型调度到该账号（上游 422 → 网关 502）。
+	//
+	// 关键约束（改动前请先读）：语义见 service.MirasimRelayAccountNeedsModelMapping；
+	// 刻意不带 omitempty，便于前端与测试显式断言 false。
+	MirasimModelMappingMissing bool       `json:"mirasim_model_mapping_missing"`
+	ProxyID                    *int64     `json:"proxy_id"`
+	ProxyFallbackOriginID      *int64     `json:"proxy_fallback_origin_id"`
+	ProxyFallbackOriginName    *string    `json:"proxy_fallback_origin_name,omitempty"`
+	Concurrency                int        `json:"concurrency"`
+	LoadFactor                 *int       `json:"load_factor,omitempty"`
+	Priority                   int        `json:"priority"`
+	RateMultiplier             float64    `json:"rate_multiplier"`
+	Status                     string     `json:"status"`
+	ErrorMessage               string     `json:"error_message"`
+	LastUsedAt                 *time.Time `json:"last_used_at"`
+	ExpiresAt                  *int64     `json:"expires_at"`
+	AutoPauseOnExpired         bool       `json:"auto_pause_on_expired"`
+	CreatedAt                  time.Time  `json:"created_at"`
+	UpdatedAt                  time.Time  `json:"updated_at"`
+	DeletedAt                  *time.Time `json:"deleted_at,omitempty"`
 
 	Schedulable bool `json:"schedulable"`
 

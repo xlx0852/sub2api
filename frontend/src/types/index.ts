@@ -907,6 +907,14 @@ export interface Account {
   } & Record<string, unknown>)
   /** 打票状态摘要（仅 OpenAI OAuth 账号会有）。 */
   codex_ticket?: CodexTicketSummary
+  /**
+   * 后端派生只读字段：mirasim relay 账号的 model_mapping 为空时为 true。
+   *
+   * 空映射在调度侧等价于「本账号认领所有模型」，会把上游不支持的模型也派给该账号，
+   * 上游返回 422 → 网关把它变成 502。前端据此显示风险提示并提供一键填充。
+   * 该字段只读：写入请走 `applyMirasimModelMapping`。
+   */
+  mirasim_model_mapping_missing?: boolean
   proxy_id: number | null
   proxy_fallback_origin_id?: number | null
   proxy_fallback_origin_name?: string | null
