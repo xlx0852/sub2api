@@ -152,9 +152,12 @@
                   </div>
                 </div>
 
-                <div
+                <button
                   v-if="isColumnVisible('latency')"
-                  class="rounded-lg bg-black/[0.03] px-3 py-2.5 dark:bg-white/[0.04]"
+                  type="button"
+                  class="w-full cursor-pointer rounded-lg bg-black/[0.03] px-3 py-2.5 text-left transition-colors hover:bg-blue-50 dark:bg-white/[0.04] dark:hover:bg-blue-900/20"
+                  :title="t('usage.timingDetail.open')"
+                  @click="emit('timingClick', row)"
                 >
                   <div class="text-[11px] font-medium text-gray-400 dark:text-dark-500">{{ t('usage.latency') }}</div>
                   <div class="mt-1.5 space-y-1 text-xs">
@@ -171,7 +174,7 @@
                       </span>
                     </div>
                   </div>
-                </div>
+                </button>
 
                 <div
                   v-if="isColumnVisible('output_rate')"
@@ -462,7 +465,12 @@
         </template>
 
         <template #cell-latency="{ row }">
-          <div class="flex min-w-[9.5rem] items-center">
+          <button
+            type="button"
+            class="flex min-w-[9.5rem] items-center rounded-md text-left transition-colors hover:bg-blue-50 dark:hover:bg-blue-900/20"
+            :title="t('usage.timingDetail.open')"
+            @click="emit('timingClick', row)"
+          >
             <div class="grid min-w-0 gap-1 text-sm tabular-nums">
               <div class="flex items-center justify-between gap-3 rounded-md bg-gray-50/80 px-1.5 py-0.5 dark:bg-gray-800/50">
                 <span class="flex items-center gap-1.5 whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
@@ -483,7 +491,7 @@
                 </span>
               </div>
             </div>
-          </div>
+          </button>
         </template>
 
         <template #cell-output_rate="{ row }">
@@ -829,6 +837,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 const emit = defineEmits<{
   userClick: [userID: number, email?: string]
+  timingClick: [row: AdminUsageLog]
   sort: [key: string, order: 'asc' | 'desc']
   ipGeoBatchFailed: []
 }>()

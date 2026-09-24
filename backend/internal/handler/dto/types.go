@@ -503,14 +503,15 @@ type UsageLog struct {
 	RateMultiplier    float64 `json:"rate_multiplier"`
 	PricingCurrency   string  `json:"pricing_currency"`
 
-	BillingType    int8   `json:"billing_type"`
-	RequestType    string `json:"request_type"`
-	Stream         bool   `json:"stream"`
-	OpenAIWSMode   bool   `json:"openai_ws_mode"`
-	WSPayloadBytes *int64 `json:"ws_payload_bytes,omitempty"`
-	WSEventCount   *int   `json:"ws_event_count,omitempty"`
-	DurationMs     *int   `json:"duration_ms"`
-	FirstTokenMs   *int   `json:"first_token_ms"`
+	BillingType       int8                      `json:"billing_type"`
+	RequestType       string                    `json:"request_type"`
+	Stream            bool                      `json:"stream"`
+	OpenAIWSMode      bool                      `json:"openai_ws_mode"`
+	WSPayloadBytes    *int64                    `json:"ws_payload_bytes,omitempty"`
+	WSEventCount      *int                      `json:"ws_event_count,omitempty"`
+	DurationMs        *int                      `json:"duration_ms"`
+	FirstTokenMs      *int                      `json:"first_token_ms"`
+	FirstOutputStages *domain.FirstOutputStages `json:"first_output_stages,omitempty"`
 
 	// 图片生成字段
 	ImageCount         int            `json:"image_count"`

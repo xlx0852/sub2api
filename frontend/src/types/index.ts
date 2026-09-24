@@ -1432,6 +1432,15 @@ export type UsageRequestType = 'unknown' | 'sync' | 'stream' | 'ws_v2' | 'cyber'
 export type ImageSizeSource = 'output' | 'input' | 'default' | 'legacy'
 export type ImageSizeBreakdown = Record<string, number>
 
+export interface FirstOutputStages {
+  gateway_pre_upstream_ms?: number | null
+  upstream_connect_ms?: number | null
+  upstream_first_output_ms?: number | null
+  retry_failover_ms?: number | null
+  gateway_first_output_write_ms?: number | null
+  gateway_first_output_total_ms?: number | null
+}
+
 export interface UsageLog {
   id: number
   user_id: number
@@ -1471,6 +1480,7 @@ export interface UsageLog {
   ws_event_count?: number | null
   duration_ms: number | null
   first_token_ms: number | null
+  first_output_stages?: FirstOutputStages | null
 
   // 图片生成字段
   image_count: number

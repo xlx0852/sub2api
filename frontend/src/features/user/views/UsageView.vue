@@ -181,6 +181,7 @@
           default-sort-key="created_at"
           default-sort-order="desc"
           @sort="handleSort"
+          @timingClick="timingLog = $event"
           @ipGeoBatchFailed="handleIpGeoBatchFailed"
         />
 
@@ -192,6 +193,7 @@
           @update:page="handlePageChange"
           @update:pageSize="handlePageSizeChange"
         />
+        <UsageRequestTimingModal v-model="timingModalOpen" :log="timingLog" />
       </template>
 
       <UserErrorRequestsTable
@@ -223,6 +225,7 @@ import Select, { type SelectOption } from '@/ui/Select.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'
+import UsageRequestTimingModal from '@/components/admin/usage/UsageRequestTimingModal.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
@@ -256,6 +259,8 @@ type EndpointSource = 'inbound' | 'upstream' | 'path'
 
 const usageStats = ref<UsageStatsResponse | null>(null)
 const usageLogs = ref<UsageLog[]>([])
+const timingLog = ref<UsageLog | null>(null)
+const timingModalOpen = computed({ get: () => timingLog.value != null, set: (open) => { if (!open) timingLog.value = null } })
 const trendData = ref<TrendDataPoint[]>([])
 const requestedModelStats = ref<ModelStat[]>([])
 const groupStats = ref<GroupStat[]>([])

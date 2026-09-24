@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
@@ -357,6 +358,35 @@ func TestUsageLogFromService_CacheSavedCostNilWhenNegative(t *testing.T) {
 	dto := UsageLogFromService(log)
 	require.NotNil(t, dto.CacheHitRate)
 	require.Nil(t, dto.CacheSavedCost)
+}
+
+func TestUsageLogFromService_IncludesFirstOutputStages(t *testing.T) {
+	t.Parallel()
+
+	pre := 285
+	upstream := 26510
+	total := 50810
+	log := &service.UsageLog{
+		RequestID: "req_stages",
+		FirstOutputStages: &domain.FirstOutputStages{
+			GatewayPreUpstreamMs:      &pre,
+			UpstreamFirstOutputMs:     &upstream,
+			GatewayFirstOutputTotalMs: &total,
+		},
+	}
+
+	user := UsageLogFromService(log)
+	admin := UsageLogFromServiceAdmin(log)
+	require.Equal(t, pre, *user.FirstOutputStages.GatewayPreUpstreamMs)
+	require.Equal(t, upstream, *admin.FirstOutputStages.UpstreamFirstOutputMs)
+	require.Equal(t, total, *admin.FirstOutputStages.GatewayFirstOutputTotalMs)
+}
+
+func TestUsageLogFromService_OmitsMissingFirstOutputStages(t *testing.T) {
+	t.Parallel()
+
+	user := UsageLogFromService(&service.UsageLog{RequestID: "req_legacy"})
+	require.Nil(t, user.FirstOutputStages)
 }
 
 func f64Ptr(value float64) *float64 {

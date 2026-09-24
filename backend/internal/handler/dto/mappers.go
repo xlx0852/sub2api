@@ -614,6 +614,7 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		WSEventCount:          l.WSEventCount,
 		DurationMs:            l.DurationMs,
 		FirstTokenMs:          l.FirstTokenMs,
+		FirstOutputStages:     l.FirstOutputStages,
 		ImageCount:            l.ImageCount,
 		ImageSize:             l.ImageSize,
 		ImageInputSize:        l.ImageInputSize,
