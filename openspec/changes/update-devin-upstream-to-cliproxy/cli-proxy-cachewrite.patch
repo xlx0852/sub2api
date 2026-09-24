@@ -1,0 +1,30 @@
+diff --git a/internal/runtime/executor/devin_executor.go b/internal/runtime/executor/devin_executor.go
+index 91596cb..2706cac 100644
+--- a/internal/runtime/executor/devin_executor.go
++++ b/internal/runtime/executor/devin_executor.go
+@@ -973,7 +973,11 @@ func (e *DevinExecutor) streamDevinFrames(
+ 		completedEvent, _ = sjson.SetBytes(completedEvent, "interaction.finish_reason", completionFinishReason)
+ 	}
+ 	if finalUsage != nil {
+-		totalInput := finalUsage.PromptTokens + finalUsage.CachedTokens
++		// Field 2 is only the uncached remainder (often 3) once prompt caching starts;
++		// the rest of a new prompt is field 4 (cache write). The OpenAI responses
++		// translator drops cache_write_tokens, so leaving it out of this sum reports
++		// input_tokens=3. Fold cache writes into the input total.
++		totalInput := finalUsage.PromptTokens + finalUsage.CachedTokens + finalUsage.CacheWriteTokens
+ 		totalOutput := finalUsage.CompletionTokens
+ 		totalTokens := totalInput + totalOutput
+ 
+@@ -1360,7 +1364,11 @@ func consumeDevinFramesToInteractions(body io.Reader, model, chatModelUID string
+ 	}
+ 
+ 	if finalUsage != nil {
+-		totalInput := finalUsage.PromptTokens + finalUsage.CachedTokens
++		// Field 2 is only the uncached remainder (often 3) once prompt caching starts;
++		// the rest of a new prompt is field 4 (cache write). The OpenAI responses
++		// translator drops cache_write_tokens, so leaving it out of this sum reports
++		// input_tokens=3. Fold cache writes into the input total.
++		totalInput := finalUsage.PromptTokens + finalUsage.CachedTokens + finalUsage.CacheWriteTokens
+ 		totalOutput := finalUsage.CompletionTokens
+ 		totalTokens := totalInput + totalOutput
+ 
