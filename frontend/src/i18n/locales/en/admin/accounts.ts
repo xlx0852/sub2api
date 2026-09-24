@@ -1361,7 +1361,13 @@ export default {
         cursorAvailable: 'Available',
         cursorExhausted: 'Exhausted',
         passiveSampled: 'Passive',
-        activeQuery: 'Refresh quota'
+        activeQuery: 'Refresh quota',
+        // Mirasim relay quota windows (normalized server-side, see openspec/changes/add-mirasim-model-roster-and-limits)
+        mirasimUnlimited: 'Unlimited',
+        mirasimModelScoped: 'Model-scoped',
+        mirasimPaid: 'Paid',
+        mirasimFree: 'Free',
+        mirasimDegradedHint: 'Upstream quota aggregation unavailable; windows may be incomplete'
       },
       usageDetails: {
         title: 'Usage details',
@@ -1442,6 +1448,8 @@ export default {
         lastUpdated: 'Last updated',
         responseStatus: 'Response status',
         lastError: 'Latest error',
+        mirasimPlan: 'Mirasim plan',
+        mirasimDegraded: 'Quota degraded',
         sourceActive: 'Active query',
         sourcePassive: 'Passive sample',
         sourceLocal: 'Local statistics',

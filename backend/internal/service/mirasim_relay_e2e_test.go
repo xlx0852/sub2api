@@ -373,3 +373,153 @@ func TestMirasimBuildersRewriteToRelay(t *testing.T) {
 	}
 	t.Logf("buildCountTokensRequest -> %s encLen=%d", ctReq.URL.String(), len(ctReq.Header.Get(mirasimHeaderEnc)))
 }
+
+// TestMirasimRealRelayMetadataEndToEnd 覆盖只读元数据通道（`GET /v1/model-roster`、
+// `GET /v1/limits`）：用真实 device key + 调用方缓存的 access token 直连 relay，
+// 断言 roster 可解析、limits 可归一化、服务门面（MirasimMetadataService）拿到同一份缓存，
+// 且**全程不触发 /auth/refresh**（refresh token 是占位值；一旦被换掉就会失败）。
+//
+// 环境变量：MIRASIM_E2E_DEVICE_KEY_FILE / MIRASIM_E2E_ACCESS_TOKEN_FILE（缺一即 skip）。
+// 日志只打印计数、agent 名、窗口名与状态（额度元数据），不含凭据与上游正文。
+func TestMirasimRealRelayMetadataEndToEnd(t *testing.T) {
+	deviceKeyPEM := mirasimE2EReadFile(t, mirasimE2EDeviceKeyFile)
+	accessToken := mirasimE2EReadFile(t, mirasimE2EAccessTokenFile)
+	if deviceKeyPEM == "" || accessToken == "" {
+		t.Skip("缺少 MIRASIM_E2E_DEVICE_KEY_FILE / MIRASIM_E2E_ACCESS_TOKEN_FILE")
+	}
+
+	const placeholderRefresh = "e2e-placeholder-not-used"
+	upstream := &mirasimE2EUpstream{client: &http.Client{Timeout: 60 * time.Second}}
+	account := mirasimE2ENewAccount(999009, placeholderRefresh, deviceKeyPEM)
+
+	cfg, err := mirasimRelayConfigForAccount(account)
+	if err != nil {
+		t.Fatalf("解析配置失败: %v", err)
+	}
+	client, err := mirasimRelayRuntimeAcquire(cfg, upstream, nil, nil)
+	if err != nil {
+		t.Fatalf("构建 client 失败: %v", err)
+	}
+	mirasimE2EPrimeAccessToken(t, client, accessToken)
+
+	deviceID := client.deviceID
+	if expect := strings.TrimSpace(os.Getenv(mirasimE2EExpectDeviceID)); expect != "" && expect != deviceID {
+		t.Fatalf("deviceID 与 %s 不一致", mirasimE2EExpectDeviceID)
+	}
+	ctx := context.Background()
+
+	// 1) 模型清单：拉取 → 解析 → 选 agent → 产出模型 id 白名单。
+	rosterRaw, err := client.fetchModelRoster(ctx)
+	if err != nil {
+		// 错误消息里只有操作名与状态码，不会泄漏上游正文。
+		t.Fatalf("真实 relay 拉取 model roster 失败: %v", err)
+	}
+	roster, err := parseMirasimModelRoster(rosterRaw)
+	if err != nil {
+		t.Fatalf("解析 model roster 失败: %v", err)
+	}
+	if len(roster.Agents) == 0 {
+		t.Fatal("roster 里没有任何有效 agent")
+	}
+	agent, err := roster.selectAgent("")
+	if err != nil {
+		t.Fatalf("选择默认 agent 失败: %v", err)
+	}
+	if len(agent.Models) == 0 {
+		t.Fatalf("agent %q 没有有效模型", agent.Name)
+	}
+	modelIDs, err := mirasimRosterModelIDsForAccount(roster, account)
+	if err != nil {
+		t.Fatalf("产出模型 id 失败: %v", err)
+	}
+	if len(modelIDs) == 0 {
+		t.Fatal("模型 id 白名单为空")
+	}
+	for _, model := range agent.Models {
+		if strings.TrimSpace(model.ID) == "" || model.ContextWindow <= 0 {
+			t.Fatalf("模型条目未通过校验: id=%q contextWindow=%v", model.ID, model.ContextWindow)
+		}
+	}
+	t.Logf("roster: agents=%d order=%v default=%q models=%d cliKeys=%d",
+		len(roster.Agents), roster.Order, agent.Name, len(modelIDs), len(roster.CLI))
+
+	// 2) 额度窗口：拉取 → 解析 → 映射到 five_hour / seven_day。
+	limitsRaw, err := client.fetchLimits(ctx)
+	if err != nil {
+		t.Fatalf("真实 relay 拉取 limits 失败: %v", err)
+	}
+	snapshot, err := parseMirasimLimits(limitsRaw)
+	if err != nil {
+		t.Fatalf("解析 limits 失败: %v", err)
+	}
+	if len(snapshot.Windows) == 0 {
+		t.Fatal("limits 里没有任何有效窗口")
+	}
+	info := &UsageInfo{Source: "active"}
+	mirasimApplyLimitsSnapshot(info, snapshot)
+	for _, window := range snapshot.Windows {
+		if window.Name == "" {
+			t.Fatalf("窗口缺少 name: %+v", window)
+		}
+		if window.Unlimited {
+			if window.Utilization != nil || window.Status != mirasimWindowStatusAllowed {
+				t.Fatalf("不限量窗口不应带百分比: %+v", window)
+			}
+		} else if window.Utilization == nil || *window.Utilization < 0 || *window.Utilization > 100 {
+			t.Fatalf("窗口百分比越界: %+v", window)
+		}
+		switch window.Name {
+		case "5h", "7d":
+			mapped := window.WindowKey != ""
+			if want := !window.ModelScoped && window.Budget > 0; mapped != want {
+				t.Fatalf("窗口 %q 的映射判定与 budget/model_scoped 不一致: %+v", window.Name, window)
+			}
+		}
+		t.Logf("window: name=%q status=%s unlimited=%v modelScoped=%v utilization=%s resetAt=%v",
+			window.Name, window.Status, window.Unlimited, window.ModelScoped,
+			mirasimE2EFloatPtr(window.Utilization), window.ResetAt != "")
+	}
+	if info.FiveHour == nil && info.SevenDay == nil {
+		t.Log("上游本次未返回可映射的 5h/7d 窗口（budget>0 且非 model_scoped），仅 mirasim_windows")
+	}
+	t.Logf("limits: paid=%v degraded=%v status=%s windows=%d fiveHour=%v sevenDay=%v",
+		mirasimE2EBoolPtr(snapshot.Paid), snapshot.Degraded, snapshot.Status, len(snapshot.Windows),
+		info.FiveHour != nil, info.SevenDay != nil)
+
+	// 3) 服务门面走同一份缓存：MirasimMetadataService 必须复用 client（同一个 runtime 条目）。
+	svc := NewMirasimMetadataService(nil, upstream)
+	svcRoster, err := svc.ModelRoster(ctx, account, false)
+	if err != nil {
+		t.Fatalf("MirasimMetadataService.ModelRoster 失败: %v", err)
+	}
+	if len(svcRoster.Agents) != len(roster.Agents) {
+		t.Fatalf("服务门面 roster 与直连结果不一致: %d vs %d", len(svcRoster.Agents), len(roster.Agents))
+	}
+	svcLimits, err := svc.Limits(ctx, account, false)
+	if err != nil {
+		t.Fatalf("MirasimMetadataService.Limits 失败: %v", err)
+	}
+	if len(svcLimits.Windows) != len(snapshot.Windows) {
+		t.Fatalf("服务门面 limits 与直连结果不一致: %d vs %d", len(svcLimits.Windows), len(snapshot.Windows))
+	}
+
+	// 4) 全程不得换凭据：metadataCredential 命中缓存 access token 就不该碰 refresh。
+	if client.refreshToken != placeholderRefresh {
+		t.Fatal("元数据路径触发了 refresh token 轮换（缓存凭据未被复用）")
+	}
+}
+
+// mirasimE2EFloatPtr / mirasimE2EBoolPtr 只用于日志排版。
+func mirasimE2EFloatPtr(v *float64) string {
+	if v == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("%.1f", *v)
+}
+
+func mirasimE2EBoolPtr(v *bool) string {
+	if v == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("%v", *v)
+}

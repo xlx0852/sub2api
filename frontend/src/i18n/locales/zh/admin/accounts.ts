@@ -369,7 +369,13 @@ export default {
         cursorAvailable: '可用',
         cursorExhausted: '已耗尽',
         passiveSampled: '被动采样',
-        activeQuery: '刷新额度'
+        activeQuery: '刷新额度',
+        // Mirasim relay 额度窗口（后端已归一化，见 openspec/changes/add-mirasim-model-roster-and-limits）
+        mirasimUnlimited: '不限量',
+        mirasimModelScoped: '模型级',
+        mirasimPaid: '付费',
+        mirasimFree: '免费',
+        mirasimDegradedHint: '上游额度聚合不可用，窗口可能不完整'
       },
       usageDetails: {
         title: '用量详情',
@@ -450,6 +456,8 @@ export default {
         lastUpdated: '最后更新',
         responseStatus: '响应状态',
         lastError: '最近错误',
+        mirasimPlan: 'Mirasim 套餐',
+        mirasimDegraded: '额度降级',
         sourceActive: '主动查询',
         sourcePassive: '被动采样',
         sourceLocal: '本地统计',

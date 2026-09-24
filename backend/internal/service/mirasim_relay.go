@@ -53,10 +53,30 @@ const (
 	mirasimExtraAuthURL       = "mirasim_auth_url"
 	mirasimExtraClientVersion = "mirasim_client_version"
 	mirasimExtraSealPubkey    = "mirasim_seal_pubkey"
+	// mirasimExtraRosterAgent 指定上游模型同步与 roster 展示使用哪个 agent
+	// （如 claude / codex / kimi / dsh）；见 mirasim_roster.go 的选择顺序。
+	mirasimExtraRosterAgent = "mirasim_roster_agent"
 
 	// 端点路径。
 	mirasimAccessRefreshPath = "/auth/refresh"
 	mirasimDeviceSessionPath = "/v1/device/session"
+
+	// 只读元数据端点头（客户端取证 server.cjs：O1n='/v1/model-roster'、
+	// ePn='/v1/limits'、ngo='x-mirasim-probe'）。
+	mirasimModelRosterPath = "/v1/model-roster"
+	mirasimLimitsPath      = "/v1/limits"
+	mirasimHeaderProbe     = "x-mirasim-probe"
+	mirasimProbeUsage      = "usage"
+
+	// 元数据调用超时（客户端取证 server.cjs：roster 8000ms=ddo、limits 10000ms=tor）。
+	// 刻意不复用 mirasimHTTPTimeout（模型转发 60s）。
+	mirasimRosterTimeout = 8 * time.Second
+	mirasimLimitsTimeout = 10 * time.Second
+
+	// 元数据缓存 TTL：roster 对齐客户端 10 分钟（ldo=600000）；limits 取 30s，
+	// 保证管理员刷新用量时既不打爆上游、又能看到较新的窗口。
+	mirasimRosterCacheTTL = 10 * time.Minute
+	mirasimLimitsCacheTTL = 30 * time.Second
 
 	mirasimAccessTokenEarlyRefresh = 120 * time.Second
 	mirasimTicketEarlyRefresh      = 60 * time.Second
@@ -181,6 +201,11 @@ func mirasimIsAuthError(err error) bool {
 	var httpErr *mirasimHTTPError
 	if errors.As(err, &httpErr) {
 		return httpErr.StatusCode == http.StatusUnauthorized || httpErr.StatusCode == http.StatusForbidden
+	}
+	// 只读元数据链路用不带响应正文的错误类型，同样是 401/403 判定。
+	var metaErr *mirasimMetadataHTTPError
+	if errors.As(err, &metaErr) {
+		return metaErr.StatusCode == http.StatusUnauthorized || metaErr.StatusCode == http.StatusForbidden
 	}
 	return false
 }
@@ -425,6 +450,151 @@ func (c *mirasimRelayClient) doJSON(req *http.Request, op string) ([]byte, error
 		return nil, &mirasimHTTPError{Op: op, StatusCode: resp.StatusCode, Body: string(body)}
 	}
 	return body, nil
+}
+
+// ---------------------------------------------------------------------------
+// 只读元数据请求（模型清单 / 额度窗口）
+//
+// 关键约束（改动前请先读）：
+//   - 与模型路由请求不同：请求体为空、只发明文签名头（x-mirasim-device/-ts/
+//     -nonce/-sig + 非空时的 x-mirasim-client），**不发** x-mirasim-enc；
+//     密封（mrs-seal-v1）只发生在被代理的模型流量上；
+//   - credential 顺序：缓存 device ticket → 缓存 access token → 走
+//     /v1/device/session 取 ticket；只要缓存可用就绝不触发 refresh token 轮换
+//     （轮换会与桌面客户端互踢，见 add-mirasim-relay-upstream 的实测结论）；
+//   - 错误消息只带操作名与状态码：上游响应正文不得进入日志或管理端响应体。
+// ---------------------------------------------------------------------------
+
+// metadataCredential 返回只读元数据请求使用的凭据，以及是否命中了本地缓存。
+//
+// 关键约束（改动前请先读）：这里刻意**不**调用 accessToken()/refresh：
+// ticket 缓存与 access token 缓存都可用时直接复用；只有两者都空了才走
+// ticket(ctx)（冷启动时该路径会 refresh 一次，并把轮换结果落盘）。
+func (c *mirasimRelayClient) metadataCredential(ctx context.Context) (string, bool, error) {
+	now := time.Now()
+	c.mu.Lock()
+	if ticket := strings.TrimSpace(c.cachedTicket); ticket != "" && now.Before(c.ticketExp) {
+		c.mu.Unlock()
+		return ticket, true, nil
+	}
+	if access := strings.TrimSpace(c.cachedAccess); access != "" && now.Before(c.accessExp) {
+		c.mu.Unlock()
+		return access, true, nil
+	}
+	c.mu.Unlock()
+
+	ticket, err := c.ticket(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	return ticket, false, nil
+}
+
+// metadataGet 发送一次只读元数据请求，返回响应体与状态码。
+// 非 2xx 时返回 *mirasimMetadataHTTPError（不含上游正文）。
+func (c *mirasimRelayClient) metadataGet(
+	ctx context.Context,
+	op, path string,
+	timeout time.Duration,
+	extraHeaders map[string]string,
+) ([]byte, int, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	credential, _, err := c.metadataCredential(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.relayURL+path, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("mirasim relay: %s 请求构造失败: %w", op, err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+credential)
+	for name, value := range extraHeaders {
+		req.Header.Set(name, value)
+	}
+	signHeaders := mirasimSignHeaders(c.priv, c.deviceID, mirasimSignParams{
+		Method:        http.MethodGet,
+		Path:          path,
+		Credential:    credential,
+		ClientVersion: c.clientVersion,
+	}, mirasimNowMillis(), "")
+	// 客户端只在 clientVersion 非空时带 x-mirasim-client；这里对齐，避免空值头。
+	if strings.TrimSpace(c.clientVersion) == "" {
+		delete(signHeaders, mirasimHeaderClient)
+	}
+	for name, value := range signHeaders {
+		req.Header.Set(name, value)
+	}
+
+	resp, err := c.upstream.Do(req, c.proxyURL, c.accountID, c.concurrency)
+	if err != nil {
+		return nil, 0, fmt.Errorf("mirasim relay: %s 请求失败: %w", op, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, mirasimMaxResponseBytes+1))
+	if err != nil {
+		return nil, resp.StatusCode, fmt.Errorf("mirasim relay: %s 响应读取失败: %w", op, err)
+	}
+	if int64(len(body)) > mirasimMaxResponseBytes {
+		return nil, resp.StatusCode, fmt.Errorf("mirasim relay: %s 响应体超过 %d 字节", op, mirasimMaxResponseBytes)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, resp.StatusCode, &mirasimMetadataHTTPError{Op: op, StatusCode: resp.StatusCode}
+	}
+	return body, resp.StatusCode, nil
+}
+
+// metadataFetch 拉取一份只读元数据，401/403 时失效本地凭据缓存并重试一次。
+//
+// 关键约束（改动前请先读）：只有 401/403 才重试，且最多一次。500/超时/网络错误
+// 一律直接失败——抖动凭据会让一个瞬时上游故障升级成账号级不可用。
+func (c *mirasimRelayClient) metadataFetch(
+	ctx context.Context,
+	op, path string,
+	timeout time.Duration,
+	extraHeaders map[string]string,
+) ([]byte, error) {
+	body, _, err := c.metadataGet(ctx, op, path, timeout, extraHeaders)
+	if err == nil {
+		return body, nil
+	}
+	if !mirasimIsAuthError(err) {
+		return nil, err
+	}
+	c.invalidateTokens()
+	body, _, err = c.metadataGet(ctx, op, path, timeout, extraHeaders)
+	if err == nil {
+		return body, nil
+	}
+	return nil, err
+}
+
+// fetchModelRoster 拉取模型清单原始 JSON（GET /v1/model-roster，空 body + 明文签名头）。
+func (c *mirasimRelayClient) fetchModelRoster(ctx context.Context) ([]byte, error) {
+	return c.metadataFetch(ctx, "拉取 model roster", mirasimModelRosterPath, mirasimRosterTimeout, nil)
+}
+
+// fetchLimits 拉取额度窗口原始 JSON（GET /v1/limits，必须带 x-mirasim-probe: usage）。
+func (c *mirasimRelayClient) fetchLimits(ctx context.Context) ([]byte, error) {
+	return c.metadataFetch(ctx, "拉取 limits", mirasimLimitsPath, mirasimLimitsTimeout, map[string]string{
+		mirasimHeaderProbe: mirasimProbeUsage,
+	})
+}
+
+// mirasimMetadataHTTPError 只保留操作名与状态码。
+//
+// 关键约束（改动前请先读）：元数据的错误消息会被写进管理端可见的响应体
+// （用量降级 error 字段），因此这里**不**携带上游响应正文。
+type mirasimMetadataHTTPError struct {
+	Op         string
+	StatusCode int
+}
+
+func (e *mirasimMetadataHTTPError) Error() string {
+	return fmt.Sprintf("mirasim relay: %s HTTP %d", e.Op, e.StatusCode)
 }
 
 // routeAuthHeaders 为模型路由请求生成鉴权头与密封 blob（credential = ticket）。

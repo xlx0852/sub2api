@@ -71,6 +71,7 @@ type AccountTestService struct {
 	kimiTokenProvider         *KimiTokenProvider
 	antigravityGatewayService *AntigravityGatewayService
 	httpUpstream              HTTPUpstream
+	mirasimMetadata           MirasimMetadataQuerier
 	cfg                       *config.Config
 	tlsFPProfileService       *TLSFingerprintProfileService
 	agentIdentityTaskMu       sync.Mutex
@@ -105,6 +106,14 @@ func NewAccountTestService(
 
 func (s *AccountTestService) validateUpstreamBaseURL(raw string) (string, error) {
 	return validateUpstreamBaseURLWithConfig(s.cfg, raw)
+}
+
+// SetMirasimMetadataService 注入 mirasim 只读元数据客户端（roster / limits）。
+// 形态对标 AccountUsageService.SetMirasimMetadataService：不动构造函数签名。
+func (s *AccountTestService) SetMirasimMetadataService(service MirasimMetadataQuerier) {
+	if s != nil {
+		s.mirasimMetadata = service
+	}
 }
 
 // generateSessionString generates a Claude Code style session string.

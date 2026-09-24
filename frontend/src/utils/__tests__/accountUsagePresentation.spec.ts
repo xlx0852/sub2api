@@ -249,6 +249,118 @@ describe('buildAccountUsagePresentation', () => {
     expect(presentation.windows[1].color).toBe('emerald')
   })
 
+  it('Mirasim relay 优先渲染归一化后的全部窗口，不重复展示 five_hour/seven_day', () => {
+    const presentation = buildAccountUsagePresentation({
+      account: makeAccount({ platform: 'anthropic', type: 'apikey', extra: { mirasim_relay_enabled: true } }),
+      usageInfo: baseUsage({
+        source: 'active',
+        // 后端会把 5h/7d 同时映射到 five_hour/seven_day，这里刻意重复，确保不会渲染两次
+        five_hour: { utilization: 98.4, resets_at: '2026-07-12T05:00:00Z', remaining_seconds: 0 },
+        seven_day: { utilization: 12.5, resets_at: '2026-07-18T00:00:00Z', remaining_seconds: 0 },
+        mirasim_paid: true,
+        mirasim_windows: [
+          {
+            name: '5h',
+            label: '5h',
+            budget: 40_000_000,
+            used: 39_360_000,
+            utilization: 98.4,
+            remaining_percent: 1.6,
+            status: 'warning',
+            reset_at: '2026-07-12T05:00:00Z',
+            window_key: 'five_hour'
+          },
+          {
+            name: '7d',
+            label: '7d',
+            budget: 400_000_000,
+            used: 50_000_000,
+            utilization: 12.5,
+            remaining_percent: 87.5,
+            status: 'allowed',
+            reset_at: '2026-07-18T00:00:00Z',
+            window_key: 'seven_day'
+          },
+          {
+            name: 'claude-opus-4-1',
+            label: 'claude-opus-4-1',
+            budget: 0,
+            used: 1234,
+            unlimited: true,
+            status: 'allowed',
+            model_scoped: true
+          }
+        ]
+      }),
+      todayStats: today,
+      t
+    })
+
+    expect(presentation.windows.map(window => window.label)).toEqual(['5h', '7d', 'claude-opus-4-1'])
+    expect(presentation.windows).toHaveLength(3)
+    expect(presentation.windows[0].utilization).toBe(98.4)
+    expect(presentation.windows[0].color).toBe('indigo')
+    expect(presentation.windows[0].resetsAt).toBe('2026-07-12T05:00:00Z')
+    expect(presentation.windows[0].detail).toBe('39.4M / 40M')
+    expect(presentation.windows[1].color).toBe('emerald')
+    expect(presentation.windows[1].detail).toBe('50M / 400M')
+    // 不限量窗口不能伪造成满额
+    expect(presentation.windows[2].utilization).toBe(0)
+    expect(presentation.windows[2].color).toBe('cyan')
+    expect(presentation.windows[2].detail).toBe('admin.accounts.usageWindow.mirasimUnlimited · admin.accounts.usageWindow.mirasimModelScoped')
+    // 唯一 key，避免上游同名 model_scoped 窗口互相覆盖
+    expect(new Set(presentation.windows.map(window => window.key)).size).toBe(3)
+    expect(presentation.statusTone).toBe('warning')
+    expect(presentation.diagnostics).toContainEqual({
+      label: 'admin.accounts.usageDetails.mirasimPlan',
+      value: 'admin.accounts.usageWindow.mirasimPaid'
+    })
+    expect(presentation.diagnostics.some(item => item.label === 'admin.accounts.usageDetails.mirasimDegraded')).toBe(false)
+  })
+
+  it('Mirasim 免费且上游降级时诊断里透出 free 与降级告警', () => {
+    const presentation = buildAccountUsagePresentation({
+      account: makeAccount({ platform: 'anthropic', type: 'apikey', extra: { mirasim_relay_enabled: true } }),
+      usageInfo: baseUsage({
+        source: 'active',
+        mirasim_paid: false,
+        mirasim_degraded: true,
+        error: 'upstream',
+        mirasim_windows: []
+      }),
+      todayStats: today,
+      t
+    })
+
+    expect(presentation.diagnostics).toContainEqual({
+      label: 'admin.accounts.usageDetails.mirasimPlan',
+      value: 'admin.accounts.usageWindow.mirasimFree'
+    })
+    expect(presentation.diagnostics).toContainEqual({
+      label: 'admin.accounts.usageDetails.mirasimDegraded',
+      value: 'admin.accounts.usageWindow.mirasimDegradedHint',
+      tone: 'warning'
+    })
+    // 降级不得影响窗口渲染路径（空窗口时回落到 0 个窗口，而不是报错）
+    expect(presentation.windows).toEqual([])
+  })
+
+  it('非 mirasim 账号不受 mirasim_windows 分支影响', () => {
+    const presentation = buildAccountUsagePresentation({
+      account: makeAccount({ platform: 'anthropic', type: 'oauth' }),
+      usageInfo: baseUsage({
+        source: 'active',
+        five_hour: { utilization: 10, resets_at: '2026-07-12T05:00:00Z', remaining_seconds: 0 },
+        seven_day: { utilization: 20, resets_at: '2026-07-18T00:00:00Z', remaining_seconds: 0 }
+      }),
+      todayStats: today,
+      t
+    })
+
+    expect(presentation.windows.map(window => window.label)).toEqual(['5h', '7d'])
+    expect(presentation.diagnostics.some(item => String(item.label).includes('mirasim'))).toBe(false)
+  })
+
   it('没有官方额度时只保留本地消耗，不伪造百分比窗口', () => {
     const presentation = buildAccountUsagePresentation({
       account: makeAccount({ type: 'apikey' }),

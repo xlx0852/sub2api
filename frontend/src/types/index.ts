@@ -1042,6 +1042,21 @@ export interface UsageProgress {
   limit_requests?: number
 }
 
+// Mirasim relay 单个额度窗口（来自 GET /v1/limits 的只读元数据，后端已归一化）
+export interface MirasimQuotaWindow {
+  name: string // 上游原始窗口名（不做 trim / lowercase）
+  label: string // 展示用标签，等于 name
+  budget: number // 额度上限；0 表示不限量
+  used: number
+  unlimited?: boolean
+  utilization?: number | null // 使用率百分比（1 位小数）
+  remaining_percent?: number | null
+  status: 'allowed' | 'warning' | 'limit_reached' | string
+  reset_at?: string // RFC3339（UTC）
+  model_scoped?: boolean // 仅模型级窗口，不参与 5h/7d 映射
+  window_key?: string // five_hour / seven_day（未映射时为空）
+}
+
 // Antigravity 单个模型的配额信息
 export interface AntigravityModelQuota {
   utilization: number // 使用率 0-100
@@ -1152,6 +1167,12 @@ export interface AccountUsageInfo {
   needs_verify?: boolean    // 需要人工验证（forbidden_type=validation）
   is_banned?: boolean       // 账号被封（forbidden_type=violation）
   needs_reauth?: boolean    // token 失效需重新授权（401）
+
+  // Mirasim relay 额度窗口（来自 GET /v1/limits 的只读元数据）。
+  // 只读元数据失败时后端会在 error 里给出降级原因，但**不会**影响账号调度状态。
+  mirasim_windows?: MirasimQuotaWindow[] | null
+  mirasim_paid?: boolean | null
+  mirasim_degraded?: boolean
 
   // 机器可读错误码：forbidden / unauthenticated / rate_limited / network_error
   error_code?: string

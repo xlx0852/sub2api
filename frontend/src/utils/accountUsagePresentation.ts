@@ -1,4 +1,4 @@
-import type { Account, AccountUsageInfo, WindowStats } from '@/types'
+import type { Account, AccountUsageInfo, MirasimQuotaWindow, WindowStats } from '@/types'
 
 export type AccountUsageTone = 'neutral' | 'success' | 'warning' | 'danger'
 
@@ -159,6 +159,56 @@ const addUsageProgress = (
   ))
 }
 
+const formatCompactNumber = (value: number): string => {
+  if (!Number.isFinite(value)) return '0'
+  const abs = Math.abs(value)
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(abs % 1_000_000 === 0 ? 0 : 1)}M`
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(abs % 1_000 === 0 ? 0 : 1)}K`
+  return String(Math.round(value * 100) / 100)
+}
+
+// Mirasim relay 额度窗口：上游窗口名不可预测（5h/7d/model_scoped 都可能出现），
+// 因此标签优先用后端归一化出的 window_key，其余按上游原样展示。
+const mirasimWindowLabel = (window: MirasimQuotaWindow): string => {
+  if (window.window_key === 'five_hour') return '5h'
+  if (window.window_key === 'seven_day') return '7d'
+  return window.name || window.label || 'quota'
+}
+
+const mirasimWindowColor = (window: MirasimQuotaWindow): AccountUsageWindowPresentation['color'] => {
+  if (window.window_key === 'five_hour') return 'indigo'
+  if (window.window_key === 'seven_day') return 'emerald'
+  if (window.model_scoped) return 'cyan'
+  return 'purple'
+}
+
+const mirasimWindowDetail = (window: MirasimQuotaWindow, t: Translator): string => {
+  const amount = window.unlimited
+    ? t('admin.accounts.usageWindow.mirasimUnlimited')
+    : `${formatCompactNumber(window.used)} / ${formatCompactNumber(window.budget)}`
+  return window.model_scoped ? `${amount} · ${t('admin.accounts.usageWindow.mirasimModelScoped')}` : amount
+}
+
+const addMirasimWindows = (
+  windows: AccountUsageWindowPresentation[],
+  quotaWindows: MirasimQuotaWindow[],
+  t: Translator
+) => {
+  quotaWindows.forEach((window, index) => {
+    windows.push(makeQuotaWindow(
+      // 上游同名窗口可能重复（尤其 model_scoped），用下标保证 key 唯一。
+      `mirasim-${index}-${window.window_key || window.name}`,
+      mirasimWindowLabel(window),
+      // 不限量窗口没有百分比语义，固定 0 而不是伪造成满额。
+      window.unlimited ? 0 : window.utilization ?? 0,
+      window.reset_at || null,
+      mirasimWindowColor(window),
+      null,
+      mirasimWindowDetail(window, t)
+    ))
+  })
+}
+
 const readPlan = (account: Account, usageInfo: AccountUsageInfo | null): string | null => {
   const extra = account.extra as Record<string, unknown> | undefined
   const credentials = account.credentials as Record<string, unknown> | undefined
@@ -196,10 +246,18 @@ export const buildAccountUsagePresentation = ({
   const diagnostics: AccountUsageDiagnostic[] = []
 
   if (account.platform === 'openai' || account.platform === 'anthropic' || account.platform === 'kimi') {
-    addUsageProgress(windows, 'five-hour', '5h', usageInfo?.five_hour || null, 'indigo')
-    addUsageProgress(windows, 'seven-day', '7d', usageInfo?.seven_day || null, 'emerald')
-    addUsageProgress(windows, 'seven-day-sonnet', '7d S', usageInfo?.seven_day_sonnet || null, 'purple')
-    addUsageProgress(windows, 'seven-day-fable', '7d F', usageInfo?.seven_day_fable || null, 'amber')
+    // Mirasim relay 账号（platform 仍是 anthropic）后端会把 /v1/limits 的**全部**窗口
+    // 归一化到 mirasim_windows（5h/7d 同时映射到 five_hour/seven_day 以兼容其它视图）。
+    // 这里优先渲染上游真实窗口，避免与 five_hour/seven_day 重复展示。
+    const mirasimWindows = account.platform === 'anthropic' ? usageInfo?.mirasim_windows || [] : []
+    if (mirasimWindows.length > 0) {
+      addMirasimWindows(windows, mirasimWindows, t)
+    } else {
+      addUsageProgress(windows, 'five-hour', '5h', usageInfo?.five_hour || null, 'indigo')
+      addUsageProgress(windows, 'seven-day', '7d', usageInfo?.seven_day || null, 'emerald')
+      addUsageProgress(windows, 'seven-day-sonnet', '7d S', usageInfo?.seven_day_sonnet || null, 'purple')
+      addUsageProgress(windows, 'seven-day-fable', '7d F', usageInfo?.seven_day_fable || null, 'amber')
+    }
   } else if (account.platform === 'grok') {
     const billing = usageInfo?.grok_billing
     if (billing?.period_type?.toLowerCase() === 'weekly' && billing.usage_percent != null) {
@@ -371,6 +429,25 @@ export const buildAccountUsagePresentation = ({
   }
   if (usageInfo?.error) {
     diagnostics.push({ label: t('admin.accounts.usageDetails.lastError'), value: usageInfo.error, tone: 'warning' })
+  }
+  // Mirasim 只读元数据：paid/degraded 由上游显式给出时透出，缺失就不猜。
+  const mirasimWindows = usageInfo?.mirasim_windows || []
+  if (mirasimWindows.length > 0 || usageInfo?.mirasim_paid != null || usageInfo?.mirasim_degraded) {
+    if (usageInfo?.mirasim_paid != null) {
+      diagnostics.push({
+        label: t('admin.accounts.usageDetails.mirasimPlan'),
+        value: usageInfo.mirasim_paid
+          ? t('admin.accounts.usageWindow.mirasimPaid')
+          : t('admin.accounts.usageWindow.mirasimFree')
+      })
+    }
+    if (usageInfo?.mirasim_degraded) {
+      diagnostics.push({
+        label: t('admin.accounts.usageDetails.mirasimDegraded'),
+        value: t('admin.accounts.usageWindow.mirasimDegradedHint'),
+        tone: 'warning'
+      })
+    }
   }
 
   return {

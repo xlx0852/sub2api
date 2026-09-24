@@ -88,6 +88,14 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 		return nil, newUpstreamModelSyncConfigError("Upstream HTTP client is not configured", nil)
 	}
 
+	// Mirasim relay：模型清单来自只读元数据通道 GET /v1/model-roster，而不是
+	// /v1/models（relay 上那条路径返回的不是模型列表结构）。放在 httpUpstream
+	// 校验之后，保留账号为空 / 客户端未配置的既有 configuration 错误语义。
+	// 见 openspec/changes/add-mirasim-model-roster-and-limits 的 3.1/3.3。
+	if mirasimRelayAccountCandidate(account) {
+		return s.fetchMirasimUpstreamModels(ctx, account)
+	}
+
 	req, err := s.buildUpstreamModelsRequest(ctx, account)
 	if err != nil {
 		return nil, err
@@ -145,6 +153,27 @@ func (s *AccountTestService) buildUpstreamModelsRequest(ctx context.Context, acc
 	}
 }
 
+func (s *AccountTestService) fetchMirasimUpstreamModels(ctx context.Context, account *Account) ([]string, error) {
+	if s.mirasimMetadata == nil {
+		return nil, newUpstreamModelSyncConfigError("Mirasim metadata client is not configured", nil)
+	}
+	roster, err := s.mirasimMetadata.ModelRoster(ctx, account, false)
+	if err != nil {
+		// 错误映射：凭据/配置缺失 → configuration；上游、网络、超时、解析失败 → upstream。
+		// 两条路径的 Message 都是固定文案，**不含**上游响应正文与凭据。
+		if mirasimMetadataIsConfigError(err) {
+			return nil, newUpstreamModelSyncConfigError("Mirasim relay credentials are not configured", err)
+		}
+		return nil, newUpstreamModelSyncUpstreamError(
+			fmt.Sprintf("Failed to fetch mirasim model roster (%s)", mirasimMetadataErrorCategory(err)), err)
+	}
+	models, err := mirasimRosterModelIDsForAccount(roster, account)
+	if err != nil {
+		return nil, newUpstreamModelSyncUpstreamError("Mirasim model roster contains no usable models", err)
+	}
+	return models, nil
+}
+
 func (s *AccountTestService) buildGrokUpstreamModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {
 	if account.Type != AccountTypeAPIKey {
 		return nil, newUpstreamModelSyncUnsupportedError(
@@ -181,12 +210,10 @@ func (s *AccountTestService) buildAnthropicUpstreamModelsRequest(ctx context.Con
 			fmt.Sprintf("Unsupported Anthropic account type for upstream model sync: %s", account.Type), nil,
 		)
 	}
-	// Mirasim relay 没有 /v1/models：模型由账号显式配置，不参与上游模型同步。
-	if isMirasimRelayAccount(account) {
-		return nil, newUpstreamModelSyncUnsupportedError(
-			"Mirasim relay upstream has no model list endpoint; select models manually", nil,
-		)
-	}
+	// Mirasim relay 账号已在 FetchUpstreamSupportedModels 首分支改走
+	// GET /v1/model-roster（见 openspec/changes/add-mirasim-model-roster-and-limits
+	// 的 3.1/3.2）；relay 上游没有可用的 /v1/models 模型列表。
+	// 这里不再保留 mirasim 的 unsupported 分支，避免与 roster 路径重复判定。
 
 	baseURL := "https://api.anthropic.com"
 	authHeaderName := ""

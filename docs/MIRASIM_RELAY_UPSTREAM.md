@@ -593,3 +593,135 @@ relay 开关；新建账号时还会用 JWT 里的 `name`/`email` 预填空的�
 - 未实测 `/auth/refresh` 旧 token 是否立即失效（§9.6 的结论保持不变），也未去动桌面客户端
   （客户端是否会因这次轮换掉线：理论上不会，因为会话族不同；不去实测以免真的踢人）。
 
+
+## 12. 元数据接口（模型清单 / 额度窗口，2026-09-24 新增）
+
+relay 除推理端点外还有两条**只读**元数据端点，本轮已接进 sub2api：
+
+| 端点 | 用途 | 超时 | 缓存 |
+| --- | --- | --- | --- |
+| `GET /v1/model-roster` | 模型清单 → 「同步上游模型」的数据源 | 8s（`mirasimRosterTimeout`，客户端 `ddo=8000`） | 10 分钟（`mirasimRosterCacheTTL`） |
+| `GET /v1/limits` | 额度窗口 → 用量抽屉的数据源 | 10s（`mirasimLimitsTimeout`，客户端 `tor=10000`） | 30 秒（`mirasimLimitsCacheTTL`） |
+
+实现落在 `backend/internal/service/`：`mirasim_relay.go`（客户端与签名）、`mirasim_roster.go`
+（解析/选择）、`mirasim_limits.go`（归一化/映射）、`mirasim_metadata.go`（服务门面 + 按账号缓存），
+`upstream_models.go`（同步接线）、`account_usage_service.go`（用量接线）、`wire.go`（依赖注入）。
+
+### 12.1 请求形状
+
+- **空 body**（`GET`），与推理请求不同：**不发** `x-mirasim-enc`（不是 `mrs-seal-v1` 密封通道）。
+- 明文签名头四件套：`x-mirasim-device` / `x-mirasim-ts` / `x-mirasim-nonce` / `x-mirasim-sig`
+  （签名输入 = `method + path + ts + nonce + deviceId + clientVersion + credential + meta`）；
+  `x-mirasim-client` 仅在客户端版本非空时发。
+- `Authorization: Bearer <credential>`。
+- `/v1/limits` 额外带 `x-mirasim-probe: usage`（`mirasimHeaderProbe`/`mirasimProbeUsage`）——
+  客户端只在探测模式下加这个头，用于区分「真实用量页」与「后台探测」。
+
+### 12.2 凭据选择（顺序固定，且**不得**无谓刷新）
+
+1. 缓存的 device ticket；
+2. 缓存的 access token；
+3. 都没有才走 `/v1/device/session`（`ticket(ctx)`）。
+
+只要命中 1 或 2，**MUST NOT** 调 `/auth/refresh`：refresh token 是单飞轮换的（§9.2），
+元数据是高频只读操作，为它刷新会把会话族踢掉。
+
+失效与重试规则：
+
+| 上游返回 | 动作 |
+| --- | --- |
+| 401 / 403 | 失效本地缓存凭据 → 换另一份凭据重试**一次**；再失败即返回错误 |
+| 5xx | 不重试、**不失效任何缓存凭据**、不触发 refresh（上游抖动不该被当成凭据问题） |
+| 超时 / 网络错误 | 不重试超过一次；报 `upstream` 类错误 |
+| 其他非 2xx | 报错并带状态码，**不回显上游正文** |
+
+**MUST NOT** 打印 / 记录 credential、ticket、device key 明文；metadata 路径的日志只打
+`category` + `account_id`（事件名如 `mirasim_roster_fetch_failed` / `mirasim_limits_parse_failed`）。
+
+### 12.3 模型清单（roster）解析与选择
+
+- 顶层 `agents` 是**对象**，键为 agent 名，值的顺序即文档顺序（`roster.Order` 保留原始顺序）。
+- agent 条目校验：`id` 必须是非空字符串、`contextWindow` 必须是 **> 0 的有限数**；
+  `label` 缺失时回退成 `id`；字符串做 trim + lowercase；**解析阶段不去重**（去重只在产出
+  「模型 id 列表」时按稳定顺序做）；某个 agent 内无有效条目 → 该 agent 丢弃；整体无有效
+  agent → 报错（不返回空清单）。
+- 默认 agent：**第一个** `default: true` 的 agent 胜出。
+- agent 选择顺序：`account.extra.mirasim_roster_agent` → 首个 `default: true` → `claude` →
+  字典序首个。
+- 产出即「同步上游模型」的模型 id 白名单。
+
+### 12.4 额度窗口（limits）归一化
+
+- 窗口条目校验：`name` 非空；`budget` 必须是有限数，`budget < 0` 直接丢弃；
+  `budget == 0` 表示**不限量**（`Unlimited=true`，不带百分比与状态）；`used` 必须是有限数。
+  顶层 `windows` 为空、或所有窗口都被丢弃 → 视为**解析失败**（`parse` 错误），而不是「零额度」。
+- 百分比公式对齐客户端：`Nir(x)=max(0,min(100,round(x*10)/10))`、
+  `Qir(x)=x>=99?100:x`、`usedPercent=Qir(Nir(used/budget*100))`、
+  `remainingPercent=max(0,round((100-usedPercent)*10)/10)`（1 位小数；spec 正文漏写了这个精度，
+  实现按客户端行为走，见代码注释）。
+- 状态阈值：`usedPercent < 80` → `allowed`，`< 100` → `warning`，`>= 100` → `limit_reached`。
+- 窗口映射：`5h` → `five_hour`、`7d` → `seven_day`，**仅当** `budget > 0` 且**非**
+  `model_scoped`；所有窗口（含 model-scoped）一律进 `mirasim_windows`。
+- 顶层状态：只看非 `model_scoped` 窗口；若一个都没有则回退到全部窗口。
+- 顶层 `paid` / `degraded` 原样透出（`mirasim_paid` 为 nil = 上游没给布尔值，**不是** false；
+  `mirasim_degraded` 只表示**上游显式声明**的降级，本地拉取失败不改它）。
+- `reset_at`（unix 秒）→ RFC3339。
+
+### 12.5 降级语义（重要）
+
+只读元数据失败**不应**影响调度：
+
+- 上游 / 网络 / 解析失败 → 归为 `upstream`；
+- 账号或凭据缺失 → 归为 `configuration`，且**根本不发上游请求**；
+- 错误消息只含操作名与状态码，**不含上游响应正文与凭据**；
+- 用量接口对上述失败一律返回 **HTTP 200 + `error` 字段**（`getMirasimUsage`），
+  **MUST NOT** 变成 5xx，也**MUST NOT** 改动账号的调度状态（比如因一次元数据抖动把账号标错）。
+
+### 12.6 非目标（明确不做）
+
+- `GET /usage/calls`：必须带 `ids=`（单次调用明细），不属于模型清单/额度窗口，本轮不做。
+- 「额度 → 账本/计费」联动：本轮只做**展示**，不做扣费、配额拦截或限流。
+- 上游 `limits` 里实测存在但**未被消费**的字段：`subject`、`suspended`、`unmetered`
+  （见 12.7 的实测键集合）；本轮不解释、不透出，留待后续 change。
+- 不把任何一个模型名固化成「默认可用」，也不缓存负结果。
+
+### 12.7 实测结论（**2026-09-24 只读联网实测**，账号 140 的真实凭据）
+
+用 `//go:build e2e` 的 `TestMirasimRealRelayMetadataEndToEnd` 直连真实 relay（只发
+`/v1/model-roster` 与 `/v1/limits`，**未**触发 `/auth/code`、`/auth/verify`，也**未**触发
+`/auth/refresh`——中途断言 refresh token 仍是占位值），结果：
+
+| 观察点 | 实测值 |
+| --- | --- |
+| roster 顶层键 | `agents` / `cli` / `models` / `version` |
+| agent 名集合（= 顺序） | `claude`、`codex`、`dsh`、`kimi`（4 个） |
+| 默认 agent | `claude`（无 `extra.mirasim_roster_agent` 时；其模型 id 白名单 6 条） |
+| `cli` 键集合 | 9 个：`claude` `codex` `dsh` `gemini` `grok` `kimi` `pi` `qwen` `zcode`，每项只有 `minVersion` |
+| 顶层 `models` 元数据 | 17 条，字段以 `pricing` 为主，部分含 `contextWindow`/`label`/`effort`/`maxOutput`/`adaptive`；**有模型只有 `pricing`（无 `contextWindow`）** ⇒ 校验只能信任 agent 内条目，不能拿它当兜底 |
+| limits 顶层键 | `windows` / `paid` / `degraded` / `subject` / `suspended` / `unmetered`；本次 `paid=true`、`degraded=false` |
+| 本次真实窗口 | `7d`（键 `budget name reset_at used`）与 `7d_claude`（键 `budget model_scoped name reset_at used`，`model_scoped=true`），状态均为 `allowed` |
+
+由此得到的**重要修正**（写进这里，避免下次再猜）：
+
+- 真实的窗口命名是 `<周期>` 与 `<周期>_<模型>`（model-scoped 靠 `model_scoped` 字段标记，
+  名字里也带模型后缀），**不是**固定的 `5h`/`7d` 两点集。本轮 `5h` → `five_hour` 的映射规则
+  按客户端代码（`WLe` 系列走 `5h`/`7d` 头名）保留，但**本次实测没出现 `5h` 窗口**，
+  因此用量抽屉里 `five_hour` 可能是空的、只有 `seven_day` 与 `mirasim_windows` —— 这是正常现象，
+  不是 bug。
+- `model_scoped` 是**上游显式字段**（只在 scoped 窗口上出现），不是本地从名字推断的。
+- 不要指望端口固定：窗口名集合会随上游扩展（`1mo` 等只见过客户端常量，未见真实响应）。
+
+### 12.8 如何复现本节验证
+
+```bash
+# 隔离目录（既有陈旧测试文件会构建失败，见 tasks.md 7.2 的手法）
+rm -rf /tmp/mrsverify && mkdir -p /tmp/mrsverify && cp -al backend /tmp/mrsverify/backend
+# 移走 internal/service 下非 mirasim 的 *_test.go 与 account_repo_gemini_test_helpers.go
+
+cd /tmp/mrsverify/backend
+MIRASIM_E2E_DEVICE_KEY_FILE=<0600 的 PKCS8 PEM 路径> \
+MIRASIM_E2E_ACCESS_TOKEN_FILE=<0600 的 access token 文件路径> \
+  go test -tags e2e -count=1 -run 'TestMirasimRealRelayMetadataEndToEnd' -v ./internal/service/
+```
+
+凭据文件必须是 0600，且**不得**把内容贴进对话/工单/日志；没有凭据时该用例 `t.Skip`。

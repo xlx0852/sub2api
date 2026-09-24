@@ -289,6 +289,17 @@ type UsageInfo struct {
 	// 错误码（机器可读）：forbidden / unauthenticated / rate_limited / network_error
 	ErrorCode string `json:"error_code,omitempty"`
 
+	// Mirasim relay 只读额度窗口（GET /v1/limits）。
+	// 关键约束（改动前请先读）：
+	//   - `mirasim_windows` 是**全部**归一化窗口（含 model_scoped）；其中 `5h` / `7d`
+	//     另外通过 WindowKey 映射到兼容字段 `five_hour` / `seven_day`；
+	//   - `mirasim_paid` 为 nil 表示上游未给出布尔值（**不是** false）；
+	//   - `mirasim_degraded` 只表示**上游显式声明**的降级；本地拉取失败不改该字段，
+	//     而是写 `error`（固定类别串）并仍返回 HTTP 200，且不影响账号调度。
+	MirasimWindows  []MirasimQuotaWindow `json:"mirasim_windows,omitempty"`
+	MirasimPaid     *bool                `json:"mirasim_paid,omitempty"`
+	MirasimDegraded bool                 `json:"mirasim_degraded,omitempty"`
+
 	// 获取 usage 时的错误信息（降级返回，而非 500）
 	Error string `json:"error,omitempty"`
 }
@@ -307,6 +318,7 @@ type AccountUsageService struct {
 	openAIQuotaService      *OpenAIQuotaService
 	grokQuotaService        *GrokQuotaService
 	kimiQuotaService        KimiQuotaQuerier
+	mirasimMetadataService  MirasimMetadataQuerier
 	quotaWindowLedger       *QuotaWindowLedger
 	cache                   *UsageCache
 	identityCache           IdentityCache
@@ -355,6 +367,14 @@ func NewAccountUsageService(
 func (s *AccountUsageService) SetKimiQuotaService(service KimiQuotaQuerier) {
 	if s != nil {
 		s.kimiQuotaService = service
+	}
+}
+
+// SetMirasimMetadataService 注入 mirasim 只读元数据客户端（roster / limits），
+// 形态对标 SetKimiQuotaService：不动构造函数签名，测试可注入假实现。
+func (s *AccountUsageService) SetMirasimMetadataService(service MirasimMetadataQuerier) {
+	if s != nil {
+		s.mirasimMetadataService = service
 	}
 }
 
@@ -422,6 +442,18 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 	if account.IsExternalBridge() {
 		usage, err := s.getExternalBridgeUsage(ctx, account, forceProbe)
 		if err == nil {
+			s.tryClearRecoverableAccountError(ctx, account)
+		}
+		return usage, err
+	}
+
+	// Mirasim relay：额度窗口来自只读元数据通道 GET /v1/limits。
+	// 关键约束（改动前请先读）：该分支必须在 CanGetUsage() 之前——mirasim 账号是
+	// PlatformAnthropic + APIKey，CanGetUsage() 为 false，否则会掉到末尾的
+	// "does not support usage query"；且失败一律降级 200 + error（见 getMirasimUsage）。
+	if mirasimRelayAccountCandidate(account) {
+		usage, err := s.getMirasimUsage(ctx, account, forceProbe)
+		if err == nil && usage != nil && usage.Error == "" {
 			s.tryClearRecoverableAccountError(ctx, account)
 		}
 		return usage, err

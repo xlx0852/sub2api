@@ -42,6 +42,9 @@
 - [x] 4.3 `upstream_billing_probe.go isUpstreamBillingProbeAccount` 排除 Mirasim 账号
 - [x] 4.4 `upstream_models.go buildAnthropicUpstreamModelsRequest` 对 Mirasim 返回
       `newUpstreamModelSyncUnsupportedError`（relay 无 `/v1/models`）
+      > **已被取代（2026-09-24）**：`add-mirasim-model-roster-and-limits` 改为走
+      > `GET /v1/model-roster` 同步模型，不再返回 `unsupported`。relay 确实没有
+      > `/v1/models`，但提供 roster。该 change 归档后本条目仅作历史记录。
 
 ## 5. 前端
 

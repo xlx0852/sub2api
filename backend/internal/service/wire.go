@@ -165,6 +165,7 @@ func ProvideAccountUsageService(
 	grokQuotaService *GrokQuotaService,
 	openAIQuotaService *OpenAIQuotaService,
 	kimiQuotaService *KimiQuotaService,
+	mirasimMetadataService *MirasimMetadataService,
 	cache *UsageCache,
 	identityCache IdentityCache,
 	tlsFPProfileService *TLSFingerprintProfileService,
@@ -185,6 +186,7 @@ func ProvideAccountUsageService(
 	)
 	service.SetKimiQuotaService(kimiQuotaService)
 	service.SetGrokQuotaService(grokQuotaService)
+	service.SetMirasimMetadataService(mirasimMetadataService)
 	service.SetQuotaWindowLedger(quotaWindowLedger)
 	if quotaWindowLedger != nil {
 		if rangeReader, ok := usageLogRepo.(accountWindowStatsRangeReader); ok {
@@ -215,6 +217,7 @@ func ProvideAccountTestService(
 	cfg *config.Config,
 	tlsFPProfileService *TLSFingerprintProfileService,
 	openAIGatewayService *OpenAIGatewayService,
+	mirasimMetadataService *MirasimMetadataService,
 ) *AccountTestService {
 	service := NewAccountTestService(
 		accountRepo,
@@ -229,7 +232,18 @@ func ProvideAccountTestService(
 	)
 	service.agentIdentityWS = openAIGatewayService
 	service.codexIdentity = openAIGatewayService.codexIdentity
+	service.SetMirasimMetadataService(mirasimMetadataService)
 	return service
+}
+
+// ProvideMirasimMetadataService 创建 mirasim 只读元数据服务（roster + limits）。
+// 它只依赖账号仓库与上游 HTTP 客户端，因此同一实例可同时注入 AccountUsageService
+// （额度抽屉）与 AccountTestService（同步上游模型），共享一份按账号的 TTL 缓存。
+func ProvideMirasimMetadataService(
+	accountRepo AccountRepository,
+	httpUpstream HTTPUpstream,
+) *MirasimMetadataService {
+	return NewMirasimMetadataService(accountRepo, httpUpstream)
 }
 
 func ProvideGrokQuotaService(
@@ -741,6 +755,7 @@ var ProviderSet = wire.NewSet(
 	ProvideRateLimitService,
 	ProvideAccountUsageService,
 	ProvideAccountTestService,
+	ProvideMirasimMetadataService,
 	ProvideSettingService,
 	ProvideUpstreamBillingProbeService,
 	NewDataManagementService,
