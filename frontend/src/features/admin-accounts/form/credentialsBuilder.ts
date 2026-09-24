@@ -141,22 +141,6 @@ export function applyOpenAIEndpointCapabilities(
   }
 }
 
-export function applyCustomBaseURL(
-  extra: Record<string, unknown>,
-  enabled: boolean,
-  value: string,
-  mode: 'create' | 'edit'
-): void {
-  const trimmed = value.trim()
-  if (enabled && trimmed) {
-    extra.custom_base_url_enabled = true
-    extra.custom_base_url = trimmed
-  } else if (mode === 'edit') {
-    delete extra.custom_base_url_enabled
-    delete extra.custom_base_url
-  }
-}
-
 export function applyAnthropicExtra(
   extra: Record<string, unknown>,
   passthroughEnabled: boolean,

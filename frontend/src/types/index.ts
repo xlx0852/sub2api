@@ -736,7 +736,6 @@ export interface UpdateGroupRequest {
 
 export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kimi'
 export type AccountType = 'oauth' | 'setup-token' | 'apikey' | 'upstream' | 'service_account'
-export type OAuthAddMethod = 'oauth' | 'setup-token'
 // Input method selector for OAuth authorization flows (non-Anthropic providers).
 export type OAuthInputMethod =
   | 'manual'
@@ -973,18 +972,6 @@ export interface Account {
   // TLS指纹伪装（仅 Anthropic OAuth/SetupToken 账号有效）
   enable_tls_fingerprint?: boolean | null
   tls_fingerprint_profile_id?: number | null
-
-  // 会话ID伪装（仅 Anthropic OAuth/SetupToken 账号有效）
-  // 启用后将在15分钟内固定 metadata.user_id 中的 session ID
-  session_id_masking_enabled?: boolean | null
-
-  // 缓存 TTL 强制替换（仅 Anthropic OAuth/SetupToken 账号有效）
-  cache_ttl_override_enabled?: boolean | null
-  cache_ttl_override_target?: string | null
-
-  // 自定义 Base URL 中继转发（仅 Anthropic OAuth/SetupToken 账号有效）
-  custom_base_url_enabled?: boolean | null
-  custom_base_url?: string | null
 
   // API Key 账号配额限制
   quota_limit?: number | null

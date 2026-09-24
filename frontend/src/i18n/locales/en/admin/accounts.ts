@@ -320,6 +320,7 @@ export default {
       },
       testConnection: 'Test Connection',
       reAuthorize: 'Re-Authorize',
+      claudeOAuthRetired: 'Claude OAuth / setup-token sign-in has been retired. Use an Anthropic API key instead.',
       refreshToken: 'Refresh Token',
       noAccountsYet: 'No accounts yet',
       createFirstAccount: 'Create your first account to start using AI services.',
@@ -694,35 +695,9 @@ export default {
       },
       autoPauseOnExpired: 'Auto Pause On Expired',
       autoPauseOnExpiredDesc: 'When enabled, the account will auto pause scheduling after it expires',
-      // Quota control (Anthropic OAuth/SetupToken only)
+      // Quota control (API key accounts)
       quotaControl: {
         title: 'Quota control',
-        hint: 'Configure client affinity, fingerprint, cache and relay scheduling controls.',
-        tlsFingerprint: {
-          label: 'TLS Fingerprint Simulation',
-          hint: 'Simulate Node.js/Claude Code client TLS fingerprint',
-          defaultProfile: 'Built-in Default',
-          randomProfile: 'Random'
-        },
-        sessionIdMasking: {
-          label: 'Session ID Masking',
-          hint: 'When enabled, fixes the session ID in metadata.user_id for 15 minutes, making upstream think requests come from the same session'
-        },
-        cacheTTLOverride: {
-          label: 'Cache TTL Override',
-          hint: 'Force all cache creation tokens to be billed as the selected TTL tier (5m or 1h)',
-          target: 'Target TTL',
-          targetHint: 'Select the TTL tier for billing'
-        },
-        customBaseUrl: {
-          label: 'Custom Relay URL',
-          hint: 'Forward requests to a custom relay service. Proxy URL will be passed as a query parameter.',
-          urlHint: 'Relay service URL (e.g., https://relay.example.com)',
-        },
-        clientAffinity: {
-          label: 'Client Affinity Scheduling',
-          hint: 'When enabled, new sessions prefer accounts previously used by this client to reduce account switching'
-        }
       },
       affinityNoClients: 'No affinity clients',
       affinityClients: '{count} affinity clients:',
@@ -806,51 +781,29 @@ export default {
       },
       // OAuth flow
       oauth: {
-        title: 'Claude Account Authorization',
+        title: 'Account Authorization',
         authMethod: 'Authorization Method',
         manualAuth: 'Manual Authorization',
-        cookieAutoAuth: 'Cookie Auto-Auth',
-        cookieAutoAuthDesc:
-          'Use claude.ai sessionKey to automatically complete OAuth authorization without manually opening browser.',
-        sessionKey: 'sessionKey',
         keysCount: '{count} keys',
         batchCreateAccounts: 'Will batch create {count} accounts',
-        sessionKeyPlaceholder:
-          'One sessionKey per line, e.g.:\nsk-ant-sid01-xxxxx...\nsk-ant-sid01-yyyyy...',
-        sessionKeyPlaceholderSingle: 'sk-ant-sid01-xxxxx...',
-        howToGetSessionKey: 'How to get sessionKey',
-        step1: 'Login to claude.ai in your browser',
-        step2: 'Press F12 to open Developer Tools',
-        step3: 'Go to Application tab',
-        step4: 'Find Cookies → https://claude.ai',
-        step5: 'Find the row with key sessionKey',
-        step6: 'Copy the Value',
-        sessionKeyFormat: 'sessionKey usually starts with sk-ant-sid01-',
-        startAutoAuth: 'Start Auto-Auth',
-        authorizing: 'Authorizing...',
-        followSteps: 'Follow these steps to authorize your Claude account:',
+        followSteps: 'Follow these steps to complete account authorization:',
         step1GenerateUrl: 'Click the button below to generate the authorization URL',
         generateAuthUrl: 'Generate Auth URL',
         generating: 'Generating...',
         regenerate: 'Regenerate',
         step2OpenUrl: 'Open the URL in your browser and complete authorization',
-        openUrlDesc:
-          'Open the authorization URL in a new tab, log in to your Claude account and authorize.',
+        openUrlDesc: 'Open the authorization URL in a new tab, sign in to your account and authorize.',
         proxyWarning:
           'Note: If you configured a proxy, make sure your browser uses the same proxy to access the authorization page.',
         step3EnterCode: 'Enter the Authorization Code',
         authCodeDesc:
           'After authorization is complete, the page will display an Authorization Code. Copy and paste it below:',
         authCode: 'Authorization Code',
-        authCodePlaceholder: 'Paste the Authorization Code from Claude page...',
-        authCodeHint: 'Paste the Authorization Code copied from the Claude page',
+        authCodePlaceholder: 'Paste the Authorization Code...',
+        authCodeHint: 'Paste the copied Authorization Code',
         completeAuth: 'Complete Authorization',
         verifying: 'Verifying...',
-        pleaseEnterSessionKey: 'Please enter at least one valid sessionKey',
         authFailed: 'Authorization failed',
-        cookieAuthFailed: 'Cookie authorization failed',
-        keyAuthFailed: 'Key {index}: {error}',
-        successCreated: 'Successfully created {count} account(s)',
         batchSuccess: 'Successfully created {count} account(s)',
         batchPartialSuccess: 'Partial success: {success} succeeded, {failed} failed',
         batchFailed: 'Batch creation failed',

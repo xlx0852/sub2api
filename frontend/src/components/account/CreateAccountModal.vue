@@ -1894,15 +1894,11 @@
       <OAuthAuthorizationFlow
         v-else
         ref="oauthFlowRef"
-        :add-method="form.platform === 'anthropic' ? addMethod : 'oauth'"
         :auth-url="currentAuthUrl"
         :session-id="currentSessionId"
         :loading="currentOAuthLoading"
         :error="currentOAuthError"
-        :show-help="form.platform === 'anthropic'"
         :show-proxy-warning="form.platform !== 'openai' && form.platform !== 'grok' && !!form.proxy_id"
-        :allow-multiple="form.platform === 'anthropic'"
-        :show-cookie-option="form.platform === 'anthropic'"
         :show-refresh-token-option="form.platform === 'openai' || form.platform === 'antigravity' || form.platform === 'grok'"
         :show-mobile-refresh-token-option="form.platform === 'openai'"
         :show-session-token-option="false"
@@ -1912,7 +1908,6 @@
         :platform="form.platform"
         :show-project-id="geminiOAuthType === 'code_assist'"
         @generate-url="handleGenerateUrl"
-        @cookie-auth="handleCookieAuth"
         @validate-refresh-token="handleValidateRefreshToken"
         @validate-mobile-refresh-token="handleOpenAIValidateMobileRT"
         @validate-session-token="handleValidateSessionToken"
@@ -2259,11 +2254,6 @@ import {
 import { adminAPI } from '@/api/admin'
 import { apiErrorMessage } from '@/api/client'
 import { useQuotaNotifyState } from '@/composables/useQuotaNotifyState'
-import {
-  useAccountOAuth,
-  type AddMethod,
-  type AuthInputMethod
-} from '@/composables/useAccountOAuth'
 import { useOpenAIOAuth } from '@/composables/useOpenAIOAuth'
 import { useGeminiOAuth } from '@/composables/useGeminiOAuth'
 import { useAntigravityOAuth } from '@/composables/useAntigravityOAuth'
@@ -2282,7 +2272,8 @@ import type {
   CodexSessionImportMessage,
   OpenAICompactMode,
   OpenAIResponsesMode,
-  OpenAIEndpointCapability
+  OpenAIEndpointCapability,
+  OAuthInputMethod
 } from '@/types'
 import BaseDialog from '@/ui/BaseDialog.vue'
 import AccountCostConfigPanel from '@/components/admin/account/AccountCostConfigPanel.vue'
@@ -2304,7 +2295,6 @@ import {
   applyOpenAIWebSocketExtra,
   applyOpenAIEndpointCapabilities,
   normalizeOpenAIEndpointCapabilities,
-  applyCustomBaseURL,
   applyAnthropicExtra,
   applyMirasimRelay,
   validateMirasimRelayInput,
@@ -2349,12 +2339,11 @@ interface OAuthFlowExposed {
   authCode: string
   oauthState: string
   projectId: string
-  sessionKey: string
   refreshToken: string
   sessionToken: string
   codexSession: string
   codexPAT: string
-  inputMethod: AuthInputMethod
+  inputMethod: OAuthInputMethod
   reset: () => void
 }
 
@@ -2389,7 +2378,6 @@ const emit = defineEmits<{
 const appStore = useAppStore()
 
 // OAuth composables
-const oauth = useAccountOAuth() // For Anthropic OAuth
 const openaiOAuth = useOpenAIOAuth() // For OpenAI OAuth
 const geminiOAuth = useGeminiOAuth() // For Gemini OAuth
 const antigravityOAuth = useAntigravityOAuth() // For Antigravity OAuth
@@ -2416,7 +2404,7 @@ const currentAuthUrl = computed(() => {
   if (form.platform === 'gemini') return geminiOAuth.authUrl.value
   if (form.platform === 'antigravity') return antigravityOAuth.authUrl.value
   if (form.platform === 'grok') return grokOAuth.authUrl.value
-  return oauth.authUrl.value
+  return ''
 })
 
 const currentSessionId = computed(() => {
@@ -2424,7 +2412,7 @@ const currentSessionId = computed(() => {
   if (form.platform === 'gemini') return geminiOAuth.sessionId.value
   if (form.platform === 'antigravity') return antigravityOAuth.sessionId.value
   if (form.platform === 'grok') return grokOAuth.sessionId.value
-  return oauth.sessionId.value
+  return ''
 })
 
 const currentOAuthLoading = computed(() => {
@@ -2432,7 +2420,7 @@ const currentOAuthLoading = computed(() => {
   if (form.platform === 'gemini') return geminiOAuth.loading.value
   if (form.platform === 'antigravity') return antigravityOAuth.loading.value
   if (form.platform === 'grok') return grokOAuth.loading.value
-  return oauth.loading.value
+  return false
 })
 
 const currentOAuthError = computed(() => {
@@ -2440,7 +2428,7 @@ const currentOAuthError = computed(() => {
   if (form.platform === 'gemini') return geminiOAuth.error.value
   if (form.platform === 'antigravity') return antigravityOAuth.error.value
   if (form.platform === 'grok') return grokOAuth.error.value
-  return oauth.error.value
+  return ''
 })
 
 // Refs
@@ -2460,8 +2448,7 @@ const step = ref(1)
 const submitting = ref(false)
 const postCreateCostAccount = ref<Account | null>(null)
 const showPostCreateCost = computed(() => !!postCreateCostAccount.value)
-const accountCategory = ref<'oauth-based' | 'apikey'>('oauth-based') // UI selection for account category
-const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
+const accountCategory = ref<'oauth-based' | 'apikey'>('apikey') // UI selection for account category
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
 
@@ -2738,15 +2725,6 @@ const antigravityMixedChannelConfirmed = ref(false)
 const showAdvancedOAuth = ref(false)
 const showGeminiHelpDialog = ref(false)
 
-const tlsFingerprintEnabled = ref(false)
-const tlsFingerprintProfileId = ref<number | null>(null)
-const tlsFingerprintProfiles = ref<{ id: number; name: string }[]>([])
-const sessionIdMaskingEnabled = ref(false)
-const cacheTTLOverrideEnabled = ref(false)
-const cacheTTLOverrideTarget = ref<string>('5m')
-const customBaseUrlEnabled = ref(false)
-const customBaseUrl = ref('')
-
 // Gemini tier selection (used as fallback when auto-detection is unavailable/fails)
 const geminiTierGoogleOne = ref<'google_one_free' | 'google_ai_pro' | 'google_ai_ultra'>('google_one_free')
 const geminiTierGcp = ref<'gcp_standard' | 'gcp_enterprise'>('gcp_standard')
@@ -2911,7 +2889,7 @@ const canExchangeCode = computed(() => {
   if (form.platform === 'grok') {
     return authCode.trim() && grokOAuth.sessionId.value && !grokOAuth.loading.value
   }
-  return authCode.trim() && oauth.sessionId.value && !oauth.loading.value
+  return false
 })
 
 // Watchers
@@ -2919,10 +2897,6 @@ watch(
   () => props.show,
   (newVal) => {
     if (newVal) {
-      // Load TLS fingerprint profiles
-      adminAPI.tlsFingerprintProfiles.list()
-        .then(profiles => { tlsFingerprintProfiles.value = profiles.map(p => ({ id: p.id, name: p.name })) })
-        .catch(() => { tlsFingerprintProfiles.value = [] })
       // Modal opened - fill related models
       allowedModels.value = [...getModelsByPlatform(form.platform)]
       // Antigravity: 默认使用映射模式并填充默认映射
@@ -2943,17 +2917,17 @@ watch(
   }
 )
 
-// Sync form.type based on accountCategory, addMethod, and platform-specific type
+// Sync form.type based on accountCategory and platform-specific type
 watch(
-  [accountCategory, addMethod, antigravityAccountType, () => form.platform],
-  ([category, method, agType]) => {
+  [accountCategory, antigravityAccountType, () => form.platform],
+  ([category, agType]) => {
     // Antigravity upstream 类型（实际创建为 apikey）
     if (form.platform === 'antigravity' && agType === 'upstream') {
       form.type = 'apikey'
       return
     }
     if (category === 'oauth-based') {
-      form.type = form.platform === 'anthropic' ? method as AccountType : 'oauth'
+      form.type = 'oauth'
     } else {
       form.type = 'apikey'
     }
@@ -2988,14 +2962,12 @@ watch(
     }
     if (newPlatform === 'grok') {
       accountCategory.value = 'oauth-based'
-      addMethod.value = 'oauth'
       modelRestrictionMode.value = 'mapping'
       form.concurrency = 1
       form.load_factor = null
     }
     if (newPlatform === 'kimi') {
       accountCategory.value = 'oauth-based'
-      addMethod.value = 'oauth'
       modelRestrictionMode.value = 'mapping'
       form.concurrency = 1
       form.load_factor = null
@@ -3025,7 +2997,6 @@ watch(
     headerOverrideEnabled.value = false
     headerOverrideRows.value = []
     // Reset OAuth states
-    oauth.resetState()
     openaiOAuth.resetState()
 
     geminiOAuth.resetState()
@@ -3390,7 +3361,7 @@ const resetForm = () => {
   form.name = ''
   form.notes = ''
   form.platform = 'anthropic'
-  form.type = 'oauth'
+  form.type = 'apikey'
   form.credentials = {}
   form.proxy_id = null
   form.concurrency = 10
@@ -3399,8 +3370,7 @@ const resetForm = () => {
   form.rate_multiplier = 1
   form.group_ids = []
   form.expires_at = null
-  accountCategory.value = 'oauth-based'
-  addMethod.value = 'oauth'
+  accountCategory.value = 'apikey'
   apiKeyBaseUrl.value = 'https://api.anthropic.com'
   apiKeyValue.value = ''
   editQuotaLimit.value = null
@@ -3445,13 +3415,6 @@ const resetForm = () => {
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
   webSearchEmulationMode.value = 'default'
   resetMirasimRelayForm()
-  tlsFingerprintEnabled.value = false
-  tlsFingerprintProfileId.value = null
-  sessionIdMaskingEnabled.value = false
-  cacheTTLOverrideEnabled.value = false
-  cacheTTLOverrideTarget.value = '5m'
-  customBaseUrlEnabled.value = false
-  customBaseUrl.value = ''
   allowOverages.value = false
   antigravityAccountType.value = 'oauth'
   antigravityProjectId.value = ''
@@ -3463,7 +3426,6 @@ const resetForm = () => {
   geminiTierGoogleOne.value = 'google_one_free'
   geminiTierGcp.value = 'gcp_standard'
   geminiTierAIStudio.value = 'aistudio_free'
-  oauth.resetState()
   openaiOAuth.resetState()
   geminiOAuth.resetState()
   antigravityOAuth.resetState()
@@ -3744,7 +3706,6 @@ const handleSubmit = async () => {
 
 const goBackToBasicInfo = () => {
   step.value = 1
-  oauth.resetState()
   openaiOAuth.resetState()
   geminiOAuth.resetState()
   antigravityOAuth.resetState()
@@ -3770,8 +3731,6 @@ const handleGenerateUrl = async () => {
     await antigravityOAuth.generateAuthUrl(form.proxy_id)
   } else if (form.platform === 'grok') {
     await grokOAuth.generateAuthUrl(form.proxy_id)
-  } else {
-    await oauth.generateAuthUrl(addMethod.value, form.proxy_id)
   }
 }
 
@@ -4645,64 +4604,6 @@ const handleGrokExchange = async (authCode: string) => {
     grokOAuth.loading.value = false
   }
 }
-
-// Anthropic OAuth 授权码兑换
-const handleAnthropicExchange = async (authCode: string) => {
-  if (!authCode.trim() || !oauth.sessionId.value) return
-
-  oauth.loading.value = true
-  oauth.error.value = ''
-
-  try {
-    const proxyConfig = form.proxy_id ? { proxy_id: form.proxy_id } : {}
-    const endpoint =
-      addMethod.value === 'oauth'
-        ? '/admin/accounts/exchange-code'
-        : '/admin/accounts/exchange-setup-token-code'
-
-    const tokenInfo = await adminAPI.accounts.exchangeCode(endpoint, {
-      session_id: oauth.sessionId.value,
-      code: authCode.trim(),
-      ...proxyConfig
-    })
-
-    // Build extra with quota control settings
-    const baseExtra = oauth.buildExtraInfo(tokenInfo) || {}
-    const extra: Record<string, unknown> = { ...baseExtra }
-
-    // Add TLS fingerprint settings
-    if (tlsFingerprintEnabled.value) {
-      extra.enable_tls_fingerprint = true
-      if (tlsFingerprintProfileId.value) {
-        extra.tls_fingerprint_profile_id = tlsFingerprintProfileId.value
-      }
-    }
-
-    // Add session ID masking settings
-    if (sessionIdMaskingEnabled.value) {
-      extra.session_id_masking_enabled = true
-    }
-
-    // Add cache TTL override settings
-    if (cacheTTLOverrideEnabled.value) {
-      extra.cache_ttl_override_enabled = true
-      extra.cache_ttl_override_target = cacheTTLOverrideTarget.value
-    }
-
-    // Add custom base URL settings
-    applyCustomBaseURL(extra, customBaseUrlEnabled.value, customBaseUrl.value, 'create')
-
-    const credentials: Record<string, unknown> = { ...tokenInfo }
-    applyInterceptWarmup(credentials, interceptWarmupRequests.value, 'create')
-    await createAccountAndFinish(form.platform, addMethod.value as AccountType, credentials, extra)
-  } catch (error: any) {
-    oauth.error.value = apiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
-    appStore.showError(oauth.error.value)
-  } finally {
-    oauth.loading.value = false
-  }
-}
-
 // 主入口：根据平台路由到对应处理函数
 const handleExchangeCode = async () => {
   const authCode = oauthFlowRef.value?.authCode || ''
@@ -4717,136 +4618,7 @@ const handleExchangeCode = async () => {
     case 'grok':
       return handleGrokExchange(authCode)
     default:
-      return handleAnthropicExchange(authCode)
-  }
-}
-
-const handleCookieAuth = async (sessionKey: string) => {
-  oauth.loading.value = true
-  oauth.error.value = ''
-
-  try {
-    const proxyConfig = form.proxy_id ? { proxy_id: form.proxy_id } : {}
-    const keys = oauth.parseSessionKeys(sessionKey)
-
-    if (keys.length === 0) {
-      oauth.error.value = t('admin.accounts.oauth.pleaseEnterSessionKey')
       return
-    }
-
-    const tempUnschedPayload = tempUnschedEnabled.value
-      ? buildTempUnschedRules(tempUnschedRules.value)
-      : []
-    if (tempUnschedEnabled.value && tempUnschedPayload.length === 0) {
-      appStore.showError(t('admin.accounts.tempUnschedulable.rulesInvalid'))
-      return
-    }
-
-    const endpoint =
-      addMethod.value === 'oauth'
-        ? '/admin/accounts/cookie-auth'
-        : '/admin/accounts/setup-token-cookie-auth'
-
-    let successCount = 0
-    let failedCount = 0
-    const errors: string[] = []
-
-    for (let i = 0; i < keys.length; i++) {
-      try {
-        const tokenInfo = await adminAPI.accounts.exchangeCode(endpoint, {
-          session_id: '',
-          code: keys[i],
-          ...proxyConfig
-        })
-
-        // Build extra with quota control settings
-        const baseExtra = oauth.buildExtraInfo(tokenInfo) || {}
-        const extra: Record<string, unknown> = { ...baseExtra }
-
-        // Add TLS fingerprint settings
-        if (tlsFingerprintEnabled.value) {
-          extra.enable_tls_fingerprint = true
-          if (tlsFingerprintProfileId.value) {
-            extra.tls_fingerprint_profile_id = tlsFingerprintProfileId.value
-          }
-        }
-
-        // Add session ID masking settings
-        if (sessionIdMaskingEnabled.value) {
-          extra.session_id_masking_enabled = true
-        }
-
-        // Add cache TTL override settings
-        if (cacheTTLOverrideEnabled.value) {
-          extra.cache_ttl_override_enabled = true
-          extra.cache_ttl_override_target = cacheTTLOverrideTarget.value
-        }
-
-        // Add custom base URL settings
-        applyCustomBaseURL(extra, customBaseUrlEnabled.value, customBaseUrl.value, 'create')
-
-        const accountName = keys.length > 1 ? `${form.name} #${i + 1}` : form.name
-
-        const credentials: Record<string, unknown> = { ...tokenInfo }
-        applyInterceptWarmup(credentials, interceptWarmupRequests.value, 'create')
-        if (tempUnschedEnabled.value) {
-          credentials.temp_unschedulable_enabled = true
-          credentials.temp_unschedulable_rules = tempUnschedPayload
-        }
-        const modelMapping = buildModelMappingObject(
-          modelRestrictionMode.value,
-          allowedModels.value,
-          modelMappings.value
-        )
-        if (modelMapping) {
-          credentials.model_mapping = modelMapping
-        }
-
-        await adminAPI.accounts.create({
-          name: accountName,
-          notes: form.notes,
-          platform: form.platform,
-          type: addMethod.value, // Use addMethod as type: 'oauth' or 'setup-token'
-          credentials,
-          extra,
-          proxy_id: form.proxy_id,
-          concurrency: form.concurrency,
-          load_factor: form.load_factor ?? undefined,
-          priority: form.priority,
-          rate_multiplier: form.rate_multiplier,
-          group_ids: form.group_ids,
-          ...accountExpiryPayload.value
-        })
-
-        successCount++
-      } catch (error: any) {
-        failedCount++
-        errors.push(
-          t('admin.accounts.oauth.keyAuthFailed', {
-            index: i + 1,
-            error: apiErrorMessage(error, t('admin.accounts.oauth.authFailed'))
-          })
-        )
-      }
-    }
-
-    if (successCount > 0) {
-      appStore.showSuccess(t('admin.accounts.oauth.successCreated', { count: successCount }))
-      if (failedCount === 0) {
-        emit('created', undefined)
-        handleClose()
-      } else {
-        emit('created', undefined)
-      }
-    }
-
-    if (failedCount > 0) {
-      oauth.error.value = errors.join('\n')
-    }
-  } catch (error: any) {
-    oauth.error.value = apiErrorMessage(error, t('admin.accounts.oauth.cookieAuthFailed'))
-  } finally {
-    oauth.loading.value = false
   }
 }
 </script>

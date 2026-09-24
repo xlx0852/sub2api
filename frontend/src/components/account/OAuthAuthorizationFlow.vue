@@ -582,6 +582,7 @@ interface Props {
   loading?: boolean
   error?: string
   showProxyWarning?: boolean
+  showRefreshTokenOption?: boolean // Whether to show refresh token input option (OpenAI only)
   showMobileRefreshTokenOption?: boolean // Whether to show mobile refresh token option (OpenAI only)
   showSessionTokenOption?: boolean
   showAccessTokenOption?: boolean

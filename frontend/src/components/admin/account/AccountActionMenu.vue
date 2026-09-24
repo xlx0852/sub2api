@@ -19,7 +19,8 @@
               {{ t('admin.accounts.viewStats') }}
             </button>
 <!-- 影子账号不持凭据:重授权/刷新 token 对其无效(后端拒绝),故隐藏(外审 G4)。 -->
-            <template v-if="(account.type === 'oauth' || account.type === 'setup-token') && !isShadow">
+<!-- Anthropic(Claude) 的 oauth/setup-token 接入已下线，存量账号不再提供重授权/刷新 token。 -->
+            <template v-if="(account.type === 'oauth' || account.type === 'setup-token') && !isShadow && account.platform !== 'anthropic'">
               <button @click="$emit('reauth', account); $emit('close')" class="flex w-full items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:bg-gray-100 dark:hover:bg-dark-700">
                 <Icon name="link" size="sm" />
                 {{ t('admin.accounts.reAuthorize') }}

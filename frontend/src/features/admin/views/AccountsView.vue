@@ -1753,7 +1753,15 @@ const openUsageDetails = (account: Account, initialTab: 'quota' | 'statistics' |
   }
 }
 const closeUsageDetails = () => { usageDetailsAcc.value = null }
-const handleReAuth = (a: Account) => { reAuthAcc.value = a; showReAuth.value = true }
+const handleReAuth = (a: Account) => {
+  // Anthropic(Claude) 的 oauth/setup-token 接入已下线：存量账号无法再重授权。
+  if (a.platform === 'anthropic' && (a.type === 'oauth' || a.type === 'setup-token')) {
+    appStore.showError(t('admin.accounts.claudeOAuthRetired'))
+    return
+  }
+  reAuthAcc.value = a
+  showReAuth.value = true
+}
 const handleRefresh = async (a: Account) => {
   try {
     const updated = a.platform === 'kimi'

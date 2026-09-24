@@ -10,7 +10,6 @@ import {
   HEADER_OVERRIDES_CREDENTIAL_KEY,
   applyAntigravityExtra,
   applyAnthropicExtra,
-  applyCustomBaseURL,
   applyOpenAIPassthrough,
   applyOpenAIExternalBridge,
   applyOpenAICompactMode,
@@ -103,20 +102,6 @@ describe('OpenAI endpoint capabilities', () => {
     const credentials: Record<string, unknown> = { openai_capabilities: ['embeddings'] }
     applyOpenAIEndpointCapabilities(credentials, ['chat_completions', 'embeddings'])
     expect(credentials).toEqual({})
-  })
-})
-
-describe('applyCustomBaseURL', () => {
-  it('trims and writes create values, while edit clears disabled values', () => {
-    const created: Record<string, unknown> = {}
-    applyCustomBaseURL(created, true, ' https://upstream.example/v1 ', 'create')
-    expect(created).toEqual({
-      custom_base_url_enabled: true,
-      custom_base_url: 'https://upstream.example/v1'
-    })
-
-    applyCustomBaseURL(created, false, '', 'edit')
-    expect(created).toEqual({})
   })
 })
 

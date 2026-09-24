@@ -218,6 +218,7 @@ export default {
       },
       testConnection: '测试连接',
       reAuthorize: '重新授权',
+      claudeOAuthRetired: 'Claude OAuth / setup-token 接入已下线，请改用 Anthropic API Key。',
       refreshToken: '刷新令牌',
       noAccountsYet: '暂无账号',
       createFirstAccount: '添加 AI 平台账号以开始使用 API 网关。',
@@ -946,35 +947,9 @@ export default {
       },
       autoPauseOnExpired: '过期自动暂停调度',
       autoPauseOnExpiredDesc: '启用后，账号过期将自动暂停调度',
-      // Quota control (Anthropic OAuth/SetupToken only)
+      // Quota control (API key accounts)
       quotaControl: {
         title: '配额控制',
-        hint: '配置客户端亲和、指纹、缓存与中继等调度控制。',
-        tlsFingerprint: {
-          label: 'TLS 指纹模拟',
-          hint: '模拟 Node.js/Claude Code 客户端的 TLS 指纹',
-          defaultProfile: '内置默认',
-          randomProfile: '随机'
-        },
-        sessionIdMasking: {
-          label: '会话 ID 伪装',
-          hint: '启用后将在 15 分钟内固定 metadata.user_id 中的 session ID，使上游认为请求来自同一会话'
-        },
-        cacheTTLOverride: {
-          label: '缓存 TTL 强制替换',
-          hint: '将所有缓存创建 token 强制按指定的 TTL 类型（5分钟或1小时）计费',
-          target: '目标 TTL',
-          targetHint: '选择计费使用的 TTL 类型'
-        },
-        customBaseUrl: {
-          label: '自定义转发地址',
-          hint: '启用后将请求转发到自定义中继服务，代理地址将作为 URL 参数传递给中继服务',
-          urlHint: '中继服务地址（如 https://relay.example.com）',
-        },
-        clientAffinity: {
-          label: '客户端亲和调度',
-          hint: '启用后，新会话会优先调度到该客户端之前使用过的账号，避免频繁切换账号'
-        }
       },
       affinityNoClients: '无亲和客户端',
       affinityClients: '{count} 个亲和客户端：',
@@ -1057,47 +1032,27 @@ export default {
       },
       // OAuth flow
       oauth: {
-        title: 'Claude 账号授权',
+        title: '账号授权',
         authMethod: '授权方式',
         manualAuth: '手动授权',
-        cookieAutoAuth: 'Cookie 自动授权',
-        cookieAutoAuthDesc: '使用 claude.ai sessionKey 自动完成 OAuth 授权，无需手动打开浏览器。',
-        sessionKey: 'sessionKey',
         keysCount: '{count} 个密钥',
         batchCreateAccounts: '将批量创建 {count} 个账号',
-        sessionKeyPlaceholder:
-          '每行一个 sessionKey，例如：\nsk-ant-sid01-xxxxx...\nsk-ant-sid01-yyyyy...',
-        sessionKeyPlaceholderSingle: 'sk-ant-sid01-xxxxx...',
-        howToGetSessionKey: '如何获取 sessionKey',
-        step1: '在浏览器中登录 claude.ai',
-        step2: '按 F12 打开开发者工具',
-        step3: '切换到 Application 标签',
-        step4: '找到 Cookies → https://claude.ai',
-        step5: '找到 sessionKey 所在行',
-        step6: '复制 Value 列的值',
-        sessionKeyFormat: 'sessionKey 通常以 sk-ant-sid01- 开头',
-        startAutoAuth: '开始自动授权',
-        authorizing: '授权中...',
-        followSteps: '按照以下步骤授权您的 Claude 账号：',
+        followSteps: '按照以下步骤完成账号授权：',
         step1GenerateUrl: '点击下方按钮生成授权 URL',
         generateAuthUrl: '生成授权 URL',
         generating: '生成中...',
         regenerate: '重新生成',
         step2OpenUrl: '在浏览器中打开 URL 并完成授权',
-        openUrlDesc: '在新标签页中打开授权 URL，登录您的 Claude 账号并授权。',
+        openUrlDesc: '在新标签页中打开授权 URL，登录您的账号并完成授权。',
         proxyWarning: '注意：如果您配置了代理，请确保浏览器使用相同的代理访问授权页面。',
         step3EnterCode: '输入授权码',
         authCodeDesc: '授权完成后，页面会显示一个授权码。复制并粘贴到下方：',
         authCode: '授权码',
-        authCodePlaceholder: '粘贴 Claude 页面的授权码...',
-        authCodeHint: '粘贴从 Claude 页面复制的授权码',
+        authCodePlaceholder: '粘贴授权码...',
+        authCodeHint: '粘贴复制的授权码',
         completeAuth: '完成授权',
         verifying: '验证中...',
-        pleaseEnterSessionKey: '请输入至少一个有效的 sessionKey',
         authFailed: '授权失败',
-        cookieAuthFailed: 'Cookie 授权失败',
-        keyAuthFailed: '密钥 {index}: {error}',
-        successCreated: '成功创建 {count} 个账号',
         batchSuccess: '成功创建 {count} 个账号',
         batchPartialSuccess: '部分成功：{success} 个成功，{failed} 个失败',
         batchFailed: '批量创建失败',
