@@ -70,6 +70,8 @@
               <TimingRow :label="t('usage.timingDetail.connectionAcquire')" :value="msValue(stages?.upstream_connect_ms)" />
               <TimingRow :label="t('usage.timingDetail.upstreamWrite')" :value="msValue(stages?.upstream_write_ms)" />
               <TimingRow :label="t('usage.timingDetail.upstreamWriteHeaders')" :value="msValue(stages?.upstream_wrote_headers_ms)" />
+              <TimingRow :label="t('usage.timingDetail.upstreamDo')" :value="msValue(stages?.upstream_do_ms)" />
+              <TimingRow :label="t('usage.timingDetail.upstreamBuild')" :value="msValue(stages?.upstream_build_ms)" />
               <TimingRow :label="t('usage.timingDetail.upstreamDial')" :value="msValue(stages?.upstream_dial_ms)" />
               <TimingRow :label="t('usage.timingDetail.upstreamTLS')" :value="msValue(stages?.upstream_tls_ms)" />
               <TimingRow :label="t('usage.timingDetail.upstreamBodyUpload')" :value="upstreamBodyUpload" />

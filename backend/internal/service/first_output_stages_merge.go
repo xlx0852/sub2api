@@ -82,6 +82,12 @@ func MergeFirstOutputStages(base, detail *domain.FirstOutputStages) *domain.Firs
 	if base.UpstreamProto == "" {
 		base.UpstreamProto = detail.UpstreamProto
 	}
+	if base.UpstreamDoMs == nil {
+		base.UpstreamDoMs = detail.UpstreamDoMs
+	}
+	if base.UpstreamBuildMs == nil {
+		base.UpstreamBuildMs = detail.UpstreamBuildMs
+	}
 	if base.UpstreamFirstByteMs == nil {
 		base.UpstreamFirstByteMs = detail.UpstreamFirstByteMs
 	}

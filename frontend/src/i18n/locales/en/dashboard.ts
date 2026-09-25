@@ -392,6 +392,8 @@ export default {
       upstreamBodyUpload: 'Body upload portion',
       upstreamDialed: 'Dialed this request',
       upstreamProto: 'Upstream protocol',
+      upstreamDo: 'Before upstream call (parse/build)',
+      upstreamBuild: 'Upstream request build',
       upstreamDial: 'TCP dial portion',
       upstreamTLS: 'TLS handshake portion',
       upstreamFirstByte: 'Wait for upstream first byte',

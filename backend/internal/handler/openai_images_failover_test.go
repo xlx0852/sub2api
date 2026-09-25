@@ -138,7 +138,8 @@ func TestOpenAIGatewayHandlerImages_ServerErrorFailsOverAndReturnsClearErrorWhen
 		nil,
 		nil,
 		nil,
-	, nil)
+	nil,
+	)
 	billingService := newBillingEligibleCache(t, cfg)
 	concurrencyService := service.NewConcurrencyService(nil)
 	handler := NewOpenAIGatewayHandler(

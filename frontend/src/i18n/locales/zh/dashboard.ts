@@ -396,6 +396,8 @@ export default {
       upstreamBodyUpload: '其中请求体上传',
       upstreamDialed: '本次新建连接',
       upstreamProto: '上游协议',
+      upstreamDo: '调用上游前（含解析/构造）',
+      upstreamBuild: '其中构造上游请求',
       upstreamDial: '其中拨号（TCP）',
       upstreamTLS: '其中 TLS 握手',
       upstreamFirstByte: '等待上游首字节',

@@ -116,7 +116,8 @@ func TestOpenAIGatewayHandlerAlphaSearch_ContextCanceledDoesNotFailOverOrPenaliz
 		nil,
 		nil,
 		nil,
-	, nil)
+	nil,
+	)
 	billingService := newBillingEligibleCache(t, cfg)
 	concurrencyService := service.NewConcurrencyService(nil)
 	h := NewOpenAIGatewayHandler(

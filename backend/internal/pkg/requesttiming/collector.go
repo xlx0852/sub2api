@@ -52,6 +52,8 @@ type Collector struct {
 	upstreamTLS          *int
 	upstreamDialed       *bool
 	upstreamProto        string
+	upstreamDo           *int
+	upstreamBuild        *int
 	upstreamFirst        *int
 	upstreamHeaders      *int
 	upstreamStream       *int
@@ -222,6 +224,8 @@ func (c *Collector) Attempt() {
 		c.upstreamFirst = nil
 		c.upstreamHeaders = nil
 		c.upstreamStream = nil
+		c.upstreamDo = nil
+		c.upstreamBuild = nil
 		c.connReusedSet = false
 		c.streamDoneSet = false
 	}
@@ -304,6 +308,14 @@ func (c *Collector) SetUpstreamDialed(dialed bool) {
 	c.upstreamDialed = &dialed
 	c.mu.Unlock()
 }
+
+// MarkUpstreamDo 记录「请求开始 → 即将调用 client.Do」的时间点，
+// 用于把请求开始到取到连接之间的时间拆成「调用前（handler/构造/客户端条目）」与
+// 「连接获取」两段。
+func (c *Collector) MarkUpstreamDo() { c.markSinceSlot(&c.upstreamDo) }
+
+// ObserveUpstreamBuild 记录构造上游请求的耗时。
+func (c *Collector) ObserveUpstreamBuild(d time.Duration) { c.store(&c.upstreamBuild, d) }
 
 // SetUpstreamProto 记录上游响应使用的 HTTP 协议版本（HTTP/1.1、HTTP/2.0）。
 func (c *Collector) SetUpstreamProto(proto string) {
@@ -411,6 +423,8 @@ func (c *Collector) Snapshot(now time.Time) *domain.FirstOutputStages {
 	out.UpstreamTLSMs = c.upstreamTLS
 	out.UpstreamDialed = c.upstreamDialed
 	out.UpstreamProto = c.upstreamProto
+	out.UpstreamDoMs = c.upstreamDo
+	out.UpstreamBuildMs = c.upstreamBuild
 	out.UpstreamFirstByteMs = c.upstreamFirst
 	out.UpstreamResponseHeadersMs = c.upstreamHeaders
 	out.UpstreamStreamTransferMs = c.upstreamStream

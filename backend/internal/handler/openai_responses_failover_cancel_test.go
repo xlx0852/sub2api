@@ -101,7 +101,8 @@ func newOpenAIResponsesFailoverTestHandler(t *testing.T, upstream service.HTTPUp
 		nil,
 		nil,
 		nil,
-	, nil)
+	nil,
+	)
 	billingService := newBillingEligibleCache(t, cfg)
 	concurrencyService := service.NewConcurrencyService(nil)
 	handler := NewOpenAIGatewayHandler(
