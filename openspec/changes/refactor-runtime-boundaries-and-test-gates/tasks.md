@@ -30,7 +30,7 @@
 
 ## 5. Service package boundaries
 
-- [ ] 5.1 将 AccountSelector 公共 primitives 与平台策略分离，补候选集/排序/sticky/cooldown 差分测试
+- [x] 5.1 将 AccountSelector 公共 primitives 与平台策略分离，补候选集/排序/sticky/cooldown 差分测试
 - [ ] 5.2 建立 gateway、scheduling、billing、identity、settings 子包边界与 import archtest
 - [ ] 5.3 将超大测试文件/测试函数按能力拆分，默认测试与 unit 测试按目录运行
 - [ ] 5.4 为 `GatewayService`、`OpenAIGatewayService`、`SystemSettings` 制定拆分清单，禁止继续增加字段
