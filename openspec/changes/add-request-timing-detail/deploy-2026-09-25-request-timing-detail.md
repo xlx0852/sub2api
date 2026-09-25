@@ -89,3 +89,16 @@ change：`add-request-timing-detail`
 ```
 
 **由此发现的性能事实**：生产 `content_moderation_config` 为 `enabled=true`、`mode=pre_block`，走 `https://api.openai.com/omni-moderation-latest` 同步调用，占该请求 2.63s 中的 **1.41s**（54%），是网关侧最大单项耗时。是否需要优化（缓存 / 并行 / 改后置）由运营决定，本 change 只负责让该耗时可见。
+
+## 7. 收尾：槽位埋点、时间刻度、审核耗时分布（14:06 JST）
+
+| 提交 | 内容 |
+| --- | --- |
+| `df38e1b73` | 调度层 `TryAcquireAccountSlot` 埋点 → Anthropic/Gemini 路径补齐 `account_queue_ms`；后端 `sha256=5653ae0df1354ff1fbe1cdf0dedf942510fabf7fad47d7a6c12fe82df9bb31fe` |
+| `1268f0e7d` | 瀑布加时间刻度轴（0 / 中位 / 总耗时）与块内时长标签；前端 release `0.1.391-1268f0e7d`（聚合 `bbf4ded8a029975720ab958e6c28e9c4b50dabfb04e610b5254c0f204f1777e5`） |
+
+**线上核验**：Anthropic `/v1/messages` 的 segments 现含 `account_queue`（32→33ms）；容器 healthy、5xx=0。
+
+**安全审核耗时分布（近 3 小时 526 条 staged 行）**：p50 = **102ms**、p95 = **634ms**、≥1100ms（打满 `timeout_ms=1200`）= **8 条**、≥100ms = 275 条（52%）。
+
+生产审核配置：`enabled=true`、`mode=pre_block`、`sample_rate=15`、`timeout_ms=1200`、`retry_count=1`、`pre_hash_check_enabled=true`、`worker_count=4`、`base_url=https://api.openai.com`、`model=omni-moderation-latest`。即：约 15% 的请求做抽样 API 审核，命中干净 hash 缓存则跳过；仍未跳过时中位 102ms、尾部会打满 1.2s 超时。是否调 `timeout_ms` / `sample_rate` / 改后置审核属运营策略，本 change 只负责让耗时可见。
