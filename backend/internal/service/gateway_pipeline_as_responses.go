@@ -30,6 +30,10 @@ func (s *GatewayService) forwardClaudeAsResponsesParse(ex *pipeline.Exchange) er
 	if err != nil {
 		return fmt.Errorf("convert responses to anthropic: %w", err)
 	}
+	// 把 custom/freeform 工具名记到 ctx：入站已把它们降级为「单一 input 字符串参数」，
+	// 出站（响应方向）必须据此把模型的 tool_use 还原成 custom_tool_call——
+	// codex 只按声明的类型路由，对 custom 工具回 function_call 会被判 payload 不兼容。
+	setOpenAIResponsesCustomToolNames(st.c, apicompat.CustomToolNamesFromResponsesBody(st.body))
 	anthropicReq.Stream = true
 	st.reqStream = true
 	st.anthropicReq = anthropicReq

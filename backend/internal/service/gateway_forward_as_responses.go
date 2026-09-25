@@ -246,6 +246,9 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 
 	state := apicompat.NewAnthropicEventToResponsesState()
 	state.Model = originalModel
+	// custom/freeform 工具名（入站时写入 ctx）：模型对它们的 tool_use 要还原成
+	// custom_tool_call + response.custom_tool_call_input.*，而不是 function_call。
+	state.CustomTools = openAIResponsesCustomToolNames(c)
 	var usage ClaudeUsage
 	var firstTokenMs *int
 	firstChunk := true

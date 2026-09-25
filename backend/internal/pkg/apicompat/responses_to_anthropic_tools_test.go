@@ -24,7 +24,14 @@ func requireObjectInputSchema(t *testing.T, schema json.RawMessage) map[string]j
 	return parsed
 }
 
-func TestResponsesToAnthropic_CustomGrammarToolUsesObjectSchema(t *testing.T) {
+// custom + grammar（无 parameters）的工具必须降级为「单一 input 字符串 schema」——
+// 否则得到 {"type":"object","properties":{}}，模型无法表达任何输入（exec 就发不出命令）。
+// 依据：仓内 downgradeExternalBridgeResponsesTools 的注释——
+//
+//	“custom/freeform 工具（codex 核心执行工具 exec 即此类）降级为 function + 单一 input 字符串 schema”。
+//
+// 旧断言（空 object schema）编码的正是**降级前**的行为，随本次变更一并修正。
+func TestResponsesToAnthropic_CustomGrammarToolDowngradedToStringInput(t *testing.T) {
 	body := []byte(`{
 		"model": "gpt-5.2",
 		"input": "apply this patch",
@@ -52,7 +59,7 @@ func TestResponsesToAnthropic_CustomGrammarToolUsesObjectSchema(t *testing.T) {
 	assert.Equal(t, "apply_patch", tool.Name)
 	assert.Equal(t, "Apply a patch to the working tree", tool.Description)
 	requireObjectInputSchema(t, tool.InputSchema)
-	assert.JSONEq(t, `{"type":"object","properties":{}}`, string(tool.InputSchema))
+	assert.JSONEq(t, `{"type":"object","properties":{"input":{"type":"string"}},"required":["input"]}`, string(tool.InputSchema))
 
 	wire, err := json.Marshal(tool)
 	require.NoError(t, err)
