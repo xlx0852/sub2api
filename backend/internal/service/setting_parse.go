@@ -238,30 +238,19 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 
 // parseSettings 解析设置到结构体
 func (s *SettingService) parseSettings(settings map[string]string) *SystemSettings {
-	emailVerifyEnabled := settings[SettingKeyEmailVerifyEnabled] == "true"
-	loginAgreementDocuments := parseLoginAgreementDocuments(settings[SettingKeyLoginAgreementDocuments])
-	loginAgreementUpdatedAt := strings.TrimSpace(settings[SettingKeyLoginAgreementUpdatedAt])
-	if loginAgreementUpdatedAt == "" {
-		loginAgreementUpdatedAt = defaultLoginAgreementDate
-	}
-	apiKeyACLTrustForwardedIP := false
-	if value, ok := settings[SettingKeyAPIKeyACLTrustForwardedIP]; ok {
-		apiKeyACLTrustForwardedIP = value == "true"
-	} else if s != nil && s.cfg != nil {
-		apiKeyACLTrustForwardedIP = s.cfg.Security.TrustForwardedIPForAPIKeyACL
-	}
+	auth := parseAuthSettingsSection(settings, s.cfg)
 	result := &SystemSettings{
-		RegistrationEnabled:              settings[SettingKeyRegistrationEnabled] == "true",
-		EmailVerifyEnabled:               emailVerifyEnabled,
-		RegistrationEmailSuffixWhitelist: ParseRegistrationEmailSuffixWhitelist(settings[SettingKeyRegistrationEmailSuffixWhitelist]),
-		PasswordResetEnabled:             emailVerifyEnabled && settings[SettingKeyPasswordResetEnabled] == "true",
+		RegistrationEnabled:              auth.RegistrationEnabled,
+		EmailVerifyEnabled:               auth.EmailVerifyEnabled,
+		RegistrationEmailSuffixWhitelist: auth.RegistrationEmailSuffixWhitelist,
+		PasswordResetEnabled:             auth.PasswordResetEnabled,
 		FrontendURL:                      settings[SettingKeyFrontendURL],
-		InvitationCodeEnabled:            settings[SettingKeyInvitationCodeEnabled] == "true",
-		TotpEnabled:                      settings[SettingKeyTotpEnabled] == "true",
-		LoginAgreementEnabled:            settings[SettingKeyLoginAgreementEnabled] == "true",
-		LoginAgreementMode:               normalizeLoginAgreementMode(settings[SettingKeyLoginAgreementMode]),
-		LoginAgreementUpdatedAt:          loginAgreementUpdatedAt,
-		LoginAgreementDocuments:          loginAgreementDocuments,
+		InvitationCodeEnabled:            auth.InvitationCodeEnabled,
+		TotpEnabled:                      auth.TotpEnabled,
+		LoginAgreementEnabled:            auth.LoginAgreementEnabled,
+		LoginAgreementMode:               auth.LoginAgreementMode,
+		LoginAgreementUpdatedAt:          auth.LoginAgreementUpdatedAt,
+		LoginAgreementDocuments:          auth.LoginAgreementDocuments,
 		SMTPHost:                         settings[SettingKeySMTPHost],
 		SMTPUsername:                     settings[SettingKeySMTPUsername],
 		SMTPFrom:                         settings[SettingKeySMTPFrom],
@@ -271,7 +260,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		TurnstileEnabled:                 settings[SettingKeyTurnstileEnabled] == "true",
 		TurnstileSiteKey:                 settings[SettingKeyTurnstileSiteKey],
 		TurnstileSecretKeyConfigured:     settings[SettingKeyTurnstileSecretKey] != "",
-		APIKeyACLTrustForwardedIP:        apiKeyACLTrustForwardedIP,
+		APIKeyACLTrustForwardedIP:        auth.APIKeyACLTrustForwardedIP,
 		SiteName:                         s.getStringOrDefault(settings, SettingKeySiteName, "Gateway"),
 		SiteLogo:                         settings[SettingKeySiteLogo],
 		SiteSubtitle:                     s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),
