@@ -28,7 +28,8 @@
               :title="segmentTitle(segment)"
               :data-segment="segment.key"
             >
-              <span v-if="segmentWidth(segment) >= 6" class="truncate">{{ segmentLabel(segment) }}</span>
+              <span v-if="segmentWidth(segment) >= 12" class="truncate">{{ segmentLabel(segment) }}</span>
+              <span v-else-if="segmentWidth(segment) >= 5" class="truncate">{{ formatMs(segmentDuration(segment)) }}</span>
             </div>
             <div
               v-if="firstTokenPercent != null"
@@ -41,6 +42,17 @@
             {{ formatMs(lane.total) }}
           </div>
         </div>
+      </div>
+
+      <!-- 时间刻度 -->
+      <div class="mt-1 flex items-center gap-3">
+        <div class="w-24 shrink-0" />
+        <div class="relative flex-1 text-[10px] tabular-nums text-gray-400 dark:text-dark-400">
+          <span class="absolute left-0">0</span>
+          <span class="absolute left-1/2 -translate-x-1/2">{{ formatMs(total / 2) }}</span>
+          <span class="absolute right-0">{{ formatMs(total) }}</span>
+        </div>
+        <div class="w-16 shrink-0" />
       </div>
 
       <!-- 图例 -->
