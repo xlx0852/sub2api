@@ -15,6 +15,7 @@ import (
 
 	"entgo.io/ent/dialect"
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/ent/authidentity"
 	"github.com/Wei-Shaw/sub2api/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/sub2api/ent/pendingauthsession"
 	dbpredicate "github.com/Wei-Shaw/sub2api/ent/predicate"
@@ -198,6 +199,51 @@ func pendingIdentityAdoptionLockKeys(pendingAuthSessionID int64, identityID *int
 
 func NewAuthPendingIdentityService(entClient *dbent.Client) *AuthPendingIdentityService {
 	return &AuthPendingIdentityService{entClient: entClient}
+}
+
+// FindOAuthIdentityUser resolves an external identity to an active local user.
+// The transport layer should not construct Ent identity queries directly.
+func (s *AuthPendingIdentityService) FindOAuthIdentityUser(ctx context.Context, identity PendingAuthIdentityKey) (*dbent.User, error) {
+	if s == nil || s.entClient == nil {
+		return nil, fmt.Errorf("pending auth ent client is not configured")
+	}
+	record, err := s.entClient.AuthIdentity.Query().Where(
+		authidentity.ProviderTypeEQ(strings.TrimSpace(identity.ProviderType)),
+		authidentity.ProviderKeyEQ(strings.TrimSpace(identity.ProviderKey)),
+		authidentity.ProviderSubjectEQ(strings.TrimSpace(identity.ProviderSubject)),
+	).Only(ctx)
+	if err != nil {
+		if dbent.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("load auth identity: %w", err)
+	}
+	userEntity, err := s.entClient.User.Get(ctx, record.UserID)
+	if err != nil {
+		if dbent.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("load auth identity user: %w", err)
+	}
+	if !strings.EqualFold(strings.TrimSpace(userEntity.Status), StatusActive) {
+		return nil, ErrUserNotActive
+	}
+	return userEntity, nil
+}
+
+func (s *AuthPendingIdentityService) AdoptionDecision(ctx context.Context, sessionID int64) (*dbent.IdentityAdoptionDecision, error) {
+	if s == nil || s.entClient == nil {
+		return nil, fmt.Errorf("pending auth ent client is not configured")
+	}
+	decision, err := s.entClient.IdentityAdoptionDecision.Query().
+		Where(identityadoptiondecision.PendingAuthSessionIDEQ(sessionID)).Only(ctx)
+	if err != nil && !dbent.IsNotFound(err) {
+		return nil, err
+	}
+	if dbent.IsNotFound(err) {
+		return nil, nil
+	}
+	return decision, nil
 }
 
 func (s *AuthPendingIdentityService) CreatePendingSession(ctx context.Context, input CreatePendingAuthSessionInput) (*dbent.PendingAuthSession, error) {

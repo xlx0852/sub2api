@@ -462,25 +462,15 @@ func (h *AuthHandler) isForceEmailOnThirdPartySignup(ctx context.Context) bool {
 }
 
 func (h *AuthHandler) findOAuthIdentityUser(ctx context.Context, identity service.PendingAuthIdentityKey) (*dbent.User, error) {
-	client := h.entClient()
-	if client == nil {
-		return nil, infraerrors.ServiceUnavailable("PENDING_AUTH_NOT_READY", "pending auth service is not ready")
-	}
-
-	record, err := client.AuthIdentity.Query().
-		Where(
-			authidentity.ProviderTypeEQ(strings.TrimSpace(identity.ProviderType)),
-			authidentity.ProviderKeyEQ(strings.TrimSpace(identity.ProviderKey)),
-			authidentity.ProviderSubjectEQ(strings.TrimSpace(identity.ProviderSubject)),
-		).
-		Only(ctx)
+	svc, err := h.pendingIdentityService()
 	if err != nil {
-		if dbent.IsNotFound(err) {
-			return nil, nil
-		}
+		return nil, err
+	}
+	userEntity, err := svc.FindOAuthIdentityUser(ctx, identity)
+	if err != nil {
 		return nil, infraerrors.InternalServer("AUTH_IDENTITY_LOOKUP_FAILED", "failed to inspect auth identity ownership").WithCause(err)
 	}
-	return findActiveUserByID(ctx, client, record.UserID)
+	return userEntity, nil
 }
 
 func (h *AuthHandler) BindLinuxDoOAuthLogin(c *gin.Context) { h.bindPendingOAuthLogin(c, "linuxdo") }
@@ -564,15 +554,12 @@ func (h *AuthHandler) upsertPendingOAuthAdoptionDecision(
 	sessionID int64,
 	req oauthAdoptionDecisionRequest,
 ) (*dbent.IdentityAdoptionDecision, error) {
-	client := h.entClient()
-	if client == nil {
-		return nil, infraerrors.ServiceUnavailable("PENDING_AUTH_NOT_READY", "pending auth service is not ready")
+	svc, err := h.pendingIdentityService()
+	if err != nil {
+		return nil, err
 	}
-
-	existing, err := client.IdentityAdoptionDecision.Query().
-		Where(identityadoptiondecision.PendingAuthSessionIDEQ(sessionID)).
-		Only(c.Request.Context())
-	if err != nil && !dbent.IsNotFound(err) {
+	existing, err := svc.AdoptionDecision(c.Request.Context(), sessionID)
+	if err != nil {
 		return nil, infraerrors.InternalServer("PENDING_AUTH_ADOPTION_LOAD_FAILED", "failed to load oauth profile adoption decision").WithCause(err)
 	}
 	if existing != nil && !req.hasDecision() {
@@ -597,10 +584,6 @@ func (h *AuthHandler) upsertPendingOAuthAdoptionDecision(
 		input.AdoptAvatar = *req.AdoptAvatar
 	}
 
-	svc, err := h.pendingIdentityService()
-	if err != nil {
-		return nil, err
-	}
 	decision, err := svc.UpsertAdoptionDecision(c.Request.Context(), input)
 	if err != nil {
 		return nil, infraerrors.InternalServer("PENDING_AUTH_ADOPTION_SAVE_FAILED", "failed to save oauth profile adoption decision").WithCause(err)
