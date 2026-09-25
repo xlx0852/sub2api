@@ -43,11 +43,16 @@ type FirstOutputStages struct {
 	// upstream_write_ms 拆成「头」与「体上传」两段；体上传 = write - wrote_headers）。
 	UpstreamWroteHeadersMs *int `json:"upstream_wrote_headers_ms,omitempty"`
 	// UpstreamDialMs / UpstreamTLSMs: 拨号与 TLS 握手耗时（仅新建连接时非零）。
-	UpstreamDialMs            *int `json:"upstream_dial_ms,omitempty"`
-	UpstreamTLSMs             *int `json:"upstream_tls_ms,omitempty"`
-	UpstreamFirstByteMs       *int `json:"upstream_first_byte_ms,omitempty"`
-	UpstreamResponseHeadersMs *int `json:"upstream_response_headers_ms,omitempty"`
-	UpstreamStreamTransferMs  *int `json:"upstream_stream_transfer_ms,omitempty"`
+	UpstreamDialMs *int `json:"upstream_dial_ms,omitempty"`
+	UpstreamTLSMs  *int `json:"upstream_tls_ms,omitempty"`
+	// UpstreamDialed: 本次请求是否新建连接（发生拨号）；配合 connection_reused 判断
+	// 「取连接耗时」是池内等待还是新建连接成本。
+	UpstreamDialed *bool `json:"upstream_dialed,omitempty"`
+	// UpstreamProto: 上游响应使用的 HTTP 协议版本（HTTP/1.1 / HTTP/2.0）。
+	UpstreamProto             string `json:"upstream_proto,omitempty"`
+	UpstreamFirstByteMs       *int   `json:"upstream_first_byte_ms,omitempty"`
+	UpstreamResponseHeadersMs *int   `json:"upstream_response_headers_ms,omitempty"`
+	UpstreamStreamTransferMs  *int   `json:"upstream_stream_transfer_ms,omitempty"`
 
 	// 请求结果
 	ResponseStreamComplete *bool  `json:"response_stream_complete,omitempty"`

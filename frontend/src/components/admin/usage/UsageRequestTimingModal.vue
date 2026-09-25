@@ -87,6 +87,8 @@
               <TimingRow :label="t('usage.timingDetail.status')" :value="outcomeLabel" />
               <TimingRow :label="t('usage.timingDetail.attempts')" :value="countValue(stages?.upstream_attempts)" />
               <TimingRow :label="t('usage.timingDetail.connectionReused')" :value="boolValue(stages?.connection_reused)" />
+              <TimingRow :label="t('usage.timingDetail.upstreamDialed')" :value="boolValue(stages?.upstream_dialed)" />
+              <TimingRow :label="t('usage.timingDetail.upstreamProto')" :value="stages?.upstream_proto || t('usage.timingDetail.notCollected')" />
               <TimingRow :label="t('usage.timingDetail.bodyComplete')" :value="boolValue(stages?.body_complete)" />
               <TimingRow :label="t('usage.timingDetail.responseComplete')" :value="boolValue(stages?.response_stream_complete)" />
               <TimingRow :label="t('usage.timingDetail.outputRate')" :value="outputRate" />

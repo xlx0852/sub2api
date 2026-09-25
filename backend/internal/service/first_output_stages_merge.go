@@ -76,6 +76,12 @@ func MergeFirstOutputStages(base, detail *domain.FirstOutputStages) *domain.Firs
 	if base.UpstreamTLSMs == nil {
 		base.UpstreamTLSMs = detail.UpstreamTLSMs
 	}
+	if base.UpstreamDialed == nil {
+		base.UpstreamDialed = detail.UpstreamDialed
+	}
+	if base.UpstreamProto == "" {
+		base.UpstreamProto = detail.UpstreamProto
+	}
 	if base.UpstreamFirstByteMs == nil {
 		base.UpstreamFirstByteMs = detail.UpstreamFirstByteMs
 	}

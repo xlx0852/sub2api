@@ -50,6 +50,8 @@ type Collector struct {
 	upstreamWroteHeaders *int
 	upstreamDial         *int
 	upstreamTLS          *int
+	upstreamDialed       *bool
+	upstreamProto        string
 	upstreamFirst        *int
 	upstreamHeaders      *int
 	upstreamStream       *int
@@ -277,6 +279,26 @@ func (c *Collector) MarkUpstreamWrite() { c.markSinceSlot(&c.upstreamWrite) }
 // SetUpstreamDialMs 记录拨号（TCP 建连）耗时。
 func (c *Collector) SetUpstreamDialMs(d time.Duration) { c.store(&c.upstreamDial, d) }
 
+// SetUpstreamDialed 记录本次请求是否新建了连接（发生拨号）。
+func (c *Collector) SetUpstreamDialed(dialed bool) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.upstreamDialed = &dialed
+	c.mu.Unlock()
+}
+
+// SetUpstreamProto 记录上游响应使用的 HTTP 协议版本（HTTP/1.1、HTTP/2.0）。
+func (c *Collector) SetUpstreamProto(proto string) {
+	if c == nil || proto == "" {
+		return
+	}
+	c.mu.Lock()
+	c.upstreamProto = proto
+	c.mu.Unlock()
+}
+
 // SetUpstreamTLSMs 记录 TLS 握手耗时。
 func (c *Collector) SetUpstreamTLSMs(d time.Duration) { c.store(&c.upstreamTLS, d) }
 
@@ -371,6 +393,8 @@ func (c *Collector) Snapshot(now time.Time) *domain.FirstOutputStages {
 	out.UpstreamWroteHeadersMs = c.upstreamWroteHeaders
 	out.UpstreamDialMs = c.upstreamDial
 	out.UpstreamTLSMs = c.upstreamTLS
+	out.UpstreamDialed = c.upstreamDialed
+	out.UpstreamProto = c.upstreamProto
 	out.UpstreamFirstByteMs = c.upstreamFirst
 	out.UpstreamResponseHeadersMs = c.upstreamHeaders
 	out.UpstreamStreamTransferMs = c.upstreamStream

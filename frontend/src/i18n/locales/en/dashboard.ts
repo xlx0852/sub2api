@@ -390,6 +390,8 @@ export default {
       upstreamWrite: 'Request write',
       upstreamWriteHeaders: 'Write headers portion',
       upstreamBodyUpload: 'Body upload portion',
+      upstreamDialed: 'Dialed this request',
+      upstreamProto: 'Upstream protocol',
       upstreamDial: 'TCP dial portion',
       upstreamTLS: 'TLS handshake portion',
       upstreamFirstByte: 'Wait for upstream first byte',

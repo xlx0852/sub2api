@@ -1464,6 +1464,8 @@ export interface FirstOutputStages {
   upstream_wrote_headers_ms?: number | null
   upstream_dial_ms?: number | null
   upstream_tls_ms?: number | null
+  upstream_dialed?: boolean | null
+  upstream_proto?: string | null
   upstream_first_byte_ms?: number | null
   upstream_response_headers_ms?: number | null
   upstream_stream_transfer_ms?: number | null

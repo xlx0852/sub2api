@@ -31,6 +31,7 @@ func withUpstreamTiming(req *http.Request) *http.Request {
 		ConnectDone: func(_, _ string, _ error) {
 			if !dialStart.IsZero() {
 				collector.SetUpstreamDialMs(time.Since(dialStart))
+				collector.SetUpstreamDialed(true)
 			}
 		},
 		TLSHandshakeStart: func() { tlsStart = time.Now() },
@@ -77,6 +78,7 @@ func trackUpstreamResponseBody(resp *http.Response) {
 	}
 	headersAt := time.Now()
 	collector.MarkUpstreamHeaders()
+	collector.SetUpstreamProto(resp.Proto)
 	attempt := collector.AttemptCount()
 	collector.AddAttemptSegment("upstream_response_headers", attempt, collector.UpstreamAttemptStart(attempt), headersAt)
 	resp.Body = &timedUpstreamBody{ReadCloser: resp.Body, collector: collector, attempt: attempt, startedAt: headersAt}

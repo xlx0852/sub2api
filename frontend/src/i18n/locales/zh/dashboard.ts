@@ -394,6 +394,8 @@ export default {
       upstreamWrite: '写入上游请求',
       upstreamWriteHeaders: '其中请求头写出',
       upstreamBodyUpload: '其中请求体上传',
+      upstreamDialed: '本次新建连接',
+      upstreamProto: '上游协议',
       upstreamDial: '其中拨号（TCP）',
       upstreamTLS: '其中 TLS 握手',
       upstreamFirstByte: '等待上游首字节',
