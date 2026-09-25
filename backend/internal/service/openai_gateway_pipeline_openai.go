@@ -13,6 +13,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/app/gateway/pipeline"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/requesttiming"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 )
@@ -34,6 +35,10 @@ func (s *OpenAIGatewayService) forwardOpenAIParse(ex *pipeline.Exchange) error {
 }
 
 func (s *OpenAIGatewayService) forwardOpenAIRewrite(ex *pipeline.Exchange) error {
+	if collector := requesttiming.FromContext(ex.Ctx); collector != nil {
+		collector.MarkStage("pipeline_rewrite_start")
+		defer collector.MarkStage("pipeline_rewrite_done")
+	}
 	st := openaiForwardStateFrom(ex)
 	if st == nil {
 		return fmt.Errorf("parse request: empty request")
@@ -346,6 +351,9 @@ func (s *OpenAIGatewayService) forwardOpenAIRewrite(ex *pipeline.Exchange) error
 }
 
 func (s *OpenAIGatewayService) forwardOpenAITransport(ex *pipeline.Exchange) error {
+	if collector := requesttiming.FromContext(ex.Ctx); collector != nil {
+		collector.MarkStage("pipeline_transport_start")
+	}
 	st := openaiForwardStateFrom(ex)
 	if st == nil {
 		return fmt.Errorf("parse request: empty request")
