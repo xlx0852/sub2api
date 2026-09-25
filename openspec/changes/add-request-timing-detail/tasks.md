@@ -65,3 +65,10 @@
 - [x] 11.2 实现 + 白名单/阈值配置 + 启动日志 + 测试（6 例）
 - [x] 11.3 新增 upstream_request_bytes 落库与前端展示
 - [x] 11.4 线上验证：出站/入站 = 29.5%，无 4xx/5xx；收益受 250–300ms 固定开销限制
+
+## 12. 三项后续（15:20–15:55）
+
+- [x] 12.1 出站压缩优先 zstd（实测 o10.top 支持；gzip 兜底升 Default）+ `upstream_zstd_hosts` 配置 + 测试
+- [x] 12.2 写耗时四段拆分（dial / tls / headers / body）并定位：体上传 ~47MiB/s，固定开销在取连接与首写之间
+- [x] 12.3 astra 双供给实验：判定 Devin 不提供 astra，已回滚 126 配置；记录冷启动死锁缺陷
+- [x] 12.4 结论落档：`openspec/OBSERVE-2026-09-25-perf-wave.md`
