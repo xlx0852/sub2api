@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"crypto/tls"
 	"io"
 	"net/http"
 	"net/http/httptrace"
@@ -24,7 +25,20 @@ func withUpstreamTiming(req *http.Request) *http.Request {
 	attempt := collector.AttemptCount()
 	doStart := time.Now()
 	last := doStart
+	var dialStart, tlsStart time.Time
 	trace := &httptrace.ClientTrace{
+		ConnectStart: func(_, _ string) { dialStart = time.Now() },
+		ConnectDone: func(_, _ string, _ error) {
+			if !dialStart.IsZero() {
+				collector.SetUpstreamDialMs(time.Since(dialStart))
+			}
+		},
+		TLSHandshakeStart: func() { tlsStart = time.Now() },
+		TLSHandshakeDone: func(_ tls.ConnectionState, _ error) {
+			if !tlsStart.IsZero() {
+				collector.SetUpstreamTLSMs(time.Since(tlsStart))
+			}
+		},
 		GotConn: func(info httptrace.GotConnInfo) {
 			now := time.Now()
 			collector.SetConnectionReused(info.Reused)

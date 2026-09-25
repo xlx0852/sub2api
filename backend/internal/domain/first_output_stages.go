@@ -41,7 +41,10 @@ type FirstOutputStages struct {
 	UpstreamWriteMs  *int  `json:"upstream_write_ms,omitempty"`
 	// UpstreamWroteHeadersMs: 从发起请求到请求头写完（写入的头部阶段，用于把
 	// upstream_write_ms 拆成「头」与「体上传」两段；体上传 = write - wrote_headers）。
-	UpstreamWroteHeadersMs    *int `json:"upstream_wrote_headers_ms,omitempty"`
+	UpstreamWroteHeadersMs *int `json:"upstream_wrote_headers_ms,omitempty"`
+	// UpstreamDialMs / UpstreamTLSMs: 拨号与 TLS 握手耗时（仅新建连接时非零）。
+	UpstreamDialMs            *int `json:"upstream_dial_ms,omitempty"`
+	UpstreamTLSMs             *int `json:"upstream_tls_ms,omitempty"`
 	UpstreamFirstByteMs       *int `json:"upstream_first_byte_ms,omitempty"`
 	UpstreamResponseHeadersMs *int `json:"upstream_response_headers_ms,omitempty"`
 	UpstreamStreamTransferMs  *int `json:"upstream_stream_transfer_ms,omitempty"`

@@ -48,6 +48,8 @@ type Collector struct {
 	upstreamConnect      *int
 	upstreamWrite        *int
 	upstreamWroteHeaders *int
+	upstreamDial         *int
+	upstreamTLS          *int
 	upstreamFirst        *int
 	upstreamHeaders      *int
 	upstreamStream       *int
@@ -272,6 +274,12 @@ func (c *Collector) MarkUpstreamConnect() { c.markSinceSlot(&c.upstreamConnect) 
 // MarkUpstreamWrite 从请求开始到请求体写完。
 func (c *Collector) MarkUpstreamWrite() { c.markSinceSlot(&c.upstreamWrite) }
 
+// SetUpstreamDialMs 记录拨号（TCP 建连）耗时。
+func (c *Collector) SetUpstreamDialMs(d time.Duration) { c.store(&c.upstreamDial, d) }
+
+// SetUpstreamTLSMs 记录 TLS 握手耗时。
+func (c *Collector) SetUpstreamTLSMs(d time.Duration) { c.store(&c.upstreamTLS, d) }
+
 // MarkUpstreamWroteHeaders 从请求开始到请求头写完。
 func (c *Collector) MarkUpstreamWroteHeaders() { c.markSinceSlot(&c.upstreamWroteHeaders) }
 
@@ -361,6 +369,8 @@ func (c *Collector) Snapshot(now time.Time) *domain.FirstOutputStages {
 	out.UpstreamConnectMs = c.upstreamConnect
 	out.UpstreamWriteMs = c.upstreamWrite
 	out.UpstreamWroteHeadersMs = c.upstreamWroteHeaders
+	out.UpstreamDialMs = c.upstreamDial
+	out.UpstreamTLSMs = c.upstreamTLS
 	out.UpstreamFirstByteMs = c.upstreamFirst
 	out.UpstreamResponseHeadersMs = c.upstreamHeaders
 	out.UpstreamStreamTransferMs = c.upstreamStream
