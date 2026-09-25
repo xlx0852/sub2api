@@ -1,9 +1,10 @@
 package service
 
 import (
-	"testing"
-
 	"github.com/stretchr/testify/require"
+	"strings"
+	"testing"
+	"time"
 )
 
 func TestIsImageGenerationIntent(t *testing.T) {
@@ -354,4 +355,32 @@ func TestCollectOpenAIImageOutputSizesFromSSEBody(t *testing.T) {
 
 	require.Equal(t, 2, countOpenAIImageOutputsFromSSEBody(body))
 	require.Equal(t, []string{"3840x2160", "1024x1024"}, collectOpenAIImageOutputSizesFromSSEBody(body))
+}
+
+// TestIsImageGenerationIntentLargeBodyCost 护栏：大包上意图检测不得退化为整包 JSON 校验。
+func TestIsImageGenerationIntentLargeBodyCost(t *testing.T) {
+	filler := strings.Repeat(`{"type":"function_call_output","call_id":"c1","output":"`+strings.Repeat("x", 4096)+`"},`, 512)
+	decorate := func(tool string) []byte {
+		body := `{"model":"gpt-5.1-codex","stream":true,"input":[` + filler + `{"type":"message"}],"tools":[` + tool + `,"extra":"` + strings.Repeat("y", 256*1024) + `"]}`
+		return []byte(body)
+	}
+	withoutMarker := decorate(`{"type":"function","name":"shell"}`)
+	withMarker := decorate(`{"type":"image_generation"}`)
+
+	start := time.Now()
+	if IsImageGenerationIntent("/v1/responses", "gpt-5.1-codex", withoutMarker) {
+		t.Fatal("无标记包不应被判定为图像生成")
+	}
+	fast := time.Since(start)
+
+	start = time.Now()
+	if !IsImageGenerationIntent("/v1/responses", "gpt-5.1-codex", withMarker) {
+		t.Fatal("含 image_generation 工具的包应被判定为图像生成")
+	}
+	slow := time.Since(start)
+
+	t.Logf("body=%.1fMiB 快速否决=%v 含标记=%v", float64(len(withMarker))/1048576, fast, slow)
+	if fast > 5*time.Millisecond {
+		t.Fatalf("无标记特大包走快速否决应 <5ms，实测 %v", fast)
+	}
 }

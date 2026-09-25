@@ -54,9 +54,8 @@ func IsImageGenerationIntent(endpoint string, requestedModel string, body []byte
 	if !bytes.Contains(body, []byte("image_gen")) {
 		return false
 	}
-	if !gjson.ValidBytes(body) {
-		return false
-	}
+	// 不再重复做整包 JSON 校验：入口（≤4MiB）或调用方已完成校验，且 gjson 对非法
+	// JSON 只会返回不存在的值、不会 panic；此处重复校验在大包上纯属浪费。
 	if model := strings.TrimSpace(gjson.GetBytes(body, "model").String()); isOpenAIImageGenerationModel(model) {
 		return true
 	}
@@ -175,9 +174,8 @@ func openAIRequestBodyHasImageGenerationDeclaration(body []byte) bool {
 	if !bytes.Contains(body, []byte("image_gen")) {
 		return false
 	}
-	if !gjson.ValidBytes(body) {
-		return false
-	}
+	// 不再重复做整包 JSON 校验：入口（≤4MiB）或调用方已完成校验，且 gjson 对非法
+	// JSON 只会返回不存在的值、不会 panic；此处重复校验在大包上纯属浪费。
 	return openAIJSONToolsContainImageGeneration(gjson.GetBytes(body, "tools")) ||
 		openAIJSONInputContainsImageGenTool(gjson.GetBytes(body, "input")) ||
 		openAIJSONToolChoiceSelectsImageGeneration(gjson.GetBytes(body, "tool_choice"))
@@ -193,9 +191,8 @@ func openAIRequestBodyImageGenerationToolNeedsNormalization(body []byte) bool {
 	if !bytes.Contains(body, []byte("image_gen")) {
 		return false
 	}
-	if !gjson.ValidBytes(body) {
-		return false
-	}
+	// 不再重复做整包 JSON 校验：入口（≤4MiB）或调用方已完成校验，且 gjson 对非法
+	// JSON 只会返回不存在的值、不会 panic；此处重复校验在大包上纯属浪费。
 	tools := gjson.GetBytes(body, "tools")
 	if !tools.IsArray() {
 		return false
