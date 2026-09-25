@@ -594,6 +594,12 @@ func NewOpenAIGatewayService(
 	svc.logOpenAIWSModeBootstrap()
 	svc.startOpenAICodexTurnStateSeeder()
 	svc.startOpenCodeGoUsageRefresher()
+	if svc.cfg != nil {
+		slog.Info("gateway_upstream_gzip_config",
+			"min_bytes", svc.cfg.Gateway.UpstreamGzipMinBytes,
+			"hosts", svc.cfg.Gateway.UpstreamGzipHosts)
+	}
+
 	return svc
 }
 
