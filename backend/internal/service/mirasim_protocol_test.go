@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -143,11 +144,85 @@ func TestMirasimCanonicalStringMetaAndEmptyBody(t *testing.T) {
 	want := strings.Join([]string{
 		"mrs-sig-v2", "GET", "/v1/limits", "1", "n", "d", "0.0.322",
 		"55d91a3561684b32df5e58a0d91968b93798af4f924bba383e1c98625ec0c834", // sha256hex("cred")
-		"37664b19301f46515688d5a22cb9ee1852e0b6443e28c7f36340a13962f0c4f7", // sha256hex("a\x001\x00b\x002\x00")
+		"2bc11e86e8348c7c62f11e681435b5d013a262e5a9f3b8ce61c25831a516a45e", // sha256hex("a:1\nb:2") —— 官方 crypto core 语义
 		"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", // sha256hex("")
 	}, "\n")
 	if got != want {
 		t.Fatalf("canonical string 不符:\n%q\nwant:\n%q", got, want)
+	}
+}
+
+// 官方客户端 0.0.260 embedded crypto core 的钉住向量（来源：cpa-plugin-mirasim
+// internal/mirasim/protocol_test.go，MIT）。canonical 串与签名必须逐字节一致，
+// 否则带元数据的签名会被上游判无效。
+func TestMirasimCanonicalSignatureMatchesClientCoreVector(t *testing.T) {
+	seed := make([]byte, ed25519.SeedSize)
+	for i := range seed {
+		seed[i] = byte(i)
+	}
+	priv := ed25519.NewKeyFromSeed(seed)
+	meta := map[string]string{
+		mirasimHeaderSession: "mirasim_00000000-0000-4000-8000-000000000000",
+		mirasimHeaderAgent:   "claude",
+		mirasimHeaderCall:    "11111111-2222-4333-8444-555555555555",
+	}
+	wantCanonical := "mrs-sig-v2\n" +
+		"POST\n" +
+		"/v1/messages\n" +
+		"1788200000123\n" +
+		"AAECAwQFBgcICQoL\n" +
+		"device-fixed\n" +
+		"0.0.260\n" +
+		"66ee005427e4f3b74ce4830f104c989613f0968f97036191a6fbaea245040170\n" +
+		"91bcb885e5b045a9f55f270bb0c6d633930407b6cca792839034702ed233be6b\n" +
+		"9df27ddbfc24ebaafa990cd41a7744f56c875d0dadf69e4941edc7e728aea6bd"
+
+	gotCanonical := mirasimCanonicalString("POST", "/v1/messages", 1788200000123,
+		"AAECAwQFBgcICQoL", "device-fixed", "0.0.260", "ticket-fixed", meta,
+		[]byte(`{"model":"claude-sonnet-5","messages":[]}`))
+	if gotCanonical != wantCanonical {
+		t.Fatalf("canonical payload 与官方向量不一致\n got: %q\nwant: %q", gotCanonical, wantCanonical)
+	}
+
+	hdrs := mirasimSignHeaders(priv, "device-fixed", mirasimSignParams{
+		Method:        "POST",
+		Path:          "/v1/messages",
+		Credential:    "ticket-fixed",
+		ClientVersion: "0.0.260",
+		Meta:          meta,
+		Body:          []byte(`{"model":"claude-sonnet-5","messages":[]}`),
+	}, 1788200000123, "AAECAwQFBgcICQoL")
+	wantSig := "zUYTEKW17Gzn7TEdEzWZ2aEOpO4oW9YFFpdsyzJaUyS4A_byq3DUNYzNOL96D24MExQ0mVbot75TkvkJw3vVAQ"
+	if hdrs[mirasimHeaderSig] != wantSig {
+		t.Fatalf("签名与官方向量不一致\n got: %q\nwant: %q", hdrs[mirasimHeaderSig], wantSig)
+	}
+}
+
+// 官方 0.0.260 core 的确定性密封向量：相同的静态公钥、临时私钥、nonce、
+// 明文与 AAD 必须得到同一个密文。
+func TestMirasimSealPayloadMatchesClientCoreVector(t *testing.T) {
+	recipientPublic, err := base64.StdEncoding.DecodeString("NYBy1jZYgNGu6jKa35EhODhR7SGijjt16WXQ0s0WYlQ=")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ephemeralSecret, err := hex.DecodeString("404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f")
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonce, err := hex.DecodeString("a0a1a2a3a4a5a6a7a8a9aaab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plaintext := []byte(`{"x-mirasim-agent":"claude","x-mirasim-call":"11111111-2222-4333-8444-555555555555","x-mirasim-device":"device-fixed","x-mirasim-nonce":"AAECAwQFBgcICQoL","x-mirasim-session":"mirasim_00000000-0000-4000-8000-000000000000","x-mirasim-sig":"zUYTEKW17Gzn7TEdEzWZ2aEOpO4oW9YFFpdsyzJaUyS4A_byq3DUNYzNOL96D24MExQ0mVbot75TkvkJw3vVAQ","x-mirasim-ts":"1788200000123"}`)
+	aad := []byte("mrs-seal-v1\nPOST\n/v1/messages")
+
+	sealed, err := mirasimSealPayload(recipientPublic, ephemeralSecret, nonce, plaintext, aad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "eaYx7t4b-cmPEgMs3q3Q56B5OY_HhriMyEbsia-FpRqgoaKjpKWmp6ipqqtWlxgybxeoS1fVDaS5_1az3V-kX_XGGNPghY8g8q81tF8LkfDoIwY8W2FWXoe5_27zjH9q2jM05ZuvNfmdYnjW0x616SP-p3g96-PvzI8GDuAbPgt9-0sIkQHeCCZ35opOpopxt_tdTp55bPp8CmjCpb1OR0aWs_5UezjAlVNibbN4979hGY_BcQ7z07Bkt92DCgJiP9aP8pLSXM1gcFHvnDDAiAqfqqA1cWx2f3EIHn585U-tdtQsRZ5BJ7wJ4sZgMswGl5CxDgSFJ-MhnsQsyj6zAR_MVujCO4jUkLVsRtI38N6sN-T79EWL4w4N1ksEfzIUJDtYDNfbr83XkXpl3sB6DvYIrrrPi5Gq96WSWldJf5Pgz0IdJq_O36wS2dNYVqQmsOU-nwgigBh0NrD94K23PthUn8qbkULkp7PgyPGDXN-4MkvdjN8LVN-oEP1oaP5FMVbiH6b_7K_9NaXvJCELj59p2P_fCnJ2ULHCpwyfDGOKjg"
+	if got := base64.RawURLEncoding.EncodeToString(sealed); got != want {
+		t.Fatalf("密封结果与官方向量不一致\n got: %q\nwant: %q", got, want)
 	}
 }
 
@@ -266,7 +341,7 @@ func TestMirasimSealHeadersFieldOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"x-mirasim-device":"d","x-mirasim-ts":"1","x-mirasim-nonce":"n","x-mirasim-sig":"s"}`
+	want := `{"x-mirasim-device":"d","x-mirasim-nonce":"n","x-mirasim-sig":"s","x-mirasim-ts":"1"}`
 	if string(pt) != want {
 		t.Fatalf("plaintext 字段顺序不符:\n%s\nwant:\n%s", pt, want)
 	}

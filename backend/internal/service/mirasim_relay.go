@@ -30,9 +30,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tidwall/gjson"
 )
 
 const (
@@ -53,6 +56,12 @@ const (
 	mirasimExtraAuthURL       = "mirasim_auth_url"
 	mirasimExtraClientVersion = "mirasim_client_version"
 	mirasimExtraSealPubkey    = "mirasim_seal_pubkey"
+	// 可选 relay 元数据（默认不发送，与官方客户端默认一致）：
+	//   mirasim_locale  非空时写入 x-mirasim-locale
+	//   mirasim_collect 显式 false 时写入 x-mirasim-collect: off
+	mirasimExtraLocale   = "mirasim_locale"
+	mirasimExtraCollect  = "mirasim_collect"
+	mirasimCollectOffStr = "off"
 	// 端点路径。
 	mirasimAccessRefreshPath = "/auth/refresh"
 	mirasimDeviceSessionPath = "/v1/device/session"
@@ -113,6 +122,9 @@ type mirasimRelayConfig struct {
 	SealPubkey    string
 	ProxyURL      string
 	Concurrency   int
+	// Locale / CollectOff 是可选 relay 元数据开关（见 extra 键注释）。
+	Locale     string
+	CollectOff bool
 }
 
 // mirasimRelayConfigForAccount 解析账号上的 mirasim 配置。
@@ -142,6 +154,11 @@ func mirasimRelayConfigForAccount(account *Account) (mirasimRelayConfig, error) 
 	cfg.SealPubkey = strings.TrimSpace(account.GetExtraString(mirasimExtraSealPubkey))
 	if cfg.SealPubkey == "" {
 		cfg.SealPubkey = mirasimDefaultSealPubkey
+	}
+	cfg.Locale = strings.TrimSpace(account.GetExtraString(mirasimExtraLocale))
+	// 仅当 extra 显式提供 mirasim_collect 且为 false 时下发 collect=off；缺省跟随上游默认。
+	if _, ok := account.Extra[mirasimExtraCollect]; ok {
+		cfg.CollectOff = !account.GetExtraBool(mirasimExtraCollect)
 	}
 	cfg.ProxyURL = mirasimAccountProxyURL(account)
 	for _, endpoint := range []string{cfg.RelayURL, cfg.AuthURL} {
@@ -178,7 +195,11 @@ func mirasimResolveEndpoint(primary, fallback, def string) string {
 // 客户端自身与 runtime 的 baseToken 比对处理，避免轮换后把 ticket 缓存整体丢弃。
 func (c mirasimRelayConfig) fingerprint() string {
 	h := sha256.New()
-	for _, part := range []string{c.RelayURL, c.AuthURL, c.ClientVersion, c.SealPubkey, c.DeviceKeyPEM, c.ProxyURL} {
+	collect := "1"
+	if c.CollectOff {
+		collect = "0"
+	}
+	for _, part := range []string{c.RelayURL, c.AuthURL, c.ClientVersion, c.SealPubkey, c.DeviceKeyPEM, c.ProxyURL, c.Locale, collect} {
 		h.Write([]byte(part))
 		h.Write([]byte{0})
 	}
@@ -231,12 +252,17 @@ type mirasimRelayClient struct {
 	devicePubB64  string
 	priv          ed25519.PrivateKey
 	upstream      HTTPUpstream
+	// locale / collectOff 是账号级可选 relay 元数据开关。
+	locale     string
+	collectOff bool
 
 	persistRefresh   func(newToken string)
 	persistDeviceKey func(pem string)
 
 	mu           sync.Mutex
 	refreshToken string
+	// sessionID 是没有客户端会话种子时的稳定回退值（每个账号客户端一份）。
+	sessionID    string
 	cachedAccess string
 	accessExp    time.Time
 	cachedTicket string
@@ -300,6 +326,8 @@ func newMirasimRelayClient(
 		authURL:          cfg.AuthURL,
 		clientVersion:    cfg.ClientVersion,
 		sealPubkey:       cfg.SealPubkey,
+		locale:           cfg.Locale,
+		collectOff:       cfg.CollectOff,
 		deviceKeyPEM:     deviceKeyPEM,
 		deviceID:         deviceID,
 		devicePubB64:     pubB64,
@@ -366,8 +394,11 @@ func (c *mirasimRelayClient) ticket(ctx context.Context) (string, error) {
 		return "", err
 	}
 	var sr struct {
-		Ticket    string `json:"ticket"`
-		ExpiresIn int64  `json:"expires_in"`
+		Ticket    string   `json:"ticket"`
+		ExpiresIn *float64 `json:"expiresIn"`
+		ExpiresAt *float64 `json:"expiresAt"`
+		// 兼容 snake_case（历史/其它部署）：两者任一可用即生效。
+		ExpiresInSnake *float64 `json:"expires_in"`
 	}
 	if err := json.Unmarshal(respBody, &sr); err != nil {
 		return "", fmt.Errorf("mirasim relay: session 响应解析失败: %w", err)
@@ -375,7 +406,19 @@ func (c *mirasimRelayClient) ticket(ctx context.Context) (string, error) {
 	if strings.TrimSpace(sr.Ticket) == "" {
 		return "", errors.New("mirasim relay: session 响应缺少 ticket")
 	}
-	expiresIn := sr.ExpiresIn
+	// 过期时间优先级：expiresAt（绝对）> expiresIn（相对）> expires_in（相对）> 默认 TTL。
+	expiresIn := int64(0)
+	if sr.ExpiresAt != nil && *sr.ExpiresAt > 0 {
+		expiresIn = int64(*sr.ExpiresAt/1000) - time.Now().Unix()
+	}
+	if expiresIn <= 0 {
+		switch {
+		case sr.ExpiresIn != nil && *sr.ExpiresIn > 0:
+			expiresIn = int64(*sr.ExpiresIn)
+		case sr.ExpiresInSnake != nil && *sr.ExpiresInSnake > 0:
+			expiresIn = int64(*sr.ExpiresInSnake)
+		}
+	}
 	if expiresIn <= 0 {
 		expiresIn = mirasimDefaultTicketTTL
 	}
@@ -602,18 +645,113 @@ func (c *mirasimRelayClient) routeAuthHeaders(ctx context.Context, method, path 
 	if err != nil {
 		return "", "", err
 	}
+	meta := c.relayMetadata(path, body)
 	signHeaders := mirasimSignHeaders(c.priv, c.deviceID, mirasimSignParams{
 		Method:        method,
 		Path:          path,
 		Credential:    ticket,
 		ClientVersion: c.clientVersion,
+		Meta:          meta,
 		Body:          body,
 	}, mirasimNowMillis(), "")
-	enc, err = mirasimSealHeaders(c.sealPubkey, method, path, signHeaders)
+	// 元数据头与签名头一起进密封块（官方客户端形态）；明文线上只留
+	// Authorization / x-mirasim-client / x-mirasim-enc。
+	sealInput := make(map[string]string, len(signHeaders)+len(meta))
+	for k, v := range signHeaders {
+		sealInput[k] = v
+	}
+	for k, v := range meta {
+		sealInput[k] = v
+	}
+	if strings.TrimSpace(c.clientVersion) == "" {
+		delete(sealInput, mirasimHeaderClient)
+	}
+	enc, err = mirasimSealHeaders(c.sealPubkey, method, path, sealInput)
 	if err != nil {
 		return "", "", err
 	}
+	// 只记录 agent 与字段存在性：session / call 明文不进日志。
+	slog.Debug("mirasim_relay_metadata_built",
+		"account_id", c.accountID,
+		"agent", meta[mirasimHeaderAgent],
+		"has_session", meta[mirasimHeaderSession] != "",
+		"has_call", meta[mirasimHeaderCall] != "",
+		"has_locale", meta[mirasimHeaderLocale] != "",
+		"collect_off", meta[mirasimHeaderCollect] != "",
+	)
 	return ticket, enc, nil
+}
+
+// relayMetadata 构造推理请求的 relay 元数据（全部进密封块并参与签名摘要）。
+//
+// 关键约束（改动前请先读）：
+//   - 官方客户端每次推理都带 session / agent / call；缺任一项都是可检测的形态差异；
+//   - call 必须每次上游尝试都新生成（重试是新的 call）；session 必须同一会话内稳定；
+//   - agent 必须依据**最终上游模型**（映射之后）与路径推导；
+//   - locale / collect 只在账号显式配置时下发；x-mirasim-account 仅当 access token
+//     自身声明子账号时才发，本仓账号没有子账号，因此不发。
+func (c *mirasimRelayClient) relayMetadata(path string, body []byte) map[string]string {
+	meta := map[string]string{
+		mirasimHeaderSession: c.relaySessionID(body),
+		mirasimHeaderAgent:   mirasimRelayAgent(path, body),
+		mirasimHeaderCall:    mirasimRandomUUID(),
+	}
+	if c.locale != "" {
+		meta[mirasimHeaderLocale] = c.locale
+	}
+	if c.collectOff {
+		meta[mirasimHeaderCollect] = mirasimCollectOffStr
+	}
+	return meta
+}
+
+// relaySessionID 返回会话稳定的 relay session id。
+//
+// 优先用请求体 metadata.user_id（客户端会话级稳定标识）按官方种子派生式
+// `mirasim_` + sha256(accountID + "\0" + seed)[:32] 生成；拿不到时回退到
+// “每个账号客户端一份的稳定随机值”（官方客户端在宿主不给 session 时的 fallback）。
+func (c *mirasimRelayClient) relaySessionID(body []byte) string {
+	seed := ""
+	if len(body) > 0 {
+		seed = strings.TrimSpace(gjson.GetBytes(body, "metadata.user_id").String())
+	}
+	if seed != "" {
+		return "mirasim_" + mirasimSHA256Hex([]byte(strconv.FormatInt(c.accountID, 10) + "\x00" + seed))[:32]
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.sessionID == "" {
+		c.sessionID = "mirasim_" + mirasimRandomUUID()
+	}
+	return c.sessionID
+}
+
+// mirasimRelayAgent 按官方客户端规则从路径与最终上游模型推导 agent。
+// deepseek-* → dsh；glm-* → zcode；kimi-* → kimi；
+// /v1/responses、/v1/alpha/search、/v1/images/* → codex；其余 /v1/messages → claude。
+func mirasimRelayAgent(path string, body []byte) string {
+	if !strings.HasPrefix(path, "/v1/messages") {
+		if strings.HasPrefix(path, "/v1/responses") ||
+			strings.HasPrefix(path, "/v1/alpha/search") ||
+			strings.HasPrefix(path, "/v1/images/") {
+			return "codex"
+		}
+		return "claude"
+	}
+	model := ""
+	if len(body) > 0 {
+		model = strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "model").String()))
+	}
+	switch {
+	case strings.HasPrefix(model, "deepseek-"):
+		return "dsh"
+	case strings.HasPrefix(model, "glm-"):
+		return "zcode"
+	case strings.HasPrefix(model, "kimi-"):
+		return "kimi"
+	default:
+		return "claude"
+	}
 }
 
 // applyMirasimRelayAuth 是网关 4 个请求构造器的统一注入点。
@@ -680,8 +818,14 @@ func applyMirasimRelayAuthToRequest(
 	req.Header.Del("x-api-key")
 	req.Header.Del("x-goog-api-key")
 	req.Header.Set("Authorization", "Bearer "+ticket)
-	req.Header.Set(mirasimHeaderClient, client.clientVersion)
-	req.Header.Set(mirasimHeaderEnc, enc)
+	if strings.TrimSpace(client.clientVersion) != "" {
+		req.Header.Set(mirasimHeaderClient, client.clientVersion)
+	}
+	if enc != "" {
+		req.Header.Set(mirasimHeaderEnc, enc)
+	} else {
+		req.Header.Del(mirasimHeaderEnc)
+	}
 	if getHeaderRaw(req.Header, "content-type") == "" {
 		req.Header.Set("Content-Type", "application/json")
 	}

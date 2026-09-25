@@ -223,20 +223,29 @@ func TestMirasimRelayInjectionProducesVerifiableSealedHeaders(t *testing.T) {
 	require.True(t, ed25519.Verify(pemStr.Public().(ed25519.PublicKey), []byte(expected), sig),
 		"session 请求签名无法用设备公钥验证")
 
-	// 5) 解封 x-mirasim-enc，字段顺序必须是固定 4 字段 JSON，且签名可被验证。
+	// 5) 解封 x-mirasim-enc：含签名头 + relay 元数据（session/agent/call），键按字典序，
+	// 且签名可用设备公钥验证（canonical 必须用同一份元数据重建）。
 	plain, fields := mirasimOpenSealedHeaders(t, sealPriv, req.Header.Get(mirasimHeaderEnc), http.MethodPost, "/v1/messages")
-	require.Less(t, strings.Index(plain, `"x-mirasim-device"`), strings.Index(plain, `"x-mirasim-ts"`))
-	require.Less(t, strings.Index(plain, `"x-mirasim-ts"`), strings.Index(plain, `"x-mirasim-nonce"`))
-	require.Less(t, strings.Index(plain, `"x-mirasim-nonce"`), strings.Index(plain, `"x-mirasim-sig"`))
-	require.Len(t, fields, 4)
+	require.Less(t, strings.Index(plain, `"x-mirasim-agent"`), strings.Index(plain, `"x-mirasim-call"`))
+	require.Less(t, strings.Index(plain, `"x-mirasim-call"`), strings.Index(plain, `"x-mirasim-device"`))
+	require.Less(t, strings.Index(plain, `"x-mirasim-session"`), strings.Index(plain, `"x-mirasim-sig"`))
+	require.Len(t, fields, 7)
+	require.Equal(t, "claude", fields[mirasimHeaderAgent])
+	require.NotEmpty(t, fields[mirasimHeaderSession])
+	require.NotEmpty(t, fields[mirasimHeaderCall])
 	require.Equal(t, deviceID, fields[mirasimHeaderDevice])
 	sealedTS, err := strconv.ParseInt(fields[mirasimHeaderTS], 10, 64)
 	require.NoError(t, err)
 	sealedSig, err := base64.RawURLEncoding.DecodeString(fields[mirasimHeaderSig])
 	require.NoError(t, err)
+	sealedMeta := map[string]string{
+		mirasimHeaderSession: fields[mirasimHeaderSession],
+		mirasimHeaderAgent:   fields[mirasimHeaderAgent],
+		mirasimHeaderCall:    fields[mirasimHeaderCall],
+	}
 	canonical := mirasimCanonicalString(http.MethodPost, "/v1/messages", sealedTS,
 		fields[mirasimHeaderNonce], deviceID, mirasimDefaultClientVersion,
-		"test-device-ticket", nil, body)
+		"test-device-ticket", sealedMeta, body)
 	require.True(t, ed25519.Verify(pemStr.Public().(ed25519.PublicKey), []byte(canonical), sealedSig),
 		"密封头里的签名无法用设备公钥验证")
 
@@ -400,11 +409,22 @@ func TestMirasimRelayConcurrentInjectionUsesSingleTokenChain(t *testing.T) {
 	require.Equal(t, 1, upstream.refreshes, "并发冷启动应只刷新一次 access token")
 	require.Equal(t, 1, upstream.sessions, "并发冷启动应只申领一次 ticket")
 	seen := make(map[string]struct{}, len(encs))
+	sessions := make(map[string]struct{}, len(encs))
+	calls := make(map[string]struct{}, len(encs))
 	for _, enc := range encs {
 		require.NotEmpty(t, enc)
 		_, fields := mirasimOpenSealedHeaders(t, sealPriv, enc, http.MethodPost, "/v1/messages")
-		require.Len(t, fields, 4)
+		// 密封块 = 4 签名头 + relay 元数据（session/agent/call）。
+		require.Len(t, fields, 7)
+		require.Equal(t, "claude", fields[mirasimHeaderAgent])
+		require.NotEmpty(t, fields[mirasimHeaderSession])
+		require.NotEmpty(t, fields[mirasimHeaderCall])
+		sessions[fields[mirasimHeaderSession]] = struct{}{}
+		calls[fields[mirasimHeaderCall]] = struct{}{}
 		seen[enc] = struct{}{}
 	}
 	require.Len(t, seen, 8, "并发请求的密封 blob 必须各不相同（nonce 唯一）")
+	// 同一会话（同一账号客户端 + 无客户端会话种子）下 session 必须稳定，call 必须每次不同。
+	require.Len(t, sessions, 1, "并发请求应共享同一个 relay session")
+	require.Len(t, calls, 8, "每次上游尝试必须带不同的 x-mirasim-call")
 }
