@@ -10,4 +10,4 @@
 - [x] 2.3 既有元数据契约测试同步（新增 `/v1/model-roster` 只读调用）
 - [x] 3.1 `go build ./...`；隔离环境 `-tags unit` vet/test；基线失败集合一致
 - [x] 3.2 `openspec validate align-mirasim-thinking-forms-and-effort --strict`
-- [ ] 3.3 生产发布 + 真实核验（relay 请求 200；无新增 400/forward_failed）
+- [x] 3.3 生产发布 + 真实核验（relay 请求 200；无新增 400/forward_failed）
