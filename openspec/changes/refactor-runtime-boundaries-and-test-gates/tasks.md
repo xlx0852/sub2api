@@ -5,7 +5,7 @@
 - [x] 1.1 记录当前 `archtest`、默认测试、`-tags unit`、`go vet` 的失败集合与耗时
 - [x] 1.2 修复 unit-tag helper/文件隔离，使 `go test -tags unit ./internal/service/...` 与 `go vet -tags unit ./internal/service/...` 可编译
 - [x] 1.3 将 unit/vet/archtest 门禁纳入 CI 或等价的仓库验证脚本
-- [ ] 1.4 补 archtest：禁止新增 service→handler、service→Gin transport、handler→repository/Ent 的依赖
+- [x] 1.4 补 archtest：禁止新增 service→handler、service→Gin transport、handler→repository/Ent 的依赖
 
 ## 2. Runtime state and injection
 

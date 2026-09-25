@@ -1,0 +1,6 @@
+# 传输/持久化直接依赖过渡基线。
+# 只允许现有边界迁移使条目消失；新增直接依赖必须先拆到 ports/repository。
+internal/service -> github.com/gin-gonic/gin
+internal/service -> database/sql
+internal/service -> ent
+internal/handler -> ent
