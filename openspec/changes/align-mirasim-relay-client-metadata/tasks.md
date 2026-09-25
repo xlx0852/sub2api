@@ -31,4 +31,4 @@
 - [x] 4.6 access token 刷新窗口对齐官方：15m lead + 30s stale（lead 窗口内 refresh 失败不失败请求；stale 窗口内必须刷新成功）
 - [x] 4.7 device ticket 降级与退避：404 → 静默 1m、501 → 静默 15m（改用 access token 作为签名凭据）；其它失败 1s 起指数退避封顶 30s，退避期内未过期 ticket 继续可用
 - [x] 4.8 `/v1/models` 目录收敛：保留位/namespaced 丢弃，dated 孪生在有 plain 时丢弃、无 plain 时保留
-- [ ] 4.9 未完成（后续独立 change）：roster `adaptive` 驱动 thinking 形态；relay 模型 effort 白名单 + `ultra→max` + 不支持即 400
+- [x] 4.9 已拆到独立 change `align-mirasim-thinking-forms-and-effort` 实现并发布：roster `adaptive` 驱动 thinking 形态；relay 模型 effort 白名单 + `ultra→max` + 不支持即 400

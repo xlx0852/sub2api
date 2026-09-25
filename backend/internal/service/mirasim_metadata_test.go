@@ -62,6 +62,7 @@ type mirasimMetaFake struct {
 
 	models  func(call int) (int, string)
 	limits  func(call int) (int, string)
+	roster  func(call int) (int, string)
 	session func(call int) (int, string)
 	refresh func(call int) (int, string)
 }
@@ -135,8 +136,26 @@ func (f *mirasimMetaFake) responderForLocked(path string) func(int) (int, string
 			return f.limits
 		}
 		return mirasimMetaLimitsResponse
+	case mirasimModelRosterPath:
+		if f.roster != nil {
+			return f.roster
+		}
+		return mirasimMetaRosterResponse
 	}
 	return nil
+}
+
+// mirasimRosterAdaptiveProbe 从假上游的 roster 响应里解析形态标记（测试辅助）。
+func mirasimRosterAdaptiveProbe(t *testing.T, f *mirasimMetaFake) map[string]bool {
+	t.Helper()
+	responder := f.responderForLocked(mirasimModelRosterPath)
+	if responder == nil {
+		return nil
+	}
+	_, payload := responder(1)
+	adaptive, err := parseMirasimRosterAdaptive([]byte(payload))
+	require.NoError(t, err)
+	return adaptive
 }
 
 func (f *mirasimMetaFake) count(path string) int {
@@ -185,11 +204,28 @@ func mirasimMetaLimitsResponse(int) (int, string) {
 	return http.StatusOK, mirasimLimitsFixture
 }
 
+func mirasimMetaRosterResponse(int) (int, string) {
+	return http.StatusOK, mirasimMetaRosterFixture
+}
+
 // ---------------------------------------------------------------------------
 // 夹具
 // ---------------------------------------------------------------------------
 
 const mirasimMetaTicket = "meta-device-ticket"
+
+// mirasimMetaRosterFixture 是签名 roster 的形态夹具：只关心 thinking 形态标记，
+// 且刻意与 /v1/models 的模型集合不同——若有人把 roster 当白名单来源，测试会立刻失败。
+const mirasimMetaRosterFixture = `{
+  "version": "v1",
+  "agents": {
+    "claude": [{"id": "claude-sonnet-5", "adaptive": true}],
+    "dsh": [{"id": "deepseek-flash", "adaptive": true}]
+  },
+  "models": {
+    "claude-legacy-budget": {"adaptive": false}
+  }
+}`
 
 // mirasimModelsFixture 覆盖：id 的 trim、trim 后重复去重、非字符串 / 空 id 丢弃、
 // 非对象条目（字符串/null/缺 id）丢弃、大小写不同视为不同 id（不做 lowercase）。
@@ -259,12 +295,21 @@ func TestMirasimMetadataReadOnlyRequestShape(t *testing.T) {
 	require.Equal(t, 1, fake.count(mirasimDeviceSessionPath))
 	require.Equal(t, 1, fake.count(mirasimAvailableModelsPath))
 	require.Equal(t, 1, fake.count(mirasimLimitsPath))
+	// roster 只用于 thinking 形态判定，与可用模型同一节奏刷新一次。
 	require.Equal(t, []string{
 		mirasimAccessRefreshPath,
 		mirasimDeviceSessionPath,
 		mirasimAvailableModelsPath,
+		mirasimModelRosterPath,
 		mirasimLimitsPath,
 	}, fake.paths())
+
+	// roster 请求同样是只读契约：GET + 空 body + 无查询串。
+	rosterCalls := fake.callsFor(mirasimModelRosterPath)
+	require.Len(t, rosterCalls, 1)
+	require.Equal(t, http.MethodGet, rosterCalls[0].Method)
+	require.Empty(t, rosterCalls[0].RawQuery)
+	require.Empty(t, rosterCalls[0].Body)
 
 	modelsCalls := fake.callsFor(mirasimAvailableModelsPath)
 	require.Len(t, modelsCalls, 1)
@@ -874,7 +919,12 @@ func TestFetchUpstreamSupportedModelsUsesMirasimAvailableModels(t *testing.T) {
 		"kimi-k3",
 	}, models)
 	require.Equal(t, 1, fake.count(mirasimAvailableModelsPath))
-	require.Equal(t, 0, fake.count("/v1/model-roster"), "白名单不得再走全局 roster")
+	// roster 仍会被拉一次，但**只**用于 thinking 形态；白名单必须逐字来自账号维度 /v1/models。
+	// （假 roster 的模型集合与 /v1/models 不同，若被当成白名单这里立刻会炸。）
+	require.Equal(t, 1, fake.count(mirasimModelRosterPath))
+	require.Equal(t, mirasimShapeAdaptive,
+		mirasimThinkingShapeForModel(mirasimRosterAdaptiveProbe(t, fake), "claude-sonnet-5"),
+		"roster 的 adaptive 标记应被解析进缓存")
 
 	// 显式同步必须绕过缓存；账号级 roster agent 覆盖对新来源不再有任何影响。
 	account.Extra["mirasim_roster_agent"] = "codex" // 遗留键：现已不参与白名单

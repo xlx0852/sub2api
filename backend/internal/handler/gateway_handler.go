@@ -836,6 +836,13 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", betaBlockedErr.Message)
 					return
 				}
+				// Mirasim relay：thinking 形态/effort 无法映射到该模型时必须本地 400，
+				// 不得转给上游再被拒（与官方客户端一致）。
+				var mirasimThinkingErr *service.MirasimThinkingConfigError
+				if errors.As(err, &mirasimThinkingErr) {
+					h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", mirasimThinkingErr.Error())
+					return
+				}
 				h.gatewayService.ReportGatewayAccountScheduleResult(account.ID, false, nil)
 
 				var promptTooLongErr *service.PromptTooLongError
