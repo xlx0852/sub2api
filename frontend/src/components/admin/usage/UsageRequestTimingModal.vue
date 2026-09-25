@@ -39,7 +39,7 @@
             :body-bytes="stages?.body_bytes"
           />
 
-          <details class="rounded-xl border border-gray-200 dark:border-dark-600" open>
+          <details class="rounded-xl border border-gray-200 dark:border-dark-600">
             <summary class="cursor-pointer px-5 py-3 text-sm font-medium text-gray-700 dark:text-dark-100">
               {{ t('usage.timingDetail.details') }}
             </summary>
