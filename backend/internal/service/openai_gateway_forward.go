@@ -15,6 +15,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/requesttiming"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 )
@@ -215,6 +216,13 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 }
 
 func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token string, isStream bool, promptCacheKey string, isCodexCLI bool) (*http.Request, error) {
+	// 请求耗时详情：构造上游请求耗时（含请求体改写与压缩）。
+	buildStarted := time.Now()
+	defer func() {
+		if collector := requesttiming.FromContext(ctx); collector != nil {
+			collector.ObserveUpstreamBuild(time.Since(buildStarted))
+		}
+	}()
 	// Determine target URL based on account type
 	var targetURL string
 	switch account.Type {

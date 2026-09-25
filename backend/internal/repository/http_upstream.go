@@ -28,6 +28,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyurl"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyutil"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/requesttiming"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
@@ -198,6 +199,9 @@ func (s *httpUpstreamService) Do(req *http.Request, proxyURL string, accountID i
 
 	// 执行请求；Grok CLI 403 兼容拒绝时回退到官方 api.x.ai
 	client := httpClientWithGrokAccessDeniedFallback(entry.client)
+	if collector := requesttiming.FromContext(req.Context()); collector != nil {
+		collector.MarkUpstreamDo()
+	}
 	req = withUpstreamTiming(req)
 	resp, err := client.Do(req)
 	if err == nil {
