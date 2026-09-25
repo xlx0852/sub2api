@@ -26,17 +26,27 @@ func parseOpenAIResponsesIngress(body []byte) (openAIResponsesIngress, string, b
 	if len(body) <= openAIResponsesIngressFullValidationMaxBytes && !gjson.ValidBytes(body) {
 		return openAIResponsesIngress{}, "Failed to parse request body", false
 	}
-	model := gjson.GetBytes(body, "model")
-	if !model.Exists() || model.Type != gjson.String || model.String() == "" {
+	// 单遍扫描顶层标量：gjson 对「不存在或靠后」的键会走完整包，实测 46MiB 请求上
+	// 三次查找合计约 900ms（见 openspec/OBSERVE-2026-09-25-perf-wave.md）。
+	scalars := scanOpenAITopLevelScalars(body, "model", "stream", "previous_response_id")
+	model, ok := scalars["model"]
+	if !ok || model.kind != 's' || model.text == "" {
 		return openAIResponsesIngress{}, "model is required", false
 	}
-	stream, ok := parseOpenAICompatibleStream(body)
-	if !ok {
-		return openAIResponsesIngress{}, invalidStreamFieldTypeMessage, false
+	stream := false
+	if raw, exists := scalars["stream"]; exists {
+		if raw.kind != 'b' {
+			return openAIResponsesIngress{}, invalidStreamFieldTypeMessage, false
+		}
+		stream = raw.truth
+	}
+	previous := ""
+	if raw, exists := scalars["previous_response_id"]; exists && raw.kind == 's' {
+		previous = strings.TrimSpace(raw.text)
 	}
 	return openAIResponsesIngress{
-		model:              model.String(),
+		model:              model.text,
 		stream:             stream,
-		previousResponseID: strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String()),
+		previousResponseID: previous,
 	}, "", true
 }
