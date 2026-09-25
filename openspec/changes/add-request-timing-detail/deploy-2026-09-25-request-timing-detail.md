@@ -110,3 +110,25 @@ change：`add-request-timing-detail`
 - 前端 release `/opt/sub2api/frontend/releases/0.1.391-d1a85a25e`（聚合 `446c4db6c648259ad24516d5d61b914436b67fc315ed400eadd47773a6c8b6d6`，`index.html` = `63e4e3d69f923981f8b89ab6ed6f7398ff88abc159700cc76828de74ded3a233`，171 文件）
 - `current` → `0.1.391-d1a85a25e`，`rollback` → `0.1.391-1268f0e7d`
 - 组件测试 6 例通过；`vue-tsc --noEmit` 与 `pnpm build` 通过
+
+## 9. 两项优化（14:30–14:45 JST）
+
+### 9.1 首字节延迟感知选号（提交 `1391cf356`、`818240e57`）
+
+- `AccountTTFTTracker`：账号×模型近期首字节中位数（20 样本 / 30 分钟 TTL / 最少 5 样本），在两条用量记录路径写入。
+- `scheduling.OrderByPriorityLoadAndLatency`：同优先级、负载差 ≤ `scheduler_ttft_max_load_delta_pct`（默认 10 个百分点）时，若某候选快至少 `scheduler_ttft_min_advantage_pct`（默认 30%）则提升到当前位置；单趟提升、不跨优先级、不跨容差。
+- 配置默认开启：`gateway.scheduler_ttft_preference=true`、`min_samples=5`、`min_advantage_pct=30`、`max_load_delta_pct=10`；测试：排序 3 例 + 追踪器 3 例。
+- 后端二进制 `sha256=b0f748eaa1563d29baec4da01b5073fade11783d8e30caeb882abe1901a91ea5`。
+- **生产现状（重要）**：该偏好当前**不改变任何路由**。近 30 分钟网关日志中 `account_simple_selection` 的多候选（同组同模型）次数 = **0**；`gpt-6-astra` 只有账号 89 有实际供给（89 priority 10 vs Devin 126 priority 50，优先级先决）；Grok Heavy 组虽映射了 5 个账号，但实测 5 次 `grok-4.6` 请求全部落在账号 86（其余账号不满足能力/额度/冷却条件）。要让它生效，需要同一分组内出现**两个同时可用的同优先级账号**。
+
+### 9.2 安全审核尾部收敛（风险控制配置变更，无代码改动）
+
+| 项 | 变更前 | 变更后 |
+| --- | --- | --- |
+| `timeout_ms` | 1200 | **400** |
+| `retry_count` | 1（最多 2 次尝试 ⇒ 最坏 ~2.4s） | **0**（单次尝试 ⇒ 最坏 ~0.4s） |
+| `group_ids` | `[4, 25]`（25 号分组已删除，校验会拒绝任何配置更新） | `[4]` |
+
+- 变更方式：`PUT /api/v1/admin/risk-control/config`（首次因 `审计分组不存在: 25` 返回 400，故同时清理已删除分组）。
+- 超时/失败语义不变：仍然 **fail-open**（放行）并计入 `pre_block_errors`（风控页可见，重启后已累计 8 次）。
+- 生效验证（变更后新发 20 条请求）：`security_audit_ms` p50 = **2ms**、p90 = **150ms**、max = **229ms**、≥300ms = 0；变更前同口径最大值为 **1168ms**（14:25 样本）。
