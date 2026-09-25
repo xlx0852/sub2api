@@ -11,13 +11,7 @@ import (
 // enables Anthropic platform groups to accept OpenAI Responses API requests
 // by converting them to the native /v1/messages format before forwarding upstream.
 func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, error) {
-	// 先把 input 里的 additional_tools 输入项取出来并从消息流中剔除：
-	// 它是工具载体，不是对话消息。**必须在** convertResponsesInputToAnthropic 之前完成，
-	// 否则该输入项会被当成未知类型跳过，连同里面的工具一起丢掉——模型于是拿不到
-	// 工具定义，只能按系统提示编造调用文本，客户端报 “incompatible payload”。
-	ingestedTools, filteredInput := extractAdditionalTools(req.Input)
-
-	system, messages, err := convertResponsesInputToAnthropic(req.Instructions, filteredInput)
+	system, messages, err := convertResponsesInputToAnthropic(req.Instructions, req.Input)
 	if err != nil {
 		return nil, err
 	}
@@ -43,22 +37,9 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
 		out.MaxTokens = 8192
 	}
 
-	// Convert tools。顺序：顶层 tools 在前、additional_tools 摄取项在后，
-	// 与 responses-lite 降级（demoteOpenAIResponsesLiteTools）保持一致，
-	// 避免同一条请求在 OpenAI 上游与 Anthropic 上游上得到不同的工具顺序。
-	allTools := make([]ResponsesTool, 0, len(req.Tools)+len(ingestedTools))
-	allTools = append(allTools, req.Tools...)
-	allTools = append(allTools, ingestedTools...)
-	if len(allTools) > 0 {
-		flatTools, flatErr := prepareResponsesTools(allTools)
-		if flatErr != nil {
-			return nil, flatErr
-		}
-		// custom/freeform 工具（Codex 的 exec 即此类）必须降级为 Anthropic 能表达的
-		// function + 单一 input 字符串 schema，否则 exec 会以「零参数工具」下发，
-		// 模型无法表达「执行这条命令」。回程由响应桥按 custom 名单还原成
-		// custom_tool_call（codex 只按该类型路由）。
-		out.Tools = convertResponsesToAnthropicTools(downgradeResponsesCustomTools(flatTools))
+	// Convert tools
+	if len(req.Tools) > 0 {
+		out.Tools = convertResponsesToAnthropicTools(req.Tools)
 	}
 
 	// Convert tool_choice (reverse of convertAnthropicToolChoiceToResponses)
@@ -581,208 +562,12 @@ func parseContentBlocks(raw json.RawMessage) []AnthropicContentBlock {
 	return nil
 }
 
-// extractAdditionalTools 从 Responses 的 input 原始 JSON 数组里取出 additional_tools 载体
-// 携带的工具，并把该载体剔除；其余输入项**原始字节保持不变**（不重建结构）。
-//
-// 关键约束（改动前请先读）：
-//   - 载体是**工具声明**，不是对话消息，必须剔除；否则上游会看到一条莫名其妙的
-//     developer 消息，而且里面的工具也到不了 tools 字段；
-//   - tools 为空数组时仍要剔除载体，但绝不能因此清空调用方的顶层 tools；
-//   - 没有任何载体时**原样返回入参**，保证无此形状的请求逐字节不变；
-//   - 在 RawMessage 层做而不是先反序列化成 []ResponsesInputItem，是为了不重建
-//     其它输入项的字节：content/arguments/output 的原形状必须原样传给下游。
-func extractAdditionalTools(inputRaw json.RawMessage) ([]ResponsesTool, json.RawMessage) {
-	trimmed := strings.TrimSpace(string(inputRaw))
-	if trimmed == "" || trimmed == "null" {
-		return nil, inputRaw
-	}
-
-	var items []json.RawMessage
-	if err := json.Unmarshal(inputRaw, &items); err != nil {
-		// 非数组：交给下游的原有校验去报错，这里不改变行为。
-		return nil, inputRaw
-	}
-
-	modified := false
-	for _, raw := range items {
-		if rawResponsesInputItemType(raw) == "additional_tools" {
-			modified = true
-			break
-		}
-	}
-	if !modified {
-		return nil, inputRaw
-	}
-
-	var tools []ResponsesTool
-	kept := make([]json.RawMessage, 0, len(items))
-	for _, raw := range items {
-		if rawResponsesInputItemType(raw) != "additional_tools" {
-			kept = append(kept, raw)
-			continue
-		}
-		var carrier struct {
-			Tools []ResponsesTool `json:"tools"`
-		}
-		if err := json.Unmarshal(raw, &carrier); err == nil {
-			tools = append(tools, carrier.Tools...)
-		}
-	}
-
-	filtered, err := json.Marshal(kept)
-	if err != nil {
-		return tools, inputRaw
-	}
-	return tools, filtered
-}
-
-// rawResponsesInputItemType 读出单个输入项的 type（只解一个字段，不重建整项）。
-func rawResponsesInputItemType(raw json.RawMessage) string {
-	var probe struct {
-		Type string `json:"type"`
-	}
-	if err := json.Unmarshal(raw, &probe); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(probe.Type)
-}
-
-// prepareResponsesTools 把工具集整理成可交给 convertResponsesToAnthropicTools 的平铺形态：
-// 递归展开 namespace 包装，并检测展平后的同名冲突。
-//
-// 为什么要展平：Anthropic Messages 没有命名空间概念；客户端（Codex）请求里的
-// namespace 语义是**分组**，不是名字的一部分——子工具名必须**原样保留**
-// （如 exec_command 就叫 exec_command），因为客户端按 name 匹配工具回执，
-// 改名会让 function_call 对不上任何工具（“incompatible payload”）。
-//
-// 为什么要检测冲突：两个命名空间下可能有同名工具，静默覆盖会让其中一个永远call不到。
-func prepareResponsesTools(tools []ResponsesTool) ([]ResponsesTool, error) {
-	flat := make([]ResponsesTool, 0, len(tools))
-	seen := make(map[string]string, len(tools))
-	if err := flattenResponsesTools(tools, &flat, seen, ""); err != nil {
-		return nil, err
-	}
-	return flat, nil
-}
-
-// flattenResponsesTools 递归展开 namespace；owner 用于冲突报错时指出归属命名空间。
-func flattenResponsesTools(tools []ResponsesTool, out *[]ResponsesTool, seen map[string]string, owner string) error {
-	for _, t := range tools {
-		if strings.TrimSpace(t.Type) == "namespace" {
-			children := t.Tools
-			if len(children) == 0 {
-				// 两个子键语义相同，二选一。
-				children = t.Children
-			}
-			childOwner := strings.TrimSpace(t.Name)
-			if childOwner == "" {
-				childOwner = owner
-			}
-			if err := flattenResponsesTools(children, out, seen, childOwner); err != nil {
-				return err
-			}
-			continue
-		}
-
-		name := strings.TrimSpace(t.Name)
-		if name != "" {
-			if prev, dup := seen[name]; dup {
-				return fmt.Errorf("spaces: duplicate tool name %q (already declared in namespace %q)", name, prev)
-			}
-			seen[name] = owner
-		}
-		*out = append(*out, t)
-	}
-	return nil
-}
-
-// downgradeResponsesCustomTools 把 custom/freeform 工具改写为 Anthropic 能表达的形态：
-// type "custom" → "function"，并在缺少 parameters 时补上单一字符串参数 input。
-//
-// 为什么必需：Codex 的 exec 以 {"type":"custom","name":"exec","format":{…lark…}}
-// 声明，**没有 parameters**。不降级就会走 normalizeAnthropicInputSchema("") 得到
-// {"type":"object","properties":{}}——模型看到一个不吃参数的工具，无法表达命令。
-//
-// 刻意**不**把 format.definition（lark 语法）拼进 description：
-//  1. 它很长，会把 description 撞到上游上限（仓内另有 truncateExternalBridgeToolDescriptions 正因如此）；
-//  2. 工具本身的 description 已说明用途（“Runs a command…”）。
-//
-// 若实测发现模型产出的命令不符合语法，再考虑带截断地追加。
-func downgradeResponsesCustomTools(tools []ResponsesTool) []ResponsesTool {
-	out := make([]ResponsesTool, 0, len(tools))
-	for _, t := range tools {
-		if strings.TrimSpace(t.Type) != "custom" {
-			out = append(out, t)
-			continue
-		}
-		degraded := t
-		degraded.Type = "function"
-		if len(strings.TrimSpace(string(degraded.Parameters))) == 0 || strings.TrimSpace(string(degraded.Parameters)) == "null" {
-			degraded.Parameters = json.RawMessage(`{"type":"object","properties":{"input":{"type":"string"}},"required":["input"]}`)
-		}
-		out = append(out, degraded)
-	}
-	return out
-}
-
-// CustomToolNamesFromResponsesBody 从 Responses **原始请求体**里收集 custom/freeform 工具名。
-//
-// 为何从 body 而不是从转换结果：服务层需要在**出站**（响应方向）知道哪些工具是 custom，
-// 才能把模型对它们的 tool_use 还原成 custom_tool_call；而入站与出站是两个函数。
-//
-// 入参形状与入站摄取保持一致：顶层 tools + input[].additional_tools 载体（含 namespace 包装）。
-// 展平失败（如同名冲突）时返回已收集到的部分——出站只需要名字，不值得因此中断请求。
-func CustomToolNamesFromResponsesBody(body []byte) map[string]bool {
-	if len(body) == 0 {
-		return nil
-	}
-	var req struct {
-		Tools []ResponsesTool   `json:"tools"`
-		Input []json.RawMessage `json:"input"`
-	}
-	if err := json.Unmarshal(body, &req); err != nil {
-		return nil
-	}
-	tools := append([]ResponsesTool{}, req.Tools...)
-	for _, raw := range req.Input {
-		if rawResponsesInputItemType(raw) != "additional_tools" {
-			continue
-		}
-		var carrier struct {
-			Tools []ResponsesTool `json:"tools"`
-		}
-		if err := json.Unmarshal(raw, &carrier); err == nil {
-			tools = append(tools, carrier.Tools...)
-		}
-	}
-	if len(tools) == 0 {
-		return nil
-	}
-	flat, err := prepareResponsesTools(tools)
-	if err != nil {
-		flat = tools
-	}
-	return CustomToolNames(flat)
-}
-
 // convertResponsesToAnthropicTools maps Responses API tools to Anthropic format.
-//
-// 调用方应先跑 prepareResponsesTools（展平 namespace + 冲突检测）；此处对
-// namespace 再做一次递归兑底，避免直接调用本函数时把命名空间包装当成一个
-// 空 schema 的工具发上去。
 // Reverse of convertAnthropicToolsToResponses.
 func convertResponsesToAnthropicTools(tools []ResponsesTool) []AnthropicTool {
 	var out []AnthropicTool
 	for _, t := range tools {
 		switch t.Type {
-		case "namespace":
-			// 兑底：子工具优先在 prepareResponsesTools 里展平（带冲突检测），
-			// 这里直接递归只是为了不把命名空间当成可用工具发出去。
-			children := t.Tools
-			if len(children) == 0 {
-				children = t.Children
-			}
-			out = append(out, convertResponsesToAnthropicTools(children)...)
 		case "web_search", "google_search", "web_search_20250305":
 			out = append(out, AnthropicTool{
 				Type: "web_search_20250305",

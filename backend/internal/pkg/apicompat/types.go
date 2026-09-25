@@ -245,14 +245,6 @@ type ResponsesInputItem struct {
 	// type=function_call_output
 	Output    string `json:"output,omitempty"`
 	outputRaw json.RawMessage
-
-	// type=additional_tools
-	//
-	// 新版 Codex（0.155+）不再用顶层 tools 携带工具，而是发一个
-	// {"type":"additional_tools","role":"developer","tools":[…]} 输入项，
-	// 且其中的工具常带一层 {"type":"namespace",…} 包装。
-	// 没有这个字段，整个输入项里的工具会在反序列化阶段静默丢失。
-	Tools []ResponsesTool `json:"tools,omitempty"`
 }
 
 // UnmarshalJSON 兼容新版 codex 的两类非字符串载荷（issue #2913）：

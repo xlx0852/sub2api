@@ -171,16 +171,6 @@ type AnthropicEventToResponsesState struct {
 	CurrentCallID string
 	CurrentName   string
 
-	// CustomTools 是本请求里以 custom/freeform 声明的工具名集合。
-	//
-	// 这些工具（Codex 的 exec 即此类）在**请求向**已降级为「单一 input 字符串参数」，
-	// 因此回程必须把模型的 tool_use 还原成 custom_tool_call +
-	// response.custom_tool_call_input.* —— codex 只按声明的类型路由：
-	// 对 custom 工具回 function_call 会被判为 payload 不兼容。
-	CustomTools map[string]bool
-	// CurrentIsCustom 记录当前打开的 tool_use 是否属于 CustomTools。
-	CurrentIsCustom bool
-
 	// Usage from message_start / message_delta. InputTokens here follows
 	// Anthropic semantics (excludes cached tokens); they are added back when
 	// emitting the OpenAI Responses usage.
@@ -325,12 +315,11 @@ func anthToResHandleContentBlockStart(evt *AnthropicStreamEvent, state *Anthropi
 		state.CurrentItemType = "function_call"
 		state.CurrentCallID = toResponsesCallID(evt.ContentBlock.ID)
 		state.CurrentName = evt.ContentBlock.Name
-		state.CurrentIsCustom = state.CustomTools[strings.TrimSpace(evt.ContentBlock.Name)]
 
 		events = append(events, makeResponsesEvent(state, "response.output_item.added", &ResponsesStreamEvent{
 			OutputIndex: state.OutputIndex,
 			Item: &ResponsesOutput{
-				Type:   responsesItemTypeForTool(state.CurrentIsCustom),
+				Type:   "function_call",
 				ID:     state.CurrentItemID,
 				CallID: state.CurrentCallID,
 				Name:   state.CurrentName,
@@ -377,11 +366,6 @@ func anthToResHandleContentBlockDelta(evt *AnthropicStreamEvent, state *Anthropi
 			return nil
 		}
 		state.currentArguments.WriteString(evt.Delta.PartialJSON)
-		// custom 工具不发增量：codex 走 custom_tool_call_input.delta/done 生命周期，
-		// 且 input 在收尾时一次性下发（同 CC 桥的做法）。
-		if state.CurrentIsCustom {
-			return nil
-		}
 		return []ResponsesStreamEvent{makeResponsesEvent(state, "response.function_call_arguments.delta", &ResponsesStreamEvent{
 			OutputIndex: state.OutputIndex,
 			Delta:       evt.Delta.PartialJSON,
@@ -414,25 +398,6 @@ func anthToResHandleContentBlockStop(evt *AnthropicStreamEvent, state *Anthropic
 		return events
 
 	case "function_call":
-		accumulated := state.currentArguments.String()
-		if state.CurrentIsCustom {
-			// custom 工具：input 在此处一次性下发（delta + done），与 CC 桥一致。
-			input := extractResponsesCustomToolInput(accumulated)
-			events := []ResponsesStreamEvent{
-				makeResponsesEvent(state, "response.custom_tool_call_input.delta", &ResponsesStreamEvent{
-					OutputIndex: state.OutputIndex,
-					ItemID:      state.CurrentItemID,
-					Delta:       input,
-				}),
-			}
-			events = append(events, makeResponsesEvent(state, "response.custom_tool_call_input.done", &ResponsesStreamEvent{
-				OutputIndex: state.OutputIndex,
-				ItemID:      state.CurrentItemID,
-				Input:       input,
-			}))
-			events = append(events, closeCurrentResponsesItem(state)...)
-			return events
-		}
 		// Emit function_call_arguments.done + output item done
 		events := []ResponsesStreamEvent{
 			makeResponsesEvent(state, "response.function_call_arguments.done", &ResponsesStreamEvent{
@@ -440,7 +405,7 @@ func anthToResHandleContentBlockStop(evt *AnthropicStreamEvent, state *Anthropic
 				ItemID:      state.CurrentItemID,
 				CallID:      state.CurrentCallID,
 				Name:        state.CurrentName,
-				Arguments:   accumulated,
+				Arguments:   state.currentArguments.String(),
 			}),
 		}
 		events = append(events, closeCurrentResponsesItem(state)...)
@@ -510,7 +475,6 @@ func closeCurrentResponsesItem(state *AnthropicEventToResponsesState) []Response
 
 	itemType := state.CurrentItemType
 	itemID := state.CurrentItemID
-	isCustom := state.CurrentIsCustom
 
 	// Build the completed item from the accumulated deltas before resetting the
 	// buffers. Emitting only Type/ID/Status (the previous behaviour) left every
@@ -519,28 +483,6 @@ func closeCurrentResponsesItem(state *AnthropicEventToResponsesState) []Response
 		Type:   itemType,
 		ID:     itemID,
 		Status: "completed",
-	}
-	if itemType == "function_call" && isCustom {
-		// custom 工具回 custom_tool_call + 自由文本 input（不是 JSON arguments）。
-		item.Type = "custom_tool_call"
-		item.CallID = state.CurrentCallID
-		item.Name = state.CurrentName
-		item.Input = extractResponsesCustomToolInput(state.currentArguments.String())
-		state.OutputItems = append(state.OutputItems, item)
-		state.CurrentItemType = ""
-		state.CurrentItemID = ""
-		state.CurrentCallID = ""
-		state.CurrentName = ""
-		state.CurrentIsCustom = false
-		state.currentArguments.Reset()
-		state.text.Reset()
-		state.reasoning.Reset()
-		state.OutputIndex++
-		state.ContentIndex = 0
-		return []ResponsesStreamEvent{makeResponsesEvent(state, "response.output_item.done", &ResponsesStreamEvent{
-			OutputIndex: state.OutputIndex - 1,
-			Item:        &item,
-		})}
 	}
 	switch itemType {
 	case "message":
@@ -560,7 +502,6 @@ func closeCurrentResponsesItem(state *AnthropicEventToResponsesState) []Response
 	state.CurrentItemID = ""
 	state.CurrentCallID = ""
 	state.CurrentName = ""
-	state.CurrentIsCustom = false
 	state.text.Reset()
 	state.reasoning.Reset()
 	state.currentArguments.Reset()
@@ -637,31 +578,6 @@ func makeResponsesCompletedEvent(
 			IncompleteDetails: incompleteDetails,
 		},
 	}
-}
-
-// responsesItemTypeForTool 返回该工具对应的 Responses 项类型：
-// custom/freeform 工具用 custom_tool_call —— codex 只按声明的类型路由。
-func responsesItemTypeForTool(isCustom bool) string {
-	if isCustom {
-		return "custom_tool_call"
-	}
-	return "function_call"
-}
-
-// extractResponsesCustomToolInput 从降级后的单一参数 JSON（{"input":"…"}）里取出自由文本。
-// 解不出时退回原始字符串（宁可把原文交给客户端，也不要丢内容）。
-func extractResponsesCustomToolInput(arguments string) string {
-	trimmed := strings.TrimSpace(arguments)
-	if trimmed == "" {
-		return ""
-	}
-	var v struct {
-		Input string `json:"input"`
-	}
-	if err := json.Unmarshal([]byte(trimmed), &v); err == nil && v.Input != "" {
-		return v.Input
-	}
-	return trimmed
 }
 
 func makeResponsesEvent(state *AnthropicEventToResponsesState, eventType string, template *ResponsesStreamEvent) ResponsesStreamEvent {
