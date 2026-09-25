@@ -161,3 +161,54 @@
 1. 小请求路径已经「拆干净」：68ms ≈ 鉴权+审核+选号（46ms）+ 解析校验（20ms）。
 2. 大请求的固定开销不在网络、不在压缩、不在连接，而在**请求体解析/规范化**（约 1.5s / 33MB）。这是当前唯一还有量级的网关侧优化点：要么给解析/规范化补埋点确认，要么改用惰性解析（gjson 按需取值、避免整包 unmarshal + 重新 marshal）。
 3. 顺带修正历史结论：此前记录的「写耗时固定开销 250–300ms」部分是重试混值造成的假象（已修 `8af1480e0`）。
+
+---
+
+# 大请求解析优化（17:55–18:40 +08）
+
+针对上一节定位到的「大请求 1.5s 未归因开销」，做了两处优化，并修正了过程中误引入的一处守卫。
+
+## A. 入口解析：单遍扫描替代 gjson 多次惰性查找（`f35858acc`）
+
+- 原因：`gjson` 的惰性查找对「不存在或位置靠后」的键必须走完整个 JSON。`parseOpenAIResponsesIngress` 对 `model` / `stream` / `previous_response_id` 各查一次，42MiB 包上合计约 **850–900ms**。
+- 方案：新增 `scanOpenAITopLevelScalars`，一次线性扫描顶层对象，未命中的嵌套值按括号深度跳过；`≤4MiB` 仍保留整包 `gjson.ValidBytes` 校验，大包改为惰性校验（要求能取到非空 `model`）。
+- 实测（单测基准）：**12.3MB 扫描 10ms**；线上 2.4MB 请求该步从 ~40ms 降到 **10–19ms**。
+
+## B. 图像生成意图：加字面量快速否决（`55ae99911`）
+
+- 原因：`IsImageGenerationIntent` 先做整包 `gjson.ValidBytes` 再做多次 gjson 查找，42MiB 请求上约 **650ms**。
+- 方案：先 `bytes.Contains(body, "image_gen")` 快速否决（扁平 `image_generation` 工具与 Codex 的 `image_gen` 命名空间都包含该字面量）；命中时保持原有校验语义。
+- 过程中的失误与修正：同一替换误加到 `isOpenAIResponsesLiteWebSocketPayload`（判的是 Lite 标记），导致两个 WS 桥接用例失败；已由 `db5125d3e` 撤回，`internal/service` 失败集恢复为基线 6 条。
+
+## C. handler 阶段打点（`e37bca86c`、后续细化）
+
+`stage_marks_ms` 记录命名时间点，用于把 handler 内部拆开。最新一次小流量实测（2.4MB 请求，修复后）：
+
+| 时间点 | 相对请求开始 | 本段耗时 |
+| --- | --- | --- |
+| `handler_entry` | ~5ms | — |
+| `body_read_done` | 17–32ms | 读体 12–27ms |
+| `ingress_parsed` | 28–49ms | 解析 10–19ms |
+| `image_intent_done` | 68–101ms | 意图检测 4–5ms（小包）/ 40ms（修复前 2.4MB） |
+| `user_slot_done` | 72–107ms | 选号+并发等待 |
+| `upstream_do_ms` | 153–385ms | 之后为 pipeline 改写 + 构造 + 取连接（h2 ≈ 0ms） |
+| `upstream_build_ms` | — | 构造含压缩 17–22ms（2.4MB） |
+
+## D. 待验证（流量偏小，暂缺 40MB 级样本）
+
+预计 42MiB 请求的上游前耗时会从 **~2.4s 降到 ~0.6s** 量级（省掉解析 ~850ms 与意图检测 ~650ms，剩余为读体 ~350ms + pipeline 改写 ~500ms + 构造/压缩 ~250ms）。有大包时可用下列语句复核：
+
+```sql
+SELECT round((first_output_stages::jsonb->>'body_bytes')::numeric/1048576,1) AS mib,
+       (first_output_stages::jsonb->'stage_marks_ms'->>'ingress_parsed')::numeric
+        - (first_output_stages::jsonb->'stage_marks_ms'->>'body_read_done')::numeric AS ingress_cost,
+       (first_output_stages::jsonb->'stage_marks_ms'->>'image_intent_done')::numeric
+        - (first_output_stages::jsonb->'stage_marks_ms'->>'ingress_parsed')::numeric AS img_cost,
+       (first_output_stages::jsonb->>'upstream_do_ms') AS pre_do
+FROM usage_logs
+WHERE created_at > now() - interval '1 hour'
+  AND first_output_stages::jsonb->'stage_marks_ms' ? 'image_intent_done'
+ORDER BY (first_output_stages::jsonb->>'body_bytes')::numeric DESC LIMIT 5;
+```
+
+期望：`ingress_cost` 与 `img_cost` 都降到 **50ms 以内**（体积无关），`pre_do` 随体积主要由读体与 pipeline 改写决定。
