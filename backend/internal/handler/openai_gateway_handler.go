@@ -279,6 +279,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", ingressErr)
 		return
 	}
+	markRequestTimingStage(c, "ingress_parsed")
 	reqModel, reqStream := ingress.model, ingress.stream
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
 	previousResponseID := ingress.previousResponseID
@@ -322,6 +323,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	}
 
 	imageIntent := service.IsImageGenerationIntent("/v1/responses", reqModel, body)
+	markRequestTimingStage(c, "image_intent_done")
 	if imageIntent && !service.GroupAllowsImageGeneration(apiKey.Group) {
 		h.errorResponse(c, http.StatusForbidden, "permission_error", service.ImageGenerationPermissionMessage())
 		return
@@ -341,9 +343,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	// 解析渠道级模型映射
 	channelMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
 	forwardBody := openAIModelMappedBody(body, channelMapping.Mapped, channelMapping.MappedModel, h.gatewayService.ReplaceModelInBody)
+	markRequestTimingStage(c, "model_mapped")
 
 	// 提前校验 function_call_output 是否具备可关联上下文，避免上游 400。
-	markRequestTimingStage(c, "ingress_parsed")
+	markRequestTimingStage(c, "moderation_done")
 	if !h.validateFunctionCallOutputRequest(c, body, reqLog) {
 		return
 	}
