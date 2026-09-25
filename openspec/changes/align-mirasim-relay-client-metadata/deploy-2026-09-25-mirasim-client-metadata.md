@@ -50,3 +50,16 @@ cp -p /opt/sub2api/api/releases/0.1.391-noinject-a33b47ef9/sub2api.bak-20260925-
       /opt/sub2api/api/releases/0.1.391-noinject-a33b47ef9/sub2api
 docker start sub2api-api-candidate-0.1.391-noinject-a33b47ef9
 ```
+
+## 追加发布（客户端身份与健壮性）
+
+- 代码基线：`a17651943`
+- 二进制 sha256 `dd2d9192da00a6ac9604d5670904ba702c632332666188953abac00a817019fe`
+  （123,711,650 B → 实际 123,732,130 B，`-tags embed`）
+- 回滚点：`sub2api.bak-20260925-mirasimidentity`（sha256 `13047956f010a3ec59fcc50bfacc47e2b8f5424d066adc6e66e62a2b50db243e`，
+  vcs.revision `2694ea76c2fbbd0b791d0bf10a9feae3e74ffe4d`）
+- 替换前 revision `2694ea76c` 是本次 HEAD 的祖先 → 未回退并行窗口的工作（含其两次 Revert 提交）
+- 健康检查：`/health` 200，容器 healthy
+- 真实核验：账号 140 relay 请求 HTTP 200 且有真实推理增量；`forward_failed`=0、上游 401/403=0
+- 生效内容：`x-mirasim-client` 0.0.354、access token 15m lead/30s stale、
+  device ticket 404/501 降级与退避、`/v1/models` 目录收敛
