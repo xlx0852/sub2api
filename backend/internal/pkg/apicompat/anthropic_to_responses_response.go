@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -151,6 +152,20 @@ type AnthropicEventToResponsesState struct {
 
 	// For message output: accumulate text parts
 	ContentIndex int
+	// text accumulates message output_text deltas. Without it the terminal
+	// artifacts (output_text.done / output_item.done / response.completed.output)
+	// are emitted empty, which is fatal for clients that finalize from those
+	// rather than from deltas — Codex CLI reads response.completed.output and
+	// reports an empty assistant message otherwise.
+	text strings.Builder
+	// reasoning accumulates reasoning summary deltas (thinking_delta).
+	reasoning strings.Builder
+	// currentArguments accumulates function_call argument deltas.
+	currentArguments strings.Builder
+	// OutputItems accumulates every closed output item in order so the terminal
+	// event can carry a complete response.output. Mirrors
+	// ChatCompletionsToResponsesStreamState.chatOutput().
+	OutputItems []ResponsesOutput
 
 	// For function_call: track per-output info
 	CurrentCallID string
@@ -326,6 +341,7 @@ func anthToResHandleContentBlockDelta(evt *AnthropicStreamEvent, state *Anthropi
 		if evt.Delta.Text == "" {
 			return nil
 		}
+		state.text.WriteString(evt.Delta.Text)
 		return []ResponsesStreamEvent{makeResponsesEvent(state, "response.output_text.delta", &ResponsesStreamEvent{
 			OutputIndex:  state.OutputIndex,
 			ContentIndex: state.ContentIndex,
@@ -337,6 +353,7 @@ func anthToResHandleContentBlockDelta(evt *AnthropicStreamEvent, state *Anthropi
 		if evt.Delta.Thinking == "" {
 			return nil
 		}
+		state.reasoning.WriteString(evt.Delta.Thinking)
 		return []ResponsesStreamEvent{makeResponsesEvent(state, "response.reasoning_summary_text.delta", &ResponsesStreamEvent{
 			OutputIndex:  state.OutputIndex,
 			SummaryIndex: 0,
@@ -348,6 +365,7 @@ func anthToResHandleContentBlockDelta(evt *AnthropicStreamEvent, state *Anthropi
 		if evt.Delta.PartialJSON == "" {
 			return nil
 		}
+		state.currentArguments.WriteString(evt.Delta.PartialJSON)
 		return []ResponsesStreamEvent{makeResponsesEvent(state, "response.function_call_arguments.delta", &ResponsesStreamEvent{
 			OutputIndex: state.OutputIndex,
 			Delta:       evt.Delta.PartialJSON,
@@ -373,6 +391,7 @@ func anthToResHandleContentBlockStop(evt *AnthropicStreamEvent, state *Anthropic
 				OutputIndex:  state.OutputIndex,
 				SummaryIndex: 0,
 				ItemID:       state.CurrentItemID,
+				Text:         state.reasoning.String(),
 			}),
 		}
 		events = append(events, closeCurrentResponsesItem(state)...)
@@ -386,6 +405,7 @@ func anthToResHandleContentBlockStop(evt *AnthropicStreamEvent, state *Anthropic
 				ItemID:      state.CurrentItemID,
 				CallID:      state.CurrentCallID,
 				Name:        state.CurrentName,
+				Arguments:   state.currentArguments.String(),
 			}),
 		}
 		events = append(events, closeCurrentResponsesItem(state)...)
@@ -398,6 +418,7 @@ func anthToResHandleContentBlockStop(evt *AnthropicStreamEvent, state *Anthropic
 				OutputIndex:  state.OutputIndex,
 				ContentIndex: state.ContentIndex,
 				ItemID:       state.CurrentItemID,
+				Text:         state.text.String(),
 			}),
 		}
 	}
@@ -455,21 +476,41 @@ func closeCurrentResponsesItem(state *AnthropicEventToResponsesState) []Response
 	itemType := state.CurrentItemType
 	itemID := state.CurrentItemID
 
+	// Build the completed item from the accumulated deltas before resetting the
+	// buffers. Emitting only Type/ID/Status (the previous behaviour) left every
+	// item with no text, so clients reading output_item.done saw empty content.
+	item := ResponsesOutput{
+		Type:   itemType,
+		ID:     itemID,
+		Status: "completed",
+	}
+	switch itemType {
+	case "message":
+		item.Role = "assistant"
+		item.Content = []ResponsesContentPart{{Type: "output_text", Text: state.text.String()}}
+	case "reasoning":
+		item.Summary = []ResponsesSummary{{Type: "summary_text", Text: state.reasoning.String()}}
+	case "function_call":
+		item.CallID = state.CurrentCallID
+		item.Name = state.CurrentName
+		item.Arguments = state.currentArguments.String()
+	}
+	state.OutputItems = append(state.OutputItems, item)
+
 	// Reset
 	state.CurrentItemType = ""
 	state.CurrentItemID = ""
 	state.CurrentCallID = ""
 	state.CurrentName = ""
+	state.text.Reset()
+	state.reasoning.Reset()
+	state.currentArguments.Reset()
 	state.OutputIndex++
 	state.ContentIndex = 0
 
 	return []ResponsesStreamEvent{makeResponsesEvent(state, "response.output_item.done", &ResponsesStreamEvent{
 		OutputIndex: state.OutputIndex - 1, // Use the index before increment
-		Item: &ResponsesOutput{
-			Type:   itemType,
-			ID:     itemID,
-			Status: "completed",
-		},
+		Item:        &item,
 	})}
 }
 
@@ -516,6 +557,14 @@ func makeResponsesCompletedEvent(
 		eventType = "response.incomplete"
 	}
 
+	// Carry every closed output item so the terminal event is complete. Clients
+	// such as Codex CLI finalize the assistant message from this payload; an
+	// always-empty slice produced empty answers.
+	output := state.OutputItems
+	if output == nil {
+		output = []ResponsesOutput{}
+	}
+
 	return ResponsesStreamEvent{
 		Type:           eventType,
 		SequenceNumber: seq,
@@ -524,7 +573,7 @@ func makeResponsesCompletedEvent(
 			Object:            "response",
 			Model:             state.Model,
 			Status:            status,
-			Output:            []ResponsesOutput{},
+			Output:            output,
 			Usage:             usage,
 			IncompleteDetails: incompleteDetails,
 		},
