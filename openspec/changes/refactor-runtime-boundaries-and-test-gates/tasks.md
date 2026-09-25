@@ -25,7 +25,7 @@
 - [ ] 4.1 将 OAuth handler 的直接 Ent 查询迁入 identity service/repository/ports
 - [ ] 4.2 将 service 中的裸 SQL/直接 Ent 访问按域迁入 repository，保持事务边界和错误语义
 - [ ] 4.3 集中 Redis key builder、版本与 snapshot invalidation，补 DB mutation 后缓存一致性测试
-- [ ] 4.4 抽取 usage log 单一 column schema/builder，覆盖 single/batch/best-effort/no-result 四种写入模式
+- [x] 4.4 抽取 usage log 单一 column schema/builder，覆盖 single/batch/best-effort/no-result 四种写入模式
 - [ ] 4.5 将 settings parser 按领域拆分为类型化 schema/defaults，保持历史 key/value 兼容
 
 ## 5. Service package boundaries
