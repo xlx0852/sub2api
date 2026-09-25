@@ -62,6 +62,10 @@ type FirstOutputStages struct {
 	ResponseStreamComplete *bool  `json:"response_stream_complete,omitempty"`
 	Outcome                string `json:"outcome,omitempty"`
 
+	// StageMarksMs 是命名时间点（相对请求开始的毫秒偏移），用于定位 handler 内部
+	// 哪一步耗时（键名见 handler 中的 MarkStage 调用）。
+	StageMarksMs map[string]int `json:"stage_marks_ms,omitempty"`
+
 	// Segments 是瀑布图用的阶段区间（相对请求开始的毫秒偏移）。
 	// 与上面的标量字段并存：标量给人读，segments 给时间轴渲染。
 	Segments []TimingSegment `json:"segments,omitempty"`

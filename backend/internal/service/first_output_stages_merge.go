@@ -103,6 +103,9 @@ func MergeFirstOutputStages(base, detail *domain.FirstOutputStages) *domain.Firs
 	if base.Outcome == "" {
 		base.Outcome = detail.Outcome
 	}
+	if len(base.StageMarksMs) == 0 && len(detail.StageMarksMs) > 0 {
+		base.StageMarksMs = detail.StageMarksMs
+	}
 	if len(base.Segments) == 0 && len(detail.Segments) > 0 {
 		base.Segments = detail.Segments
 	}

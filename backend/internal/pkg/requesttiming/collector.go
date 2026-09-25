@@ -54,6 +54,7 @@ type Collector struct {
 	upstreamProto        string
 	upstreamDo           *int
 	upstreamBuild        *int
+	stageMarks           map[string]int
 	upstreamFirst        *int
 	upstreamHeaders      *int
 	upstreamStream       *int
@@ -309,6 +310,22 @@ func (c *Collector) SetUpstreamDialed(dialed bool) {
 	c.mu.Unlock()
 }
 
+// MarkStage 记录一个命名时间点（相对请求开始的毫秒偏移），用于定位「哪一步慢」。
+// 同名只记第一次，避免重试/循环覆盖首次到达时间。
+func (c *Collector) MarkStage(name string) {
+	if c == nil || name == "" {
+		return
+	}
+	c.mu.Lock()
+	if c.stageMarks == nil {
+		c.stageMarks = make(map[string]int)
+	}
+	if _, exists := c.stageMarks[name]; !exists {
+		c.stageMarks[name] = ms(time.Since(c.start))
+	}
+	c.mu.Unlock()
+}
+
 // MarkUpstreamDo 记录「请求开始 → 即将调用 client.Do」的时间点，
 // 用于把请求开始到取到连接之间的时间拆成「调用前（handler/构造/客户端条目）」与
 // 「连接获取」两段。
@@ -446,6 +463,13 @@ func (c *Collector) Snapshot(now time.Time) *domain.FirstOutputStages {
 	segments = append(segments, c.segments...)
 	if len(segments) > 0 {
 		out.Segments = segments
+	}
+	if len(c.stageMarks) > 0 {
+		marks := make(map[string]int, len(c.stageMarks))
+		for k, v := range c.stageMarks {
+			marks[k] = v
+		}
+		out.StageMarksMs = marks
 	}
 	return out
 }

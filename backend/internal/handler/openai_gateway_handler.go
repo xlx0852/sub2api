@@ -242,6 +242,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	}
 
 	// Read request body
+	markRequestTimingStage(c, "handler_entry")
 	body, err := readLenientJSONRequestBodyWithPrealloc(c.Request, h.cfg)
 	if err != nil {
 		if maxErr, ok := extractMaxBytesError(err); ok {
@@ -269,6 +270,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	stopCompactKeepalive := service.StartOpenAICompactSSEKeepalive(c, h.openAICompactKeepaliveInterval())
 	defer stopCompactKeepalive()
 
+	markRequestTimingStage(c, "body_read_done")
 	ingress, ingressErr, ok := parseOpenAIResponsesIngress(body)
 	if !ok {
 		if ingressErr == "Failed to parse request body" {
@@ -341,6 +343,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	forwardBody := openAIModelMappedBody(body, channelMapping.Mapped, channelMapping.MappedModel, h.gatewayService.ReplaceModelInBody)
 
 	// 提前校验 function_call_output 是否具备可关联上下文，避免上游 400。
+	markRequestTimingStage(c, "ingress_parsed")
 	if !h.validateFunctionCallOutputRequest(c, body, reqLog) {
 		return
 	}
@@ -354,10 +357,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 	requestPlatform := openAICompatibleRequestPlatform(apiKey)
 
+	markRequestTimingStage(c, "validated")
 	service.SetOpsLatencyMs(c, service.OpsAuthLatencyMsKey, time.Since(requestStart).Milliseconds())
 	routingStart := time.Now()
 
+	markRequestTimingStage(c, "preflight_done")
 	userReleaseFunc, acquired := h.acquireResponsesUserSlot(c, subject.UserID, subject.Concurrency, reqStream, &streamStarted, reqLog)
+	markRequestTimingStage(c, "user_slot_done")
 	if !acquired {
 		return
 	}
@@ -3217,4 +3223,14 @@ func mergeRequestTiming(base *domain.FirstOutputStages, c *gin.Context) *domain.
 		return base
 	}
 	return service.MergeFirstOutputStages(base, collector.Snapshot(time.Now()))
+}
+
+// markRequestTimingStage 记录 handler 内部的命名时间点（见 requesttiming.Collector.MarkStage）。
+func markRequestTimingStage(c *gin.Context, name string) {
+	if c == nil || c.Request == nil {
+		return
+	}
+	if collector := requesttiming.FromContext(c.Request.Context()); collector != nil {
+		collector.MarkStage(name)
+	}
 }
