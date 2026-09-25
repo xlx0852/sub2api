@@ -237,8 +237,6 @@
         <div v-show="activeTab === 'payment'" class="space-y-6">
           <SettingsPaymentTab
             v-model:form="formModel"
-            :payment-guide-href="paymentGuideHref"
-            :payment-methods-href="paymentMethodsHref"
             :load-balance-options="loadBalanceOptions"
             :cancel-rate-limit-mode-options="cancelRateLimitModeOptions"
             :cancel-rate-limit-unit-options="cancelRateLimitUnitOptions"
@@ -447,18 +445,6 @@ const isZhLocale = computed(() => locale.value.startsWith("zh"));
 function localText(zh: string, en: string): string {
   return isZhLocale.value ? zh : en;
 }
-
-const paymentGuideHref = computed(() =>
-  locale.value.startsWith("zh")
-    ? "https://github.com/Wei-Shaw/sub2api/blob/main/docs/PAYMENT_CN.md"
-    : "https://github.com/Wei-Shaw/sub2api/blob/main/docs/PAYMENT.md",
-);
-
-const paymentMethodsHref = computed(() =>
-  locale.value.startsWith("zh")
-    ? "https://github.com/Wei-Shaw/sub2api/blob/main/docs/PAYMENT_CN.md#支持的支付方式"
-    : "https://github.com/Wei-Shaw/sub2api/blob/main/docs/PAYMENT.md#supported-payment-methods",
-);
 
 const settingsTabs = SETTINGS_TABS;
 const activeTab = ref<SettingsTab>(settingsTabFromParam(route.params?.tab));
