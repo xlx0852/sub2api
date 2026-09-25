@@ -1,6 +1,11 @@
 package scheduling
 
-import "context"
+import (
+	"context"
+	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/requesttiming"
+)
 
 // SlotResult 是模型感知并发槽位的获取结果。
 // 字段与现有 service.AcquireResult 对齐，便于两套调度器无损适配。
@@ -28,7 +33,13 @@ func TryAcquireAccountSlot(ctx context.Context, acquirer ModelAwareSlotAcquirer,
 		slot := PassthroughSlot()
 		return &slot, nil
 	}
-	return acquirer.AcquireModelAwareAccountSlot(ctx, requestedModel, accountID, maxConcurrency)
+	// 请求耗时详情：账号并发准入与等待（Anthropic/Gemini 等网关路径）。
+	started := time.Now()
+	result, err := acquirer.AcquireModelAwareAccountSlot(ctx, requestedModel, accountID, maxConcurrency)
+	if collector := requesttiming.FromContext(ctx); collector != nil {
+		collector.SetAccountQueueMs(time.Since(started))
+	}
+	return result, err
 }
 
 // IsExcluded 判断账号是否在本轮调度排除集中。
