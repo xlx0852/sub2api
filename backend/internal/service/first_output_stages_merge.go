@@ -67,6 +67,9 @@ func MergeFirstOutputStages(base, detail *domain.FirstOutputStages) *domain.Firs
 	if base.UpstreamWriteMs == nil {
 		base.UpstreamWriteMs = detail.UpstreamWriteMs
 	}
+	if base.UpstreamWroteHeadersMs == nil {
+		base.UpstreamWroteHeadersMs = detail.UpstreamWroteHeadersMs
+	}
 	if base.UpstreamFirstByteMs == nil {
 		base.UpstreamFirstByteMs = detail.UpstreamFirstByteMs
 	}

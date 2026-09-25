@@ -23,6 +23,13 @@ func gzipTestConfig(minBytes int64, hosts ...string) *config.Config {
 	return cfg
 }
 
+func zstdTestConfig(minBytes int64, hosts ...string) *config.Config {
+	cfg := &config.Config{}
+	cfg.Gateway.UpstreamGzipMinBytes = minBytes
+	cfg.Gateway.UpstreamZstdHosts = hosts
+	return cfg
+}
+
 func gzipTestAccount(baseURL string) *Account {
 	return &Account{
 		Platform:    PlatformOpenAI,
@@ -37,7 +44,7 @@ func TestMaybeGzipOpenAIUpstreamBodyCompressesWhitelistedHost(t *testing.T) {
 	account := gzipTestAccount("https://o10.top")
 	cfg := gzipTestConfig(1024, "o10.top")
 
-	if !maybeGzipOpenAIUpstreamBody(req, body, account, cfg) {
+	if !maybeCompressOpenAIUpstreamBody(req, body, account, cfg) {
 		t.Fatal("expected compression to apply")
 	}
 	if got := req.Header.Get(openAIRequestCompressionHeader); got != "gzip" {
@@ -75,7 +82,7 @@ func TestMaybeGzipOpenAIUpstreamBodySkipsWhen(t *testing.T) {
 	}
 	for _, tc := range cases {
 		req, _ := http.NewRequest(http.MethodPost, "https://o10.top/v1/responses", bytes.NewReader(large))
-		if maybeGzipOpenAIUpstreamBody(req, large, tc.account, tc.cfg) {
+		if maybeCompressOpenAIUpstreamBody(req, large, tc.account, tc.cfg) {
 			t.Fatalf("%s: compression must be skipped", tc.name)
 		}
 		if req.Header.Get(openAIRequestCompressionHeader) != "" {
@@ -87,7 +94,7 @@ func TestMaybeGzipOpenAIUpstreamBodySkipsWhen(t *testing.T) {
 func TestMaybeGzipOpenAIUpstreamBodyRespectsThreshold(t *testing.T) {
 	small := bytes.Repeat([]byte("x"), 512)
 	req, _ := http.NewRequest(http.MethodPost, "https://o10.top/v1/responses", bytes.NewReader(small))
-	if maybeGzipOpenAIUpstreamBody(req, small, gzipTestAccount("https://o10.top"), gzipTestConfig(1024, "o10.top")) {
+	if maybeCompressOpenAIUpstreamBody(req, small, gzipTestAccount("https://o10.top"), gzipTestConfig(1024, "o10.top")) {
 		t.Fatal("body below threshold must not be compressed")
 	}
 }
@@ -104,8 +111,8 @@ func TestUpstreamGzipHostAllowed(t *testing.T) {
 		"https://other.example.com":   false,
 	}
 	for base, want := range cases {
-		if got := upstreamGzipHostAllowed(base, allowed); got != want {
-			t.Fatalf("upstreamGzipHostAllowed(%q) = %v, want %v", base, got, want)
+		if got := upstreamHostAllowed(base, allowed); got != want {
+			t.Fatalf("upstreamHostAllowed(%q) = %v, want %v", base, got, want)
 		}
 	}
 }
@@ -172,4 +179,35 @@ func TestOpenAIGatewayService_APIKeyUpstreamGzipsLargeBody(t *testing.T) {
 	require.NoError(t, readErr)
 	require.Contains(t, string(decoded), "gzip-upstream-body-", "解压后应还原出原始载荷")
 	require.Contains(t, string(upstream.lastBody), "gzip-upstream-body-", "recorder 视角（上游解压后）同样可见载荷")
+}
+
+func TestMaybeCompressOpenAIUpstreamBodyPrefersZstd(t *testing.T) {
+	body := bytes.Repeat([]byte("compressed-please-"), 8192)
+	req, _ := http.NewRequest(http.MethodPost, "https://o10.top/v1/responses", bytes.NewReader(body))
+	cfg := zstdTestConfig(1024, "o10.top")
+	cfg.Gateway.UpstreamGzipHosts = []string{"o10.top"}
+
+	if !maybeCompressOpenAIUpstreamBody(req, body, gzipTestAccount("https://o10.top"), cfg) {
+		t.Fatal("expected compression to apply")
+	}
+	if got := req.Header.Get(openAIRequestCompressionHeader); got != "zstd" {
+		t.Fatalf("Content-Encoding = %q, want zstd when host is in zstd allowlist", got)
+	}
+	compressed := mustReadAll(t, req)
+	if len(compressed) >= len(body)/2 {
+		t.Fatalf("zstd should shrink payload, got %d of %d", len(compressed), len(body))
+	}
+}
+
+func TestMaybeCompressOpenAIUpstreamBodyFallsBackToGzip(t *testing.T) {
+	body := bytes.Repeat([]byte("compressed-please-"), 8192)
+	req, _ := http.NewRequest(http.MethodPost, "https://gzip-only.example.com/v1/responses", bytes.NewReader(body))
+	cfg := gzipTestConfig(1024, "gzip-only.example.com")
+
+	if !maybeCompressOpenAIUpstreamBody(req, body, gzipTestAccount("https://gzip-only.example.com"), cfg) {
+		t.Fatal("expected gzip fallback to apply")
+	}
+	if got := req.Header.Get(openAIRequestCompressionHeader); got != "gzip" {
+		t.Fatalf("Content-Encoding = %q, want gzip", got)
+	}
 }

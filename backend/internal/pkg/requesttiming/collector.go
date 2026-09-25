@@ -42,16 +42,17 @@ type Collector struct {
 	upstreamReqBytes *int64
 
 	// 上游
-	attempts        int
-	connReused      bool
-	connReusedSet   bool
-	upstreamConnect *int
-	upstreamWrite   *int
-	upstreamFirst   *int
-	upstreamHeaders *int
-	upstreamStream  *int
-	streamComplete  bool
-	streamDoneSet   bool
+	attempts             int
+	connReused           bool
+	connReusedSet        bool
+	upstreamConnect      *int
+	upstreamWrite        *int
+	upstreamWroteHeaders *int
+	upstreamFirst        *int
+	upstreamHeaders      *int
+	upstreamStream       *int
+	streamComplete       bool
+	streamDoneSet        bool
 
 	outcome  string
 	segments []domain.TimingSegment
@@ -271,6 +272,9 @@ func (c *Collector) MarkUpstreamConnect() { c.markSinceSlot(&c.upstreamConnect) 
 // MarkUpstreamWrite 从请求开始到请求体写完。
 func (c *Collector) MarkUpstreamWrite() { c.markSinceSlot(&c.upstreamWrite) }
 
+// MarkUpstreamWroteHeaders 从请求开始到请求头写完。
+func (c *Collector) MarkUpstreamWroteHeaders() { c.markSinceSlot(&c.upstreamWroteHeaders) }
+
 // MarkUpstreamFirstByte 从请求开始到上游首字节。
 func (c *Collector) MarkUpstreamFirstByte() { c.markSinceSlot(&c.upstreamFirst) }
 
@@ -356,6 +360,7 @@ func (c *Collector) Snapshot(now time.Time) *domain.FirstOutputStages {
 	}
 	out.UpstreamConnectMs = c.upstreamConnect
 	out.UpstreamWriteMs = c.upstreamWrite
+	out.UpstreamWroteHeadersMs = c.upstreamWroteHeaders
 	out.UpstreamFirstByteMs = c.upstreamFirst
 	out.UpstreamResponseHeadersMs = c.upstreamHeaders
 	out.UpstreamStreamTransferMs = c.upstreamStream

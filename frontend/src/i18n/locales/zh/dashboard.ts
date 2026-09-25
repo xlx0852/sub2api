@@ -392,6 +392,8 @@ export default {
       userQueue: '用户并发等待',
       accountQueue: '账号并发准入',
       upstreamWrite: '写入上游请求',
+      upstreamWriteHeaders: '其中请求头写出',
+      upstreamBodyUpload: '其中请求体上传',
       upstreamFirstByte: '等待上游首字节',
       upstreamResponseHeaders: '上游响应头',
       streamTransfer: '响应流传输',

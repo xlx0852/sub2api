@@ -32,6 +32,9 @@ func withUpstreamTiming(req *http.Request) *http.Request {
 			collector.AddAttemptSegment("upstream_connect", attempt, doStart, now)
 			last = now
 		},
+		WroteHeaders: func() {
+			collector.MarkUpstreamWroteHeaders()
+		},
 		WroteRequest: func(httptrace.WroteRequestInfo) {
 			now := time.Now()
 			collector.MarkUpstreamWrite()

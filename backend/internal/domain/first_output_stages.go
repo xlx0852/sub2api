@@ -36,12 +36,15 @@ type FirstOutputStages struct {
 	HandlerTotalMs    *int `json:"handler_total_ms,omitempty"`
 
 	// Sub2API → 上游
-	UpstreamAttempts          *int  `json:"upstream_attempts,omitempty"`
-	ConnectionReused          *bool `json:"connection_reused,omitempty"`
-	UpstreamWriteMs           *int  `json:"upstream_write_ms,omitempty"`
-	UpstreamFirstByteMs       *int  `json:"upstream_first_byte_ms,omitempty"`
-	UpstreamResponseHeadersMs *int  `json:"upstream_response_headers_ms,omitempty"`
-	UpstreamStreamTransferMs  *int  `json:"upstream_stream_transfer_ms,omitempty"`
+	UpstreamAttempts *int  `json:"upstream_attempts,omitempty"`
+	ConnectionReused *bool `json:"connection_reused,omitempty"`
+	UpstreamWriteMs  *int  `json:"upstream_write_ms,omitempty"`
+	// UpstreamWroteHeadersMs: 从发起请求到请求头写完（写入的头部阶段，用于把
+	// upstream_write_ms 拆成「头」与「体上传」两段；体上传 = write - wrote_headers）。
+	UpstreamWroteHeadersMs    *int `json:"upstream_wrote_headers_ms,omitempty"`
+	UpstreamFirstByteMs       *int `json:"upstream_first_byte_ms,omitempty"`
+	UpstreamResponseHeadersMs *int `json:"upstream_response_headers_ms,omitempty"`
+	UpstreamStreamTransferMs  *int `json:"upstream_stream_transfer_ms,omitempty"`
 
 	// 请求结果
 	ResponseStreamComplete *bool  `json:"response_stream_complete,omitempty"`

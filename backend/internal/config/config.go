@@ -299,6 +299,7 @@ func setDefaults() {
 	viper.SetDefault("gateway.scheduler_ttft_preference", true)
 	viper.SetDefault("gateway.upstream_gzip_min_bytes", 1<<20)
 	viper.SetDefault("gateway.upstream_gzip_hosts", []string{"o10.top"})
+	viper.SetDefault("gateway.upstream_zstd_hosts", []string{"o10.top"})
 	viper.SetDefault("server.frontend_url", "")
 	viper.SetDefault("server.read_header_timeout", 30) // 30秒读取请求头
 	viper.SetDefault("server.idle_timeout", 120)       // 120秒空闲超时

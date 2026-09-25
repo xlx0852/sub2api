@@ -381,7 +381,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	// APIKey 账号（第三方 OpenAI 兼容中转）大请求体走 gzip：白名单 + 阈值见
 	// maybeGzipOpenAIUpstreamBody。OAuth 已走 zstd，这里只处理非 OAuth。
 	if account.Type != AccountTypeOAuth {
-		maybeGzipOpenAIUpstreamBody(req, body, account, s.cfg)
+		maybeCompressOpenAIUpstreamBody(req, body, account, s.cfg)
 	}
 
 	// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效，若最终 user-agent 仍为浏览器

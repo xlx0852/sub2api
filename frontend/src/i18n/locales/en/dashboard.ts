@@ -388,6 +388,8 @@ export default {
       userQueue: 'User concurrency wait',
       accountQueue: 'Account admission wait',
       upstreamWrite: 'Request write',
+      upstreamWriteHeaders: 'Write headers portion',
+      upstreamBodyUpload: 'Body upload portion',
       upstreamFirstByte: 'Wait for upstream first byte',
       upstreamResponseHeaders: 'Response headers ready',
       streamTransfer: 'Stream transfer',

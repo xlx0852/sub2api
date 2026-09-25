@@ -572,7 +572,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	}
 	// APIKey 账号大请求体 gzip（白名单 + 阈值）。
 	if account.Type != AccountTypeOAuth {
-		maybeGzipOpenAIUpstreamBody(req, body, account, s.cfg)
+		maybeCompressOpenAIUpstreamBody(req, body, account, s.cfg)
 	}
 
 	// 终态收口：originator 必须与最终 User-Agent 首段配套且为官方身份，非官方 UA 整体回退为

@@ -69,6 +69,8 @@
             <TimingSection :title="t('usage.timingDetail.gatewayToUpstream')">
               <TimingRow :label="t('usage.timingDetail.connectionAcquire')" :value="msValue(stages?.upstream_connect_ms)" />
               <TimingRow :label="t('usage.timingDetail.upstreamWrite')" :value="msValue(stages?.upstream_write_ms)" />
+              <TimingRow :label="t('usage.timingDetail.upstreamWriteHeaders')" :value="msValue(stages?.upstream_wrote_headers_ms)" />
+              <TimingRow :label="t('usage.timingDetail.upstreamBodyUpload')" :value="upstreamBodyUpload" />
               <TimingRow :label="t('usage.timingDetail.upstreamFirstByte')" :value="msValue(stages?.upstream_first_byte_ms)" />
               <TimingRow :label="t('usage.timingDetail.upstreamResponseHeaders')" :value="msValue(stages?.upstream_response_headers_ms)" />
               <TimingRow :label="t('usage.timingDetail.firstToken')" :value="msValue(log.first_token_ms)" />
@@ -205,6 +207,12 @@ const bodySize = computed(() => {
   const bytes = stages.value?.body_bytes
   if (bytes == null) return t('usage.timingDetail.notCollected')
   return formatBytes(bytes)
+})
+const upstreamBodyUpload = computed(() => {
+  const total = stages.value?.upstream_write_ms
+  const headers = stages.value?.upstream_wrote_headers_ms
+  if (total == null || headers == null) return t('usage.timingDetail.notCollected')
+  return formatDuration(Math.max(total - headers, 0))
 })
 const upstreamBodySize = computed(() => {
   const bytes = stages.value?.upstream_request_bytes

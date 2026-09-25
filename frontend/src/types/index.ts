@@ -1461,6 +1461,7 @@ export interface FirstOutputStages {
   upstream_attempts?: number | null
   connection_reused?: boolean | null
   upstream_write_ms?: number | null
+  upstream_wrote_headers_ms?: number | null
   upstream_first_byte_ms?: number | null
   upstream_response_headers_ms?: number | null
   upstream_stream_transfer_ms?: number | null
