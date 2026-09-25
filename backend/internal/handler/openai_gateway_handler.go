@@ -322,6 +322,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 
+	markRequestTimingStage(c, "moderation_checked")
 	imageIntent := service.IsImageGenerationIntent("/v1/responses", reqModel, body)
 	markRequestTimingStage(c, "image_intent_done")
 	if imageIntent && !service.GroupAllowsImageGeneration(apiKey.Group) {
@@ -346,10 +347,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	markRequestTimingStage(c, "model_mapped")
 
 	// 提前校验 function_call_output 是否具备可关联上下文，避免上游 400。
-	markRequestTimingStage(c, "moderation_done")
 	if !h.validateFunctionCallOutputRequest(c, body, reqLog) {
 		return
 	}
+	markRequestTimingStage(c, "func_call_output_checked")
 
 	// 绑定错误透传服务，允许 service 层在非 failover 错误场景复用规则。
 	if h.errorPassthroughService != nil {
