@@ -102,3 +102,11 @@ change：`add-request-timing-detail`
 **安全审核耗时分布（近 3 小时 526 条 staged 行）**：p50 = **102ms**、p95 = **634ms**、≥1100ms（打满 `timeout_ms=1200`）= **8 条**、≥100ms = 275 条（52%）。
 
 生产审核配置：`enabled=true`、`mode=pre_block`、`sample_rate=15`、`timeout_ms=1200`、`retry_count=1`、`pre_hash_check_enabled=true`、`worker_count=4`、`base_url=https://api.openai.com`、`model=omni-moderation-latest`。即：约 15% 的请求做抽样 API 审核，命中干净 hash 缓存则跳过；仍未跳过时中位 102ms、尾部会打满 1.2s 超时。是否调 `timeout_ms` / `sample_rate` / 改后置审核属运营策略，本 change 只负责让耗时可见。
+
+## 8. 分段数值默认折叠（14:20 JST，提交 `d1a85a25e`）
+
+按运营要求，弹窗默认只展示瀑布时间线；数值分组收进 `<details>`（默认收起，点击「分段数值」展开）。
+
+- 前端 release `/opt/sub2api/frontend/releases/0.1.391-d1a85a25e`（聚合 `446c4db6c648259ad24516d5d61b914436b67fc315ed400eadd47773a6c8b6d6`，`index.html` = `63e4e3d69f923981f8b89ab6ed6f7398ff88abc159700cc76828de74ded3a233`，171 文件）
+- `current` → `0.1.391-d1a85a25e`，`rollback` → `0.1.391-1268f0e7d`
+- 组件测试 6 例通过；`vue-tsc --noEmit` 与 `pnpm build` 通过

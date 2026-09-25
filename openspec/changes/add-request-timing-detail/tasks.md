@@ -41,7 +41,7 @@
 
 - [x] 7.1 采集器输出 `segments`（lane + 起止偏移 + 尝试序号），上游 httptrace 分阶段落区间
 - [x] 7.2 `RequestTimingWaterfall.vue`：时间轴、阶段着色、悬停明细、首 Token 标记、体积标注、图例
-- [x] 7.3 数值分组折叠为「分段数值」details；zh/en i18n 补齐
+- [x] 7.3 数值分组折叠为「分段数值」details（默认收起，见第 8 节）；zh/en i18n 补齐
 - [x] 7.4 测试：瀑布组件 3 例、采集器 segments 断言；线上核验 segments 落库
 
 ## 8. 收尾
@@ -49,3 +49,7 @@
 - [x] 8.1 调度层槽位埋点（`TryAcquireAccountSlot`）→ Anthropic/Gemini 的 `account_queue_ms` 可见
 - [x] 8.2 瀑布时间刻度轴 + 块内时长标签（前端 release `0.1.391-1268f0e7d`）
 - [x] 8.3 统计审核耗时分布（p50 102ms / p95 634ms / 8 条打满 1.2s 超时）并记录配置
+
+## 9. 展示默认态
+
+- [x] 9.1 分段数值默认不展开，瀑布为默认视图（前端 release `0.1.391-d1a85a25e`）
