@@ -26,6 +26,5 @@
 - [x] 4.1 `go build ./...`；隔离环境 `go vet -tags unit ./internal/service/` 与 `go test -tags unit ./internal/service/ -count=1`（含官方 0.0.260 签名/密封钉住向量）全绿
 - [x] 4.2 `gofmt -l` 干净；`go test ./internal/service/ -count=1` 失败集合与 HEAD 基线一致（6 条 pre-existing）；`vue-tsc --noEmit` 干净
 - [x] 4.3 `openspec validate align-mirasim-relay-client-metadata --strict`
-- [ ] 4.4 真实核验（**待批准**）：单账号一次 `/v1/messages` 返回 200（签名错误会在推理前被拒）；观察 `forward_failed` 无上升
-  - 待批准原因：需要要么把新二进制热替换到生产候选容器（有备份/回滚点），要么用一次性探针直连 relay；两者都会触碰生产或凭据，按项目纪律需你点头
+- [x] 4.4 真实核验（已批准执行 A 方案）：新二进制热替换生产候选容器；账号 140 两次 relay 请求均 200 且有真实推理增量；`forward_failed`=0、上游 401/403=0；记录见 `deploy-2026-09-25-mirasim-client-metadata.md`
 - [ ] 4.5 后续独立项（不在本变更范围）：`mirasim_default_client_version` 仍是 0.0.322，官方客户端为 0.0.354；`x-mirasim-client` 在线上明文可见，是否跟进由你决定
