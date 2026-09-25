@@ -143,3 +143,19 @@ func TestCollectorEmitsWaterfallSegments(t *testing.T) {
 		}
 	}
 }
+
+func TestCollectorAttemptResetKeepsLastAttemptMarks(t *testing.T) {
+	start := time.Now()
+	c := New(start)
+	c.Attempt()
+	c.MarkUpstreamConnect() // 第一次尝试的连接时间点（777ms 之类）
+	time.Sleep(2 * time.Millisecond)
+	c.Attempt() // 重试：尝试级标量应被清空，只保留最后一次
+	out := c.Snapshot(time.Now())
+	if out.UpstreamConnectMs != nil {
+		t.Fatalf("attempt-scoped marks must reset on retry, got connect=%v", *out.UpstreamConnectMs)
+	}
+	if out.UpstreamAttempts == nil || *out.UpstreamAttempts != 2 {
+		t.Fatalf("attempts = %v, want 2", out.UpstreamAttempts)
+	}
+}

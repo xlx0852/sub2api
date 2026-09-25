@@ -209,6 +209,22 @@ func (c *Collector) Attempt() {
 	}
 	c.attemptStarts[c.attempts] = time.Now()
 	c.lastAttemptStart = c.attemptStarts[c.attempts]
+	if c.attempts > 1 {
+		// 尝试级标量只保留最后一次尝试：否则重试会与上一次尝试的时间点混在一
+		// 起（曾出现「请求头写出早于取到连接」的负值）。按尝试的区间由
+		// segments 数组单独记录，不受影响。
+		c.upstreamConnect = nil
+		c.upstreamDialed = nil
+		c.upstreamDial = nil
+		c.upstreamTLS = nil
+		c.upstreamWroteHeaders = nil
+		c.upstreamWrite = nil
+		c.upstreamFirst = nil
+		c.upstreamHeaders = nil
+		c.upstreamStream = nil
+		c.connReusedSet = false
+		c.streamDoneSet = false
+	}
 	c.mu.Unlock()
 }
 
