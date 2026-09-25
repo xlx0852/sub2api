@@ -49,6 +49,7 @@
               <TimingRow :label="t('usage.timingDetail.bodyFirstWait')" :value="msValue(stages?.body_first_wait_ms)" />
               <TimingRow :label="t('usage.timingDetail.bodyReceive')" :value="msValue(stages?.body_receive_ms)" />
               <TimingRow :label="t('usage.timingDetail.bodySize')" :value="bodySize" />
+              <TimingRow :label="t('usage.timingDetail.upstreamRequestBytes')" :value="upstreamBodySize" />
               <TimingRow :label="t('usage.timingDetail.bodyRate')" :value="bodyRate" />
               <TimingRow :label="t('usage.timingDetail.inboundPath')" :value="log.inbound_endpoint || '-'" />
               <TimingRow :label="t('usage.timingDetail.requestType')" :value="requestTypeLabel" />
@@ -204,6 +205,13 @@ const bodySize = computed(() => {
   const bytes = stages.value?.body_bytes
   if (bytes == null) return t('usage.timingDetail.notCollected')
   return formatBytes(bytes)
+})
+const upstreamBodySize = computed(() => {
+  const bytes = stages.value?.upstream_request_bytes
+  if (bytes == null) return t('usage.timingDetail.notCollected')
+  const inbound = stages.value?.body_bytes
+  const suffix = inbound != null && bytes < inbound ? ` (${(bytes / Math.max(inbound, 1) * 100).toFixed(0)}%)` : ''
+  return formatBytes(bytes) + suffix
 })
 const bodyRate = computed(() => {
   const bytes = stages.value?.body_bytes

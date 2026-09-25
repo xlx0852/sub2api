@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/requesttiming"
 )
 
 // maybeGzipOpenAIUpstreamBody 按配置对出站请求体做 gzip 压缩。
@@ -29,6 +30,10 @@ import (
 func maybeGzipOpenAIUpstreamBody(req *http.Request, body []byte, account *Account, cfg *config.Config) bool {
 	if req == nil || account == nil || cfg == nil || len(body) == 0 {
 		return false
+	}
+	// 先记录未压缩的出站长度，供瀑布图/导出对照；压缩成功时再覆盖为压缩后长度。
+	if collector := requesttiming.FromContext(req.Context()); collector != nil {
+		collector.SetUpstreamRequestBytes(int64(len(body)))
 	}
 	settings := cfg.Gateway
 	if settings.UpstreamGzipMinBytes <= 0 || len(settings.UpstreamGzipHosts) == 0 {
@@ -53,6 +58,9 @@ func maybeGzipOpenAIUpstreamBody(req *http.Request, body []byte, account *Accoun
 		return io.NopCloser(bytes.NewReader(compressed)), nil
 	}
 	req.Header.Set(openAIRequestCompressionHeader, "gzip")
+	if collector := requesttiming.FromContext(req.Context()); collector != nil {
+		collector.SetUpstreamRequestBytes(int64(len(compressed)))
+	}
 	return true
 }
 

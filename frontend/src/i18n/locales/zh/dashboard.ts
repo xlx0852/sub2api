@@ -381,6 +381,7 @@ export default {
       },
       bodyFirstWait: '请求体首读等待',
       bodyReceive: '请求体接收',
+      upstreamRequestBytes: '出站请求体',
       bodyRate: '接收速率',
       handlerBodyRead: 'Handler 读取请求体',
       securityAudit: '安全审核',

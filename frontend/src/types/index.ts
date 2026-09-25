@@ -1445,6 +1445,7 @@ export interface FirstOutputStages {
   body_receive_ms?: number | null
   body_read_ms?: number | null
   body_bytes?: number | null
+  upstream_request_bytes?: number | null
   body_complete?: boolean | null
 
   /** Sub2API 内部 */

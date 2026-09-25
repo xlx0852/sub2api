@@ -377,6 +377,7 @@ export default {
       },
       bodyFirstWait: 'Body first-read wait',
       bodyReceive: 'Body receive span',
+      upstreamRequestBytes: 'Upstream request body',
       bodyRate: 'Read rate',
       handlerBodyRead: 'Handler body read',
       securityAudit: 'Security audit',

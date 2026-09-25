@@ -22,7 +22,9 @@ type FirstOutputStages struct {
 	BodyReceiveMs   *int   `json:"body_receive_ms,omitempty"`
 	BodyReadMs      *int   `json:"body_read_ms,omitempty"`
 	BodyBytes       *int64 `json:"body_bytes,omitempty"`
-	BodyComplete    *bool  `json:"body_complete,omitempty"`
+	// UpstreamRequestBytes 是实际写往上游的请求体字节数（压缩后），nil = 未记录。
+	UpstreamRequestBytes *int64 `json:"upstream_request_bytes,omitempty"`
+	BodyComplete         *bool  `json:"body_complete,omitempty"`
 
 	// Sub2API 内部
 	APIKeyAuthMs      *int `json:"api_key_auth_ms,omitempty"`

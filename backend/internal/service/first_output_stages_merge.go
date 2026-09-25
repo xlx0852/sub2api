@@ -34,6 +34,9 @@ func MergeFirstOutputStages(base, detail *domain.FirstOutputStages) *domain.Firs
 	if base.BodyComplete == nil {
 		base.BodyComplete = detail.BodyComplete
 	}
+	if base.UpstreamRequestBytes == nil {
+		base.UpstreamRequestBytes = detail.UpstreamRequestBytes
+	}
 	if base.APIKeyAuthMs == nil {
 		base.APIKeyAuthMs = detail.APIKeyAuthMs
 	}

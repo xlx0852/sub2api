@@ -33,12 +33,13 @@ type Collector struct {
 	bodyReadStarted bool
 
 	// 网关内部
-	apiKeyAuthMs    *int
-	securityAuditMs *int
-	userQueueMs     *int
-	accountSelectMs *int
-	accountQueueMs  *int
-	handlerTotalMs  *int
+	apiKeyAuthMs     *int
+	securityAuditMs  *int
+	userQueueMs      *int
+	accountSelectMs  *int
+	accountQueueMs   *int
+	handlerTotalMs   *int
+	upstreamReqBytes *int64
 
 	// 上游
 	attempts        int
@@ -298,6 +299,16 @@ func (c *Collector) MarkHandlerEnd(t time.Time) {
 	c.store(&c.handlerTotalMs, t.Sub(c.start))
 }
 
+// SetUpstreamRequestBytes 记录实际写往上游的请求体字节数（压缩后）。
+func (c *Collector) SetUpstreamRequestBytes(n int64) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.upstreamReqBytes = &n
+	c.mu.Unlock()
+}
+
 // -- 快照 ----------------------------------------------------------------
 
 // Snapshot 输出新分段；未采集的字段保持 nil。
@@ -327,6 +338,7 @@ func (c *Collector) Snapshot(now time.Time) *domain.FirstOutputStages {
 	out.AccountSelectMs = c.accountSelectMs
 	out.AccountQueueMs = c.accountQueueMs
 	out.HandlerBodyReadMs = out.BodyReadMs
+	out.UpstreamRequestBytes = c.upstreamReqBytes
 	if c.handlerTotalMs != nil {
 		total := *c.handlerTotalMs
 		out.HandlerTotalMs = &total
