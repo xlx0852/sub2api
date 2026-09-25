@@ -417,7 +417,6 @@
             {{ t('admin.proxies.batchAdd') }}
           </button>
         </div>
-        <ProxyAdBanner />
       </div>
 
       <!-- Standard Add Form -->
@@ -982,7 +981,6 @@ import ConfirmDialog from '@/ui/ConfirmDialog.vue'
 import EmptyState from '@/ui/EmptyState.vue'
 import ImportDataModal from '@/components/admin/proxy/ImportDataModal.vue'
 import Select from '@/ui/Select.vue'
-import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import { useClipboard } from '@/composables/useClipboard'

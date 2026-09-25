@@ -1004,7 +1004,6 @@
           <div v-if="!isSparkShadow">
             <div class="mb-1 flex items-center gap-2">
               <label class="input-label mb-0">{{ t('admin.accounts.proxy') }}</label>
-              <ProxyAdBanner />
             </div>
             <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
           </div>
@@ -1972,7 +1971,6 @@ import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import MirasimOAuthOnboarding from './MirasimOAuthOnboarding.vue'
 import type { MirasimOAuthIdentity } from '@/api/admin/mirasim'
-import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
