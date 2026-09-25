@@ -15,7 +15,7 @@
 
 ## 3. Transport boundary
 
-- [ ] 3.1 定义 transport-neutral stream event/sink contract 与 HTTP/SSE adapter
+- [x] 3.1 定义 transport-neutral stream event/sink contract 与 HTTP/SSE adapter
 - [ ] 3.2 迁移一个 Claude/OpenAI HTTP/SSE 主路径，补旧/新 body、事件、错误、usage、settlement 差分测试
 - [ ] 3.3 迁移 WS、图片和兼容入口，删除已验证的 service 直接 writer/Flush/SSE 编码
 - [ ] 3.4 验证所有 provider 仍通过统一 pipeline 阶段执行，禁止新增并行转发路径

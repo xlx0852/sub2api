@@ -161,7 +161,7 @@ func (s *GatewayService) forwardClaudeAsChatRelay(ex *pipeline.Exchange) error {
 	var result *ForwardResult
 	var err error
 	if st.clientStream {
-		result, err = s.handleCCStreamingFromAnthropic(st.resp, st.c, st.originalModel, st.mappedModel, st.reasoningEffort, st.startTime, st.includeUsage)
+		result, err = s.handleCCStreamingFromAnthropic(st.resp, st.c, st.originalModel, st.mappedModel, st.reasoningEffort, st.startTime, st.includeUsage, st.sink)
 	} else {
 		result, err = s.handleCCBufferedFromAnthropic(st.resp, st.c, st.originalModel, st.mappedModel, st.reasoningEffort, st.startTime)
 	}

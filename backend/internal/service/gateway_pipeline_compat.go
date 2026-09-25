@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/app/gateway/pipeline"
+	"github.com/Wei-Shaw/sub2api/internal/app/gateway/stream"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/gin-gonic/gin"
@@ -45,6 +46,7 @@ func claudeAsResponsesStateFrom(ex *pipeline.Exchange) *claudeAsResponsesState {
 
 type claudeAsChatState struct {
 	c               *gin.Context
+	sink            stream.Sink
 	body            []byte
 	parsed          *ParsedRequest
 	startTime       time.Time

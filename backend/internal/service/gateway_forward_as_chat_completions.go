@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/app/gateway/pipeline"
+	"github.com/Wei-Shaw/sub2api/internal/app/gateway/stream"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
@@ -33,9 +34,15 @@ func (s *GatewayService) ForwardAsChatCompletions(
 	account *Account,
 	body []byte,
 	parsed *ParsedRequest,
+	sinks ...stream.Sink,
 ) (*ForwardResult, error) {
+	var sink stream.Sink
+	if len(sinks) > 0 {
+		sink = sinks[0]
+	}
 	st := &claudeAsChatState{
 		c:         c,
+		sink:      sink,
 		body:      body,
 		parsed:    parsed,
 		startTime: time.Now(),
@@ -210,7 +217,12 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 	reasoningEffort *string,
 	startTime time.Time,
 	includeUsage bool,
+	sinks ...stream.Sink,
 ) (*ForwardResult, error) {
+	var sink stream.Sink
+	if len(sinks) > 0 {
+		sink = sinks[0]
+	}
 	requestID := resp.Header.Get("x-request-id")
 
 	if s.responseHeaderFilter != nil {
@@ -260,8 +272,14 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 		}
 		// Reverse tool name mapping: fake → real, per-chunk bytes.Replace.
 		// c 可能持有请求侧注入的 ToolNameRewrite；无则仅做静态前缀还原。
-		out := string(reverseToolNamesIfPresent(c, []byte(sse)))
-		if _, err := fmt.Fprint(c.Writer, out); err != nil {
+		out := []byte(reverseToolNamesIfPresent(c, []byte(sse)))
+		if stSink := sink; stSink != nil {
+			if err := stSink.Emit(stream.Event{Kind: "chat.completions.sse", Data: out}); err != nil {
+				return true
+			}
+			return false
+		}
+		if _, err := fmt.Fprint(c.Writer, string(out)); err != nil {
 			return true // client disconnected
 		}
 		return false
@@ -293,7 +311,13 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 				}
 			}
 		}
-		c.Writer.Flush()
+		if stSink := sink; stSink != nil {
+			if err := stSink.Flush(); err != nil {
+				return true
+			}
+		} else {
+			c.Writer.Flush()
+		}
 		return false
 	}
 
@@ -344,9 +368,14 @@ func (s *GatewayService) handleCCStreamingFromAnthropic(
 		writeChunk(chunk) //nolint:errcheck
 	}
 
-	// Write [DONE] marker
-	fmt.Fprint(c.Writer, "data: [DONE]\n\n") //nolint:errcheck
-	c.Writer.Flush()
+	// Write [DONE] marker.
+	if stSink := sink; stSink != nil {
+		_ = stSink.Emit(stream.Event{Kind: "chat.completions.sse", Data: []byte("data: [DONE]\\n\\n")})
+		_ = stSink.Flush()
+	} else {
+		fmt.Fprint(c.Writer, "data: [DONE]\\n\\n") //nolint:errcheck
+		c.Writer.Flush()
+	}
 
 	return resultWithUsage(), nil
 }

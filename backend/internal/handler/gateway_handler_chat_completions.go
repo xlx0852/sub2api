@@ -272,7 +272,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 			}
 			return
 		}
-		result, err = h.gatewayService.ForwardAsChatCompletions(attemptCtx, c, account, forwardBody, parsedReq)
+		result, err = h.gatewayService.ForwardAsChatCompletions(attemptCtx, c, account, forwardBody, parsedReq, newChatCompletionsStreamSink(c))
 
 		if accountReleaseFunc != nil {
 			accountReleaseFunc()
