@@ -169,8 +169,13 @@ func convertResponsesInputToAnthropic(instructions string, inputRaw json.RawMess
 				Content: blockJSON,
 			})
 
-		case item.Type == "function_call_output":
-			// function_call_output → user message with tool_result block
+		case item.Type == "function_call_output" || item.Type == "custom_tool_call_output":
+			// function_call_output / custom_tool_call_output → user message with tool_result block
+			//
+			// custom_tool_call_output 必须一并处理：我们把 custom/freeform 工具（exec 即此类）
+			// 在响应方向还原成了 custom_tool_call，客户端就会回 custom_tool_call_output。
+			// 只处理 function_call_output 会让工具结果被静默丢弃——模型看不到结果，
+			// 于是无限重调同一个命令（实测同一命令被连续执行 74 次）。
 			contentJSON := responsesFunctionOutputToAnthropicContent(item)
 			block := AnthropicContentBlock{
 				Type:      "tool_result",
