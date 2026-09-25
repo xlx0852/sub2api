@@ -72,6 +72,7 @@ const (
 	// 全局目录 /v1/model-roster 不描述「本账号能用什么」，已不再用于白名单。
 	mirasimAvailableModelsPath = "/v1/models"
 	mirasimLimitsPath          = "/v1/limits"
+	mirasimModelRosterPath     = "/v1/model-roster"
 	mirasimHeaderProbe         = "x-mirasim-probe"
 	mirasimProbeUsage          = "usage"
 
@@ -85,6 +86,9 @@ const (
 	// 显式「同步上游模型」会传 force=true 绕过可用模型缓存。
 	mirasimModelsCacheTTL = 10 * time.Minute
 	mirasimLimitsCacheTTL = 30 * time.Second
+	// mirasimRosterCacheTTL 与可用模型同一节奏：roster 只用于 thinking 形态判定，
+	// 冷/拉不到时保持默认形态（自适应型），绝不在请求路径上阻塞。
+	mirasimRosterCacheTTL = 10 * time.Minute
 
 	// 刷新窗口对齐官方客户端（quarter hour lead + 30s stale）：
 	//   - 距过期 15 分钟内尝试提前刷新，但 token 仍可用；
@@ -291,6 +295,11 @@ type mirasimRelayClient struct {
 	ticketUnmintableUntil time.Time
 	ticketRetryAt         time.Time
 	ticketBackoff         time.Duration
+	// rosterAdaptive 是 signed roster 的「模型 → 是否自适应型」显式标记缓存，
+	// 只由只读元数据路径刷新；请求路径只读不拉（冷缓存 = 默认形态）。
+	rosterAdaptive  map[string]bool
+	rosterFetchedAt time.Time
+	rosterInFlight  bool
 }
 
 func newMirasimRelayClient(
@@ -738,6 +747,62 @@ func (c *mirasimRelayClient) fetchLimits(ctx context.Context) ([]byte, error) {
 	})
 }
 
+// fetchModelRoster 拉取签名 roster 原始 JSON（GET /v1/model-roster，空 body + 明文签名头）。
+func (c *mirasimRelayClient) fetchModelRoster(ctx context.Context) ([]byte, error) {
+	return c.metadataFetch(ctx, "拉取 model roster", mirasimModelRosterPath, mirasimModelsTimeout, nil)
+}
+
+// refreshModelRoster 刷新 roster 形态标记缓存（只在只读元数据路径调用）。
+//
+// 关键约束（改动前请先读）：失败不影响调用方；缓存仅在成功解析后替换；
+// 同一客户端同时只允许一次在途请求。
+func (c *mirasimRelayClient) refreshModelRoster(ctx context.Context) {
+	if c == nil {
+		return
+	}
+	now := time.Now()
+	c.mu.Lock()
+	if c.rosterInFlight || (len(c.rosterAdaptive) > 0 && now.Sub(c.rosterFetchedAt) < mirasimRosterCacheTTL) {
+		c.mu.Unlock()
+		return
+	}
+	c.rosterInFlight = true
+	c.mu.Unlock()
+
+	defer func() {
+		c.mu.Lock()
+		c.rosterInFlight = false
+		c.mu.Unlock()
+	}()
+
+	body, err := c.fetchModelRoster(ctx)
+	if err != nil {
+		slog.Debug("mirasim_roster_fetch_failed", "account_id", c.accountID, "category", mirasimMetadataErrorCategory(err))
+		return
+	}
+	adaptive, err := parseMirasimRosterAdaptive(body)
+	if err != nil {
+		slog.Debug("mirasim_roster_parse_failed", "account_id", c.accountID, "category", mirasimMetadataErrorCategory(err))
+		return
+	}
+	c.mu.Lock()
+	c.rosterAdaptive = adaptive
+	c.rosterFetchedAt = time.Now()
+	c.mu.Unlock()
+}
+
+// modelThinkingShape 返回该模型在 roster 里声明的 thinking 形态（**只读缓存**）。
+// 缓存为空或模型未声明时返回 mirasimShapeUnknown（调用方用默认自适应型）。
+func (c *mirasimRelayClient) modelThinkingShape(model string) mirasimThinkingShape {
+	if c == nil {
+		return mirasimShapeUnknown
+	}
+	c.mu.Lock()
+	adaptive := c.rosterAdaptive
+	c.mu.Unlock()
+	return mirasimThinkingShapeForModel(adaptive, model)
+}
+
 // mirasimMetadataHTTPError 只保留操作名与状态码。
 //
 // 关键约束（改动前请先读）：元数据的错误消息会被写进管理端可见的响应体
@@ -864,6 +929,25 @@ func mirasimRelayAgent(path string, body []byte) string {
 	default:
 		return "claude"
 	}
+}
+
+// mirasimRelayModelThinkingShape 只读返回该账号该模型在 signed roster 里声明的
+// thinking 形态；roster 尚未缓存/模型未声明/配置不可用时返回 mirasimShapeUnknown
+// （即默认的自适应型）。本函数不允许发起任何上游请求。
+func (s *GatewayService) mirasimRelayModelThinkingShape(account *Account, model string) mirasimThinkingShape {
+	if s == nil || !isMirasimRelayAccount(account) {
+		return mirasimShapeUnknown
+	}
+	cfg, err := mirasimRelayConfigForAccount(account)
+	if err != nil {
+		return mirasimShapeUnknown
+	}
+	persistRefresh, persistDeviceKey := mirasimPersistCallbacks(cfg.AccountID, s.accountRepo)
+	client, err := mirasimRelayRuntimeAcquire(cfg, s.httpUpstream, persistRefresh, persistDeviceKey)
+	if err != nil {
+		return mirasimShapeUnknown
+	}
+	return client.modelThinkingShape(model)
 }
 
 // applyMirasimRelayAuth 是网关 4 个请求构造器的统一注入点。

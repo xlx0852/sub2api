@@ -164,6 +164,9 @@ func (s *MirasimMetadataService) AvailableModels(ctx context.Context, account *A
 		return nil, err
 	}
 	s.storeAvailableModels(cfg, models)
+	// roster 只用于 thinking 形态判定：与模型清单同一节奏刷新，失败不影响本次调用，
+	// 也绝不会在模型转发路径上触发拉取。
+	client.refreshModelRoster(ctx)
 	return models, nil
 }
 

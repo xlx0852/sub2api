@@ -150,6 +150,24 @@ func (s *GatewayService) forwardClaudeRewrite(ex *pipeline.Exchange) error {
 		}
 	}
 
+	// Mirasim relay：thinking 形态（自适应型 / 预算型）与 effort 阶梯归一。
+	//
+	// 关键约束（改动前请先读）：这里必须用**映射之后**的模型名（st.reqModel）——
+	// relay 按上游模型决定哪套阶梯；形态只用本地缓存的 roster 标记（冷缓存 = 默认
+	// 自适应型），且本步骤不得发起任何上游请求。
+	if isMirasimRelayAccount(account) {
+		shape := s.mirasimRelayModelThinkingShape(account, st.reqModel)
+		rewritten, errThinking := normalizeMirasimRelayThinkingBody(st.body, st.reqModel, shape)
+		if errThinking != nil {
+			return errThinking
+		}
+		if !bytes.Equal(rewritten, st.body) {
+			if err := st.replaceBody(rewritten); err != nil {
+				return err
+			}
+		}
+	}
+
 	ex.UpstreamModel = st.mappedModel
 	ex.Inbound = st.body
 	return nil
