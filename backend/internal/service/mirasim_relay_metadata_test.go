@@ -95,7 +95,7 @@ func TestMirasimRelayInjectionSealsMetadataAndKeepsWireClean(t *testing.T) {
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
 		"https://api.anthropic.com/v1/messages", strings.NewReader(string(body)))
 	require.NoError(t, err)
-	require.NoError(t, applyMirasimRelayAuthToRequest(context.Background(), upstream, nil, account, req, body))
+	require.NoError(t, applyMirasimRelayAuthToRequest(context.Background(), upstream, nil, account, req, body, mirasimRelayClients))
 
 	// 明文线上只允许这三个头；元数据必须全部在密封块里。
 	require.NotEmpty(t, req.Header.Get(mirasimHeaderEnc))

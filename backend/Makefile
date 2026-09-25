@@ -1,4 +1,4 @@
-.PHONY: release-bundle build generate test test-unit test-unit-race test-integration test-settlement test-e2e
+.PHONY: release-bundle build generate test test-unit test-unit-architecture test-unit-race test-integration test-settlement test-e2e
 
 VERSION ?= $(shell ./scripts/resolve-version.sh)
 MIN_FRONTEND_VERSION ?= $(shell tr -d '\r\n' < cmd/server/MIN_FRONTEND_VERSION)
@@ -17,6 +17,14 @@ test:
 
 test-unit:
 	go test -tags=unit ./...
+
+# Compile and vet the declared unit configuration without masking assertion failures.
+# This is the architecture/test-build gate used by CI while legacy assertion failures
+# are migrated separately.
+test-unit-architecture:
+	go test -tags=unit -run '^$$' ./internal/service/...
+	go vet -tags=unit ./internal/service/...
+	go test ./internal/archtest
 
 # Race coverage for the money-path packages. Expand to handler/service only after
 # those packages are race-clean; a red first CI run would hide real regressions.

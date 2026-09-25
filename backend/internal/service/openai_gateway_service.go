@@ -427,6 +427,7 @@ var ErrNoAvailableCompactAccounts = errors.New("no available OpenAI accounts sup
 
 // OpenAIGatewayService handles OpenAI API gateway operations
 type OpenAIGatewayService struct {
+	codexProbeWatch  codexTurnStateProbeWatch
 	accountRepo      AccountRepository
 	usageLogRepo     UsageLogRepository
 	usageBillingRepo UsageBillingRepository

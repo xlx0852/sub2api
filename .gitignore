@@ -99,8 +99,11 @@ release/
 backend/sub2api-api-*
 backend/artifact-api/release-worktree-*/
 artifact-api/sub2api
+artifact-api-*/
+artifact-api/
 sub2api-api-*.tar.gz
 sub2api-frontend-*.zip
+/package.json
 
 # 后端嵌入的前端构建产物
 # Keep a placeholder file so `//go:embed all:dist` always has a match in CI/lint,
@@ -161,6 +164,8 @@ output/
 __pycache__/
 tools/sicts-image-gen/target/
 tools/hakimi-restock-agent/.venv/
+tools/hakimi-restock-agent/.env
+tools/hakimi-restock-agent/config.yaml
 tools/hakimi-restock-agent/src/*.egg-info/
 tools/hakimi-restock-agent/config.yaml
 tools/hakimi-restock-agent/data/

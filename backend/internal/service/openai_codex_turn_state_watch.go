@@ -35,15 +35,15 @@ type codexTurnStateProbeWatch struct {
 	fired   bool
 }
 
-var openAICodexTurnStateProbeWatch = &codexTurnStateProbeWatch{lengths: map[int]struct{}{}}
-
 // observeCodexTurnStateProbeOutcome 记录一次探测结果。
 //
 // verdict 为空串表示**成功**（拿到可复用票），此时清零。
 // 返回 (是否需要告警, 当前连续次数, 观察到的原始票长排序列表)。
 // 同一段连续异常**只告警一次**，避免刷屏；异常类型变化或成功都会重置。
-func observeCodexTurnStateProbeOutcome(verdict string, rawLen int) (bool, int, []int) {
-	w := openAICodexTurnStateProbeWatch
+func (w *codexTurnStateProbeWatch) observe(verdict string, rawLen int) (bool, int, []int) {
+	if w == nil {
+		return false, 0, nil
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -79,9 +79,11 @@ func observeCodexTurnStateProbeOutcome(verdict string, rawLen int) (bool, int, [
 	return true, w.streak, lengths
 }
 
-// resetCodexTurnStateProbeWatch 仅供单测清理全局状态。
-func resetCodexTurnStateProbeWatch() {
-	w := openAICodexTurnStateProbeWatch
+// reset 只清理当前实例；生产代码通过 OpenAIGatewayService 持有 watcher。
+func (w *codexTurnStateProbeWatch) reset() {
+	if w == nil {
+		return
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.verdict, w.streak, w.fired = "", 0, false

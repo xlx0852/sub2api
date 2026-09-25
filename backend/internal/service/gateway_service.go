@@ -689,6 +689,7 @@ func (s *GatewayService) TempUnscheduleRetryableError(ctx context.Context, accou
 
 // GatewayService handles API gateway operations
 type GatewayService struct {
+	mirasimRegistry   *MirasimRelayRegistry
 	accountRepo       AccountRepository
 	groupRepo         GroupRepository
 	usageLogRepo      UsageLogRepository
@@ -761,11 +762,17 @@ func NewGatewayService(
 	balanceNotifyService *BalanceNotifyService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
 	ttftTracker *AccountTTFTTracker,
+	registries ...*MirasimRelayRegistry,
 ) *GatewayService {
 	userGroupRateTTL := resolveUserGroupRateCacheTTL(cfg)
 	modelsListTTL := resolveModelsListCacheTTL(cfg)
 
+	registry := NewMirasimRelayRegistry()
+	if len(registries) > 0 && registries[0] != nil {
+		registry = registries[0]
+	}
 	svc := &GatewayService{
+		mirasimRegistry:       registry,
 		accountRepo:           accountRepo,
 		ttftTracker:           ttftTracker,
 		groupRepo:             groupRepo,

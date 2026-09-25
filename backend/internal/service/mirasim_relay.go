@@ -943,7 +943,7 @@ func (s *GatewayService) mirasimRelayModelThinkingShape(account *Account, model 
 		return mirasimShapeUnknown
 	}
 	persistRefresh, persistDeviceKey := mirasimPersistCallbacks(cfg.AccountID, s.accountRepo)
-	client, err := mirasimRelayRuntimeAcquire(cfg, s.httpUpstream, persistRefresh, persistDeviceKey)
+	client, err := mirasimRelayRuntimeAcquire(cfg, s.httpUpstream, persistRefresh, persistDeviceKey, s.mirasimRegistry)
 	if err != nil {
 		return mirasimShapeUnknown
 	}
@@ -964,7 +964,14 @@ func (s *GatewayService) applyMirasimRelayAuth(ctx context.Context, account *Acc
 		upstream = s.httpUpstream
 		repo = s.accountRepo
 	}
-	return applyMirasimRelayAuthToRequest(ctx, upstream, repo, account, req, body)
+	return applyMirasimRelayAuthToRequest(ctx, upstream, repo, account, req, body, s.mirasimRegistry)
+}
+
+func firstMirasimRegistry(registries []*MirasimRelayRegistry) *MirasimRelayRegistry {
+	if len(registries) > 0 {
+		return registries[0]
+	}
+	return nil
 }
 
 // applyMirasimRelayAuthToRequest 把 mirasim 鉴权写入 req。
@@ -974,7 +981,7 @@ func (s *GatewayService) applyMirasimRelayAuth(ctx context.Context, account *Acc
 // 请求（含真实 api key 的 host/头）会被错误改写。宁可在两处重复判断，也不要让
 // "忘了判断"变成静默的跨上游串号。
 func applyMirasimRelayAuthToRequest(
-	ctx context.Context, upstream HTTPUpstream, repo AccountRepository, account *Account, req *http.Request, body []byte,
+	ctx context.Context, upstream HTTPUpstream, repo AccountRepository, account *Account, req *http.Request, body []byte, registries ...*MirasimRelayRegistry,
 ) error {
 	if !isMirasimRelayAccount(account) {
 		return nil
@@ -999,14 +1006,14 @@ func applyMirasimRelayAuthToRequest(
 	path := req.URL.Path
 
 	persistRefresh, persistDeviceKey := mirasimPersistCallbacks(cfg.AccountID, repo)
-	client, err := mirasimRelayRuntimeAcquire(cfg, upstream, persistRefresh, persistDeviceKey)
+	client, err := mirasimRelayRuntimeAcquire(cfg, upstream, persistRefresh, persistDeviceKey, firstMirasimRegistry(registries))
 	if err != nil {
 		return err
 	}
 	ticket, enc, err := client.routeAuthHeaders(ctx, req.Method, path, body)
 	if err != nil {
 		if mirasimIsAuthError(err) {
-			invalidateMirasimRelayClientTokens(cfg.AccountID)
+			invalidateMirasimRelayClientTokens(cfg.AccountID, firstMirasimRegistry(registries))
 		}
 		return fmt.Errorf("mirasim relay: 获取签名凭据失败: %w", err)
 	}
@@ -1045,14 +1052,14 @@ func (s *GatewayService) mirasimRelayTicketToken(ctx context.Context, account *A
 		return "", "", err
 	}
 	persistRefresh, persistDeviceKey := mirasimPersistCallbacks(cfg.AccountID, s.accountRepo)
-	client, err := mirasimRelayRuntimeAcquire(cfg, s.httpUpstream, persistRefresh, persistDeviceKey)
+	client, err := mirasimRelayRuntimeAcquire(cfg, s.httpUpstream, persistRefresh, persistDeviceKey, s.mirasimRegistry)
 	if err != nil {
 		return "", "", err
 	}
 	ticket, err := client.ticket(ctx)
 	if err != nil {
 		if mirasimIsAuthError(err) {
-			invalidateMirasimRelayClientTokens(cfg.AccountID)
+			invalidateMirasimRelayClientTokens(cfg.AccountID, s.mirasimRegistry)
 		}
 		return "", "", fmt.Errorf("mirasim relay: 获取 device ticket 失败: %w", err)
 	}

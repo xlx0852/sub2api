@@ -192,6 +192,7 @@ func ProvideAccountUsageService(
 }
 
 func ProvideAccountTestService(
+	mirasimRegistry *MirasimRelayRegistry,
 	accountRepo AccountRepository,
 	geminiTokenProvider *GeminiTokenProvider,
 	grokTokenProvider *GrokTokenProvider,
@@ -212,6 +213,7 @@ func ProvideAccountTestService(
 		httpUpstream,
 		cfg,
 		tlsFPProfileService,
+		mirasimRegistry,
 	)
 	service.agentIdentityWS = openAIGatewayService
 	service.codexIdentity = openAIGatewayService.codexIdentity
@@ -223,10 +225,11 @@ func ProvideAccountTestService(
 // 它只依赖账号仓库与上游 HTTP 客户端，因此同一实例可同时注入 AccountUsageService
 // （额度抽屉）与 AccountTestService（同步上游模型），共享一份按账号的 TTL 缓存。
 func ProvideMirasimMetadataService(
+	mirasimRegistry *MirasimRelayRegistry,
 	accountRepo AccountRepository,
 	httpUpstream HTTPUpstream,
 ) *MirasimMetadataService {
-	return NewMirasimMetadataService(accountRepo, httpUpstream)
+	return NewMirasimMetadataService(accountRepo, httpUpstream, mirasimRegistry)
 }
 
 func ProvideGrokQuotaService(
@@ -389,6 +392,7 @@ func ProvideSchedulerSnapshotService(
 
 // ProvideRateLimitService creates RateLimitService with optional dependencies.
 func ProvideRateLimitService(
+	mirasimRegistry *MirasimRelayRegistry,
 	accountRepo AccountRepository,
 	usageRepo UsageLogRepository,
 	cfg *config.Config,
@@ -400,7 +404,7 @@ func ProvideRateLimitService(
 	tokenCacheInvalidator TokenCacheInvalidator,
 	quotaWindowLedger *QuotaWindowLedger,
 ) *RateLimitService {
-	svc := NewRateLimitService(accountRepo, usageRepo, cfg, geminiQuotaService, tempUnschedCache)
+	svc := NewRateLimitService(accountRepo, usageRepo, cfg, geminiQuotaService, tempUnschedCache, mirasimRegistry)
 	svc.SetTimeoutCounterCache(timeoutCounterCache)
 	svc.SetOpenAI403CounterCache(openAI403CounterCache)
 	svc.SetSettingService(settingService)
@@ -689,6 +693,26 @@ func ProvideAPIKeyService(
 	return svc
 }
 
+// ProvideGatewayService supplies the shared Mirasim registry explicitly.
+func ProvideGatewayService(
+	mirasimRegistry *MirasimRelayRegistry,
+	accountRepo AccountRepository, groupRepo GroupRepository, usageLogRepo UsageLogRepository,
+	usageBillingRepo UsageBillingRepository, userRepo UserRepository, userSubRepo UserSubscriptionRepository,
+	userGroupRateRepo UserGroupRateRepository, cache GatewayCache, cfg *config.Config,
+	schedulerSnapshot *SchedulerSnapshotService, concurrencyService *ConcurrencyService,
+	billingService *BillingService, rateLimitService *RateLimitService, billingCacheService *BillingCacheService,
+	identityService *IdentityService, httpUpstream HTTPUpstream, deferredService *DeferredService,
+	digestStore *DigestSessionStore, settingService *SettingService,
+	tlsFPProfileService *TLSFingerprintProfileService, channelService *ChannelService,
+	resolver *ModelPricingResolver, balanceNotifyService *BalanceNotifyService,
+	userPlatformQuotaRepo UserPlatformQuotaRepository, ttftTracker *AccountTTFTTracker,
+) *GatewayService {
+	return NewGatewayService(accountRepo, groupRepo, usageLogRepo, usageBillingRepo, userRepo, userSubRepo,
+		userGroupRateRepo, cache, cfg, schedulerSnapshot, concurrencyService, billingService, rateLimitService,
+		billingCacheService, identityService, httpUpstream, deferredService, digestStore, settingService,
+		tlsFPProfileService, channelService, resolver, balanceNotifyService, userPlatformQuotaRepo, ttftTracker, mirasimRegistry)
+}
+
 // ProviderSet is the Wire provider set for all services
 var ProviderSet = wire.NewSet(
 	// Core services
@@ -707,7 +731,9 @@ var ProviderSet = wire.NewSet(
 	ProvideBillingCacheService,
 	NewAnnouncementService,
 	NewAdminService,
-	NewGatewayService,
+	NewMirasimRelayRegistry,
+	NewAccountTTFTTracker,
+	ProvideGatewayService,
 	NewOpenAIGatewayService,
 	NewUsageSettlementPostCommit,
 	NewUsageSettlementRecovery,

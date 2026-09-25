@@ -22,3 +22,6 @@ internal/domain -> internal/pkg/timezone
 internal/domain -> internal/pkg/tlsfingerprint
 internal/domain -> internal/pkg/usagestats
 internal/domain -> internal/pkg/xai
+# requesttiming's output snapshot currently uses the domain billing/usage timing DTO;
+# migrate the DTO to a transport-neutral model before removing this transition edge.
+internal/pkg/requesttiming -> internal/domain

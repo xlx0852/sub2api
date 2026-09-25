@@ -123,11 +123,12 @@ func mirasimTestAccount(t *testing.T, accountID int64, extras map[string]any) (*
 	return account, sealPriv
 }
 
+var mirasimRelayClients = NewMirasimRelayRegistry()
+
 func mirasimForgetAccount(accountID int64) {
-	rt := mirasimRelayClients
-	rt.mu.Lock()
-	delete(rt.entries, accountID)
-	rt.mu.Unlock()
+	mirasimRelayClients.mu.Lock()
+	delete(mirasimRelayClients.entries, accountID)
+	mirasimRelayClients.mu.Unlock()
 }
 
 // mirasimOpenSealedHeaders 用测试私钥解封 x-mirasim-enc，返回明文串与字段。
@@ -177,7 +178,7 @@ func TestMirasimRelayInjectionProducesVerifiableSealedHeaders(t *testing.T) {
 	req.Header.Set("x-api-key", "should-be-removed")
 	req.Header.Set("anthropic-version", "2023-06-01")
 
-	require.NoError(t, applyMirasimRelayAuthToRequest(context.Background(), upstream, nil, account, req, body))
+	require.NoError(t, applyMirasimRelayAuthToRequest(context.Background(), upstream, nil, account, req, body, mirasimRelayClients))
 
 	// 1) 目标主机被改写为 relay，且 query 被清掉（签名只覆盖 path）。
 	require.Equal(t, mirasimDefaultRelayURL+"/v1/messages", req.URL.String())
@@ -253,7 +254,7 @@ func TestMirasimRelayInjectionProducesVerifiableSealedHeaders(t *testing.T) {
 	req2, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
 		"https://api.anthropic.com/v1/messages?beta=true", strings.NewReader(string(body)))
 	require.NoError(t, err)
-	require.NoError(t, applyMirasimRelayAuthToRequest(context.Background(), upstream, nil, account, req2, body))
+	require.NoError(t, applyMirasimRelayAuthToRequest(context.Background(), upstream, nil, account, req2, body, mirasimRelayClients))
 	require.Len(t, upstream.snapshot(), 2, "ticket 缓存未生效，重复请求了 token 链")
 	require.Equal(t, "Bearer test-device-ticket", req2.Header.Get("Authorization"))
 	// 每次注入的 ts/nonce/密文都必须不同，否则上游可重放。
@@ -267,7 +268,7 @@ func TestMirasimRelayTicketTokenKeepsAPIKeyType(t *testing.T) {
 
 	account, _ := mirasimTestAccount(t, accountID, nil)
 	upstream := &mirasimRelayUpstreamFake{}
-	svc := &GatewayService{httpUpstream: upstream}
+	svc := &GatewayService{httpUpstream: upstream, mirasimRegistry: mirasimRelayClients}
 
 	token, tokenType, err := svc.mirasimRelayTicketToken(context.Background(), account)
 	require.NoError(t, err)
@@ -281,7 +282,7 @@ func TestMirasimRelayTicketTokenKeepsAPIKeyType(t *testing.T) {
 	body := []byte(`{"model":"claude-sonnet-4-5"}`)
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://api.anthropic.com/v1/messages", strings.NewReader(string(body)))
 	require.NoError(t, err)
-	require.NoError(t, applyMirasimRelayAuthToRequest(context.Background(), upstream, nil, account, req, body))
+	require.NoError(t, applyMirasimRelayAuthToRequest(context.Background(), upstream, nil, account, req, body, mirasimRelayClients))
 	require.Len(t, upstream.snapshot(), 2)
 	require.Equal(t, "Bearer test-device-ticket", req.Header.Get("Authorization"))
 }
@@ -311,7 +312,7 @@ func TestMirasimRelayInjectionSkipsOtherAccounts(t *testing.T) {
 			req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "https://api.anthropic.com/v1/messages", strings.NewReader(string(body)))
 			require.NoError(t, err)
 			req.Header.Set("x-api-key", "sk-test")
-			require.NoError(t, applyMirasimRelayAuthToRequest(context.Background(), upstream, nil, tc.account, req, body))
+			require.NoError(t, applyMirasimRelayAuthToRequest(context.Background(), upstream, nil, tc.account, req, body, mirasimRelayClients))
 			// 完全未触碰请求：URL、host、鉴权头保持原样。
 			require.Equal(t, "https://api.anthropic.com/v1/messages", req.URL.String())
 			require.Equal(t, "sk-test", req.Header.Get("x-api-key"))
@@ -357,7 +358,7 @@ func TestMirasimRelayRotationPersistsNewRefreshToken(t *testing.T) {
 	require.NoError(t, err)
 	client, err := mirasimRelayRuntimeAcquire(cfg, upstream,
 		func(tok string) { ch <- persisted{mirasimCredentialRefreshToken, tok} },
-		func(pem string) { ch <- persisted{mirasimCredentialDeviceKey, pem} })
+		func(pem string) { ch <- persisted{mirasimCredentialDeviceKey, pem} }, mirasimRelayClients)
 	require.NoError(t, err)
 	_, err = client.ticket(context.Background())
 	require.NoError(t, err)
@@ -395,7 +396,7 @@ func TestMirasimRelayConcurrentInjectionUsesSingleTokenChain(t *testing.T) {
 				errs[idx] = err
 				return
 			}
-			if err := applyMirasimRelayAuthToRequest(context.Background(), upstream, nil, account, req, body); err != nil {
+			if err := applyMirasimRelayAuthToRequest(context.Background(), upstream, nil, account, req, body, mirasimRelayClients); err != nil {
 				errs[idx] = err
 				return
 			}

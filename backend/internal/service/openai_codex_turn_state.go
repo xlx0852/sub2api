@@ -785,7 +785,7 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnStateWithClient(ctx context.Co
 				strings.Join(codexTurnStateProbeCodexLikeHeaderNames(result.headers), ","))
 			// 连续同种异常 → 升级为 ERROR。上游改票的形态时，这一条能在**一两分钟内**把
 			// 「我们静默拒票」和「上游不发」分开（后者此前会一起沉寂 19 小时）。
-			if fire, streak, lengths := observeCodexTurnStateProbeOutcome(verdict, len(probeTicket)); fire {
+			if fire, streak, lengths := s.codexProbeWatch.observe(verdict, len(probeTicket)); fire {
 				logger.L().With(
 					zap.String("component", "service.openai_codex_turn_state"),
 					zap.String("verdict", verdict),
@@ -801,7 +801,7 @@ func (s *OpenAIGatewayService) seedOpenAICodexTurnStateWithClient(ctx context.Co
 		}
 		s.captureOpenAICodexTurnStateForPool(account, result.headers, pool, pool, true)
 		// 成功即清零连续异常计数（下一次漂移从 0 开始重新计数）。
-		observeCodexTurnStateProbeOutcome("", 0)
+		s.codexProbeWatch.observe("", 0)
 		// len 记录票的**形态**。形态与落池并不一一对应（实测 292↔astra、312↔luna/terra、
 		// 332 也出现过在 luna），所以两个都记：requested_model 看请求、pool 看真实落点、
 		// len 看形态。三者放在同一行才能回答「请求 astra 到底有没有拿到 astra」。

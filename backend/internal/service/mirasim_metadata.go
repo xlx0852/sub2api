@@ -115,8 +115,9 @@ type mirasimLimitsCacheEntry struct {
 
 // MirasimMetadataService 是只读元数据客户端 + 进程内缓存。
 type MirasimMetadataService struct {
-	accountRepo  AccountRepository
-	httpUpstream HTTPUpstream
+	mirasimRegistry *MirasimRelayRegistry
+	accountRepo     AccountRepository
+	httpUpstream    HTTPUpstream
 
 	// now 可被测试替换；生产恒为 time.Now。
 	now func() time.Time
@@ -127,11 +128,16 @@ type MirasimMetadataService struct {
 }
 
 // NewMirasimMetadataService 创建只读元数据服务。
-func NewMirasimMetadataService(accountRepo AccountRepository, httpUpstream HTTPUpstream) *MirasimMetadataService {
+func NewMirasimMetadataService(accountRepo AccountRepository, httpUpstream HTTPUpstream, registries ...*MirasimRelayRegistry) *MirasimMetadataService {
+	registry := NewMirasimRelayRegistry()
+	if len(registries) > 0 && registries[0] != nil {
+		registry = registries[0]
+	}
 	return &MirasimMetadataService{
-		accountRepo:  accountRepo,
-		httpUpstream: httpUpstream,
-		now:          time.Now,
+		mirasimRegistry: registry,
+		accountRepo:     accountRepo,
+		httpUpstream:    httpUpstream,
+		now:             time.Now,
 	}
 }
 
@@ -230,7 +236,7 @@ func (s *MirasimMetadataService) client(cfg mirasimRelayConfig) (*mirasimRelayCl
 		return nil, &MirasimMetadataConfigError{Err: errors.New("mirasim metadata: upstream HTTP 客户端未初始化")}
 	}
 	persistRefresh, persistDeviceKey := mirasimPersistCallbacks(cfg.AccountID, s.accountRepo)
-	return mirasimRelayRuntimeAcquire(cfg, s.httpUpstream, persistRefresh, persistDeviceKey)
+	return mirasimRelayRuntimeAcquire(cfg, s.httpUpstream, persistRefresh, persistDeviceKey, s.mirasimRegistry)
 }
 
 func (s *MirasimMetadataService) cachedAvailableModels(cfg mirasimRelayConfig) ([]string, bool) {

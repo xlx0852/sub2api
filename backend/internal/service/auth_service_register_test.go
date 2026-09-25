@@ -380,7 +380,7 @@ func TestAuthService_Register_EmailVerifyEnabledButServiceNotConfigured(t *testi
 	}, nil, nil)
 
 	// 应返回服务不可用错误，而不是允许绕过验证
-	_, _, err := service.RegisterWithVerification(context.Background(), "user@test.com", "password", "any-code", "", "", "")
+	_, _, err := service.RegisterWithVerification(context.Background(), "user@test.com", "password", "any-code", "", "")
 	require.ErrorIs(t, err, ErrServiceUnavailable)
 }
 
@@ -392,7 +392,7 @@ func TestAuthService_Register_EmailVerifyRequired(t *testing.T) {
 		SettingKeyEmailVerifyEnabled:  "true",
 	}, cache, nil)
 
-	_, _, err := service.RegisterWithVerification(context.Background(), "user@test.com", "password", "", "", "", "")
+	_, _, err := service.RegisterWithVerification(context.Background(), "user@test.com", "password", "", "", "")
 	require.ErrorIs(t, err, ErrEmailVerifyRequired)
 }
 
@@ -406,7 +406,7 @@ func TestAuthService_Register_EmailVerifyInvalid(t *testing.T) {
 		SettingKeyEmailVerifyEnabled:  "true",
 	}, cache, nil)
 
-	_, _, err := service.RegisterWithVerification(context.Background(), "user@test.com", "password", "wrong", "", "", "")
+	_, _, err := service.RegisterWithVerification(context.Background(), "user@test.com", "password", "wrong", "", "")
 	require.ErrorIs(t, err, ErrInvalidVerifyCode)
 	require.ErrorContains(t, err, "verify code")
 }
@@ -542,7 +542,7 @@ func TestAuthService_Register_InvitationEnabledAllowsAffiliateCodeFromLink(t *te
 	affiliateRepo.summaries[101] = &AffiliateSummary{UserID: 101, AffCode: "NEW101"}
 	service.affiliateService = NewAffiliateService(affiliateRepo, service.settingService, nil, nil)
 
-	_, user, err := service.RegisterWithVerification(context.Background(), "invitee@test.com", "password", "", "", "", "AFF1")
+	_, user, err := service.RegisterWithVerification(context.Background(), "invitee@test.com", "password", "", "", "AFF1")
 	require.NoError(t, err)
 	require.NotNil(t, user)
 	require.Equal(t, int64(101), user.ID)
@@ -563,7 +563,7 @@ func TestAuthService_Register_InvitationFieldAffiliateCodeBindsInviter(t *testin
 	affiliateRepo.summaries[102] = &AffiliateSummary{UserID: 102, AffCode: "NEW102"}
 	service.affiliateService = NewAffiliateService(affiliateRepo, service.settingService, nil, nil)
 
-	_, user, err := service.RegisterWithVerification(context.Background(), "invitee2@test.com", "password", "", "", "aff2", "")
+	_, user, err := service.RegisterWithVerification(context.Background(), "invitee2@test.com", "password", "", "", "aff2")
 	require.NoError(t, err)
 	require.NotNil(t, user)
 	require.Equal(t, int64(102), user.ID)
@@ -584,7 +584,7 @@ func TestAuthService_Register_RedeemInvitationStillMarksUsed(t *testing.T) {
 	}
 	service.redeemRepo = redeemRepo
 
-	_, user, err := service.RegisterWithVerification(context.Background(), "invitee3@test.com", "password", "", "", "INVITE1", "")
+	_, user, err := service.RegisterWithVerification(context.Background(), "invitee3@test.com", "password", "", "", "INVITE1")
 	require.NoError(t, err)
 	require.NotNil(t, user)
 	require.Equal(t, []redeemUseCall{{id: 77, userID: 103}}, redeemRepo.uses)
@@ -876,7 +876,7 @@ func newAuthServiceWithDingTalkCfg(settings map[string]string, dtCfg config.Ding
 		DingTalk: dtCfg,
 	}
 	settingService := NewSettingService(&settingRepoStub{values: settings}, cfg)
-	return NewAuthService(nil, nil, nil, nil, cfg, settingService, nil, nil, nil, nil, nil, nil, nil)
+	return NewAuthService(nil, nil, nil, nil, cfg, settingService, nil, nil, nil, nil, nil, nil)
 }
 
 // minDingTalkURLs 返回一个包含必填字段的基础 DingTalkConnectConfig（不设 Enabled/BypassRegistration/Policy）。

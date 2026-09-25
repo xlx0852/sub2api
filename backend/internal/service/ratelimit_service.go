@@ -20,6 +20,7 @@ import (
 
 // RateLimitService 处理限流和过载状态管理
 type RateLimitService struct {
+	mirasimRegistry       *MirasimRelayRegistry
 	accountRepo           AccountRepository
 	usageRepo             UsageLogRepository
 	cfg                   *config.Config
@@ -89,8 +90,13 @@ const (
 )
 
 // NewRateLimitService 创建RateLimitService实例
-func NewRateLimitService(accountRepo AccountRepository, usageRepo UsageLogRepository, cfg *config.Config, geminiQuotaService *GeminiQuotaService, tempUnschedCache TempUnschedCache) *RateLimitService {
+func NewRateLimitService(accountRepo AccountRepository, usageRepo UsageLogRepository, cfg *config.Config, geminiQuotaService *GeminiQuotaService, tempUnschedCache TempUnschedCache, registries ...*MirasimRelayRegistry) *RateLimitService {
+	registry := NewMirasimRelayRegistry()
+	if len(registries) > 0 && registries[0] != nil {
+		registry = registries[0]
+	}
 	return &RateLimitService{
+		mirasimRegistry:    registry,
 		accountRepo:        accountRepo,
 		usageRepo:          usageRepo,
 		cfg:                cfg,
@@ -314,7 +320,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 		// 恢复。走临时不可调度（保留 status=active），绝不能落到下面的非 OAuth 分支
 		// 被 handleAuthError 永久禁用。
 		if isMirasimRelayAccount(authAccount) {
-			invalidateMirasimRelayClientTokens(authAccount.ID)
+			invalidateMirasimRelayClientTokens(authAccount.ID, s.mirasimRegistry)
 			msg := "Authentication failed (401): mirasim relay credentials rejected"
 			if upstreamMsg != "" {
 				msg = "Mirasim relay 401: " + upstreamMsg
@@ -860,7 +866,7 @@ func (s *RateLimitService) handle403(ctx context.Context, account *Account, upst
 	// Mirasim relay：403 多为 relay 侧 Cloudflare/风控或设备身份被拒，与账号凭据
 	// 本身无关。永久禁用会误杀一个只需重建 ticket 的账号，因此只临时不可调度。
 	if isMirasimRelayAccount(account) {
-		invalidateMirasimRelayClientTokens(account.ID)
+		invalidateMirasimRelayClientTokens(account.ID, s.mirasimRegistry)
 		msg := buildForbiddenErrorMessage(
 			"Mirasim relay 403:",
 			upstreamMsg,

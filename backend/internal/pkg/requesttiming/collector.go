@@ -19,6 +19,14 @@ import (
 
 type collectorContextKey struct{}
 
+type timingSegment struct {
+	key     string
+	lane    string
+	start   int
+	end     int
+	attempt int
+}
+
 // Collector 是一个请求级时间线。
 type Collector struct {
 	mu    sync.Mutex
@@ -62,7 +70,7 @@ type Collector struct {
 	streamDoneSet        bool
 
 	outcome  string
-	segments []domain.TimingSegment
+	segments []timingSegment
 
 	attemptStarts    map[int]time.Time
 	lastAttemptStart time.Time
@@ -128,14 +136,14 @@ func (c *Collector) AddSegment(key, lane string, start, end time.Time) {
 	if c == nil || key == "" || end.Before(start) {
 		return
 	}
-	seg := domain.TimingSegment{
-		Key:   key,
-		Lane:  lane,
-		Start: ms(start.Sub(c.start)),
-		End:   ms(end.Sub(c.start)),
+	seg := timingSegment{
+		key:   key,
+		lane:  lane,
+		start: ms(start.Sub(c.start)),
+		end:   ms(end.Sub(c.start)),
 	}
-	if seg.End < seg.Start {
-		seg.End = seg.Start
+	if seg.end < seg.start {
+		seg.end = seg.start
 	}
 	c.mu.Lock()
 	c.segments = append(c.segments, seg)
@@ -150,7 +158,7 @@ func (c *Collector) AddAttemptSegment(key string, attempt int, start, end time.T
 	}
 	c.mu.Lock()
 	if n := len(c.segments); n > 0 {
-		c.segments[n-1].Attempt = attempt
+		c.segments[n-1].attempt = attempt
 	}
 	c.mu.Unlock()
 }
@@ -460,7 +468,9 @@ func (c *Collector) Snapshot(now time.Time) *domain.FirstOutputStages {
 			domain.TimingSegment{Key: "body_receive", Lane: "client", Start: waitEnd, End: ms(c.bodyLastReadAt.Sub(c.start))},
 		)
 	}
-	segments = append(segments, c.segments...)
+	for _, seg := range c.segments {
+		segments = append(segments, domain.TimingSegment{Key: seg.key, Lane: seg.lane, Start: seg.start, End: seg.end, Attempt: seg.attempt})
+	}
 	if len(segments) > 0 {
 		out.Segments = segments
 	}

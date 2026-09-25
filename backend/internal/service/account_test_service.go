@@ -64,6 +64,7 @@ func isOpenAIImageModel(model string) bool {
 
 // AccountTestService handles account testing operations
 type AccountTestService struct {
+	mirasimRegistry           *MirasimRelayRegistry
 	accountRepo               AccountRepository
 	geminiTokenProvider       *GeminiTokenProvider
 	grokTokenProvider         *GrokTokenProvider
@@ -88,8 +89,14 @@ func NewAccountTestService(
 	httpUpstream HTTPUpstream,
 	cfg *config.Config,
 	tlsFPProfileService *TLSFingerprintProfileService,
+	registries ...*MirasimRelayRegistry,
 ) *AccountTestService {
+	registry := NewMirasimRelayRegistry()
+	if len(registries) > 0 && registries[0] != nil {
+		registry = registries[0]
+	}
 	return &AccountTestService{
+		mirasimRegistry:           registry,
 		accountRepo:               accountRepo,
 		geminiTokenProvider:       geminiTokenProvider,
 		grokTokenProvider:         grokTokenProvider,
@@ -454,7 +461,7 @@ func (s *AccountTestService) testClaudeAccountConnection(c *gin.Context, account
 	// Mirasim relay：换成 ticket + 签名密封头（与网关路径同一注入函数，
 	// 保证测试请求与真实转发完全同构）。
 	if isMirasimRelay {
-		if err := applyMirasimRelayAuthToRequest(ctx, s.httpUpstream, s.accountRepo, account, req, payloadBytes); err != nil {
+		if err := applyMirasimRelayAuthToRequest(ctx, s.httpUpstream, s.accountRepo, account, req, payloadBytes, s.mirasimRegistry); err != nil {
 			return s.sendErrorAndEnd(c, fmt.Sprintf("Request failed: %s", err.Error()))
 		}
 	}

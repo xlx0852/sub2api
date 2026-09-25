@@ -27,15 +27,36 @@ type mirasimRelayEntry struct {
 	client      *mirasimRelayClient
 }
 
-type mirasimRelayRuntime struct {
+type MirasimRelayRegistry struct {
 	mu      sync.Mutex
 	entries map[int64]*mirasimRelayEntry
 }
 
-var mirasimRelayClients = &mirasimRelayRuntime{}
+// NewMirasimRelayRegistry creates the account-scoped relay client registry.
+// The application must share one instance across gateway, metadata and rate-limit services.
+func NewMirasimRelayRegistry() *MirasimRelayRegistry {
+	return &MirasimRelayRegistry{}
+}
 
 // mirasimRelayRuntimeAcquire 取（或构建）账号对应的 client。
 func mirasimRelayRuntimeAcquire(
+	cfg mirasimRelayConfig,
+	upstream HTTPUpstream,
+	persistRefresh func(newToken string),
+	persistDeviceKey func(pem string),
+	registries ...*MirasimRelayRegistry,
+) (*mirasimRelayClient, error) {
+	var registry *MirasimRelayRegistry
+	if len(registries) > 0 {
+		registry = registries[0]
+	}
+	if registry == nil {
+		registry = NewMirasimRelayRegistry()
+	}
+	return registry.acquire(cfg, upstream, persistRefresh, persistDeviceKey)
+}
+
+func (rt *MirasimRelayRegistry) acquire(
 	cfg mirasimRelayConfig,
 	upstream HTTPUpstream,
 	persistRefresh func(newToken string),
@@ -44,7 +65,6 @@ func mirasimRelayRuntimeAcquire(
 	fingerprint := cfg.fingerprint()
 	now := time.Now()
 
-	rt := mirasimRelayClients
 	rt.mu.Lock()
 	if rt.entries == nil {
 		rt.entries = make(map[int64]*mirasimRelayEntry)
@@ -98,8 +118,14 @@ func mirasimRelayRuntimeAcquire(
 // 更新的 refresh token（轮换落盘是异步的），丢弃条目会让下一次请求退回旧 token，
 // 触发 401 → 再丢弃的死循环。凭据本身变化时由 acquire 的 fingerprint/baseToken
 // 比对负责重建，不需要在这里删。
-func invalidateMirasimRelayClientTokens(accountID int64) {
-	rt := mirasimRelayClients
+func invalidateMirasimRelayClientTokens(accountID int64, registries ...*MirasimRelayRegistry) {
+	if len(registries) == 0 || registries[0] == nil {
+		return
+	}
+	registries[0].invalidateTokens(accountID)
+}
+
+func (rt *MirasimRelayRegistry) invalidateTokens(accountID int64) {
 	rt.mu.Lock()
 	entry, ok := rt.entries[accountID]
 	rt.mu.Unlock()
@@ -110,7 +136,7 @@ func invalidateMirasimRelayClientTokens(accountID int64) {
 }
 
 // pruneLocked 防止已删除账号的条目长期驻留。
-func (rt *mirasimRelayRuntime) pruneLocked(now time.Time) {
+func (rt *MirasimRelayRegistry) pruneLocked(now time.Time) {
 	if len(rt.entries) <= mirasimRelayEntrySoftLimit {
 		return
 	}
