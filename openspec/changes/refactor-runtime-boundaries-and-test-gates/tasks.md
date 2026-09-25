@@ -39,6 +39,6 @@
 
 - [x] 6.1 更新 `.gitignore`，覆盖 artifact、tar/zip、`.env`、`.venv`、本地 dist 与临时文件
 - [x] 6.2 清理当前未跟踪构建产物与敏感/临时目录（保留必要源代码）
-- [ ] 6.3 运行后端构建、unit/vet/archtest、受影响协议/计费/调度测试
+- [x] 6.3 运行后端构建、unit/vet/archtest、受影响协议/计费/调度测试
 - [ ] 6.4 运行前端 typecheck/Vitest；确认 routes.golden、OpenAPI 契约无未预期变化
-- [ ] 6.5 更新部署/回滚说明，确认无公开 API、计费、调度语义回归
+- [x] 6.5 更新部署/回滚说明，确认无公开 API、计费、调度语义回归
