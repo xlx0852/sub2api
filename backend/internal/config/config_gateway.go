@@ -92,6 +92,11 @@ type GatewayConfig struct {
 	// SchedulerTTFTMaxLoadDeltaPct: 参与延迟比较允许的负载差（百分点，默认 10）；
 	// 负载差超过该值的候选之间保持负载优先，避免延迟偏好把流量压到单一账号。
 	SchedulerTTFTMaxLoadDeltaPct float64 `mapstructure:"scheduler_ttft_max_load_delta_pct"`
+	// UpstreamGzipMinBytes: OpenAI 兼容 APIKey 账号出站请求体压缩阈值（字节，默认 1MiB）；
+	// 0 表示关闭压缩。
+	UpstreamGzipMinBytes int64 `mapstructure:"upstream_gzip_min_bytes"`
+	// UpstreamGzipHosts: 允许压缩请求体的上游 host 后缀白名单（实测支持 Content-Encoding: gzip 才可加入）。
+	UpstreamGzipHosts []string `mapstructure:"upstream_gzip_hosts"`
 	// ConnectionPoolIsolation: 上游连接池隔离策略（proxy/account/account_proxy）
 	ConnectionPoolIsolation string `mapstructure:"connection_pool_isolation"`
 	// ForceCodexCLI: 强制将 OpenAI `/v1/responses` 请求按 Codex CLI 处理。

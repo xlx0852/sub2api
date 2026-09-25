@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -75,12 +76,20 @@ func (u *httpUpstreamRecorder) Do(req *http.Request, proxyURL string, accountID 
 		// 所以对外暴露的 lastBody/bodies 是**解压后的载荷**，与既有断言口径一致。
 		// 需要校验压缩帧本身的用例请用 lastBodyRaw。
 		decoded := b
-		if strings.EqualFold(strings.TrimSpace(req.Header.Get("Content-Encoding")), "zstd") {
+		switch strings.ToLower(strings.TrimSpace(req.Header.Get("Content-Encoding"))) {
+		case "zstd":
 			if zr, err := zstd.NewReader(bytes.NewReader(b)); err == nil {
 				if plain, err := io.ReadAll(zr); err == nil {
 					decoded = plain
 				}
 				zr.Close()
+			}
+		case "gzip":
+			if gr, err := gzip.NewReader(bytes.NewReader(b)); err == nil {
+				if plain, err := io.ReadAll(gr); err == nil {
+					decoded = plain
+				}
+				_ = gr.Close()
 			}
 		}
 		u.lastBody = decoded

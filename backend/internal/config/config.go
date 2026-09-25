@@ -297,6 +297,8 @@ func setDefaults() {
 	viper.SetDefault("server.port", 8080)
 	viper.SetDefault("server.mode", "release")
 	viper.SetDefault("gateway.scheduler_ttft_preference", true)
+	viper.SetDefault("gateway.upstream_gzip_min_bytes", 1<<20)
+	viper.SetDefault("gateway.upstream_gzip_hosts", []string{"o10.top"})
 	viper.SetDefault("server.frontend_url", "")
 	viper.SetDefault("server.read_header_timeout", 30) // 30秒读取请求头
 	viper.SetDefault("server.idle_timeout", 120)       // 120秒空闲超时
@@ -1397,6 +1399,11 @@ func (c *Config) Validate() error {
 	if c.Gateway.SchedulerTTFTMaxLoadDeltaPct > 100 {
 		c.Gateway.SchedulerTTFTMaxLoadDeltaPct = 100
 	}
+	if c.Gateway.UpstreamGzipMinBytes < 0 {
+		c.Gateway.UpstreamGzipMinBytes = 0
+	}
+	// 出站压缩默认配置由 viper 默认值提供（1MiB / o10.top）；
+	// 显式设为 0 或清空白名单即为关闭，故此处只做负数归一。
 	if c.Gateway.OpenAIResponseHeaderTimeout < 0 {
 		return fmt.Errorf("gateway.openai_response_header_timeout must be non-negative")
 	}
