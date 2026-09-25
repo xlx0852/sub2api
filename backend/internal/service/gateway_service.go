@@ -689,16 +689,18 @@ func (s *GatewayService) TempUnscheduleRetryableError(ctx context.Context, accou
 
 // GatewayService handles API gateway operations
 type GatewayService struct {
-	accountRepo           AccountRepository
-	groupRepo             GroupRepository
-	usageLogRepo          UsageLogRepository
-	usageBillingRepo      UsageBillingRepository
-	userRepo              UserRepository
-	userSubRepo           UserSubscriptionRepository
-	userGroupRateRepo     UserGroupRateRepository
-	cache                 GatewayCache
-	digestStore           *DigestSessionStore
-	cfg                   *config.Config
+	accountRepo       AccountRepository
+	groupRepo         GroupRepository
+	usageLogRepo      UsageLogRepository
+	usageBillingRepo  UsageBillingRepository
+	userRepo          UserRepository
+	userSubRepo       UserSubscriptionRepository
+	userGroupRateRepo UserGroupRateRepository
+	cache             GatewayCache
+	digestStore       *DigestSessionStore
+	cfg               *config.Config
+	// ttftTracker 记录账号×模型的近期首字节中位数，供选号做延迟偏好（可为 nil）。
+	ttftTracker           *AccountTTFTTracker
 	schedulerSnapshot     *SchedulerSnapshotService
 	billingService        *BillingService
 	rateLimitService      *RateLimitService
@@ -758,12 +760,14 @@ func NewGatewayService(
 	resolver *ModelPricingResolver,
 	balanceNotifyService *BalanceNotifyService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
+	ttftTracker *AccountTTFTTracker,
 ) *GatewayService {
 	userGroupRateTTL := resolveUserGroupRateCacheTTL(cfg)
 	modelsListTTL := resolveModelsListCacheTTL(cfg)
 
 	svc := &GatewayService{
 		accountRepo:           accountRepo,
+		ttftTracker:           ttftTracker,
 		groupRepo:             groupRepo,
 		usageLogRepo:          usageLogRepo,
 		usageBillingRepo:      usageBillingRepo,

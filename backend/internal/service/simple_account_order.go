@@ -7,7 +7,7 @@ import (
 
 // simpleAccountOrder is the shared adapter for every provider. Unknown load is
 // explicitly unavailable, never interpreted as a measured empty account.
-func simpleAccountOrder(accounts []*Account, loads map[int64]*AccountLoadInfo) []*Account {
+func simpleAccountOrder(accounts []*Account, loads map[int64]*AccountLoadInfo, latency scheduling.LatencyPreference) []*Account {
 	snapshots := make([]scheduling.CandidateSnapshot, 0, len(accounts))
 	byID := make(map[int64]*Account, len(accounts))
 	for _, a := range accounts {
@@ -22,7 +22,7 @@ func simpleAccountOrder(accounts []*Account, loads map[int64]*AccountLoadInfo) [
 		byID[a.ID] = a
 	}
 	rng := scheduling.NewSelectionRNG(uint64(time.Now().UnixNano()))
-	ranked := scheduling.OrderByPriorityAndLoad(snapshots, &rng)
+	ranked := scheduling.OrderByPriorityLoadAndLatency(snapshots, &rng, latency)
 	result := make([]*Account, 0, len(ranked))
 	for _, c := range ranked {
 		result = append(result, byID[c.AccountID])

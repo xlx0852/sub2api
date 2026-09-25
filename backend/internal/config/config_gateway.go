@@ -82,6 +82,13 @@ type GatewayConfig struct {
 	ProxyProbeResponseReadMaxBytes int64 `mapstructure:"proxy_probe_response_read_max_bytes"`
 	// Gemini 上游响应头调试日志开关（默认关闭，避免高频日志开销）
 	GeminiDebugResponseHeaders bool `mapstructure:"gemini_debug_response_headers"`
+	// SchedulerTTFTPreference: 选号时在同优先级/同负载并列组内优先选择近期首字节更短的账号。
+	// 纯观测数据驱动，默认开启；样本不足或优势不明显时保持原有顺序。
+	SchedulerTTFTPreference bool `mapstructure:"scheduler_ttft_preference"`
+	// SchedulerTTFTMinSamples: 参与延迟比较所需的最少样本数（默认 5）。
+	SchedulerTTFTMinSamples int `mapstructure:"scheduler_ttft_min_samples"`
+	// SchedulerTTFTMinAdvantagePct: 认定为「明显更快」所需的最小优势百分比（默认 30）。
+	SchedulerTTFTMinAdvantagePct int `mapstructure:"scheduler_ttft_min_advantage_pct"`
 	// ConnectionPoolIsolation: 上游连接池隔离策略（proxy/account/account_proxy）
 	ConnectionPoolIsolation string `mapstructure:"connection_pool_isolation"`
 	// ForceCodexCLI: 强制将 OpenAI `/v1/responses` 请求按 Codex CLI 处理。

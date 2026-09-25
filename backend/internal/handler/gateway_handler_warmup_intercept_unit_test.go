@@ -170,7 +170,7 @@ func newTestGatewayHandler(t *testing.T, group *service.Group, accounts []*servi
 		nil, // resolver
 		nil, // balanceNotifyService
 		nil, // userPlatformQuotaRepo
-	)
+	, nil)
 
 	// 标准模式会执行计费预检，测试使用固定充足余额的 repository。
 	cfg := &config.Config{RunMode: config.RunModeStandard}

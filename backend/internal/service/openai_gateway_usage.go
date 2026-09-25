@@ -117,6 +117,10 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	// 新用量统一余额扣费且不再写入 subscription_id。
 	var subscription *UserSubscription
 	ApplyOpenAIImageBillingResolution(result)
+	// 选号延迟偏好数据源：记录该账号在本次请求模型上的首字节耗时。
+	if s.ttftTracker != nil && result.FirstTokenMs != nil && account != nil {
+		s.ttftTracker.Observe(account.ID, firstNonEmpty(result.Model, input.OriginalModel), *result.FirstTokenMs)
+	}
 	normalizeOpenAIUsageForBilling(&result.Usage)
 
 	// OpenAI input_tokens 是总输入，包含缓存读取和缓存写入明细。

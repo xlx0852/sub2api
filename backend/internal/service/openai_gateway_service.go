@@ -427,13 +427,15 @@ var ErrNoAvailableCompactAccounts = errors.New("no available OpenAI accounts sup
 
 // OpenAIGatewayService handles OpenAI API gateway operations
 type OpenAIGatewayService struct {
-	accountRepo           AccountRepository
-	usageLogRepo          UsageLogRepository
-	usageBillingRepo      UsageBillingRepository
-	userRepo              UserRepository
-	userSubRepo           UserSubscriptionRepository
-	cache                 GatewayCache
-	cfg                   *config.Config
+	accountRepo      AccountRepository
+	usageLogRepo     UsageLogRepository
+	usageBillingRepo UsageBillingRepository
+	userRepo         UserRepository
+	userSubRepo      UserSubscriptionRepository
+	cache            GatewayCache
+	cfg              *config.Config
+	// ttftTracker 记录账号×模型的近期首字节中位数，供选号做延迟偏好（可为 nil）。
+	ttftTracker           *AccountTTFTTracker
 	codexDetector         CodexClientRestrictionDetector
 	schedulerSnapshot     *SchedulerSnapshotService
 	concurrencyService    *ConcurrencyService
@@ -542,9 +544,11 @@ func NewOpenAIGatewayService(
 	balanceNotifyService *BalanceNotifyService,
 	settingService *SettingService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
+	ttftTracker *AccountTTFTTracker,
 ) *OpenAIGatewayService {
 	svc := &OpenAIGatewayService{
 		accountRepo:         accountRepo,
+		ttftTracker:         ttftTracker,
 		usageLogRepo:        usageLogRepo,
 		usageBillingRepo:    usageBillingRepo,
 		userRepo:            userRepo,

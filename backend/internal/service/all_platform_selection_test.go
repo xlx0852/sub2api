@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/stretchr/testify/require"
@@ -53,7 +54,7 @@ func TestAllPlatformsSharedOrderingIgnoresOldScoringSignals(t *testing.T) {
 	a, b := &Account{ID: 1, Priority: 1}, &Account{ID: 2, Priority: 1, LastUsedAt: &now, Extra: map[string]any{"codex_7d_used_percent": 100.0}}
 	seen := map[int64]bool{}
 	for i := 0; i < 100; i++ {
-		order := simpleAccountOrder([]*Account{a, b}, map[int64]*AccountLoadInfo{1: {LoadRate: 0}, 2: {LoadRate: 0}})
+		order := simpleAccountOrder([]*Account{a, b}, map[int64]*AccountLoadInfo{1: {LoadRate: 0}, 2: {LoadRate: 0}}, scheduling.LatencyPreference{})
 		seen[order[0].ID] = true
 	}
 	require.Len(t, seen, 2, "neither unknown quota nor LRU can pin all requests")

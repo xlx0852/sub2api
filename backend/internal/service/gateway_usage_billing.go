@@ -670,6 +670,10 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	// 新用量统一余额扣费且不再写入 subscription_id。
 	var subscription *UserSubscription
 	ApplyForwardImageBillingResolution(result)
+	// 选号延迟偏好数据源：记录该账号在本次请求模型上的首字节耗时。
+	if s.ttftTracker != nil && result.FirstTokenMs != nil && account != nil {
+		s.ttftTracker.Observe(account.ID, firstNonEmpty(result.Model, input.OriginalModel), *result.FirstTokenMs)
+	}
 	normalizeClaudeUsageForBilling(&result.Usage)
 
 	// 强制缓存计费：将 input_tokens 转为 cache_read_input_tokens

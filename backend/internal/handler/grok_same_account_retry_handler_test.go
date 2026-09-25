@@ -201,7 +201,7 @@ func TestOpenAIGatewayHandlerChatCompletions_GrokRetryPinsAccountThenFailsOver(t
 	concurrencyService := service.NewConcurrencyService(cache)
 	gatewayService := service.NewOpenAIGatewayService(
 		accountRepo, nil, nil, billingEligibleUserRepository{}, nil, nil, nil, cfg, nil, concurrencyService, nil, nil, nil,
-		upstream, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		upstream, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 	billingService := newBillingEligibleCache(t, cfg)
 	handler := NewOpenAIGatewayHandler(

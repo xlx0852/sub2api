@@ -296,6 +296,7 @@ func setDefaults() {
 	viper.SetDefault("server.host", "0.0.0.0")
 	viper.SetDefault("server.port", 8080)
 	viper.SetDefault("server.mode", "release")
+	viper.SetDefault("gateway.scheduler_ttft_preference", true)
 	viper.SetDefault("server.frontend_url", "")
 	viper.SetDefault("server.read_header_timeout", 30) // 30秒读取请求头
 	viper.SetDefault("server.idle_timeout", 120)       // 120秒空闲超时
@@ -1379,6 +1380,16 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.ResponseHeaderTimeout < 0 {
 		return fmt.Errorf("gateway.response_header_timeout must be non-negative")
+	}
+	// 首字节延迟偏好：默认开启，样本阈值与优势阈值归一到保守区间。
+	if c.Gateway.SchedulerTTFTMinSamples <= 0 {
+		c.Gateway.SchedulerTTFTMinSamples = 5
+	}
+	if c.Gateway.SchedulerTTFTMinAdvantagePct <= 0 {
+		c.Gateway.SchedulerTTFTMinAdvantagePct = 30
+	}
+	if c.Gateway.SchedulerTTFTMinAdvantagePct > 90 {
+		c.Gateway.SchedulerTTFTMinAdvantagePct = 90
 	}
 	if c.Gateway.OpenAIResponseHeaderTimeout < 0 {
 		return fmt.Errorf("gateway.openai_response_header_timeout must be non-negative")

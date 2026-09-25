@@ -104,7 +104,7 @@ func (s *defaultOpenAIAccountScheduler) buildSimpleLoadPlan(req OpenAIAccountSch
 		byID[a.ID] = openAIAccountCandidate{account: a, priority: a.Priority, loadInfo: loads[a.ID]}
 	}
 	rng := scheduling.NewSelectionRNG(seed)
-	ordered := scheduling.OrderByPriorityAndLoad(snapshots, &rng)
+	ordered := scheduling.OrderByPriorityLoadAndLatency(snapshots, &rng, s.service.ttftLatencyPreference(req.RequestedModel))
 	candidates := make([]openAIAccountCandidate, 0, len(ordered))
 	for _, c := range ordered {
 		candidates = append(candidates, byID[c.AccountID])

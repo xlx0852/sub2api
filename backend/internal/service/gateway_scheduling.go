@@ -151,7 +151,7 @@ func (s *GatewayService) selectGatewayAccountOnce(ctx context.Context, groupID *
 		loadMap, _ = s.concurrencyService.GetAccountsLoadBatch(ctx, loads)
 	}
 	s.reportGatewayCandidateSnapshots(ctx, candidates, loadMap)
-	order := simpleAccountOrder(candidates, loadMap)
+	order := simpleAccountOrder(candidates, loadMap, s.ttftLatencyPreference(requestedModel))
 	// Explicit model routing remains a preferred pool, not a second scoring engine.
 	var routeIDs []int64
 	if group != nil && group.Platform == PlatformAnthropic && requestedModel != "" {
