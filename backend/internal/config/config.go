@@ -1391,6 +1391,12 @@ func (c *Config) Validate() error {
 	if c.Gateway.SchedulerTTFTMinAdvantagePct > 90 {
 		c.Gateway.SchedulerTTFTMinAdvantagePct = 90
 	}
+	if c.Gateway.SchedulerTTFTMaxLoadDeltaPct <= 0 {
+		c.Gateway.SchedulerTTFTMaxLoadDeltaPct = 10
+	}
+	if c.Gateway.SchedulerTTFTMaxLoadDeltaPct > 100 {
+		c.Gateway.SchedulerTTFTMaxLoadDeltaPct = 100
+	}
 	if c.Gateway.OpenAIResponseHeaderTimeout < 0 {
 		return fmt.Errorf("gateway.openai_response_header_timeout must be non-negative")
 	}

@@ -89,6 +89,9 @@ type GatewayConfig struct {
 	SchedulerTTFTMinSamples int `mapstructure:"scheduler_ttft_min_samples"`
 	// SchedulerTTFTMinAdvantagePct: 认定为「明显更快」所需的最小优势百分比（默认 30）。
 	SchedulerTTFTMinAdvantagePct int `mapstructure:"scheduler_ttft_min_advantage_pct"`
+	// SchedulerTTFTMaxLoadDeltaPct: 参与延迟比较允许的负载差（百分点，默认 10）；
+	// 负载差超过该值的候选之间保持负载优先，避免延迟偏好把流量压到单一账号。
+	SchedulerTTFTMaxLoadDeltaPct float64 `mapstructure:"scheduler_ttft_max_load_delta_pct"`
 	// ConnectionPoolIsolation: 上游连接池隔离策略（proxy/account/account_proxy）
 	ConnectionPoolIsolation string `mapstructure:"connection_pool_isolation"`
 	// ForceCodexCLI: 强制将 OpenAI `/v1/responses` 请求按 Codex CLI 处理。

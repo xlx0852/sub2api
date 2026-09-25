@@ -107,6 +107,7 @@ func (s *OpenAIGatewayService) ttftLatencyPreference(model string) scheduling.La
 		Provider:        s.ttftTracker,
 		MinSamples:      s.cfg.Gateway.SchedulerTTFTMinSamples,
 		MinAdvantagePct: s.cfg.Gateway.SchedulerTTFTMinAdvantagePct,
+		MaxLoadDeltaPct: s.cfg.Gateway.SchedulerTTFTMaxLoadDeltaPct,
 	}
 }
 
@@ -121,5 +122,6 @@ func (s *GatewayService) ttftLatencyPreference(model string) scheduling.LatencyP
 		Provider:        s.ttftTracker,
 		MinSamples:      s.cfg.Gateway.SchedulerTTFTMinSamples,
 		MinAdvantagePct: s.cfg.Gateway.SchedulerTTFTMinAdvantagePct,
+		MaxLoadDeltaPct: s.cfg.Gateway.SchedulerTTFTMaxLoadDeltaPct,
 	}
 }

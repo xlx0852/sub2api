@@ -17,6 +17,8 @@ type LatencyPreference struct {
 	Provider        LatencyProvider
 	MinSamples      int
 	MinAdvantagePct int
+	// MaxLoadDeltaPct 是参与延迟比较允许的负载差（百分点，默认 10）。
+	MaxLoadDeltaPct float64
 }
 
 // candidateLoad 与 OrderByPriorityAndLoad 的负载判断保持一致。
@@ -25,22 +27,11 @@ func candidateLoad(c CandidateSnapshot) (float64, bool) {
 	return value, c.Signals.LoadRate.Available && value >= 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
-// sameOrderingGroup 判断两个候选是否属于同一「优先级 + 负载」并列组。
-func sameOrderingGroup(a, b CandidateSnapshot) bool {
-	if a.Priority != b.Priority {
-		return false
-	}
-	av, ak := candidateLoad(a)
-	bv, bk := candidateLoad(b)
-	if ak != bk {
-		return false
-	}
-	return !ak || av == bv
-}
-
-// OrderByPriorityLoadAndLatency 沿用 OrderByPriorityAndLoad 的排序，再在并列组内
-// 按近期首字节中位数重排：仅当双方样本数都达到 MinSamples，且一方比另一方快
-// 至少 MinAdvantagePct% 时才交换，避免样本噪声与只顾快号的流量倾斜。
+// OrderByPriorityLoadAndLatency 沿用 OrderByPriorityAndLoad 的排序，再做一遍延迟优选：
+// 从队首开始，若同优先级、负载与当前候选相差不超过 MaxLoadDeltaPct 的候选中有账号
+// 的近期首字节明显更快（快至少 MinAdvantagePct%，且双方样本数达到 MinSamples），
+// 就把最快者提升到当前位置。该过程只做单趟「提升」，不跨越优先级，也不跨越负载容差，
+// 保证不因延迟把流量全部压到一个账号上。
 func OrderByPriorityLoadAndLatency(candidates []CandidateSnapshot, rng *SelectionRNG, pref LatencyPreference) []CandidateSnapshot {
 	ordered := OrderByPriorityAndLoad(candidates, rng)
 	if !pref.Enabled || pref.Provider == nil || len(ordered) < 2 {
@@ -54,26 +45,51 @@ func OrderByPriorityLoadAndLatency(candidates []CandidateSnapshot, rng *Selectio
 	if advantage <= 0 {
 		advantage = 30
 	}
-	samplesOK := func(id int64) (int, bool) {
+	loadDelta := pref.MaxLoadDeltaPct
+	if loadDelta <= 0 {
+		loadDelta = 10
+	}
+	median := func(id int64) (int, bool) {
 		value, samples, ok := pref.Provider.AccountTTFT(id, pref.Model)
 		if !ok || samples < minSamples || value <= 0 {
 			return 0, false
 		}
 		return value, true
 	}
-	fasterBy := func(a, b int) bool { return a*100 <= b*(100-advantage) }
-	sort.SliceStable(ordered, func(i, j int) bool {
-		a, b := ordered[i], ordered[j]
-		if !sameOrderingGroup(a, b) {
-			return false
+	for i := 0; i < len(ordered)-1; i++ {
+		current := ordered[i]
+		currentLoad, currentOK := candidateLoad(current)
+		currentMedian, currentHas := median(current.AccountID)
+		bestIdx := -1
+		bestMedian := currentMedian
+		for j := i + 1; j < len(ordered); j++ {
+			candidate := ordered[j]
+			if candidate.Priority != current.Priority {
+				break // 同优先级区段结束
+			}
+			candidateLoad, candidateOK := candidateLoad(candidate)
+			if currentOK && candidateOK && math.Abs(candidateLoad-currentLoad) > loadDelta {
+				continue // 负载差距超出容差，保持负载优先
+			}
+			candidateMedian, ok := median(candidate.AccountID)
+			if !ok {
+				continue
+			}
+			// 只有当候选明显更快时才考虑提升。
+			if currentHas && candidateMedian*100 > currentMedian*(100-advantage) {
+				continue
+			}
+			if bestIdx < 0 || candidateMedian < bestMedian {
+				bestIdx = j
+				bestMedian = candidateMedian
+			}
 		}
-		am, aok := samplesOK(a.AccountID)
-		bm, bok := samplesOK(b.AccountID)
-		if !aok || !bok {
-			return false
+		if bestIdx > i {
+			promoted := ordered[bestIdx]
+			copy(ordered[i+1:bestIdx+1], ordered[i:bestIdx])
+			ordered[i] = promoted
 		}
-		return fasterBy(am, bm)
-	})
+	}
 	return ordered
 }
 
