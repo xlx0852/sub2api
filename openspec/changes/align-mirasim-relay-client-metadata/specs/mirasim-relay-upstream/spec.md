@@ -81,3 +81,53 @@ The device-ticket response parser SHALL accept `expiresIn`/`expiresAt` (camelCas
 
 - **WHEN** the mint response contains a ticket without a positive expiry field
 - **THEN** the cached ticket SHALL use the default lifetime
+
+### Requirement: Access-token refresh window matches the official client
+
+The relay client SHALL attempt the access-token refresh inside a fifteen-minute lead window while still using the cached token, and SHALL refuse to start a request with a cached token only inside the final thirty seconds of its lifetime. A refresh failure inside the lead window MUST NOT fail the request.
+
+#### Scenario: Refresh fails well before expiry
+- **WHEN** the cached access token has ten minutes of lifetime left and `/auth/refresh` fails
+- **THEN** the request SHALL continue with the cached token instead of failing
+
+#### Scenario: Token is about to expire
+- **WHEN** the cached access token has five seconds of lifetime left
+- **THEN** the client SHALL refresh before using it and SHALL fail only if the refresh itself fails
+
+### Requirement: Device-ticket mint degrades and backs off
+
+When `/v1/device/session` answers `404` the client SHALL stop minting for one minute and sign with the access token instead; when it answers `501` the client SHALL do the same for fifteen minutes. Any other mint failure SHALL back off exponentially from one second up to thirty seconds, SHALL keep using an unexpired cached ticket during the backoff window, and MUST NOT turn a transient mint failure into a failed request while a usable credential remains.
+
+#### Scenario: Relay has no device-session route
+- **WHEN** the mint answers `404`
+- **THEN** the next relay requests within one minute SHALL be signed with the access token
+- **AND** no further mint SHALL be attempted inside that window
+
+#### Scenario: Mint fails while a ticket is still valid
+- **WHEN** the mint answers `500` and an unexpired ticket is cached
+- **THEN** the request SHALL proceed with the cached ticket
+- **AND** the next mint attempt SHALL be delayed by the doubled backoff
+
+#### Scenario: Mint fails with nothing usable left
+- **WHEN** the mint fails and the cached ticket is expired or absent
+- **THEN** the client SHALL return an error so the caller can fail over to another account
+
+### Requirement: Client identity version tracks the official client
+
+The default `x-mirasim-client` version SHALL match the official desktop client version this implementation targets, and an account-level override SHALL keep winning over the default.
+
+#### Scenario: Default client version
+- **WHEN** an account does not configure `mirasim_client_version`
+- **THEN** the signed and sent client version SHALL be the official client version this build targets
+
+### Requirement: Available-model catalog is narrowed like the official client
+
+The account-dimension catalog SHALL drop entries that name no servable model — reserved placeholders and namespaced IDs — and SHALL drop a dated twin such as `claude-haiku-4-5-20251001` when the plain ID it duplicates is served beside it, while keeping a dated ID that has no plain counterpart.
+
+#### Scenario: Catalog lists placeholders, namespaced and dated entries
+- **WHEN** the catalog contains `*`, `gpt-4o-mini`, `anthropic/claude-sonnet-5`, `claude-haiku-4-5` and `claude-haiku-4-5-20251001`
+- **THEN** the narrowed list SHALL contain only `claude-haiku-4-5`
+
+#### Scenario: Dated model without a plain twin
+- **WHEN** the catalog contains a dated ID whose undated twin is absent
+- **THEN** the dated ID SHALL be kept

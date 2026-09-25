@@ -17,11 +17,49 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 )
 
-// parseMirasimAvailableModels 解析 `GET /v1/models` 响应为可用模型 id 列表（去重 + 升序）。
+// mirasimDatedModelSuffix 匹配目录里带发布日期的“双生” id，如 claude-haiku-4-5-20251001。
+var mirasimDatedModelSuffix = regexp.MustCompile(`-20\d{6}$`)
+
+// mirasimReservedCatalogIDs 是目录会列、但不指向可服务模型的条目（对齐官方客户端收敛规则）。
+var mirasimReservedCatalogIDs = map[string]struct{}{
+	"*":                      {},
+	"gpt-4o-mini":            {},
+	"gpt-4o-mini-openrouter": {},
+}
+
+// mirasimNarrowAvailableModels 按官方客户端的方式收敛目录：
+//   - 保留保留位（reserved）不指向模型，丢弃；
+//   - 带命名空间的 id（含 "/"）不指向模型，丢弃；
+//   - 带日期后缀的 id，若不放日期的“原名”也在服务中，则丢弃（避免同一个模型发两次）；
+//     没有对应原名的日期 id 必须保留（那是拿到该模型的唯一方式）。
+func mirasimNarrowAvailableModels(ids []string) []string {
+	undated := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		if !strings.Contains(id, "/") && !mirasimDatedModelSuffix.MatchString(id) {
+			undated[id] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if _, reserved := mirasimReservedCatalogIDs[id]; reserved || strings.Contains(id, "/") {
+			continue
+		}
+		if mirasimDatedModelSuffix.MatchString(id) {
+			if _, twin := undated[mirasimDatedModelSuffix.ReplaceAllString(id, "")]; twin {
+				continue
+			}
+		}
+		out = append(out, id)
+	}
+	return out
+}
+
+// parseMirasimAvailableModels 解析 `GET /v1/models` 响应为可用模型 id 列表（收敛 + 去重 + 升序）。
 func parseMirasimAvailableModels(body []byte) ([]string, error) {
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(body, &root); err != nil {
@@ -62,6 +100,10 @@ func parseMirasimAvailableModels(body []byte) ([]string, error) {
 	}
 	if len(ids) == 0 {
 		return nil, errors.New("mirasim models: 响应中没有可用的模型 id")
+	}
+	ids = mirasimNarrowAvailableModels(ids)
+	if len(ids) == 0 {
+		return nil, errors.New("mirasim models: 收敛后没有可服务的模型 id")
 	}
 	sort.Strings(ids)
 	return ids, nil

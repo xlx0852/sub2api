@@ -42,7 +42,7 @@ const (
 	// 默认端点与协议参数（与参考实现 internal/mirasim/client.go 一致）。
 	mirasimDefaultRelayURL      = "https://relay.mirasim.ai"
 	mirasimDefaultAuthURL       = "https://auth.mirasim.ai"
-	mirasimDefaultClientVersion = "0.0.322"
+	mirasimDefaultClientVersion = "0.0.354"
 	mirasimDefaultSealPubkey    = "HlyNMMeGXryasYLJuYQ/9ksCD4AYVVy1zXKAtJdpJn4="
 
 	// 账号凭据键。
@@ -86,13 +86,31 @@ const (
 	mirasimModelsCacheTTL = 10 * time.Minute
 	mirasimLimitsCacheTTL = 30 * time.Second
 
-	mirasimAccessTokenEarlyRefresh = 120 * time.Second
-	mirasimTicketEarlyRefresh      = 60 * time.Second
+	// 刷新窗口对齐官方客户端（quarter hour lead + 30s stale）：
+	//   - 距过期 15 分钟内尝试提前刷新，但 token 仍可用；
+	//   - 只有距过期 30 秒以内才拒绝用它（refresh 失败时也只到这时才报错）。
+	// 旧值 120s 只给一次失败的 /auth/refresh 留两分钟容错，官方给的是十五分钟。
+	mirasimAccessTokenEarlyRefresh = 15 * time.Minute
+	mirasimAccessTokenStaleLead    = 30 * time.Second
+	mirasimTicketEarlyRefresh      = 2 * time.Minute
 	mirasimDefaultAccessTokenTTL   = 3600 // 秒；响应缺 expires_in 时的兜底
 	mirasimDefaultTicketTTL        = 900  // 秒；同上
 	mirasimHTTPTimeout             = 60 * time.Second
 	mirasimMaxResponseBytes        = 1 << 20
 	mirasimPersistTimeout          = 10 * time.Second
+
+	// device ticket 申领的降级/退避参数（对齐官方客户端）：
+	//   404 → 上游没有 device-session 路由，静默 1 分钟；
+	//   501 → 明确未实现，静默 15 分钟；
+	//   其它失败 → 1s 起指数退避，封顶 30s；
+	// 静默期内改用 access token 作为签名凭据（只换签名用的凭据，请求照发）。
+	mirasimTicketRouteAbsentQuiet   = time.Minute
+	mirasimTicketUnimplementedQuiet = 15 * time.Minute
+	mirasimTicketBackoffBase        = time.Second
+	mirasimTicketBackoffMax         = 30 * time.Second
+	// mirasimTicketStaleLead 是 ticket 临近过期的阈值：退避期间只有剩余寿命超过它
+	// 才继续用旧 ticket。
+	mirasimTicketStaleLead = 30 * time.Second
 )
 
 // isMirasimRelayAccount 是 mirasim relay 账号的唯一权威识别规则。
@@ -267,6 +285,12 @@ type mirasimRelayClient struct {
 	accessExp    time.Time
 	cachedTicket string
 	ticketExp    time.Time
+	// ticket 申领退避状态（官方客户端同语义）：
+	//   ticketUnmintableUntil: 上游 404/501 表明“此地无 device signing”时的静默期；
+	//   ticketRetryAt/Backoff: 其它失败（429/5xx/网络）的指数退避。
+	ticketUnmintableUntil time.Time
+	ticketRetryAt         time.Time
+	ticketBackoff         time.Duration
 }
 
 func newMirasimRelayClient(
@@ -358,8 +382,21 @@ func (c *mirasimRelayClient) invalidateTokens() {
 func (c *mirasimRelayClient) ticket(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.cachedTicket != "" && time.Now().Before(c.ticketExp.Add(-mirasimTicketEarlyRefresh)) {
+	now := time.Now()
+	if c.cachedTicket != "" && now.Before(c.ticketExp.Add(-mirasimTicketEarlyRefresh)) {
 		return c.cachedTicket, nil
+	}
+	// 静默期：上游已告知没有 device-session 路由（404/501）。改用 access token
+	// 作为签名凭据（只换签名里的 credential，请求形态不变），并不再问上游。
+	if now.Before(c.ticketUnmintableUntil) {
+		return c.accessTokenLocked(ctx)
+	}
+	// 退避窗口：不再申领；手上有未过期的 ticket 就继续用。
+	if now.Before(c.ticketRetryAt) {
+		if c.cachedTicket != "" && now.Before(c.ticketExp.Add(-mirasimTicketStaleLead)) {
+			return c.cachedTicket, nil
+		}
+		return "", fmt.Errorf("mirasim relay: device ticket 申领处于退避中（%s 后重试）", c.ticketRetryAt.Sub(now).Round(time.Millisecond))
 	}
 	accessTok, err := c.accessTokenLocked(ctx)
 	if err != nil {
@@ -391,7 +428,7 @@ func (c *mirasimRelayClient) ticket(ctx context.Context) (string, error) {
 	}
 	respBody, err := c.doJSON(req, "申领 device ticket")
 	if err != nil {
-		return "", err
+		return c.handleTicketMintFailureLocked(ctx, now, err)
 	}
 	var sr struct {
 		Ticket    string   `json:"ticket"`
@@ -424,7 +461,54 @@ func (c *mirasimRelayClient) ticket(ctx context.Context) (string, error) {
 	}
 	c.cachedTicket = sr.Ticket
 	c.ticketExp = time.Now().Add(time.Duration(expiresIn) * time.Second)
+	// 申领成功：清空退避与静默状态。
+	c.ticketRetryAt = time.Time{}
+	c.ticketBackoff = 0
 	return c.cachedTicket, nil
+}
+
+// handleTicketMintFailureLocked 把 ticket 申领失败分类为“降级”或“退避”：
+//
+//   - 404：上游没有 device-session 路由（可能还在部署）→ 静默 1 分钟；
+//   - 501：上游明确未实现 → 静默 15 分钟；
+//     以上两者都改用 access token 作为签名凭据，请求继续可用；
+//   - 其它（429/5xx/网络）：指数退避（1s 起，封顶 30s）；手上有未过期 ticket 就继续用，
+//     否则返回错误（调用方可 failover 到其它账号）。
+func (c *mirasimRelayClient) handleTicketMintFailureLocked(ctx context.Context, now time.Time, err error) (string, error) {
+	var httpErr *mirasimHTTPError
+	if errors.As(err, &httpErr) {
+		switch httpErr.StatusCode {
+		case http.StatusNotFound:
+			c.ticketUnmintableUntil = now.Add(mirasimTicketRouteAbsentQuiet)
+			c.ticketRetryAt = time.Time{}
+			c.ticketBackoff = 0
+			slog.Warn("mirasim_relay_ticket_route_absent", "account_id", c.accountID,
+				"status", httpErr.StatusCode, "quiet_s", int(mirasimTicketRouteAbsentQuiet.Seconds()))
+			return c.accessTokenLocked(ctx)
+		case http.StatusNotImplemented:
+			c.ticketUnmintableUntil = now.Add(mirasimTicketUnimplementedQuiet)
+			c.ticketRetryAt = time.Time{}
+			c.ticketBackoff = 0
+			slog.Warn("mirasim_relay_ticket_unimplemented", "account_id", c.accountID,
+				"status", httpErr.StatusCode, "quiet_s", int(mirasimTicketUnimplementedQuiet.Seconds()))
+			return c.accessTokenLocked(ctx)
+		}
+	}
+	if c.ticketBackoff <= 0 {
+		c.ticketBackoff = mirasimTicketBackoffBase
+	} else {
+		c.ticketBackoff *= 2
+	}
+	if c.ticketBackoff > mirasimTicketBackoffMax {
+		c.ticketBackoff = mirasimTicketBackoffMax
+	}
+	c.ticketRetryAt = now.Add(c.ticketBackoff)
+	slog.Warn("mirasim_relay_ticket_mint_backoff", "account_id", c.accountID,
+		"backoff_s", c.ticketBackoff.Seconds())
+	if c.cachedTicket != "" && now.Before(c.ticketExp.Add(-mirasimTicketStaleLead)) {
+		return c.cachedTicket, nil
+	}
+	return "", err
 }
 
 func (c *mirasimRelayClient) accessToken(ctx context.Context) (string, error) {
@@ -433,10 +517,37 @@ func (c *mirasimRelayClient) accessToken(ctx context.Context) (string, error) {
 	return c.accessTokenLocked(ctx)
 }
 
+// accessTokenLocked 返回可用的 access token，必要时刷新。
+//
+// 关键约束（改动前请先读）——两个阀值刻意不同（对齐官方客户端）：
+//   - 距过期 mirasimAccessTokenEarlyRefresh（15m）内：尝试提前刷新，以给一次慢/短暂失败的
+//     /auth/refresh 留够剩余时间；
+//   - 但只有距过期 mirasimAccessTokenStaleLead（30s）以内才拒绝用旧 token：
+//     刷新失败时，只要 token 还没到那个点，就继续拿它发请求，而不是把一次
+//     上游刷新抖动升级成账号级失败。
 func (c *mirasimRelayClient) accessTokenLocked(ctx context.Context) (string, error) {
-	if c.cachedAccess != "" && time.Now().Before(c.accessExp.Add(-mirasimAccessTokenEarlyRefresh)) {
-		return c.cachedAccess, nil
+	now := time.Now()
+	if c.cachedAccess != "" {
+		if now.Before(c.accessExp.Add(-mirasimAccessTokenEarlyRefresh)) {
+			return c.cachedAccess, nil
+		}
+		if now.Before(c.accessExp.Add(-mirasimAccessTokenStaleLead)) {
+			if refreshed, err := c.refreshAccessTokenLocked(ctx); err == nil {
+				return refreshed, nil
+			}
+			// 仍在可用窗口内：带着旧 token 继续，不让刷新抖动影响请求。
+			slog.Warn("mirasim_relay_access_refresh_deferred",
+				"account_id", c.accountID,
+				"expires_in_s", int(time.Until(c.accessExp).Seconds()),
+			)
+			return c.cachedAccess, nil
+		}
 	}
+	return c.refreshAccessTokenLocked(ctx)
+}
+
+// refreshAccessTokenLocked 打 /auth/refresh 并落盘轮换后的 refresh token。
+func (c *mirasimRelayClient) refreshAccessTokenLocked(ctx context.Context) (string, error) {
 	body, err := json.Marshal(map[string]string{"refresh_token": c.refreshToken})
 	if err != nil {
 		return "", fmt.Errorf("mirasim relay: refresh 请求体序列化失败: %w", err)
@@ -519,7 +630,8 @@ func (c *mirasimRelayClient) metadataCredential(ctx context.Context) (string, bo
 		c.mu.Unlock()
 		return ticket, true, nil
 	}
-	if access := strings.TrimSpace(c.cachedAccess); access != "" && now.Before(c.accessExp) {
+	// 与 accessTokenLocked 同一门槛：只有距过期 30 秒以内才视为不可用。
+	if access := strings.TrimSpace(c.cachedAccess); access != "" && now.Before(c.accessExp.Add(-mirasimAccessTokenStaleLead)) {
 		c.mu.Unlock()
 		return access, true, nil
 	}

@@ -27,4 +27,8 @@
 - [x] 4.2 `gofmt -l` 干净；`go test ./internal/service/ -count=1` 失败集合与 HEAD 基线一致（6 条 pre-existing）；`vue-tsc --noEmit` 干净
 - [x] 4.3 `openspec validate align-mirasim-relay-client-metadata --strict`
 - [x] 4.4 真实核验（已批准执行 A 方案）：新二进制热替换生产候选容器；账号 140 两次 relay 请求均 200 且有真实推理增量；`forward_failed`=0、上游 401/403=0；记录见 `deploy-2026-09-25-mirasim-client-metadata.md`
-- [ ] 4.5 后续独立项（不在本变更范围）：`mirasim_default_client_version` 仍是 0.0.322，官方客户端为 0.0.354；`x-mirasim-client` 在线上明文可见，是否跟进由你决定
+- [x] 4.5 客户端版本对齐：`mirasim_default_client_version` 0.0.322 → 0.0.354（账号级 `mirasim_client_version` 覆写仍优先）
+- [x] 4.6 access token 刷新窗口对齐官方：15m lead + 30s stale（lead 窗口内 refresh 失败不失败请求；stale 窗口内必须刷新成功）
+- [x] 4.7 device ticket 降级与退避：404 → 静默 1m、501 → 静默 15m（改用 access token 作为签名凭据）；其它失败 1s 起指数退避封顶 30s，退避期内未过期 ticket 继续可用
+- [x] 4.8 `/v1/models` 目录收敛：保留位/namespaced 丢弃，dated 孪生在有 plain 时丢弃、无 plain 时保留
+- [ ] 4.9 未完成（后续独立 change）：roster `adaptive` 驱动 thinking 形态；relay 模型 effort 白名单 + `ultra→max` + 不支持即 400
