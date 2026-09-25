@@ -21,16 +21,7 @@ func isOpenAIResponsesLiteHeader(value string) bool {
 }
 
 func isOpenAIResponsesLiteWebSocketPayload(body []byte) bool {
-	if len(body) == 0 {
-		return false
-	}
-	// 快速否决：任何图像生成声明（扁平 image_generation 工具、Codex 的 image_gen
-	// 命名空间、tool_choice 选中它们）都必然包含 image_gen 字面量；不含时直接返回，
-	// 避免为 42MiB 级请求做整包 JSON 校验与多次 gjson 查找（实测该步约 650ms）。
-	if !bytes.Contains(body, []byte("image_gen")) {
-		return false
-	}
-	if !gjson.ValidBytes(body) {
+	if len(body) == 0 || !gjson.ValidBytes(body) {
 		return false
 	}
 	return isOpenAIResponsesLiteHeader(gjson.GetBytes(body, "client_metadata."+responsesLiteWSMetadataKey).String())
