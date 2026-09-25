@@ -132,3 +132,27 @@ change：`add-request-timing-detail`
 - 变更方式：`PUT /api/v1/admin/risk-control/config`（首次因 `审计分组不存在: 25` 返回 400，故同时清理已删除分组）。
 - 超时/失败语义不变：仍然 **fail-open**（放行）并计入 `pre_block_errors`（风控页可见，重启后已累计 8 次）。
 - 生效验证（变更后新发 20 条请求）：`security_audit_ms` p50 = **2ms**、p90 = **150ms**、max = **229ms**、≥300ms = 0；变更前同口径最大值为 **1168ms**（14:25 样本）。
+
+## 10. 小项：大请求体 gzip 压缩（15:00 JST，提交 `f71f936da`、`a65a7f526`）
+
+**动机（来自采集数据）**：openai apikey 路径 body p50 ≈ 5.8 MiB，`upstream_write_ms` p50 ≈ 495ms / p95 ≈ 2.5s，其中 8.9MiB 级请求占多数。
+
+**上游能力实测**：账号 89 的上游 `o10.top` 接受 `Content-Encoding: gzip` 请求体（对照组与实验组均 HTTP 200，响应尺寸一致）。
+
+**实现**：
+
+- `maybeGzipOpenAIUpstreamBody`：仅 **APIKey 账号**、上游 host 命中白名单、体积 ≥ 阈值时用 `gzip(BestSpeed)` 压缩并设置 `Content-Encoding: gzip`；OAuth(Codex) 仍走 zstd，外部桥与 compact unary 协议未验证一律不压。
+- 配置：`gateway.upstream_gzip_min_bytes`（默认 1 MiB，0 关闭）、`gateway.upstream_gzip_hosts`（默认 `["o10.top"]`）。**清空白名单即可即时回退，无需重新发布**；启动日志会打印生效值（`gateway_upstream_gzip_config`）。
+- 新增 `upstream_request_bytes`（出站请求体字节数，压缩后）落库并在弹窗「出站请求体」行展示，同时给出相对入站体积的百分比。
+
+**验证**：
+
+| 指标 | 结果 |
+| --- | --- |
+| 压缩是否生效 | **是**：近 4 分钟 9 条 >1MiB 请求全部压缩，入站 p50 2.68 MiB → **出站 p50 0.79 MiB（29.5%）** |
+| 错误面 | 近 12 分钟 5xx = 0，`/v1/responses` 4xx = 0；账号 89 期间 56 条请求全部 `outcome=success` |
+| 写耗时 | 出站字节与耗时关系：0.57 MiB → 301ms、3.01 MiB → 518ms、7.28 MiB → 884ms ⇒ 约 **100–170 ms/出站 MiB + 250–300ms 固定开销**。压缩把出站字节降到约 30%，但固定开销不随之下降，故端到端收益仍属「<1s」量级（与最初估计一致），不会改变 TTFT 主因（上游模型时间）。 |
+
+**测试**：白名单/阈值/账号类型 4 例 + 真实转发路径集成 1 例（上游收到 gzip 且载荷可还原）+ 配置默认值 2 例。
+
+制品：后端 `sha256=a0b7c5f18264812bb88df37140db00bc883d8a61ea2425af82623b4671a5677b`，前端 release `0.1.391-a65a7f526`（聚合 `609921c7a0f9458b5385cfa99dab7f09f63b026776b9c9be9232ce92585cbb3f`）。
