@@ -7,11 +7,10 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/rediskeys"
 	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/redis/go-redis/v9"
 )
-
-const tempUnschedPrefix = "temp_unsched:account:"
 
 var tempUnschedSetScript = redis.NewScript(`
 	local key = KEYS[1]
@@ -44,7 +43,7 @@ func NewTempUnschedCache(rdb *redis.Client) ports.TempUnschedCache {
 
 // SetTempUnsched 设置临时不可调度状态（只延长不缩短）
 func (c *tempUnschedCache) SetTempUnsched(ctx context.Context, accountID int64, state *domain.TempUnschedState) error {
-	key := fmt.Sprintf("%s%d", tempUnschedPrefix, accountID)
+	key := rediskeys.TempUnschedAccount(accountID)
 
 	stateJSON, err := json.Marshal(state)
 	if err != nil {
@@ -67,7 +66,7 @@ func (c *tempUnschedCache) SetTempUnsched(ctx context.Context, accountID int64, 
 
 // GetTempUnsched 获取临时不可调度状态
 func (c *tempUnschedCache) GetTempUnsched(ctx context.Context, accountID int64) (*domain.TempUnschedState, error) {
-	key := fmt.Sprintf("%s%d", tempUnschedPrefix, accountID)
+	key := rediskeys.TempUnschedAccount(accountID)
 
 	val, err := c.rdb.Get(ctx, key).Result()
 	if err == redis.Nil {
@@ -87,6 +86,6 @@ func (c *tempUnschedCache) GetTempUnsched(ctx context.Context, accountID int64) 
 
 // DeleteTempUnsched 删除临时不可调度状态
 func (c *tempUnschedCache) DeleteTempUnsched(ctx context.Context, accountID int64) error {
-	key := fmt.Sprintf("%s%d", tempUnschedPrefix, accountID)
+	key := rediskeys.TempUnschedAccount(accountID)
 	return c.rdb.Del(ctx, key).Err()
 }

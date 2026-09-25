@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/rediskeys"
 	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"log/slog"
 	"strconv"
@@ -14,16 +15,6 @@ import (
 )
 
 const (
-	schedulerBucketSetKey       = "sched:buckets"
-	schedulerOutboxWatermarkKey = "sched:outbox:watermark"
-	schedulerAccountPrefix      = "sched:acc:"
-	schedulerAccountMetaPrefix  = "sched:meta:"
-	schedulerActivePrefix       = "sched:active:"
-	schedulerReadyPrefix        = "sched:ready:"
-	schedulerVersionPrefix      = "sched:ver:"
-	schedulerSnapshotPrefix     = "sched:"
-	schedulerLockPrefix         = "sched:lock:"
-
 	defaultSchedulerSnapshotMGetChunkSize  = 128
 	defaultSchedulerSnapshotWriteChunkSize = 256
 
@@ -100,7 +91,7 @@ func newSchedulerCacheWithChunkSizes(rdb *redis.Client, mgetChunkSize, writeChun
 }
 
 func (c *schedulerCache) GetSnapshot(ctx context.Context, bucket domain.SchedulerBucket) ([]*domain.Account, bool, error) {
-	readyKey := schedulerBucketKey(schedulerReadyPrefix, bucket)
+	readyKey := schedulerBucketKey("sched:ready:", bucket)
 	readyVal, err := c.rdb.Get(ctx, readyKey).Result()
 	if err == redis.Nil {
 		return nil, false, nil
@@ -112,7 +103,7 @@ func (c *schedulerCache) GetSnapshot(ctx context.Context, bucket domain.Schedule
 		return nil, false, nil
 	}
 
-	activeKey := schedulerBucketKey(schedulerActivePrefix, bucket)
+	activeKey := schedulerBucketKey("sched:active:", bucket)
 	activeVal, err := c.rdb.Get(ctx, activeKey).Result()
 	if err == redis.Nil {
 		return nil, false, nil
@@ -134,7 +125,7 @@ func (c *schedulerCache) GetSnapshot(ctx context.Context, bucket domain.Schedule
 
 	keys := make([]string, 0, len(ids))
 	for _, id := range ids {
-		keys = append(keys, schedulerAccountMetaKey(id))
+		keys = append(keys, rediskeys.SchedulerAccountMetaString(id))
 	}
 	values, err := c.mgetChunked(ctx, keys)
 	if err != nil {
@@ -160,7 +151,7 @@ func (c *schedulerCache) SetSnapshot(ctx context.Context, bucket domain.Schedule
 	// Phase 1: 分配新版本号并写入快照数据。
 	// INCR 保证每个调用方获得唯一递增版本号。
 	// 写入的 snapshotKey 是新的版本化 key，reader 尚不知晓，因此无竞态。
-	versionKey := schedulerBucketKey(schedulerVersionPrefix, bucket)
+	versionKey := schedulerBucketKey("sched:ver:", bucket)
 	version, err := c.rdb.Incr(ctx, versionKey).Result()
 	if err != nil {
 		return err
@@ -200,11 +191,11 @@ func (c *schedulerCache) SetSnapshot(ctx context.Context, bucket domain.Schedule
 	// Lua 脚本保证：仅当新版本 >= 当前激活版本时才切换 active 指针，
 	// 防止并发写入导致版本回滚。
 	// 旧快照使用 EXPIRE 宽限期而非立即 DEL，避免 reader 竞态。
-	activeKey := schedulerBucketKey(schedulerActivePrefix, bucket)
-	readyKey := schedulerBucketKey(schedulerReadyPrefix, bucket)
-	snapshotKeyPrefix := fmt.Sprintf("%s%d:%s:%s:v", schedulerSnapshotPrefix, bucket.GroupID, bucket.Platform, bucket.Mode)
+	activeKey := schedulerBucketKey("sched:active:", bucket)
+	readyKey := schedulerBucketKey("sched:ready:", bucket)
+	snapshotKeyPrefix := fmt.Sprintf("%s%d:%s:%s:v", "sched:", bucket.GroupID, bucket.Platform, bucket.Mode)
 
-	keys := []string{activeKey, readyKey, schedulerBucketSetKey, snapshotKey}
+	keys := []string{activeKey, readyKey, rediskeys.SchedulerBucketSet(), snapshotKey}
 	args := []any{versionStr, bucket.String(), snapshotKeyPrefix, snapshotGraceTTLSeconds}
 
 	_, err = activateSnapshotScript.Run(ctx, c.rdb, keys, args...).Result()
@@ -216,7 +207,7 @@ func (c *schedulerCache) SetSnapshot(ctx context.Context, bucket domain.Schedule
 }
 
 func (c *schedulerCache) GetAccount(ctx context.Context, accountID int64) (*domain.Account, error) {
-	key := schedulerAccountKey(strconv.FormatInt(accountID, 10))
+	key := rediskeys.SchedulerAccount(accountID)
 	val, err := c.rdb.Get(ctx, key).Result()
 	if err == redis.Nil {
 		return nil, nil
@@ -246,7 +237,7 @@ func (c *schedulerCache) DeleteAccount(ctx context.Context, accountID int64) err
 		return nil
 	}
 	id := strconv.FormatInt(accountID, 10)
-	return c.rdb.Del(ctx, schedulerAccountKey(id), schedulerAccountMetaKey(id)).Err()
+	return c.rdb.Del(ctx, rediskeys.SchedulerAccountString(id), rediskeys.SchedulerAccountMetaString(id)).Err()
 }
 
 func (c *schedulerCache) UpdateLastUsed(ctx context.Context, updates map[int64]time.Time) error {
@@ -257,7 +248,7 @@ func (c *schedulerCache) UpdateLastUsed(ctx context.Context, updates map[int64]t
 	keys := make([]string, 0, len(updates))
 	ids := make([]int64, 0, len(updates))
 	for id := range updates {
-		keys = append(keys, schedulerAccountKey(strconv.FormatInt(id, 10)))
+		keys = append(keys, rediskeys.SchedulerAccount(id))
 		ids = append(ids, id)
 	}
 
@@ -293,17 +284,17 @@ func (c *schedulerCache) UpdateLastUsed(ctx context.Context, updates map[int64]t
 }
 
 func (c *schedulerCache) TryLockBucket(ctx context.Context, bucket domain.SchedulerBucket, ttl time.Duration) (bool, error) {
-	key := schedulerBucketKey(schedulerLockPrefix, bucket)
+	key := schedulerBucketKey("sched:lock:", bucket)
 	return c.rdb.SetNX(ctx, key, time.Now().UnixNano(), ttl).Result()
 }
 
 func (c *schedulerCache) UnlockBucket(ctx context.Context, bucket domain.SchedulerBucket) error {
-	key := schedulerBucketKey(schedulerLockPrefix, bucket)
+	key := schedulerBucketKey("sched:lock:", bucket)
 	return c.rdb.Del(ctx, key).Err()
 }
 
 func (c *schedulerCache) ListBuckets(ctx context.Context) ([]domain.SchedulerBucket, error) {
-	raw, err := c.rdb.SMembers(ctx, schedulerBucketSetKey).Result()
+	raw, err := c.rdb.SMembers(ctx, rediskeys.SchedulerBucketSet()).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -319,7 +310,7 @@ func (c *schedulerCache) ListBuckets(ctx context.Context) ([]domain.SchedulerBuc
 }
 
 func (c *schedulerCache) GetOutboxWatermark(ctx context.Context) (int64, error) {
-	val, err := c.rdb.Get(ctx, schedulerOutboxWatermarkKey).Result()
+	val, err := c.rdb.Get(ctx, rediskeys.SchedulerOutboxWatermark()).Result()
 	if err == redis.Nil {
 		return 0, nil
 	}
@@ -334,23 +325,23 @@ func (c *schedulerCache) GetOutboxWatermark(ctx context.Context) (int64, error) 
 }
 
 func (c *schedulerCache) SetOutboxWatermark(ctx context.Context, id int64) error {
-	return c.rdb.Set(ctx, schedulerOutboxWatermarkKey, strconv.FormatInt(id, 10), 0).Err()
+	return c.rdb.Set(ctx, rediskeys.SchedulerOutboxWatermark(), strconv.FormatInt(id, 10), 0).Err()
 }
 
 func schedulerBucketKey(prefix string, bucket domain.SchedulerBucket) string {
-	return fmt.Sprintf("%s%d:%s:%s", prefix, bucket.GroupID, bucket.Platform, bucket.Mode)
+	return rediskeys.SchedulerBucket(prefix, bucket.GroupID, bucket.Platform, bucket.Mode)
 }
 
 func schedulerSnapshotKey(bucket domain.SchedulerBucket, version string) string {
-	return fmt.Sprintf("%s%d:%s:%s:v%s", schedulerSnapshotPrefix, bucket.GroupID, bucket.Platform, bucket.Mode, version)
+	return rediskeys.SchedulerSnapshot(bucket.GroupID, bucket.Platform, bucket.Mode, version)
 }
 
 func schedulerAccountKey(id string) string {
-	return schedulerAccountPrefix + id
+	return rediskeys.SchedulerAccountString(id)
 }
 
 func schedulerAccountMetaKey(id string) string {
-	return schedulerAccountMetaPrefix + id
+	return rediskeys.SchedulerAccountMetaString(id)
 }
 
 func ptrTime(t time.Time) *time.Time {
@@ -402,7 +393,7 @@ func (c *schedulerCache) writeAccounts(ctx context.Context, accounts []domain.Ac
 				"error", err,
 			)
 			id := strconv.FormatInt(account.ID, 10)
-			pipe.Del(ctx, schedulerAccountKey(id), schedulerAccountMetaKey(id))
+			pipe.Del(ctx, rediskeys.SchedulerAccountString(id), rediskeys.SchedulerAccountMetaString(id))
 			pending++
 			if pending >= c.writeChunkSize {
 				if err := flush(); err != nil {
@@ -413,8 +404,8 @@ func (c *schedulerCache) writeAccounts(ctx context.Context, accounts []domain.Ac
 		}
 
 		id := strconv.FormatInt(account.ID, 10)
-		pipe.Set(ctx, schedulerAccountKey(id), fullPayload, schedulerAccountTTL)
-		pipe.Set(ctx, schedulerAccountMetaKey(id), metaPayload, schedulerAccountTTL)
+		pipe.Set(ctx, rediskeys.SchedulerAccountString(id), fullPayload, schedulerAccountTTL)
+		pipe.Set(ctx, rediskeys.SchedulerAccountMetaString(id), metaPayload, schedulerAccountTTL)
 		cacheableAccounts = append(cacheableAccounts, account)
 		pending++
 		if pending >= c.writeChunkSize {
