@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/app/gateway/stream"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -73,6 +74,54 @@ func TestHandleCCBufferedFromAnthropic_PreservesMessageStartCacheUsageAndReasoni
 	require.Equal(t, 3, result.Usage.CacheCreationInputTokens)
 	require.NotNil(t, result.ReasoningEffort)
 	require.Equal(t, "high", *result.ReasoningEffort)
+}
+
+type recordingChatStreamSink struct {
+	events  []stream.Event
+	flushes int
+}
+
+func (s *recordingChatStreamSink) Emit(event stream.Event) error {
+	s.events = append(s.events, event)
+	return nil
+}
+
+func (s *recordingChatStreamSink) Flush() error {
+	s.flushes++
+	return nil
+}
+
+func TestHandleCCStreamingFromAnthropic_UsesTransportNeutralSink(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	sink := &recordingChatStreamSink{}
+	resp := &http.Response{
+		Header: http.Header{"x-request-id": []string{"rid_cc_sink"}},
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`event: message_start`,
+			`data: {"type":"message_start","message":{"id":"msg_sink","type":"message","role":"assistant","content":[],"model":"claude-sonnet-4.5","usage":{"input_tokens":2}}}`,
+			``,
+			`event: content_block_start`,
+			`data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":"hello"}}`,
+			``,
+			`event: message_delta`,
+			`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}`,
+			``,
+			`event: message_stop`,
+			`data: {"type":"message_stop"}`,
+			``,
+		}, "\n"))),
+	}
+
+	result, err := (&GatewayService{}).handleCCStreamingFromAnthropic(resp, c, "gpt-5", "claude-sonnet-4.5", nil, time.Now(), true, sink)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Usage.InputTokens)
+	require.Equal(t, 3, result.Usage.OutputTokens)
+	require.Empty(t, rec.Body.String(), "service must not write directly when a sink is supplied")
+	require.GreaterOrEqual(t, len(sink.events), 2)
+	require.Greater(t, sink.flushes, 0)
+	require.Contains(t, string(sink.events[len(sink.events)-1].Data), "[DONE]")
 }
 
 func TestHandleCCStreamingFromAnthropic_PreservesMessageStartCacheUsageAndReasoning(t *testing.T) {
