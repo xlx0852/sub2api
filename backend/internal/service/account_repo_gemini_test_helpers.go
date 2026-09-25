@@ -83,6 +83,10 @@ func (m *mockAccountRepoForGemini) ListOAuthIncludingDeleted(ctx context.Context
 func (m *mockAccountRepoForGemini) ListCRSAccountIDs(ctx context.Context) (map[string]int64, error) {
 	return nil, nil
 }
+
+func (m *mockAccountRepoForGemini) ListOAuthRefreshCandidates(ctx context.Context) ([]Account, error) {
+	return m.ListActive(ctx)
+}
 func (m *mockAccountRepoForGemini) Update(ctx context.Context, account *Account) error { return nil }
 func (m *mockAccountRepoForGemini) Delete(ctx context.Context, id int64) error         { return nil }
 func (m *mockAccountRepoForGemini) HardDelete(ctx context.Context, id int64) error     { return nil }
