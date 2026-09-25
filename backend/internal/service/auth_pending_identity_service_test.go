@@ -36,6 +36,29 @@ func newAuthPendingIdentityServiceTestClient(t *testing.T) (*AuthPendingIdentity
 	return NewAuthPendingIdentityService(client), client
 }
 
+func TestAuthPendingIdentityService_FindIdentityUserAndAdoptionDecision(t *testing.T) {
+	svc, client := newAuthPendingIdentityServiceTestClient(t)
+	ctx := context.Background()
+	user, err := client.User.Create().
+		SetEmail("identity-owner@example.com").SetPasswordHash("hash").SetRole(RoleUser).SetStatus(StatusActive).Save(ctx)
+	require.NoError(t, err)
+	_, err = client.AuthIdentity.Create().SetUserID(user.ID).
+		SetProviderType("oidc").SetProviderKey("corp").SetProviderSubject("subject-1").SetMetadata(map[string]any{}).Save(ctx)
+	require.NoError(t, err)
+
+	got, err := svc.FindOAuthIdentityUser(ctx, PendingAuthIdentityKey{ProviderType: "oidc", ProviderKey: "corp", ProviderSubject: "subject-1"})
+	require.NoError(t, err)
+	require.Equal(t, user.ID, got.ID)
+
+	missing, err := svc.FindOAuthIdentityUser(ctx, PendingAuthIdentityKey{ProviderType: "oidc", ProviderKey: "corp", ProviderSubject: "missing"})
+	require.NoError(t, err)
+	require.Nil(t, missing)
+
+	decision, err := svc.AdoptionDecision(ctx, 999999)
+	require.NoError(t, err)
+	require.Nil(t, decision)
+}
+
 func TestAuthPendingIdentityService_CreatePendingSessionStoresSeparatedState(t *testing.T) {
 	svc, client := newAuthPendingIdentityServiceTestClient(t)
 	ctx := context.Background()

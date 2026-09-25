@@ -242,7 +242,7 @@ func (h *AuthHandler) emailOAuthShouldCreatePendingRegistration(ctx context.Cont
 		}
 		return false, nil
 	}
-	if _, err := findUserByNormalizedEmail(ctx, client, email); err != nil {
+	if _, err := h.findUserByNormalizedEmail(ctx, email); err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
 			return true, nil
 		}
@@ -316,7 +316,7 @@ func (h *AuthHandler) createEmailOAuthRegistrationPendingSession(
 	// 前端展示「绑定已有账号」choice，用户通过既有密码/邮箱验证码证明所有权（禁止自动登录接管）。
 	var existingUser *dbent.User
 	if client := h.entClient(); client != nil {
-		if u, err := findUserByNormalizedEmail(c.Request.Context(), client, email); err == nil {
+		if u, err := h.findUserByNormalizedEmail(c.Request.Context(), email); err == nil {
 			existingUser = u
 		}
 	}

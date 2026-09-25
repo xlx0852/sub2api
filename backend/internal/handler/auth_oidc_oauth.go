@@ -526,7 +526,7 @@ func (h *AuthHandler) findOIDCCompatEmailUser(ctx context.Context, email string)
 		return nil, nil
 	}
 
-	userEntity, err := findUserByNormalizedEmail(ctx, client, email)
+	userEntity, err := h.findUserByNormalizedEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, service.ErrUserNotFound) {
 			return nil, nil
@@ -697,7 +697,7 @@ func (h *AuthHandler) CompleteOIDCOAuthRegistration(c *gin.Context) {
 	if err != nil {
 		// 邮箱已存在但身份未绑定（service 层拒绝自动登录防接管）→ 转 choice state。
 		if errors.Is(err, service.ErrOAuthEmailOwnershipRequired) {
-			if existingUser, lookupErr := findUserByNormalizedEmail(c.Request.Context(), client, email); lookupErr == nil && existingUser != nil {
+			if existingUser, lookupErr := h.findUserByNormalizedEmail(c.Request.Context(), email); lookupErr == nil && existingUser != nil {
 				if _, transitionErr := h.transitionPendingOAuthAccountToChoiceState(c, client, session, existingUser, email); transitionErr != nil {
 					response.ErrorFrom(c, transitionErr)
 					return

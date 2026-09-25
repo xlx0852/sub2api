@@ -15,6 +15,8 @@ import (
 
 	"entgo.io/ent/dialect"
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	dbuser "github.com/Wei-Shaw/sub2api/ent/user"
+	userpredicate "github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/ent/authidentity"
 	"github.com/Wei-Shaw/sub2api/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/sub2api/ent/pendingauthsession"
@@ -229,6 +231,32 @@ func (s *AuthPendingIdentityService) FindOAuthIdentityUser(ctx context.Context, 
 		return nil, ErrUserNotActive
 	}
 	return userEntity, nil
+}
+
+func (s *AuthPendingIdentityService) FindUserByNormalizedEmail(ctx context.Context, email string) (*dbent.User, error) {
+	if s == nil || s.entClient == nil {
+		return nil, fmt.Errorf("pending auth ent client is not configured")
+	}
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	predicate := userpredicate.User(func(selector *entsql.Selector) {
+		selector.Where(entsql.P(func(builder *entsql.Builder) {
+			builder.WriteString("LOWER(TRIM(").Ident(selector.C(dbuser.FieldEmail)).WriteString(")) = ").Arg(normalized)
+		}))
+	})
+	if normalized == "" {
+		predicate = dbuser.EmailEQ(email)
+	}
+	matches, err := s.entClient.User.Query().Where(predicate).Order(dbent.Asc(dbuser.FieldID)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(matches) == 0 {
+		return nil, ErrUserNotFound
+	}
+	if len(matches) > 1 {
+		return nil, infraerrors.Conflict("USER_EMAIL_CONFLICT", "normalized email matched multiple users")
+	}
+	return matches[0], nil
 }
 
 func (s *AuthPendingIdentityService) AdoptionDecision(ctx context.Context, sessionID int64) (*dbent.IdentityAdoptionDecision, error) {

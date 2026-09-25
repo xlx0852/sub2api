@@ -101,6 +101,14 @@ func (h *AuthHandler) pendingIdentityService() (*service.AuthPendingIdentityServ
 	return service.NewAuthPendingIdentityService(h.authService.EntClient()), nil
 }
 
+func (h *AuthHandler) findUserByNormalizedEmail(ctx context.Context, email string) (*dbent.User, error) {
+	svc, err := h.pendingIdentityService()
+	if err != nil {
+		return nil, err
+	}
+	return svc.FindUserByNormalizedEmail(ctx, email)
+}
+
 func generateOAuthPendingBrowserSession() (string, error) {
 	return oauth.GenerateState()
 }
@@ -524,7 +532,7 @@ func (h *AuthHandler) SendPendingOAuthVerifyCode(c *gin.Context) {
 	}
 
 	email := strings.TrimSpace(strings.ToLower(req.Email))
-	if existingUser, err := findUserByNormalizedEmail(c.Request.Context(), client, email); err == nil && existingUser != nil {
+	if existingUser, err := h.findUserByNormalizedEmail(c.Request.Context(), email); err == nil && existingUser != nil {
 		session, err = h.transitionPendingOAuthAccountToChoiceState(c, client, session, existingUser, email)
 		if err != nil {
 			response.ErrorFrom(c, err)
@@ -1659,7 +1667,7 @@ func (h *AuthHandler) createPendingOAuthAccount(c *gin.Context, provider string)
 	}
 
 	email := strings.TrimSpace(strings.ToLower(req.Email))
-	existingUser, err := findUserByNormalizedEmail(c.Request.Context(), client, email)
+	existingUser, err := h.findUserByNormalizedEmail(c.Request.Context(), email)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrUserNotFound):
@@ -1697,7 +1705,7 @@ func (h *AuthHandler) createPendingOAuthAccount(c *gin.Context, provider string)
 	)
 	if err != nil {
 		if errors.Is(err, service.ErrEmailExists) {
-			existingUser, lookupErr := findUserByNormalizedEmail(c.Request.Context(), client, email)
+			existingUser, lookupErr := h.findUserByNormalizedEmail(c.Request.Context(), email)
 			if lookupErr != nil {
 				response.ErrorFrom(c, lookupErr)
 				return
