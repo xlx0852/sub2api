@@ -109,6 +109,32 @@ func TestEmbeddedCatalogLoads(t *testing.T) {
 	}
 }
 
+// OpenAI 已把 Sol 迭代到 gpt-6.1-sol：目录必须暴露它，且不能动到 gpt-6-sol 自身，
+// 否则请求会落到 default_test_model 上按别的模型计费。
+func TestOpenAICatalogIncludesGPT61Sol(t *testing.T) {
+	var found *ModelEntry
+	for _, model := range OpenAIModels() {
+		if model.ID == "gpt-6.1-sol" {
+			found = &model
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected gpt-6.1-sol in OpenAI catalog")
+	}
+	if found.DisplayName != "GPT-6.1 Sol" {
+		t.Fatalf("gpt-6.1-sol display name = %q, want %q", found.DisplayName, "GPT-6.1 Sol")
+	}
+	if !found.UseResponsesLite {
+		t.Fatalf("gpt-6.1-sol must keep use_responses_lite like the rest of the GPT-6 family")
+	}
+
+	sol, ok := ResolvePriceEntry("gpt-6-sol")
+	if !ok || sol.InputCostPerToken != 2e-06 || sol.CacheReadInputTokenCost != 2e-07 {
+		t.Fatalf("gpt-6-sol entry changed unexpectedly: %+v ok=%v", sol, ok)
+	}
+}
+
 func TestKimiCatalogUsesOfficialCodingModelIDs(t *testing.T) {
 	models := KimiModels()
 	got := make([]string, 0, len(models))

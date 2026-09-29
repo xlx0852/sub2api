@@ -46,6 +46,43 @@ func TestParsePricingData_ParsesPriorityAndServiceTierFields(t *testing.T) {
 	require.True(t, pricing.SupportsServiceTier)
 }
 
+// gpt-6.1-sol 与 gpt-6-sol 同价但缓存读取为官方 5%（$0.10 vs $0.20）。前缀分支
+// 必须单独存在，否则 6.1 的未知变体会落到 gpt-6-sol 上按 10% 多收一倍。
+func TestPricingService_GPT61SolStaticFallback(t *testing.T) {
+	svc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{}}
+
+	tests := []struct {
+		model string
+		in    float64
+		read  float64
+		write float64
+		out   float64
+	}{
+		{model: "gpt-6.1-sol", in: 2e-6, read: 1e-7, write: 2.5e-6, out: 1e-5},
+		{model: "gpt-6.1-sol-2026-10-01", in: 2e-6, read: 1e-7, write: 2.5e-6, out: 1e-5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			pricing := svc.GetModelPricing(tt.model)
+			require.NotNilf(t, pricing, "%s must resolve a static fallback price", tt.model)
+			require.InDelta(t, tt.in, pricing.InputCostPerToken, 1e-15)
+			require.InDelta(t, tt.read, pricing.CacheReadInputTokenCost, 1e-15)
+			require.InDelta(t, tt.write, pricing.CacheCreationInputTokenCost, 1e-15)
+			require.InDelta(t, tt.out, pricing.OutputCostPerToken, 1e-15)
+			require.InDelta(t, 2*tt.in, pricing.InputCostPerTokenPriority, 1e-15, "official Fast tier is 2x standard")
+			require.InDelta(t, 2*tt.read, pricing.CacheReadInputTokenCostPriority, 1e-15)
+			require.InDelta(t, 2*tt.write, pricing.CacheCreationInputTokenCostPriority, 1e-15)
+			require.InDelta(t, 2*tt.out, pricing.OutputCostPerTokenPriority, 1e-15)
+		})
+	}
+
+	// 兄弟模型的兜底不得被新分支抢走。
+	sol := svc.GetModelPricing("gpt-6-sol")
+	require.NotNil(t, sol)
+	require.InDelta(t, 2e-7, sol.CacheReadInputTokenCost, 1e-15,
+		"gpt-6-sol must keep its official 10% cache-read rate")
+}
+
 func TestPricingService_GPT6AstraStaticFallback(t *testing.T) {
 	svc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{}}
 	pricing := svc.GetModelPricing("gpt-6-astra")
@@ -227,6 +264,43 @@ func TestDefaultPricingIncludesOfficialGPT56Rates(t *testing.T) {
 			require.InDelta(t, 1.5, pricing.LongContextOutputMultiplier, 1e-12)
 		})
 	}
+}
+
+// OpenAI 把 Sol 迭代到 gpt-6.1-sol：镜像行必须给出官方标准档 2 / 0.1 / 2.5 / 10
+// （USD per MTok）、Fast 档 2x，以及 >272K 长上下文 2x/1.5x；缓存读取是 6.1 与
+// gpt-6-sol 的唯一价差，回归时不能退化成 0.2。
+func TestDefaultPricingIncludesOfficialGPT61SolRates(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "resources", "model-pricing", "model_prices_and_context_window.json"))
+	require.NoError(t, err)
+
+	pricingSvc := &PricingService{}
+	pricingData, err := pricingSvc.parsePricingData(data)
+	require.NoError(t, err)
+	pricingSvc.pricingData = pricingData
+	billingSvc := NewBillingService(&config.Config{}, pricingSvc)
+
+	for _, model := range []string{"gpt-6.1-sol"} {
+		t.Run(model, func(t *testing.T) {
+			pricing, err := billingSvc.GetModelPricing(model)
+			require.NoError(t, err)
+			require.InDelta(t, 2e-6, pricing.InputPricePerToken, 1e-12)
+			require.InDelta(t, 1e-7, pricing.CacheReadPricePerToken, 1e-12)
+			require.InDelta(t, 2.5e-6, pricing.CacheCreationPricePerToken, 1e-12)
+			require.InDelta(t, 1e-5, pricing.OutputPricePerToken, 1e-12)
+			require.InDelta(t, 4e-6, pricing.InputPricePerTokenPriority, 1e-12)
+			require.InDelta(t, 2e-7, pricing.CacheReadPricePerTokenPriority, 1e-12)
+			require.InDelta(t, 5e-6, pricing.CacheCreationPricePerTokenPriority, 1e-12)
+			require.InDelta(t, 2e-5, pricing.OutputPricePerTokenPriority, 1e-12)
+			require.Equal(t, 272000, pricing.LongContextInputThreshold)
+			require.InDelta(t, 2.0, pricing.LongContextInputMultiplier, 1e-12)
+			require.InDelta(t, 1.5, pricing.LongContextOutputMultiplier, 1e-12)
+		})
+	}
+
+	sol, err := billingSvc.GetModelPricing("gpt-6-sol")
+	require.NoError(t, err)
+	require.InDelta(t, 2e-7, sol.CacheReadPricePerToken, 1e-12,
+		"gpt-6-sol must keep its own 10% cache-read rate")
 }
 
 func TestDefaultPricingIncludesOfficialGrok46Rates(t *testing.T) {

@@ -109,6 +109,26 @@ var (
 		Mode:                                "chat",
 		SupportsPromptCaching:               true,
 	}
+	// GPT-6.1 Sol：官方 $2/$10 per MTok，与 GPT-6 Sol 同价，但缓存读取按官方
+	// “5% of the uncached input token rate”（$0.10 vs Sol 的 $0.20）计。其余档位与
+	// GPT-6 家族一致：缓存写入 1.25x 输入价、Fast 档 2x、>272K 输入 2x / 输出 1.5x。
+	openAIGPT61SolFallbackPricing = &LiteLLMModelPricing{
+		InputCostPerToken:                   2e-06,
+		InputCostPerTokenPriority:           4e-06,
+		OutputCostPerToken:                  1e-05,
+		OutputCostPerTokenPriority:          2e-05,
+		CacheCreationInputTokenCost:         2.5e-06,
+		CacheCreationInputTokenCostPriority: 5e-06,
+		CacheReadInputTokenCost:             1e-07,
+		CacheReadInputTokenCostPriority:     2e-07,
+		LongContextInputTokenThreshold:      openAIGPT54LongContextInputThreshold,
+		LongContextInputCostMultiplier:      openAIGPT54LongContextInputMultiplier,
+		LongContextOutputCostMultiplier:     openAIGPT54LongContextOutputMultiplier,
+		SupportsServiceTier:                 true,
+		LiteLLMProvider:                     "openai",
+		Mode:                                "chat",
+		SupportsPromptCaching:               true,
+	}
 	openAIGPT6LunaFallbackPricing = &LiteLLMModelPricing{
 		InputCostPerToken:                   1e-07,
 		InputCostPerTokenPriority:           2e-07,
@@ -1069,6 +1089,13 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 		logger.With(zap.String("component", "service.pricing")).
 			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s(static)", model, "gpt-6-astra"))
 		return newGPT6AstraFallbackPricing()
+	}
+	// gpt-6.1-sol 是 gpt-6-sol 的继任版本，id 前缀不含 "gpt-6-"，因此两个分支
+	// 互不覆盖；共用一个分支会把 6.1 的缓存读取价多收一倍（官方 5% vs 10%）。
+	if strings.HasPrefix(model, "gpt-6.1-sol") {
+		logger.With(zap.String("component", "service.pricing")).
+			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s(static)", model, "gpt-6.1-sol"))
+		return openAIGPT61SolFallbackPricing
 	}
 	if strings.HasPrefix(model, "gpt-6-sol") {
 		logger.With(zap.String("component", "service.pricing")).
