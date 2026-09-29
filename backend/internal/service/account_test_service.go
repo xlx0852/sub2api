@@ -77,6 +77,9 @@ type AccountTestService struct {
 	agentIdentityTaskMu       sync.Mutex
 	agentIdentityWS           agentIdentityWSConnectionInvalidator
 	codexIdentity             *CodexIdentity
+	// openAIGatewayService 提供 Codex manifest 取回（刷新感知 token、身份头、代理）。
+	// 仅在 ProvideAccountTestService 中注入；nil 时 OpenAI OAuth 同步报 configuration。
+	openAIGatewayService *OpenAIGatewayService
 }
 
 // NewAccountTestService creates a new AccountTestService

@@ -97,6 +97,9 @@ func applyCodexManifestClientETag(manifest *CodexModelsManifest, ifNoneMatch str
 type codexManifestModelEntry struct {
 	Slug string `json:"slug"`
 	ID   string `json:"id"`
+	// Visibility 为上游的可见性标记："hide" 表示 Codex 内部模型（gpt-reserve、
+	// codex-auto-review），不应对用户暴露。
+	Visibility string `json:"visibility"`
 }
 
 type codexManifestEnvelope struct {
@@ -139,6 +142,30 @@ func inspectCodexManifestScore(body []byte) codexManifestScore {
 		}
 	}
 	return score
+}
+
+// extractCodexManifestModelIDs 把 Codex manifest 正文投影为可同步到白名单的模型 ID：
+// 优先 slug、退化到 id，剔除 visibility=hide 的内部条目。visibility 缺失或取值未知时
+// 视为可见——上游新增取值不应让白名单同步静默返回空列表。
+// 解析失败由调用方决定错误语义。
+func extractCodexManifestModelIDs(body []byte) ([]string, error) {
+	var envelope codexManifestEnvelope
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return nil, fmt.Errorf("parse codex models manifest: %w", err)
+	}
+
+	models := make([]string, 0, len(envelope.Models))
+	for _, model := range envelope.Models {
+		if strings.EqualFold(strings.TrimSpace(model.Visibility), "hide") {
+			continue
+		}
+		modelID := strings.TrimSpace(model.Slug)
+		if modelID == "" {
+			modelID = strings.TrimSpace(model.ID)
+		}
+		models = append(models, modelID)
+	}
+	return dedupeAndSortModelIDs(models), nil
 }
 
 func sortUniqueCodexManifestAccounts(ctx context.Context, repo AccountRepository, accounts []Account) []*Account {

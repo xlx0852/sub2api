@@ -5,8 +5,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
@@ -214,22 +216,338 @@ func TestBuildUpstreamModelsRequestsForAPIKeyAccounts(t *testing.T) {
 	require.Equal(t, "antigravity-key", antigravityReq.Header.Get("x-api-key"))
 }
 
-func TestBuildGrokUpstreamModelsRequestRejectsOAuth(t *testing.T) {
+func TestBuildGrokUpstreamModelsRequestOAuthRequiresOfficialBaseURL(t *testing.T) {
 	t.Parallel()
 
-	svc := &AccountTestService{cfg: upstreamModelSyncTestConfig()}
-	_, err := svc.buildGrokUpstreamModelsRequest(context.Background(), &Account{
+	ctx := context.Background()
+	var syncErr *UpstreamModelSyncError
+
+	// 自定义 base_url：OAuth 订阅凭据不得离开官方 host。
+	svc := &AccountTestService{cfg: upstreamModelSyncTestConfig(), grokTokenProvider: &GrokTokenProvider{}}
+	_, err := svc.buildGrokUpstreamModelsRequest(ctx, &Account{
 		Platform: PlatformGrok,
 		Type:     AccountTypeOAuth,
 		Credentials: map[string]any{
 			"access_token": "oauth-token",
+			"base_url":     "https://grok-relay.example.com/v1",
 		},
 	})
 	require.Error(t, err)
-
-	var syncErr *UpstreamModelSyncError
 	require.True(t, errors.As(err, &syncErr))
 	require.Equal(t, UpstreamModelSyncErrorUnsupported, syncErr.Kind)
+	require.NotContains(t, syncErr.SafeMessage(), "oauth-token")
+
+	// 未注入 token provider：配置问题，不是上游故障。
+	svc = &AccountTestService{cfg: upstreamModelSyncTestConfig()}
+	_, err = svc.buildGrokUpstreamModelsRequest(ctx, &Account{
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "oauth-token",
+			"base_url":     "https://api.x.ai/v1",
+		},
+	})
+	require.Error(t, err)
+	require.True(t, errors.As(err, &syncErr))
+	require.Equal(t, UpstreamModelSyncErrorConfiguration, syncErr.Kind)
+
+	// 过期且无 refresh_token：在发出任何请求前就报配置错误。
+	svc = &AccountTestService{cfg: upstreamModelSyncTestConfig(), grokTokenProvider: &GrokTokenProvider{}}
+	_, err = svc.buildGrokUpstreamModelsRequest(ctx, &Account{
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "oauth-token",
+			"base_url":     "https://api.x.ai/v1",
+			"expires_at":   time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
+		},
+	})
+	require.Error(t, err)
+	require.True(t, errors.As(err, &syncErr))
+	require.Equal(t, UpstreamModelSyncErrorConfiguration, syncErr.Kind)
+
+	// 非 API key / 非 OAuth 的类型仍然 unsupported，消息不变。
+	svc = &AccountTestService{cfg: upstreamModelSyncTestConfig()}
+	_, err = svc.buildGrokUpstreamModelsRequest(ctx, &Account{
+		Platform: PlatformGrok,
+		Type:     AccountTypeServiceAccount,
+	})
+	require.Error(t, err)
+	require.True(t, errors.As(err, &syncErr))
+	require.Equal(t, UpstreamModelSyncErrorUnsupported, syncErr.Kind)
+	require.Contains(t, syncErr.SafeMessage(), "Unsupported Grok account type")
+}
+
+func TestBuildGrokUpstreamModelsRequestUsesOAuthAccessToken(t *testing.T) {
+	t.Parallel()
+
+	svc := &AccountTestService{cfg: upstreamModelSyncTestConfig(), grokTokenProvider: &GrokTokenProvider{}}
+	req, err := svc.buildGrokUpstreamModelsRequest(context.Background(), &Account{
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "oauth-token",
+			"base_url":     "https://api.x.ai/v1",
+			"expires_at":   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "https://api.x.ai/v1/models", req.URL.String())
+	require.Equal(t, "Bearer oauth-token", req.Header.Get("Authorization"))
+}
+
+func TestExtractCodexManifestModelIDs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		body string
+		want []string
+	}{
+		{
+			name: "hides internal models and prefers slug",
+			body: `{"models":[{"slug":"gpt-5.5","id":"gpt-5.5-2026","visibility":"list"},{"slug":"gpt-6.1-sol"},{"slug":"gpt-reserve","visibility":"hide"},{"slug":"codex-auto-review","visibility":"HIDE"}]}`,
+			want: []string{"gpt-5.5", "gpt-6.1-sol"},
+		},
+		{
+			name: "falls back to id and keeps unknown visibility",
+			body: `{"models":[{"id":"gpt-6-sol","visibility":"preview"},{"slug":"gpt-6-luna","visibility":""}]}`,
+			want: []string{"gpt-6-luna", "gpt-6-sol"},
+		},
+		{
+			name: "dedupes and drops empty entries",
+			body: `{"models":[{"slug":"gpt-5.5"},{"slug":"gpt-5.5"},{"slug":"  "},{"slug":""}]}`,
+			want: []string{"gpt-5.5"},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := extractCodexManifestModelIDs([]byte(tt.body))
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+
+	_, err := extractCodexManifestModelIDs([]byte(`not json`))
+	require.Error(t, err)
+}
+
+func TestFetchUpstreamSupportedModelsOpenAIOAuthUsesCodexManifest(t *testing.T) {
+	// 该用例改写包级 chatgptCodexModelsURL，因此不能并行。
+	var gotClientVersion string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotClientVersion = r.URL.Query().Get("client_version")
+		require.Equal(t, "Bearer test-access-token", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"models":[{"slug":"gpt-6.1-sol","visibility":"list"},{"slug":"gpt-reserve","visibility":"hide"},{"slug":"gpt-5.5"},{"slug":"gpt-6.1-sol"}]}`))
+	}))
+	defer server.Close()
+
+	original := chatgptCodexModelsURL
+	chatgptCodexModelsURL = server.URL
+	defer func() { chatgptCodexModelsURL = original }()
+
+	// settingService 的 settingRepo 为 nil → 回退到内置编译常量，正好用来断言
+	// 「同步用的版本与网关对外声明的版本同源」这一段接线。
+	svc := &AccountTestService{
+		cfg: upstreamModelSyncTestConfig(),
+		openAIGatewayService: &OpenAIGatewayService{
+			settingService: &SettingService{},
+		},
+	}
+
+	models, err := svc.FetchUpstreamSupportedModels(context.Background(), &Account{
+		ID:       69,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token":       "test-access-token",
+			"chatgpt_account_id": "acc-123",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"gpt-5.5", "gpt-6.1-sol"}, models)
+	require.Equal(t, codexCLIVersion, gotClientVersion)
+}
+
+func TestFetchUpstreamSupportedModelsOpenAIOAuthCredentialFailures(t *testing.T) {
+	t.Parallel()
+	var syncErr *UpstreamModelSyncError
+
+	// gateway service 未注入（旧构造路径 / 测试装配）→ configuration，不得 panic。
+	svc := &AccountTestService{cfg: upstreamModelSyncTestConfig()}
+	_, err := svc.FetchUpstreamSupportedModels(context.Background(), &Account{
+		ID:       69,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "test-access-token",
+		},
+	})
+	require.Error(t, err)
+	require.True(t, errors.As(err, &syncErr))
+	require.Equal(t, UpstreamModelSyncErrorConfiguration, syncErr.Kind)
+
+	// 无可用凭据（不可刷新）→ configuration，且不发任何上游请求。
+	upstream := &httpUpstreamRecorder{}
+	svc = &AccountTestService{
+		cfg:                  upstreamModelSyncTestConfig(),
+		openAIGatewayService: &OpenAIGatewayService{},
+		httpUpstream:         upstream,
+	}
+	_, err = svc.FetchUpstreamSupportedModels(context.Background(), &Account{
+		ID:       113,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"chatgpt_account_id": "acc-123",
+		},
+	})
+	require.Error(t, err)
+	require.True(t, errors.As(err, &syncErr))
+	require.Equal(t, UpstreamModelSyncErrorConfiguration, syncErr.Kind)
+	require.Nil(t, upstream.lastReq)
+}
+
+func TestFetchUpstreamSupportedModelsKeepsRetiredCombinationsRejected(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		account *Account
+		kind    UpstreamModelSyncErrorKind
+	}{
+		{
+			name:    "anthropic oauth is retired",
+			account: &Account{ID: 1, Platform: PlatformAnthropic, Type: AccountTypeOAuth},
+			kind:    UpstreamModelSyncErrorConfiguration,
+		},
+		{
+			name:    "anthropic setup token is retired",
+			account: &Account{ID: 2, Platform: PlatformAnthropic, Type: AccountTypeSetupToken},
+			kind:    UpstreamModelSyncErrorConfiguration,
+		},
+		{
+			name:    "anthropic service account is unsupported",
+			account: &Account{ID: 3, Platform: PlatformAnthropic, Type: AccountTypeServiceAccount},
+			kind:    UpstreamModelSyncErrorUnsupported,
+		},
+		{
+			name: "gemini oauth with project id is unsupported",
+			account: &Account{ID: 4, Platform: PlatformGemini, Type: AccountTypeOAuth,
+				Credentials: map[string]any{"project_id": "proj-1"}},
+			kind: UpstreamModelSyncErrorUnsupported,
+		},
+		{
+			name:    "gemini service account is unsupported",
+			account: &Account{ID: 5, Platform: PlatformGemini, Type: AccountTypeServiceAccount},
+			kind:    UpstreamModelSyncErrorUnsupported,
+		},
+		{
+			name:    "kimi oauth has no listing path",
+			account: &Account{ID: 6, Platform: PlatformKimi, Type: AccountTypeOAuth},
+			kind:    UpstreamModelSyncErrorUnsupported,
+		},
+		{
+			name:    "openai service account is unsupported",
+			account: &Account{ID: 7, Platform: PlatformOpenAI, Type: AccountTypeServiceAccount},
+			kind:    UpstreamModelSyncErrorUnsupported,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			upstream := &httpUpstreamRecorder{}
+			svc := &AccountTestService{cfg: upstreamModelSyncTestConfig(), httpUpstream: upstream}
+
+			models, err := svc.FetchUpstreamSupportedModels(context.Background(), tc.account)
+			require.Error(t, err)
+			require.Empty(t, models)
+			var syncErr *UpstreamModelSyncError
+			require.True(t, errors.As(err, &syncErr))
+			require.Equal(t, tc.kind, syncErr.Kind)
+			// 退役/未验证组合必须在发请求前就失败。
+			require.Nil(t, upstream.lastReq)
+		})
+	}
+}
+
+func TestFetchUpstreamSupportedModelsOpenAIOAuthUpstreamFailures(t *testing.T) {
+	// 改写包级 chatgptCodexModelsURL，因此不能并行。
+	cases := []struct {
+		name       string
+		status     int
+		body       string
+		wantMsg    string
+		leakString string
+	}{
+		{
+			name:       "upstream http error",
+			status:     http.StatusInternalServerError,
+			body:       `boom-secret-payload`,
+			wantMsg:    "Failed to fetch OpenAI Codex models manifest",
+			leakString: "boom-secret-payload",
+		},
+		{
+			name:    "invalid json",
+			status:  http.StatusOK,
+			body:    `not json`,
+			wantMsg: "Upstream model list response was not valid JSON",
+		},
+		{
+			name:    "empty model list",
+			status:  http.StatusOK,
+			body:    `{"models":[]}`,
+			wantMsg: "Upstream returned no supported models",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+
+			original := chatgptCodexModelsURL
+			chatgptCodexModelsURL = server.URL
+			defer func() { chatgptCodexModelsURL = original }()
+
+			svc := &AccountTestService{
+				cfg: upstreamModelSyncTestConfig(),
+				openAIGatewayService: &OpenAIGatewayService{
+					settingService: &SettingService{},
+				},
+			}
+
+			models, err := svc.FetchUpstreamSupportedModels(context.Background(), &Account{
+				ID:       69,
+				Platform: PlatformOpenAI,
+				Type:     AccountTypeOAuth,
+				Credentials: map[string]any{
+					"access_token":       "test-access-token",
+					"chatgpt_account_id": "acc-123",
+				},
+			})
+			require.Error(t, err)
+			require.Empty(t, models)
+			var syncErr *UpstreamModelSyncError
+			require.True(t, errors.As(err, &syncErr))
+			require.Equal(t, UpstreamModelSyncErrorUpstream, syncErr.Kind)
+			require.Equal(t, tc.wantMsg, syncErr.SafeMessage())
+			if tc.leakString != "" {
+				// 上游正文只能进内部 err，不能进客户端可见消息。
+				require.NotContains(t, syncErr.SafeMessage(), tc.leakString)
+			}
+		})
+	}
 }
 
 func TestFetchUpstreamSupportedModelsParsesGrokResponse(t *testing.T) {

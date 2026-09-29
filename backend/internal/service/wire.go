@@ -217,6 +217,7 @@ func ProvideAccountTestService(
 	)
 	service.agentIdentityWS = openAIGatewayService
 	service.codexIdentity = openAIGatewayService.codexIdentity
+	service.openAIGatewayService = openAIGatewayService
 	service.SetMirasimMetadataService(mirasimMetadataService)
 	return service
 }

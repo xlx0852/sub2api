@@ -11,6 +11,8 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 )
 
 const upstreamModelsBodyLimit int64 = 8 << 20
@@ -82,6 +84,15 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 
 	if account.Platform == PlatformAntigravity && account.Type != AccountTypeAPIKey {
 		return s.fetchAntigravityOAuthUpstreamModels(ctx, account)
+	}
+
+	// OpenAI Codex（ChatGPT OAuth）没有 /v1/models 等价物：平台 API 只接受 API key，
+	// 而订阅 token 只在 chatgpt.com/backend-api/codex/models 上有效。因此这里不经过
+	// buildUpstreamModelsRequest，直接复用网关的 manifest 取回（刷新感知 token、
+	// 账号身份头、代理都已在网关侧实现）。
+	// 见 openspec/changes/add-oauth-upstream-model-sync。
+	if account.IsOpenAIOAuth() {
+		return s.fetchOpenAIOAuthUpstreamModels(ctx, account)
 	}
 
 	if s.httpUpstream == nil {
@@ -181,16 +192,90 @@ func (s *AccountTestService) fetchMirasimUpstreamModels(ctx context.Context, acc
 	return models, nil
 }
 
+func (s *AccountTestService) fetchOpenAIOAuthUpstreamModels(ctx context.Context, account *Account) ([]string, error) {
+	if s.openAIGatewayService == nil {
+		return nil, newUpstreamModelSyncConfigError("OpenAI gateway service is not configured", nil)
+	}
+
+	// 用**实际对外声明**的 Codex 版本查询：上游按 client_version 过滤模型清单，
+	// 陈旧版本拿不到新模型，版本与网关对外身份不一致会让同步结果与真实可用性分叉。
+	// 空值由 manifest 层回退到编译常量。
+	clientVersion := ""
+	if settingService := s.openAIGatewayService.settingService; settingService != nil {
+		clientVersion = settingService.GetOpenAICodexClientVersion(ctx)
+	}
+
+	manifest, err := s.openAIGatewayService.FetchCodexModelsManifest(ctx, account, clientVersion, "")
+	if err != nil {
+		// 凭据/代理不可用是运维可修的配置问题，和上游故障（5xx、非 JSON）分开报，
+		// 否则「同步失败」会指向错误的方向。
+		if upstreamModelSyncIsOpenAICredentialError(err) {
+			return nil, newUpstreamModelSyncConfigError(
+				fmt.Sprintf("No usable OpenAI Codex credential for account type %s", account.Type), err)
+		}
+		return nil, newUpstreamModelSyncUpstreamError("Failed to fetch OpenAI Codex models manifest", err)
+	}
+	if manifest == nil || len(manifest.Body) == 0 {
+		return nil, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", nil)
+	}
+
+	models, err := extractCodexManifestModelIDs(manifest.Body)
+	if err != nil {
+		return nil, newUpstreamModelSyncUpstreamError("Upstream model list response was not valid JSON", err)
+	}
+	if len(models) == 0 {
+		return nil, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", nil)
+	}
+	return models, nil
+}
+
+// upstreamModelSyncIsOpenAICredentialError 区分「账号凭据/代理不可用」与真正的上游失败。
+// 判据是 manifest 层给出的错误码，而不是 HTTP 状态：同一层用 502 同时表达凭据缺失与
+// 上游 5xx，只有错误码能分辨。
+func upstreamModelSyncIsOpenAICredentialError(err error) bool {
+	switch infraerrors.Reason(err) {
+	case "OPENAI_CODEX_MODELS_ACCOUNT_REQUIRED",
+		"OPENAI_CODEX_MODELS_CREDENTIALS_FAILED",
+		"OPENAI_CODEX_MODELS_TOKEN_MISSING",
+		"OPENAI_CODEX_MODELS_PROXY_INVALID":
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *AccountTestService) buildGrokUpstreamModelsRequest(ctx context.Context, account *Account) (*http.Request, error) {
-	if account.Type != AccountTypeAPIKey {
+	var bearerToken string
+	switch account.Type {
+	case AccountTypeAPIKey:
+		apiKey := strings.TrimSpace(account.GetCredential("api_key"))
+		if apiKey == "" {
+			return nil, newUpstreamModelSyncConfigError("No Grok API key is available", nil)
+		}
+		bearerToken = apiKey
+	case AccountTypeOAuth:
+		// OAuth 订阅凭据只允许发往官方 xAI host。base_url 可被运维改写成任意网关，
+		// 若照发就是把订阅 token 交给第三方（凭据外泄，且与白名单同步无关）。
+		if rawBaseURL := strings.TrimSpace(account.GetGrokBaseURL()); rawBaseURL != "" && !xai.IsOfficialBaseURL(rawBaseURL) {
+			return nil, newUpstreamModelSyncUnsupportedError(
+				"Grok OAuth upstream model sync requires an official xAI base URL; use a Grok API-key account for custom gateways", nil)
+		}
+		if s.grokTokenProvider == nil {
+			return nil, newUpstreamModelSyncConfigError("Grok token provider is not configured", nil)
+		}
+		accessToken, err := s.grokTokenProvider.GetAccessToken(ctx, account)
+		if err != nil {
+			return nil, newUpstreamModelSyncConfigError("Failed to get Grok access token", err)
+		}
+		accessToken = strings.TrimSpace(accessToken)
+		if accessToken == "" {
+			return nil, newUpstreamModelSyncConfigError("No Grok access token is available", nil)
+		}
+		bearerToken = accessToken
+	default:
 		return nil, newUpstreamModelSyncUnsupportedError(
 			fmt.Sprintf("Unsupported Grok account type for upstream model sync: %s", account.Type), nil,
 		)
-	}
-
-	apiKey := strings.TrimSpace(account.GetCredential("api_key"))
-	if apiKey == "" {
-		return nil, newUpstreamModelSyncConfigError("No Grok API key is available", nil)
 	}
 
 	baseURL := account.GetGrokOfficialBaseURL()
@@ -207,7 +292,7 @@ func (s *AccountTestService) buildGrokUpstreamModelsRequest(ctx context.Context,
 		return nil, newUpstreamModelSyncConfigError("Invalid Grok model list URL", err)
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Authorization", "Bearer "+bearerToken)
 	return req, nil
 }
 
