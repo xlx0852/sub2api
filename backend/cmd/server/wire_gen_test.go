@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -84,9 +85,22 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		nil, // upstreamBillingProbe
 		nil, // quotaWindowSweep
 		nil, // retrospectiveRisk
+		nil, // openAICodexVersionSyncService
 	)
 
 	require.NotPanics(t, func() {
 		cleanup()
 	})
+}
+
+// 装配回归守卫：wire 会静默丢弃 ProviderSet 中没有消费者的 provider——Codex 版本同步
+// 曾因此在线上从未启动，同步值冻结了三周多，而 `wire check` 不报任何诊断。
+// 这个断言盯着生成代码，确保同步服务确实被构造并交给 provideCleanup。
+func TestCodexVersionSyncIsWiredIntoGeneratedInjector(t *testing.T) {
+	source, err := os.ReadFile("wire_gen.go")
+	require.NoError(t, err)
+
+	code := string(source)
+	require.Contains(t, code, "service.ProvideOpenAICodexVersionSyncService(")
+	require.Contains(t, code, "openAICodexVersionSyncService)")
 }

@@ -1,8 +1,10 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -445,6 +447,126 @@ func TestOpenAICodexVersionSyncInitialRunsWhenStaleOrMissing(t *testing.T) {
 		require.Equal(t, 1, github.calls)
 		require.Equal(t, []string{"0.146.0"}, repo.syncedWrites())
 	})
+}
+
+// 计数用的 GitHub stub：并发安全，因为本测试里调用来自后台 goroutine。
+type codexVersionSyncCountingGitHubStub struct {
+	GitHubReleaseClient
+
+	mu    sync.Mutex
+	calls int
+}
+
+func (c *codexVersionSyncCountingGitHubStub) FetchLatestRelease(_ context.Context, _ string) (*GitHubRelease, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	return &GitHubRelease{TagName: "rust-v0.146.0"}, nil
+}
+
+func (c *codexVersionSyncCountingGitHubStub) callCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.calls
+}
+
+// Stop 必须真的停掉后台 goroutine：调度器装配处依赖这个语义（启动即同步 + 关机停表），
+// 停不下来会让进程退出时仍在请求 GitHub，也会让多次 Stop 互相死锁。
+func TestOpenAICodexVersionSyncStopStopsGoroutine(t *testing.T) {
+	repo := newCodexVersionSyncSettingRepoStub(nil)
+	github := &codexVersionSyncCountingGitHubStub{}
+	svc := NewOpenAICodexVersionSyncService(repo, &SettingService{}, github, 20*time.Millisecond)
+
+	svc.Start()
+	require.Eventually(t, func() bool { return github.callCount() > 0 }, 2*time.Second, 5*time.Millisecond)
+
+	svc.Stop()
+	svc.Stop() // 重复停止必须直接返回，不能死锁
+
+	after := github.callCount()
+	time.Sleep(10 * svc.interval)
+	require.Equal(t, after, github.callCount(), "Stop 之后不再有新的同步请求")
+}
+
+// 只放进 ProviderSet 而不被 injector 消费的 provider 会被 wire 静默丢弃：
+// 版本同步曾因此从未启动，生产上同步值冻结了三周多。跳过分支也要落日志，
+// 否则「没日志」既可能是没发布新版本，也可能是功能根本没跑。
+func TestOpenAICodexVersionSyncLogsStartAndSkipReasons(t *testing.T) {
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	t.Run("启动记录周期", func(t *testing.T) {
+		buf.Reset()
+		svc := newCodexVersionSyncService(
+			newCodexVersionSyncSettingRepoStub(map[string]string{SettingKeyOpenAICodexClientVersionSynced: "0.146.0"}),
+			&codexVersionSyncGitHubStub{},
+		)
+		svc.Start()
+		svc.Stop()
+		logs := buf.String()
+		require.Contains(t, logs, openAICodexVersionSyncStartedEvent)
+		require.Contains(t, logs, openAICodexVersionSyncInterval.String())
+	})
+
+	t.Run("启动同步因值仍新鲜而跳过", func(t *testing.T) {
+		buf.Reset()
+		repo := newCodexVersionSyncSettingRepoStub(map[string]string{
+			SettingKeyOpenAICodexClientVersionSynced: "0.146.0",
+		})
+		repo.updatedAt = time.Now().Add(-time.Hour)
+		github := &codexVersionSyncGitHubStub{}
+
+		newCodexVersionSyncService(repo, github).runInitial()
+
+		require.Contains(t, buf.String(), openAICodexVersionSyncInitialSkippedEvent)
+		require.Zero(t, github.latestCalls)
+	})
+
+	t.Run("关闭自动同步", func(t *testing.T) {
+		buf.Reset()
+		repo := newCodexVersionSyncSettingRepoStub(map[string]string{
+			SettingKeyOpenAICodexVersionAutoSyncEnabled: "false",
+		})
+		github := &codexVersionSyncGitHubStub{}
+
+		newCodexVersionSyncService(repo, github).runOnce()
+
+		require.Contains(t, buf.String(), noopEventAndReason("disabled"))
+		require.Zero(t, github.latestCalls)
+	})
+
+	t.Run("已是最新", func(t *testing.T) {
+		buf.Reset()
+		repo := newCodexVersionSyncSettingRepoStub(map[string]string{
+			SettingKeyOpenAICodexClientVersionSynced: "0.146.0",
+		})
+		github := &codexVersionSyncGitHubStub{latest: &GitHubRelease{TagName: "rust-v0.146.0"}}
+
+		newCodexVersionSyncService(repo, github).runOnce()
+
+		require.Contains(t, buf.String(), noopEventAndReason("up_to_date"))
+		require.Empty(t, repo.syncedWrites())
+	})
+
+	t.Run("上游版本未前进", func(t *testing.T) {
+		buf.Reset()
+		repo := newCodexVersionSyncSettingRepoStub(map[string]string{
+			SettingKeyOpenAICodexClientVersionSynced: "0.146.0",
+		})
+		github := &codexVersionSyncGitHubStub{releases: []*GitHubRelease{{TagName: "rust-v0.99.0"}}}
+
+		newCodexVersionSyncService(repo, github).runOnce()
+
+		require.Contains(t, buf.String(), noopEventAndReason("not_advanced"))
+		require.Empty(t, repo.syncedWrites())
+	})
+}
+
+// noopEventAndReason 按 slog TextHandler 的输出格式拼出「事件名 + 指定跳过原因」。
+func noopEventAndReason(reason string) string {
+	return openAICodexVersionSyncNoopEvent + " reason=" + reason
 }
 
 // 版本比较必须按段取数字：字典序会把 0.99.0 判为大于 0.146.0，

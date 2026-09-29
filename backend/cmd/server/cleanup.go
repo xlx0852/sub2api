@@ -46,6 +46,7 @@ func provideCleanup(
 	upstreamBillingProbe *service.UpstreamBillingProbeService,
 	quotaWindowSweep *service.QuotaWindowSweepService,
 	retrospectiveRisk *service.RetrospectiveRiskService,
+	openAICodexVersionSync *service.OpenAICodexVersionSyncService,
 ) func() {
 	return func() {
 		reg := lifecycle.New()
@@ -55,6 +56,12 @@ func provideCleanup(
 			name string
 			fn   func() error
 		}{
+			{"OpenAICodexVersionSyncService", func() error {
+				if openAICodexVersionSync != nil {
+					openAICodexVersionSync.Stop()
+				}
+				return nil
+			}},
 			{"OpenAIStatusCollectorService", func() error {
 				if openAIStatusCollector != nil {
 					openAIStatusCollector.Stop()

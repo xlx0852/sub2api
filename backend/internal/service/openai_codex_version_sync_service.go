@@ -24,6 +24,12 @@ const (
 	// openAICodexVersionTagPrefix 客户端 release 的 tag 前缀（如 rust-v0.146.0）。
 	// 同仓库还有其他组件的 tag（如 rusty-v8-*），必须按前缀过滤，否则会同步到无关版本号。
 	openAICodexVersionTagPrefix = "rust-v"
+
+	// 同步过程中的事件名。跳过分支必须落日志：只靠「推进成功」和「失败」两条事件时，
+	// 功能未启动、被关掉、上游长时间未发版在日志上长得完全一样。
+	openAICodexVersionSyncStartedEvent        = "openai_codex_version_sync_started"
+	openAICodexVersionSyncInitialSkippedEvent = "openai_codex_version_sync_initial_skipped"
+	openAICodexVersionSyncNoopEvent           = "openai_codex_version_sync_noop"
 )
 
 // OpenAICodexVersionSyncService 周期性把官方 Codex 客户端的最新稳定版版本号同步到设置，
@@ -60,6 +66,7 @@ func (s *OpenAICodexVersionSyncService) Start() {
 	if s == nil || s.settingRepo == nil || s.githubClient == nil || s.interval <= 0 {
 		return
 	}
+	slog.Info(openAICodexVersionSyncStartedEvent, "repo", openAICodexVersionSyncRepo, "interval", s.interval.String())
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -92,30 +99,33 @@ func (s *OpenAICodexVersionSyncService) Stop() {
 // 频繁重启、滚动发布或崩溃重启会让「启动即同步」放大成对 GitHub 的连续请求，
 // 而版本号是天级变化的，重启后没有立刻重新拉取的必要。
 func (s *OpenAICodexVersionSyncService) runInitial() {
-	if s.syncedWithinInterval() {
+	if fresh, age := s.syncedWithinInterval(); fresh {
+		slog.Info(openAICodexVersionSyncInitialSkippedEvent,
+			"synced_age", age.Round(time.Second).String(), "interval", s.interval.String())
 		return
 	}
 	s.runOnce()
 }
 
-// syncedWithinInterval 判断已同步值是否仍在一个同步周期内。
+// syncedWithinInterval 判断已同步值是否仍在一个同步周期内，并返回其已存放时长（供日志诊断）。
 // 借设置行自身的 UpdatedAt 判断，无需额外记录时间戳的设置项。
 // 读取失败或尚无有效同步值时返回 false，让启动同步照常执行。
-func (s *OpenAICodexVersionSyncService) syncedWithinInterval() bool {
+func (s *OpenAICodexVersionSyncService) syncedWithinInterval() (bool, time.Duration) {
 	if s.interval <= 0 {
-		return false
+		return false, 0
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), openAICodexVersionSyncTimeout)
 	defer cancel()
 
 	setting, err := s.settingRepo.Get(ctx, SettingKeyOpenAICodexClientVersionSynced)
 	if err != nil || setting == nil || setting.UpdatedAt.IsZero() {
-		return false
+		return false, 0
 	}
 	if NormalizeCodexClientVersion(setting.Value) == "" {
-		return false
+		return false, 0
 	}
-	return time.Since(setting.UpdatedAt) < s.interval
+	age := time.Since(setting.UpdatedAt)
+	return age < s.interval, age
 }
 
 func (s *OpenAICodexVersionSyncService) runOnce() {
@@ -123,18 +133,27 @@ func (s *OpenAICodexVersionSyncService) runOnce() {
 	defer cancel()
 
 	if !s.autoSyncEnabled(ctx) {
+		slog.Info(openAICodexVersionSyncNoopEvent, "reason", "disabled")
 		return
 	}
 
 	latest := s.fetchLatestStableVersion(ctx)
 	if latest == "" {
+		// 抓取失败已在 fetchLatestStableVersion 内落日志，保持既有值。
 		return
 	}
 
 	current := NormalizeCodexClientVersion(s.currentSyncedVersion(ctx))
 	// 只向前推进：上游偶发返回旧数据或重新发布历史 tag 时不把已同步的版本号降级。
-	if current != "" && CompareVersions(latest, current) <= 0 {
-		return
+	if current != "" {
+		switch cmp := CompareVersions(latest, current); {
+		case cmp == 0:
+			slog.Info(openAICodexVersionSyncNoopEvent, "reason", "up_to_date", "version", current)
+			return
+		case cmp < 0:
+			slog.Info(openAICodexVersionSyncNoopEvent, "reason", "not_advanced", "current", current, "latest", latest)
+			return
+		}
 	}
 	if err := s.settingRepo.Set(ctx, SettingKeyOpenAICodexClientVersionSynced, latest); err != nil {
 		slog.Warn("openai_codex_version_sync_persist_failed", "version", latest, "error", err)
