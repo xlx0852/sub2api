@@ -47,10 +47,19 @@
       `TestOpenAIGatewayServiceForward_CodexImageInjectionRespectsGroupCapability`,
       `TestOpenAIGatewayService_OAuthPassthrough_CompactUsesJSONAndKeepsNonStreaming`,
       `TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_CodexImageBridgeRespectsResponsesLite`.
-- [ ] 4.2 Confirm the runner is present in a real binary (build with the `cmd/server` package and
+- [x] 4.2 Confirm the runner is present in a real binary (build with the `cmd/server` package and
       check symbols), not just in the source; guard the generated injector with a source-level test
       (`cmd/server/wire_gen_test.go`) so a future regeneration that drops the runner fails the
       build's test step rather than silently stopping the sync.
+      Verified: an unstripped `linux/amd64` build of `./cmd/server` exposes
+      `internal/service.(*OpenAICodexVersionSyncService).Start/Stop/runOnce` and
+      `internal/repository.ProvideGitHubReleaseClient` via `go tool nm`; the shipped stripped binary
+      contains the same symbols in its pclntab (`strings` count 4 vs 0 in the previous production
+      binary). Deployed to production and confirmed by logs:
+      `openai_codex_version_sync_started` (interval `6h0m0s`) then `openai_codex_version_synced`
+      (`previous=0.153.4 version=0.159.1`), and setting
+      `openai_codex_client_version_synced = 0.159.1` (previously frozen at `0.153.4` since
+      2026-09-05).
 - [x] 4.3 `openspec validate update-codex-client-version-sync --strict` passes.
 
 ## 5. Documentation
