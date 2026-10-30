@@ -1652,6 +1652,69 @@ func TestOpenAIGatewayService_APIKeyPassthrough_PreservesBodyAndUsesResponsesEnd
 	require.Empty(t, upstream.lastReq.Header.Get("X-Test"))
 }
 
+func TestOpenAIGatewayService_APIKeyPassthrough_NormalizesGLMDeepSeekV4ReasoningEffortWithModelMapping(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name          string
+		reasoningJSON string
+		path          string
+		want          string
+		wantNumber    bool
+	}{
+		{name: "nested string", reasoningJSON: `"reasoning":{"effort":"medium"}`, path: "reasoning.effort", want: "high"},
+		{name: "nested minimal", reasoningJSON: `"reasoning":{"effort":"minimal"}`, path: "reasoning.effort", want: "high"},
+		{name: "top-level string", reasoningJSON: `"reasoning_effort":"XHIGH"`, path: "reasoning_effort", want: "max"},
+		{name: "integer preserved as number", reasoningJSON: `"reasoning":{"effort":37}`, path: "reasoning.effort", want: "37", wantNumber: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
+
+			body := []byte(`{"model":"deepseek-chat","stream":false,` + tt.reasoningJSON + `,"input":[{"type":"text","text":"hi"}]}`)
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"output":[],"usage":{"input_tokens":1,"output_tokens":1}}`)),
+			}}
+			svc := &OpenAIGatewayService{
+				cfg:          &config.Config{Gateway: config.GatewayConfig{ForceCodexCLI: false}},
+				httpUpstream: upstream,
+			}
+			account := &Account{
+				ID:             457,
+				Name:           "apikey-deepseek-mapped",
+				Platform:       PlatformOpenAI,
+				Type:           AccountTypeAPIKey,
+				Concurrency:    1,
+				Credentials:    map[string]any{"api_key": "sk-api-key", "base_url": "https://api.openai.com", "model_mapping": map[string]any{"deepseek-chat": "deepseek-v4.1-flash"}},
+				Extra:          map[string]any{"openai_passthrough": true},
+				Status:         StatusActive,
+				Schedulable:    true,
+				RateMultiplier: f64p(1),
+			}
+
+			result, err := svc.Forward(context.Background(), c, account, body)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, "https://api.openai.com/v1/responses", upstream.lastReq.URL.String())
+			require.Equal(t, "deepseek-v4.1-flash", gjson.GetBytes(upstream.lastBody, "model").String())
+			parsed := gjson.GetBytes(upstream.lastBody, tt.path)
+			if tt.wantNumber {
+				require.Equal(t, gjson.Number, parsed.Type)
+				require.Equal(t, int64(37), parsed.Int())
+			} else {
+				require.Equal(t, gjson.String, parsed.Type)
+				require.Equal(t, tt.want, parsed.String())
+			}
+			require.True(t, gjson.GetBytes(upstream.lastBody, "input.0").Exists())
+		})
+	}
+}
+
 func TestOpenAIGatewayService_OAuthPassthrough_WarnOnTimeoutHeadersForStream(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logSink, restore := captureStructuredLog(t)

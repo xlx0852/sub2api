@@ -1294,8 +1294,7 @@ func ApplyThinkingEnabledFallback(effort *string, body []byte, mappedModel strin
 // DeepSeek V4. DeepSeek officially maps low/medium to high and xhigh to max.
 // Other providers remain untouched.
 func NormalizeGLMOpenAIReasoningEffort(body []byte, mappedModel string) ([]byte, bool) {
-	normalizedModel := strings.ToLower(strings.TrimSpace(mappedModel))
-	if !strings.HasPrefix(normalizedModel, "glm-") && !strings.HasPrefix(normalizedModel, "deepseek-v4-") {
+	if !isGLMOrDeepSeekV4Model(mappedModel) {
 		return body, false
 	}
 
@@ -1305,12 +1304,8 @@ func NormalizeGLMOpenAIReasoningEffort(body []byte, mappedModel string) ([]byte,
 		path = "reasoning_effort"
 		raw = strings.TrimSpace(gjson.GetBytes(body, path).String())
 	}
-	if raw == "" {
-		return body, false
-	}
-
-	mapped := normalizeGLMOpenAIReasoningEffort(raw)
-	if mapped == "" || mapped == raw {
+	mapped := GLMDeepSeekV4ReasoningEffort(raw, mappedModel)
+	if mapped == "" {
 		return body, false
 	}
 
@@ -1319,6 +1314,44 @@ func NormalizeGLMOpenAIReasoningEffort(body []byte, mappedModel string) ([]byte,
 		return body, false
 	}
 	return modified, true
+}
+
+// isGLMOrDeepSeekV4Model reports whether the mapped upstream model is one that
+// only accepts the collapsed reasoning-effort ladder (low/high/xhigh/max or an
+// integer).
+//
+// The prefix must be "deepseek-v4" without a trailing separator: real model ids
+// come in both shapes — deepseek-v4-pro / deepseek-v4-flash (dash) and
+// deepseek-v4.1-flash (dot). Matching only "deepseek-v4-" silently skipped
+// deepseek-v4.1-flash, the highest-volume model on these upstreams.
+func isGLMOrDeepSeekV4Model(mappedModel string) bool {
+	m := strings.ToLower(strings.TrimSpace(mappedModel))
+	return strings.HasPrefix(m, "glm-") || strings.HasPrefix(m, "deepseek-v4")
+}
+
+// GLMDeepSeekV4ReasoningEffort returns the normalized upstream effort value for
+// glm-*/deepseek-v4* models, or "" when no rewrite is needed.
+//
+// Those upstreams only accept low/high/xhigh/max (or an integer). Integer values
+// are deliberately left untouched: returning them as a string would change the
+// JSON number into a JSON string. OpenAI-only minimal is folded into high.
+func GLMDeepSeekV4ReasoningEffort(raw, mappedModel string) string {
+	model := strings.ToLower(strings.TrimSpace(mappedModel))
+	if !isGLMOrDeepSeekV4Model(model) {
+		return ""
+	}
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	mapped := normalizeGLMOpenAIReasoningEffort(value)
+	if mapped == "" && strings.EqualFold(value, "minimal") {
+		mapped = "high"
+	}
+	if mapped == "" || mapped == value {
+		return ""
+	}
+	return mapped
 }
 
 func normalizeGLMOpenAIReasoningEffort(raw string) string {

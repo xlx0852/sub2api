@@ -1587,6 +1587,23 @@ func TestNormalizeGLMOpenAIReasoningEffort(t *testing.T) {
 			wantValue:   "high",
 		},
 		{
+			name:        "deepseek minimal maps to high",
+			model:       "deepseek-v4-pro",
+			input:       `{"model":"deepseek-v4-pro","reasoning_effort":"minimal","messages":[]}`,
+			wantApplied: true,
+			wantPath:    "reasoning_effort",
+			wantValue:   "high",
+		},
+		{
+			// 真实 id 是 deepseek-v4.1-flash（点前缀），曾因只匹配 "deepseek-v4-" 被漏掉。
+			name:        "deepseek v4.1 (dot prefix) medium maps to high",
+			model:       "deepseek-v4.1-flash",
+			input:       `{"model":"deepseek-v4.1-flash","reasoning":{"effort":"medium"},"messages":[]}`,
+			wantApplied: true,
+			wantPath:    "reasoning.effort",
+			wantValue:   "high",
+		},
+		{
 			name:          "missing effort unchanged",
 			model:         "glm-5.2",
 			input:         `{"model":"glm-5.2","messages":[]}`,
@@ -1611,6 +1628,58 @@ func TestNormalizeGLMOpenAIReasoningEffort(t *testing.T) {
 				return
 			}
 			require.Equal(t, tt.wantValue, gjson.GetBytes(got, tt.wantPath).String())
+		})
+	}
+
+	t.Run("nil body is safe", func(t *testing.T) {
+		got, applied := NormalizeGLMOpenAIReasoningEffort(nil, "deepseek-v4-pro")
+		require.False(t, applied)
+		require.Nil(t, got)
+	})
+
+	t.Run("does not mutate reusable input body", func(t *testing.T) {
+		input := []byte(`{"model":"deepseek-v4-pro","reasoning":{"effort":"medium"}}`)
+		original := append([]byte(nil), input...)
+		got, applied := NormalizeGLMOpenAIReasoningEffort(input, "deepseek-v4-pro")
+		require.True(t, applied)
+		require.Equal(t, original, input)
+		require.Equal(t, "high", gjson.GetBytes(got, "reasoning.effort").String())
+	})
+}
+
+func TestGLMDeepSeekV4ReasoningEffort(t *testing.T) {
+	tests := []struct {
+		name    string
+		model   string
+		raw     string
+		want    string
+		wantNil bool
+	}{
+		{name: "glm medium -> high", model: "glm-5.2", raw: "medium", want: "high"},
+		{name: "deepseek nested medium -> high", model: "deepseek-v4.1-flash", raw: "medium", want: "high"},
+		{name: "deepseek low -> high (official mapping)", model: "deepseek-v4-pro", raw: "low", want: "high"},
+		{name: "deepseek xhigh -> max", model: "deepseek-v4-flash", raw: "xhigh", want: "max"},
+		{name: "deepseek minimal -> high", model: "deepseek-v4-pro", raw: "minimal", want: "high"},
+		{name: "case insensitive", model: "deepseek-v4-pro", raw: "MEDIUM", want: "high"},
+		{name: "case-normalizes native value", model: "deepseek-v4-pro", raw: "HIGH", want: "high"},
+		{name: "model id case insensitive", model: "DeepSeek-V4-Pro", raw: "medium", want: "high"},
+		{name: "native high unchanged", model: "deepseek-v4-pro", raw: "high", wantNil: true},
+		{name: "native max unchanged", model: "glm-5.2", raw: "max", wantNil: true},
+		{name: "integer passthrough unchanged", model: "deepseek-v4-pro", raw: "50", wantNil: true},
+		{name: "unknown value unchanged", model: "glm-5.2", raw: "banana", wantNil: true},
+		{name: "empty unchanged", model: "deepseek-v4-pro", raw: "", wantNil: true},
+		{name: "non glm/deepseek model untouched", model: "gpt-5.6-luna", raw: "medium", wantNil: true},
+		{name: "deepseek-v3 not matched", model: "deepseek-v3", raw: "medium", wantNil: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GLMDeepSeekV4ReasoningEffort(tt.raw, tt.model)
+			if tt.wantNil {
+				require.Empty(t, got)
+				return
+			}
+			require.Equal(t, tt.want, got)
 		})
 	}
 }

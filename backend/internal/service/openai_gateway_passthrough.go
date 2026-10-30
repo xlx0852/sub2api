@@ -1,8 +1,7 @@
 package service
 
-// 本文件由 openai_gateway_service.go 纯移动拆分而来：/v1/responses 直通
-// （passthrough）转发路径及其流式/非流式响应处理与错误处理。仅做代码搬迁，
-// 无任何行为变更。
+// 本文件承载 /v1/responses 直通（passthrough）转发路径及其流式/非流式
+// 响应处理和错误处理。
 
 import (
 	"bufio"
@@ -96,6 +95,22 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Passthrough force-demoted Responses-Lite for external bridge model=%s (account: %s)", liteUpstreamModel, account.Name)
 		} else {
 			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Passthrough demoted Responses-Lite request for non-lite upstream model=%s (account: %s)", liteUpstreamModel, account.Name)
+		}
+	}
+
+	if isGLMOrDeepSeekV4Model(liteUpstreamModel) {
+		for _, path := range []string{"reasoning.effort", "reasoning_effort"} {
+			raw := strings.TrimSpace(gjson.GetBytes(body, path).String())
+			mapped := GLMDeepSeekV4ReasoningEffort(raw, liteUpstreamModel)
+			if mapped == "" {
+				continue
+			}
+			nextBody, setErr := sjson.SetBytes(body, path, mapped)
+			if setErr != nil {
+				return nil, fmt.Errorf("normalize passthrough reasoning effort: %w", setErr)
+			}
+			body = nextBody
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Passthrough normalized %s: %s -> %s for upstream model=%s (account: %s)", path, raw, mapped, liteUpstreamModel, account.Name)
 		}
 	}
 

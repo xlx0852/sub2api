@@ -132,7 +132,26 @@ func (s *OpenAIGatewayService) forwardOpenAIRewrite(ex *pipeline.Exchange) error
 		markOpenAIResponsesLiteDemoted(c)
 		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Demoted Responses-Lite request for non-lite upstream model=%s (account: %s)", st.upstreamModel, account.Name)
 	}
-	if strings.TrimSpace(gjson.GetBytes(st.body, "reasoning.effort").String()) == "minimal" {
+	// GLM / DeepSeek V4 上游只接受 low/high/xhigh/max（或 [1,100] 的整数）。
+	// chat-completions 路径已挂同一张归一表，但 /responses 路径此前没挂：
+	// 客户端发 reasoning.effort=medium 会被上游 400
+	// （"reasoning_effort must be low, high, xhigh, max, or an integer..."）。
+	effortModel := strings.ToLower(strings.TrimSpace(firstNonEmpty(st.upstreamModel, st.billingModel, st.originalModel)))
+	isGLMOrDeepSeekV4 := isGLMOrDeepSeekV4Model(effortModel)
+	if isGLMOrDeepSeekV4 {
+		for _, path := range []string{"reasoning.effort", "reasoning_effort"} {
+			raw := strings.TrimSpace(gjson.GetBytes(st.body, path).String())
+			mapped := GLMDeepSeekV4ReasoningEffort(raw, effortModel)
+			if mapped == "" {
+				continue
+			}
+			st.markPatchSet(path, mapped)
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Normalized %s: %s -> %s for upstream model=%s (account: %s)", path, raw, mapped, effortModel, account.Name)
+		}
+	}
+	// minimal -> none 只适用于真正认 none 的上游；glm/deepseek-v4 已被上面归到 high，
+	// 这里的 none 会被它们 400，所以必须跳过。
+	if !isGLMOrDeepSeekV4 && strings.TrimSpace(gjson.GetBytes(st.body, "reasoning.effort").String()) == "minimal" {
 		st.markPatchSet("reasoning.effort", "none")
 		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Normalized reasoning.effort: minimal -> none (account: %s)", account.Name)
 	}

@@ -5,6 +5,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -71,7 +72,7 @@ func TestForwardResponses_ForceChatCompletionsRoutesStreamingToChatCompletions(t
 		"",
 		`data: {"id":"chatcmpl_stream","object":"chat.completion.chunk","model":"gpt-5.4","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
 		"",
-		`data: {"id":"chatcmpl_stream","object":"chat.completion.chunk","model":"gpt-5.4","choices":[],"usage":{"prompt_tokens":4,"completion_tokens":3,"total_tokens":7}}`,
+		`data: {"id":"chatcmpl_stream","object":"chat.completion.chunk","model":"gpt-5.4","choices":[],"usage":{"prompt_tokens":4,"completion_tokens":3,"total_tokens":7,"prompt_tokens_details":{"cached_tokens":2}}}`,
 		"",
 		"data: [DONE]",
 		"",
@@ -98,6 +99,7 @@ func TestForwardResponses_ForceChatCompletionsRoutesStreamingToChatCompletions(t
 	require.Contains(t, rec.Body.String(), "data: [DONE]")
 	require.Equal(t, 4, result.Usage.InputTokens)
 	require.Equal(t, 3, result.Usage.OutputTokens)
+	require.Equal(t, 2, result.Usage.CacheReadInputTokens)
 	require.True(t, result.Stream)
 	require.NotNil(t, result.FirstTokenMs)
 }
@@ -209,6 +211,70 @@ func TestForwardResponses_AutoSupportedAccountStillUsesResponsesEndpoint(t *test
 	require.True(t, gjson.GetBytes(upstream.lastBody, "input").Exists())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "messages").Exists())
 	require.Equal(t, "ok", gjson.Get(rec.Body.String(), "output.0.content.0.text").String())
+}
+
+func TestForwardResponses_NativePipelineNormalizesGLMDeepSeekV4ReasoningEffort(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name          string
+		requestModel  string
+		upstreamModel string
+		path          string
+		reasoningJSON string
+		wantEffort    string
+		wantInteger   bool
+	}{
+		{name: "nested medium", requestModel: "deepseek-v4.1-flash", upstreamModel: "deepseek-v4.1-flash", path: "reasoning.effort", reasoningJSON: `"reasoning":{"effort":"medium"}`, wantEffort: "high"},
+		{name: "nested uppercase", requestModel: "deepseek-v4.1-flash", upstreamModel: "deepseek-v4.1-flash", path: "reasoning.effort", reasoningJSON: `"reasoning":{"effort":"HIGH"}`, wantEffort: "high"},
+		{name: "minimal", requestModel: "deepseek-v4-pro", upstreamModel: "deepseek-v4-pro", path: "reasoning.effort", reasoningJSON: `"reasoning":{"effort":"minimal"}`, wantEffort: "high"},
+		{name: "top level case insensitive", requestModel: "deepseek-v4-pro", upstreamModel: "deepseek-v4-pro", path: "reasoning_effort", reasoningJSON: `"reasoning_effort":"XHIGH"`, wantEffort: "max"},
+		{name: "integer", requestModel: "deepseek-v4-flash", upstreamModel: "deepseek-v4-flash", path: "reasoning.effort", reasoningJSON: `"reasoning":{"effort":37}`, wantEffort: "37", wantInteger: true},
+		{name: "unsupported unchanged", requestModel: "deepseek-v4-pro", upstreamModel: "deepseek-v4-pro", path: "reasoning.effort", reasoningJSON: `"reasoning":{"effort":"banana"}`, wantEffort: "banana"},
+		{name: "mapped model", requestModel: "deepseek-chat", upstreamModel: "deepseek-v4.1-flash", path: "reasoning.effort", reasoningJSON: `"reasoning":{"effort":"medium"}`, wantEffort: "high"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := []byte(fmt.Sprintf(`{"model":%q,"input":"hello","stream":false,%s}`, tt.requestModel, tt.reasoningJSON))
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(strings.NewReader(fmt.Sprintf(
+					`{"id":"resp_native","object":"response","model":%q,"status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`,
+					tt.upstreamModel,
+				))),
+			}}
+			svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
+			account := rawChatCompletionsTestAccount()
+			account.Extra = map[string]any{
+				openai_compat.ExtraKeyResponsesMode:      string(openai_compat.ResponsesSupportModeAuto),
+				openai_compat.ExtraKeyResponsesSupported: true,
+			}
+			if tt.requestModel != tt.upstreamModel {
+				account.Credentials["model_mapping"] = map[string]any{tt.requestModel: tt.upstreamModel}
+			}
+
+			result, err := svc.Forward(context.Background(), c, account, body)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, "http://upstream.example/v1/responses", upstream.lastReq.URL.String())
+			require.Equal(t, tt.upstreamModel, gjson.GetBytes(upstream.lastBody, "model").String())
+			if tt.wantInteger {
+				parsed := gjson.GetBytes(upstream.lastBody, tt.path)
+				require.Equal(t, gjson.Number, parsed.Type)
+				require.Equal(t, int64(37), parsed.Int())
+			} else {
+				require.Equal(t, gjson.String, gjson.GetBytes(upstream.lastBody, tt.path).Type)
+				require.Equal(t, tt.wantEffort, gjson.GetBytes(upstream.lastBody, tt.path).String())
+			}
+		})
+	}
 }
 
 func forceChatResponsesFallbackAccount() *Account {
