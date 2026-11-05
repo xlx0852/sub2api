@@ -173,6 +173,7 @@ export default {
     users: 'Users',
     groups: 'Group Plans',
     pricing: 'Pricing',
+    models: 'Models',
     channels: 'Sell-Price Policies',
     availableChannels: 'Model Plaza',
     accounts: 'Account Pool',

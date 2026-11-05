@@ -693,6 +693,33 @@ export default {
 
     // Groups
     // Pricing page (sell-price table library)
+    models: {
+      title: 'Model registry',
+      subtitle: 'The only source of model identity and capabilities. Price rows must reference a registered model; unregistered models cannot be priced and empty rows are rejected.',
+      hint: 'price rows = 0 means the model has no price at all and requests fail closed',
+      searchPlaceholder: 'Search model id or display name',
+      create: 'Register model',
+      edit: 'Edit',
+      empty: 'No matching model',
+      colId: 'Model ID',
+      colPlatform: 'Platform',
+      colDisplay: 'Display name',
+      colContext: 'Context',
+      colPrices: 'Price rows',
+      colStatus: 'Status',
+      colGroup: 'Group',
+      aliases: 'Aliases',
+      addAlias: 'Add alias',
+      aliasPlaceholder: 'alias (e.g. kimi3.1)',
+      noAliases: 'No aliases',
+      prices: 'Price rows',
+      pricesHint: 'Values are per million tokens. “default” is the fallback row; per-group rows win. fx_auto needs a rate and a cost basis.',
+      defaultPrice: 'Default (fallback)',
+      noPrices: 'No price row yet — this model fails closed',
+      savePrice: 'Save price row',
+      saved: 'Model saved',
+      saveModelFirst: 'Save the model before adding prices'
+    },
     pricing: {
       pageTitle: 'Pricing & sell-price tables',
       subtitle: 'The only place to edit a model unit price. Groups only pick a table and apply a customer discount; groups without a table fall back to the built-in default (official pins and peak windows, not editable here).',

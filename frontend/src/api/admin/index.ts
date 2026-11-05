@@ -32,12 +32,14 @@ import riskControlAPI from './riskControl'
 import adminComplianceAPI from './compliance'
 import profitAPI from './profit'
 import deviceOAuthAPI from './deviceOAuth'
+import modelRegistryAPI from './modelRegistry'
 
 /**
  * Unified admin API object for convenient access
  */
 export const adminAPI = {
   dashboard: dashboardAPI,
+  models: modelRegistryAPI,
   users: usersAPI,
   groups: groupsAPI,
   accounts: accountsAPI,

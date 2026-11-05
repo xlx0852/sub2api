@@ -684,6 +684,18 @@ func registerChannelRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	registerSellPricePolicyRoutes(admin.Group("/sell-price-policies"), h)
 	// Legacy path: still functional (deprecation headers applied at /admin group for /channels*).
 	registerSellPricePolicyRoutes(admin.Group("/channels"), h)
+
+	// 模型注册表（models / 别名 / 各组价格）
+	models := admin.Group("/models")
+	{
+		models.GET("", h.Admin.Channel.ListModels)
+		models.PUT("", h.Admin.Channel.UpsertModel)
+		models.GET("/:id/aliases", h.Admin.Channel.ListModelAliases)
+		models.PUT("/:id/aliases", h.Admin.Channel.ReplaceModelAliases)
+		models.GET("/:id/prices", h.Admin.Channel.ListModelPrices)
+		models.PUT("/:id/price", h.Admin.Channel.UpsertModelPrice)
+		models.DELETE("/:id/price", h.Admin.Channel.DeleteModelPrice)
+	}
 }
 
 func registerSellPricePolicyRoutes(g *gin.RouterGroup, h *handler.Handlers) {

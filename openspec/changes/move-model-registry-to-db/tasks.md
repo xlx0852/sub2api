@@ -30,9 +30,9 @@
 
 ## 4. Slice 3 — guards and admin surface
 
-- [ ] 4.1 Reject price rows for unregistered models (`MODEL_NOT_REGISTERED`) and rows with no price at all.
-- [ ] 4.2 Alias conflicts (same alias, different model) rejected; retired ids cannot be re-registered as active.
-- [ ] 4.3 `/admin/models` page: list with defaults column and red flag for `MISSING_DEFAULT_PRICE`; detail drawer for identity, aliases and per-group prices (default row first).
+- [x] 4.1 Reject price rows for unregistered models (`MODEL_NOT_REGISTERED`) and rows with no price at all.
+- [x] 4.2 Alias conflicts (same alias, different model) rejected; retired ids cannot be re-registered as active.
+- [x] 4.3 `/admin/models` page: list with defaults column and red flag for `MISSING_DEFAULT_PRICE`; detail drawer for identity, aliases and per-group prices (default row first).
 - [ ] 4.4 `/admin/pricing` becomes a read-only comparison view (matrix, divergence, effective preview) and links to the model page for edits.
 - [ ] 4.5 "Register from vendor" action: pull `/v1/models` from an account, prefill id/context/capabilities/price, require human confirmation.
 - [ ] 4.6 Optimistic locking (`version`) on save with a clear conflict error.
@@ -78,3 +78,16 @@
   5.60 / 8.40 CNY per MTok.
   The 48 boot diffs are all "registry has X / file does not" for those nine models plus the
   price-only alias names — inspect them with `grep model_registry.mismatch` after a restart.
+
+### Slice 3 status (2026-11-06)
+
+- Guards shipped with tests: unregistered model → `MODEL_NOT_REGISTERED`, empty price row
+  rejected, `fx_auto` requires cost basis + positive rate, alias conflicts rejected,
+  retired+enabled rejected. Optimistic locking is implemented in SQL (version match) but the
+  admin UI does not send a version yet.
+- Admin API: `GET /admin/models`, `PUT /admin/models`, `GET|PUT /admin/models/:id/aliases`,
+  `GET /admin/models/:id/prices`, `PUT|DELETE /admin/models/:id/price`.
+- New page `/admin/models` (list + drawer with identity, aliases, per-group prices, inline
+  upsert/delete). Prices are edited in ¥ per million tokens and stored per token.
+- Still open: “register from vendor” (pull `/v1/models` from an account) and optimistic-lock
+  surfacing in the UI.

@@ -430,6 +430,12 @@ const routes: RouteRecordRaw[] = [
   // Sell pricing is inlined on Groups → Pricing (GroupSellPriceEditor).
   // Keep old URLs as soft redirects so bookmarks don't 404.
   {
+    path: '/admin/models',
+    name: 'admin-models',
+    component: () => import('@/features/admin/views/ModelsView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
     path: '/admin/pricing',
     name: 'admin-pricing',
     component: () => import('@/features/admin/views/PricingView.vue'),

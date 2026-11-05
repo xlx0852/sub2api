@@ -173,6 +173,7 @@ export default {
     users: '用户管理',
     groups: '分组套餐',
     pricing: '定价与售价表',
+    models: '模型注册',
     channels: '售价策略',
     availableChannels: '模型广场',
     accounts: '号池管理',

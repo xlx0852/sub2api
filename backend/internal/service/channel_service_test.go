@@ -21,6 +21,8 @@ type mockChannelRepository struct {
 	listAllFn                         func(ctx context.Context) ([]Channel, error)
 	listGroupRefsFn                   func(ctx context.Context) (map[int64][]domain.GroupPolicyBinding, error)
 	getModelPriceFn                   func(ctx context.Context, modelID string, groupID *int64) (*domain.ModelPriceRow, error)
+	listModelRegistryFn               func(ctx context.Context, platform, search string) ([]domain.ModelRegistryEntry, error)
+	aliasConflictFn                   func(ctx context.Context, alias, platform, modelID string) (string, error)
 	getGroupPlatformsFn               func(ctx context.Context, groupIDs []int64) (map[int64]string, error)
 	createFn                          func(ctx context.Context, channel *Channel) error
 	getByIDFn                         func(ctx context.Context, id int64) (*Channel, error)
@@ -217,6 +219,44 @@ func (m *mockChannelRepository) GetModelPrice(ctx context.Context, modelID strin
 	if m.getModelPriceFn != nil {
 		return m.getModelPriceFn(ctx, modelID, groupID)
 	}
+	return nil, nil
+}
+
+func (m *mockChannelRepository) ListModelRegistry(ctx context.Context, platform, search string) ([]domain.ModelRegistryEntry, error) {
+	if m.listModelRegistryFn != nil {
+		return m.listModelRegistryFn(ctx, platform, search)
+	}
+	return nil, nil
+}
+
+func (m *mockChannelRepository) UpsertModelRegistry(ctx context.Context, e *domain.ModelRegistryEntry, expectedVersion int64) (int64, error) {
+	return 1, nil
+}
+
+func (m *mockChannelRepository) ListModelAliases(ctx context.Context, modelID string) ([]domain.ModelAliasEntry, error) {
+	return nil, nil
+}
+
+func (m *mockChannelRepository) AliasConflict(ctx context.Context, alias, platform, modelID string) (string, error) {
+	if m.aliasConflictFn != nil {
+		return m.aliasConflictFn(ctx, alias, platform, modelID)
+	}
+	return "", nil
+}
+
+func (m *mockChannelRepository) ReplaceModelAliases(ctx context.Context, modelID string, aliases []domain.ModelAliasEntry) error {
+	return nil
+}
+
+func (m *mockChannelRepository) UpsertModelPrice(ctx context.Context, row *domain.ModelPriceRow) error {
+	return nil
+}
+
+func (m *mockChannelRepository) DeleteModelPrice(ctx context.Context, modelID string, groupID *int64) error {
+	return nil
+}
+
+func (m *mockChannelRepository) ListModelPrices(ctx context.Context, modelID string) ([]domain.ModelPriceRow, error) {
 	return nil, nil
 }
 

@@ -44,6 +44,16 @@ type ChannelRepository interface {
 	GetPriceCost(ctx context.Context, id int64) (*domain.PriceCost, error)
 	// GetModelPrice 返回模型在分组下的价格行（精确分组行优先，其次平台默认行）。
 	GetModelPrice(ctx context.Context, modelID string, groupID *int64) (*domain.ModelPriceRow, error)
+
+	// —— 模型注册表后台管理 ——
+	ListModelRegistry(ctx context.Context, platform, search string) ([]domain.ModelRegistryEntry, error)
+	UpsertModelRegistry(ctx context.Context, m *domain.ModelRegistryEntry, expectedVersion int64) (int64, error)
+	ListModelAliases(ctx context.Context, modelID string) ([]domain.ModelAliasEntry, error)
+	AliasConflict(ctx context.Context, alias, platform, modelID string) (string, error)
+	ReplaceModelAliases(ctx context.Context, modelID string, aliases []domain.ModelAliasEntry) error
+	UpsertModelPrice(ctx context.Context, row *domain.ModelPriceRow) error
+	DeleteModelPrice(ctx context.Context, modelID string, groupID *int64) error
+	ListModelPrices(ctx context.Context, modelID string) ([]domain.ModelPriceRow, error)
 	ListPriceCosts(ctx context.Context) ([]domain.PriceCost, error)
 	UpsertPriceCost(ctx context.Context, cost *domain.PriceCost) (*domain.PriceCost, error)
 	DeletePriceCost(ctx context.Context, id int64) error

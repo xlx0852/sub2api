@@ -747,6 +747,33 @@ export default {
 
     // Groups Management
     // 独立定价页（售价表唯一入口）
+    models: {
+      title: '模型注册表',
+      subtitle: '模型身份与能力的唯一来源。价格行必须引用已登记的模型；未登记模型禁止配价，空价行会被拒绝。',
+      hint: '价格行数 0 = 该模型没有任何价格，请求会 fail-closed',
+      searchPlaceholder: '搜索模型 id 或显示名',
+      create: '登记模型',
+      edit: '编辑',
+      empty: '没有匹配的模型',
+      colId: '模型 ID',
+      colPlatform: '平台',
+      colDisplay: '显示名',
+      colContext: '上下文',
+      colPrices: '价格行',
+      colStatus: '状态',
+      colGroup: '分组',
+      aliases: '别名',
+      addAlias: '添加别名',
+      aliasPlaceholder: '别名（如 kimi3.1）',
+      noAliases: '暂无别名',
+      prices: '价格行',
+      pricesHint: '每百万 token 填写；group=默认价 是兜底价，各组行优先。fx_auto 需同时填汇率与成本基。',
+      defaultPrice: '默认价（兜底）',
+      noPrices: '还没有价格行 —— 该模型请求会 fail-closed',
+      savePrice: '保存价格行',
+      saved: '模型已保存',
+      saveModelFirst: '请先保存模型，再配置价格'
+    },
     pricing: {
       pageTitle: '定价与售价表',
       subtitle: '这里是唯一能改"模型单价"的地方。分组只负责绑定哪张表 + 客户折扣倍率；没绑表的分组走内置默认价（含官方钉价与峰谷，后台不可改）。',
