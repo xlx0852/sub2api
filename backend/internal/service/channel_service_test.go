@@ -191,6 +191,14 @@ func (m *mockChannelRepository) ReplaceModelPricing(ctx context.Context, channel
 	return nil
 }
 
+func (m *mockChannelRepository) ListPriceModifiers(ctx context.Context) ([]domain.PriceModifier, error) {
+	return nil, nil
+}
+
+func (m *mockChannelRepository) GetPriceCost(ctx context.Context, id int64) (*domain.PriceCost, error) {
+	return nil, nil
+}
+
 // ---------------------------------------------------------------------------
 // Mock: APIKeyAuthCacheInvalidator
 // ---------------------------------------------------------------------------

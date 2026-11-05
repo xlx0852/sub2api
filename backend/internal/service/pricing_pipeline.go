@@ -32,11 +32,11 @@ type PricingFxMode string
 
 const (
 	// FxModeManual 人工填写的售价，永不换汇。
-	FxModeManual PricingFxMode = "manual"
+	FxModeManual PricingFxMode = domain.PricingFxModeManual
 	// FxModeCnyNative 以人民币报价的售价，永不换汇。
-	FxModeCnyNative PricingFxMode = "cny_native"
+	FxModeCnyNative PricingFxMode = domain.PricingFxModeCnyNative
 	// FxModeAuto 由 L1 成本按 汇率 × (1+markup) 派生售价。
-	FxModeAuto PricingFxMode = "fx_auto"
+	FxModeAuto PricingFxMode = domain.PricingFxModeAuto
 )
 
 // NormalizePricingPipelineMode 把外部配置值收敛为受支持的模式，未知值降级为 legacy（安全默认）。
@@ -61,18 +61,6 @@ func NormalizePricingFxMode(value string) PricingFxMode {
 	default:
 		return FxModeManual
 	}
-}
-
-// PriceCost 是 L1 成本基（每百万 token，供应商币种口径）。
-type PriceCost struct {
-	Vendor            string
-	ModelPattern      string
-	Currency          domain.PricingCurrency
-	InputPerMTok      float64
-	CachedPerMTok     float64
-	OutputPerMTok     float64
-	CacheWritePerMTok float64
-	DiscountPct       float64
 }
 
 // DerivedSellPrice 是 L2 派生结果，单位：每个 token。
@@ -145,34 +133,18 @@ func ApplyDerivedSellPrice(pricing *ModelPricing, derived DerivedSellPrice) *Mod
 	return &cloned
 }
 
-// PriceModifierScope 是修饰因子作用域。
-type PriceModifierScope string
+// 修饰因子与成本基的实体定义在 domain 层（仓储要直接读写），这里保留别名。
+type PriceModifierScope = domain.PriceModifierScope
 
 const (
-	// ModifierScopeVendorTime 供应商时间窗（如 DeepSeek 峰谷）。
-	ModifierScopeVendorTime PriceModifierScope = "vendor_time"
-	// ModifierScopeRequestTier 请求档位（flex / priority）。
-	ModifierScopeRequestTier PriceModifierScope = "request_tier"
-	// ModifierScopeGroupTime 分组时间窗（分组峰时加价）。
-	ModifierScopeGroupTime PriceModifierScope = "group_time"
+	ModifierScopeVendorTime  = domain.ModifierScopeVendorTime
+	ModifierScopeRequestTier = domain.ModifierScopeRequestTier
+	ModifierScopeGroupTime   = domain.ModifierScopeGroupTime
 )
 
-// PriceModifier 是一条可配置的扣费修饰因子。
-type PriceModifier struct {
-	ID          int64
-	Scope       PriceModifierScope
-	Target      string // 模型 pattern（vendor/request）；分组 id 字符串（group）
-	Kind        string // window | tier
-	WhenMode    string // inside | outside
-	WindowStart string // HH:MM
-	WindowEnd   string // HH:MM
-	TZ          string // IANA 时区，默认 UTC
-	Weekdays    []int  // 0=Sunday..6=Saturday；nil = 每天
-	TierValue   string // request_tier 用
-	Multiplier  float64
-	Enabled     bool
-	Priority    int
-}
+type PriceModifier = domain.PriceModifier
+
+type PriceCost = domain.PriceCost
 
 // ModifierContext 是判定所需的请求上下文。
 type ModifierContext struct {
@@ -228,13 +200,10 @@ func ApplyPriceModifiers(pricing *ModelPricing, modifiers []PriceModifier, ctx M
 		ModifierScopeRequestTier,
 		ModifierScopeGroupTime,
 	} {
-		for _, m := range modifiers {
-			if !m.Enabled || m.Scope != scope {
-				continue
-			}
-			if !modifierMatches(m, ctx) {
-				continue
-			}
+		// 同一 scope 内"首个命中生效"：时间窗彼此互斥（峰时 / 谷时是并列分支），
+		// 若改成连乘，配两条窗口就会把 0.5 叠成 0.25。多个窗口用 priority 表达优先级，
+		// 例如"峰时窗口 ×1.0（priority 10）"+"兜底 ×0.5（priority 100）"。
+		if m, ok := firstMatchingModifier(modifiers, scope, ctx); ok {
 			multiply(m.Multiplier)
 			applied = append(applied, AppliedModifier{ID: m.ID, Scope: m.Scope, Value: m.Multiplier})
 		}
@@ -247,6 +216,25 @@ func ApplyPriceModifiers(pricing *ModelPricing, modifiers []PriceModifier, ctx M
 	}
 
 	return result, applied
+}
+
+// firstMatchingModifier 在指定 scope 内按 (priority, id) 顺序返回第一个命中的因子。
+func firstMatchingModifier(modifiers []PriceModifier, scope PriceModifierScope, ctx ModifierContext) (PriceModifier, bool) {
+	var best PriceModifier
+	found := false
+	for _, m := range modifiers {
+		if !m.Enabled || m.Scope != scope {
+			continue
+		}
+		if !modifierMatches(m, ctx) {
+			continue
+		}
+		if !found || m.Priority < best.Priority || (m.Priority == best.Priority && m.ID < best.ID) {
+			best = m
+			found = true
+		}
+	}
+	return best, found
 }
 
 func modifierMatches(m PriceModifier, ctx ModifierContext) bool {

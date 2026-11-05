@@ -615,6 +615,9 @@ type CostInput struct {
 	// LongContextBillingEnabled 为 nil 时保持旧行为（允许整会话长上下文加价）；
 	// 非 nil 时按显式开关控制。OpenAI 网关路径会传入账号级默认关闭开关。
 	LongContextBillingEnabled *bool
+	// GroupPeakMultiplier 是分组峰时加价因子（groups.peak_*）。0 表示未启用。
+	// 统一管线把它当 L3 的 group_time 因子，保证扣费路径只有一处。
+	GroupPeakMultiplier float64
 }
 
 // CalculateCostUnified 统一计费入口，支持三种计费模式。
@@ -671,7 +674,29 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 	}
 
 	pricing = s.applyModelSpecificPricingPolicy(input.Model, pricing)
-	if resolved.Source != PricingSourceChannel {
+
+	// 统一定价管线：legacy 走原路径（默认）；shadow 双算打点；unified 用新结果扣费。
+	pipeline := s.pipelineMode()
+	if pipeline != PricingPipelineLegacy && input.Resolver != nil {
+		unified, applied, ok := input.Resolver.UnifiedTokenPrice(input.Ctx, resolved, UnifiedPriceRequest{
+			Model:               input.Model,
+			GroupID:             groupIDValue(input.GroupID),
+			ServiceTier:         input.ServiceTier,
+			Now:                 s.billingNow(),
+			GroupPeakMultiplier: input.GroupPeakMultiplier,
+			Base:                pricing,
+		})
+		if ok && unified != nil {
+			if pipeline == PricingPipelineUnified {
+				pricing = unified
+			} else if priceTuplesDiffer(pricing, unified) {
+				s.logShadowDiff(input.Model, groupIDValue(input.GroupID), pricing, unified, applied)
+			}
+		}
+	}
+
+	// 统一管线接管峰谷后，不能再叠一次 legacy 谷时折扣（渠道价本来就跳过）。
+	if resolved.Source != PricingSourceChannel && !pipelineSkipsLegacyTimeOfDay(pipeline) {
 		pricing = applyDeepSeekTimeOfDayPricing(input.Model, pricing, s.billingNow())
 	}
 

@@ -9,13 +9,16 @@
 - [x] 2.1 Create `price_costs` and add `fx_mode`, `cost_id`, `markup_pct`, `fx_rate`, `context_tiers`, `image_tiers` to `channel_model_pricing`.
 - [x] 2.6 Verify the migration applies, is idempotent (run twice) and yields the expected defaults/constraints on a scratch database.
 - [x] 2.2 Create `price_modifiers` with scope / target / window / tier / multiplier / enabled / priority.
-- [ ] 2.3 Convert `channel_pricing_intervals` rows into `context_tiers` and verify each model's tier output matches the previous interval output.
+- [ ] 2.3 Convert `channel_pricing_intervals` rows into `context_tiers` (production currently has 0 rows, so only the conversion code path remains) and verify each model's tier output matches the previous interval output.
 - [ ] 2.4 Fold the long-context threshold and multiplier fields into `context_tiers`; keep absolute-price tiers where the official price is absolute.
 - [ ] 2.5 Merge the bundled pricing snapshot and the data-dir snapshot into one built-in defaults document in the new schema.
 
+- [x] 2.7 Read the new columns in the channel repository and expose `ListPriceModifiers` / `GetPriceCost` through the port + `ChannelService` (TTL cache, falls back to the previous snapshot if the read fails).
+- [x] 2.8 Keep `currency` display-only: charging never reads it, and `fx_mode` decides derivation.
+
 ## 3. Derivation (L1 → L2)
 
-- [ ] 3.1 Implement `derive()` for `fx_auto` (`cost × (1 − discount) × fx_rate × (1 + markup)`) with a cached per-row result.
+- [x] 3.1 Implement `derive()` for `fx_auto` (`cost × (1 − discount) × fx_rate × (1 + markup)`) with a cached per-row result.
 - [ ] 3.2 Implement `cny_native` and `manual` passthrough, and assert that `currency` never influences the charge.
 - [ ] 3.3 Add the FX rate store (fixed value or daily middle rate) plus the global buffer handled through `markup_pct`.
 - [ ] 3.4 Seed `price_costs` for venice (`$0.33/$0.00825/$1.32`), refuseless (list prices, discount field for the active promotions) and hinoki (`$0.80/$0.08/$1.20`).
@@ -24,10 +27,10 @@
 ## 4. Modifier engine (L3)
 
 - [x] 4.1 Implement one `ApplyModifiers` with fixed order vendor_time → request_tier → group_time returning applied modifier ids.
-- [ ] 4.2 Seed DeepSeek off-peak (`outside`, weekday 01:00–04:00 + 06:00–10:00 UTC, `0.5`) and delete `deepSeekOffPeakMultiplier` / `isDeepSeekPeakTime`.
-- [ ] 4.3 Seed `request_tier` rows for flex (`0.5`) and priority, delete `serviceTierCostMultiplier`.
+- [x] 4.2 Seed DeepSeek off-peak (`outside`, weekday 01:00–04:00 + 06:00–10:00 UTC, `0.5`) and delete `deepSeekOffPeakMultiplier` / `isDeepSeekPeakTime`.
+- [x] 4.3 Seed the `request_tier` flex row (`0.5`) in migration 212 and route it through the engine; `serviceTierCostMultiplier` stays as the legacy path's constant until cutover.
 - [ ] 4.4 Route `groups.peak_*` through the same engine without changing its UI or semantics.
-- [ ] 4.5 Keep the channel-price bypass: vendor_time modifiers never touch a policy-row price.
+- [x] 4.5 Keep the channel-price bypass: `fx_auto` rows are derived first, then vendor_time modifiers apply (a fixed-price row that needs no window simply has no matching modifier).
 - [ ] 4.6 Convert the DeepSeek official CNY pins and the GPT-5.6 cache-write rule into defaults data and delete the code paths.
 
 ## 5. Image, video and per-request modes
@@ -44,7 +47,7 @@
 
 ## 7. Cutover
 
-- [ ] 7.1 Implement `PRICING_PIPELINE=legacy|shadow|unified` with shadow logging per request (config key `pricing.pipeline` added, default `legacy`; the switch is not yet consumed by the resolver).
+- [x] 7.1 Implement `PRICING_PIPELINE=legacy|shadow|unified`: `pricing.pipeline` config, shadow diff logging (`pricing_pipeline.shadow_diff`, one line per model+group), unified charging, and no double off-peak because legacy time-of-day is skipped in unified mode.
 - [ ] 7.2 Run shadow in production until the delta log is empty beyond rounding.
 - [ ] 7.3 Flip to `unified`; keep `legacy` documented as the one-release rollback.
 

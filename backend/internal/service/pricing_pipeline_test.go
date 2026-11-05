@@ -3,9 +3,11 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/stretchr/testify/require"
 )
@@ -197,4 +199,143 @@ func TestPriceTuplesDiffer(t *testing.T) {
 	b.OutputPricePerToken = 2.001e-6
 	require.True(t, priceTuplesDiffer(a, b))
 	require.True(t, priceTuplesDiffer(a, nil))
+}
+
+// DeepSeek 官方峰谷的正式配置是"两条峰时窗口 + 一条兜底"，必须首个命中生效，
+// 否则 0.5 会被两条窗口各乘一次变成 0.25。
+func TestApplyPriceModifiersDeepSeekSeedShape(t *testing.T) {
+	peakWindows := []PriceModifier{
+		{
+			ID: 1, Scope: ModifierScopeVendorTime, Target: "deepseek-v4*", Kind: "window",
+			WhenMode: "inside", WindowStart: "01:00", WindowEnd: "04:00", TZ: "UTC",
+			Weekdays: []int{1, 2, 3, 4, 5}, Multiplier: 1.0, Enabled: true, Priority: 10,
+		},
+		{
+			ID: 2, Scope: ModifierScopeVendorTime, Target: "deepseek-v4*", Kind: "window",
+			WhenMode: "inside", WindowStart: "06:00", WindowEnd: "10:00", TZ: "UTC",
+			Weekdays: []int{1, 2, 3, 4, 5}, Multiplier: 1.0, Enabled: true, Priority: 10,
+		},
+		{
+			ID: 3, Scope: ModifierScopeVendorTime, Target: "deepseek-v4*", Kind: "window",
+			WhenMode: "inside", Multiplier: 0.5, Enabled: true, Priority: 100,
+		},
+	}
+	base := &ModelPricing{InputPricePerToken: 2e-6, OutputPricePerToken: 8e-6}
+
+	cases := []struct {
+		name string
+		now  time.Time
+		want float64
+	}{
+		{"峰时 02:00 UTC 周四", time.Date(2026, time.November, 5, 2, 0, 0, 0, time.UTC), 2e-6},
+		{"峰时 07:00 UTC 周四", time.Date(2026, time.November, 5, 7, 0, 0, 0, time.UTC), 2e-6},
+		{"谷时 04:30 UTC 周四", time.Date(2026, time.November, 5, 4, 30, 0, 0, time.UTC), 1e-6},
+		{"周六 02:00 UTC 无峰时", time.Date(2026, time.November, 7, 2, 0, 0, 0, time.UTC), 1e-6},
+	}
+	for _, tc := range cases {
+		out, applied := ApplyPriceModifiers(base, peakWindows, ModifierContext{Model: "deepseek-v4.1-flash", Now: tc.now})
+		require.InDelta(t, tc.want, out.InputPricePerToken, 1e-15, tc.name)
+		require.InDelta(t, tc.want*4, out.OutputPricePerToken, 1e-15, tc.name)
+		require.Len(t, applied, 1, "%s: 每次只应有一个时间窗因子生效", tc.name)
+	}
+}
+
+func TestPipelineModeReadsConfig(t *testing.T) {
+	legacy := NewBillingService(&config.Config{}, nil)
+	require.Equal(t, PricingPipelineLegacy, legacy.pipelineMode(), "默认必须是 legacy")
+
+	cfg := &config.Config{}
+	cfg.Pricing.Pipeline = "shadow"
+	require.Equal(t, PricingPipelineShadow, NewBillingService(cfg, nil).pipelineMode())
+
+	cfg.Pricing.Pipeline = "UNIFIED"
+	require.Equal(t, PricingPipelineUnified, NewBillingService(cfg, nil).pipelineMode())
+
+	cfg.Pricing.Pipeline = "nonsense"
+	require.Equal(t, PricingPipelineLegacy, NewBillingService(cfg, nil).pipelineMode())
+}
+
+func newStubChannelService(mods []PriceModifier, costs map[int64]*PriceCost) *ChannelService {
+	return &ChannelService{
+		modifiers:       mods,
+		modifiersLoaded: true,
+		modifiersAtTime: time.Now(),
+		costs:           costs,
+	}
+}
+
+// fx_auto 行 + 成本基 → 统一管线按汇率派生，并叠加 vendor_time 谷时折扣。
+func TestUnifiedTokenPriceDerivesAndAppliesModifiers(t *testing.T) {
+	rate := 7.0
+	costID := int64(11)
+	svc := newStubChannelService(
+		[]PriceModifier{
+			{ID: 1, Scope: ModifierScopeVendorTime, Target: "hinoki-*", Kind: "window", WhenMode: "inside", Multiplier: 0.5, Enabled: true, Priority: 10},
+		},
+		map[int64]*PriceCost{
+			11: {ID: 11, Vendor: "hinoki", ModelPattern: "hinoki-offensive", Currency: domain.PricingCurrencyUSD,
+				InputPerMTok: 0.80, CachedPerMTok: 0.08, OutputPerMTok: 1.20, CacheWritePerMTok: 0.80},
+		},
+	)
+	resolver := &ModelPricingResolver{channelService: svc}
+
+	resolved := &ResolvedPricing{
+		Mode:     BillingModeToken,
+		Currency: domain.PricingCurrencyCNY,
+		Source:   PricingSourceChannel,
+		channelPricing: &domain.ChannelModelPricing{
+			FxMode:    domain.PricingFxModeAuto,
+			CostID:    &costID,
+			FxRate:    &rate,
+			MarkupPct: 0,
+		},
+	}
+	base := &ModelPricing{Currency: domain.PricingCurrencyCNY, InputPricePerToken: 5.6e-6, OutputPricePerToken: 8.4e-6}
+
+	out, applied, ok := resolver.UnifiedTokenPrice(context.Background(), resolved, UnifiedPriceRequest{
+		Model: "hinoki-offensive", GroupID: 49, Now: time.Now(), Base: base,
+	})
+	require.True(t, ok)
+	// 5.6e-6 × 0.5 的窗口因子
+	require.InDelta(t, 2.8e-6, out.InputPricePerToken, 1e-15)
+	require.InDelta(t, 4.2e-6, out.OutputPricePerToken, 1e-15)
+	require.Len(t, applied, 1)
+}
+
+// fx_auto 但缺成本基 / 缺汇率 → 必须放弃统一管线，让调用方保持 legacy 结果。
+func TestUnifiedTokenPriceFailsClosedWhenCostOrRateMissing(t *testing.T) {
+	rate := 7.0
+	costID := int64(99)
+	svc := newStubChannelService(nil, map[int64]*PriceCost{})
+	resolver := &ModelPricingResolver{channelService: svc}
+	base := &ModelPricing{InputPricePerToken: 1e-6}
+
+	missingCost := &ResolvedPricing{Mode: BillingModeToken, channelPricing: &domain.ChannelModelPricing{
+		FxMode: domain.PricingFxModeAuto, CostID: &costID, FxRate: &rate,
+	}}
+	_, _, ok := resolver.UnifiedTokenPrice(context.Background(), missingCost, UnifiedPriceRequest{Model: "m", Base: base})
+	require.False(t, ok, "成本基缺失时必须返回 false")
+
+	missingRate := &ResolvedPricing{Mode: BillingModeToken, channelPricing: &domain.ChannelModelPricing{
+		FxMode: domain.PricingFxModeAuto, CostID: &costID,
+	}}
+	_, _, ok = resolver.UnifiedTokenPrice(context.Background(), missingRate, UnifiedPriceRequest{Model: "m", Base: base})
+	require.False(t, ok, "汇率缺失时必须返回 false")
+}
+
+func TestPipelineSkipsLegacyTimeOfDay(t *testing.T) {
+	require.False(t, pipelineSkipsLegacyTimeOfDay("legacy"))
+	require.False(t, pipelineSkipsLegacyTimeOfDay("shadow"), "shadow 仍按 legacy 扣费，谷时折扣照旧")
+	require.True(t, pipelineSkipsLegacyTimeOfDay("unified"))
+}
+
+func TestHasVendorTimeModifier(t *testing.T) {
+	mods := []PriceModifier{
+		{ID: 1, Scope: ModifierScopeVendorTime, Target: "deepseek-v4*", Enabled: true},
+		{ID: 2, Scope: ModifierScopeRequestTier, Target: "*", Enabled: true},
+	}
+	require.True(t, hasVendorTimeModifier(mods, "deepseek-v4.1-flash"))
+	require.False(t, hasVendorTimeModifier(mods, "glm-5.3"))
+	mods[0].Enabled = false
+	require.False(t, hasVendorTimeModifier(mods, "deepseek-v4.1-flash"))
 }

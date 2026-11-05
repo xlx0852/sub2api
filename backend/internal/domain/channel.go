@@ -41,9 +41,21 @@ type ChannelModelPricing struct {
 	CacheReadPrice   *float64          // 缓存读取价格
 	ImageOutputPrice *float64          // 图片输出价格（向后兼容）
 	PerRequestPrice  *float64          // 默认按次计费价格——币种由 Currency 定义
-	Intervals        []PricingInterval // 区间定价列表
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	Intervals        []PricingInterval // 区间定价列表（逐步由 ContextTiers 取代）
+
+	// --- 统一管线（L2 售价派生 / L3 分层）---
+	// FxMode 决定这一行的售价怎么来：manual（人工填写，永不换汇）、cny_native（人民币原生，
+	// 永不换汇）、fx_auto（由 cost_id 指向的成本基按 fx_rate × (1+markup) 派生）。
+	FxMode    string
+	CostID    *int64   // fx_auto 行引用的 price_costs.id
+	MarkupPct float64  // 派生时叠加的加价百分比
+	FxRate    *float64 // 派生时冻结的汇率（USD→CNY）
+	// ContextTiers / ImageTiers 是逐行的分层价：JSON 原样保留，由服务层解析。
+	ContextTiers []byte
+	ImageTiers   []byte
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // PricingInterval 定价区间（token 区间 / 按次分层 / 图片分辨率分层）
@@ -109,3 +121,15 @@ func (p ChannelModelPricing) Clone() ChannelModelPricing {
 var ErrChannelNotFound = infraerrors.NotFound("CHANNEL_NOT_FOUND", "channel not found")
 
 var ErrChannelExists = infraerrors.Conflict("CHANNEL_EXISTS", "channel name already exists")
+
+// 统一管线：L2 价格行的售价派生方式。
+//
+// 定义放在 domain 层，仓储按字符串读写，服务层做语义处理。
+const (
+	// PricingFxModeManual 人工填写的售价，永不换汇。
+	PricingFxModeManual = "manual"
+	// PricingFxModeCnyNative 以人民币报价的售价，永不换汇。
+	PricingFxModeCnyNative = "cny_native"
+	// PricingFxModeAuto 由 L1 成本基派生售价。
+	PricingFxModeAuto = "fx_auto"
+)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -122,11 +123,77 @@ type ChannelService struct {
 
 	cache   atomic.Value // *channelCache
 	cacheSF singleflight.Group
+
+	// 统一定价管线（L3 修饰因子 / L1 成本基）的进程内缓存。
+	modifiersMu     sync.RWMutex
+	modifiers       []domain.PriceModifier
+	modifiersLoaded bool
+	modifiersAtTime time.Time
+	costsMu         sync.RWMutex
+	costs           map[int64]*domain.PriceCost
 }
 
 // NewChannelService 创建渠道服务实例。
 // pricingService 仅供 ListAvailable 在渠道未配置定价时回落到全局 LiteLLM 数据；
 // 计费热路径走独立的 ModelPricingResolver，与此参数无关。可传 nil。
+// ListPriceModifiers 返回启用的定价修饰因子（L3）。短 TTL 缓存，避免每请求查库。
+func (s *ChannelService) ListPriceModifiers(ctx context.Context) []domain.PriceModifier {
+	s.modifiersMu.RLock()
+	if s.modifiersLoaded && time.Since(s.modifiersAtTime) < channelCacheTTL {
+		mods := s.modifiers
+		s.modifiersMu.RUnlock()
+		return mods
+	}
+	s.modifiersMu.RUnlock()
+
+	if s.repo == nil {
+		return nil
+	}
+	mods, err := s.repo.ListPriceModifiers(ctx)
+	if err != nil {
+		// 读不到因子时保持上一份快照：宁可按旧配置计费，也不要静默变成 1.0 倍。
+		s.modifiersMu.RLock()
+		stale := s.modifiers
+		s.modifiersMu.RUnlock()
+		return stale
+	}
+	s.modifiersMu.Lock()
+	s.modifiers = mods
+	s.modifiersLoaded = true
+	s.modifiersAtTime = time.Now()
+	s.modifiersMu.Unlock()
+	return mods
+}
+
+// GetPriceCost 返回 L1 成本基（带进程内缓存）。
+func (s *ChannelService) GetPriceCost(ctx context.Context, id int64) *domain.PriceCost {
+	if id <= 0 {
+		return nil
+	}
+	// 先读进程内缓存：成本基变更频率极低，未命中再回源。
+	s.costsMu.RLock()
+	if cached, ok := s.costs[id]; ok {
+		s.costsMu.RUnlock()
+		return cached
+	}
+	s.costsMu.RUnlock()
+
+	if s.repo == nil {
+		return nil
+	}
+	cost, err := s.repo.GetPriceCost(ctx, id)
+	if err != nil || cost == nil {
+		return nil
+	}
+	s.costsMu.Lock()
+	if s.costs == nil {
+		s.costs = make(map[int64]*domain.PriceCost)
+	}
+	s.costs[id] = cost
+	s.costsMu.Unlock()
+	return cost
+}
+
 func NewChannelService(repo ChannelRepository, groupRepo GroupRepository, authCacheInvalidator APIKeyAuthCacheInvalidator, pricingService *PricingService) *ChannelService {
 	s := &ChannelService{
 		repo:                 repo,

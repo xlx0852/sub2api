@@ -36,4 +36,8 @@ type ChannelRepository interface {
 	UpdateModelPricing(ctx context.Context, pricing *domain.ChannelModelPricing) error
 	DeleteModelPricing(ctx context.Context, id int64) error
 	ReplaceModelPricing(ctx context.Context, channelID int64, pricingList []domain.ChannelModelPricing) error
+
+	// 统一定价管线（L1 成本基 / L3 修饰因子）
+	ListPriceModifiers(ctx context.Context) ([]domain.PriceModifier, error)
+	GetPriceCost(ctx context.Context, id int64) (*domain.PriceCost, error)
 }
