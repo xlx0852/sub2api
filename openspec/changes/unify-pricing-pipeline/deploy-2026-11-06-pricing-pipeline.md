@@ -67,3 +67,22 @@ Release dirs: `0.1.393-priceswitch-d44ce087d`, `0.1.394-priceswitch-fix`,
 - Watch `pricing_pipeline.shadow_diff` for 24h; when it stays empty, flip to `unified` with
   the same endpoint, then remove the legacy constants (`deepSeekOffPeakMultiplier`,
   `serviceTierCostMultiplier`, and the DeepSeek official pin).
+
+## 0.1.396 — admin clarity pass
+
+Deployed binary `0.1.396` (release dir `0.1.396-pricingui-7abb8cf72`) plus frontend
+`0.1.396-7abb8cf72` (symlink `current`, previous kept in `rollback`).
+
+What shipped:
+
+- Group list card shows a price example: `模型 售价 → 实付` (实付 = 售价 × 分组倍率),
+  e.g. `国模abliterated(rate 1.5) policy=8 | deepseek-v4-1-flash-1017-uncensored 2.31 → 3.465 CNY [fx_auto]`.
+- Pricing card locks the manual price inputs for `fx_auto` rows and prints the derivation
+  formula from the cost basis (`成本 $x / $y × 汇率 (乘数 k) = 售价 ¥a / ¥b`).
+- Models not priced in the policy are flagged as falling back to the built-in default.
+- Settings → 定价管线 tab: pipeline switch (legacy/shadow/unified) and the cost-basis table
+  with upsert/delete via the new `/admin/settings/price-costs` endpoints.
+
+Verification: `/admin/settings/price-costs` returns the 8 rows; the groups list carries
+`example_*`; frontend `index.html` md5 matches the local build; `pricing_pipeline` still
+`shadow`.
