@@ -6,11 +6,14 @@
 
 ## 2. Slice 1 — additive schema and seed (no behaviour change)
 
-- [ ] 2.1 Migration 215: create `models`, `model_aliases`, `model_prices` with the constraints from the design (including the one-default-per-model partial index).
-- [ ] 2.2 Migration 216: seed from both `catalog.json` copies — models, aliases (`aliases` / `id_overrides` / `id_reverse_overrides` / `retired_ids`), default chat/test flags, and default prices from `fallback_pricing`.
-- [ ] 2.3 Migration 216: import the live sell rows (2 tables, 18 model names) into `model_prices` as per-group rows, preserving `fx_mode`, `cost_id`, `fx_rate`, `markup_pct`.
-- [ ] 2.4 Post-migration assertions: every imported price row resolves to the same value as `channel_model_pricing`, and no row has four empty token prices.
-- [ ] 2.5 Verify the migration is idempotent and aborts atomically on assertion failure (scratch-database run with the real rows, like migration 213).
+- [x] 2.1 Migration 215: create `models`, `model_aliases`, `model_prices` with the constraints from the design (including the one-default-per-model partial index).
+- [x] 2.2 Migration 216: seed from both `catalog.json` copies — models, aliases (`aliases` / `id_overrides` / `id_reverse_overrides` / `retired_ids`), default chat/test flags, and default prices from `fallback_pricing`.
+- [x] 2.3 Migration 216: import the live sell rows (2 tables, 18 model names) into `model_prices` as per-group rows, preserving `fx_mode`, `cost_id`, `fx_rate`, `markup_pct`.
+- [x] 2.4 Post-migration assertions: every imported price row resolves to the same value as `channel_model_pricing`, and no row has four empty token prices.
+- [x] 2.5 Verify the migration is idempotent and aborts atomically on assertion failure (scratch-database run with the real rows, like migration 213).
+
+- [x] 2.6 Seed generator (`scripts/gen_model_registry_seed.py`) keeps the SQL in sync with catalog.json instead of hand-writing 120+ inserts.
+- [x] 2.7 Scratch-database run with the real 13 price rows / 46 groups / 8 cost rows: 123 models, 10 aliases, 69 default prices, 10 group prices; second run idempotent; tampering with one group price makes the assertion abort; a row with no price is rejected.
 
 ## 3. Slice 2 — loaders and dual read
 
