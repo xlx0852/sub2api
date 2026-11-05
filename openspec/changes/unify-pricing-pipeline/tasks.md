@@ -21,8 +21,8 @@
 - [x] 3.1 Implement `derive()` for `fx_auto` (`cost × (1 − discount) × fx_rate × (1 + markup)`) with a cached per-row result.
 - [ ] 3.2 Implement `cny_native` and `manual` passthrough, and assert that `currency` never influences the charge.
 - [ ] 3.3 Add the FX rate store (fixed value or daily middle rate) plus the global buffer handled through `markup_pct`.
-- [ ] 3.4 Seed `price_costs` for venice (`$0.33/$0.00825/$1.32`), refuseless (list prices, discount field for the active promotions) and hinoki (`$0.80/$0.08/$1.20`).
-- [ ] 3.5 Flip exactly the eight live rows to `fx_auto` at `fx_rate=7.0` and assert derived = existing within `1e-9`, otherwise abort.
+- [x] 3.4 Seed `price_costs` for venice (`$0.33/$0.00825/$1.32`), refuseless (list prices, promotion ignored per operator) and hinoki (`$0.80/$0.08/$1.20`) in migration 213.
+- [x] 3.5 Flip exactly the eight live rows to `fx_auto` at `fx_rate=7.0`; migration 213 asserts the derived value equals the stored price (1e-12 per token) and aborts the whole statement otherwise. Verified on a scratch database seeded with the real 19 rows: 8 flipped, 11 untouched, prices unchanged, idempotent, and the assertion fires on a tampered row.
 
 ## 4. Modifier engine (L3)
 
@@ -54,6 +54,7 @@
 ## 8. Verification
 
 - [ ] 8.1 Unit tests: derivation per mode, tier selection, modifier order, channel-price bypass, fail-closed behaviour.
+- [x] 8.5 Go/SQL parity: a unit test derives the same eight rows from their cost basis at `fx_rate=7.0` and asserts the exact CNY values the migration writes.
 - [ ] 8.2 Regression: every previously verified price (deepseek CNY official, kimi K3.1 Pro, the eight policy rows, Qwen/MiMo) resolves to the same value.
 - [ ] 8.3 Replay a sample of historical usage and assert recalculated charges are byte-identical.
 - [ ] 8.4 Run `gofmt`, `git diff --check`, `cmp` on duplicated data files, and the focused unit suites with `CGO_ENABLED=0 -tags unit`.

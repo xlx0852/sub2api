@@ -339,3 +339,57 @@ func TestHasVendorTimeModifier(t *testing.T) {
 	mods[0].Enabled = false
 	require.False(t, hasVendorTimeModifier(mods, "deepseek-v4.1-flash"))
 }
+
+// 线上 8 行的真实值（migration 213 回填后的 CNY 售价，单位 元/百万 token）。
+// 该用例锁住"SQL 迁移里的 ROUND 计算"与"Go 派生"结果一致，防止两边算法漂移。
+func TestDeriveSellPriceMatchesLivePriceRows(t *testing.T) {
+	cases := []struct {
+		model     string
+		cost      PriceCost
+		in, out   float64
+		cacheRead float64
+	}{
+		{
+			model: "deepseek-v4-1-flash-1017-uncensored",
+			cost:  PriceCost{Currency: domain.PricingCurrencyUSD, InputPerMTok: 0.33, CachedPerMTok: 0.00825, OutputPerMTok: 1.32, CacheWritePerMTok: 0.33},
+			in:    2.31, out: 9.24, cacheRead: 0.05775,
+		},
+		{
+			model: "deepseek-v4.1-flash-abliterated",
+			cost:  PriceCost{Currency: domain.PricingCurrencyUSD, InputPerMTok: 0.14, CachedPerMTok: 0.035, OutputPerMTok: 0.50, CacheWritePerMTok: 0.14},
+			in:    0.98, out: 3.50, cacheRead: 0.245,
+		},
+		{
+			model: "deepseek-v4.1-flash-fast",
+			cost:  PriceCost{Currency: domain.PricingCurrencyUSD, InputPerMTok: 0.01, CachedPerMTok: 0.002, OutputPerMTok: 0.08, CacheWritePerMTok: 0.01},
+			in:    0.07, out: 0.56, cacheRead: 0.014,
+		},
+		{
+			model: "glm-5.3-abliterated",
+			cost:  PriceCost{Currency: domain.PricingCurrencyUSD, InputPerMTok: 1.00, CachedPerMTok: 0.15, OutputPerMTok: 2.00, CacheWritePerMTok: 1.00},
+			in:    7.00, out: 14.00, cacheRead: 1.05,
+		},
+		{
+			model: "glm-5.3-flash-abliterated",
+			cost:  PriceCost{Currency: domain.PricingCurrencyUSD, InputPerMTok: 0.12, CachedPerMTok: 0.04, OutputPerMTok: 0.50, CacheWritePerMTok: 0.12},
+			in:    0.84, out: 3.50, cacheRead: 0.28,
+		},
+		{
+			model: "minimax-m3.1-flash",
+			cost:  PriceCost{Currency: domain.PricingCurrencyUSD, InputPerMTok: 0.02, CachedPerMTok: 0.002, OutputPerMTok: 0.08, CacheWritePerMTok: 0.02},
+			in:    0.14, out: 0.56, cacheRead: 0.014,
+		},
+		{
+			model: "hinoki-offensive",
+			cost:  PriceCost{Currency: domain.PricingCurrencyUSD, InputPerMTok: 0.80, CachedPerMTok: 0.08, OutputPerMTok: 1.20, CacheWritePerMTok: 0.80},
+			in:    5.60, out: 8.40, cacheRead: 0.56,
+		},
+	}
+	for _, tc := range cases {
+		derived, err := DeriveSellPrice(tc.cost, 0, 7.0)
+		require.NoError(t, err, tc.model)
+		require.InDelta(t, tc.in, derived.InputPerToken*1e6, 1e-9, "%s 输入价", tc.model)
+		require.InDelta(t, tc.out, derived.OutputPerToken*1e6, 1e-9, "%s 输出价", tc.model)
+		require.InDelta(t, tc.cacheRead, derived.CachedPerToken*1e6, 1e-9, "%s 缓存价", tc.model)
+	}
+}
