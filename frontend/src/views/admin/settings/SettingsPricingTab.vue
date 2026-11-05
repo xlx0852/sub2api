@@ -166,7 +166,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Select from '@/ui/Select.vue'
 import adminAPI from '@/api/admin'
@@ -180,20 +180,20 @@ const appStore = useAppStore()
 const pipelineMode = ref<'legacy' | 'shadow' | 'unified'>('legacy')
 const pipelineSaved = ref<'legacy' | 'shadow' | 'unified'>('legacy')
 const pipelineSaving = ref(false)
-const pipelineOptions = [
-  { value: 'legacy', label: 'legacy' },
-  { value: 'shadow', label: 'shadow' },
-  { value: 'unified', label: 'unified' }
-]
+const pipelineOptions = computed(() => [
+  { value: 'legacy', label: t('admin.settings.pricing.pipelineOptionLegacy') },
+  { value: 'shadow', label: t('admin.settings.pricing.pipelineOptionShadow') },
+  { value: 'unified', label: t('admin.settings.pricing.pipelineOptionUnified') }
+])
 
 const priceSource = ref<'legacy' | 'dual' | 'model_prices'>('legacy')
 const priceSourceSaved = ref<'legacy' | 'dual' | 'model_prices'>('legacy')
 const priceSourceSaving = ref(false)
-const priceSourceOptions = [
-  { value: 'legacy', label: 'legacy（现有链路）' },
-  { value: 'dual', label: 'dual（双算打点，按 legacy 扣费）' },
-  { value: 'model_prices', label: 'model_prices（注册表价格）' }
-]
+const priceSourceOptions = computed(() => [
+  { value: 'legacy', label: t('admin.settings.pricing.priceSourceOptionLegacy') },
+  { value: 'dual', label: t('admin.settings.pricing.priceSourceOptionDual') },
+  { value: 'model_prices', label: t('admin.settings.pricing.priceSourceOptionRegistry') }
+])
 
 function onSelectPriceSource(value: unknown) {
   priceSource.value = value as typeof priceSource.value
@@ -215,11 +215,11 @@ async function savePriceSource() {
 const registrySource = ref<'file' | 'dual' | 'db'>('file')
 const registrySourceSaved = ref<'file' | 'dual' | 'db'>('file')
 const registrySaving = ref(false)
-const registryOptions = [
-  { value: 'file', label: 'file（编译进二进制的 catalog）' },
-  { value: 'dual', label: 'dual（比对差异，只打日志）' },
-  { value: 'db', label: 'db（用注册表覆盖，含别名/默认价）' }
-]
+const registryOptions = computed(() => [
+  { value: 'file', label: t('admin.settings.pricing.registryOptionFile') },
+  { value: 'dual', label: t('admin.settings.pricing.registryOptionDual') },
+  { value: 'db', label: t('admin.settings.pricing.registryOptionDb') }
+])
 
 function onSelectRegistrySource(value: unknown) {
   registrySource.value = value as typeof registrySource.value

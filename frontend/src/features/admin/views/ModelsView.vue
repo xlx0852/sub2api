@@ -84,22 +84,22 @@
               <input v-model.number="editing.context_window" type="number" class="input mt-1 text-sm" />
             </label>
             <label class="text-xs sm:col-span-2">
-              <span class="text-gray-500">upstream_id</span>
+              <span class="text-gray-500">{{ t('admin.models.upstreamId') }}</span>
               <input v-model="editing.upstream_id" class="input mt-1 text-sm font-mono" :placeholder="t('admin.models.upstreamHint')" />
             </label>
             <div class="flex items-end pb-1 sm:col-span-2">
               <div class="flex flex-wrap items-center gap-4 text-xs">
                 <label class="inline-flex items-center gap-1.5">
                   <input v-model="editing.enabled" type="checkbox" />
-                  <span>enabled</span>
+                  <span>{{ t('admin.models.enabled') }}</span>
                 </label>
                 <label class="inline-flex items-center gap-1.5">
                   <input v-model="editing.retired" type="checkbox" />
-                  <span>retired</span>
+                  <span>{{ t('admin.models.retired') }}</span>
                 </label>
                 <label class="inline-flex items-center gap-1.5">
                   <input v-model="editing.is_reasoning" type="checkbox" />
-                  <span>reasoning</span>
+                  <span>{{ t('admin.models.reasoning') }}</span>
                 </label>
               </div>
             </div>
@@ -135,8 +135,8 @@
                   <th class="w-[14%] py-1.5 pr-2 text-right font-medium">{{ t('admin.models.priceInput') }}</th>
                   <th class="w-[14%] py-1.5 pr-2 text-right font-medium">{{ t('admin.models.priceOutput') }}</th>
                   <th class="w-[16%] py-1.5 pr-2 text-right font-medium">{{ t('admin.models.priceCacheRead') }}</th>
-                  <th class="w-[14%] py-1.5 pr-2 text-left font-medium">fx_mode</th>
-                  <th class="w-[10%] py-1.5 pr-2 text-right font-medium">fx_rate</th>
+                  <th class="w-[14%] py-1.5 pr-2 text-left font-medium">{{ t('admin.models.fxMode') }}</th>
+                  <th class="w-[10%] py-1.5 pr-2 text-right font-medium">{{ t('admin.models.fxRate') }}</th>
                   <th class="w-[10%] py-1.5 pr-2 text-right font-medium" />
                 </tr>
               </thead>
@@ -180,11 +180,11 @@
                 <input v-model.number="draft.cache_read" type="number" step="any" class="input mt-1 text-xs" :placeholder="t('admin.models.pricePlaceholder')" />
               </label>
               <label class="text-xs">
-                <span class="text-gray-500">fx_mode</span>
+                <span class="text-gray-500">{{ t('admin.models.fxMode') }}</span>
                 <Select v-model="draft.fx_mode" :options="fxModeOptions" class="mt-1 text-xs" />
               </label>
               <label v-if="draft.fx_mode === 'fx_auto'" class="text-xs">
-                <span class="text-gray-500">fx_rate</span>
+                <span class="text-gray-500">{{ t('admin.models.fxRate') }}</span>
                 <input v-model.number="draft.fx_rate" type="number" step="any" class="input mt-1 text-xs" placeholder="7" />
               </label>
               <label v-if="draft.fx_mode === 'fx_auto'" class="text-xs">
@@ -230,8 +230,8 @@ const models = ref<ModelRegistryEntry[]>([])
 const loading = ref(false)
 const search = ref('')
 const platform = ref('')
-const platformOptions = [
-  { value: '', label: '全部平台' },
+const platformOptions = computed(() => [
+  { value: '', label: t('admin.models.allPlatforms') },
   { value: 'openai', label: 'openai' },
   { value: 'anthropic', label: 'anthropic' },
   { value: 'grok', label: 'grok' },
@@ -239,7 +239,7 @@ const platformOptions = [
   { value: 'deepseek', label: 'deepseek' },
   { value: 'gemini', label: 'gemini' },
   { value: 'antigravity', label: 'antigravity' }
-]
+])
 
 const editorOpen = ref(false)
 const isExisting = ref(false)
