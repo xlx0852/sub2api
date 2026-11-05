@@ -600,13 +600,6 @@ export interface SystemSettings {
   openai_codex_client_version: string;
   openai_codex_client_version_synced: string;
   openai_codex_version_auto_sync_enabled: boolean;
-  // codex_cli_only 加固
-  min_codex_version: string;
-  max_codex_version: string;
-  codex_cli_only_blacklist: string;
-  codex_cli_only_whitelist: string;
-  codex_cli_only_allow_app_server_clients: boolean;
-  codex_cli_only_engine_fingerprint_signals: string;
   web_search_emulation_enabled?: boolean;
 
   // Payment configuration
@@ -873,13 +866,6 @@ export interface UpdateSettingsRequest {
   openai_codex_user_agent?: string;
   openai_codex_client_version?: string;
   openai_codex_version_auto_sync_enabled?: boolean;
-  // codex_cli_only 加固
-  min_codex_version?: string;
-  max_codex_version?: string;
-  codex_cli_only_blacklist?: string;
-  codex_cli_only_whitelist?: string;
-  codex_cli_only_allow_app_server_clients?: boolean;
-  codex_cli_only_engine_fingerprint_signals?: string;
   // Payment configuration
   payment_enabled?: boolean;
   risk_control_enabled?: boolean;

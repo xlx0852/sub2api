@@ -19,13 +19,10 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/app/scheduling"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/ports"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 const (
@@ -437,7 +434,6 @@ type OpenAIGatewayService struct {
 	cfg              *config.Config
 	// ttftTracker 记录账号×模型的近期首字节中位数，供选号做延迟偏好（可为 nil）。
 	ttftTracker           *AccountTTFTTracker
-	codexDetector         CodexClientRestrictionDetector
 	schedulerSnapshot     *SchedulerSnapshotService
 	concurrencyService    *ConcurrencyService
 	billingService        *BillingService
@@ -556,7 +552,6 @@ func NewOpenAIGatewayService(
 		userSubRepo:         userSubRepo,
 		cache:               cache,
 		cfg:                 cfg,
-		codexDetector:       NewOpenAICodexClientRestrictionDetector(cfg),
 		schedulerSnapshot:   schedulerSnapshot,
 		concurrencyService:  concurrencyService,
 		billingService:      billingService,
@@ -736,17 +731,6 @@ func (s *OpenAIGatewayService) logOpenAIWSModeBootstrap() {
 		wsCfg.RetryTotalBudgetMS,
 		openAIWSMessageReadLimitBytes,
 	)
-}
-
-func (s *OpenAIGatewayService) getCodexClientRestrictionDetector() CodexClientRestrictionDetector {
-	if s != nil && s.codexDetector != nil {
-		return s.codexDetector
-	}
-	var cfg *config.Config
-	if s != nil {
-		cfg = s.cfg
-	}
-	return NewOpenAICodexClientRestrictionDetector(cfg)
 }
 
 func (s *OpenAIGatewayService) getOpenAIWSProtocolResolver() OpenAIWSProtocolResolver {
@@ -1070,20 +1054,6 @@ func SnapshotOpenAICompatibilityFallbackMetrics() OpenAICompatibilityFallbackMet
 	}
 }
 
-func (s *OpenAIGatewayService) detectCodexClientRestriction(c *gin.Context, account *Account, body []byte) CodexClientRestrictionDetectionResult {
-	// 安全默认：即便缺 settingService（仅测试/误配可达）也保持指纹门为默认种子，
-	// 避免零值 policy（nil 信号）让指纹门失败开放。有 settingService 时整体覆盖为全局策略。
-	policy := CodexRestrictionPolicy{EngineFingerprintSignals: openai.DefaultEngineFingerprintSignals}
-	if account != nil && account.IsCodexCLIOnlyEnabled() && s != nil && s.settingService != nil {
-		ctx := context.Background()
-		if c != nil && c.Request != nil {
-			ctx = c.Request.Context()
-		}
-		policy = s.settingService.GetCodexRestrictionPolicy(ctx)
-	}
-	return s.getCodexClientRestrictionDetector().Detect(c, account, policy, body)
-}
-
 func getAPIKeyIDFromContext(c *gin.Context) int64 {
 	if c == nil {
 		return 0
@@ -1145,86 +1115,6 @@ func setOpenAIIsolatedSessionHeaders(h http.Header, isolated string, withConvers
 	if withConversation {
 		h.Set("thread-id", isolated)
 	}
-}
-
-func logCodexCLIOnlyDetection(ctx context.Context, c *gin.Context, account *Account, apiKeyID int64, result CodexClientRestrictionDetectionResult, body []byte) {
-	if !result.Enabled {
-		return
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	accountID := int64(0)
-	if account != nil {
-		accountID = account.ID
-	}
-	fields := []zap.Field{
-		zap.String("component", "service.openai_gateway"),
-		zap.Int64("account_id", accountID),
-		zap.Bool("codex_cli_only_enabled", result.Enabled),
-		zap.Bool("codex_official_client_match", result.Matched),
-		zap.String("reject_reason", result.Reason),
-	}
-	if apiKeyID > 0 {
-		fields = append(fields, zap.Int64("api_key_id", apiKeyID))
-	}
-	if !result.Matched {
-		fields = appendCodexCLIOnlyRejectedRequestFields(fields, c, body)
-	}
-	log := logger.FromContext(ctx).With(fields...)
-	if result.Matched {
-		log.Info("OpenAI codex_cli_only 放行请求")
-		return
-	}
-	log.Warn("OpenAI codex_cli_only 拒绝非官方客户端请求")
-}
-
-func appendCodexCLIOnlyRejectedRequestFields(fields []zap.Field, c *gin.Context, body []byte) []zap.Field {
-	if c == nil || c.Request == nil {
-		return fields
-	}
-
-	req := c.Request
-	requestModel, requestStream, promptCacheKey := extractOpenAIRequestMetaFromBody(body)
-	fields = append(fields,
-		zap.String("request_method", strings.TrimSpace(req.Method)),
-		zap.String("request_path", strings.TrimSpace(req.URL.Path)),
-		zap.String("request_query", strings.TrimSpace(req.URL.RawQuery)),
-		zap.String("request_host", strings.TrimSpace(req.Host)),
-		zap.String("request_client_ip", strings.TrimSpace(ip.GetClientIP(c))),
-		zap.String("request_remote_addr", strings.TrimSpace(req.RemoteAddr)),
-		zap.String("request_user_agent", strings.TrimSpace(req.Header.Get("User-Agent"))),
-		zap.String("request_content_type", strings.TrimSpace(req.Header.Get("Content-Type"))),
-		zap.Int64("request_content_length", req.ContentLength),
-		zap.Bool("request_stream", requestStream),
-	)
-	if requestModel != "" {
-		fields = append(fields, zap.String("request_model", requestModel))
-	}
-	if promptCacheKey != "" {
-		fields = append(fields, zap.String("request_prompt_cache_key_sha256", hashSensitiveValueForLog(promptCacheKey)))
-	}
-
-	if headers := snapshotCodexCLIOnlyHeaders(req.Header); len(headers) > 0 {
-		fields = append(fields, zap.Any("request_headers", headers))
-	}
-	fields = append(fields, zap.Int("request_body_size", len(body)))
-	return fields
-}
-
-func snapshotCodexCLIOnlyHeaders(header http.Header) map[string]string {
-	if len(header) == 0 {
-		return nil
-	}
-	result := make(map[string]string, len(codexCLIOnlyDebugHeaderWhitelist))
-	for _, key := range codexCLIOnlyDebugHeaderWhitelist {
-		value := strings.TrimSpace(header.Get(key))
-		if value == "" {
-			continue
-		}
-		result[strings.ToLower(key)] = truncateString(value, codexCLIOnlyHeaderValueMaxBytes)
-	}
-	return result
 }
 
 func hashSensitiveValueForLog(raw string) string {

@@ -1735,62 +1735,6 @@
         </div>
       </div>
 
-      <!-- OpenAI OAuth Codex 官方客户端限制开关 -->
-      <div
-        v-if="isFieldVisible('openAIAdvanced', { platform: form.platform }) && accountCategory === 'oauth-based'"
-        class="border-t border-gray-200 pt-4 dark:border-dark-600"
-      >
-        <div class="flex items-center justify-between">
-          <div>
-            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexCLIOnly') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('admin.accounts.openai.codexCLIOnlyDesc') }}
-            </p>
-          </div>
-          <button
-            type="button"
-            @click="codexCLIOnlyEnabled = !codexCLIOnlyEnabled"
-            :class="[
-              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
-              codexCLIOnlyEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-            ]"
-          >
-            <span
-              :class="[
-                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                codexCLIOnlyEnabled ? 'translate-x-5' : 'translate-x-0'
-              ]"
-            />
-          </button>
-        </div>
-        <div
-          v-if="codexCLIOnlyEnabled"
-          class="mt-4 flex items-center justify-between border-l-2 border-gray-200 pl-4 dark:border-dark-600"
-        >
-          <div>
-            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexCLIOnlyAppServer') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('admin.accounts.openai.codexCLIOnlyAppServerDesc') }}
-            </p>
-          </div>
-          <button
-            type="button"
-            @click="codexCLIOnlyAppServerEnabled = !codexCLIOnlyAppServerEnabled"
-            :class="[
-              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
-              codexCLIOnlyAppServerEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-            ]"
-          >
-            <span
-              :class="[
-                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                codexCLIOnlyAppServerEnabled ? 'translate-x-5' : 'translate-x-0'
-              ]"
-            />
-          </button>
-        </div>
-      </div>
-
       <!-- Codex 指纹收敛模式（仅 OpenAI OAuth） -->
       <div
         v-if="isFieldVisible('openAIAdvanced', { platform: form.platform }) && accountCategory === 'oauth-based'"
@@ -2682,8 +2626,6 @@ const openAIResponsesMode = ref<OpenAIResponsesMode>('auto')
 const openAIEndpointCapabilities = ref<OpenAIEndpointCapability[]>(['chat_completions', 'embeddings'])
 const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
-const codexCLIOnlyEnabled = ref(false)
-const codexCLIOnlyAppServerEnabled = ref(false)
 type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
 const codexFingerprintMode = ref<CodexFingerprintMode>('session')
 const codexFingerprintModeOptions = computed(() => [
@@ -3124,8 +3066,6 @@ watch(
       openAIEndpointCapabilities.value = ['chat_completions', 'embeddings']
       openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
       openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
-      codexCLIOnlyEnabled.value = false
-      codexCLIOnlyAppServerEnabled.value = false
     }
     if (newPlatform !== 'anthropic') {
       anthropicPassthroughEnabled.value = false
@@ -3155,8 +3095,6 @@ watch(
   [accountCategory, () => form.platform],
   ([category, platform]) => {
     if (platform === 'openai' && category !== 'oauth-based') {
-      codexCLIOnlyEnabled.value = false
-      codexCLIOnlyAppServerEnabled.value = false
     }
     if (platform !== 'anthropic' || category !== 'apikey') {
       anthropicPassthroughEnabled.value = false
@@ -3549,8 +3487,6 @@ const resetForm = () => {
   openAIEndpointCapabilities.value = ['chat_completions', 'embeddings']
   openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
-  codexCLIOnlyEnabled.value = false
-  codexCLIOnlyAppServerEnabled.value = false
   codexFingerprintMode.value = 'session'
   anthropicPassthroughEnabled.value = false
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
@@ -3599,21 +3535,10 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
   applyOpenAIPassthrough(extra, openaiPassthroughEnabled.value, 'create')
   applyOpenAIExternalBridge(extra, accountCategory.value === 'apikey' && externalBridgeEnabled.value, externalBridgeKind.value)
 
-  if (accountCategory.value === 'oauth-based' && codexCLIOnlyEnabled.value) {
-    extra.codex_cli_only = true
-  } else {
-    delete extra.codex_cli_only
-  }
+  // codex_cli_only 客户端限制能力已下线：新建账号时不再写入相关字段。
+  delete extra.codex_cli_only
   delete extra.codex_cli_only_allowed_clients
-  if (
-    accountCategory.value === 'oauth-based' &&
-    codexCLIOnlyEnabled.value &&
-    codexCLIOnlyAppServerEnabled.value
-  ) {
-    extra.codex_cli_only_allow_app_server = true
-  } else {
-    delete extra.codex_cli_only_allow_app_server
-  }
+  delete extra.codex_cli_only_allow_app_server
   if (accountCategory.value === 'oauth-based') {
     extra.codex_fingerprint_mode = codexFingerprintMode.value
   } else {

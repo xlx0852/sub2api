@@ -1576,62 +1576,6 @@
         />
       </div>
 
-      <!-- OpenAI OAuth Codex 官方客户端限制开关 -->
-      <div v-show="activeEditTab === 'advanced'"
-        v-if="account && isFieldVisible('openAIAdvanced', { platform: account.platform }) && (account.type === 'oauth' || account.type === 'setup-token')"
-        class="pt-4"
-      >
-        <div class="flex items-center justify-between">
-          <div>
-            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexCLIOnly') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('admin.accounts.openai.codexCLIOnlyDesc') }}
-            </p>
-          </div>
-          <button
-            type="button"
-            @click="codexCLIOnlyEnabled = !codexCLIOnlyEnabled"
-            :class="[
-              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
-              codexCLIOnlyEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-            ]"
-          >
-            <span
-              :class="[
-                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                codexCLIOnlyEnabled ? 'translate-x-5' : 'translate-x-0'
-              ]"
-            />
-          </button>
-        </div>
-        <div
-          v-if="codexCLIOnlyEnabled"
-          class="mt-4 flex items-center justify-between border-l-2 border-gray-200 pl-4 dark:border-dark-600"
-        >
-          <div>
-            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexCLIOnlyAppServer') }}</label>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('admin.accounts.openai.codexCLIOnlyAppServerDesc') }}
-            </p>
-          </div>
-          <button
-            type="button"
-            @click="codexCLIOnlyAppServerEnabled = !codexCLIOnlyAppServerEnabled"
-            :class="[
-              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
-              codexCLIOnlyAppServerEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
-            ]"
-          >
-            <span
-              :class="[
-                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
-                codexCLIOnlyAppServerEnabled ? 'translate-x-5' : 'translate-x-0'
-              ]"
-            />
-          </button>
-        </div>
-      </div>
-
       <!-- Codex 指纹收敛模式（仅 OpenAI OAuth） -->
       <div
         v-show="activeEditTab === 'advanced'"
@@ -2221,8 +2165,6 @@ const openAIResponsesMode = ref<OpenAIResponsesMode>('auto')
 const openAIEndpointCapabilities = ref<OpenAIEndpointCapability[]>(['chat_completions', 'embeddings'])
 const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
-const codexCLIOnlyEnabled = ref(false)
-const codexCLIOnlyAppServerEnabled = ref(false)
 type CodexFingerprintMode = 'off' | 'device' | 'session' | 'full'
 const codexFingerprintMode = ref<CodexFingerprintMode>('off')
 type CodexImageToolMode = 'inherit' | 'enabled' | 'disabled' | 'block'
@@ -2771,8 +2713,6 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   openAICompactModelMappings.value = []
   openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
-  codexCLIOnlyEnabled.value = false
-  codexCLIOnlyAppServerEnabled.value = false
   codexFingerprintMode.value = 'off'
   codexImageToolMode.value = 'inherit'
   anthropicPassthroughEnabled.value = false
@@ -2815,11 +2755,6 @@ const syncFormFromAccount = (newAccount: Account | null) => {
       fallbackEnabledKeys: ['responses_websockets_v2_enabled', 'openai_ws_enabled'],
       defaultMode: OPENAI_WS_MODE_OFF
     })
-    if (newAccount.type === 'oauth' || newAccount.type === 'setup-token') {
-      codexCLIOnlyEnabled.value = extra?.codex_cli_only === true
-      codexCLIOnlyAppServerEnabled.value =
-        extra?.codex_cli_only_allow_app_server === true
-    }
     if (newAccount.type === 'oauth') {
       const fingerprintMode = extra?.codex_fingerprint_mode as string | undefined
       codexFingerprintMode.value = (['off', 'device', 'session', 'full'].includes(fingerprintMode || '')
@@ -3653,7 +3588,6 @@ const handleSubmit = async () => {
     if (props.account.platform === 'openai' && (props.account.type === 'oauth' || props.account.type === 'setup-token' || props.account.type === 'apikey')) {
       const currentExtra = (props.account.extra as Record<string, unknown>) || {}
       const newExtra: Record<string, unknown> = { ...currentExtra }
-      const hadCodexCLIOnlyEnabled = currentExtra.codex_cli_only === true
       applyOpenAIWebSocketExtra(newExtra, props.account.type, openaiOAuthResponsesWebSocketV2Mode.value, openaiAPIKeyResponsesWebSocketV2Mode.value, isOpenAIWSModeEnabled)
       applyOpenAIPassthrough(newExtra, openaiPassthroughEnabled.value, 'edit')
       applyOpenAIExternalBridge(newExtra, props.account.type === 'apikey' && externalBridgeEnabled.value, externalBridgeKind.value)
@@ -3681,22 +3615,11 @@ const handleSubmit = async () => {
           delete newExtra.codex_image_generation_explicit_tool_policy
       }
 
+      // codex_cli_only 客户端限制能力已下线：提交时顺手清掉历史遗留字段。
       if (props.account.type === 'oauth' || props.account.type === 'setup-token') {
-        if (codexCLIOnlyEnabled.value) {
-          newExtra.codex_cli_only = true
-        } else if (hadCodexCLIOnlyEnabled) {
-          // 关闭时显式写 false，避免 extra 为空被后端忽略导致旧值无法清除
-          newExtra.codex_cli_only = false
-        } else {
-          delete newExtra.codex_cli_only
-        }
-        // Claude Code 插件放行已迁移到全局 codex_cli_only_whitelist，编辑时清理废弃账号级快捷字段。
+        delete newExtra.codex_cli_only
         delete newExtra.codex_cli_only_allowed_clients
-        if (codexCLIOnlyEnabled.value && codexCLIOnlyAppServerEnabled.value) {
-          newExtra.codex_cli_only_allow_app_server = true
-        } else {
-          delete newExtra.codex_cli_only_allow_app_server
-        }
+        delete newExtra.codex_cli_only_allow_app_server
       }
 
       if (props.account.type === 'oauth') {

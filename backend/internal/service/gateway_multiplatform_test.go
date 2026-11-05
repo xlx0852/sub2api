@@ -3134,38 +3134,6 @@ func TestGatewayService_SelectAccountWithLoadAwareness(t *testing.T) {
 		require.Equal(t, int64(1), result.Account.ID)
 	})
 
-	t.Run("ClaudeCode限制-无降级返回错误", func(t *testing.T) {
-		groupID := int64(62)
-
-		groupRepo := &mockGroupRepoForGateway{
-			groups: map[int64]*Group{
-				groupID: {
-					ID:             groupID,
-					Platform:       PlatformAnthropic,
-					Status:         StatusActive,
-					Hydrated:       true,
-					ClaudeCodeOnly: true,
-				},
-			},
-		}
-
-		cfg := testConfig()
-		cfg.Gateway.Scheduling.LoadBatchEnabled = false
-
-		svc := &GatewayService{
-			accountRepo:        &mockAccountRepoForPlatform{},
-			groupRepo:          groupRepo,
-			cache:              &mockGatewayCacheForPlatform{},
-			cfg:                cfg,
-			concurrencyService: nil,
-		}
-
-		result, err := svc.SelectAccountWithLoadAwareness(ctx, &groupID, "", "claude-3-5-sonnet-20241022", nil, "", int64(0))
-		require.Error(t, err)
-		require.Nil(t, result)
-		require.ErrorIs(t, err, ErrClaudeCodeOnly)
-	})
-
 	t.Run("负载可用但无法获取槽位-兜底等待", func(t *testing.T) {
 		repo := &mockAccountRepoForPlatform{
 			accounts: []Account{

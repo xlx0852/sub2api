@@ -347,24 +347,6 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.MaxClaudeCodeVersion != after.MaxClaudeCodeVersion {
 		changed = append(changed, "max_claude_code_version")
 	}
-	if before.MinCodexVersion != after.MinCodexVersion {
-		changed = append(changed, "min_codex_version")
-	}
-	if before.MaxCodexVersion != after.MaxCodexVersion {
-		changed = append(changed, "max_codex_version")
-	}
-	if before.CodexCLIOnlyAllowAppServerClients != after.CodexCLIOnlyAllowAppServerClients {
-		changed = append(changed, "codex_cli_only_allow_app_server_clients")
-	}
-	if before.CodexCLIOnlyEngineFingerprintSignals != after.CodexCLIOnlyEngineFingerprintSignals {
-		changed = append(changed, "codex_cli_only_engine_fingerprint_signals")
-	}
-	if before.CodexCLIOnlyBlacklist != after.CodexCLIOnlyBlacklist {
-		changed = append(changed, "codex_cli_only_blacklist")
-	}
-	if before.CodexCLIOnlyWhitelist != after.CodexCLIOnlyWhitelist {
-		changed = append(changed, "codex_cli_only_whitelist")
-	}
 	if before.AllowUngroupedKeyScheduling != after.AllowUngroupedKeyScheduling {
 		changed = append(changed, "allow_ungrouped_key_scheduling")
 	}

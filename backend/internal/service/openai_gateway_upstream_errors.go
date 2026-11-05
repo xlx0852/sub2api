@@ -57,7 +57,6 @@ func logOpenAIInstructionsRequiredDebug(
 		zap.String("request_user_agent", userAgent),
 		zap.Bool("codex_official_client_match", openai.IsCodexOfficialClientByHeaders(userAgent, originator)),
 	}
-	fields = appendCodexCLIOnlyRejectedRequestFields(fields, c, requestBody)
 
 	logger.FromContext(ctx).With(fields...).Warn("OpenAI 上游返回 Instructions are required，已记录请求详情用于排查")
 }

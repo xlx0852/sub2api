@@ -22,23 +22,9 @@ import (
 
 // Forward forwards request to OpenAI API.
 // Grok/Kimi and the main OpenAI/Codex HTTP path run dedicated pipelines.
-// Codex restriction, passthrough, and WSv1 rejection stay at the entrance.
+// Passthrough and WSv1 rejection stay at the entrance.
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
 	startTime := time.Now()
-
-	restrictionResult := s.detectCodexClientRestriction(c, account, body)
-	apiKeyID := getAPIKeyIDFromContext(c)
-	logCodexCLIOnlyDetection(ctx, c, account, apiKeyID, restrictionResult, body)
-	if restrictionResult.Enabled && !restrictionResult.Matched {
-		MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": gin.H{
-				"type":    "forbidden_error",
-				"message": CodexClientRestrictionMessage(restrictionResult),
-			},
-		})
-		return nil, errors.New("codex_cli_only restriction: only codex official clients are allowed")
-	}
 
 	normalizedBody, normalized, err := normalizeOpenAICodexCompactReasoningEffortForAccount(c, account, body)
 	if err != nil {

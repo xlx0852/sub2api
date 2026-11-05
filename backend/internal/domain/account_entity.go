@@ -2014,28 +2014,6 @@ func (a *Account) GetWebSearchEmulationMode() string {
 	}
 }
 
-// IsCodexCLIOnlyEnabled 返回 OpenAI OAuth 账号是否启用"仅允许 Codex 官方客户端"。
-// 字段：accounts.extra.codex_cli_only。
-// 字段缺失或类型不正确时，按 false（关闭）处理。
-func (a *Account) IsCodexCLIOnlyEnabled() bool {
-	if a == nil || !a.IsOpenAIOAuth() || a.Extra == nil {
-		return false
-	}
-	enabled, ok := a.Extra["codex_cli_only"].(bool)
-	return ok && enabled
-}
-
-// IsCodexCLIOnlyAppServerAllowed 返回 codex_cli_only 账号是否额外放行 Codex app-server
-// 第三方客户端（运行时与全局 app_server 开关 OR）。字段：accounts.extra.codex_cli_only_allow_app_server。
-// 仅在 codex_cli_only 已启用时有意义；字段缺失或类型不符按 false（不放行）处理。
-func (a *Account) IsCodexCLIOnlyAppServerAllowed() bool {
-	if !a.IsCodexCLIOnlyEnabled() {
-		return false
-	}
-	v, ok := a.Extra["codex_cli_only_allow_app_server"].(bool)
-	return ok && v
-}
-
 // IsAnthropicOAuthOrSetupToken 判断是否为 Anthropic OAuth 或 SetupToken 类型账号
 // 仅这两类账号支持 5h 窗口额度控制和会话数量控制
 func (a *Account) IsAnthropicOAuthOrSetupToken() bool {

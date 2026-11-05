@@ -411,21 +411,8 @@ const (
 
 	// SettingKeyMinClaudeCodeVersion 最低 Claude Code 版本号要求 (semver, 如 "2.1.0"，空值=不检查)
 	SettingKeyMinClaudeCodeVersion = "min_claude_code_version"
-	// SettingKeyMinCodexVersion 最低 Codex 引擎版本要求 (semver, 如 "0.141.0"，空值=不检查)
-	SettingKeyMinCodexVersion = "min_codex_version"
-	// SettingKeyMaxCodexVersion 最高 Codex 引擎版本限制 (semver, 如 "0.200.0"，空值=不检查)
-	SettingKeyMaxCodexVersion = "max_codex_version"
-	// SettingKeyCodexCLIOnlyBlacklist codex_cli_only 全局黑名单（[]AllowedClientEntry JSON，OR deny）。
-	SettingKeyCodexCLIOnlyBlacklist = "codex_cli_only_blacklist"
-	// SettingKeyCodexCLIOnlyWhitelist codex_cli_only 全局白名单（[]AllowedClientEntry JSON，双因子 AND allow）。
-	SettingKeyCodexCLIOnlyWhitelist = "codex_cli_only_whitelist"
-	// SettingKeyCodexCLIOnlyAllowAppServerClients App Server 开关：对未列名客户端开闸（默认 false；仅显式 "true" 开）。
-	SettingKeyCodexCLIOnlyAllowAppServerClients = "codex_cli_only_allow_app_server_clients"
-	// SettingKeyCodexCLIOnlyAllowBodyEngineFingerprint 引擎门 body 通道开关：接受 client_metadata 引擎指纹（默认 false；仅显式 "true" 开）。(已废弃，迁移并入信号列表)
-	SettingKeyCodexCLIOnlyAllowBodyEngineFingerprint = "codex_cli_only_allow_body_engine_fingerprint"
 	// SettingKeyCodexCLIOnlyEngineFingerprintSignals codex_cli_only 引擎指纹门信号列表（[]EngineFingerprintSignal JSON）。
 	// 勾选(required)信号之间 AND;每条 match 变体行内 OR;缺失/空/非法 → 默认种子(只勾 x-codex-)。
-	SettingKeyCodexCLIOnlyEngineFingerprintSignals = "codex_cli_only_engine_fingerprint_signals"
 
 	// SettingKeyMaxClaudeCodeVersion 最高 Claude Code 版本号限制 (semver, 如 "3.0.0"，空值=不检查)
 	SettingKeyMaxClaudeCodeVersion = "max_claude_code_version"

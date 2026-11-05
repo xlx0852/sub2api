@@ -14,7 +14,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 )
 
 // InitializeDefaultSettings 初始化默认设置
@@ -194,12 +193,6 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyMaxClaudeCodeVersion: "",
 
 		// codex_cli_only 加固（默认：版本不检查、名单空、默认种子指纹信号）
-		SettingKeyMinCodexVersion:                      "",
-		SettingKeyMaxCodexVersion:                      "",
-		SettingKeyCodexCLIOnlyBlacklist:                "",
-		SettingKeyCodexCLIOnlyWhitelist:                "",
-		SettingKeyCodexCLIOnlyAllowAppServerClients:    "false",
-		SettingKeyCodexCLIOnlyEngineFingerprintSignals: openai.DefaultEngineFingerprintSignalsJSON(),
 
 		// 分组隔离（默认不允许未分组 Key 调度）
 		SettingKeyAllowUngroupedKeyScheduling:                        "false",
@@ -754,16 +747,6 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		result.OpenAICodexVersionAutoSyncEnabled = true
 	}
 	// codex_cli_only 加固
-	result.MinCodexVersion = settings[SettingKeyMinCodexVersion]
-	result.MaxCodexVersion = settings[SettingKeyMaxCodexVersion]
-	result.CodexCLIOnlyBlacklist = settings[SettingKeyCodexCLIOnlyBlacklist]
-	result.CodexCLIOnlyWhitelist = settings[SettingKeyCodexCLIOnlyWhitelist]
-	result.CodexCLIOnlyAllowAppServerClients = settings[SettingKeyCodexCLIOnlyAllowAppServerClients] == "true"
-	if raw := strings.TrimSpace(settings[SettingKeyCodexCLIOnlyEngineFingerprintSignals]); raw != "" {
-		result.CodexCLIOnlyEngineFingerprintSignals = raw
-	} else {
-		result.CodexCLIOnlyEngineFingerprintSignals = openai.DefaultEngineFingerprintSignalsJSON() // 缺失/空 → 展示默认种子
-	}
 
 	// Web search emulation: quick enabled check from the JSON config
 	if raw := settings[SettingKeyWebSearchEmulationConfig]; raw != "" {

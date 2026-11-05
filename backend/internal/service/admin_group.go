@@ -294,8 +294,6 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		VideoPrice480P:                  videoPrice480P,
 		VideoPrice720P:                  videoPrice720P,
 		VideoPrice1080P:                 videoPrice1080P,
-		ClaudeCodeOnly:                  input.ClaudeCodeOnly,
-		FallbackGroupID:                 input.FallbackGroupID,
 		FallbackGroupIDOnInvalidRequest: fallbackOnInvalidRequest,
 		ModelRouting:                    input.ModelRouting,
 		MCPXMLInject:                    mcpXMLInject,
@@ -542,9 +540,6 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 
 	// Claude Code 客户端限制
-	if input.ClaudeCodeOnly != nil {
-		group.ClaudeCodeOnly = *input.ClaudeCodeOnly
-	}
 	if input.FallbackGroupID != nil {
 		// 校验降级分组
 		if *input.FallbackGroupID > 0 {

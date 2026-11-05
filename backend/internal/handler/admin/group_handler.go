@@ -123,8 +123,6 @@ type CreateGroupRequest struct {
 	VideoPrice480P                  *float64 `json:"video_price_480p"`
 	VideoPrice720P                  *float64 `json:"video_price_720p"`
 	VideoPrice1080P                 *float64 `json:"video_price_1080p"`
-	ClaudeCodeOnly                  bool     `json:"claude_code_only"`
-	FallbackGroupID                 *int64   `json:"fallback_group_id"`
 	FallbackGroupIDOnInvalidRequest *int64   `json:"fallback_group_id_on_invalid_request"`
 	// 模型路由配置（仅 anthropic 平台使用）
 	ModelRouting        map[string][]int64 `json:"model_routing"`
@@ -173,8 +171,6 @@ type UpdateGroupRequest struct {
 	VideoPrice480P                  *float64 `json:"video_price_480p"`
 	VideoPrice720P                  *float64 `json:"video_price_720p"`
 	VideoPrice1080P                 *float64 `json:"video_price_1080p"`
-	ClaudeCodeOnly                  *bool    `json:"claude_code_only"`
-	FallbackGroupID                 *int64   `json:"fallback_group_id"`
 	FallbackGroupIDOnInvalidRequest *int64   `json:"fallback_group_id_on_invalid_request"`
 	// 模型路由配置（仅 anthropic 平台使用）
 	ModelRouting        map[string][]int64 `json:"model_routing"`
@@ -350,8 +346,6 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		VideoPrice480P:                  req.VideoPrice480P,
 		VideoPrice720P:                  req.VideoPrice720P,
 		VideoPrice1080P:                 req.VideoPrice1080P,
-		ClaudeCodeOnly:                  req.ClaudeCodeOnly,
-		FallbackGroupID:                 req.FallbackGroupID,
 		FallbackGroupIDOnInvalidRequest: req.FallbackGroupIDOnInvalidRequest,
 		ModelRouting:                    req.ModelRouting,
 		ModelRoutingEnabled:             req.ModelRoutingEnabled,
@@ -415,8 +409,6 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		VideoPrice480P:                  req.VideoPrice480P,
 		VideoPrice720P:                  req.VideoPrice720P,
 		VideoPrice1080P:                 req.VideoPrice1080P,
-		ClaudeCodeOnly:                  req.ClaudeCodeOnly,
-		FallbackGroupID:                 req.FallbackGroupID,
 		FallbackGroupIDOnInvalidRequest: req.FallbackGroupIDOnInvalidRequest,
 		ModelRouting:                    req.ModelRouting,
 		ModelRoutingEnabled:             req.ModelRoutingEnabled,

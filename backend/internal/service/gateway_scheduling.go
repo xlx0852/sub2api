@@ -75,7 +75,7 @@ func (s *GatewayService) selectAccountWithLoadAwarenessStrategy(ctx context.Cont
 func (s *GatewayService) selectGatewayAccountOnce(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, metadataUserID string, sub2apiUserID int64) (*AccountSelectionResult, gatewaySelectionPoolStats, error) {
 	stats := gatewaySelectionPoolStats{}
 	cfg := s.schedulingConfig()
-	group, groupID, err := s.checkClaudeCodeRestriction(ctx, groupID)
+	group, groupID, err := s.resolveGatewayGroup(ctx, groupID)
 	if err != nil {
 		return nil, stats, err
 	}
@@ -258,55 +258,20 @@ func (s *GatewayService) ResolveGroupByID(ctx context.Context, groupID int64) (*
 	return s.resolveGroupByID(ctx, groupID)
 }
 
+// resolveGatewayGroup 解析请求所属分组。
+//
+// 曾经这里按 claude_code_only 做"非 Claude Code 客户端降级到 fallback 分组/拒绝"的处理，
+// 该能力已下线：分组不再按客户端类型限制访问。
 func (s *GatewayService) resolveGatewayGroup(ctx context.Context, groupID *int64) (*Group, *int64, error) {
 	if groupID == nil {
 		return nil, nil, nil
 	}
-
-	currentID := *groupID
-	visited := map[int64]struct{}{}
-	for {
-		if _, seen := visited[currentID]; seen {
-			return nil, nil, fmt.Errorf("fallback group cycle detected")
-		}
-		visited[currentID] = struct{}{}
-
-		group, err := s.resolveGroupByID(ctx, currentID)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		if !group.ClaudeCodeOnly || IsClaudeCodeClient(ctx) {
-			return group, &currentID, nil
-		}
-
-		if group.FallbackGroupID == nil {
-			return nil, nil, ErrClaudeCodeOnly
-		}
-		currentID = *group.FallbackGroupID
-	}
-}
-
-// checkClaudeCodeRestriction 检查分组的 Claude Code 客户端限制
-// 如果分组启用了 claude_code_only 且请求不是来自 Claude Code 客户端：
-//   - 有降级分组：返回降级分组的 ID
-//   - 无降级分组：返回 ErrClaudeCodeOnly 错误
-func (s *GatewayService) checkClaudeCodeRestriction(ctx context.Context, groupID *int64) (*Group, *int64, error) {
-	if groupID == nil {
-		return nil, groupID, nil
-	}
-
-	// 强制平台模式不检查 Claude Code 限制
-	if forcePlatform, hasForcePlatform := ctx.Value(ctxkey.ForcePlatform).(string); hasForcePlatform && forcePlatform != "" {
-		return nil, groupID, nil
-	}
-
-	group, resolvedID, err := s.resolveGatewayGroup(ctx, groupID)
+	group, err := s.resolveGroupByID(ctx, *groupID)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	return group, resolvedID, nil
+	id := *groupID
+	return group, &id, nil
 }
 
 func (s *GatewayService) resolvePlatform(ctx context.Context, groupID *int64, group *Group) (string, bool, error) {

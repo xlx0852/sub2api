@@ -226,12 +226,6 @@ type UpdateSettingsRequest struct {
 	OpenAICodexVersionAutoSyncEnabled  *bool   `json:"openai_codex_version_auto_sync_enabled"`
 
 	// codex_cli_only 加固（global-only）
-	MinCodexVersion                      string `json:"min_codex_version"`
-	MaxCodexVersion                      string `json:"max_codex_version"`
-	CodexCLIOnlyBlacklist                string `json:"codex_cli_only_blacklist"`
-	CodexCLIOnlyWhitelist                string `json:"codex_cli_only_whitelist"`
-	CodexCLIOnlyAllowAppServerClients    *bool  `json:"codex_cli_only_allow_app_server_clients"`
-	CodexCLIOnlyEngineFingerprintSignals string `json:"codex_cli_only_engine_fingerprint_signals"`
 
 	// Payment visible method routing
 	PaymentVisibleMethodAlipaySource  *string `json:"payment_visible_method_alipay_source"`
@@ -1130,34 +1124,6 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		}
 	}
 
-	// codex_cli_only 加固：最低/最高 Codex 版本（空=禁用，或合法 semver；max>=min）
-	if req.MinCodexVersion != "" && !semverPattern.MatchString(req.MinCodexVersion) {
-		response.Error(c, http.StatusBadRequest, "min_codex_version must be empty or a valid semver (e.g. 0.141.0)")
-		return
-	}
-	if req.MaxCodexVersion != "" && !semverPattern.MatchString(req.MaxCodexVersion) {
-		response.Error(c, http.StatusBadRequest, "max_codex_version must be empty or a valid semver (e.g. 0.200.0)")
-		return
-	}
-	if req.MinCodexVersion != "" && req.MaxCodexVersion != "" && service.CompareVersions(req.MaxCodexVersion, req.MinCodexVersion) < 0 {
-		response.Error(c, http.StatusBadRequest, "max_codex_version must be greater than or equal to min_codex_version")
-		return
-	}
-	// codex_cli_only 黑/白名单：非空须为合法 []AllowedClientEntry JSON。
-	// 黑名单 OR 宽 deny（允许 originator-only）；白名单双因子 AND，额外要求每条可命中（非空 originator + ua_contains）。
-	if err := service.ValidateCodexClientEntriesJSON(req.CodexCLIOnlyBlacklist); err != nil {
-		response.Error(c, http.StatusBadRequest, "codex_cli_only_blacklist "+err.Error())
-		return
-	}
-	if err := service.ValidateCodexWhitelistEntriesJSON(req.CodexCLIOnlyWhitelist); err != nil {
-		response.Error(c, http.StatusBadRequest, "codex_cli_only_whitelist "+err.Error())
-		return
-	}
-	if err := service.ValidateEngineFingerprintSignalsJSON(req.CodexCLIOnlyEngineFingerprintSignals); err != nil {
-		response.Error(c, http.StatusBadRequest, "codex_cli_only_engine_fingerprint_signals "+err.Error())
-		return
-	}
-
 	// 交叉验证：如果同时设置了最低和最高版本号，最高版本号必须 >= 最低版本号
 	if req.MinClaudeCodeVersion != "" && req.MaxClaudeCodeVersion != "" {
 		if service.CompareVersions(req.MaxClaudeCodeVersion, req.MinClaudeCodeVersion) < 0 {
@@ -1397,17 +1363,6 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.OpenAICodexVersionAutoSyncEnabled
 		}(),
-		MinCodexVersion:       strings.TrimSpace(req.MinCodexVersion),
-		MaxCodexVersion:       strings.TrimSpace(req.MaxCodexVersion),
-		CodexCLIOnlyBlacklist: strings.TrimSpace(req.CodexCLIOnlyBlacklist),
-		CodexCLIOnlyWhitelist: strings.TrimSpace(req.CodexCLIOnlyWhitelist),
-		CodexCLIOnlyAllowAppServerClients: func() bool {
-			if req.CodexCLIOnlyAllowAppServerClients != nil {
-				return *req.CodexCLIOnlyAllowAppServerClients
-			}
-			return previousSettings.CodexCLIOnlyAllowAppServerClients
-		}(),
-		CodexCLIOnlyEngineFingerprintSignals: strings.TrimSpace(req.CodexCLIOnlyEngineFingerprintSignals),
 		PaymentVisibleMethodAlipaySource: func() string {
 			if req.PaymentVisibleMethodAlipaySource != nil {
 				return strings.TrimSpace(*req.PaymentVisibleMethodAlipaySource)
@@ -1811,12 +1766,6 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		OpenAICodexClientVersion:                               updatedSettings.OpenAICodexClientVersion,
 		OpenAICodexClientVersionSynced:                         updatedSettings.OpenAICodexClientVersionSynced,
 		OpenAICodexVersionAutoSyncEnabled:                      updatedSettings.OpenAICodexVersionAutoSyncEnabled,
-		MinCodexVersion:                                        updatedSettings.MinCodexVersion,
-		MaxCodexVersion:                                        updatedSettings.MaxCodexVersion,
-		CodexCLIOnlyBlacklist:                                  updatedSettings.CodexCLIOnlyBlacklist,
-		CodexCLIOnlyWhitelist:                                  updatedSettings.CodexCLIOnlyWhitelist,
-		CodexCLIOnlyAllowAppServerClients:                      updatedSettings.CodexCLIOnlyAllowAppServerClients,
-		CodexCLIOnlyEngineFingerprintSignals:                   updatedSettings.CodexCLIOnlyEngineFingerprintSignals,
 		PaymentVisibleMethodAlipaySource:                       updatedSettings.PaymentVisibleMethodAlipaySource,
 		PaymentVisibleMethodWxpaySource:                        updatedSettings.PaymentVisibleMethodWxpaySource,
 		PaymentVisibleMethodAlipayEnabled:                      updatedSettings.PaymentVisibleMethodAlipayEnabled,

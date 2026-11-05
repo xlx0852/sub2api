@@ -373,9 +373,6 @@ var (
 // ErrNoAvailableAccounts 表示没有可用的账号
 var ErrNoAvailableAccounts = errors.New("no available accounts")
 
-// ErrClaudeCodeOnly 表示分组仅允许 Claude Code 客户端访问
-var ErrClaudeCodeOnly = errors.New("this group only allows Claude Code clients")
-
 // allowedHeaders 白名单headers（参考CRS项目）
 var allowedHeaders = map[string]bool{
 	"accept":                                    true,

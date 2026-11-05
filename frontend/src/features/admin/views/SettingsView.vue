@@ -130,10 +130,6 @@
             v-model:apiKeyVisible="apiKeyVisibleModel"
             :wsTestLoading="wsTestLoading"
             :wsTestResult="wsTestResult"
-            :codexFingerprintRows="codexFingerprintRows"
-            :codexWhitelistRows="codexWhitelistRows"
-            :codexBlacklistRows="codexBlacklistRows"
-            :codexFingerprintNoRequired="codexFingerprintNoRequired"
             :saveOverloadCooldownSettings="saveOverloadCooldownSettings"
             :saveRateLimit429CooldownSettings="saveRateLimit429CooldownSettings"
             :saveStreamTimeoutSettings="saveStreamTimeoutSettings"
@@ -155,12 +151,6 @@
             :resetWebSearchUsage="resetWebSearchUsage"
             :copyApiKey="copyApiKey"
             :testWebSearchProvider="testWebSearchProvider"
-            :addCodexFingerprintRow="addCodexFingerprintRow"
-            :removeCodexFingerprintRow="removeCodexFingerprintRow"
-            :addCodexBlacklistRow="addCodexBlacklistRow"
-            :removeCodexBlacklistRow="removeCodexBlacklistRow"
-            :addCodexWhitelistRow="addCodexWhitelistRow"
-            :removeCodexWhitelistRow="removeCodexWhitelistRow"
             v-model:wsTestQuery="wsTestQuery"
             v-model:wsTestDialogOpen="wsTestDialogOpen"
           />
@@ -413,12 +403,6 @@ import {
   normalizeRegistrationEmailSuffixDomains,
   parseRegistrationEmailSuffixWhitelistInput,
 } from "@/utils/registrationEmailPolicy";
-import {
-  parseFingerprintSignalsToRows,
-  serializeFingerprintRowsToJSON,
-  defaultFingerprintSignalRows,
-  type FingerprintSignalRow,
-} from "@/views/admin/codexFingerprintSignals";
 import SettingsPaymentTab from "@/views/admin/settings/SettingsPaymentTab.vue";
 import SettingsUsersTab from "@/views/admin/settings/SettingsUsersTab.vue";
 import SettingsSecurityTab from "@/views/admin/settings/SettingsSecurityTab.vue";
@@ -922,13 +906,6 @@ const form = reactive<SettingsForm>({
   openai_codex_client_version: "",
   openai_codex_client_version_synced: "",
   openai_codex_version_auto_sync_enabled: true,
-  // codex_cli_only 加固
-  min_codex_version: "",
-  max_codex_version: "",
-  codex_cli_only_blacklist: "",
-  codex_cli_only_whitelist: "",
-  codex_cli_only_allow_app_server_clients: false,
-  codex_cli_only_engine_fingerprint_signals: "",
   // 余额、订阅到期与账号限额通知
   balance_low_notify_enabled: false,
   balance_low_notify_threshold: 0,
@@ -1513,82 +1490,6 @@ function parseTablePageSizeOptionsInput(raw: string): number[] | null {
   return deduped;
 }
 
-// ── codex_cli_only 黑/白名单结构化编辑（行 ↔ JSON）──
-interface CodexClientRow {
-  originator: string;
-  uaContains: string; // 逗号分隔，序列化时拆成 ua_contains 数组
-  skipEngineFingerprint?: boolean; // 仅白名单：命中即跳过引擎指纹门
-}
-const codexBlacklistRows = ref<CodexClientRow[]>([]);
-const codexWhitelistRows = ref<CodexClientRow[]>([]);
-const codexFingerprintRows = ref<FingerprintSignalRow[]>([]);
-const codexFingerprintNoRequired = computed(
-  () => !codexFingerprintRows.value.some((r) => r.required),
-);
-function addCodexFingerprintRow(): void {
-  codexFingerprintRows.value.push({ type: "header_exact", match: "", required: false });
-}
-function removeCodexFingerprintRow(i: number): void {
-  codexFingerprintRows.value.splice(i, 1);
-}
-
-function parseCodexEntriesToRows(raw: string): CodexClientRow[] {
-  if (!raw || !raw.trim()) return [];
-  try {
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return [];
-    return arr.map((e) => ({
-      originator: typeof e?.originator === "string" ? e.originator : "",
-      uaContains: Array.isArray(e?.ua_contains)
-        ? e.ua_contains
-            .filter((x: unknown) => typeof x === "string")
-            .join(", ")
-        : "",
-      skipEngineFingerprint: e?.skip_engine_fingerprint === true,
-    }));
-  } catch {
-    return [];
-  }
-}
-
-function serializeCodexRowsToJSON(rows: CodexClientRow[]): string {
-  const entries = rows
-    .map((r) => {
-      const entry: {
-        originator: string;
-        ua_contains: string[];
-        skip_engine_fingerprint?: boolean;
-      } = {
-        originator: r.originator.trim(),
-        ua_contains: r.uaContains
-          .split(",")
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0),
-      };
-      if (r.skipEngineFingerprint) entry.skip_engine_fingerprint = true;
-      return entry;
-    })
-    .filter((e) => e.originator !== "" || e.ua_contains.length > 0);
-  return entries.length > 0 ? JSON.stringify(entries) : "";
-}
-
-function addCodexBlacklistRow(): void {
-  codexBlacklistRows.value.push({ originator: "", uaContains: "" });
-}
-function removeCodexBlacklistRow(i: number): void {
-  codexBlacklistRows.value.splice(i, 1);
-}
-function addCodexWhitelistRow(): void {
-  codexWhitelistRows.value.push({
-    originator: "",
-    uaContains: "",
-    skipEngineFingerprint: false,
-  });
-}
-function removeCodexWhitelistRow(i: number): void {
-  codexWhitelistRows.value.splice(i, 1);
-}
-
 async function loadSettings() {
   loading.value = true;
   loadFailed.value = false;
@@ -1602,15 +1503,6 @@ async function loadSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
-    codexBlacklistRows.value = parseCodexEntriesToRows(
-      form.codex_cli_only_blacklist,
-    );
-    codexWhitelistRows.value = parseCodexEntriesToRows(
-      form.codex_cli_only_whitelist,
-    );
-    codexFingerprintRows.value = form.codex_cli_only_engine_fingerprint_signals
-      ? parseFingerprintSignalsToRows(form.codex_cli_only_engine_fingerprint_signals)
-      : defaultFingerprintSignalRows();
     form.login_agreement_mode =
       settings.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
     form.login_agreement_updated_at =
@@ -2008,19 +1900,6 @@ async function saveSettings() {
         form.openai_codex_client_version?.trim() || "",
       openai_codex_version_auto_sync_enabled:
         !!form.openai_codex_version_auto_sync_enabled,
-      min_codex_version: form.min_codex_version?.trim() || "",
-      max_codex_version: form.max_codex_version?.trim() || "",
-      codex_cli_only_allow_app_server_clients:
-        form.codex_cli_only_allow_app_server_clients,
-      codex_cli_only_engine_fingerprint_signals: serializeFingerprintRowsToJSON(
-        codexFingerprintRows.value,
-      ),
-      codex_cli_only_blacklist: serializeCodexRowsToJSON(
-        codexBlacklistRows.value,
-      ),
-      codex_cli_only_whitelist: serializeCodexRowsToJSON(
-        codexWhitelistRows.value,
-      ),
       // Payment configuration
       payment_enabled: form.payment_enabled,
       risk_control_enabled: form.risk_control_enabled,
