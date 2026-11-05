@@ -91,3 +91,8 @@
   upsert/delete). Prices are edited in ¥ per million tokens and stored per token.
 - Still open: “register from vendor” (pull `/v1/models` from an account) and optimistic-lock
   surfacing in the UI.
+- 0.1.406/0.1.407/0.1.408: slice 3 deployed. Guards verified live:
+  `PUT /admin/models/ghost-model-xyz/price` → `400 MODEL_NOT_REGISTERED`,
+  empty row → `400 EMPTY_PRICE_ROW`, `fx_auto` without a cost basis → `400 INVALID_FX_AUTO_PRICE`.
+  The write-path smoke test briefly switched `hinoki-offensive` to `manual`; the row was
+  restored to `fx_auto` (cost 8, rate 7) and a live request still bills 5.60 / 8.40 CNY per MTok.
