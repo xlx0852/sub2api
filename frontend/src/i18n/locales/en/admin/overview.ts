@@ -773,7 +773,6 @@ export default {
       listOnly: 'Model list only',
       unbound: 'Unbound',
       edit: 'Edit',
-      matrixHint: 'A model offered by several tables shows several quotes; two or more real prices means the config has diverged and needs a decision.',
       diverged: '{n} prices',
       editingPolicy: 'Editing table #{id} · {groups} bound group(s)',
       openLibrary: 'Unit prices are maintained on the Pricing page — open it →',

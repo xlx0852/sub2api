@@ -89,7 +89,6 @@
 
       <!-- Tab: 按模型的价目矩阵 -->
       <section v-show="activeTab === 'models'" class="space-y-2">
-        <p class="text-[11px] text-gray-400">{{ t('admin.pricing.matrixHint') }}</p>
         <div class="overflow-x-auto">
           <table class="min-w-full text-sm">
             <thead class="table-header bg-[#f0f0ec] text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:bg-dark-800 dark:text-dark-400">

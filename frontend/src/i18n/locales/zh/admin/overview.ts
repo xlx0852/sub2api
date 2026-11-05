@@ -827,7 +827,6 @@ export default {
       listOnly: '仅模型清单',
       unbound: '未绑定',
       edit: '编辑',
-      matrixHint: '同一模型出现在多张表里就会有多条报价；出现两个以上真实价即为"分叉"，需要人工确认。',
       diverged: '{n} 个价',
       editingPolicy: '正在编辑售价表 #{id} · 已绑定 {groups} 个分组',
       openLibrary: '单价统一在「定价与售价表」页维护，点此跳转 →',
