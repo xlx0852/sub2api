@@ -34,6 +34,14 @@ export interface ChannelModelPricing {
   image_output_price: number | null
   per_request_price: number | null
   intervals: PricingInterval[]
+  /** 售价派生方式：manual / cny_native / fx_auto */
+  fx_mode?: 'manual' | 'cny_native' | 'fx_auto'
+  /** fx_auto 行引用的成本基 id */
+  cost_id?: number | null
+  /** 派生时叠加的加价百分比 */
+  markup_pct?: number
+  /** 派生时使用的汇率（USD→CNY） */
+  fx_rate?: number | null
 }
 
 

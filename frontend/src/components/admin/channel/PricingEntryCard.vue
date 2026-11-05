@@ -199,6 +199,50 @@
             </div>
           </div>
 
+          <!-- 售价派生（L2）：fx_auto 由成本基 × 汇率 × (1+加价) 派生，其余两种不换汇 -->
+          <div class="mt-3 rounded-md border border-dashed border-sky-300 bg-sky-50/40 px-2 py-2 dark:border-sky-900/50 dark:bg-sky-950/20">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-[11px] font-medium text-sky-800 dark:text-sky-200">
+                {{ t('admin.channels.form.fxMode') }}
+              </span>
+              <Select
+                :modelValue="entry.fx_mode || 'manual'"
+                @update:modelValue="emit('update', { ...entry, fx_mode: $event as 'manual' | 'cny_native' | 'fx_auto' })"
+                :options="fxModeOptions"
+                class="w-44"
+              />
+              <template v-if="(entry.fx_mode || 'manual') === 'fx_auto'">
+                <label class="text-[11px] text-gray-500">{{ t('admin.channels.form.costId') }}</label>
+                <input
+                  :value="entry.cost_id"
+                  @input="emitField('cost_id', ($event.target as HTMLInputElement).value)"
+                  type="number" step="1" min="1" class="input h-7 w-20 px-1 text-[11px]"
+                  :placeholder="t('admin.channels.form.costIdPlaceholder')"
+                />
+                <label class="text-[11px] text-gray-500">{{ t('admin.channels.form.fxRate') }}</label>
+                <input
+                  :value="entry.fx_rate"
+                  @input="emitField('fx_rate', ($event.target as HTMLInputElement).value)"
+                  type="number" step="any" class="input h-7 w-20 px-1 text-[11px]"
+                  placeholder="7.0"
+                />
+                <label class="text-[11px] text-gray-500">{{ t('admin.channels.form.markupPct') }}</label>
+                <input
+                  :value="entry.markup_pct"
+                  @input="emitField('markup_pct', ($event.target as HTMLInputElement).value)"
+                  type="number" step="any" class="input h-7 w-16 px-1 text-[11px]"
+                  placeholder="0"
+                />
+                <span class="text-[11px] text-sky-700 dark:text-sky-300">
+                  {{ t('admin.channels.form.fxMultiplierPreview', { factor: fxFactorPreview }) }}
+                </span>
+              </template>
+              <span v-else class="text-[11px] text-gray-400">
+                {{ t('admin.channels.form.fxModeManualHint') }}
+              </span>
+            </div>
+          </div>
+
           <!-- Token intervals -->
           <div class="mt-3">
             <div class="flex items-center justify-between">
@@ -338,6 +382,21 @@ const billingModeOptions = computed(() => [
   { value: 'per_request', label: t('admin.channels.billingMode.perRequest') },
   { value: 'image', label: t('admin.channels.billingMode.image') }
 ])
+
+const fxModeOptions = computed(() => [
+  { value: 'manual', label: t('admin.channels.form.fxModeManual') },
+  { value: 'cny_native', label: t('admin.channels.form.fxModeCnyNative') },
+  { value: 'fx_auto', label: t('admin.channels.form.fxModeAuto') },
+])
+
+// 汇率 × (1+加价%)，即成本基到售价的换算乘数，供录入时核对。
+const fxFactorPreview = computed(() => {
+  const rate = Number(props.entry.fx_rate)
+  const markup = Number(props.entry.markup_pct || 0)
+  if (!(rate > 0)) return '-'
+  const factor = rate * (1 + markup / 100)
+  return factor.toFixed(4).replace(/\.?0+$/, '')
+})
 
 const currencyOptions = [
 	{ value: 'USD', label: 'USD ($)' },

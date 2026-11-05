@@ -397,6 +397,10 @@ function pricingToForm(channel: Channel | null, platform: GroupPlatform): Pricin
       cache_read_price: perTokenToMTok(entry.cache_read_price),
       image_output_price: perTokenToMTok(entry.image_output_price),
       per_request_price: entry.per_request_price,
+      fx_mode: entry.fx_mode === 'fx_auto' ? 'fx_auto' : entry.fx_mode === 'cny_native' ? 'cny_native' : 'manual',
+      cost_id: entry.cost_id ?? null,
+      markup_pct: entry.markup_pct ?? 0,
+      fx_rate: entry.fx_rate ?? null,
       intervals: (entry.intervals || []).map((iv, idx) => ({
         min_tokens: iv.min_tokens,
         max_tokens: iv.max_tokens,
@@ -430,6 +434,10 @@ function formToModelPricing(platform: GroupPlatform): ChannelModelPricing[] {
           ? Number(entry.per_request_price)
           : null,
       intervals: formIntervalsToAPI(entry.intervals || []),
+      fx_mode: entry.fx_mode || 'manual',
+      cost_id: entry.cost_id != null && entry.cost_id !== '' ? Number(entry.cost_id) : null,
+      markup_pct: entry.markup_pct != null && entry.markup_pct !== '' ? Number(entry.markup_pct) : 0,
+      fx_rate: entry.fx_rate != null && entry.fx_rate !== '' ? Number(entry.fx_rate) : null,
     })
   }
   return out
@@ -499,6 +507,10 @@ function addPricingEntry() {
     image_output_price: null,
     per_request_price: null,
     intervals: [],
+    fx_mode: 'manual',
+    cost_id: null,
+    markup_pct: 0,
+    fx_rate: null,
   })
 }
 
@@ -542,6 +554,10 @@ async function syncLatestModels() {
           image_output_price: null,
           per_request_price: null,
           intervals: [],
+          fx_mode: 'manual',
+          cost_id: null,
+          markup_pct: 0,
+          fx_rate: null,
         }
         if (official?.found) {
           entry.input_price = perTokenToMTok(official.input_price ?? null)
@@ -566,6 +582,10 @@ async function syncLatestModels() {
           image_output_price: null,
           per_request_price: null,
           intervals: [],
+          fx_mode: 'manual',
+          cost_id: null,
+          markup_pct: 0,
+          fx_rate: null,
         })
       }
     }

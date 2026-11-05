@@ -57,10 +57,12 @@ func (r *channelRepository) UpdateModelPricing(ctx context.Context, pricing *dom
 	}
 	result, err := r.db.ExecContext(ctx,
 		`UPDATE channel_model_pricing
-		 SET models = $1, billing_mode = $2, input_price = $3, output_price = $4, cache_write_price = $5, cache_read_price = $6, image_output_price = $7, per_request_price = $8, platform = $9, currency = $10, updated_at = NOW()
+		 SET models = $1, billing_mode = $2, input_price = $3, output_price = $4, cache_write_price = $5, cache_read_price = $6, image_output_price = $7, per_request_price = $8, platform = $9, currency = $10, updated_at = NOW(),
+		     fx_mode = $12, cost_id = $13, markup_pct = $14, fx_rate = $15
 		 WHERE id = $11`,
 		modelsJSON, billingMode, pricing.InputPrice, pricing.OutputPrice, pricing.CacheWritePrice, pricing.CacheReadPrice,
 		pricing.ImageOutputPrice, pricing.PerRequestPrice, pricing.Platform, domain.NormalizePricingCurrency(string(pricing.Currency)), pricing.ID,
+		normalizeFxModeForWrite(pricing.FxMode), pricing.CostID, pricing.MarkupPct, pricing.FxRate,
 	)
 	if err != nil {
 		return fmt.Errorf("update model pricing: %w", err)
@@ -293,11 +295,12 @@ func createModelPricingExec(ctx context.Context, exec dbExec, pricing *domain.Ch
 	}
 	currency := domain.NormalizePricingCurrency(string(pricing.Currency))
 	err = exec.QueryRowContext(ctx,
-		`INSERT INTO channel_model_pricing (channel_id, platform, currency, models, billing_mode, input_price, output_price, cache_write_price, cache_read_price, image_output_price, per_request_price)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, created_at, updated_at`,
+		`INSERT INTO channel_model_pricing (channel_id, platform, currency, models, billing_mode, input_price, output_price, cache_write_price, cache_read_price, image_output_price, per_request_price, fx_mode, cost_id, markup_pct, fx_rate)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id, created_at, updated_at`,
 		pricing.ChannelID, platform, currency, modelsJSON, billingMode,
 		pricing.InputPrice, pricing.OutputPrice, pricing.CacheWritePrice, pricing.CacheReadPrice,
 		pricing.ImageOutputPrice, pricing.PerRequestPrice,
+		normalizeFxModeForWrite(pricing.FxMode), pricing.CostID, pricing.MarkupPct, pricing.FxRate,
 	).Scan(&pricing.ID, &pricing.CreatedAt, &pricing.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("insert model pricing: %w", err)
@@ -352,4 +355,16 @@ func escapeLike(s string) string {
 	s = strings.ReplaceAll(s, `%`, `\%`)
 	s = strings.ReplaceAll(s, `_`, `\_`)
 	return s
+}
+
+// normalizeFxModeForWrite 保证写入的 fx_mode 一定是受支持的值（空值落 manual，永不换汇）。
+func normalizeFxModeForWrite(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case domain.PricingFxModeAuto:
+		return domain.PricingFxModeAuto
+	case domain.PricingFxModeCnyNative:
+		return domain.PricingFxModeCnyNative
+	default:
+		return domain.PricingFxModeManual
+	}
 }

@@ -42,8 +42,13 @@
 ## 6. Observability and reporting
 
 - [ ] 6.1 Add `fx_mode`, `fx_rate`, `modifier_ids[]`, `unit_value` to `usage_logs` and populate them on every settlement path.
-- [ ] 6.2 Extend the group pricing summary with cost → sell → effective → gross margin.
+- [x] 6.2 Extend the group pricing summary with cost → sell → effective → gross margin (fx_auto rows only) and cover it with a unit test.
 - [ ] 6.3 Add vendor price drift detection (nightly compare against the last observation, log-only).
+
+## 6b. Admin UI
+
+- [x] 6b.1 Expose `fx_mode`, `cost_id`, `markup_pct`, `fx_rate` in the sell-price policy DTOs and persist them in the channel repository (create/update).
+- [x] 6b.2 Pricing entry card: fx-mode selector plus cost-benefit inputs and a live multiplier preview; i18n keys in zh/en; `vue-tsc` clean.
 
 ## 7. Cutover
 

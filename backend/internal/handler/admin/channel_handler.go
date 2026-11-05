@@ -65,6 +65,14 @@ type channelModelPricingRequest struct {
 	ImageOutputPrice *float64                 `json:"image_output_price" binding:"omitempty,min=0"`
 	PerRequestPrice  *float64                 `json:"per_request_price" binding:"omitempty,min=0"`
 	Intervals        []pricingIntervalRequest `json:"intervals"`
+
+	// 统一定价管线：售价派生方式与成本引用。
+	// fx_mode=cny_native/manual 时直接使用上面的 CNY 售价；fx_auto 时按
+	// cost_id 的成本基 × fx_rate × (1+markup_pct) 派生。
+	FxMode    string   `json:"fx_mode" binding:"omitempty,oneof=cny_native fx_auto manual"`
+	CostID    *int64   `json:"cost_id"`
+	MarkupPct *float64 `json:"markup_pct"`
+	FxRate    *float64 `json:"fx_rate"`
 }
 
 type pricingIntervalRequest struct {
@@ -108,6 +116,10 @@ type channelModelPricingResponse struct {
 	ImageOutputPrice *float64                  `json:"image_output_price"`
 	PerRequestPrice  *float64                  `json:"per_request_price"`
 	Intervals        []pricingIntervalResponse `json:"intervals"`
+	FxMode           string                    `json:"fx_mode"`
+	CostID           *int64                    `json:"cost_id"`
+	MarkupPct        float64                   `json:"markup_pct"`
+	FxRate           *float64                  `json:"fx_rate"`
 }
 
 type pricingIntervalResponse struct {
@@ -199,6 +211,10 @@ func pricingToResponse(p *service.ChannelModelPricing) channelModelPricingRespon
 		ImageOutputPrice: p.ImageOutputPrice,
 		PerRequestPrice:  p.PerRequestPrice,
 		Intervals:        intervals,
+		FxMode:           p.FxMode,
+		CostID:           p.CostID,
+		MarkupPct:        p.MarkupPct,
+		FxRate:           p.FxRate,
 	}
 }
 
@@ -255,6 +271,10 @@ func pricingRequestToService(reqs []channelModelPricingRequest) []service.Channe
 			ImageOutputPrice: r.ImageOutputPrice,
 			PerRequestPrice:  r.PerRequestPrice,
 			Intervals:        intervals,
+			FxMode:           r.FxMode,
+			CostID:           r.CostID,
+			MarkupPct:        derefFloat(r.MarkupPct),
+			FxRate:           r.FxRate,
 		})
 	}
 	return result
@@ -505,4 +525,12 @@ func (h *ChannelHandler) SyncPricingModels(c *gin.Context) {
 
 	models := h.pricingService.ListModelNamesByProvider(provider)
 	response.Success(c, gin.H{"models": models})
+}
+
+// derefFloat 把可选指针折成 0。
+func derefFloat(v *float64) float64 {
+	if v == nil {
+		return 0
+	}
+	return *v
 }

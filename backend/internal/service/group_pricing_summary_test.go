@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/stretchr/testify/require"
 )
 
@@ -136,4 +137,39 @@ func TestPopulateChannelCachePrefersGroupToPolicyMap(t *testing.T) {
 	cache2 := populateChannelCache([]Channel{policy, legacy}, platforms, map[int64]int64{})
 	require.NotNil(t, cache2.channelByGroupID[99])
 	require.Equal(t, int64(9), cache2.channelByGroupID[99].ID)
+}
+
+// fx_auto 行必须在后台显示成本与毛利：这里用 hinoki 的真实数字（$0.80 → ¥5.60 @7.0）。
+func TestBuildModelPreviews_FxAutoShowsCostAndMargin(t *testing.T) {
+	rate := 7.0
+	sellIn := 5.6e-6
+	sellOut := 8.4e-6
+	group := &Group{ID: 49, Name: "国模abliterated", Platform: "openai", RateMultiplier: 1.5}
+	policy := &Channel{
+		ModelPricing: []ChannelModelPricing{
+			{
+				Platform:    "openai",
+				Models:      []string{"hinoki-offensive"},
+				BillingMode: BillingModeToken,
+				Currency:    domain.PricingCurrencyCNY,
+				InputPrice:  &sellIn,
+				OutputPrice: &sellOut,
+				FxMode:      domain.PricingFxModeAuto,
+				FxRate:      &rate,
+				MarkupPct:   0,
+			},
+		},
+	}
+
+	previews := buildModelPreviews(policy, group, nil, true)
+	require.Len(t, previews, 1)
+	p := previews[0]
+	require.Equal(t, domain.PricingFxModeAuto, p.FxMode)
+	require.NotNil(t, p.CostInputUSD)
+	require.InDelta(t, 0.80, *p.CostInputUSD, 1e-9)
+	require.NotNil(t, p.CostOutputUSD)
+	require.InDelta(t, 1.20, *p.CostOutputUSD, 1e-9)
+	require.NotNil(t, p.GrossMarginPct)
+	// 售价 5.6、实付 8.4、成本 5.6 → 毛利 33.3%
+	require.InDelta(t, 33.3, *p.GrossMarginPct, 0.1)
 }

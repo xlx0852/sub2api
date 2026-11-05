@@ -50,6 +50,17 @@ type GroupPricingModelPreview struct {
 	EffectiveOutput *float64 `json:"effective_output"`
 	// MarkupN is sell/official when both sides have positive input price; nil if unknown.
 	MarkupN *float64 `json:"markup_n,omitempty"`
+
+	// --- 统一定价管线（L1 成本 → L2 售价）---
+	// FxMode 为 manual / cny_native / fx_auto；只有 fx_auto 会填下面的成本与毛利。
+	FxMode    string   `json:"fx_mode"`
+	FxRate    *float64 `json:"fx_rate,omitempty"`
+	MarkupPct float64  `json:"markup_pct,omitempty"`
+	// CostInputUSD/CostOutputUSD 是成本基折算回的美元价（每百万 token）。
+	CostInputUSD  *float64 `json:"cost_input_usd,omitempty"`
+	CostOutputUSD *float64 `json:"cost_output_usd,omitempty"`
+	// GrossMarginPct = (实付 − 成本) / 实付，按成本基口径给出，仅 fx_auto 行有值。
+	GrossMarginPct *float64 `json:"gross_margin_pct,omitempty"`
 }
 
 // GroupPricingSummary is the admin-facing pricing view for one group.
@@ -474,6 +485,31 @@ func buildModelPreviews(policy *Channel, group *Group, billing *BillingService, 
 				p.MarkupN = &n
 			}
 
+			// 统一管线信息：fx_auto 行给出成本与毛利，便于后台一眼看出是否倒挂。
+			p.FxMode = NormalizePricingFxModeString(entry.FxMode)
+			p.MarkupPct = entry.MarkupPct
+			if entry.FxRate != nil {
+				rate := *entry.FxRate
+				p.FxRate = &rate
+			}
+			if p.FxMode == domain.PricingFxModeAuto && entry.FxRate != nil && *entry.FxRate > 0 {
+				effectiveRate := *entry.FxRate * (1 + entry.MarkupPct/100)
+				if effectiveRate > 0 {
+					if p.SellInput != nil {
+						p.CostInputUSD = floatPtr(*p.SellInput / effectiveRate)
+					}
+					if p.SellOutput != nil {
+						p.CostOutputUSD = floatPtr(*p.SellOutput / effectiveRate)
+					}
+					if p.SellInput != nil && p.EffectiveInput != nil && *p.EffectiveInput > 0 {
+						costCNY := *p.SellInput / (1 + entry.MarkupPct/100)
+						margin := (*p.EffectiveInput - costCNY) / *p.EffectiveInput * 100
+						margin = math.Round(margin*10) / 10
+						p.GrossMarginPct = &margin
+					}
+				}
+			}
+
 			previews = append(previews, p)
 		}
 	}
@@ -493,4 +529,9 @@ func firstFloatPtr(vals ...*float64) *float64 {
 		}
 	}
 	return nil
+}
+
+// NormalizePricingFxModeString 把任意输入收敛成受支持的 fx_mode 字符串。
+func NormalizePricingFxModeString(mode string) string {
+	return string(NormalizePricingFxMode(mode))
 }

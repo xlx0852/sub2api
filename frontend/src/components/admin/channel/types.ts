@@ -25,6 +25,11 @@ export interface PricingFormEntry {
   image_output_price: number | string | null
   per_request_price: number | string | null
   intervals: IntervalFormEntry[]
+  /** 售价派生方式：manual（人工价，不换汇）/ cny_native（人民币原生）/ fx_auto（按成本价 × 汇率派生） */
+  fx_mode: 'manual' | 'cny_native' | 'fx_auto'
+  cost_id: number | string | null
+  markup_pct: number | string | null
+  fx_rate: number | string | null
 }
 
 // 价格转换：后端存 per-token，前端显示 per-MTok ($/1M tokens)
