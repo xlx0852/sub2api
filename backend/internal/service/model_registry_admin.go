@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
 
 // 模型注册表后台管理：护栏集中在这里。
@@ -138,8 +139,8 @@ func (s *ChannelService) DeleteModelPrice(ctx context.Context, modelID string, g
 	return s.repo.DeleteModelPrice(ctx, strings.TrimSpace(modelID), groupID)
 }
 
-// ErrModelNotRegistered 表示尝试为未登记的模型配价。
-var ErrModelNotRegistered = fmt.Errorf("model is not registered")
+// ErrModelNotRegistered 表示尝试为未登记的模型配价（映射为 400，而不是 500）。
+var ErrModelNotRegistered = infraerrors.BadRequest("MODEL_NOT_REGISTERED", "model is not registered")
 
 // ListModelAliasesFor 返回某模型的别名（后台展示用）。
 func (s *ChannelService) ListModelAliasesFor(ctx context.Context, modelID string) ([]domain.ModelAliasEntry, error) {
