@@ -64,6 +64,10 @@ func InitEnt(cfg *config.Config) (*ent.Client, *sql.DB, error) {
 		return nil, nil, err
 	}
 
+	// 模型注册表来源开关（file / dual / db）：迁移完成后用注册表覆盖内存 catalog。
+	// 读表失败一律回退到编译进来的 catalog，不影响启动。
+	ApplyModelRegistrySource(migrationCtx, drv.DB())
+
 	// 创建 Ent 客户端，绑定到已配置的数据库驱动。
 	client := ent.NewClient(ent.Driver(drv))
 

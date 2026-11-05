@@ -141,3 +141,25 @@ func (s *ChannelService) modelPriceRowToPricing(ctx context.Context, row *domain
 func NormalizeModelPricingSourceForAPI(value string) string {
 	return normalizeModelPricingSource(value)
 }
+
+// 模型注册表来源三态（与 repository 的读取常量保持一致）。
+const (
+	ModelRegistrySourceFile = "file"
+	ModelRegistrySourceDual = "dual"
+	ModelRegistrySourceDB   = "db"
+
+	// SettingKeyModelRegistrySource 供管理端读写；启动时由 repository 读取生效。
+	SettingKeyModelRegistrySource = "model_registry_source"
+)
+
+// NormalizeModelRegistrySourceForAPI 收敛为受支持的三态字符串。
+func NormalizeModelRegistrySourceForAPI(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case ModelRegistrySourceDual:
+		return ModelRegistrySourceDual
+	case ModelRegistrySourceDB, "database":
+		return ModelRegistrySourceDB
+	default:
+		return ModelRegistrySourceFile
+	}
+}

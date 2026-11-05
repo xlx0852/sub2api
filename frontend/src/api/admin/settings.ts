@@ -1474,6 +1474,8 @@ export interface PricingPipelineSettings {
   modes: string[]
   pricing_source: 'legacy' | 'dual' | 'model_prices'
   pricing_sources: string[]
+  registry_source: 'file' | 'dual' | 'db'
+  registry_sources: string[]
 }
 
 export async function getPricingPipeline(): Promise<PricingPipelineSettings> {
@@ -1484,7 +1486,7 @@ export async function getPricingPipeline(): Promise<PricingPipelineSettings> {
 }
 
 export async function updatePricingPipeline(
-  payload: Partial<Pick<PricingPipelineSettings, 'mode' | 'pricing_source'>>,
+  payload: Partial<Pick<PricingPipelineSettings, 'mode' | 'pricing_source' | 'registry_source'>>,
 ): Promise<PricingPipelineSettings> {
   const { data } = await apiClient.put<PricingPipelineSettings>(
     "/admin/settings/pricing-pipeline",

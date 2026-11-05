@@ -59,6 +59,35 @@
             {{ t('admin.settings.pricing.priceSourceCurrent', { source: priceSourceSaved }) }}
           </span>
         </div>
+
+        <h4 class="mt-4 text-xs font-semibold text-gray-900 dark:text-white">
+          {{ t('admin.settings.pricing.registrySourceTitle') }}
+        </h4>
+        <p class="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
+          {{ t('admin.settings.pricing.registrySourceHint') }}
+        </p>
+        <div class="mt-2 flex flex-wrap items-center gap-3">
+          <Select
+            :modelValue="registrySource"
+            :options="registryOptions"
+            class="w-64"
+            @update:modelValue="onSelectRegistrySource"
+          />
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="registrySaving || registrySource === registrySourceSaved"
+            @click="saveRegistrySource"
+          >
+            {{ registrySaving ? t('common.saving') : t('common.saving') }}
+          </button>
+          <span class="text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.settings.pricing.registrySourceCurrent', { source: registrySourceSaved }) }}
+          </span>
+          <span class="text-[11px] text-amber-600 dark:text-amber-400">
+            {{ t('admin.settings.pricing.registrySourceRestart') }}
+          </span>
+        </div>
       </div>
     </section>
 
@@ -183,6 +212,32 @@ async function savePriceSource() {
   }
 }
 
+const registrySource = ref<'file' | 'dual' | 'db'>('file')
+const registrySourceSaved = ref<'file' | 'dual' | 'db'>('file')
+const registrySaving = ref(false)
+const registryOptions = [
+  { value: 'file', label: 'file（编译进二进制的 catalog）' },
+  { value: 'dual', label: 'dual（比对差异，只打日志）' },
+  { value: 'db', label: 'db（用注册表覆盖，含别名/默认价）' }
+]
+
+function onSelectRegistrySource(value: unknown) {
+  registrySource.value = value as typeof registrySource.value
+}
+
+async function saveRegistrySource() {
+  registrySaving.value = true
+  try {
+    const data = await adminAPI.settings.updatePricingPipeline({ registry_source: registrySource.value })
+    registrySourceSaved.value = data.registry_source
+    appStore.showSuccess(t('admin.settings.pricing.registrySourceSaved', { source: data.registry_source }))
+  } catch (error) {
+    appStore.showError(apiErrorMessage(error))
+  } finally {
+    registrySaving.value = false
+  }
+}
+
 const costs = ref<PriceCost[]>([])
 const costLoading = ref(false)
 const costSaving = ref(false)
@@ -211,6 +266,8 @@ async function loadPipeline() {
     pipelineSaved.value = data.mode
     priceSource.value = data.pricing_source || 'legacy'
     priceSourceSaved.value = data.pricing_source || 'legacy'
+    registrySource.value = data.registry_source || 'file'
+    registrySourceSaved.value = data.registry_source || 'file'
   } catch (error) {
     appStore.showError(apiErrorMessage(error))
   }

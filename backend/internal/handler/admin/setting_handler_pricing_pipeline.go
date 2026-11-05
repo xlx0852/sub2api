@@ -22,6 +22,9 @@ type PricingPipelineSettings struct {
 	PricingSource string `json:"pricing_source"`
 	// PricingSources 列出可选值。
 	PricingSources []string `json:"pricing_sources"`
+	// RegistrySource 是模型注册表来源：file（编译进二进制的 catalog）/ dual / db。
+	RegistrySource  string   `json:"registry_source"`
+	RegistrySources []string `json:"registry_sources"`
 }
 
 // GetPricingPipelineSettings 读取定价管线开关。
@@ -43,20 +46,28 @@ func (h *SettingHandler) GetPricingPipelineSettings(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	registrySource, err := h.settingService.GetRawValue(ctx, service.SettingKeyModelRegistrySource)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 	response.Success(c, PricingPipelineSettings{
-		Mode:           mode,
-		Configured:     strings.TrimSpace(raw),
-		Modes:          []string{service.PricingPipelineLegacy, service.PricingPipelineShadow, service.PricingPipelineUnified},
-		PricingSource:  service.NormalizeModelPricingSourceForAPI(pricingSource),
-		PricingSources: []string{service.PricingModelSourceLegacy, service.PricingModelSourceDual, service.PricingModelSourceRegistry},
+		Mode:            mode,
+		Configured:      strings.TrimSpace(raw),
+		Modes:           []string{service.PricingPipelineLegacy, service.PricingPipelineShadow, service.PricingPipelineUnified},
+		PricingSource:   service.NormalizeModelPricingSourceForAPI(pricingSource),
+		PricingSources:  []string{service.PricingModelSourceLegacy, service.PricingModelSourceDual, service.PricingModelSourceRegistry},
+		RegistrySource:  service.NormalizeModelRegistrySourceForAPI(registrySource),
+		RegistrySources: []string{service.ModelRegistrySourceFile, service.ModelRegistrySourceDual, service.ModelRegistrySourceDB},
 	})
 }
 
 // updatePricingPipelineSettingsRequest 更新定价管线开关请求。
 type updatePricingPipelineSettingsRequest struct {
-	// Mode 与 PricingSource 至少给一个；分别独立更新，互不影响。
-	Mode          string `json:"mode" binding:"omitempty,oneof=legacy shadow unified"`
-	PricingSource string `json:"pricing_source" binding:"omitempty,oneof=legacy dual model_prices"`
+	// 三个字段至少给一个；分别独立更新，互不影响。
+	Mode           string `json:"mode" binding:"omitempty,oneof=legacy shadow unified"`
+	PricingSource  string `json:"pricing_source" binding:"omitempty,oneof=legacy dual model_prices"`
+	RegistrySource string `json:"registry_source" binding:"omitempty,oneof=file dual db"`
 }
 
 // UpdatePricingPipelineSettings 切换定价管线：
@@ -69,7 +80,7 @@ func (h *SettingHandler) UpdatePricingPipelineSettings(c *gin.Context) {
 			"mode must be one of legacy, shadow, unified"))
 		return
 	}
-	if strings.TrimSpace(req.Mode) == "" && strings.TrimSpace(req.PricingSource) == "" {
+	if strings.TrimSpace(req.Mode) == "" && strings.TrimSpace(req.PricingSource) == "" && strings.TrimSpace(req.RegistrySource) == "" {
 		response.ErrorFrom(c, infraerrors.BadRequest("EMPTY_SETTINGS",
 			"provide mode and/or pricing_source"))
 		return
@@ -85,6 +96,13 @@ func (h *SettingHandler) UpdatePricingPipelineSettings(c *gin.Context) {
 	if strings.TrimSpace(req.PricingSource) != "" {
 		src := service.NormalizeModelPricingSourceForAPI(req.PricingSource)
 		if err := h.settingService.SetRawValue(ctx, service.SettingKeyModelPricingSource, src); err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+	}
+	if strings.TrimSpace(req.RegistrySource) != "" {
+		src := service.NormalizeModelRegistrySourceForAPI(req.RegistrySource)
+		if err := h.settingService.SetRawValue(ctx, service.SettingKeyModelRegistrySource, src); err != nil {
 			response.ErrorFrom(c, err)
 			return
 		}
