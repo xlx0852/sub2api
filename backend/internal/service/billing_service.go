@@ -679,8 +679,20 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 	pricing = s.applyModelSpecificPricingPolicy(input.Model, pricing)
 
 	// 统一定价管线：legacy 走原路径（默认）；shadow 双算打点；unified 用新结果扣费。
+	//
+	// 注意顺序：legacy 的谷时折扣必须先算完，shadow 才能拿"最终 legacy 价"和新管线比对，
+	// 否则谷时段会出现假差异（未完税的 base 价 vs 打完折的新价）。
 	pipeline := s.resolvePipelineMode(input.Ctx)
-	if pipeline != PricingPipelineLegacy && input.Resolver != nil {
+	legacyPricing := pricing
+	// 统一管线接管峰谷后，不能再叠一次 legacy 谷时折扣（渠道价本来就跳过）。
+	if resolved.Source != PricingSourceChannel && !pipelineSkipsLegacyTimeOfDay(pipeline) {
+		legacyPricing = applyDeepSeekTimeOfDayPricing(input.Model, legacyPricing, s.billingNow())
+	}
+
+	if pipeline == PricingPipelineLegacy || input.Resolver == nil {
+		pricing = legacyPricing
+	} else {
+		// 统一管线自己负责峰谷，所以喂给它的 base 是未打折的价格。
 		unified, applied, ok := input.Resolver.UnifiedTokenPrice(input.Ctx, resolved, UnifiedPriceRequest{
 			Model:               input.Model,
 			GroupID:             groupIDValue(input.GroupID),
@@ -689,18 +701,15 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 			GroupPeakMultiplier: input.GroupPeakMultiplier,
 			Base:                pricing,
 		})
-		if ok && unified != nil {
-			if pipeline == PricingPipelineUnified {
-				pricing = unified
-			} else if priceTuplesDiffer(pricing, unified) {
-				s.logShadowDiff(input.Model, groupIDValue(input.GroupID), pricing, unified, applied)
-			}
+		switch {
+		case pipeline == PricingPipelineUnified && ok && unified != nil:
+			pricing = unified
+		case pipeline == PricingPipelineShadow && ok && unified != nil && priceTuplesDiffer(legacyPricing, unified):
+			s.logShadowDiff(input.Model, groupIDValue(input.GroupID), legacyPricing, unified, applied)
+			pricing = legacyPricing
+		default:
+			pricing = legacyPricing
 		}
-	}
-
-	// 统一管线接管峰谷后，不能再叠一次 legacy 谷时折扣（渠道价本来就跳过）。
-	if resolved.Source != PricingSourceChannel && !pipelineSkipsLegacyTimeOfDay(pipeline) {
-		pricing = applyDeepSeekTimeOfDayPricing(input.Model, pricing, s.billingNow())
 	}
 
 	// 长上下文定价仅在无区间定价时应用（区间定价已包含上下文分层）

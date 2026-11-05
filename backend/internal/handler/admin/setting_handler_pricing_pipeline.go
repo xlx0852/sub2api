@@ -3,6 +3,7 @@ package admin
 import (
 	"strings"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -51,7 +52,8 @@ type updatePricingPipelineSettingsRequest struct {
 func (h *SettingHandler) UpdatePricingPipelineSettings(c *gin.Context) {
 	var req updatePricingPipelineSettingsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.ErrorFrom(c, err)
+		response.ErrorFrom(c, infraerrors.BadRequest("INVALID_PRICING_PIPELINE_MODE",
+			"mode must be one of legacy, shadow, unified"))
 		return
 	}
 	mode := service.NormalizePricingPipelineMode(req.Mode)
