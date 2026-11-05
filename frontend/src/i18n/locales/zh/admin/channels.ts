@@ -127,6 +127,7 @@ export default {
         image: '图片（按次）'
       },
       form: {
+        loadError: '加载售价策略失败',
         name: '名称',
         namePlaceholder: '输入策略名称（如 luna×4）',
         description: '描述',

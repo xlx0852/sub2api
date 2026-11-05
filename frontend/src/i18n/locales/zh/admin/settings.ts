@@ -1132,6 +1132,14 @@ export default {
         previousResponseWeight: 'previous_response 粘性',
         sessionStickyWeight: 'session_hash 粘性'
       },
+      accountProfitWeighting: {
+        title: '账号动态运营',
+        description: '跨平台生效。先按观察模式看建议配比，再对明确开启动态权重的账号启用自动调节。',
+        accountHint: '账号侧开关：号池管理 → 编辑账号 → 基础 → 动态业务权重。',
+        off: '关闭',
+        observe: '观察',
+        active: '启用',
+      },
       usageRecords: {
         title: '使用记录',
         description: '与终端用户可见的用量及失败请求记录相关的设置。',

@@ -127,6 +127,7 @@ export default {
         image: 'Image (Per Request)'
       },
       form: {
+        loadError: 'Failed to load sell policies',
         name: 'Name',
         namePlaceholder: 'Enter policy name (e.g. luna×4)',
         description: 'Description',
