@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/websearch"
 	"golang.org/x/sync/singleflight"
@@ -240,7 +241,15 @@ func (s *SettingService) GetRawValue(ctx context.Context, key string) (string, e
 	if s == nil || s.settingRepo == nil || key == "" {
 		return "", nil
 	}
-	return s.settingRepo.GetValue(ctx, key)
+	value, err := s.settingRepo.GetValue(ctx, key)
+	if err != nil {
+		// 未配置视为空值，不要把它当成读取失败（否则运维开关首次读取会 500）。
+		if errors.Is(err, domain.ErrSettingNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+	return value, nil
 }
 
 // SetRawValue 写入任意设置项原始值（运维开关用）。
