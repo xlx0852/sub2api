@@ -64,39 +64,46 @@
     <BaseDialog :show="editorOpen" :title="editing?.id || t('admin.models.create')" width="extra-wide" @close="editorOpen = false">
       <div v-if="editing" class="space-y-4">
         <!-- 身份与能力 -->
-        <section class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <label class="text-xs">
-            <span class="text-gray-500">{{ t('admin.models.colId') }}</span>
-            <input v-model="editing.id" :disabled="isExisting" class="input mt-1 text-sm font-mono" />
-          </label>
-          <label class="text-xs">
-            <span class="text-gray-500">{{ t('admin.models.colPlatform') }}</span>
-            <input v-model="editing.platform" class="input mt-1 text-sm" placeholder="openai" />
-          </label>
-          <label class="text-xs">
-            <span class="text-gray-500">{{ t('admin.models.colDisplay') }}</span>
-            <input v-model="editing.display_name" class="input mt-1 text-sm" />
-          </label>
-          <label class="text-xs">
-            <span class="text-gray-500">{{ t('admin.models.colContext') }}</span>
-            <input v-model.number="editing.context_window" type="number" class="input mt-1 text-sm" />
-          </label>
-          <label class="text-xs">
-            <span class="text-gray-500">upstream_id</span>
-            <input v-model="editing.upstream_id" class="input mt-1 text-sm font-mono" />
-          </label>
-          <label class="flex items-center gap-2 text-xs">
-            <input v-model="editing.enabled" type="checkbox" />
-            <span>enabled</span>
-          </label>
-          <label class="flex items-center gap-2 text-xs">
-            <input v-model="editing.retired" type="checkbox" />
-            <span>retired</span>
-          </label>
-          <label class="flex items-center gap-2 text-xs">
-            <input v-model="editing.is_reasoning" type="checkbox" />
-            <span>reasoning</span>
-          </label>
+        <section class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+          <h3 class="text-sm font-medium">{{ t('admin.models.identity') }}</h3>
+          <div class="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <label class="text-xs">
+              <span class="text-gray-500">{{ t('admin.models.colId') }}</span>
+              <input v-model="editing.id" :disabled="isExisting" class="input mt-1 text-sm font-mono disabled:opacity-60" />
+            </label>
+            <label class="text-xs">
+              <span class="text-gray-500">{{ t('admin.models.colPlatform') }}</span>
+              <input v-model="editing.platform" class="input mt-1 text-sm" placeholder="openai" />
+            </label>
+            <label class="text-xs">
+              <span class="text-gray-500">{{ t('admin.models.colDisplay') }}</span>
+              <input v-model="editing.display_name" class="input mt-1 text-sm" />
+            </label>
+            <label class="text-xs">
+              <span class="text-gray-500">{{ t('admin.models.colContext') }}</span>
+              <input v-model.number="editing.context_window" type="number" class="input mt-1 text-sm" />
+            </label>
+            <label class="text-xs sm:col-span-2">
+              <span class="text-gray-500">upstream_id</span>
+              <input v-model="editing.upstream_id" class="input mt-1 text-sm font-mono" :placeholder="t('admin.models.upstreamHint')" />
+            </label>
+            <div class="flex items-end pb-1 sm:col-span-2">
+              <div class="flex flex-wrap items-center gap-4 text-xs">
+                <label class="inline-flex items-center gap-1.5">
+                  <input v-model="editing.enabled" type="checkbox" />
+                  <span>enabled</span>
+                </label>
+                <label class="inline-flex items-center gap-1.5">
+                  <input v-model="editing.retired" type="checkbox" />
+                  <span>retired</span>
+                </label>
+                <label class="inline-flex items-center gap-1.5">
+                  <input v-model="editing.is_reasoning" type="checkbox" />
+                  <span>reasoning</span>
+                </label>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- 别名 -->
@@ -123,14 +130,14 @@
           <div class="mt-2 overflow-x-auto">
             <table class="min-w-full text-xs">
               <thead class="text-left text-gray-500">
-                <tr>
-                  <th class="py-1 pr-2">{{ t('admin.models.colGroup') }}</th>
-                  <th class="py-1 pr-2 text-right">input/M</th>
-                  <th class="py-1 pr-2 text-right">output/M</th>
-                  <th class="py-1 pr-2 text-right">cache read/M</th>
-                  <th class="py-1 pr-2">fx_mode</th>
-                  <th class="py-1 pr-2 text-right">fx_rate</th>
-                  <th class="py-1 pr-2" />
+                <tr class="border-b border-gray-100 dark:border-dark-700">
+                  <th class="w-[22%] py-1.5 pr-2 text-left font-medium">{{ t('admin.models.colGroup') }}</th>
+                  <th class="w-[14%] py-1.5 pr-2 text-right font-medium">{{ t('admin.models.priceInput') }}</th>
+                  <th class="w-[14%] py-1.5 pr-2 text-right font-medium">{{ t('admin.models.priceOutput') }}</th>
+                  <th class="w-[16%] py-1.5 pr-2 text-right font-medium">{{ t('admin.models.priceCacheRead') }}</th>
+                  <th class="w-[14%] py-1.5 pr-2 text-left font-medium">fx_mode</th>
+                  <th class="w-[10%] py-1.5 pr-2 text-right font-medium">fx_rate</th>
+                  <th class="w-[10%] py-1.5 pr-2 text-right font-medium" />
                 </tr>
               </thead>
               <tbody>
@@ -153,16 +160,43 @@
           </div>
 
           <!-- 新增/更新一行价格 -->
-          <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-            <Select v-model="draft.group_id" :options="groupOptions" class="text-xs" />
-            <input v-model.number="draft.input" type="number" step="any" class="input text-xs" placeholder="input/M" />
-            <input v-model.number="draft.output" type="number" step="any" class="input text-xs" placeholder="output/M" />
-            <input v-model.number="draft.cache_read" type="number" step="any" class="input text-xs" placeholder="cache read/M" />
-            <Select v-model="draft.fx_mode" :options="fxModeOptions" class="text-xs" />
-            <input v-model.number="draft.fx_rate" type="number" step="any" class="input text-xs" placeholder="fx_rate" />
-            <button type="button" class="btn btn-primary btn-sm" :disabled="saving" @click="savePrice">
-              {{ t('admin.models.savePrice') }}
-            </button>
+          <div class="mt-3 rounded-lg border border-dashed border-gray-300 p-3 dark:border-dark-500">
+            <p class="text-xs font-medium text-gray-700 dark:text-gray-200">{{ t('admin.models.newPriceRow') }}</p>
+            <div class="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <label class="text-xs">
+                <span class="text-gray-500">{{ t('admin.models.colGroup') }}</span>
+                <Select v-model="draft.group_id" :options="groupOptions" class="mt-1 text-xs" />
+              </label>
+              <label class="text-xs">
+                <span class="text-gray-500">{{ t('admin.models.priceInput') }}</span>
+                <input v-model.number="draft.input" type="number" step="any" class="input mt-1 text-xs" :placeholder="t('admin.models.pricePlaceholder')" />
+              </label>
+              <label class="text-xs">
+                <span class="text-gray-500">{{ t('admin.models.priceOutput') }}</span>
+                <input v-model.number="draft.output" type="number" step="any" class="input mt-1 text-xs" :placeholder="t('admin.models.pricePlaceholder')" />
+              </label>
+              <label class="text-xs">
+                <span class="text-gray-500">{{ t('admin.models.priceCacheRead') }}</span>
+                <input v-model.number="draft.cache_read" type="number" step="any" class="input mt-1 text-xs" :placeholder="t('admin.models.pricePlaceholder')" />
+              </label>
+              <label class="text-xs">
+                <span class="text-gray-500">fx_mode</span>
+                <Select v-model="draft.fx_mode" :options="fxModeOptions" class="mt-1 text-xs" />
+              </label>
+              <label v-if="draft.fx_mode === 'fx_auto'" class="text-xs">
+                <span class="text-gray-500">fx_rate</span>
+                <input v-model.number="draft.fx_rate" type="number" step="any" class="input mt-1 text-xs" placeholder="7" />
+              </label>
+              <label v-if="draft.fx_mode === 'fx_auto'" class="text-xs">
+                <span class="text-gray-500">{{ t('admin.models.costId') }}</span>
+                <input v-model.number="draft.cost_id" type="number" step="1" class="input mt-1 text-xs" :placeholder="t('admin.models.costIdPlaceholder')" />
+              </label>
+            </div>
+            <div class="mt-3 flex justify-end">
+              <button type="button" class="btn btn-primary btn-sm" :disabled="saving" @click="savePrice">
+                {{ t('admin.models.savePrice') }}
+              </button>
+            </div>
           </div>
         </section>
       </div>
@@ -240,7 +274,8 @@ const draft = reactive<{
   cache_read: number | null
   fx_mode: string
   fx_rate: number | null
-}>({ group_id: null, input: null, output: null, cache_read: null, fx_mode: 'manual', fx_rate: 7 })
+  cost_id: number | null
+}>({ group_id: null, input: null, output: null, cache_read: null, fx_mode: 'manual', fx_rate: 7, cost_id: null })
 
 function perMillion(v: number | null | undefined) {
   return v == null ? '-' : (v * 1_000_000).toFixed(4).replace(/\.?0+$/, '')
@@ -333,7 +368,7 @@ async function savePrice() {
       currency: 'CNY',
       fx_mode: draft.fx_mode,
       fx_rate: draft.fx_mode === 'fx_auto' ? draft.fx_rate : null,
-      cost_id: null,
+      cost_id: draft.fx_mode === 'fx_auto' ? draft.cost_id : null,
       input_price: draft.input == null ? null : draft.input / 1_000_000,
       output_price: draft.output == null ? null : draft.output / 1_000_000,
       cache_read_price: draft.cache_read == null ? null : draft.cache_read / 1_000_000
