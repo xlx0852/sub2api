@@ -69,3 +69,12 @@
   the DB and not in the file. Models, aliases, default chat/test models and default prices of the
   62 catalog models are identical. A retired id no longer gets turned into a self-alias, which
   removed one phantom diff (`gpt-5.2`).
+- 0.1.404 + `registry_source=db` (2026-11-06 02:12 UTC+8): migration 217 adds the 22 `alias_of`
+  pairs as `model_aliases(kind=alias)`; the overlay materialises alias prices along the chain
+  (gpt-5.5, kimi-k3, claude-opus-5, grok-4.20-*, swe-2-*, gemini-*). Boot log:
+  `source=db models=123 aliases=31 default_prices=69 diffs_from_file=48`.
+  Live verification: `GET /v1/models` for group 49 returns 22 models **including the nine vendor
+  models** that previously had no catalog entry; a `hinoki-offensive` request still bills
+  5.60 / 8.40 CNY per MTok.
+  The 48 boot diffs are all "registry has X / file does not" for those nine models plus the
+  price-only alias names — inspect them with `grep model_registry.mismatch` after a restart.
