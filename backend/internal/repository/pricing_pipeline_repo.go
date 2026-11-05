@@ -226,7 +226,8 @@ func (r *channelRepository) GetModelPrice(ctx context.Context, modelID string, g
 		       image_output_price, per_request_price, context_tiers, image_tiers, enabled, version
 		FROM model_prices
 		WHERE model_id = $1 AND enabled
-		  AND ($2::bigint IS NULL AND group_id IS NULL OR group_id = $2::bigint)
+		  -- 分组行优先，其次平台默认行（group_id IS NULL）；$2 为 NULL 时只匹配默认行
+		  AND (group_id = $2::bigint OR group_id IS NULL)
 		ORDER BY group_id NULLS LAST
 		LIMIT 1`, strings.TrimSpace(modelID), groupArg)
 

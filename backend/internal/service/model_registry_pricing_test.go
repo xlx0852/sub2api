@@ -116,3 +116,19 @@ func TestApplyRegistryPricingLegacyIsNoop(t *testing.T) {
 	resolver.applyRegistryPricing(context.Background(), PricingInput{Model: "hinoki-offensive", GroupID: &groupID}, resolved)
 	require.InDelta(t, 1e-6, resolved.BasePricing.InputPricePerToken, 1e-15)
 }
+
+// dual 模式：注册表价格与现有链路不同时不得改扣费，只打点。
+func TestApplyRegistryPricingDualDoesNotOverride(t *testing.T) {
+	svc := newRegistryStub(map[string]*domain.ModelPriceRow{
+		"grok-4.7": {ModelID: "grok-4.7", Currency: "USD", FxMode: domain.PricingFxModeManual,
+			InputPrice: regF64(3e-6), OutputPrice: regF64(9e-6)},
+	}, nil)
+	svc.pricingSourceCache = modelPricingSourceCache{value: "dual", loadedAt: time.Now()}
+	resolver := &ModelPricingResolver{channelService: svc}
+	groupID := int64(23)
+	legacy := &ResolvedPricing{Mode: BillingModeToken, Currency: domain.PricingCurrencyUSD,
+		Source: PricingSourceLiteLLM, BasePricing: &ModelPricing{InputPricePerToken: 2e-6}}
+	resolver.applyRegistryPricing(context.Background(), PricingInput{Model: "grok-4.7", GroupID: &groupID}, legacy)
+	require.Equal(t, PricingSourceLiteLLM, legacy.Source, "dual 不得改来源")
+	require.InDelta(t, 2e-6, legacy.BasePricing.InputPricePerToken, 1e-15, "dual 不得改扣费价格")
+}
