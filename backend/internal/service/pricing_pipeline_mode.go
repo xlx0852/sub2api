@@ -7,14 +7,6 @@ import (
 	"sync"
 )
 
-// pipelineMode 读取定价管线开关（配置 pricing.pipeline，env PRICING_PIPELINE）。
-func (s *BillingService) pipelineMode() string {
-	if s == nil || s.cfg == nil {
-		return PricingPipelineLegacy
-	}
-	return NormalizePricingPipelineMode(s.cfg.Pricing.Pipeline)
-}
-
 // groupIDValue 把可空分组 id 折成 int64（nil → 0）。
 func groupIDValue(id *int64) int64 {
 	if id == nil || *id <= 0 {

@@ -161,6 +161,9 @@ type BillingService struct {
 	// 让 "[Billing] Using fallback pricing" 每个模型每进程最多打一条,
 	// 避免热路径上每请求刷屏(issue #3394)。零值即可用,无需在构造函数初始化。
 	fallbackWarnSeen sync.Map
+	// 统一定价管线开关与设置读取器（后台可切，见 pricing_pipeline_setting.go）。
+	settingsReader billingSettingsReader
+	pipelineCache  pipelineSettingCache
 }
 
 // NewBillingService 创建计费服务实例
@@ -676,7 +679,7 @@ func (s *BillingService) calculateTokenCost(resolved *ResolvedPricing, input Cos
 	pricing = s.applyModelSpecificPricingPolicy(input.Model, pricing)
 
 	// 统一定价管线：legacy 走原路径（默认）；shadow 双算打点；unified 用新结果扣费。
-	pipeline := s.pipelineMode()
+	pipeline := s.resolvePipelineMode(input.Ctx)
 	if pipeline != PricingPipelineLegacy && input.Resolver != nil {
 		unified, applied, ok := input.Resolver.UnifiedTokenPrice(input.Ctx, resolved, UnifiedPriceRequest{
 			Model:               input.Model,

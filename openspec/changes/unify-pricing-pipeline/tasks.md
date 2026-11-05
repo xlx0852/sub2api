@@ -44,6 +44,7 @@
 - [ ] 6.1 Add `fx_mode`, `fx_rate`, `modifier_ids[]`, `unit_value` to `usage_logs` and populate them on every settlement path.
 - [x] 6.2 Extend the group pricing summary with cost → sell → effective → gross margin (fx_auto rows only) and cover it with a unit test.
 - [ ] 6.3 Add vendor price drift detection (nightly compare against the last observation, log-only).
+- [x] 6.4 Make the pipeline switch a DB setting (`pricing_pipeline`) resolved per request with a 10s cache, falling back to `pricing.pipeline`; expose GET/PUT `/admin/settings/pricing-pipeline` so it can be flipped without a container recreate.
 
 ## 6b. Admin UI
 

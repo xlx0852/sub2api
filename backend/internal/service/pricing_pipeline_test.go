@@ -242,17 +242,17 @@ func TestApplyPriceModifiersDeepSeekSeedShape(t *testing.T) {
 
 func TestPipelineModeReadsConfig(t *testing.T) {
 	legacy := NewBillingService(&config.Config{}, nil)
-	require.Equal(t, PricingPipelineLegacy, legacy.pipelineMode(), "默认必须是 legacy")
+	require.Equal(t, PricingPipelineLegacy, legacy.resolvePipelineMode(context.Background()), "默认必须是 legacy")
 
 	cfg := &config.Config{}
 	cfg.Pricing.Pipeline = "shadow"
-	require.Equal(t, PricingPipelineShadow, NewBillingService(cfg, nil).pipelineMode())
+	require.Equal(t, PricingPipelineShadow, NewBillingService(cfg, nil).resolvePipelineMode(context.Background()))
 
 	cfg.Pricing.Pipeline = "UNIFIED"
-	require.Equal(t, PricingPipelineUnified, NewBillingService(cfg, nil).pipelineMode())
+	require.Equal(t, PricingPipelineUnified, NewBillingService(cfg, nil).resolvePipelineMode(context.Background()))
 
 	cfg.Pricing.Pipeline = "nonsense"
-	require.Equal(t, PricingPipelineLegacy, NewBillingService(cfg, nil).pipelineMode())
+	require.Equal(t, PricingPipelineLegacy, NewBillingService(cfg, nil).resolvePipelineMode(context.Background()))
 }
 
 func newStubChannelService(mods []PriceModifier, costs map[int64]*PriceCost) *ChannelService {
@@ -393,3 +393,54 @@ func TestDeriveSellPriceMatchesLivePriceRows(t *testing.T) {
 		require.InDelta(t, tc.cacheRead, derived.CachedPerToken*1e6, 1e-9, "%s 缓存价", tc.model)
 	}
 }
+
+type stubSettingsReader struct {
+	value string
+	err   error
+}
+
+func (s *stubSettingsReader) GetRawValue(ctx context.Context, key string) (string, error) {
+	return s.value, s.err
+}
+
+// 设置项优先于配置文件；空值回落配置；读失败保留上一次结果。
+func TestResolvePipelineModePrefersSettings(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Pricing.Pipeline = "legacy"
+	svc := NewBillingService(cfg, nil)
+
+	require.Equal(t, PricingPipelineLegacy, svc.resolvePipelineMode(context.Background()), "无设置读取器时用配置")
+
+	reader := &stubSettingsReader{value: "shadow"}
+	svc.SetSettingsReader(reader)
+	require.Equal(t, PricingPipelineShadow, svc.resolvePipelineMode(context.Background()), "设置项优先")
+
+	// 设置项清空 → 回落配置
+	reader.value = ""
+	svc.pipelineCache.loadedAt = time.Time{} // 绕过 10s 缓存
+	require.Equal(t, PricingPipelineLegacy, svc.resolvePipelineMode(context.Background()))
+
+	// 设置项改为 unified
+	reader.value = "unified"
+	svc.pipelineCache.loadedAt = time.Time{}
+	require.Equal(t, PricingPipelineUnified, svc.resolvePipelineMode(context.Background()))
+
+	// 读失败 → 保持上一次的 unified，不静默回退
+	reader.err = errStubSettings
+	svc.pipelineCache.loadedAt = time.Time{}
+	require.Equal(t, PricingPipelineUnified, svc.resolvePipelineMode(context.Background()))
+
+	// 未知值 → legacy
+	reader.err = nil
+	reader.value = "garbage"
+	svc.pipelineCache.loadedAt = time.Time{}
+	require.Equal(t, PricingPipelineLegacy, svc.resolvePipelineMode(context.Background()))
+}
+
+var errStubSettings = errorsNew("settings unavailable")
+
+func errorsNew(msg string) error { return &stubErr{msg} }
+
+type stubErr struct{ msg string }
+
+func (e *stubErr) Error() string { return e.msg }

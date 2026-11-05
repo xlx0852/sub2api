@@ -234,6 +234,23 @@ func (s *SettingService) LoadAPIKeyACLTrustForwardedIPSetting(ctx context.Contex
 }
 
 // GetAllSettings 获取所有系统设置
+// GetRawValue 读取任意设置项的原始字符串（供定价管线开关等运维开关使用）。
+// 未配置时返回空串且不报错。
+func (s *SettingService) GetRawValue(ctx context.Context, key string) (string, error) {
+	if s == nil || s.settingRepo == nil || key == "" {
+		return "", nil
+	}
+	return s.settingRepo.GetValue(ctx, key)
+}
+
+// SetRawValue 写入任意设置项原始值（运维开关用）。
+func (s *SettingService) SetRawValue(ctx context.Context, key, value string) error {
+	if s == nil || s.settingRepo == nil || key == "" {
+		return nil
+	}
+	return s.settingRepo.Set(ctx, key, value)
+}
+
 func (s *SettingService) GetAllSettings(ctx context.Context) (*SystemSettings, error) {
 	settings, err := s.settingRepo.GetAll(ctx)
 	if err != nil {

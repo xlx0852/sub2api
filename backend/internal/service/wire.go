@@ -632,6 +632,16 @@ func ProvideOpsService(
 }
 
 // ProvideSettingService wires SettingService with group reader and proxy repo.
+// ProvideBillingService 构造计费服务，并把设置读取器接上，
+// 让定价管线开关（pricing_pipeline）能后台热切、无需重建容器。
+func ProvideBillingService(cfg *config.Config, pricingService *PricingService, settingService *SettingService) *BillingService {
+	svc := NewBillingService(cfg, pricingService)
+	if settingService != nil {
+		svc.SetSettingsReader(settingService)
+	}
+	return svc
+}
+
 func ProvideSettingService(settingRepo SettingRepository, groupRepo GroupRepository, proxyRepo ProxyRepository, cfg *config.Config) *SettingService {
 	svc := NewSettingService(settingRepo, cfg)
 	svc.SetDefaultSubscriptionGroupReader(groupRepo)
@@ -728,7 +738,7 @@ var ProviderSet = wire.NewSet(
 	NewUsageService,
 	NewDashboardService,
 	ProvidePricingService,
-	NewBillingService,
+	ProvideBillingService,
 	ProvideBillingCacheService,
 	NewAnnouncementService,
 	NewAdminService,
