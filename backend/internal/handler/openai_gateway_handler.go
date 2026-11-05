@@ -119,13 +119,6 @@ func (h *OpenAIGatewayHandler) recordOpenAICompactSoftTimeoutUsage(
 	})
 }
 
-func resolveOpenAIMessagesDispatchMappedModel(apiKey *service.APIKey, requestedModel string) string {
-	if apiKey == nil || apiKey.Group == nil {
-		return ""
-	}
-	return strings.TrimSpace(apiKey.Group.ResolveMessagesDispatchModel(requestedModel))
-}
-
 type openAIModelBodyReplaceFunc func([]byte, string) []byte
 
 func openAIModelMappedBody(body []byte, mapped bool, mappedModel string, replace openAIModelBodyReplaceFunc) []byte {
@@ -160,14 +153,20 @@ func openAICompatibleRequestPlatform(apiKey *service.APIKey) string {
 	return service.PlatformOpenAI
 }
 
+// allowOpenAICompatibleMessagesDispatch 报告该分组是否接受 /v1/messages（Anthropic 协议）请求。
+//
+// OpenAI 平台已下线「Claude 系列 → GPT 模型」的调度映射：这类请求应由 Anthropic 分组承接。
+// grok / kimi 的原生兼容入口保留。
 func allowOpenAICompatibleMessagesDispatch(apiKey *service.APIKey) bool {
 	if apiKey == nil || apiKey.Group == nil {
-		return true
+		return false
 	}
-	if apiKey.Group.Platform == service.PlatformGrok || apiKey.Group.Platform == service.PlatformKimi {
+	switch apiKey.Group.Platform {
+	case service.PlatformGrok, service.PlatformKimi:
 		return true
+	default:
+		return false
 	}
-	return apiKey.Group.AllowMessagesDispatch
 }
 
 // NewOpenAIGatewayHandler creates a new OpenAIGatewayHandler
@@ -1066,7 +1065,8 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	}
 	reqModel := modelResult.String()
 	routingModel := service.NormalizeOpenAICompatRequestedModel(reqModel)
-	preferredMappedModel := resolveOpenAIMessagesDispatchMappedModel(apiKey, reqModel)
+	// Claude 系列 → GPT 的族映射已下线：请求按原始模型名路由，不再改写。
+	preferredMappedModel := ""
 	reqStream := gjson.GetBytes(body, "stream").Bool()
 
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
