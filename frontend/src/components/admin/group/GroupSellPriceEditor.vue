@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-5">
-    <div v-if="!group" class="py-10 text-center text-sm text-gray-500">
+    <div v-if="!editorTitle && !policyMode" class="py-10 text-center text-sm text-gray-500">
       {{ t('admin.channels.selectGroupPrompt') }}
     </div>
 
@@ -10,12 +10,12 @@
         <div class="min-w-0 space-y-1">
           <div class="flex flex-wrap items-center gap-2">
             <PlatformIcon
-              :platform="group.platform"
+              :platform="platformForTags"
               size="sm"
-              :class="platformTextClass(group.platform)"
+              :class="platformTextClass(platformForTags)"
             />
             <span class="truncate text-base font-semibold text-gray-900 dark:text-white">
-              {{ group.name }}
+              {{ editorTitle }}
             </span>
             <span class="rounded-md px-2 py-0.5 text-xs font-semibold" :class="sourceBadgeClass">
               {{ sourceLabel }}
@@ -28,9 +28,14 @@
             </span>
           </div>
           <p class="text-xs text-gray-500 dark:text-gray-400">
-            {{ t('admin.channels.groupRateLine', { rate: formatRate(group.rate_multiplier) }) }}
-            <template v-if="summary?.policy_name">
-              · {{ t('admin.channels.boundPolicy', { name: summary.policy_name }) }}
+            <template v-if="policyMode">
+              {{ t('admin.pricing.editingPolicy', { id: policyId, groups: boundGroupNames }) }}
+            </template>
+            <template v-else>
+              {{ t('admin.channels.groupRateLine', { rate: formatRate(group?.rate_multiplier) }) }}
+              <template v-if="summary?.policy_name">
+                · {{ t('admin.channels.boundPolicy', { name: summary.policy_name }) }}
+              </template>
             </template>
           </p>
         </div>
@@ -45,7 +50,7 @@
             {{ t('common.refresh') }}
           </button>
           <button
-            v-if="sharedGroupNames.length"
+            v-if="sharedGroupNames.length && !policyMode"
             type="button"
             class="btn btn-secondary btn-sm"
             :disabled="splitting || saving || loading"
@@ -55,7 +60,7 @@
             {{ t('admin.channels.splitDedicated') }}
           </button>
           <button
-            v-if="summary?.policy_id"
+            v-if="summary?.policy_id && !policyMode"
             type="button"
             class="btn btn-secondary btn-sm"
             :disabled="saving || loading"
@@ -96,6 +101,11 @@
           </p>
           <p class="mt-1 text-xs opacity-80">
             {{ t('admin.groups.pricing.architectureSplit') }}
+          </p>
+          <p v-if="!policyMode && summary?.policy_id" class="mt-1 text-xs">
+            <button type="button" class="underline hover:no-underline" @click="goToPricingPage">
+              {{ t('admin.pricing.openLibrary') }}
+            </button>
           </p>
         </div>
 
@@ -151,13 +161,13 @@
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
               <PlatformIcon
-                :platform="group.platform"
+                :platform="platformForTags"
                 size="xs"
-                :class="platformTextClass(group.platform)"
+                :class="platformTextClass(platformForTags)"
               />
               <span>{{ t('admin.channels.form.modelPricing') }}</span>
               <span class="text-xs font-normal text-gray-400">
-                {{ t('admin.groups.platforms.' + group.platform, group.platform) }}
+                {{ t('admin.groups.platforms.' + platformForTags, platformForTags) }}
               </span>
             </div>
             <div class="flex items-center gap-2">
@@ -190,7 +200,7 @@
               v-for="(entry, idx) in form.model_pricing"
               :key="idx"
               :entry="entry"
-              :platform="group.platform"
+              :platform="platformForTags"
               :price-costs="priceCosts"
               @update="updatePricingEntry(idx, $event)"
               @remove="removePricingEntry(idx)"
@@ -280,6 +290,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { adminAPI } from '@/api/admin'
@@ -306,8 +317,10 @@ import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import PricingEntryCard from '@/components/admin/channel/PricingEntryCard.vue'
 
 const props = defineProps<{
-  /** Target group; when null the editor is idle */
+  /** Target group; when null the editor is idle (unless policyId is set) */
   group: AdminGroup | null
+  /** 售价表模式：直接编辑一张价目表，与分组解耦（独立定价页使用） */
+  policyId?: number | null
   /** When false, skip loading (e.g. parent modal closed) */
   active?: boolean
 }>()
@@ -318,6 +331,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const router = useRouter()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -337,6 +351,22 @@ const statusEditOptions = computed(() => [
   { value: 'active', label: t('admin.channels.statusActive') },
   { value: 'disabled', label: t('admin.channels.statusDisabled') },
 ])
+
+// 售价表模式：编辑对象是表本身，不依赖分组
+const policyMode = computed(() => props.policyId != null && props.policyId > 0)
+// 标签用的平台：优先用表内第一行的平台
+const platformForTags = computed(() => {
+  const fromRows = boundPolicy.value?.model_pricing?.find((p) => p.platform)?.platform
+  return (fromRows || props.group?.platform || 'openai') as GroupPlatform
+})
+// 标题：分组名 或 表名
+// 售价表模式下的绑定分组名（来自 table 之外的 summary 不可用，故用 boundPolicy.group_ids 计数）
+const boundGroupNames = computed(() => {
+  const ids = boundPolicy.value?.group_ids || []
+  return ids.length ? `${ids.length}` : '-'
+})
+
+const editorTitle = computed(() => (policyMode.value ? (boundPolicy.value?.name || form.name) : props.group?.name || ''))
 
 const defaultPolicyName = computed(() => {
   if (!props.group) return t('admin.channels.form.namePlaceholder')
@@ -369,7 +399,8 @@ const sharedGroupNames = computed(() => {
 })
 
 const canSave = computed(() => {
-  if (!props.group || loading.value) return false
+  if (loading.value) return false
+  if (!policyMode.value && !props.group) return false
   if (!boundPolicy.value && form.model_pricing.length === 0) return false
   return true
 })
@@ -422,6 +453,17 @@ function pricingToForm(channel: Channel | null, platform: GroupPlatform): Pricin
         sort_order: iv.sort_order ?? idx,
       })),
     }))
+}
+
+// 售价表模式：不强制统一平台，沿用行内已有的平台（缺省用表内第一个平台）
+function formToModelPricingForPolicy(): ChannelModelPricing[] {
+  const fallback = platformForTags.value
+  const existingPlatforms = (boundPolicy.value?.model_pricing || []).map((p) => p.platform)
+  const out = formToModelPricing(fallback)
+  return out.map((row, idx) => ({
+    ...row,
+    platform: existingPlatforms[idx] || fallback
+  }))
 }
 
 function formToModelPricing(platform: GroupPlatform): ChannelModelPricing[] {
@@ -492,7 +534,79 @@ const uncoveredModels = computed(() => {
 // 平台可选模型清单（由 syncPricingModels 提供，失败时为空）
 const availableModels = ref<string[]>([])
 
+// 跳到独立定价页（单价唯一入口），带上当前策略 id
+function goToPricingPage() {
+  const id = summary.value?.policy_id
+  void router.push(id ? `/admin/pricing?policy=${id}` : '/admin/pricing')
+}
+
+// 成本基 + 平台模型清单（两个模式共用）
+async function loadAuxiliaryData() {
+  try {
+    priceCosts.value = await adminAPI.settings.listPriceCosts()
+  } catch {
+    priceCosts.value = []
+  }
+  try {
+    const models = await adminAPI.channels.syncPricingModels(platformForTags.value || '')
+    availableModels.value = models?.models || []
+  } catch {
+    availableModels.value = []
+  }
+}
+
+// 售价表模式：保留每行的平台，不做平台过滤（一张表可能跨平台）
+function pricingToFormForPolicy(policy: Channel): PricingFormEntry[] {
+  return (policy.model_pricing || []).map((entry) => ({
+    models: [...(entry.models || [])],
+    billing_mode: (entry.billing_mode || 'token') as PricingFormEntry['billing_mode'],
+    currency: entry.currency === 'CNY' ? 'CNY' : 'USD',
+    input_price: perTokenToMTok(entry.input_price),
+    output_price: perTokenToMTok(entry.output_price),
+    cache_write_price: perTokenToMTok(entry.cache_write_price),
+    cache_read_price: perTokenToMTok(entry.cache_read_price),
+    image_output_price: perTokenToMTok(entry.image_output_price),
+    per_request_price: entry.per_request_price,
+    intervals: (entry.intervals || []).map((iv, idx) => ({
+      min_tokens: iv.min_tokens,
+      max_tokens: iv.max_tokens,
+      tier_label: iv.tier_label || '',
+      input_price: perTokenToMTok(iv.input_price),
+      output_price: perTokenToMTok(iv.output_price),
+      cache_write_price: perTokenToMTok(iv.cache_write_price),
+      cache_read_price: perTokenToMTok(iv.cache_read_price),
+      per_request_price: iv.per_request_price,
+      sort_order: iv.sort_order ?? idx
+    })),
+    fx_mode: entry.fx_mode === 'fx_auto' ? 'fx_auto' : entry.fx_mode === 'cny_native' ? 'cny_native' : 'manual',
+    cost_id: entry.cost_id ?? null,
+    markup_pct: entry.markup_pct ?? 0,
+    fx_rate: entry.fx_rate ?? null
+  }))
+}
+
 async function reload() {
+  // 售价表模式：直接按表 id 加载，跳过分组摘要
+  if (policyMode.value) {
+    loading.value = true
+    summary.value = null
+    try {
+      const policy = await adminAPI.channels.getById(props.policyId as number)
+      boundPolicy.value = policy
+      // 表里可能有多个平台的行；这里不做平台过滤，原样展示全部行
+      form.name = policy.name
+      form.description = policy.description || ''
+      form.status = policy.status || 'active'
+      form.model_pricing = pricingToFormForPolicy(policy)
+      void loadAuxiliaryData()
+    } catch (error) {
+      appStore.showError(extractApiErrorMessage(error, t('admin.channels.form.loadError')))
+    } finally {
+      loading.value = false
+    }
+    return
+  }
+
   if (!props.group) return
   loading.value = true
   summary.value = null
@@ -503,19 +617,7 @@ async function reload() {
     summary.value = data
 
     // 成本基与平台模型清单：用于 fx_auto 公式展示和"未定价模型"提示，失败不阻塞编辑。
-    void (async () => {
-      try {
-        priceCosts.value = await adminAPI.settings.listPriceCosts()
-      } catch {
-        priceCosts.value = []
-      }
-      try {
-        const models = await adminAPI.channels.syncPricingModels(props.group?.platform || '')
-        availableModels.value = models?.models || []
-      } catch {
-        availableModels.value = []
-      }
-    })()
+    void loadAuxiliaryData()
 
     if (data.policy_id) {
       try {
@@ -714,6 +816,42 @@ async function splitToDedicated() {
 }
 
 async function handleSave() {
+  if (saving.value) return
+
+  // 售价表模式：只更新这张表本身，不碰分组绑定
+  if (policyMode.value) {
+    const name = form.name.trim()
+    if (!name) {
+      appStore.showError(t('admin.channels.nameRequired'))
+      return
+    }
+    const err = validatePricing()
+    if (err) {
+      appStore.showError(err)
+      return
+    }
+    saving.value = true
+    try {
+      const existing = boundPolicy.value
+      const modelPricing = formToModelPricingForPolicy()
+      await adminAPI.channels.update(props.policyId as number, {
+        name,
+        description: form.description.trim() || undefined,
+        status: form.status,
+        group_ids: existing?.group_ids || [],
+        model_pricing: modelPricing
+      })
+      appStore.showSuccess(t('admin.channels.updateSuccess'))
+      await reload()
+      emit('success')
+    } catch (error) {
+      appStore.showError(extractApiErrorMessage(error, t('admin.channels.updateError')))
+    } finally {
+      saving.value = false
+    }
+    return
+  }
+
   const group = props.group
   if (!group || saving.value) return
 
@@ -803,9 +941,9 @@ async function unbindOfficial() {
 }
 
 watch(
-  () => [props.active !== false, props.group?.id] as const,
-  ([active, id]) => {
-    if (active && id) {
+  () => [props.active !== false, props.group?.id, props.policyId] as const,
+  ([active, id, policyId]) => {
+    if (active && (id || policyId)) {
       reload()
     } else if (!active) {
       summary.value = null

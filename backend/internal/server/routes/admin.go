@@ -688,6 +688,7 @@ func registerChannelRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 
 func registerSellPricePolicyRoutes(g *gin.RouterGroup, h *handler.Handlers) {
 	g.GET("", h.Admin.Channel.List)
+	g.GET("/overview", h.Admin.Channel.GetPricingOverview)
 	g.GET("/model-pricing", h.Admin.Channel.GetModelDefaultPricing)
 	g.POST("/model-pricing/batch", h.Admin.Channel.BatchGetModelDefaultPricing)
 	g.GET("/pricing/sync-models", h.Admin.Channel.SyncPricingModels)

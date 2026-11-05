@@ -172,6 +172,7 @@ export default {
     profile: '个人资料',
     users: '用户管理',
     groups: '分组套餐',
+    pricing: '定价与售价表',
     channels: '售价策略',
     availableChannels: '模型广场',
     accounts: '号池管理',

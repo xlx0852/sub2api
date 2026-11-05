@@ -179,3 +179,30 @@ func nullableFloat(v float64) *float64 {
 	}
 	return &v
 }
+
+// ListGroupRefsByPolicy 返回每张售价表绑定了哪些分组（含分组名与折扣倍率）。
+func (r *channelRepository) ListGroupRefsByPolicy(ctx context.Context) (map[int64][]domain.GroupPolicyBinding, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT sell_price_policy_id, id, name, rate_multiplier
+		FROM groups
+		WHERE deleted_at IS NULL AND sell_price_policy_id IS NOT NULL AND sell_price_policy_id > 0
+		ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("list group policy bindings: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make(map[int64][]domain.GroupPolicyBinding)
+	for rows.Next() {
+		var policyID int64
+		var ref domain.GroupPolicyBinding
+		if err := rows.Scan(&policyID, &ref.GroupID, &ref.Name, &ref.RateMultiplier); err != nil {
+			return nil, fmt.Errorf("scan group policy binding: %w", err)
+		}
+		out[policyID] = append(out[policyID], ref)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate group policy bindings: %w", err)
+	}
+	return out, nil
+}

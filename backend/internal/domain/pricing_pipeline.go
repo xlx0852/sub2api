@@ -51,3 +51,10 @@ type PriceCost struct {
 	SourceURL         string
 	Notes             string
 }
+
+// GroupPolicyBinding 是"分组绑定售价表"的只读视图（后台售价表总览用）。
+type GroupPolicyBinding struct {
+	GroupID        int64
+	Name           string
+	RateMultiplier float64
+}

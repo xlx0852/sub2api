@@ -173,3 +173,42 @@ func TestBuildModelPreviews_FxAutoShowsCostAndMargin(t *testing.T) {
 	// 售价 5.6、实付 8.4、成本 5.6 → 毛利 33.3%
 	require.InDelta(t, 33.3, *p.GrossMarginPct, 0.1)
 }
+
+// 售价表总览：模型清单容器（无价行）要能区分出来，示例价要乘上绑定分组的折扣。
+func TestBuildPricingOverview(t *testing.T) {
+	sellIn := 5.6e-6
+	nullRow := ChannelModelPricing{Platform: "openai", Models: []string{"a", "b"}, BillingMode: BillingModeToken, Currency: domain.PricingCurrencyUSD}
+	pricedRow := ChannelModelPricing{Platform: "openai", Models: []string{"hinoki-offensive"}, BillingMode: BillingModeToken,
+		Currency: domain.PricingCurrencyCNY, InputPrice: &sellIn, FxMode: domain.PricingFxModeAuto}
+
+	repo := &mockChannelRepository{
+		listAllFn: func(ctx context.Context) ([]Channel, error) {
+			return []Channel{
+				{ID: 8, Name: "国模", Status: "active", ModelPricing: []ChannelModelPricing{pricedRow}},
+				{ID: 5, Name: "Grok", Status: "active", ModelPricing: []ChannelModelPricing{nullRow}},
+			}, nil
+		},
+		listGroupRefsFn: func(ctx context.Context) (map[int64][]domain.GroupPolicyBinding, error) {
+			return map[int64][]domain.GroupPolicyBinding{
+				8: {{GroupID: 49, Name: "国模abliterated", RateMultiplier: 1.5}},
+			}, nil
+		},
+	}
+	svc := NewChannelService(repo, nil, nil, nil)
+	out, err := svc.BuildPricingOverview(context.Background())
+	require.NoError(t, err)
+	require.Len(t, out.Policies, 2)
+
+	// 有绑定+有定价的排前面
+	first := out.Policies[0]
+	require.Equal(t, int64(8), first.ID)
+	require.Equal(t, 1, first.PricedRowCount)
+	require.InDelta(t, 5.6, *first.ExampleSellInput, 1e-9)
+	require.InDelta(t, 8.4, *first.ExampleEffectiveInput, 1e-9, "示例实付要乘分组折扣")
+	require.Equal(t, "hinoki-offensive", first.ExampleModel)
+	require.Len(t, first.BoundGroups, 1)
+
+	second := out.Policies[1]
+	require.Equal(t, 0, second.PricedRowCount, "无价行只是模型清单容器")
+	require.Equal(t, 2, second.ModelCount)
+}

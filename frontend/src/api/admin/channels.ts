@@ -184,6 +184,55 @@ const channelsAPI = {
   remove,
   getModelDefaultPricing,
   batchGetModelDefaultPricing,
-  syncPricingModels
+  syncPricingModels,
+  getPricingOverview,
 }
 export default channelsAPI
+
+// ==================== 售价表总览（独立定价页） ====================
+
+export interface PricingOverviewRow {
+  models: string[]
+  billing_mode: BillingMode
+  currency: 'USD' | 'CNY'
+  input_per_mtok?: number | null
+  output_per_mtok?: number | null
+  cache_read_per_mtok?: number | null
+  cache_write_per_mtok?: number | null
+  per_request_price?: number | null
+  fx_mode: 'manual' | 'cny_native' | 'fx_auto'
+  cost_id?: number | null
+  fx_rate?: number | null
+  markup_pct?: number
+}
+
+export interface PricingOverviewGroup {
+  id: number
+  name: string
+  rate_multiplier: number
+}
+
+export interface PricingOverviewPolicy {
+  id: number
+  name: string
+  status: string
+  platforms: string[]
+  model_count: number
+  priced_row_count: number
+  rows: PricingOverviewRow[]
+  bound_groups: PricingOverviewGroup[]
+  example_model?: string
+  example_sell_input?: number | null
+  example_effective_input?: number | null
+  example_currency?: string
+  example_fx_mode?: string
+}
+
+export interface PricingOverview {
+  policies: PricingOverviewPolicy[]
+}
+
+export async function getPricingOverview(): Promise<PricingOverview> {
+  const { data } = await apiClient.get<PricingOverview>('/admin/sell-price-policies/overview')
+  return data
+}

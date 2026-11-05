@@ -7,6 +7,7 @@
   >
     <GroupSellPriceEditor
       :group="group"
+      :policy-id="policyId ?? null"
       :active="show"
       @success="emit('success')"
     />
@@ -30,12 +31,16 @@ import GroupSellPriceEditor from '@/components/admin/group/GroupSellPriceEditor.
 defineProps<{
   show: boolean
   group: AdminGroup | null
+  /** 售价表模式：直接编辑这张表（独立定价页使用） */
+  policyId?: number | null
 }>()
 
 const emit = defineEmits<{
   close: []
   success: []
 }>()
+
+// policyId 可能为 null，模板里用 ?? null 兜底
 
 const { t } = useI18n()
 </script>

@@ -25,6 +25,8 @@ type ChannelRepository interface {
 	GetChannelIDsByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64]int64, error)
 	// ListGroupIDsWithSellPricePolicy returns groupID → policyID for all groups with explicit binding.
 	ListGroupIDsWithSellPricePolicy(ctx context.Context) (map[int64]int64, error)
+	// ListGroupRefsByPolicy returns policyID → bound groups (id/name/rate) for the pricing overview.
+	ListGroupRefsByPolicy(ctx context.Context) (map[int64][]domain.GroupPolicyBinding, error)
 	GetGroupsInOtherChannels(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error)
 
 	// 分组平台查询

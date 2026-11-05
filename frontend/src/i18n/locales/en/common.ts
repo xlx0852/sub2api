@@ -172,6 +172,7 @@ export default {
     profile: 'Profile',
     users: 'Users',
     groups: 'Group Plans',
+    pricing: 'Pricing',
     channels: 'Sell-Price Policies',
     availableChannels: 'Model Plaza',
     accounts: 'Account Pool',

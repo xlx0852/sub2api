@@ -697,6 +697,7 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/ops', label: t('nav.ops'), icon: ChartIcon, featureFlag: flagOpsMonitoring },
 		{ path: '/admin/users', label: t('nav.users'), icon: UsersIcon },
 		{ path: '/admin/groups', label: t('nav.groups'), icon: FolderIcon },
+		{ path: '/admin/pricing', label: t('nav.pricing'), icon: CreditCardIcon },
     // Sell pricing lives inside Groups → Pricing (GroupSellPriceEditor); no standalone nav page.
     { path: '/admin/accounts', label: t('nav.accounts'), icon: GlobeIcon },
 		{ path: '/admin/profit', label: t('nav.profit'), icon: ProfitIcon },
