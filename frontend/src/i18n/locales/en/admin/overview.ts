@@ -758,6 +758,7 @@ export default {
       saveModelFirst: 'Save the model before adding prices'
     },
     pricing: {
+      statusActive: 'Active',
       pageTitle: 'Pricing & sell-price tables',
       subtitle: 'The only place to edit a model unit price. Groups only pick a table and apply a customer discount; groups without a table fall back to the built-in default (official pins and peak windows, not editable here).',
       tabPolicies: 'Tables',

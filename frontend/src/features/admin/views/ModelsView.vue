@@ -1,58 +1,63 @@
 <template>
   <AppLayout>
-    <div class="space-y-4 p-4 sm:p-6">
-      <header class="space-y-1">
-        <h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('admin.models.title') }}</h1>
-        <p class="max-w-4xl text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.models.subtitle') }}</p>
-      </header>
+    <TablePageLayout>
+      <template #filters>
+        <div class="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+          <div class="flex flex-wrap items-center gap-2">
+            <input v-model="search" class="input w-64" :placeholder="t('admin.models.searchPlaceholder')" @keyup.enter="load" />
+            <Select v-model="scope" :options="scopeOptions" class="w-52" />
+            <Select v-model="platform" :options="platformOptions" class="w-40" @update:modelValue="load" />
+            <button type="button" class="btn btn-secondary" :disabled="loading" @click="load">
+              {{ loading ? t('common.loading') : t('common.refresh') }}
+            </button>
+          </div>
+          <div class="flex flex-shrink-0 flex-wrap items-center gap-2 lg:justify-end">
+            <button type="button" class="btn btn-primary" @click="openCreate">
+              + {{ t('admin.models.create') }}
+            </button>
+          </div>
+        </div>
+        <p class="mt-2 text-[11px] text-gray-400">
+          {{ t('admin.models.hint') }}
+          <span v-if="legacyCount">· {{ t('admin.models.legacyCount', { n: legacyCount }) }}</span>
+        </p>
+      </template>
 
-      <div class="flex flex-wrap items-center gap-2">
-        <input v-model="search" class="input w-64 text-sm" :placeholder="t('admin.models.searchPlaceholder')" @keyup.enter="load" />
-        <Select v-model="scope" :options="scopeOptions" class="w-52" />
-        <Select v-model="platform" :options="platformOptions" class="w-40" @update:modelValue="load" />
-        <button type="button" class="btn btn-secondary btn-sm" :disabled="loading" @click="load">
-          {{ loading ? t('common.loading') : t('common.refresh') }}
-        </button>
-        <button type="button" class="btn btn-primary btn-sm" @click="openCreate">
-          + {{ t('admin.models.create') }}
-        </button>
-        <span class="text-[11px] text-gray-400">{{ t('admin.models.hint') }}</span>
-        <span v-if="legacyCount" class="text-[11px] text-gray-400">· {{ t('admin.models.legacyCount', { n: legacyCount }) }}</span>
-      </div>
+      <template #table>
 
-      <section class="overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-600">
-        <table class="min-w-full text-xs">
-          <thead class="bg-gray-50 text-left text-gray-500 dark:bg-dark-700 dark:text-gray-400">
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="table-header bg-[#f0f0ec] text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:bg-dark-800 dark:text-dark-400">
             <tr>
-              <th class="px-3 py-2">{{ t('admin.models.colId') }}</th>
-              <th class="px-3 py-2">{{ t('admin.models.colPlatform') }}</th>
-              <th class="px-3 py-2">{{ t('admin.models.colDisplay') }}</th>
+              <th class="px-3 py-3">{{ t('admin.models.colId') }}</th>
+              <th class="px-3 py-3">{{ t('admin.models.colPlatform') }}</th>
+              <th class="px-3 py-3">{{ t('admin.models.colDisplay') }}</th>
               <th class="px-3 py-2 text-right">{{ t('admin.models.colContext') }}</th>
               <th class="px-3 py-2 text-right">{{ t('admin.models.colPrices') }}</th>
-              <th class="px-3 py-2">{{ t('admin.models.colStatus') }}</th>
+              <th class="px-3 py-3">{{ t('admin.models.colStatus') }}</th>
               <th class="px-3 py-2" />
             </tr>
           </thead>
-          <tbody class="text-gray-700 dark:text-gray-200">
-            <tr v-for="m in visibleModels" :key="m.id" class="border-t border-gray-100 dark:border-dark-700">
-              <td class="px-3 py-2 font-mono">{{ m.id }}</td>
-              <td class="px-3 py-2">
+          <tbody class="divide-y divide-gray-200 text-gray-700 dark:divide-dark-700 dark:text-gray-200">
+            <tr v-for="m in visibleModels" :key="m.id" class="transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]">
+              <td class="px-3 py-2.5 font-mono">{{ m.id }}</td>
+              <td class="px-3 py-2.5">
                 <span v-if="m.platform">{{ m.platform }}</span>
                 <span v-else class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500 dark:bg-dark-700 dark:text-gray-400" :title="t('admin.models.legacyTagHint')">{{ t('admin.models.legacyTag') }}</span>
               </td>
-              <td class="px-3 py-2">{{ m.display_name || '-' }}</td>
-              <td class="px-3 py-2 text-right">{{ m.context_window ?? '-' }}</td>
-              <td class="px-3 py-2 text-right">
+              <td class="px-3 py-2.5">{{ m.display_name || '-' }}</td>
+              <td class="px-3 py-2.5 text-right">{{ m.context_window ?? '-' }}</td>
+              <td class="px-3 py-2.5 text-right">
                 <span v-if="m.price_row_count" class="text-gray-700 dark:text-gray-200">{{ m.price_row_count }}</span>
                 <span v-else-if="!m.platform" class="text-gray-400" :title="t('admin.models.priceViaAliasHint')">{{ t('admin.models.priceViaAlias') }}</span>
                 <span v-else class="text-amber-600 dark:text-amber-400" :title="t('admin.models.noPrices')">0</span>
               </td>
-              <td class="px-3 py-2">
+              <td class="px-3 py-2.5">
                 <span v-if="m.retired" class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] dark:bg-dark-700">{{ t('admin.models.retired') }}</span>
                 <span v-else-if="!m.enabled" class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] dark:bg-dark-700">{{ t('admin.models.disabled') }}</span>
                 <span v-else class="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">{{ t('admin.models.enabled') }}</span>
               </td>
-              <td class="px-3 py-2 text-right">
+              <td class="px-3 py-2.5 text-right">
                 <button type="button" class="text-primary-600 hover:text-primary-700" @click="openEdit(m)">
                   {{ t('admin.models.edit') }}
                 </button>
@@ -63,8 +68,9 @@
             </tr>
           </tbody>
         </table>
-      </section>
-    </div>
+      </div>
+      </template>
+    </TablePageLayout>
 
     <BaseDialog :show="editorOpen" :title="editing?.id || t('admin.models.create')" width="extra-wide" @close="editorOpen = false">
       <div v-if="editing" class="space-y-4">
@@ -220,6 +226,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import BaseDialog from '@/ui/BaseDialog.vue'
 import Select from '@/ui/Select.vue'
 import adminAPI from '@/api/admin'

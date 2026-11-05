@@ -1,42 +1,37 @@
 <template>
   <AppLayout>
-    <div class="space-y-4 p-4 sm:p-6">
-      <!-- 顶部说明：讲清楚"这里是唯一改单价的地方" -->
-      <header class="space-y-1">
-        <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
-          {{ t('admin.pricing.pageTitle') }}
-        </h1>
-        <p class="max-w-4xl text-xs leading-5 text-gray-500 dark:text-gray-400">
-          {{ t('admin.pricing.subtitle') }}
-        </p>
-      </header>
-
-      <div class="flex flex-wrap items-center gap-2">
-        <div class="flex rounded-lg border border-gray-200 p-0.5 dark:border-dark-600">
-          <button
-            v-for="tab in tabs"
-            :key="tab.key"
-            type="button"
-            class="rounded-md px-3 py-1 text-xs font-medium"
-            :class="activeTab === tab.key
-              ? 'bg-primary-600 text-white'
-              : 'text-gray-600 hover:text-gray-900 dark:text-gray-300'"
-            @click="activeTab = tab.key"
-          >
-            {{ t(tab.label) }}
-          </button>
+    <TablePageLayout>
+      <template #filters>
+        <div class="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="flex rounded-lg border border-gray-200 p-0.5 dark:border-dark-600">
+              <button
+                v-for="tab in tabs"
+                :key="tab.key"
+                type="button"
+                class="rounded-md px-3 py-1.5 text-sm font-medium"
+                :class="activeTab === tab.key
+                  ? 'bg-primary-600 text-white'
+                  : 'text-gray-600 hover:text-gray-900 dark:text-gray-300'"
+                @click="activeTab = tab.key"
+              >
+                {{ t(tab.label) }}
+              </button>
+            </div>
+            <button type="button" class="btn btn-secondary" :disabled="loading" @click="load">
+              <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
+              {{ t('common.refresh') }}
+            </button>
+          </div>
         </div>
-        <button type="button" class="btn btn-secondary btn-sm" :disabled="loading" @click="load">
-          <Icon name="refresh" size="sm" class="mr-1" :class="loading ? 'animate-spin' : ''" />
-          {{ t('common.refresh') }}
-        </button>
-        <span class="text-[11px] text-gray-400">{{ t('admin.pricing.hintCostOnly') }}</span>
-      </div>
+        <p class="mt-2 text-[11px] text-gray-400">{{ t('admin.pricing.hintCostOnly') }}</p>
+      </template>
 
+      <template #table>
       <!-- Tab: 售价表 -->
-      <section v-show="activeTab === 'policies'" class="overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-600">
-        <table class="min-w-full text-xs">
-          <thead class="bg-gray-50 text-left text-gray-500 dark:bg-dark-700 dark:text-gray-400">
+      <section v-show="activeTab === 'policies'" class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="table-header bg-[#f0f0ec] text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:bg-dark-800 dark:text-dark-400">
             <tr>
               <th class="px-3 py-2">{{ t('admin.pricing.colPolicy') }}</th>
               <th class="px-3 py-2">{{ t('admin.pricing.colStatus') }}</th>
@@ -46,8 +41,8 @@
               <th class="px-3 py-2" />
             </tr>
           </thead>
-          <tbody class="text-gray-700 dark:text-gray-200">
-            <tr v-for="policy in overview?.policies || []" :key="policy.id" class="border-t border-gray-100 dark:border-dark-700">
+          <tbody class="divide-y divide-gray-200 text-gray-700 dark:divide-dark-700 dark:text-gray-200">
+            <tr v-for="policy in overview?.policies || []" :key="policy.id" class="transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.03]">
               <td class="px-3 py-2">
                 <div class="font-medium">#{{ policy.id }} {{ policy.name }}</div>
                 <div class="text-[11px] text-gray-400">{{ (policy.platforms || []).join(', ') || '-' }}</div>
@@ -57,7 +52,7 @@
                   :class="policy.status === 'active'
                     ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
                     : 'bg-gray-100 text-gray-500 dark:bg-dark-700'">
-                  {{ policy.status }}
+                  {{ policy.status === 'active' ? t('admin.pricing.statusActive') : policy.status }}
                 </span>
                 <span v-if="policy.priced_row_count === 0"
                   class="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
@@ -96,17 +91,17 @@
       <!-- Tab: 按模型的价目矩阵 -->
       <section v-show="activeTab === 'models'" class="space-y-2">
         <p class="text-[11px] text-gray-400">{{ t('admin.pricing.matrixHint') }}</p>
-        <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-600">
-          <table class="min-w-full text-xs">
-            <thead class="bg-gray-50 text-left text-gray-500 dark:bg-dark-700 dark:text-gray-400">
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="table-header bg-[#f0f0ec] text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:bg-dark-800 dark:text-dark-400">
               <tr>
                 <th class="px-3 py-2">{{ t('admin.pricing.colModelName') }}</th>
                 <th class="px-3 py-2">{{ t('admin.pricing.colOffers') }}</th>
                 <th class="px-3 py-2 text-right">{{ t('admin.pricing.colSpread') }}</th>
               </tr>
             </thead>
-            <tbody class="text-gray-700 dark:text-gray-200">
-              <tr v-for="row in modelMatrix" :key="row.model" class="border-t border-gray-100 dark:border-dark-700">
+            <tbody class="divide-y divide-gray-200 text-gray-700 dark:divide-dark-700 dark:text-gray-200">
+              <tr v-for="row in modelMatrix" :key="row.model">
                 <td class="px-3 py-2 font-mono">{{ row.model }}</td>
                 <td class="px-3 py-2">
                   <div v-for="(offer, i) in row.offers" :key="i" class="flex flex-wrap items-center gap-1 py-0.5">
@@ -130,7 +125,8 @@
           </table>
         </div>
       </section>
-    </div>
+      </template>
+    </TablePageLayout>
 
     <GroupPricingModal
       :show="editorPolicyId !== null"
@@ -147,6 +143,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import GroupPricingModal from '@/components/admin/group/GroupPricingModal.vue'
 import adminAPI from '@/api/admin'

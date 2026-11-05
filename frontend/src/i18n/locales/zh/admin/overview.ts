@@ -812,6 +812,7 @@ export default {
       saveModelFirst: '请先保存模型，再配置价格'
     },
     pricing: {
+      statusActive: '启用',
       pageTitle: '定价与售价表',
       subtitle: '这里是唯一能改"模型单价"的地方。分组只负责绑定哪张表 + 客户折扣倍率；没绑表的分组走内置默认价（含官方钉价与峰谷，后台不可改）。',
       tabPolicies: '售价表',

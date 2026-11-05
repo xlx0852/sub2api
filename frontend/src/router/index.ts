@@ -433,13 +433,23 @@ const routes: RouteRecordRaw[] = [
     path: '/admin/models',
     name: 'admin-models',
     component: () => import('@/features/admin/views/ModelsView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      titleKey: 'admin.models.title',
+      descriptionKey: 'admin.models.subtitle'
+    }
   },
   {
     path: '/admin/pricing',
     name: 'admin-pricing',
     component: () => import('@/features/admin/views/PricingView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      titleKey: 'admin.pricing.pageTitle',
+      descriptionKey: 'admin.pricing.subtitle'
+    }
   },
   {
     path: '/admin/sell-price-policies',
