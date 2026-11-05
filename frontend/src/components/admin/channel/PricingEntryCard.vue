@@ -120,7 +120,7 @@
             <button
               type="button"
               class="rounded border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-700 hover:border-primary-300 hover:text-primary-700 disabled:opacity-50 dark:border-dark-600 dark:text-gray-200"
-              :disabled="quickBusy || entry.models.length === 0"
+              :disabled="quickBusy || entry.models.length === 0 || isFxAuto"
               @click="fillOfficialPrices"
             >
               {{ quickBusy ? t('admin.channels.form.quickPricingLoading') : t('admin.channels.form.fillOfficialPrice') }}
@@ -132,7 +132,7 @@
                 :key="n"
                 type="button"
                 class="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
-                :disabled="quickBusy || entry.models.length === 0"
+                :disabled="quickBusy || entry.models.length === 0 || isFxAuto"
                 @click="scaleFromOfficial(n)"
               >
                 ×{{ n }}
@@ -147,7 +147,7 @@
               <button
                 type="button"
                 class="rounded border border-amber-200 px-1.5 py-0.5 text-[11px] text-amber-800 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-900/50 dark:text-amber-200"
-                :disabled="quickBusy || entry.models.length === 0 || !(Number(customScale) > 0)"
+                :disabled="quickBusy || entry.models.length === 0 || isFxAuto || !(Number(customScale) > 0)"
                 @click="scaleFromOfficial(Number(customScale))"
               >
                 {{ t('admin.channels.form.applyScale') }}
@@ -155,11 +155,15 @@
             </div>
             <button
               type="button"
-              class="rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:text-gray-900 dark:border-dark-600 dark:text-gray-300"
+              class="rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:text-gray-900 disabled:opacity-50 dark:border-dark-600 dark:text-gray-300"
+              :disabled="isFxAuto"
               @click="clearOverrides"
             >
               {{ t('admin.channels.form.clearPriceOverride') }}
             </button>
+            <span v-if="isFxAuto" class="text-[11px] text-sky-700 dark:text-sky-300">
+              {{ t('admin.channels.form.quickToolsDisabledByFxAuto') }}
+            </span>
           </div>
           <p class="mt-1 text-[11px] leading-4 text-gray-400">
             {{ t('admin.channels.form.tokenPriceHint') }}
