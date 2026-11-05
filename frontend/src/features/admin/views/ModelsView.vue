@@ -8,6 +8,7 @@
 
       <div class="flex flex-wrap items-center gap-2">
         <input v-model="search" class="input w-64 text-sm" :placeholder="t('admin.models.searchPlaceholder')" @keyup.enter="load" />
+        <Select v-model="scope" :options="scopeOptions" class="w-52" />
         <Select v-model="platform" :options="platformOptions" class="w-40" @update:modelValue="load" />
         <button type="button" class="btn btn-secondary btn-sm" :disabled="loading" @click="load">
           {{ loading ? t('common.loading') : t('common.refresh') }}
@@ -16,6 +17,7 @@
           + {{ t('admin.models.create') }}
         </button>
         <span class="text-[11px] text-gray-400">{{ t('admin.models.hint') }}</span>
+        <span v-if="legacyCount" class="text-[11px] text-gray-400">· {{ t('admin.models.legacyCount', { n: legacyCount }) }}</span>
       </div>
 
       <section class="overflow-x-auto rounded-lg border border-gray-200 dark:border-dark-600">
@@ -32,15 +34,18 @@
             </tr>
           </thead>
           <tbody class="text-gray-700 dark:text-gray-200">
-            <tr v-for="m in models" :key="m.id" class="border-t border-gray-100 dark:border-dark-700">
+            <tr v-for="m in visibleModels" :key="m.id" class="border-t border-gray-100 dark:border-dark-700">
               <td class="px-3 py-2 font-mono">{{ m.id }}</td>
-              <td class="px-3 py-2">{{ m.platform || '-' }}</td>
+              <td class="px-3 py-2">
+                <span v-if="m.platform">{{ m.platform }}</span>
+                <span v-else class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500 dark:bg-dark-700 dark:text-gray-400" :title="t('admin.models.legacyTagHint')">{{ t('admin.models.legacyTag') }}</span>
+              </td>
               <td class="px-3 py-2">{{ m.display_name || '-' }}</td>
               <td class="px-3 py-2 text-right">{{ m.context_window ?? '-' }}</td>
               <td class="px-3 py-2 text-right">
-                <span :class="m.price_row_count ? 'text-gray-700 dark:text-gray-200' : 'text-amber-600 dark:text-amber-400'">
-                  {{ m.price_row_count }}
-                </span>
+                <span v-if="m.price_row_count" class="text-gray-700 dark:text-gray-200">{{ m.price_row_count }}</span>
+                <span v-else-if="!m.platform" class="text-gray-400" :title="t('admin.models.priceViaAliasHint')">{{ t('admin.models.priceViaAlias') }}</span>
+                <span v-else class="text-amber-600 dark:text-amber-400" :title="t('admin.models.noPrices')">0</span>
               </td>
               <td class="px-3 py-2">
                 <span v-if="m.retired" class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] dark:bg-dark-700">{{ t('admin.models.retired') }}</span>
@@ -53,7 +58,7 @@
                 </button>
               </td>
             </tr>
-            <tr v-if="!models.length">
+            <tr v-if="!visibleModels.length">
               <td colspan="7" class="px-3 py-6 text-center text-gray-400">{{ t('admin.models.empty') }}</td>
             </tr>
           </tbody>
@@ -230,6 +235,20 @@ const models = ref<ModelRegistryEntry[]>([])
 const loading = ref(false)
 const search = ref('')
 const platform = ref('')
+// 范围：model = 有平台的真实模型（默认）；legacy = 只有兜底价的兼容 id；all = 全部
+const scope = ref<'model' | 'legacy' | 'all'>('model')
+const scopeOptions = computed(() => [
+  { value: 'model', label: t('admin.models.scopeModel') },
+  { value: 'legacy', label: t('admin.models.scopeLegacy') },
+  { value: 'all', label: t('admin.models.scopeAll') }
+])
+const visibleModels = computed(() => {
+  const list = models.value
+  if (scope.value === 'all') return list
+  if (scope.value === 'legacy') return list.filter((m) => !m.platform)
+  return list.filter((m) => !!m.platform)
+})
+const legacyCount = computed(() => models.value.filter((m) => !m.platform).length)
 const platformOptions = computed(() => [
   { value: '', label: t('admin.models.allPlatforms') },
   { value: 'openai', label: 'openai' },
