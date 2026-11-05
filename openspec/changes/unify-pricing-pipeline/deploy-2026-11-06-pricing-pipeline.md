@@ -86,3 +86,25 @@ What shipped:
 Verification: `/admin/settings/price-costs` returns the 8 rows; the groups list carries
 `example_*`; frontend `index.html` md5 matches the local build; `pricing_pipeline` still
 `shadow`.
+
+## 0.1.397 — standalone pricing page (unit price has one editing surface)
+
+- `GET /admin/sell-price-policies/overview` (new): every table with rows per MTok, bound
+  groups + their discounts, `priced_row_count` (0 = model-list container), and one example
+  (sell → effective). Priced+bound tables sort first.
+- New page `/admin/pricing` with tabs 售价表 / 按模型价目 (matrix shows every offer per model
+  and flags diverged models). Legacy `/admin/sell-price-policies` and `/admin/channels`
+  redirect there; sidebar has a Pricing entry.
+- The pricing editor gained a policy mode (edit a table without a group); the group modal
+  keeps editing but links to the pricing page.
+
+Live overview right after deploy (this is the first time the divergence is visible):
+
+```
+#4  GPT Pro        11 models / 1 priced   bound: GPT Pro ×0.18
+#8  国模无 s        9 models / 8 priced   bound: 国模abliterated ×1.5
+#5  Grok Heavy     12 models / 0 priced   bound: Grok Heavy ×0.16   ← 只有模型清单，没有价
+#7  Pro 外接       10 models / 1 priced   unbound                  ← 绑定分组已被删除
+#3  企业高可用      10 models / 1 priced   unbound                  ← 绑定分组已被删除
+#6  Claude Max20    9 models / 0 priced   unbound                  ← 绑定分组已被删除
+```
