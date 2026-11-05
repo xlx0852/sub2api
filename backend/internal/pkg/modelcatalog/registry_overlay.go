@@ -169,11 +169,36 @@ func buildOverlay(current *Catalog, snap *RegistrySnapshot) (*Catalog, error) {
 		next.Platforms[a.Platform] = cfg
 	}
 
-	// 3) 平台默认价 → fallback_pricing
+	// 3) 平台默认价 → fallback_pricing，并把 alias_of 语义物化：
+	//    catalog 里 `alias_of` 表示"某名字按目标模型的价收费"，注册表把它存成
+	//    model_aliases(kind=alias)。这里沿别名链把目标价复制到别名 key 上，
+	//    否则 db 模式下这些名字会失去兜底价（fail-closed）。
 	if len(snap.DefaultPrices) > 0 {
 		prices := make(map[string]PriceEntry, len(snap.DefaultPrices))
 		for model, entry := range snap.DefaultPrices {
 			prices[model] = entry
+		}
+		aliasTo := make(map[string]string, len(snap.Aliases))
+		for _, a := range snap.Aliases {
+			if a.Kind == "alias" && a.Alias != a.ModelID {
+				aliasTo[a.Alias] = a.ModelID
+			}
+		}
+		for alias := range aliasTo {
+			if _, ok := prices[alias]; ok {
+				continue
+			}
+			target := alias
+			for depth := 0; depth < 8; depth++ {
+				next, ok := aliasTo[target]
+				if !ok {
+					break
+				}
+				target = next
+			}
+			if entry, ok := prices[target]; ok {
+				prices[alias] = entry
+			}
 		}
 		next.FallbackPricing = prices
 	}

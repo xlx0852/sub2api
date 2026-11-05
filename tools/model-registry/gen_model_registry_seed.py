@@ -141,6 +141,19 @@ def main() -> None:
         for rid in cfg.get("retired_ids") or []:
             emit_alias(rid, platform, rid, "retired")
 
+    w("\n-- fallback_pricing 里的 alias_of → model_aliases(kind=alias)，价格按目标模型解析\n")
+    for alias_key in sorted(fallback):
+        entry = fallback[alias_key] or {}
+        target = (entry.get("alias_of") or "").strip()
+        if not target:
+            continue
+        platform = (models.get(target) or {}).get("platform", "")
+        w(
+            "INSERT INTO model_aliases (alias, platform, model_id, kind) VALUES ("
+            f"{sql_str(alias_key)}, {sql_str(platform)}, {sql_str(target)}, 'alias') "
+            "ON CONFLICT (alias, platform) DO NOTHING;\n"
+        )
+
     w("\n-- 平台默认价（group_id IS NULL），来自 catalog.fallback_pricing\n")
     for mid in sorted(fallback):
         e = fallback[mid] or {}

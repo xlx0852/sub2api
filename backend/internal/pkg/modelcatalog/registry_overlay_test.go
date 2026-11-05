@@ -85,3 +85,30 @@ func TestDecodeMediaFlags(t *testing.T) {
 	require.Empty(t, DecodeMediaFlags(nil))
 	require.Empty(t, DecodeMediaFlags([]byte(`not-json`)), "坏数据不应 panic，返回空能力集")
 }
+
+// alias_of 语义：db 模式下别名必须继承目标模型的兜底价（含多级链）。
+func TestApplyRegistryMaterialisesAliasPrices(t *testing.T) {
+	t.Cleanup(func() { _ = Load(nil) })
+	snap := &RegistrySnapshot{
+		Models: []RegistryModel{
+			{ID: "base-model", Platform: "openai", Enabled: true},
+			{ID: "mid-alias", Platform: "", Enabled: true},
+			{ID: "top-alias", Platform: "", Enabled: true},
+		},
+		Aliases: []RegistryAlias{
+			{Alias: "mid-alias", Platform: "", ModelID: "base-model", Kind: "alias"},
+			{Alias: "top-alias", Platform: "", ModelID: "mid-alias", Kind: "alias"},
+		},
+		DefaultPrices: map[string]PriceEntry{
+			"base-model": {Currency: "USD", InputCostPerToken: 1e-6, OutputCostPerToken: 2e-6},
+		},
+	}
+	_, err := ApplyRegistry(snap)
+	require.NoError(t, err)
+
+	prices := Get().FallbackPricing
+	require.Equal(t, 1e-6, prices["base-model"].InputCostPerToken)
+	require.Equal(t, 1e-6, prices["mid-alias"].InputCostPerToken, "一级别名继承目标价")
+	require.Equal(t, 1e-6, prices["top-alias"].InputCostPerToken, "多级别名也要解析到最终目标")
+	require.Equal(t, 2e-6, prices["top-alias"].OutputCostPerToken)
+}
