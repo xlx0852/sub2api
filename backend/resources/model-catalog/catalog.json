@@ -1,6 +1,6 @@
 {
-  "version": 16,
-  "updated_at": "2026-09-29T19:50:11Z",
+  "version": 17,
+  "updated_at": "2026-10-30T13:34:56Z",
   "platforms": {
     "openai": {
       "default_test_model": "gpt-5.5",
@@ -574,7 +574,24 @@
     "kimi": {
       "default_test_model": "k3",
       "default_chat_model": "k3",
+      "default_mapping": {
+        "kimi-k3.1-pro": "kimi-k3.1-pro"
+      },
       "models": [
+        {
+          "id": "kimi-k3.1-pro",
+          "display_name": "Kimi K3.1 Pro",
+          "object": "model",
+          "owned_by": "moonshot",
+          "family": "kimi-k3",
+          "is_reasoning": true,
+          "context_window": 1048576,
+          "max_context_window": 1048576,
+          "media": {
+            "image": true,
+            "video": true
+          }
+        },
         {
           "id": "k3",
           "display_name": "Kimi K3 (1M)",
@@ -625,6 +642,7 @@
         }
       ],
       "aliases": {
+        "kimi3.1": "kimi-k3.1-pro",
         "kimi-k3": "k3",
         "kimi-k3-256k": "k3-256k",
         "kimi-k2.7-code": "kimi-for-coding",
@@ -871,6 +889,17 @@
     "glm-4.7-flash": {
       "input_cost_per_token": 0,
       "output_cost_per_token": 0
+    },
+    "kimi-k3.1-pro": {
+      "currency": "CNY",
+      "input_cost_per_token": 13e-06,
+      "input_cost_per_token_priority": 26e-06,
+      "output_cost_per_token": 68e-06,
+      "output_cost_per_token_priority": 136e-06,
+      "cache_creation_input_token_cost": 13e-06,
+      "cache_creation_input_token_cost_priority": 26e-06,
+      "cache_read_input_token_cost": 1.3e-06,
+      "cache_read_input_token_cost_priority": 1.3e-06
     },
     "kimi-k2.6": {
       "input_cost_per_token": 9.5e-07,
@@ -1333,6 +1362,11 @@
       }
     ],
     "kimi": [
+      {
+        "label": "Kimi K3.1 Pro",
+        "from": "kimi-k3.1-pro",
+        "to": "kimi-k3.1-pro"
+      },
       {
         "label": "Kimi K3 (1M)",
         "from": "k3",

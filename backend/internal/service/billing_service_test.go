@@ -77,6 +77,65 @@ func TestCalculateCost_WithCacheTokens(t *testing.T) {
 	require.InDelta(t, expectedTotal, cost.TotalCost, 1e-10)
 }
 
+func TestCalculateCost_KimiK31ProStandardAndHighspeed(t *testing.T) {
+	svc := newTestBillingService()
+	tokens := UsageTokens{
+		InputTokens:         1_000_000,
+		OutputTokens:        1_000_000,
+		CacheCreationTokens: 1_000_000,
+		CacheReadTokens:     1_000_000,
+	}
+
+	standard, err := svc.CalculateCostWithServiceTier("kimi-k3.1-pro", tokens, 1, "")
+	require.NoError(t, err)
+	require.Equal(t, domain.PricingCurrencyCNY, standard.PricingCurrency)
+	require.InDelta(t, 13.0, standard.InputCost, 1e-9)
+	require.InDelta(t, 68.0, standard.OutputCost, 1e-9)
+	require.InDelta(t, 13.0, standard.CacheCreationCost, 1e-9)
+	require.InDelta(t, 1.3, standard.CacheReadCost, 1e-9)
+	require.InDelta(t, 95.3, standard.TotalCost, 1e-9)
+
+	highspeed, err := svc.CalculateCostWithServiceTier("kimi-k3.1-pro", tokens, 1, "priority")
+	require.NoError(t, err)
+	require.Equal(t, domain.PricingCurrencyCNY, highspeed.PricingCurrency)
+	require.InDelta(t, 26.0, highspeed.InputCost, 1e-9)
+	require.InDelta(t, 136.0, highspeed.OutputCost, 1e-9)
+	require.InDelta(t, 26.0, highspeed.CacheCreationCost, 1e-9)
+	require.InDelta(t, 1.3, highspeed.CacheReadCost, 1e-9)
+	require.InDelta(t, 189.3, highspeed.TotalCost, 1e-9)
+}
+
+func TestGetModelPricing_KimiK31ProUsesExactEntry(t *testing.T) {
+	svc := newTestBillingService()
+
+	for _, model := range []string{
+		"kimi-k3.1-pro",
+		"KIMI-K3.1-PRO",
+		"kimi3.1",
+		"moonshot/kimi-k3.1-pro",
+	} {
+		pricing, err := svc.GetModelPricing(model)
+		require.NoError(t, err, "模型 %s", model)
+		require.Equal(t, domain.PricingCurrencyCNY, pricing.Currency, "模型 %s", model)
+		require.InDelta(t, 13e-6, pricing.InputPricePerToken, 1e-12, "模型 %s", model)
+		require.InDelta(t, 68e-6, pricing.OutputPricePerToken, 1e-12, "模型 %s", model)
+		require.InDelta(t, 13e-6, pricing.CacheCreationPricePerToken, 1e-12, "模型 %s", model)
+		require.InDelta(t, 1.3e-6, pricing.CacheReadPricePerToken, 1e-12, "模型 %s", model)
+		require.InDelta(t, 26e-6, pricing.InputPricePerTokenPriority, 1e-12, "模型 %s", model)
+		require.InDelta(t, 136e-6, pricing.OutputPricePerTokenPriority, 1e-12, "模型 %s", model)
+		require.InDelta(t, 26e-6, pricing.CacheCreationPricePerTokenPriority, 1e-12, "模型 %s", model)
+		require.InDelta(t, 1.3e-6, pricing.CacheReadPricePerTokenPriority, 1e-12, "模型 %s", model)
+	}
+
+	for _, legacyModel := range []string{"k3", "kimi-k3"} {
+		pricing, err := svc.GetModelPricing(legacyModel)
+		require.NoError(t, err, "模型 %s", legacyModel)
+		require.InDelta(t, 3e-6, pricing.InputPricePerToken, 1e-12, "模型 %s", legacyModel)
+		require.InDelta(t, 15e-6, pricing.OutputPricePerToken, 1e-12, "模型 %s", legacyModel)
+		require.InDelta(t, 0.3e-6, pricing.CacheReadPricePerToken, 1e-12, "模型 %s", legacyModel)
+	}
+}
+
 func TestCalculateCost_RateMultiplier(t *testing.T) {
 	svc := newTestBillingService()
 

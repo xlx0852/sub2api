@@ -135,16 +135,56 @@ func TestOpenAICatalogIncludesGPT61Sol(t *testing.T) {
 	}
 }
 
-func TestKimiCatalogUsesOfficialCodingModelIDs(t *testing.T) {
+func TestKimiCatalogIncludesK31ProWithoutReplacingCodingIDs(t *testing.T) {
 	models := KimiModels()
 	got := make([]string, 0, len(models))
 	for _, model := range models {
 		got = append(got, model.ID)
 	}
-	want := []string{"k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"}
+	want := []string{"kimi-k3.1-pro", "k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("KimiModels() = %v, want %v", got, want)
 	}
+
+	var k31 *ModelEntry
+	for i := range models {
+		if models[i].ID == "kimi-k3.1-pro" {
+			k31 = &models[i]
+			break
+		}
+	}
+	if k31 == nil {
+		t.Fatal("kimi-k3.1-pro missing from KimiModels()")
+	}
+	if k31.DisplayName != "Kimi K3.1 Pro" || k31.Family != "kimi-k3" || !k31.IsReasoning {
+		t.Fatalf("kimi-k3.1-pro metadata = %+v", *k31)
+	}
+	if k31.ContextWindow != 1048576 || k31.MaxContextWindow != 1048576 {
+		t.Fatalf("kimi-k3.1-pro context = %d/%d", k31.ContextWindow, k31.MaxContextWindow)
+	}
+	if !k31.Media["image"] || !k31.Media["video"] {
+		t.Fatalf("kimi-k3.1-pro media = %+v, want image and video", k31.Media)
+	}
+
+	catalog := Get()
+	kimi := catalog.Platforms["kimi"]
+	if kimi.DefaultMapping["kimi-k3.1-pro"] != "kimi-k3.1-pro" {
+		t.Fatalf("Kimi default mapping = %+v", kimi.DefaultMapping)
+	}
+	if kimi.Aliases["kimi3.1"] != "kimi-k3.1-pro" {
+		t.Fatalf("Kimi aliases = %+v", kimi.Aliases)
+	}
+	var presetFound bool
+	for _, preset := range catalog.UIPresets["kimi"] {
+		if preset.Label == "Kimi K3.1 Pro" && preset.From == "kimi-k3.1-pro" && preset.To == "kimi-k3.1-pro" {
+			presetFound = true
+			break
+		}
+	}
+	if !presetFound {
+		t.Fatalf("Kimi UI presets missing Kimi K3.1 Pro: %+v", catalog.UIPresets["kimi"])
+	}
+
 	if KimiDefaultTestModel() != "k3" {
 		t.Fatalf("KimiDefaultTestModel() = %q, want k3", KimiDefaultTestModel())
 	}

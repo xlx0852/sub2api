@@ -341,8 +341,13 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 		return s.fallbackPrice("glm-4-32b-0414-128k")
 	}
 
-	// 月之暗面 Kimi（kimi-k3 / k3 / kimi-k2.6 / kimi-for-coding / kimi-k2.5 / kimi-k2-thinking / kimi-k2）
+	// 月之暗面 Kimi（kimi-k3.1-pro / kimi-k3 / k3 / kimi-k2.6 / kimi-for-coding / kimi-k2.5 / kimi-k2-thinking / kimi-k2）
 	// K2-0905 / K2-0711 官方未保留定价，不进入 fallback。
+	// K3.1 Pro 必须先精确匹配，避免被下方宽泛的 kimi-k3 规则命中。
+	switch modelLower {
+	case "kimi3.1", "kimi-k3.1-pro", "moonshot/kimi-k3.1-pro":
+		return s.fallbackPrice("kimi-k3.1-pro")
+	}
 	// Kimi Coding 上游短名 "k3" / "kimi-k3"：优先专用价，否则回落 coding/k2.6 价。
 	if modelLower == "k3" || strings.Contains(modelLower, "kimi-k3") || strings.Contains(modelLower, "kimi/k3") {
 		if p := s.fallbackPrice("k3"); p != nil {

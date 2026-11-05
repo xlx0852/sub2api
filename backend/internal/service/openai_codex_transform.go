@@ -1066,6 +1066,8 @@ func normalizeKimiUpstreamModel(model string) string {
 	model = strings.TrimSpace(model)
 	normalized := strings.ToLower(model)
 	switch normalized {
+	case "kimi3.1", "kimi-k3.1-pro", "moonshot/kimi-k3.1-pro":
+		normalized = "kimi-k3.1-pro"
 	case "kimi-k3":
 		normalized = "k3"
 	case "kimi-k3-256k":
