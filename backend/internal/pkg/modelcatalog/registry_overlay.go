@@ -160,8 +160,9 @@ func buildOverlay(current *Catalog, snap *RegistrySnapshot) (*Catalog, error) {
 		case "id_reverse":
 			cfg.IDReverseOverrides[a.Alias] = a.ModelID
 		case "retired":
-			// retired id 已在 models.retired 处理；这里只补一个自映射，便于解析
-			cfg.Aliases[a.Alias] = a.ModelID
+			// retired id 由 models.retired 落进 RetiredIDs；不再伪装成别名，
+			// 否则会和"文件里没有这个别名"的比对结果产生噪音。
+			continue
 		default:
 			cfg.Aliases[a.Alias] = a.ModelID
 		}

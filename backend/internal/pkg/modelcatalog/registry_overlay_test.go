@@ -46,6 +46,7 @@ func TestApplyRegistryOverlaysModelsAliasesAndPrices(t *testing.T) {
 	require.Equal(t, "custom-model-a", openai.DefaultTestModel)
 	require.Equal(t, []string{"custom-retired"}, openai.RetiredIDs)
 	require.Equal(t, "custom-model-a", openai.Aliases["alias-a"])
+	require.NotContains(t, openai.Aliases, "custom-retired", "retired id 不应伪装成别名")
 	require.Equal(t, "claude-sonnet-4-5-20250929", after.Platforms["anthropic"].IDOverrides["short-id"])
 	require.Equal(t, 2.0e-6, after.FallbackPricing["custom-model-a"].OutputCostPerToken)
 	require.Contains(t, after.FallbackPricing, "price-only-id", "价格专用 id 也要保留默认价")
