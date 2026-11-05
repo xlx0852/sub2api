@@ -1472,6 +1472,8 @@ export interface PricingPipelineSettings {
   mode: 'legacy' | 'shadow' | 'unified'
   configured: string
   modes: string[]
+  pricing_source: 'legacy' | 'dual' | 'model_prices'
+  pricing_sources: string[]
 }
 
 export async function getPricingPipeline(): Promise<PricingPipelineSettings> {
@@ -1482,11 +1484,11 @@ export async function getPricingPipeline(): Promise<PricingPipelineSettings> {
 }
 
 export async function updatePricingPipeline(
-  mode: PricingPipelineSettings['mode'],
+  payload: Partial<Pick<PricingPipelineSettings, 'mode' | 'pricing_source'>>,
 ): Promise<PricingPipelineSettings> {
   const { data } = await apiClient.put<PricingPipelineSettings>(
     "/admin/settings/pricing-pipeline",
-    { mode },
+    payload,
   )
   return data
 }

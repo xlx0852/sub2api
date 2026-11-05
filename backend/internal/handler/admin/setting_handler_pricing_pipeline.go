@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// PricingPipelineSettings 是定价管线开关的后台视图。
+// PricingPipelineSettings 是定价开关的后台视图（管线模式 + 价格来源）。
 type PricingPipelineSettings struct {
 	// Mode 是当前生效的模式：legacy / shadow / unified。
 	Mode string `json:"mode"`
@@ -18,6 +18,10 @@ type PricingPipelineSettings struct {
 	Configured string `json:"configured"`
 	// Modes 列出可选值，供前端渲染选择器。
 	Modes []string `json:"modes"`
+	// PricingSource 是价格来源：legacy（现有链路）/ dual（双算打点）/ model_prices（注册表）。
+	PricingSource string `json:"pricing_source"`
+	// PricingSources 列出可选值。
+	PricingSources []string `json:"pricing_sources"`
 }
 
 // GetPricingPipelineSettings 读取定价管线开关。
@@ -34,16 +38,25 @@ func (h *SettingHandler) GetPricingPipelineSettings(c *gin.Context) {
 		// 未配置时回落到环境变量默认值（legacy）。
 		mode = service.NormalizePricingPipelineMode("")
 	}
+	pricingSource, err := h.settingService.GetRawValue(ctx, service.SettingKeyModelPricingSource)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 	response.Success(c, PricingPipelineSettings{
-		Mode:       mode,
-		Configured: strings.TrimSpace(raw),
-		Modes:      []string{service.PricingPipelineLegacy, service.PricingPipelineShadow, service.PricingPipelineUnified},
+		Mode:           mode,
+		Configured:     strings.TrimSpace(raw),
+		Modes:          []string{service.PricingPipelineLegacy, service.PricingPipelineShadow, service.PricingPipelineUnified},
+		PricingSource:  service.NormalizeModelPricingSourceForAPI(pricingSource),
+		PricingSources: []string{service.PricingModelSourceLegacy, service.PricingModelSourceDual, service.PricingModelSourceRegistry},
 	})
 }
 
 // updatePricingPipelineSettingsRequest 更新定价管线开关请求。
 type updatePricingPipelineSettingsRequest struct {
-	Mode string `json:"mode" binding:"required,oneof=legacy shadow unified"`
+	// Mode 与 PricingSource 至少给一个；分别独立更新，互不影响。
+	Mode          string `json:"mode" binding:"omitempty,oneof=legacy shadow unified"`
+	PricingSource string `json:"pricing_source" binding:"omitempty,oneof=legacy dual model_prices"`
 }
 
 // UpdatePricingPipelineSettings 切换定价管线：
@@ -56,14 +69,25 @@ func (h *SettingHandler) UpdatePricingPipelineSettings(c *gin.Context) {
 			"mode must be one of legacy, shadow, unified"))
 		return
 	}
-	mode := service.NormalizePricingPipelineMode(req.Mode)
-	if err := h.settingService.SetRawValue(c.Request.Context(), service.SettingKeyPricingPipeline, mode); err != nil {
-		response.ErrorFrom(c, err)
+	if strings.TrimSpace(req.Mode) == "" && strings.TrimSpace(req.PricingSource) == "" {
+		response.ErrorFrom(c, infraerrors.BadRequest("EMPTY_SETTINGS",
+			"provide mode and/or pricing_source"))
 		return
 	}
-	response.Success(c, PricingPipelineSettings{
-		Mode:       mode,
-		Configured: mode,
-		Modes:      []string{service.PricingPipelineLegacy, service.PricingPipelineShadow, service.PricingPipelineUnified},
-	})
+	ctx := c.Request.Context()
+	if strings.TrimSpace(req.Mode) != "" {
+		mode := service.NormalizePricingPipelineMode(req.Mode)
+		if err := h.settingService.SetRawValue(ctx, service.SettingKeyPricingPipeline, mode); err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+	}
+	if strings.TrimSpace(req.PricingSource) != "" {
+		src := service.NormalizeModelPricingSourceForAPI(req.PricingSource)
+		if err := h.settingService.SetRawValue(ctx, service.SettingKeyModelPricingSource, src); err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+	}
+	h.GetPricingPipelineSettings(c)
 }

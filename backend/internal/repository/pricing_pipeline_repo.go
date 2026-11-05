@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -205,4 +207,45 @@ func (r *channelRepository) ListGroupRefsByPolicy(ctx context.Context) (map[int6
 		return nil, fmt.Errorf("iterate group policy bindings: %w", err)
 	}
 	return out, nil
+}
+
+// GetModelPrice 返回某模型在某分组下的价格行：先精确分组行，再平台默认行（group_id IS NULL）。
+// 都不存在时返回 (nil, nil) —— 由调用方 fail-closed。
+func (r *channelRepository) GetModelPrice(ctx context.Context, modelID string, groupID *int64) (*domain.ModelPriceRow, error) {
+	if strings.TrimSpace(modelID) == "" {
+		return nil, nil
+	}
+	var groupArg any
+	if groupID != nil && *groupID > 0 {
+		groupArg = *groupID
+	}
+	row := r.db.QueryRowContext(ctx, `
+		SELECT id, model_id, group_id, billing_mode, currency, fx_mode, cost_id, fx_rate, markup_pct,
+		       input_price, output_price, cache_write_price, cache_read_price,
+		       input_price_priority, output_price_priority,
+		       image_output_price, per_request_price, context_tiers, image_tiers, enabled, version
+		FROM model_prices
+		WHERE model_id = $1 AND enabled
+		  AND ($2::bigint IS NULL AND group_id IS NULL OR group_id = $2::bigint)
+		ORDER BY group_id NULLS LAST
+		LIMIT 1`, strings.TrimSpace(modelID), groupArg)
+
+	var out domain.ModelPriceRow
+	var group sql.NullInt64
+	if err := row.Scan(&out.ID, &out.ModelID, &group, &out.BillingMode, &out.Currency, &out.FxMode,
+		&out.CostID, &out.FxRate, &out.MarkupPct,
+		&out.InputPrice, &out.OutputPrice, &out.CacheWritePrice, &out.CacheReadPrice,
+		&out.InputPricePriority, &out.OutputPricePriority,
+		&out.ImageOutputPrice, &out.PerRequestPrice, &out.ContextTiers, &out.ImageTiers,
+		&out.Enabled, &out.Version); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get model price %s: %w", modelID, err)
+	}
+	if group.Valid {
+		id := group.Int64
+		out.GroupID = &id
+	}
+	return &out, nil
 }

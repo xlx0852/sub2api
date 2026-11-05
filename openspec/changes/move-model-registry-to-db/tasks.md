@@ -19,9 +19,14 @@
 
 - [ ] 3.1 `modelcatalog.Load` accepts a database source and builds the same `Catalog` struct; `MODEL_REGISTRY_SOURCE=file|dual|db` via settings, hot switch with short TTL.
 - [ ] 3.2 `dual` mode compares model sets, aliases, default chat/test models and retired ids against the file, logging one line per difference.
-- [ ] 3.3 `ModelPricingResolver` gains a `model_prices` source with order group row → default row → fail closed; `MODEL_PRICING_SOURCE=legacy|dual|model_prices`.
-- [ ] 3.4 `dual` mode logs `pricing_source.mismatch` with model, group, both prices; charging stays legacy.
+- [x] 3.3 `ModelPricingResolver` gains a `model_prices` source with order group row → default row → fail closed; `MODEL_PRICING_SOURCE=legacy|dual|model_prices`.
+- [x] 3.4 `dual` mode logs `pricing_source.mismatch` with model, group, both prices; charging stays legacy.
 - [ ] 3.5 Registry alias resolution runs before pricing (canonical id used for both price lookup and upstream mapping).
+
+- [x] 3.6 Settings switch `model_pricing_source` (legacy|dual|model_prices) exposed through the existing `/admin/settings/pricing-pipeline` endpoint and the settings UI, hot with a 10s cache.
+- [x] 3.7 `model_prices` rows build `ModelPricing` including priority prices, image price and `fx_auto` derivation; covered by unit tests (priority survives, derivation overrides stored values, missing cost fails closed).
+- [x] 3.8 Registry hit overrides the legacy pricing; a miss under `model_prices` fails closed (BasePricing nil).
+- [ ] 3.9 Registry source for `modelcatalog` (`MODEL_REGISTRY_SOURCE`) — deferred to its own slice.
 
 ## 4. Slice 3 — guards and admin surface
 

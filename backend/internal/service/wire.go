@@ -642,6 +642,21 @@ func ProvideBillingService(cfg *config.Config, pricingService *PricingService, s
 	return svc
 }
 
+// ProvideChannelService 构造渠道服务，并把设置读取器接上（定价来源开关用）。
+func ProvideChannelService(
+	repo ChannelRepository,
+	groupRepo GroupRepository,
+	authCacheInvalidator APIKeyAuthCacheInvalidator,
+	pricingService *PricingService,
+	settingService *SettingService,
+) *ChannelService {
+	svc := NewChannelService(repo, groupRepo, authCacheInvalidator, pricingService)
+	if settingService != nil {
+		svc.SetSettingsReader(settingService)
+	}
+	return svc
+}
+
 func ProvideSettingService(settingRepo SettingRepository, groupRepo GroupRepository, proxyRepo ProxyRepository, cfg *config.Config) *SettingService {
 	svc := NewSettingService(settingRepo, cfg)
 	svc.SetDefaultSubscriptionGroupReader(groupRepo)
@@ -824,7 +839,7 @@ var ProviderSet = wire.NewSet(
 	ProvideScheduledTestService,
 	ProvideScheduledTestRunnerService,
 	NewGroupCapacityService,
-	NewChannelService,
+	ProvideChannelService,
 	NewModelPricingResolver,
 	NewContentModerationServiceWithAPIKeyRepository,
 	NewRetrospectiveRiskService,

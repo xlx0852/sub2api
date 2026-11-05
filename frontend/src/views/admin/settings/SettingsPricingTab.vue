@@ -32,6 +32,34 @@
       <p class="mt-2 rounded bg-amber-50 px-2 py-1.5 text-[11px] leading-5 text-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
         {{ t('admin.settings.pricing.pipelineWarning') }}
       </p>
+
+      <div class="mt-4 border-t border-gray-100 pt-3 dark:border-dark-700">
+        <h4 class="text-xs font-semibold text-gray-900 dark:text-white">
+          {{ t('admin.settings.pricing.priceSourceTitle') }}
+        </h4>
+        <p class="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
+          {{ t('admin.settings.pricing.priceSourceHint') }}
+        </p>
+        <div class="mt-2 flex flex-wrap items-center gap-3">
+          <Select
+            :modelValue="priceSource"
+            :options="priceSourceOptions"
+            class="w-64"
+            @update:modelValue="onSelectPriceSource"
+          />
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="priceSourceSaving || priceSource === priceSourceSaved"
+            @click="savePriceSource"
+          >
+            {{ priceSourceSaving ? t('common.saving') : t('common.save') }}
+          </button>
+          <span class="text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.settings.pricing.priceSourceCurrent', { source: priceSourceSaved }) }}
+          </span>
+        </div>
+      </div>
     </section>
 
     <!-- 成本基 -->
@@ -129,6 +157,32 @@ const pipelineOptions = [
   { value: 'unified', label: 'unified' }
 ]
 
+const priceSource = ref<'legacy' | 'dual' | 'model_prices'>('legacy')
+const priceSourceSaved = ref<'legacy' | 'dual' | 'model_prices'>('legacy')
+const priceSourceSaving = ref(false)
+const priceSourceOptions = [
+  { value: 'legacy', label: 'legacy（现有链路）' },
+  { value: 'dual', label: 'dual（双算打点，按 legacy 扣费）' },
+  { value: 'model_prices', label: 'model_prices（注册表价格）' }
+]
+
+function onSelectPriceSource(value: unknown) {
+  priceSource.value = value as typeof priceSource.value
+}
+
+async function savePriceSource() {
+  priceSourceSaving.value = true
+  try {
+    const data = await adminAPI.settings.updatePricingPipeline({ pricing_source: priceSource.value })
+    priceSourceSaved.value = data.pricing_source
+    appStore.showSuccess(t('admin.settings.pricing.priceSourceSaved', { source: data.pricing_source }))
+  } catch (error) {
+    appStore.showError(apiErrorMessage(error))
+  } finally {
+    priceSourceSaving.value = false
+  }
+}
+
 const costs = ref<PriceCost[]>([])
 const costLoading = ref(false)
 const costSaving = ref(false)
@@ -155,6 +209,8 @@ async function loadPipeline() {
     const data = await adminAPI.settings.getPricingPipeline()
     pipelineMode.value = data.mode
     pipelineSaved.value = data.mode
+    priceSource.value = data.pricing_source || 'legacy'
+    priceSourceSaved.value = data.pricing_source || 'legacy'
   } catch (error) {
     appStore.showError(apiErrorMessage(error))
   }
@@ -163,7 +219,7 @@ async function loadPipeline() {
 async function savePipeline() {
   pipelineSaving.value = true
   try {
-    const data = await adminAPI.settings.updatePricingPipeline(pipelineMode.value)
+    const data = await adminAPI.settings.updatePricingPipeline({ mode: pipelineMode.value })
     pipelineSaved.value = data.mode
     appStore.showSuccess(t('admin.settings.pricing.pipelineSaved', { mode: data.mode }))
   } catch (error) {

@@ -131,6 +131,10 @@ type ChannelService struct {
 	modifiersAtTime time.Time
 	costsMu         sync.RWMutex
 	costs           map[int64]*domain.PriceCost
+
+	// 定价来源开关（legacy / dual / model_prices）
+	settingsReader     billingSettingsReader
+	pricingSourceCache modelPricingSourceCache
 }
 
 // NewChannelService 创建渠道服务实例。

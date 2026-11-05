@@ -3,6 +3,9 @@ package service
 import (
 	"context"
 	"log/slog"
+	"strconv"
+	"strings"
+	"sync"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 )
@@ -12,6 +15,8 @@ const (
 	PricingSourceChannel  = "channel"
 	PricingSourceLiteLLM  = "litellm"
 	PricingSourceFallback = "fallback"
+	// PricingSourceRegistry 表示价格来自 model_prices（模型注册表）。
+	PricingSourceRegistry = "registry"
 )
 
 // ResolvedPricing 统一定价解析结果
@@ -112,7 +117,89 @@ func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) 
 		r.applyChannelOverrides(ctx, *input.GroupID, input.Model, resolved)
 	}
 
+	// 3. 模型注册表价格（model_prices）：命中即覆盖；dual 模式只比对打点
+	r.applyRegistryPricing(ctx, input, resolved)
+
 	return resolved
+}
+
+// applyRegistryPricing 按 MODEL_PRICING_SOURCE 决定是否使用 model_prices。
+//
+//   - legacy：完全不动（默认，行为与今天一致）
+//   - dual：算出注册表价格并与现有结果比对，只记 pricing_source.mismatch 日志
+//   - model_prices：注册表价格直接生效
+func (r *ModelPricingResolver) applyRegistryPricing(ctx context.Context, input PricingInput, resolved *ResolvedPricing) {
+	if r == nil || r.channelService == nil || resolved == nil || input.GroupID == nil {
+		return
+	}
+	source := r.channelService.modelPricingSource(ctx)
+	if source == PricingModelSourceLegacy {
+		return
+	}
+
+	row := r.channelService.GetModelPrice(ctx, input.Model, input.GroupID)
+	if row == nil {
+		if source == PricingModelSourceRegistry {
+			// 注册表里没有价：保持 fail-closed 语义，由计费层报 ErrModelPricingUnavailable。
+			resolved.BasePricing = nil
+			resolved.Source = PricingSourceRegistry
+		}
+		return
+	}
+	registryPricing, err := r.channelService.modelPriceRowToPricing(ctx, row)
+	if err != nil || registryPricing == nil {
+		return
+	}
+
+	if source == PricingModelSourceDual {
+		if priceTuplesDiffer(resolved.BasePricing, registryPricing) {
+			r.logRegistryMismatch(input, resolved, registryPricing, row)
+		}
+		return
+	}
+
+	resolved.BasePricing = registryPricing
+	resolved.Source = PricingSourceRegistry
+	resolved.Currency = domain.NormalizePricingCurrency(string(registryPricing.Currency))
+	if row.BillingMode != "" {
+		resolved.Mode = BillingMode(row.BillingMode)
+	}
+}
+
+var registryMismatchSeen sync.Map
+
+func (r *ModelPricingResolver) logRegistryMismatch(input PricingInput, legacy *ResolvedPricing, registry *ModelPricing, row *domain.ModelPriceRow) {
+	key := strings.ToLower(strings.TrimSpace(input.Model)) + "|" + strconv.FormatInt(groupIDValue(input.GroupID), 10)
+	if _, loaded := registryMismatchSeen.LoadOrStore(key, struct{}{}); loaded {
+		return
+	}
+	var legacyPricing *ModelPricing
+	if legacy != nil {
+		legacyPricing = legacy.BasePricing
+	}
+	slog.Warn("pricing_source.mismatch",
+		"model", input.Model,
+		"group_id", groupIDValue(input.GroupID),
+		"legacy_source", sourceOf(legacy),
+		"legacy_input", priceOrZero(legacyPricing),
+		"registry_input", registry.InputPricePerToken,
+		"registry_output", registry.OutputPricePerToken,
+		"registry_row_group", row.GroupID,
+	)
+}
+
+func sourceOf(resolved *ResolvedPricing) string {
+	if resolved == nil {
+		return ""
+	}
+	return resolved.Source
+}
+
+func priceOrZero(p *ModelPricing) float64 {
+	if p == nil {
+		return 0
+	}
+	return p.InputPricePerToken
 }
 
 // resolveBasePricing 从 LiteLLM 或 Fallback 获取基础定价

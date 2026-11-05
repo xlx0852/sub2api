@@ -124,7 +124,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	v39 := repository.NewTLSFingerprintProfileCache(redisClient)
 	tlsFingerprintProfileService := service.NewTLSFingerprintProfileService(v38, v39)
 	v40 := repository.NewChannelRepository(db)
-	channelService := service.NewChannelService(v40, v5, apiKeyAuthCacheInvalidator, pricingService)
+	channelService := service.ProvideChannelService(v40, v5, apiKeyAuthCacheInvalidator, pricingService, settingService)
 	modelPricingResolver := service.NewModelPricingResolver(channelService, billingService)
 	notificationEmailService := service.NewNotificationEmailService(v4, emailService)
 	balanceNotifyService := service.ProvideBalanceNotifyService(emailService, v4, v18, notificationEmailService)

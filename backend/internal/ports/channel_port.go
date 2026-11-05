@@ -42,6 +42,8 @@ type ChannelRepository interface {
 	// 统一定价管线（L1 成本基 / L3 修饰因子）
 	ListPriceModifiers(ctx context.Context) ([]domain.PriceModifier, error)
 	GetPriceCost(ctx context.Context, id int64) (*domain.PriceCost, error)
+	// GetModelPrice 返回模型在分组下的价格行（精确分组行优先，其次平台默认行）。
+	GetModelPrice(ctx context.Context, modelID string, groupID *int64) (*domain.ModelPriceRow, error)
 	ListPriceCosts(ctx context.Context) ([]domain.PriceCost, error)
 	UpsertPriceCost(ctx context.Context, cost *domain.PriceCost) (*domain.PriceCost, error)
 	DeletePriceCost(ctx context.Context, id int64) error

@@ -20,6 +20,7 @@ import (
 type mockChannelRepository struct {
 	listAllFn                         func(ctx context.Context) ([]Channel, error)
 	listGroupRefsFn                   func(ctx context.Context) (map[int64][]domain.GroupPolicyBinding, error)
+	getModelPriceFn                   func(ctx context.Context, modelID string, groupID *int64) (*domain.ModelPriceRow, error)
 	getGroupPlatformsFn               func(ctx context.Context, groupIDs []int64) (map[int64]string, error)
 	createFn                          func(ctx context.Context, channel *Channel) error
 	getByIDFn                         func(ctx context.Context, id int64) (*Channel, error)
@@ -210,6 +211,13 @@ func (m *mockChannelRepository) UpsertPriceCost(ctx context.Context, cost *domai
 
 func (m *mockChannelRepository) DeletePriceCost(ctx context.Context, id int64) error {
 	return nil
+}
+
+func (m *mockChannelRepository) GetModelPrice(ctx context.Context, modelID string, groupID *int64) (*domain.ModelPriceRow, error) {
+	if m.getModelPriceFn != nil {
+		return m.getModelPriceFn(ctx, modelID, groupID)
+	}
+	return nil, nil
 }
 
 func (m *mockChannelRepository) ListGroupRefsByPolicy(ctx context.Context) (map[int64][]domain.GroupPolicyBinding, error) {
