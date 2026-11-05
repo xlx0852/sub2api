@@ -5,6 +5,7 @@ export const SETTINGS_TABS = [
   { key: 'security', icon: 'shield' },
   { key: 'users', icon: 'user' },
   { key: 'gateway', icon: 'server' },
+  { key: 'pricing', icon: 'creditCard' },
   { key: 'payment', icon: 'creditCard' },
   { key: 'email', icon: 'mail' },
   { key: 'backup', icon: 'database' }

@@ -35,6 +35,27 @@ func TestComputeOpenAIUsageScorePrefersHottestWindow(t *testing.T) {
 	require.Equal(t, 88.0, ComputeOpenAIUsageScore(account, now))
 }
 
+func TestOpenAIAccountCredentialGenerationUsesExtraThenUpdatedAt(t *testing.T) {
+	updatedAt := time.Unix(1_790_000_000, 0)
+
+	fallback := &Account{ID: 42, UpdatedAt: updatedAt}
+	require.Equal(t, updatedAt.Unix(), OpenAIAccountCredentialGeneration(fallback))
+
+	override := &Account{
+		ID:        42,
+		UpdatedAt: updatedAt.Add(time.Hour),
+		Extra:     map[string]any{"credential_generation": "1790000123"},
+	}
+	require.Equal(t, int64(1_790_000_123), OpenAIAccountCredentialGeneration(override))
+
+	invalidOverride := &Account{
+		ID:        42,
+		UpdatedAt: updatedAt,
+		Extra:     map[string]any{"credential_generation": float64(0)},
+	}
+	require.Equal(t, updatedAt.Unix(), OpenAIAccountCredentialGeneration(invalidOverride))
+}
+
 func TestBumpOpenAIAccountStickyEpochInvalidatesMatch(t *testing.T) {
 	account := &Account{ID: 42, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
 	// Ensure deterministic baseline.

@@ -543,6 +543,12 @@ export interface GroupSellPriceSource {
   inactive_policy: boolean
   model_count: number
   sample_models?: string[]
+  /** 卡片示例：售价 → 实付（售价 × 分组倍率）*/
+  example_model?: string
+  example_sell_input?: number | null
+  example_effective_input?: number | null
+  example_currency?: string
+  example_fx_mode?: 'manual' | 'cny_native' | 'fx_auto' | string
 }
 
 export interface AdminGroup extends Group {

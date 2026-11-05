@@ -199,6 +199,18 @@ func (m *mockChannelRepository) GetPriceCost(ctx context.Context, id int64) (*do
 	return nil, nil
 }
 
+func (m *mockChannelRepository) ListPriceCosts(ctx context.Context) ([]domain.PriceCost, error) {
+	return nil, nil
+}
+
+func (m *mockChannelRepository) UpsertPriceCost(ctx context.Context, cost *domain.PriceCost) (*domain.PriceCost, error) {
+	return cost, nil
+}
+
+func (m *mockChannelRepository) DeletePriceCost(ctx context.Context, id int64) error {
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Mock: APIKeyAuthCacheInvalidator
 // ---------------------------------------------------------------------------

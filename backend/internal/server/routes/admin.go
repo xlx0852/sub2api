@@ -555,6 +555,10 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		// 定价管线开关（legacy / shadow / unified）
 		adminSettings.GET("/pricing-pipeline", h.Admin.Setting.GetPricingPipelineSettings)
 		adminSettings.PUT("/pricing-pipeline", h.Admin.Setting.UpdatePricingPipelineSettings)
+		// L1 成本基管理（fx_auto 派生与毛利口径，不直接扣费）
+		adminSettings.GET("/price-costs", h.Admin.Channel.ListPriceCosts)
+		adminSettings.POST("/price-costs", h.Admin.Channel.UpsertPriceCost)
+		adminSettings.DELETE("/price-costs/:id", h.Admin.Channel.DeletePriceCost)
 	}
 }
 

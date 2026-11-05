@@ -1433,6 +1433,11 @@ export async function resetWebSearchUsage(payload: {
 export const settingsAPI = {
   getSettings,
   updateSettings,
+  getPricingPipeline,
+  updatePricingPipeline,
+  listPriceCosts,
+  upsertPriceCost,
+  deletePriceCost,
   testSmtpConnection,
   sendTestEmail,
   getEmailTemplates,
@@ -1460,3 +1465,63 @@ export const settingsAPI = {
 };
 
 export default settingsAPI;
+
+// ==================== 定价管线（统一 5 层） ====================
+
+export interface PricingPipelineSettings {
+  mode: 'legacy' | 'shadow' | 'unified'
+  configured: string
+  modes: string[]
+}
+
+export async function getPricingPipeline(): Promise<PricingPipelineSettings> {
+  const { data } = await apiClient.get<PricingPipelineSettings>(
+    "/admin/settings/pricing-pipeline",
+  )
+  return data
+}
+
+export async function updatePricingPipeline(
+  mode: PricingPipelineSettings['mode'],
+): Promise<PricingPipelineSettings> {
+  const { data } = await apiClient.put<PricingPipelineSettings>(
+    "/admin/settings/pricing-pipeline",
+    { mode },
+  )
+  return data
+}
+
+/** L1 成本基（供应商美元/人民币报价，按每百万 token） */
+export interface PriceCost {
+  id: number
+  vendor: string
+  model_pattern: string
+  currency: 'USD' | 'CNY'
+  input_per_mtok: number
+  cached_per_mtok: number
+  output_per_mtok: number
+  cache_write_per_mtok: number
+  discount_pct: number
+  observed_at: string
+  source_url: string
+  notes: string
+}
+
+export async function listPriceCosts(): Promise<PriceCost[]> {
+  const { data } = await apiClient.get<{ items: PriceCost[] }>("/admin/settings/price-costs")
+  return data.items || []
+}
+
+export async function upsertPriceCost(
+  cost: Omit<PriceCost, 'id' | 'observed_at' | 'cache_write_per_mtok'> & {
+    id?: number
+    cache_write_per_mtok?: number
+  },
+): Promise<{ id: number }> {
+  const { data } = await apiClient.post<{ id: number }>("/admin/settings/price-costs", cost)
+  return data
+}
+
+export async function deletePriceCost(id: number): Promise<void> {
+  await apiClient.delete(`/admin/settings/price-costs/${id}`)
+}

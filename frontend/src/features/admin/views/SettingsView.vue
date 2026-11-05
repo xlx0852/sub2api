@@ -233,6 +233,11 @@
         <!-- /Tab: Features (extracted) -->
 
         <!-- Tab: Email -->
+        <!-- Tab: Pricing -->
+        <div v-show="activeTab === 'pricing'" class="space-y-6">
+          <SettingsPricingTab />
+        </div>
+
         <!-- Tab: Payment -->
         <div v-show="activeTab === 'payment'" class="space-y-6">
           <SettingsPaymentTab
@@ -418,6 +423,7 @@ import SettingsPaymentTab from "@/views/admin/settings/SettingsPaymentTab.vue";
 import SettingsUsersTab from "@/views/admin/settings/SettingsUsersTab.vue";
 import SettingsSecurityTab from "@/views/admin/settings/SettingsSecurityTab.vue";
 import SettingsGatewayTab from "@/views/admin/settings/SettingsGatewayTab.vue";
+import SettingsPricingTab from "@/views/admin/settings/SettingsPricingTab.vue";
 
 const SettingsGeneralTab = defineAsyncComponent(
   () => import("@/views/admin/settings/SettingsGeneralTab.vue"),

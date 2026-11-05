@@ -184,6 +184,12 @@ type GroupSellPriceSource struct {
 	InactivePolicy bool     `json:"inactive_policy"`
 	ModelCount     int      `json:"model_count"`
 	SampleModels   []string `json:"sample_models,omitempty"`
+	// 卡片价格示例（售价/币种/fx 模式），Effective 由 handler 乘分组倍率回填
+	ExampleModel          string   `json:"example_model,omitempty"`
+	ExampleSellInput      *float64 `json:"example_sell_input,omitempty"`
+	ExampleEffectiveInput *float64 `json:"example_effective_input,omitempty"`
+	ExampleCurrency       string   `json:"example_currency,omitempty"`
+	ExampleFxMode         string   `json:"example_fx_mode,omitempty"`
 }
 
 type Account struct {

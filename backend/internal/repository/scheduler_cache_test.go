@@ -1,11 +1,24 @@
 package repository
 
 import (
-	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"testing"
+	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/stretchr/testify/require"
 )
+
+func TestBuildSchedulerMetadataAccountKeepsUpdatedAt(t *testing.T) {
+	updatedAt := time.Date(2026, time.October, 30, 12, 6, 19, 247105000, time.UTC)
+	account := domain.Account{
+		ID:        42,
+		UpdatedAt: updatedAt,
+	}
+
+	got := buildSchedulerMetadataAccount(account)
+
+	require.Equal(t, updatedAt, got.UpdatedAt)
+}
 
 func TestFilterSchedulerCredentialsKeepsSubscriptionPlanType(t *testing.T) {
 	filtered := filterSchedulerCredentials(map[string]any{
@@ -31,8 +44,8 @@ func TestBuildSchedulerMetadataAccountKeepsExternalBridgeFlags(t *testing.T) {
 			"base_url": "http://sub2api-devin-bridge:8080",
 		},
 		Extra: map[string]any{
-			"external_bridge":      true,
-			"external_bridge_kind": "devin",
+			"external_bridge":       true,
+			"external_bridge_kind":  "devin",
 			"openai_responses_mode": "force_responses",
 			"unused_large_field":    "drop-me",
 		},

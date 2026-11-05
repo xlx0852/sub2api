@@ -255,8 +255,20 @@
               >
                 <span class="truncate">{{ sellSourceLabel(row.sell_price_source) }}</span>
               </span>
+              <!-- 价格示例：让"这组收多少钱"不用点进去就能看到 -->
               <p
-                v-if="row.sell_price_source?.sample_models?.length"
+                v-if="row.sell_price_source?.example_model"
+                class="truncate text-[10px] text-gray-500 dark:text-gray-400"
+                :title="exampleTitle(row.sell_price_source)"
+              >
+                <span class="text-gray-400">{{ row.sell_price_source.example_model }}</span>
+                {{ formatMoney(row.sell_price_source.example_sell_input, row.sell_price_source.example_currency) }}
+                <span v-if="row.sell_price_source.example_effective_input != null">
+                  → {{ formatMoney(row.sell_price_source.example_effective_input, row.sell_price_source.example_currency) }}
+                </span>
+              </p>
+              <p
+                v-else-if="row.sell_price_source?.sample_models?.length"
                 class="truncate text-[10px] text-gray-400"
                 :title="row.sell_price_source.sample_models.join(', ')"
               >
@@ -3028,6 +3040,27 @@ import {
 } from "@/views/admin/groupsImagePricing";
 
 const { t } = useI18n();
+
+// 售价示例展示：币种符号 + 每百万 token
+function formatMoney(value: number | null | undefined, currency?: string) {
+  if (value == null) return "-";
+  const symbol = currency === "CNY" ? "¥" : "$";
+  const digits = value >= 1 ? 2 : 3;
+  return `${symbol}${Number(value).toFixed(digits)}`;
+}
+
+function exampleTitle(src: {
+  example_model?: string;
+  example_sell_input?: number | null;
+  example_effective_input?: number | null;
+  example_currency?: string;
+  example_fx_mode?: string;
+  policy_name?: string;
+}) {
+  if (!src?.example_model) return "";
+  const fx = src.example_fx_mode === "fx_auto" ? "（按成本×汇率派生）" : src.example_fx_mode === "cny_native" ? "（人民币原生价）" : "（手工价）";
+  return `${src.example_model}：售价 ${formatMoney(src.example_sell_input, src.example_currency)}/M → 实付 ${formatMoney(src.example_effective_input, src.example_currency)}/M ${fx}`;
+}
 const appStore = useAppStore();
 const onboardingStore = useOnboardingStore();
 

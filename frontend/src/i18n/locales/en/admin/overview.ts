@@ -858,6 +858,7 @@ export default {
         colSource: 'Source',
         colEffective: 'User unit',
         statusDisabled: 'disabled',
+        uncoveredHint: '{count} model(s) are not priced in this policy and fall back to the built-in default (not editable in the admin): {models}',
         loadError: 'Failed to load group pricing',
         bindSuccess: 'Sell-price policy updated',
         bindError: 'Failed to update sell-price policy'

@@ -49,6 +49,7 @@
 ## 6b. Admin UI
 
 - [x] 6b.1 Expose `fx_mode`, `cost_id`, `markup_pct`, `fx_rate` in the sell-price policy DTOs and persist them in the channel repository (create/update).
+- [x] 6b.3 Group list shows a price example on the card (`倍率 · 策略 · 模型 售价→实付`), the pricing card locks the manual inputs for `fx_auto` and shows the derivation formula, unpriced models get an "uses built-in default (not editable)" hint, and the settings page gains a pricing tab (pipeline switch + cost-basis table with upsert/delete).
 - [x] 6b.2 Pricing entry card: fx-mode selector plus cost-benefit inputs and a live multiplier preview; i18n keys in zh/en; `vue-tsc` clean.
 
 ## 7. Cutover

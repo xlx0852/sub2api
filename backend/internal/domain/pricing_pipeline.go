@@ -48,4 +48,6 @@ type PriceCost struct {
 	CacheWritePerMTok float64
 	DiscountPct       float64
 	ObservedAt        time.Time
+	SourceURL         string
+	Notes             string
 }

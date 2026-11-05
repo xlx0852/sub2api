@@ -191,10 +191,19 @@
               :key="idx"
               :entry="entry"
               :platform="group.platform"
+              :price-costs="priceCosts"
               @update="updatePricingEntry(idx, $event)"
               @remove="removePricingEntry(idx)"
             />
           </div>
+
+          <!-- 未在此策略里定价的模型会走内置默认价（后台不可改） -->
+          <p
+            v-if="uncoveredModels.length"
+            class="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] leading-5 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200"
+          >
+            {{ t('admin.groups.pricing.uncoveredHint', { count: uncoveredModels.length, models: uncoveredModels.slice(0, 5).join(', ') }) }}
+          </p>
         </div>
 
         <!-- Saved-state preview -->
@@ -464,6 +473,25 @@ function applyPolicyToForm(channel: Channel | null, group: AdminGroup) {
   }
 }
 
+// 成本基列表（fx_auto 行的公式与只读展示用）
+const priceCosts = ref<{ id: number; currency: string; input_per_mtok: number; output_per_mtok: number; cached_per_mtok: number }[]>([])
+
+// 该分组平台下"没有在这条策略里定价"的模型：它们会走内置默认价，后台改不了。
+const uncoveredModels = computed(() => {
+  if (!props.group) return []
+  const covered = new Set<string>()
+  for (const entry of form.model_pricing) {
+    for (const m of entry.models) covered.add((m || '').toLowerCase().trim())
+  }
+  return availableModels.value
+    .map((m) => (m || '').trim())
+    .filter((m) => m && !covered.has(m.toLowerCase()))
+    .filter((m) => ![...covered].some((c) => c.endsWith('*') && m.toLowerCase().startsWith(c.slice(0, -1))))
+})
+
+// 平台可选模型清单（由 syncPricingModels 提供，失败时为空）
+const availableModels = ref<string[]>([])
+
 async function reload() {
   if (!props.group) return
   loading.value = true
@@ -473,6 +501,21 @@ async function reload() {
   try {
     const data = await adminAPI.groups.getPricingSummary(props.group.id)
     summary.value = data
+
+    // 成本基与平台模型清单：用于 fx_auto 公式展示和"未定价模型"提示，失败不阻塞编辑。
+    void (async () => {
+      try {
+        priceCosts.value = await adminAPI.settings.listPriceCosts()
+      } catch {
+        priceCosts.value = []
+      }
+      try {
+        const models = await adminAPI.channels.syncPricingModels(props.group?.platform || '')
+        availableModels.value = models?.models || []
+      } catch {
+        availableModels.value = []
+      }
+    })()
 
     if (data.policy_id) {
       try {

@@ -30,6 +30,15 @@ type GroupSellPriceSource struct {
 	ModelCount int `json:"model_count"`
 	// SampleModels is a short list of models covered by the policy (for UI chips).
 	SampleModels []string `json:"sample_models,omitempty"`
+
+	// 卡片上的价格示例（取策略里第一条 token 定价行）：
+	// ExampleSellInput 是售价（该行币种，元或美元/百万 token），
+	// ExampleEffectiveInput 由 handler 乘上分组倍率后回填，等于用户实付。
+	ExampleModel          string   `json:"example_model,omitempty"`
+	ExampleSellInput      *float64 `json:"example_sell_input,omitempty"`
+	ExampleEffectiveInput *float64 `json:"example_effective_input,omitempty"`
+	ExampleCurrency       string   `json:"example_currency,omitempty"`
+	ExampleFxMode         string   `json:"example_fx_mode,omitempty"`
 }
 
 // GroupPricingModelPreview is one model row in the group pricing summary.
@@ -239,6 +248,22 @@ func buildSellSourceFromChannel(ch *Channel, effective bool) GroupSellPriceSourc
 		InactivePolicy: !ch.IsActive(),
 		ModelCount:     countPricingModels(ch.ModelPricing),
 		SampleModels:   samplePricingModels(ch.ModelPricing, 3),
+	}
+	// 取第一条带输入价的 token 行作为卡片示例，让后台一眼看到"这组收多少钱"。
+	for i := range ch.ModelPricing {
+		row := ch.ModelPricing[i]
+		if row.InputPrice == nil || len(row.Models) == 0 {
+			continue
+		}
+		if row.BillingMode != "" && row.BillingMode != BillingModeToken {
+			continue
+		}
+		price := *row.InputPrice * 1_000_000
+		src.ExampleModel = strings.TrimSpace(row.Models[0])
+		src.ExampleSellInput = &price
+		src.ExampleCurrency = string(domain.NormalizePricingCurrency(string(row.Currency)))
+		src.ExampleFxMode = string(NormalizePricingFxMode(row.FxMode))
+		break
 	}
 	if !src.Effective {
 		// Bound but not applied — UI should still show policy name with warning.

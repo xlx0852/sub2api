@@ -169,27 +169,41 @@
           <label class="mt-3 block text-xs font-medium text-gray-500 dark:text-gray-400">
             {{ t('admin.channels.form.defaultPrices') }}
             <span class="ml-1 font-normal text-gray-400">{{ currencySymbol }} / 1M tokens</span>
+            <span
+              v-if="isFxAuto"
+              class="ml-1 rounded bg-sky-100 px-1 py-0.5 text-[10px] font-normal text-sky-700 dark:bg-sky-900/40 dark:text-sky-300"
+            >
+              {{ t('admin.channels.form.lockedByFxAuto') }}
+            </span>
           </label>
-          <div class="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <!-- fx_auto：这些格子的值由成本派生，手填不生效，因此只读展示 -->
+          <div v-if="isFxAuto" class="mt-1 rounded-md bg-sky-50/60 px-2 py-1.5 text-[11px] leading-5 text-sky-800 dark:bg-sky-950/20 dark:text-sky-200">
+            {{ fxFormulaText }}
+          </div>
+          <div class="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-5" :class="isFxAuto ? 'opacity-60' : ''">
             <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.inputPrice') }}</label>
               <input :value="entry.input_price" @input="emitField('input_price', ($event.target as HTMLInputElement).value)"
-                type="number" step="any" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
+                :disabled="isFxAuto" type="number" step="any" class="input mt-0.5 text-sm"
+                :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.outputPrice') }}</label>
               <input :value="entry.output_price" @input="emitField('output_price', ($event.target as HTMLInputElement).value)"
-                type="number" step="any" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
+                :disabled="isFxAuto" type="number" step="any" class="input mt-0.5 text-sm"
+                :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.cacheWritePrice') }}</label>
               <input :value="entry.cache_write_price" @input="emitField('cache_write_price', ($event.target as HTMLInputElement).value)"
-                type="number" step="any" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
+                :disabled="isFxAuto" type="number" step="any" class="input mt-0.5 text-sm"
+                :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.cacheReadPrice') }}</label>
               <input :value="entry.cache_read_price" @input="emitField('cache_read_price', ($event.target as HTMLInputElement).value)"
-                type="number" step="any" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder')" />
+                :disabled="isFxAuto" type="number" step="any" class="input mt-0.5 text-sm"
+                :placeholder="t('admin.channels.form.pricePlaceholder')" />
             </div>
             <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.imageTokenPrice') }}</label>
@@ -365,6 +379,8 @@ const { t } = useI18n()
 const props = defineProps<{
   entry: PricingFormEntry
   platform?: string
+  /** 成本基列表（父组件传入，用于 fx_auto 行的公式与只读展示） */
+  priceCosts?: { id: number; currency: string; input_per_mtok: number; output_per_mtok: number; cached_per_mtok: number }[]
 }>()
 
 const emit = defineEmits<{
@@ -382,6 +398,37 @@ const billingModeOptions = computed(() => [
   { value: 'per_request', label: t('admin.channels.billingMode.perRequest') },
   { value: 'image', label: t('admin.channels.billingMode.image') }
 ])
+
+const isFxAuto = computed(() => (props.entry.fx_mode || 'manual') === 'fx_auto')
+
+// 成本基（由父组件一次性传入，避免每张卡片各查一次）
+const cost = computed(() => {
+  const id = Number(props.entry.cost_id)
+  if (!id) return null
+  return (props.priceCosts || []).find((c) => c.id === id) || null
+})
+
+// 公式文案：成本 $x × 汇率 = ¥y → 用户实付（再乘分组倍率）
+const fxFormulaText = computed(() => {
+  const rate = Number(props.entry.fx_rate)
+  const markup = Number(props.entry.markup_pct || 0)
+  const c = cost.value
+  if (!c) {
+    return t('admin.channels.form.fxFormulaNoCost', { rate: Number.isFinite(rate) && rate > 0 ? rate : '-' })
+  }
+  const factor = (Number.isFinite(rate) && rate > 0 ? rate : 0) * (1 + markup / 100)
+  const sellIn = (c.input_per_mtok * factor).toFixed(4).replace(/\.?0+$/, '')
+  const sellOut = (c.output_per_mtok * factor).toFixed(4).replace(/\.?0+$/, '')
+  return t('admin.channels.form.fxFormula', {
+    currency: c.currency,
+    in: c.input_per_mtok,
+    out: c.output_per_mtok,
+    rate: Number.isFinite(rate) && rate > 0 ? rate : '-',
+    factor: factor.toFixed(4).replace(/\.?0+$/, ''),
+    sellIn,
+    sellOut,
+  })
+})
 
 const fxModeOptions = computed(() => [
   { value: 'manual', label: t('admin.channels.form.fxModeManual') },

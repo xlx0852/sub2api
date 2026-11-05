@@ -801,10 +801,30 @@ func (h *GroupHandler) attachSellPriceSources(c *gin.Context, out []dto.AdminGro
 	if err != nil || len(sources) == 0 {
 		return
 	}
-	for i := range out {
-		if src, ok := sources[out[i].ID]; ok {
-			out[i].SellPriceSource = sellPriceSourceToDTO(src)
+	rateByGroup := make(map[int64]float64, len(groups))
+	for i := range groups {
+		rate := groups[i].RateMultiplier
+		if rate <= 0 {
+			rate = 1
 		}
+		rateByGroup[groups[i].ID] = rate
+	}
+	for i := range out {
+		src, ok := sources[out[i].ID]
+		if !ok {
+			continue
+		}
+		resp := sellPriceSourceToDTO(src)
+		// 卡片示例的实付 = 售价 × 分组倍率（用户实际被扣的钱）。
+		if resp.ExampleSellInput != nil {
+			rate := rateByGroup[out[i].ID]
+			if rate <= 0 {
+				rate = 1
+			}
+			effective := *resp.ExampleSellInput * rate
+			resp.ExampleEffectiveInput = &effective
+		}
+		out[i].SellPriceSource = resp
 	}
 }
 
@@ -818,5 +838,10 @@ func sellPriceSourceToDTO(src service.GroupSellPriceSource) *dto.GroupSellPriceS
 		InactivePolicy: src.InactivePolicy,
 		ModelCount:     src.ModelCount,
 		SampleModels:   src.SampleModels,
+
+		ExampleModel:     src.ExampleModel,
+		ExampleSellInput: src.ExampleSellInput,
+		ExampleCurrency:  src.ExampleCurrency,
+		ExampleFxMode:    src.ExampleFxMode,
 	}
 }

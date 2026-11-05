@@ -468,6 +468,7 @@ func buildSchedulerMetadataAccount(account domain.Account) domain.Account {
 		Priority:                account.Priority,
 		RateMultiplier:          account.RateMultiplier,
 		Status:                  account.Status,
+		UpdatedAt:               account.UpdatedAt,
 		LastUsedAt:              account.LastUsedAt,
 		ExpiresAt:               account.ExpiresAt,
 		AutoPauseOnExpired:      account.AutoPauseOnExpired,
