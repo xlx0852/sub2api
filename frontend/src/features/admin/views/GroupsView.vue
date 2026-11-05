@@ -974,120 +974,6 @@
             </div>
           </div>
         </div>
-        <div v-if="createForm.platform === 'antigravity'" class="border-t pt-4">
-          <label class="input-label">{{ t("admin.groups.supportedScopes.title") }}</label>
-          <p class="text-sm text-gray-700 dark:text-gray-300">{{ t("admin.groups.supportedScopes.geminiTextOnly") }}</p>
-        </div>
-
-        <!-- 账号过滤控制 (OpenAI/Antigravity/Anthropic/Gemini) -->
-        <div
-          v-if="
-            ['openai', 'antigravity', 'anthropic'].includes(
-              createForm.platform,
-            )
-          "
-          class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4 space-y-4"
-        >
-          <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-            {{ t("admin.groups.accountFilters.title") }}
-          </h4>
-
-          <!-- require_oauth_only toggle -->
-          <div class="flex items-center justify-between">
-            <div>
-              <label class="text-sm text-gray-600 dark:text-gray-400"
-                >{{ t("admin.groups.accountFilters.oauthOnly") }}</label
-              >
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {{
-                  createForm.require_oauth_only
-                    ? t("admin.groups.accountFilters.oauthOnlyEnabled")
-                    : t("admin.groups.accountFilters.disabled")
-                }}
-              </p>
-            </div>
-            <button
-              type="button"
-              @click="
-                createForm.require_oauth_only = !createForm.require_oauth_only
-              "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                createForm.require_oauth_only
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  createForm.require_oauth_only
-                    ? 'translate-x-6'
-                    : 'translate-x-1'
-                "
-              />
-            </button>
-          </div>
-
-          <!-- require_privacy_set toggle -->
-          <div class="flex items-center justify-between">
-            <div>
-              <label class="text-sm text-gray-600 dark:text-gray-400"
-                >{{ t("admin.groups.accountFilters.privacySetOnly") }}</label
-              >
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {{
-                  createForm.require_privacy_set
-                    ? t("admin.groups.accountFilters.privacySetOnlyEnabled")
-                    : t("admin.groups.accountFilters.disabled")
-                }}
-              </p>
-            </div>
-            <button
-              type="button"
-              @click="
-                createForm.require_privacy_set = !createForm.require_privacy_set
-              "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                createForm.require_privacy_set
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  createForm.require_privacy_set
-                    ? 'translate-x-6'
-                    : 'translate-x-1'
-                "
-              />
-            </button>
-          </div>
-        </div>
-
-        <!-- 无效请求兜底（仅 anthropic/antigravity 平台，且非订阅分组） -->
-        <div
-          v-if="
-            ['anthropic', 'antigravity'].includes(createForm.platform) &&
-            createForm.subscription_type !== 'subscription'
-          "
-          class="border-t pt-4"
-        >
-          <label class="input-label">{{
-            t("admin.groups.invalidRequestFallback.title")
-          }}</label>
-          <Select
-            v-model="createForm.fallback_group_id_on_invalid_request"
-            :options="invalidRequestFallbackOptions"
-            :placeholder="t('admin.groups.invalidRequestFallback.noFallback')"
-          />
-          <p class="input-hint">
-            {{ t("admin.groups.invalidRequestFallback.hint") }}
-          </p>
-        </div>
-
         <!-- 模型路由配置（仅 anthropic 平台） -->
         <div v-if="createForm.platform === 'anthropic'" class="border-t pt-4">
           <div class="mb-1.5 flex items-center gap-1">
@@ -1348,7 +1234,7 @@
             :class="editGroupTab === tab.id
               ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
               : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-dark-700'"
-            @click="editGroupTab = tab.id as 'basic' | 'rate' | 'routing' | 'advanced'"
+            @click="editGroupTab = tab.id as 'basic' | 'rate' | 'routing'"
           >
             {{ tab.label }}
           </button>
@@ -1896,122 +1782,6 @@
         </div>
         </div><!-- /edit-tab-rate -->
 
-        <div v-show="editGroupTab === 'advanced'" class="space-y-5">
-        <div v-if="editForm.platform === 'antigravity'" class="border-t pt-4">
-          <label class="input-label">{{ t("admin.groups.supportedScopes.title") }}</label>
-          <p class="text-sm text-gray-700 dark:text-gray-300">{{ t("admin.groups.supportedScopes.geminiTextOnly") }}</p>
-        </div>
-
-        <!-- 账号过滤控制 (OpenAI/Antigravity/Anthropic/Gemini) -->
-        <div
-          v-if="
-            ['openai', 'antigravity', 'anthropic'].includes(
-              editForm.platform,
-            )
-          "
-          class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4 space-y-4"
-        >
-          <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-            {{ t("admin.groups.accountFilters.title") }}
-          </h4>
-
-          <!-- require_oauth_only toggle -->
-          <div class="flex items-center justify-between">
-            <div>
-              <label class="text-sm text-gray-600 dark:text-gray-400"
-                >{{ t("admin.groups.accountFilters.oauthOnly") }}</label
-              >
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {{
-                  editForm.require_oauth_only
-                    ? t("admin.groups.accountFilters.oauthOnlyEnabled")
-                    : t("admin.groups.accountFilters.disabled")
-                }}
-              </p>
-            </div>
-            <button
-              type="button"
-              @click="
-                editForm.require_oauth_only = !editForm.require_oauth_only
-              "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                editForm.require_oauth_only
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  editForm.require_oauth_only
-                    ? 'translate-x-6'
-                    : 'translate-x-1'
-                "
-              />
-            </button>
-          </div>
-
-          <!-- require_privacy_set toggle -->
-          <div class="flex items-center justify-between">
-            <div>
-              <label class="text-sm text-gray-600 dark:text-gray-400"
-                >{{ t("admin.groups.accountFilters.privacySetOnly") }}</label
-              >
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {{
-                  editForm.require_privacy_set
-                    ? t("admin.groups.accountFilters.privacySetOnlyEnabled")
-                    : t("admin.groups.accountFilters.disabled")
-                }}
-              </p>
-            </div>
-            <button
-              type="button"
-              @click="
-                editForm.require_privacy_set = !editForm.require_privacy_set
-              "
-              class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              :class="
-                editForm.require_privacy_set
-                  ? 'bg-primary-500'
-                  : 'bg-gray-300 dark:bg-dark-600'
-              "
-            >
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                :class="
-                  editForm.require_privacy_set
-                    ? 'translate-x-6'
-                    : 'translate-x-1'
-                "
-              />
-            </button>
-          </div>
-        </div>
-
-        <!-- 无效请求兜底（仅 anthropic/antigravity 平台，且非订阅分组） -->
-        <div
-          v-if="
-            ['anthropic', 'antigravity'].includes(editForm.platform) &&
-            editForm.subscription_type !== 'subscription'
-          "
-          class="border-t pt-4"
-        >
-          <label class="input-label">{{
-            t("admin.groups.invalidRequestFallback.title")
-          }}</label>
-          <Select
-            v-model="editForm.fallback_group_id_on_invalid_request"
-            :options="invalidRequestFallbackOptionsForEdit"
-            :placeholder="t('admin.groups.invalidRequestFallback.noFallback')"
-          />
-          <p class="input-hint">
-            {{ t("admin.groups.invalidRequestFallback.hint") }}
-          </p>
-        </div>
-
-                </div><!-- /edit-tab-advanced -->
 
         <div v-show="editGroupTab === 'routing' || editForm.platform !== 'anthropic'" class="space-y-5">
           <div v-if="editForm.platform !== 'anthropic'" class="rounded-lg border border-dashed border-gray-300 p-4 text-xs text-gray-500 dark:border-dark-600">
@@ -2603,43 +2373,7 @@ const editStatusOptions = computed(() => [
 ]);
 
 
-// 无效请求兜底分组选项（创建时）- 仅包含 anthropic 平台、非订阅且未配置兜底的分组
-const invalidRequestFallbackOptions = computed(() => {
-  const options: { value: number | null; label: string }[] = [
-    { value: null, label: t("admin.groups.invalidRequestFallback.noFallback") },
-  ];
-  const eligibleGroups = groups.value.filter(
-    (g) =>
-      g.platform === "anthropic" &&
-      g.status === "active" &&
-      g.subscription_type !== "subscription" &&
-      g.fallback_group_id_on_invalid_request === null,
-  );
-  eligibleGroups.forEach((g) => {
-    options.push({ value: g.id, label: g.name });
-  });
-  return options;
-});
 
-// 无效请求兜底分组选项（编辑时）- 排除自身
-const invalidRequestFallbackOptionsForEdit = computed(() => {
-  const options: { value: number | null; label: string }[] = [
-    { value: null, label: t("admin.groups.invalidRequestFallback.noFallback") },
-  ];
-  const currentId = editingGroup.value?.id;
-  const eligibleGroups = groups.value.filter(
-    (g) =>
-      g.platform === "anthropic" &&
-      g.status === "active" &&
-      g.subscription_type !== "subscription" &&
-      g.fallback_group_id_on_invalid_request === null &&
-      g.id !== currentId,
-  );
-  eligibleGroups.forEach((g) => {
-    options.push({ value: g.id, label: g.name });
-  });
-  return options;
-});
 
 // 复制账号的源分组选项（创建时）- 仅包含相同平台且有账号的分组
 const copyAccountsGroupOptions = computed(() => {
@@ -2704,13 +2438,12 @@ let groupSummaryGeneration = 0;
 
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
-const editGroupTab = ref<'basic' | 'rate' | 'routing' | 'advanced'>('basic');
+const editGroupTab = ref<'basic' | 'rate' | 'routing'>('basic');
 const editGroupTabs = computed(() => {
-  const tabs: Array<{ id: 'basic' | 'rate' | 'routing' | 'advanced'; label: string; show?: boolean }> = [
+  const tabs: Array<{ id: 'basic' | 'rate' | 'routing'; label: string; show?: boolean }> = [
     { id: 'basic', label: t('admin.groups.editTabs.basic') },
     { id: 'rate', label: t('admin.groups.editTabs.rate') },
     { id: 'routing', label: t('admin.groups.editTabs.routing'), show: editForm.platform === 'anthropic' },
-    { id: 'advanced', label: t('admin.groups.editTabs.advanced') },
   ];
   return tabs.filter((x) => x.show !== false);
 });
@@ -2769,10 +2502,7 @@ const createForm = reactive({
   peak_end: "",
   peak_rate_multiplier: 1.0,
   // Claude Code 客户端限制（仅 anthropic 平台使用）
-  fallback_group_id_on_invalid_request: null as number | null,
   // 账号过滤控制（OpenAI/Antigravity 平台）
-  require_oauth_only: false,
-  require_privacy_set: false,
   // 模型路由开关
   model_routing_enabled: false,
   // 支持的模型系列（仅 antigravity 平台）
@@ -3072,10 +2802,7 @@ const editForm = reactive({
   peak_end: "",
   peak_rate_multiplier: 1.0,
   // Claude Code 客户端限制（仅 anthropic 平台使用）
-  fallback_group_id_on_invalid_request: null as number | null,
   // 账号过滤控制（OpenAI/Antigravity 平台）
-  require_oauth_only: false,
-  require_privacy_set: false,
   // 模型路由开关
   model_routing_enabled: false,
   // 支持的模型系列（仅 antigravity 平台）
@@ -3416,9 +3143,6 @@ const closeCreateModal = () => {
   createForm.peak_start = "";
   createForm.peak_end = "";
   createForm.peak_rate_multiplier = 1.0;
-  createForm.fallback_group_id_on_invalid_request = null;
-  createForm.require_oauth_only = false;
-  createForm.require_privacy_set = false;
   createForm.supported_model_scopes = ["gemini_text"];
   createForm.mcp_xml_inject = false;
   createForm.copy_accounts_from_group_ids = [];
@@ -3567,10 +3291,6 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.peak_start = group.peak_start ?? "";
   editForm.peak_end = group.peak_end ?? "";
   editForm.peak_rate_multiplier = group.peak_rate_multiplier ?? 1.0;
-  editForm.fallback_group_id_on_invalid_request =
-    group.fallback_group_id_on_invalid_request;
-  editForm.require_oauth_only = group.require_oauth_only ?? false;
-  editForm.require_privacy_set = group.require_privacy_set ?? false;
   editForm.model_routing_enabled = group.model_routing_enabled || false;
   editForm.supported_model_scopes = normalizeSupportedModelScopesForPlatform(group.platform, group.supported_model_scopes);
   editForm.mcp_xml_inject = false;
@@ -3629,10 +3349,6 @@ const handleUpdateGroup = async () => {
       monthly_limit_usd: normalizeOptionalLimit(
         editForm.monthly_limit_usd as number | string | null,
       ),
-      fallback_group_id_on_invalid_request:
-        editForm.fallback_group_id_on_invalid_request === null
-          ? 0
-          : editForm.fallback_group_id_on_invalid_request,
       model_routing: convertRoutingRulesToApiFormat(
         editModelRoutingRules.value,
       ),
@@ -3768,13 +3484,10 @@ watch(
   () => createForm.platform,
   (newVal) => {
     if (!["anthropic", "antigravity"].includes(newVal)) {
-      createForm.fallback_group_id_on_invalid_request = null;
     }
     if (newVal !== "openai") {
     }
     if (!["openai", "antigravity", "anthropic"].includes(newVal)) {
-      createForm.require_oauth_only = false;
-      createForm.require_privacy_set = false;
     }
     resetDisabledBatchImagePricing(createForm);
     resetModelsListState(createModelsListState);
@@ -3800,13 +3513,10 @@ watch(
   () => editForm.platform,
   (newVal) => {
     if (!["anthropic", "antigravity"].includes(newVal)) {
-      editForm.fallback_group_id_on_invalid_request = null;
     }
     if (newVal !== "openai") {
     }
     if (!["openai", "antigravity", "anthropic"].includes(newVal)) {
-      editForm.require_oauth_only = false;
-      editForm.require_privacy_set = false;
     }
     resetDisabledBatchImagePricing(editForm);
     if (editingGroup.value) {
@@ -3829,15 +3539,6 @@ watch(
     resetDisabledBatchImagePricing(editForm);
   },
 );
-
-watch(
-  () => editForm.platform,
-  (newVal) => {
-    if (!['anthropic', 'antigravity'].includes(newVal)) {
-      editForm.fallback_group_id_on_invalid_request = null
-    }
-  }
-)
 
 // 点击外部关闭账号搜索下拉框
 const handleClickOutside = (event: MouseEvent) => {
