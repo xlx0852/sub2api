@@ -49,3 +49,16 @@
 - [ ] 6.2 Regression: seeded defaults equal the previous resolved prices for every model/group (baseline diff from 1.3).
 - [ ] 6.3 Frontend: `vue-tsc`, model page component test, pricing page read-only test.
 - [ ] 6.4 `gofmt`, `go build ./...`, focused `-tags unit` suites, migration idempotency run.
+
+## 7. Deploy log
+
+- 2026-11-06 0.1.400: migrations 215/216 applied on production (`models` 123 / `model_aliases` 10 /
+  `model_prices` 69 defaults + 10 group rows). Switch `model_pricing_source=dual` enabled;
+  `pricing_pipeline` stays `shadow`.
+- 0.1.401: fixed the registry price lookup — a model with only a default row never resolved,
+  because the predicate only matched defaults when no group was given. Now group row first,
+  else default row. Verified by a deliberate 1.5× bump on `grok-4.7`'s default price: dual
+  logged exactly one `pricing_source.mismatch` (legacy 2e-6 vs registry 3e-6, row=default) and
+  charging stayed at the legacy value; the row was then restored.
+- Live checks under `dual`: `hinoki-offensive` charged 5.60 / 8.40 CNY per MTok before and
+  after the switch (unchanged), and no other model produced a mismatch.
