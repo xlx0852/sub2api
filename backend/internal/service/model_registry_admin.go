@@ -35,7 +35,7 @@ func (s *ChannelService) UpsertModelRegistry(ctx context.Context, m *domain.Mode
 	m.ID = strings.TrimSpace(m.ID)
 	m.Platform = strings.TrimSpace(m.Platform)
 	if m.Retired && m.Enabled {
-		return fmt.Errorf("%w: retired model cannot stay enabled", ErrInvalidInput)
+		return ErrRetiredModelEnabled
 	}
 	_, err := s.repo.UpsertModelRegistry(ctx, m, expectedVersion)
 	return err
@@ -109,16 +109,16 @@ func (s *ChannelService) UpsertModelPrice(ctx context.Context, row *domain.Model
 
 	// 规则 2：不能存在"没有价"的行。
 	if row.IsEmpty() {
-		return fmt.Errorf("%w: a price row must have at least one price", ErrInvalidInput)
+		return ErrEmptyPriceRow
 	}
 
 	// fx_auto 必须自带成本基与汇率，否则运行时无法派生（fail-closed）。
 	if NormalizePricingFxMode(row.FxMode) == FxModeAuto {
 		if row.CostID == nil || row.FxRate == nil || *row.FxRate <= 0 {
-			return fmt.Errorf("%w: fx_auto requires cost_id and a positive fx_rate", ErrInvalidInput)
+			return ErrInvalidFxAutoPrice
 		}
 		if s.GetPriceCost(ctx, *row.CostID) == nil {
-			return fmt.Errorf("%w: cost basis %d not found", ErrPriceCostMissing, *row.CostID)
+			return ErrInvalidFxAutoPrice
 		}
 	}
 	if row.BillingMode == "" {
@@ -141,6 +141,15 @@ func (s *ChannelService) DeleteModelPrice(ctx context.Context, modelID string, g
 
 // ErrModelNotRegistered 表示尝试为未登记的模型配价（映射为 400，而不是 500）。
 var ErrModelNotRegistered = infraerrors.BadRequest("MODEL_NOT_REGISTERED", "model is not registered")
+
+// ErrEmptyPriceRow 表示价格行没有任何价格（历史上这种行会把请求按 0 元结算）。
+var ErrEmptyPriceRow = infraerrors.BadRequest("EMPTY_PRICE_ROW", "a price row must have at least one price")
+
+// ErrInvalidFxAutoPrice 表示 fx_auto 行缺少成本基或汇率。
+var ErrInvalidFxAutoPrice = infraerrors.BadRequest("INVALID_FX_AUTO_PRICE", "fx_auto requires cost_id and a positive fx_rate")
+
+// ErrRetiredModelEnabled 表示 retired 与 enabled 同时为真。
+var ErrRetiredModelEnabled = infraerrors.BadRequest("RETIRED_MODEL_ENABLED", "retired model cannot stay enabled")
 
 // ListModelAliasesFor 返回某模型的别名（后台展示用）。
 func (s *ChannelService) ListModelAliasesFor(ctx context.Context, modelID string) ([]domain.ModelAliasEntry, error) {

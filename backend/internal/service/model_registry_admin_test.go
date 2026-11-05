@@ -24,7 +24,7 @@ func registryStub(models []domain.ModelRegistryEntry) *ChannelService {
 func TestUpsertModelPriceRejectsEmptyRow(t *testing.T) {
 	svc := registryStub([]domain.ModelRegistryEntry{{ID: "m-1", Platform: "openai", Enabled: true}})
 	err := svc.UpsertModelPrice(context.Background(), &domain.ModelPriceRow{ModelID: "m-1"})
-	require.ErrorIs(t, err, ErrInvalidInput)
+	require.ErrorIs(t, err, ErrEmptyPriceRow)
 }
 
 // 规则 1：未登记模型禁止配价。
@@ -42,7 +42,7 @@ func TestUpsertModelPriceRequiresCostForFxAuto(t *testing.T) {
 	err := svc.UpsertModelPrice(context.Background(), &domain.ModelPriceRow{
 		ModelID: "m-1", InputPrice: &price, FxMode: domain.PricingFxModeAuto,
 	})
-	require.ErrorIs(t, err, ErrInvalidInput)
+	require.ErrorIs(t, err, ErrInvalidFxAutoPrice)
 }
 
 // 正常行（手工价）应通过校验。
@@ -70,5 +70,5 @@ func TestUpsertModelRegistryRejectsRetiredEnabled(t *testing.T) {
 	err := svc.UpsertModelRegistry(context.Background(), &domain.ModelRegistryEntry{
 		ID: "m-1", Platform: "openai", Retired: true, Enabled: true,
 	}, 0)
-	require.ErrorIs(t, err, ErrInvalidInput)
+	require.ErrorIs(t, err, ErrRetiredModelEnabled)
 }
