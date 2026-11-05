@@ -1027,10 +1027,10 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		zap.Any("group_id", apiKey.GroupID),
 	)
 
-	// 检查分组是否允许 /v1/messages 调度
+	// OpenAI 分组的 /v1/messages 调度已下线；grok / kimi 的原生兼容入口保留。
 	if !allowOpenAICompatibleMessagesDispatch(apiKey) {
 		h.anthropicErrorResponse(c, http.StatusForbidden, "permission_error",
-			"This group does not allow /v1/messages dispatch")
+			"This group does not support /v1/messages (use an Anthropic group)")
 		return
 	}
 
