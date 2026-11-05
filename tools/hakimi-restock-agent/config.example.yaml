@@ -1,0 +1,58 @@
+# Copy to config.yaml and fill in secrets.
+# config.yaml is gitignored. Prefer env vars for tokens.
+
+hakimi:
+  base_url: https://hakimi.team/shop/api
+  # token: set via HAKIMI_TOKEN
+
+sub2api:
+  base_url: https://your-sub2api-host
+  # admin_api_key: set via SUB2API_ADMIN_API_KEY
+  # jwt: set via SUB2API_JWT if you are not using an admin API key
+
+pool:
+  platform: openai
+  type: oauth
+  # Capacity is counted against this group. Leave 0 to count all matching accounts.
+  group_id: 0
+  min_schedulable: 20
+  count_temp_unschedulable_as_down: true
+
+buy:
+  # Keep false until restock policy is decided. Agent will never create orders.
+  enabled: false
+  quantity: 10
+  minimum: 1
+  maximum: 20
+  budget_cents: 35000
+  fresh: false
+  # Optional: lock a specific timetable run.
+  source: null
+  cycle_id: null
+  cooldown_seconds: 300
+
+import:
+  group_ids: []
+  concurrency: 3
+  priority: 50
+  proxy_id: null
+  update_existing: true
+  skip_default_group_bind: true
+  confirm_mixed_channel_risk: true
+  auto_pause_on_expired: true
+
+recover:
+  enabled: false
+  interval_minutes: 30
+  poll_seconds: 8
+  timeout_seconds: 900
+
+runtime:
+  check_seconds: 60
+  order_poll_seconds: 8
+  order_timeout_seconds: 900
+  dry_run: false
+  state_path: data/state.json
+  save_downloads: false
+  download_dir: data/downloads
+  log_level: INFO

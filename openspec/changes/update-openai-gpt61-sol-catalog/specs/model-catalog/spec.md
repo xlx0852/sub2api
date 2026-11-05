@@ -59,12 +59,12 @@ without selecting itself, so catalog validation accepts the document.
 #### Scenario: No self-referential aliases
 
 - **WHEN** the catalog fallback pricing block is validated
-- **THEN** no entry's `alias_of` chain revisits the entry itself, and `gpt-5.5` resolves through `gpt-5.4`.
+- **THEN** no entry's `alias_of` chain revisits the entry itself, and a multi-hop chain such as `claude-opus-4.8` resolves through `claude-opus-4.6` to `claude-opus-4.5`.
 
 #### Scenario: Restored GPT-5.4 fallback entries keep effective prices
 
-- **WHEN** `gpt-5.4-mini` or `gpt-5.5-pro` is priced through the fallback path
-- **THEN** the effective rates match the previously shipped embedded catalog (0.75/4.5 USD per million tokens for `gpt-5.4-mini`; 2.5 USD input and 15 USD output per million tokens with the 2x/1.5x long-context multipliers for `gpt-5.5-pro`).
+- **WHEN** `gpt-5.4-mini` is priced through the fallback path
+- **THEN** the effective rates match the previously shipped embedded catalog (0.75 USD input and 4.5 USD output per million tokens).
 
 #### Scenario: Catalog verifier passes
 

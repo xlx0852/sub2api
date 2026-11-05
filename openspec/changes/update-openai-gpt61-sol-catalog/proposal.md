@@ -66,4 +66,6 @@ redefining it.
   `gpt-5.5` ($5.00/$30.00 per MTok) and `gpt-5.5-pro` ($30.00/$180.00) are far above the legacy
   GPT-5.4 rates those fallback entries still resolve to. That fallback is only used when the pricing
   service has no data for the model, but the discrepancy should be decided explicitly rather than
-  rewritten by a mechanical rename.
+  rewritten by a mechanical rename. It is resolved by the follow-up change
+  `update-openai-gpt55-fallback-pricing`, which repriced the GPT-5.5 family from the official table
+  and corrected this change's delta accordingly.
