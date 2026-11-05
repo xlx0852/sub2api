@@ -108,3 +108,40 @@ Live overview right after deploy (this is the first time the divergence is visib
 #3  企业高可用      10 models / 1 priced   unbound                  ← 绑定分组已被删除
 #6  Claude Max20    9 models / 0 priced   unbound                  ← 绑定分组已被删除
 ```
+
+## Sell-table consolidation (2026-11-06 ~01:00 +08)
+
+Deleted four tables via the admin API, keeping the two that actually price something:
+
+| Deleted | Why |
+| --- | --- |
+| `#3 企业高可用 售价` | only row duplicated the luna price, bound group (29) already deleted |
+| `#7 Pro 外接 售价` | same luna duplicate, bound group (25) already deleted |
+| `#5 Grok Heavy 售价` | 12 model names, **zero prices** (pure model list), bound to a live group |
+| `#6 Claude Max20 售价` | zero prices, unbound |
+
+Result: `#4 GPT Pro 售价` (luna) and `#8 国模无 s 售价` (8 cost-derived rows) remain;
+`Grok Heavy` (23) and `国模集合` (34) are unbound and resolve through the built-in defaults.
+
+Verification before/after (pricing-summary diff per group, values rounded to 1e-9):
+
+- group 4: 11 models, 0 differences
+- group 49: 9 models, 0 differences
+- groups 23/34: no priced rows on either side; grok models still resolve through defaults
+  (`grok-4.3` → $1.25/$2.50 per MTok, `grok-build-0.1` → $1.00/$2.00)
+- live probe on group 49 (`hinoki-offensive`): HTTP 200, billed 5.60 / 8.40 CNY per MTok —
+  identical to pre-merge. (The two 404s in between were account #148 being temporarily
+  demoted by scheduled diagnostics, not the merge; it recovered at 01:02 and the probe passed.)
+
+Backups taken before the change: `/tmp/backup-channels.csv`, `/tmp/backup-pricing.csv`,
+`/tmp/backup-bindings.csv` on the prod host.
+
+### Why the two remaining tables were not merged into one
+
+Merging `#8` into a single table shared with `GPT Pro` would publish the uncensored models
+at `price × 0.18` (e.g. hinoki ¥5.60 → ¥1.01 per MTok) against a ¥5.74 cost — an 82% loss
+for any group whose account pool can serve those model ids. One table only works while every
+group's difference is proportional; 1.5 (markup) and 0.16/0.18 (reseller discounts) are not
+compatible regimes for the same rows. Options if a single table is still wanted: restrict
+model visibility per group and rely on admission, raise the shared row prices so `×0.18`
+lands at cost, or accept the risk knowingly.
