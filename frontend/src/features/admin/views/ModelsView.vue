@@ -43,9 +43,9 @@
                 </span>
               </td>
               <td class="px-3 py-2">
-                <span v-if="m.retired" class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] dark:bg-dark-700">retired</span>
-                <span v-else-if="!m.enabled" class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] dark:bg-dark-700">disabled</span>
-                <span v-else class="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">enabled</span>
+                <span v-if="m.retired" class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] dark:bg-dark-700">{{ t('admin.models.retired') }}</span>
+                <span v-else-if="!m.enabled" class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] dark:bg-dark-700">{{ t('admin.models.disabled') }}</span>
+                <span v-else class="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">{{ t('admin.models.enabled') }}</span>
               </td>
               <td class="px-3 py-2 text-right">
                 <button type="button" class="text-primary-600 hover:text-primary-700" @click="openEdit(m)">
@@ -73,7 +73,7 @@
             </label>
             <label class="text-xs">
               <span class="text-gray-500">{{ t('admin.models.colPlatform') }}</span>
-              <input v-model="editing.platform" class="input mt-1 text-sm" placeholder="openai" />
+              <input v-model="editing.platform" class="input mt-1 text-sm" :placeholder="t('admin.models.platformPlaceholder')" />
             </label>
             <label class="text-xs">
               <span class="text-gray-500">{{ t('admin.models.colDisplay') }}</span>
@@ -115,7 +115,7 @@
           <div class="mt-2 space-y-2">
             <div v-for="(a, i) in aliases" :key="i" class="flex gap-2">
               <input v-model="a.alias" class="input flex-1 text-xs font-mono" :placeholder="t('admin.models.aliasPlaceholder')" />
-              <input v-model="a.platform" class="input w-32 text-xs" placeholder="openai" />
+              <input v-model="a.platform" class="input w-32 text-xs" :placeholder="t('admin.models.platformPlaceholder')" />
               <Select v-model="a.kind" :options="aliasKindOptions" class="w-40" />
               <button type="button" class="text-xs text-red-500" @click="aliases.splice(i, 1)">{{ t('common.delete') }}</button>
             </div>
@@ -146,7 +146,7 @@
                   <td class="py-1 pr-2 text-right">{{ perMillion(row.input_price) }}</td>
                   <td class="py-1 pr-2 text-right">{{ perMillion(row.output_price) }}</td>
                   <td class="py-1 pr-2 text-right">{{ perMillion(row.cache_read_price) }}</td>
-                  <td class="py-1 pr-2">{{ row.fx_mode }}</td>
+                  <td class="py-1 pr-2">{{ fxModeLabel(row.fx_mode) }}</td>
                   <td class="py-1 pr-2 text-right">{{ row.fx_rate ?? '-' }}</td>
                   <td class="py-1 pr-2 text-right">
                     <button type="button" class="text-red-500 hover:text-red-600" @click="removePrice(row)">{{ t('common.delete') }}</button>
@@ -255,17 +255,22 @@ const groupOptions = computed(() => [
   { value: null as number | null, label: t('admin.models.defaultPrice') },
   ...groups.value.map((g) => ({ value: g.id as number | null, label: g.name }))
 ])
-const aliasKindOptions = [
-  { value: 'alias', label: 'alias' },
-  { value: 'id_override', label: 'id_override' },
-  { value: 'id_reverse', label: 'id_reverse' },
-  { value: 'retired', label: 'retired' }
-]
-const fxModeOptions = [
-  { value: 'manual', label: 'manual' },
-  { value: 'cny_native', label: 'cny_native' },
-  { value: 'fx_auto', label: 'fx_auto' }
-]
+const aliasKindOptions = computed(() =>
+  ['alias', 'id_override', 'id_reverse', 'retired'].map((kind) => ({
+    value: kind,
+    label: t('admin.models.aliasKinds.' + kind)
+  }))
+)
+const fxModeOptions = computed(() =>
+  ['manual', 'cny_native', 'fx_auto'].map((mode) => ({
+    value: mode,
+    label: t('admin.models.fxModes.' + mode)
+  }))
+)
+const fxModeLabel = (mode: string) =>
+  ['manual', 'cny_native', 'fx_auto'].includes(mode)
+    ? t('admin.models.fxModes.' + mode)
+    : mode
 
 const draft = reactive<{
   group_id: number | null
