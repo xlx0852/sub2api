@@ -145,3 +145,30 @@ group's difference is proportional; 1.5 (markup) and 0.16/0.18 (reseller discoun
 compatible regimes for the same rows. Options if a single table is still wanted: restrict
 model visibility per group and rely on admission, raise the shared row prices so `×0.18`
 lands at cost, or accept the risk knowingly.
+
+## 0.1.398 / 0.1.399 — retire the OpenAI `/v1/messages` dispatch capability
+
+Usage check first: `/v1/messages` on the only OpenAI group with the flag enabled (GPT Pro)
+had **10 requests in 30 days**; group #49 carried a leftover config with the flag off.
+`/v1/messages` traffic on groups 23 (grok) and 34 (anthropic) is unrelated to this feature.
+
+Removed:
+
+- backend: the Claude-family → GPT mapping (`Opus/Sonnet/Haiku` + exact overrides), the
+  allow flag gate (OpenAI groups now always 403), and the admin request/response fields
+  (`allow_messages_dispatch`, `messages_dispatch_model_config`, `default_mapped_model`).
+  grok / kimi native `/v1/messages` support is untouched.
+- frontend: the whole "OpenAI Messages 调度配置" block (create + edit dialogs), the helper
+  module and its spec, the "Claude Code" tab in the API-key usage modal, i18n keys.
+- migration 214 clears the three columns on every group (columns kept, repository writes
+  zeros; dropping them would need an ent regeneration).
+
+Live verification (0.1.399):
+
+```
+POST /v1/messages (group 4)                 → 403 {"message":"This group does not support /v1/messages (use an Anthropic group)"}
+POST /v1/messages/count_tokens (group 4)    → 403 same message
+GET  /admin/groups/4                        → response no longer carries any dispatch field
+groups table                                → allow_messages_dispatch=f, config={}, default_mapped_model=''
+ops_error_logs                              → only the expected two 403s from the probes
+```
