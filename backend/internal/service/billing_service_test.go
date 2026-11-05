@@ -535,30 +535,38 @@ func TestGetFallbackPricing_FamilyMatching(t *testing.T) {
 		{
 			name:              "deepseek v4 flash",
 			model:             "deepseek-v4-flash",
-			expectedInput:     3e-6,
-			expectedOutput:    floatPtr(9e-6),
-			expectedCacheRead: floatPtr(0.10e-6),
+			expectedInput:     2e-6,
+			expectedOutput:    floatPtr(8e-6),
+			expectedCacheRead: floatPtr(0.04e-6),
 		},
 		{
 			name:              "deepseek v4 flash vision exp",
 			model:             "deepseek-v4-flash-vision-exp",
-			expectedInput:     3e-6,
-			expectedOutput:    floatPtr(9e-6),
-			expectedCacheRead: floatPtr(0.10e-6),
+			expectedInput:     2e-6,
+			expectedOutput:    floatPtr(8e-6),
+			expectedCacheRead: floatPtr(0.04e-6),
 		},
 		{
 			name:              "deepseek chat alias → flash",
 			model:             "deepseek-chat",
-			expectedInput:     3e-6,
-			expectedOutput:    floatPtr(9e-6),
-			expectedCacheRead: floatPtr(0.10e-6),
+			expectedInput:     2e-6,
+			expectedOutput:    floatPtr(8e-6),
+			expectedCacheRead: floatPtr(0.04e-6),
 		},
 		{
 			name:              "deepseek reasoner alias → flash",
 			model:             "deepseek-reasoner",
-			expectedInput:     3e-6,
-			expectedOutput:    floatPtr(9e-6),
-			expectedCacheRead: floatPtr(0.10e-6),
+			expectedInput:     2e-6,
+			expectedOutput:    floatPtr(8e-6),
+			expectedCacheRead: floatPtr(0.04e-6),
+		},
+		{
+			// 厂商版本后缀（-1017）必须同步官方 V4.1 Flash 价，不能因后缀变成无价。
+			name:              "deepseek v4.1 flash 1017 variant",
+			model:             "deepseek-v4.1-flash-1017",
+			expectedInput:     2e-6,
+			expectedOutput:    floatPtr(8e-6),
+			expectedCacheRead: floatPtr(0.04e-6),
 		},
 
 		// ---- 智谱 GLM（z.ai USD 口径）----
@@ -929,6 +937,8 @@ func TestCalculateCost_DeepSeekFlashAndProExactCNYComponents(t *testing.T) {
 	}{
 		{model: "deepseek-v4-flash", input: 2, output: 8, cacheCreation: 2, cacheRead: 0.04},
 		{model: "deepseek-v4-flash-vision-exp", input: 2, output: 8, cacheCreation: 2, cacheRead: 0.04},
+		{model: "deepseek-v4.1-flash", input: 2, output: 8, cacheCreation: 2, cacheRead: 0.04},
+		{model: "deepseek-v4.1-flash-1017", input: 2, output: 8, cacheCreation: 2, cacheRead: 0.04},
 		{model: "deepseek-v4-pro", input: 9, output: 27, cacheCreation: 9, cacheRead: 0.30},
 	} {
 		t.Run(tt.model, func(t *testing.T) {

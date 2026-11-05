@@ -1,6 +1,6 @@
 {
-  "version": 17,
-  "updated_at": "2026-10-30T13:34:56Z",
+  "version": 18,
+  "updated_at": "2026-11-05T08:40:00Z",
   "platforms": {
     "openai": {
       "default_test_model": "gpt-5.5",
@@ -1104,6 +1104,13 @@
       "cache_read_input_token_cost": 4e-08
     },
     "deepseek-v4.1-flash": {
+      "currency": "CNY",
+      "input_cost_per_token": 2e-06,
+      "output_cost_per_token": 8e-06,
+      "cache_creation_input_token_cost": 2e-06,
+      "cache_read_input_token_cost": 4e-08
+    },
+    "deepseek-v4.1-flash-1017": {
       "currency": "CNY",
       "input_cost_per_token": 2e-06,
       "output_cost_per_token": 8e-06,

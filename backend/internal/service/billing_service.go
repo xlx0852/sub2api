@@ -79,8 +79,13 @@ const deepSeekOffPeakMultiplier = 0.5
 
 func isDeepSeekV4OfficialModel(model string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(model))
+	// The dotted V4.1 Flash family is matched by prefix because vendor-suffixed
+	// spellings (deepseek-v4.1-flash-1017 and friends) share the same official
+	// CNY rates and the same peak/off-peak windows; only the exact-equality match
+	// used to exist, which left every suffixed spelling unpriced.
 	return strings.Contains(normalized, "deepseek-v4-pro") ||
 		strings.Contains(normalized, "deepseek-v4-flash") ||
+		strings.Contains(normalized, "deepseek-v4.1-flash") ||
 		normalized == "deepseek-flash" || normalized == "deepseek-v4.1-flash" ||
 		normalized == "deepseek-chat" || normalized == "deepseek-reasoner"
 }
