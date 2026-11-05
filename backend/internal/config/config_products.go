@@ -148,6 +148,8 @@ type PricingConfig struct {
 	UpdateIntervalHours int `mapstructure:"update_interval_hours"`
 	// 哈希校验间隔（分钟）
 	HashCheckIntervalMinutes int `mapstructure:"hash_check_interval_minutes"`
+	// Pipeline 选择定价管线：legacy（默认，现有 11 层）/ shadow（双算打点）/ unified（统一 5 层）。
+	Pipeline string `mapstructure:"pipeline"`
 }
 
 // ModelCatalogConfig controls the optional remote first-party model catalog.

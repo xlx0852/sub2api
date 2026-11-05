@@ -568,6 +568,8 @@ func setDefaults() {
 	viper.SetDefault("pricing.fallback_file", "./resources/model-pricing/model_prices_and_context_window.json")
 	viper.SetDefault("pricing.update_interval_hours", 24)
 	viper.SetDefault("pricing.hash_check_interval_minutes", 10)
+	// 定价管线开关：legacy=现有行为（默认），shadow=双算打点，unified=统一管线。
+	viper.SetDefault("pricing.pipeline", "legacy")
 
 	// First-party model catalog. Startup never depends on this remote source.
 	viper.SetDefault("model_catalog.remote_enabled", true)
