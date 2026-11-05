@@ -355,8 +355,7 @@ export default {
       bind: {
         title: 'Bind Invite Relationship',
         action: 'Bind Invite',
-        hint: 'Link an inviter and invitee. Both users must be valid.',
-        inviterUserId: 'Inviter User ID',
+          inviterUserId: 'Inviter User ID',
         inviteeUserId: 'Invitee User ID',
         inviterPlaceholder: 'Enter inviter user ID',
         inviteePlaceholder: 'Enter invitee user ID',
@@ -705,7 +704,6 @@ export default {
       legacyTagHint: 'No platform: these are fallback_pricing compat ids from the catalog. They only take part in per-model billing and are not listed under any platform.',
       priceViaAlias: 'priced via alias',
       priceViaAliasHint: 'No price of its own: an alias points at the target model, which carries the price.',
-      legacyCount: '{n} price-only legacy ids',
       allPlatforms: 'All platforms',
       enabled: 'Enabled',
       retired: 'Retired',
@@ -777,7 +775,6 @@ export default {
       matrixHint: 'A model offered by several tables shows several quotes; two or more real prices means the config has diverged and needs a decision.',
       diverged: '{n} prices',
       editingPolicy: 'Editing table #{id} · {groups} bound group(s)',
-      hintCostOnly: 'Cost basis lives in Settings → Pricing pipeline and never changes the manual price here',
       openLibrary: 'Unit prices are maintained on the Pricing page — open it →',
     },
 

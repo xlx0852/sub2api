@@ -17,10 +17,6 @@
             </button>
           </div>
         </div>
-        <p class="mt-2 text-[11px] text-gray-400">
-          {{ t('admin.models.hint') }}
-          <span v-if="legacyCount">· {{ t('admin.models.legacyCount', { n: legacyCount }) }}</span>
-        </p>
       </template>
 
       <template #table>
@@ -255,7 +251,6 @@ const visibleModels = computed(() => {
   if (scope.value === 'legacy') return list.filter((m) => !m.platform)
   return list.filter((m) => !!m.platform)
 })
-const legacyCount = computed(() => models.value.filter((m) => !m.platform).length)
 const platformOptions = computed(() => [
   { value: '', label: t('admin.models.allPlatforms') },
   { value: 'openai', label: 'openai' },

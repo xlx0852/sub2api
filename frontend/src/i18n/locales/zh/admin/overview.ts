@@ -377,8 +377,7 @@ export default {
       bind: {
         title: '绑定邀请关系',
         action: '绑定邀请',
-        hint: '将邀请人与被邀请人建立邀请关系；双方均需为有效用户。',
-        inviterUserId: '邀请人用户 ID',
+          inviterUserId: '邀请人用户 ID',
         inviteeUserId: '被邀请人用户 ID',
         inviterPlaceholder: '输入邀请人用户 ID',
         inviteePlaceholder: '输入被邀请人用户 ID',
@@ -759,7 +758,6 @@ export default {
       legacyTagHint: '没有平台归属：这是 catalog 里 fallback_pricing 的兼容 id，只参与按模型计费，不出现在任何平台的模型清单里。',
       priceViaAlias: '按别名计费',
       priceViaAliasHint: '本行没有独立价格：它由别名指向目标模型，真正的价格在目标模型上。',
-      legacyCount: '另有 {n} 个仅计费的兼容 ID',
       allPlatforms: '全部平台',
       enabled: '启用',
       retired: '已下线',
@@ -831,7 +829,6 @@ export default {
       matrixHint: '同一模型出现在多张表里就会有多条报价；出现两个以上真实价即为"分叉"，需要人工确认。',
       diverged: '{n} 个价',
       editingPolicy: '正在编辑售价表 #{id} · 已绑定 {groups} 个分组',
-      hintCostOnly: '成本基只在 设置 → 定价管线 里维护，不影响这里的手工单价',
       openLibrary: '单价统一在「定价与售价表」页维护，点此跳转 →',
     },
     groups: {

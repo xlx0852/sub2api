@@ -24,7 +24,6 @@
             </button>
           </div>
         </div>
-        <p class="mt-2 text-[11px] text-gray-400">{{ t('admin.pricing.hintCostOnly') }}</p>
       </template>
 
       <template #table>
