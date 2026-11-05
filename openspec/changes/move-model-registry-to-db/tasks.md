@@ -62,3 +62,10 @@
   charging stayed at the legacy value; the row was then restored.
 - Live checks under `dual`: `hinoki-offensive` charged 5.60 / 8.40 CNY per MTok before and
   after the switch (unchanged), and no other model produced a mismatch.
+- 0.1.402/0.1.403: registry source switch shipped (`registry_source` in the settings endpoint and
+  UI, restart-required). With `dual`, boot logs compare the registry against the compiled file:
+  the only differences are the **9 vendor models** imported from the sell rows
+  (`deepseek-v4.1-flash-*`, `glm-5.3-*`, `minimax-m3.1-flash`, `hinoki-offensive`) which exist in
+  the DB and not in the file. Models, aliases, default chat/test models and default prices of the
+  62 catalog models are identical. A retired id no longer gets turned into a self-alias, which
+  removed one phantom diff (`gpt-5.2`).
