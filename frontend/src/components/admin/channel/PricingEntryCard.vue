@@ -115,12 +115,18 @@
 
         <!-- Token mode -->
         <div v-if="entry.billing_mode === 'token'">
-          <!-- Quick sell-price tools -->
-          <div class="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-dashed border-gray-300 bg-white/70 px-2 py-2 dark:border-dark-500 dark:bg-dark-900/40">
+          <!-- Quick sell-price tools（fx_auto 行由成本派生，整块隐藏，避免误操作） -->
+          <p
+            v-if="isFxAuto"
+            class="mt-3 rounded-md border border-dashed border-sky-300 bg-sky-50/40 px-2 py-1.5 text-[11px] leading-5 text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/20 dark:text-sky-200"
+          >
+            {{ t('admin.channels.form.quickToolsHiddenByFxAuto') }}
+          </p>
+          <div v-else class="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-dashed border-gray-300 bg-white/70 px-2 py-2 dark:border-dark-500 dark:bg-dark-900/40">
             <button
               type="button"
               class="rounded border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-700 hover:border-primary-300 hover:text-primary-700 disabled:opacity-50 dark:border-dark-600 dark:text-gray-200"
-              :disabled="quickBusy || entry.models.length === 0 || isFxAuto"
+              :disabled="quickBusy || entry.models.length === 0"
               @click="fillOfficialPrices"
             >
               {{ quickBusy ? t('admin.channels.form.quickPricingLoading') : t('admin.channels.form.fillOfficialPrice') }}
@@ -132,7 +138,7 @@
                 :key="n"
                 type="button"
                 class="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
-                :disabled="quickBusy || entry.models.length === 0 || isFxAuto"
+                :disabled="quickBusy || entry.models.length === 0"
                 @click="scaleFromOfficial(n)"
               >
                 ×{{ n }}
@@ -147,7 +153,7 @@
               <button
                 type="button"
                 class="rounded border border-amber-200 px-1.5 py-0.5 text-[11px] text-amber-800 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-900/50 dark:text-amber-200"
-                :disabled="quickBusy || entry.models.length === 0 || isFxAuto || !(Number(customScale) > 0)"
+                :disabled="quickBusy || entry.models.length === 0 || !(Number(customScale) > 0)"
                 @click="scaleFromOfficial(Number(customScale))"
               >
                 {{ t('admin.channels.form.applyScale') }}
@@ -155,15 +161,11 @@
             </div>
             <button
               type="button"
-              class="rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:text-gray-900 disabled:opacity-50 dark:border-dark-600 dark:text-gray-300"
-              :disabled="isFxAuto"
+              class="rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:text-gray-900 dark:border-dark-600 dark:text-gray-300"
               @click="clearOverrides"
             >
               {{ t('admin.channels.form.clearPriceOverride') }}
             </button>
-            <span v-if="isFxAuto" class="text-[11px] text-sky-700 dark:text-sky-300">
-              {{ t('admin.channels.form.quickToolsDisabledByFxAuto') }}
-            </span>
           </div>
           <p class="mt-1 text-[11px] leading-4 text-gray-400">
             {{ t('admin.channels.form.tokenPriceHint') }}

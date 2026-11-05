@@ -217,7 +217,7 @@ export default {
 		lockedByFxAuto: 'derived from cost',
 		fxFormula: 'Cost {currency} {in} / {out} per MTok × {rate} (multiplier {factor}) = sell ¥{sellIn} / ¥{sellOut}; the group rate is applied on top',
 		fxFormulaNoCost: 'FX rate {rate} set, but the cost-basis id was not found — derivation needs a valid cost basis',
-quickToolsDisabledByFxAuto: 'This row derives its price from cost × FX; the quick fill/scale tools are disabled (switch to manual or native CNY to use them).',
+quickToolsHiddenByFxAuto: 'This row is priced by cost × FX, so the quick fill/scale tools are hidden; switch to manual or native CNY to use them.',
         imageOutputNullHint: 'Note: empty image-output on a matched rule bills as 0 (does not fall back to official)',
         fallbackOfficialShort: 'Official fallback',
         accountCostDefaultHint: 'Default COGS uses official base; enabling the toggle copies pre-multiplier user list price into account stats.',

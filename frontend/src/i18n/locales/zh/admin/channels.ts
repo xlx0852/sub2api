@@ -217,7 +217,7 @@ export default {
 		lockedByFxAuto: '由成本基派生',
 		fxFormula: '成本 {currency} {in} / {out} 每百万 token × {rate}（乘数 {factor}）= 售价 ¥{sellIn} / ¥{sellOut}，再乘分组倍率就是用户实付',
 		fxFormulaNoCost: '汇率 {rate}，但成本基 ID 未找到——填一个有效的成本基才会派生售价',
-quickToolsDisabledByFxAuto: '本行售价由「成本基 × 汇率」派生，快捷填充与缩放不可用（切回手工/人民币原生即可用）。',
+quickToolsHiddenByFxAuto: '本行售价由「成本基 × 汇率」派生，快捷填充/缩放已隐藏；切回「手工填写」或「人民币原生价」即可使用。',
         imageOutputNullHint: '注意：命中本规则时图片输出留空会按 0 计，不会回退官方',
         fallbackOfficialShort: '回退官方',
         accountCostDefaultHint: '默认用官方基准算账号成本；打开开关会把「用户标价（倍率前）」当作账号成本。',
