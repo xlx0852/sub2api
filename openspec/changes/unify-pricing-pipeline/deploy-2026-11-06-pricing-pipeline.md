@@ -45,3 +45,25 @@
 - Frontend: repoint `current` to the `rollback` target.
 - Data: all changes are additive; `channel_model_pricing.fx_mode` can be reset to
   `manual` for all rows without touching prices. No `usage_logs` rows were rewritten.
+
+## Follow-up deploys (same day)
+
+| Version | Why | Result |
+| --- | --- | --- |
+| `0.1.393` | pipeline switch readable from the DB setting `pricing_pipeline` + `GET/PUT /admin/settings/pricing-pipeline` | hot switch, no container recreate |
+| `0.1.394` | unset setting returned `404 SETTING_NOT_FOUND` before the first write | GET now reports the effective default |
+| `0.1.395` | shadow compared against the pre-discount base price (false diffs at DeepSeek off-peak); invalid mode returned 500 | comparison uses the final legacy price; invalid mode → 400 |
+
+Release dirs: `0.1.393-priceswitch-d44ce087d`, `0.1.394-priceswitch-fix`,
+`0.1.395-priceshadow-fix`; the bind-mounted binary is replaced in place each time with
+`sub2api.bak-20261106-pricingpipeline` kept as the pre-change rollback.
+
+## Shadow is ON
+
+- `pricing_pipeline` setting = `shadow` (flipped via the admin API at 2026-11-06 00:24 +08).
+- Two real requests immediately after the flip (`hinoki-offensive`,
+  `deepseek-v4.1-flash-abliterated`) produced **0 `pricing_pipeline.shadow_diff` lines** and
+  were billed at exactly the pre-change prices (5.60 / 8.40 and 0.98 / 3.50 CNY per MTok).
+- Watch `pricing_pipeline.shadow_diff` for 24h; when it stays empty, flip to `unified` with
+  the same endpoint, then remove the legacy constants (`deepSeekOffPeakMultiplier`,
+  `serviceTierCostMultiplier`, and the DeepSeek official pin).

@@ -54,7 +54,7 @@
 ## 7. Cutover
 
 - [x] 7.1 Implement `PRICING_PIPELINE=legacy|shadow|unified`: `pricing.pipeline` config, shadow diff logging (`pricing_pipeline.shadow_diff`, one line per model+group), unified charging, and no double off-peak because legacy time-of-day is skipped in unified mode.
-- [ ] 7.2 Run shadow in production until the delta log is empty beyond rounding.
+- [~] 7.2 Shadow enabled in production on 2026-11-06 00:24 (+08) via the `pricing_pipeline` setting; first two real requests logged zero diffs. Watching for 24h before cutover.
 - [ ] 7.3 Flip to `unified`; keep `legacy` documented as the one-release rollback.
 
 ## 8. Verification
